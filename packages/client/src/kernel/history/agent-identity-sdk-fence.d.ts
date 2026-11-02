@@ -40,11 +40,11 @@ export type AgentIdentitySDKReceivingObservation = Pending | Readonly<{
 /** A released check or copied SDK receipt cannot authorize native History readiness. */
 export declare const IDENTITY_HISTORY_HANDOFF_UNAVAILABLE = "identity-source-history-durable-handoff-unavailable";
 export declare const AGENT_IDENTITY_SDK_OBSERVATION_COST: Readonly<{
-    rows: 3;
-    points: 2;
-    statements: 1;
-    bytes: 8192;
-    engineRequests: 0;
+    rows: number;
+    points: number;
+    statements: number;
+    bytes: number;
+    engineRequests: number;
 }>;
 export type AgentIdentitySDKWriterObservation = Pending | Readonly<{
     state: 'observed';
@@ -103,18 +103,18 @@ export declare function lockAgentIdentityHistoryHandoff(tx: CommandTransaction, 
     }>;
 }>>;
 export declare const AGENT_IDENTITY_HISTORY_GUARD_COST: Readonly<{
-    rows: 92;
-    points: 87;
-    statements: 11;
-    bytes: 40960;
-    engineRequests: 0;
+    rows: number;
+    points: number;
+    statements: number;
+    bytes: number;
+    engineRequests: number;
 }>;
 export declare const AGENT_IDENTITY_HISTORY_ABSENCE_COST: Readonly<{
-    rows: 9;
-    points: 9;
-    statements: 9;
-    bytes: 0;
-    engineRequests: 0;
+    rows: number;
+    points: number;
+    statements: number;
+    bytes: number;
+    engineRequests: number;
 }>;
 export declare function lockRecordedAgentIdentityHistory(tx: CommandTransaction, client: WorkClient, stage: AgentIdentityRetirementStage, context: HistoryReceivingContext): Promise<Pending | Readonly<{
     state: 'guarded';

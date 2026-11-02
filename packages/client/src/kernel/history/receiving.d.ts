@@ -29,7 +29,7 @@ export declare function historyDeadline(context: HistoryReceivingContext, partit
 export declare function lockHistoryBarrier(tx: CommandTransaction, barrier: HistoryBarrier): Promise<boolean>;
 /** Called by the physical minimizer in the SAME transaction as its local locator effect. No
  * caller boolean or process capability substitutes for the native minimized source proof. */
-export declare function recordHistoryReceivingProof(tx: CommandTransaction, barrier: HistoryBarrier, partition: number, locator: HistoryArtifact['locator'], pool?: Pool): Promise<string | null>;
+export declare function recordHistoryReceivingProof(tx: CommandTransaction, barrier: HistoryBarrier, partition: number, locator: HistoryArtifact['locator'], pool?: Pool, context?: HistoryReceivingContext): Promise<string | null>;
 export declare function historyReceivingGap(tx: CommandTransaction, partition: number, locator: HistoryArtifact['locator'], barrier?: HistoryBarrier, pool?: Pool): Promise<string | null>;
 export declare function historyPhysicalProof(tx: CommandTransaction, partition: number, locator: HistoryArtifact['locator']): Promise<boolean>;
 export declare function readHistoryReceivingReceipt(deps: HistoryReceivingDependencies, barrier: HistoryBarrier, artifact: HistoryArtifact, context: HistoryReceivingContext): Promise<HistoryReceivingReceipt | null>;

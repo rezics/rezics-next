@@ -8,6 +8,7 @@ import { type AgentIdentitySDKRetirementReceipt } from './agent-identity-sdk-fen
 import { type HistoryReceivingContext } from './receiving.ts';
 import type { HistoryArtifact, HistoryBarrier, HistoryReadiness } from './registry.ts';
 import type { AgentIdentityOriginal } from './agent-identity-inventory.ts';
+import type { HistoryOriginalDependencies, IdentityOriginalSourceContext, PrepaidAgentIdentityHistoryUnit } from '../access/identity-original-admission.ts';
 export type { IdentitySourceConsumerMaintenanceWork, IdentitySourceConsumerMaintenanceContext, } from '../semantic/identity-source-consumer-maintenance.ts';
 export type IdentitySourceConsumerMaintenanceModule = Pick<typeof import('../semantic/identity-source-consumer-maintenance.ts'), 'withIdentitySourceConsumerMaintenance'>;
 /** Released foreign staging is not cleanup authority. The receiving owner must verify
@@ -38,6 +39,7 @@ export declare const AGENT_IDENTITY_SDK_RETIREMENT: Readonly<{
     readonly gap: "identity-source-terminal-transfer-unavailable";
 }>;
 export declare const IDENTITY_SOURCE_MAINTENANCE_UNAVAILABLE = "identity-source-maintenance-funding-unavailable";
+export declare const IDENTITY_SOURCE_PREPAID_MAINTENANCE_UNAVAILABLE = "identity-source-prepaid-maintenance-not-installed";
 export { IDENTITY_HISTORY_HANDOFF_UNAVAILABLE } from './agent-identity-sdk-fence.ts';
 /** One selected native identity unit, after the scheduler has released its job checkout.
  * Only the actual Source runtime export may enter this callback. Its frame spans the
@@ -53,8 +55,20 @@ type IdentityUnit = {
     context: HistoryReceivingContext;
     stage?: AgentIdentityRetirementStage;
     client?: WorkClient;
+    active: boolean;
+    prepaid?: Readonly<{
+        deps: HistoryOriginalDependencies;
+        parent: IdentityOriginalSourceContext;
+        owner: Pick<typeof import('../semantic/identity-source-consumer-maintenance.ts'), 'isLiveIdentitySourceConsumerMaintenance' | 'identitySourceConsumerLibraryWork'>;
+    }>;
+    failure?: Error;
 };
 export declare function currentAgentIdentityHistoryUnit(): Readonly<IdentityUnit> | undefined;
+/** Validate the exact callback context, actual Pool/client and original lifetime.
+ * A deadline-only native command may inherit this frame; a copied explicit token
+ * context cannot replace the producer callback's object. */
+export declare function assertAgentIdentityHistoryUnit(pool: Pool, context?: HistoryReceivingContext, client?: WorkClient): void;
+export declare const withPrepaidAgentIdentityHistoryUnit: PrepaidAgentIdentityHistoryUnit;
 /** The default scheduler enters this AFTER selection releases its checkout. The only
  * Source frame and deadline survive physical cleanup and the final receiving COMMIT. */
 export declare function withAgentIdentityHistoryUnit<T>(deps: Readonly<{
@@ -94,3 +108,4 @@ export type AgentIdentitySDKRetirementObservation = Readonly<{
  * independently re-read before and after the ordinary physical receiving proof. This is
  * not a certificate for a later source command, a Source disposition or an Account root. */
 export declare function readAgentIdentitySDKRetirement(pool: Pool, client: WorkClient, original: AgentIdentityOriginal, barrier: HistoryBarrier, context: HistoryReceivingContext): Promise<AgentIdentitySDKRetirementObservation>;
+export { IDENTITY_HISTORY_ACCOUNTS_DECLARATION } from './agent-identity-inventory-work.ts';
