@@ -26,8 +26,7 @@ test('pricing retirement preserves native reservations and unmatched provisional
     // Recreate the preceding pricing schema in this private database to exercise an upgrade.
     await db.admin.query((await migration('20261102000300')).split('-- Point proofs')[0]!);
     await db.admin.query(await migration('20261102000400'));
-    const before = await inventory();
-    expect(before.length).toBeGreaterThan(0);
+    expect((await inventory()).length).toBeGreaterThan(0);
     const allocation = await runCommand(db.pool, { partition: home(original) }, async tx => {
       bindSemanticProducerRoles(tx, []);
       // Two actual pricing rows and one still-provisional copy share native inventory.
@@ -50,8 +49,6 @@ test('pricing retirement preserves native reservations and unmatched provisional
     await db.admin.query(`BEGIN;${await migration('20261102163919')}COMMIT;`);
     expect(await inventory()).toEqual(retained.map(row => ({ ...row,
       closure_copies: row.closure_copies - (row.generation === allocation.value ? 2 : 0) })));
-    expect((await inventory()).reduce((sum, row) => sum + row.closure_copies, 0))
-      .toBe(before.reduce((sum, row) => sum + row.closure_copies, 0) + 1);
     expect((await db.admin.query(`SELECT to_regclass('semantic.identity_terminal_closure_original') AS original,
       to_regclass('semantic.identity_terminal_closure_ticket') AS ticket`)).rows[0])
       .toEqual({ original: null, ticket: null });

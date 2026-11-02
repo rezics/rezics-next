@@ -1,4 +1,9 @@
 -- migrate:up
+-- Drain any preceding-version pricing writer before counting and dropping its
+-- rows. The migration transaction keeps this lock through physical retirement.
+LOCK TABLE semantic.identity_terminal_closure_original,
+ semantic.identity_terminal_closure_ticket IN ACCESS EXCLUSIVE MODE;
+
 -- Pricing has no runtime producer. Retire its physical rows, not the native
 -- source, directory, export or generation records that share their reservations.
 -- Count only actual deleted rows: an unused provisional copy is not evidence
