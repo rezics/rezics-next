@@ -242,11 +242,7 @@ function MangaCreate({
         setFailure({ ok: false, reason: 'invalid', errors: draft.errors });
         return;
       }
-      request.current = {
-        key: crypto.randomUUID(),
-        item: draft.item,
-        independent,
-      };
+      request.current = { key: crypto.randomUUID(), item: draft.item, independent };
     }
     running.current = true;
     setBusy(true);
@@ -284,9 +280,7 @@ function MangaCreate({
           <p className="break-all font-mono text-sm">{created.id}</p>
           {created.reader.state === 'ready' ? (
             <MangaNavigationLink
-              className={buttonVariants({
-                className: 'h-auto min-h-11 max-w-full whitespace-normal text-start',
-              })}
+              className={buttonVariants({ className: 'h-auto min-h-11 max-w-full whitespace-normal text-start' })}
               href={created.reader.href}
             >
               {m.candidate_view_public({}, o)}
@@ -312,10 +306,7 @@ function MangaCreate({
                     setCreated({ ...created, reader });
                   } catch {
                     if (!lifetime.active()) return;
-                    setCreated({
-                      ...created,
-                      reader: { state: 'unavailable' },
-                    });
+                    setCreated({ ...created, reader: { state: 'unavailable' } });
                   } finally {
                     if (!lifetime.active()) return;
                     running.current = false;
@@ -480,13 +471,7 @@ function MangaCreate({
               if (locked || running.current || request.current) return;
               setTerms((previous) => [
                 ...previous,
-                {
-                  id: nextTermId.current++,
-                  language: '',
-                  label: '',
-                  description: '',
-                  aliases: '',
-                },
+                { id: nextTermId.current++, language: '', label: '', description: '', aliases: '' },
               ]);
             }}
           >

@@ -51,7 +51,7 @@ export function MangaInitialField({
   onChange: (row: MangaRow) => void;
   onRemove: () => void;
   feedback: StatementFeedback;
-  removalAllowed?: () => boolean;
+  removalAllowed?: (() => boolean) | undefined;
 }) {
   const o = { locale: locale as never };
   const property = read.release.properties[row.statement.property.id]!;
@@ -68,6 +68,7 @@ export function MangaInitialField({
   const [removingQualifier, setRemovingQualifier] = useState<string>();
   const qualifierId = useId();
   const section = useRef<HTMLElement>(null);
+  // Late editor emissions obey the current lock and exact row incarnation.
   const current = useRef({ disabled, row });
   current.current = { disabled, row };
   const editable = () => !current.current.disabled && current.current.row === row;
@@ -99,20 +100,13 @@ export function MangaInitialField({
     !!Object.values(row.targets ?? {}).some((targets) => targets.length);
   const update = (statement: StatementInput) => change({ ...row, statement });
   const updateAuthored = (next: AuthoredField) =>
-    change({
-      ...row,
-      authored: next,
-      statement: { ...row.statement, value: authoredFieldValue(next) },
-    });
+    change({ ...row, authored: next, statement: { ...row.statement, value: authoredFieldValue(next) } });
   const removeQualifier = (index: number) => {
     if (!editable() || !section.current?.isConnected) return;
     const next = {
       ...row,
       qualifierIds: qualifierIds.filter((_, at) => at !== index),
-      statement: {
-        ...row.statement,
-        qualifiers: qualifiers.filter((_, at) => at !== index),
-      },
+      statement: { ...row.statement, qualifiers: qualifiers.filter((_, at) => at !== index) },
     };
     const propertyId = qualifiers[index]!.property.id;
     if (
@@ -145,21 +139,14 @@ export function MangaInitialField({
         picked={row.targets?.[part.property.id] ?? []}
         mangaWork={type === 'schema:PublicationVolume' && part.property.id === 'wdt:P179'}
         onChange={(value, items) =>
-          change({
-            ...row,
-            statement: statement(value),
-            targets: { ...row.targets, [part.property.id]: items },
-          })
+          change({ ...row, statement: statement(value), targets: { ...row.targets, [part.property.id]: items } })
         }
       />
     ) : (
       <ScalarControl
         part={part}
         definition={definition}
-        read={{
-          release: read.release,
-          public: { related: read.public?.related ?? {} },
-        }}
+        read={{ release: read.release, public: { related: read.public?.related ?? {} } }}
         locale={locale}
         feedback={{ ...feedback, address }}
         onChange={(value) => update(statement(value))}
@@ -360,10 +347,7 @@ export function MangaInitialField({
                       ...row.statement,
                       qualifiers: [
                         ...qualifiers,
-                        {
-                          property: { id: qualifier },
-                          value: { type: 'value', content: '' },
-                        },
+                        { property: { id: qualifier }, value: { type: 'value', content: '' } },
                       ],
                     },
                   });
