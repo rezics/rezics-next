@@ -80,12 +80,15 @@ export type RealmDiscoveryWindow = Readonly<{
 export const REALM_DISCOVERY_PAGE_SIZE = 20;
 
 export function createRealmDiscoveryWindow(state: RealmDiscoveryState): RealmDiscoveryWindow {
-  return reduceRealmDiscovery({
-    state: { kind: 'loading' },
-    pending: false,
-    retry: false,
-    restart: false,
-  }, state);
+  return reduceRealmDiscovery(
+    {
+      state: { kind: 'loading' },
+      pending: false,
+      retry: false,
+      restart: false,
+    },
+    state,
+  );
 }
 
 /** Successful pages replace the finite window; pending and failed requests retain the accepted window. */

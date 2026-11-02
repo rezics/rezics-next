@@ -1,7 +1,11 @@
 import { expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { RealmDiscoverySection, type RealmDiscoveryCard, type RealmDiscoveryState } from '../src/community/realm-discovery';
+import {
+  RealmDiscoverySection,
+  type RealmDiscoveryCard,
+  type RealmDiscoveryState,
+} from '../src/community/realm-discovery';
 import { createSearchRealmDiscoveryPage } from '../src/search/realm-discovery-section';
 import {
   advanceRealmPageProgress,
@@ -46,7 +50,11 @@ test('More replaces the visible page, preserves it while pending or failed, and 
     async (request) => {
       calls.push(request);
       if (calls.length === 1)
-        return { kind: 'ready', realms: Array.from({ length: 24 }, (_, index) => card(`first-${index}`)), next: cursor };
+        return {
+          kind: 'ready',
+          realms: Array.from({ length: 24 }, (_, index) => card(`first-${index}`)),
+          next: cursor,
+        };
       if (calls.length === 2) return failure.promise;
       return ready('second-page', 'next-page');
     },
@@ -81,7 +89,8 @@ test('a repeated cycle offers a visible restart and issues one fresh first-page 
   const page = createSearchRealmDiscoveryPage(
     async (request) => {
       calls.push(request);
-      if (request.cursor === undefined) return ready(calls.length === 1 ? 'first-page' : 'restarted', calls.length === 1 ? 'a' : 'c');
+      if (request.cursor === undefined)
+        return ready(calls.length === 1 ? 'first-page' : 'restarted', calls.length === 1 ? 'a' : 'c');
       if (request.cursor === 'a') return ready('page-a', 'b');
       return ready('page-b', 'a');
     },

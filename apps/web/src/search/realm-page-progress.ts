@@ -41,8 +41,7 @@ export function advanceRealmPageProgress(
       distance: previous.distance,
       started: true,
     };
-  if (!previous.started)
-    return { cursor: nextCursor, anchor: nextCursor, power: 1, distance: 0, started: true };
+  if (!previous.started) return { cursor: nextCursor, anchor: nextCursor, power: 1, distance: 0, started: true };
   if (nextCursor === previous.anchor) return null;
 
   const distance = previous.distance + 1;
@@ -55,7 +54,9 @@ export function advanceRealmPageProgress(
   return { ...previous, cursor: nextCursor, distance };
 }
 
-export type RealmPageReader = (input: Readonly<{ cursor?: string; signal: AbortSignal }>) => Promise<RealmDiscoveryPage>;
+export type RealmPageReader = (
+  input: Readonly<{ cursor?: string; signal: AbortSignal }>,
+) => Promise<RealmDiscoveryPage>;
 
 /** Shared explicit-page controller for Search and header Realm browsing. */
 export function createRealmPageProgress(input: {
