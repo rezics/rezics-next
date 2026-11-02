@@ -147,7 +147,7 @@ test('restart failures preserve the exact cause and use durable bounded backoff 
   }
 }, 10_000);
 
-test('startup failure diagnostics are bounded to the current launch and report truncation', async () => {
+test('startup failure diagnostics bound current launch evidence and report missing or truncated output honestly', async () => {
   const dir = temporaryDirectory();
   const logPath = join(dir.path, 'manager-host.log');
   const oldFailure = 'previous launch failure';
@@ -189,6 +189,23 @@ test('startup failure diagnostics are bounded to the current launch and report t
     expect(second).toContain(currentTail);
     expect(second).not.toContain(oldFailure);
     expect(second.length).toBeLessThan(4500);
+
+    for (const [source, outcome, evidence] of [
+      ['process.exit(19);', 'code 19', 'complete (0 bytes; no output recorded)'],
+      ['process.kill(process.pid, "SIGTERM");', 'signal SIGTERM', 'complete (0 bytes; no output recorded)'],
+      [
+        `import { truncateSync } from 'node:fs'; truncateSync(${JSON.stringify(logPath)}, 0); console.error('replacement output'); process.exit(20);`,
+        'code 20',
+        'unavailable: the log shrank',
+      ],
+    ]) {
+      writeFileSync(failing, source!);
+      const diagnostic = await failAndRead();
+      expect(diagnostic).toContain(`exited with ${outcome}`);
+      expect(diagnostic).toContain(`log path: ${logPath}`);
+      expect(diagnostic).toContain(evidence!);
+      for (const previous of [oldFailure, currentFailure, currentTail]) expect(diagnostic).not.toContain(previous);
+    }
   } finally {
     dir.close();
   }
