@@ -413,7 +413,8 @@ function GameClassificationDiscard({
       !holder.current?.isConnected ||
       current.current.draft !== draft ||
       !current.current.allowed(draft)
-    ) return;
+    )
+      return;
     current.current.discard(draft);
   };
   // Property/rank and empty scaffolding alone are not assertion content.
@@ -514,8 +515,9 @@ function GameClassificationsLive({
     const row = focusAfterDiscard.current;
     if (!row || !lifetime.active()) return;
     focusAfterDiscard.current = null;
-    const section = [...(holder.current?.querySelectorAll<HTMLElement>('[data-classification-property]') ?? [])]
-      .find((node) => node.dataset.classificationProperty === row.property);
+    const section = [...(holder.current?.querySelectorAll<HTMLElement>('[data-classification-property]') ?? [])].find(
+      (node) => node.dataset.classificationProperty === row.property,
+    );
     const controls = [...(section?.querySelectorAll<HTMLButtonElement>('button[data-classification-source]') ?? [])];
     (controls.find((button) => button.dataset.classificationSource === (row.source ?? '')) ?? controls[0])?.focus();
   }, [drafts, lifetime]);
