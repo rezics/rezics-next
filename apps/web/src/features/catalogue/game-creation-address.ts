@@ -57,8 +57,5 @@ export function gameCreationAddress(
   )[0]!;
   // The shared presenter also offers section fallbacks; creation only links an actual inner control.
   if (!presented.target.startsWith(`${id}-${address}-`)) return;
-  return {
-    id: presented.target,
-    label: `${propertyName} ${ordinal + 1} · ${presented.label}`,
-  };
+  return { id: presented.target, label: `${propertyName} ${ordinal + 1} · ${presented.label}` };
 }

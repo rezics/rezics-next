@@ -61,11 +61,7 @@ async function mounted(
   };
   const saved = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals))
-    Object.defineProperty(globalThis, key, {
-      configurable: true,
-      writable: true,
-      value,
-    });
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   const { createRoot } = await import('react-dom/client');
   const { CandidateReaderBoundary } = await import('../src/subject/candidate-lifetime');
   const { getLocale, setLocale } = await import('../src/paraglide/runtime.js');
@@ -75,9 +71,7 @@ async function mounted(
   const { within, waitFor } = await import(testing.resolve('@testing-library/dom'));
   const { default: userEvent } = await import(testing.resolve('@testing-library/user-event'));
   const user = userEvent.setup({ document: window.document });
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false, gcTime: 0 } },
-  });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   const host = window.document.createElement('main') as HTMLElement;
   window.document.body.append(host);
   const root = createRoot(host);
@@ -96,11 +90,7 @@ async function mounted(
                 address="game-fields"
                 observed={
                   reader
-                    ? {
-                        state: 'signed-in',
-                        subject: reader,
-                        csrfToken: 'fixture-csrf',
-                      }
+                    ? { state: 'signed-in', subject: reader, csrfToken: 'fixture-csrf' }
                     : { state: 'signed-out', subject: null, csrfToken: null }
                 }
               >
@@ -167,20 +157,10 @@ test('Game and Addon complete fields family preserves independent labels, native
     const changes: InitialRow[][][] = [[], []];
     const supplied = initialRow();
     supplied.statement.qualifiers = [
-      {
-        property: { id: 'schema:name' },
-        value: { type: 'value', content: { text: longName, language: 'ja' } },
-      },
+      { property: { id: 'schema:name' }, value: { type: 'value', content: { text: longName, language: 'ja' } } },
     ];
     supplied.statement.references = [
-      {
-        parts: [
-          {
-            property: { id: 'schema:url' },
-            value: { type: 'value', content: longCitation },
-          },
-        ],
-      },
+      { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: longCitation } }] },
     ];
     const original = structuredClone(supplied);
     function Initial({
@@ -220,42 +200,28 @@ test('Game and Addon complete fields family preserves independent labels, native
     );
     const mounts = [...host.querySelectorAll<HTMLElement>('[data-initial]')];
     const selectors = mounts.map(
-      (mount) =>
-        within(mount).getByRole('combobox', {
-          name: m.character_add_fact(),
-        }) as HTMLSelectElement,
+      (mount) => within(mount).getByRole('combobox', { name: m.character_add_fact() }) as HTMLSelectElement,
     );
     expect(selectors[0]!.id).not.toBe(selectors[1]!.id);
     for (let index = 0; index < 2; index++) {
       const mount = mounts[index]!;
       const select = selectors[index]!;
-      const label = within(mount).getByText(m.character_add_fact(), {
-        selector: 'label',
-      }) as HTMLLabelElement;
+      const label = within(mount).getByText(m.character_add_fact(), { selector: 'label' }) as HTMLLabelElement;
       expect(label.htmlFor).toBe(select.id);
       expect(label.control).toBe(select);
       await act(async () => user.click(label));
       expect(host.ownerDocument.activeElement).toBe(select);
-      const heading = within(mount).getByRole('heading', {
-        level: 2,
-        name: longName,
-      });
+      const heading = within(mount).getByRole('heading', { level: 2, name: longName });
       expect(heading.closest('section')?.querySelector('[data-slot="game-initial-fact"]')).not.toBeNull();
       expect(heading.getAttribute('lang')).toBe('en');
-      expect(
-        (
-          within(mount).getByRole('textbox', {
-            name: m.correction_url(),
-          }) as HTMLInputElement
-        ).value,
-      ).toBe(longCitation);
+      expect((within(mount).getByRole('textbox', { name: m.correction_url() }) as HTMLInputElement).value).toBe(
+        longCitation,
+      );
       expect(within(mount).getByRole('textbox', { name: m.correction_language() })).toBeDefined();
     }
     await act(async () => user.selectOptions(selectors[0]!, 'schema:url'));
     expect(selectors[1]!.value).toBe('');
-    const add = within(mounts[0]!).getAllByRole('button', {
-      name: m.correction_add(),
-    })[0]!;
+    const add = within(mounts[0]!).getAllByRole('button', { name: m.correction_add() })[0]!;
     await act(async () => user.tab());
     expect(host.ownerDocument.activeElement).toBe(add);
     expect(add.className).toContain('focus-visible:outline-2');
@@ -278,46 +244,20 @@ test('Game and Addon complete fields family preserves independent labels, native
     await act(async () => user.selectOptions(selectors[0]!, 'schema:inLanguage'));
     await act(async () => user.click(add));
     expect(changes[0]!.at(-1)!.filter((row) => row.statement.property.id === 'schema:inLanguage')).toHaveLength(2);
-    await act(async () =>
-      user.click(
-        within(mounts[0]!).getAllByRole('button', {
-          name: m.recipe_remove_field(),
-        })[1]!,
-      ),
-    );
+    await act(async () => user.click(within(mounts[0]!).getAllByRole('button', { name: m.recipe_remove_field() })[1]!));
     expect(changes[0]!.at(-1)).toHaveLength(2);
     expect(changes[0]!.at(-1)!.some((row) => row.key === allocated.key)).toBe(false);
     expect(supplied).toEqual(original);
 
     await render(<Initial key="cap" index={0} rows={Array.from({ length: 31 }, () => initialRow())} />);
-    let select = within(host).getByRole('combobox', {
-      name: m.character_add_fact(),
-    }) as HTMLSelectElement;
+    let select = within(host).getByRole('combobox', { name: m.character_add_fact() }) as HTMLSelectElement;
     await act(async () => user.selectOptions(select, 'schema:inLanguage'));
     await act(async () => user.click(within(host).getByRole('button', { name: m.correction_add() })));
     expect(host.querySelectorAll('[data-slot="game-initial-fact"]')).toHaveLength(32);
     await act(async () => user.selectOptions(select, 'schema:inLanguage'));
-    expect(
-      (
-        within(host).getByRole('button', {
-          name: m.correction_add(),
-        }) as HTMLButtonElement
-      ).disabled,
-    ).toBe(true);
-    await act(async () =>
-      user.click(
-        within(host).getAllByRole('button', {
-          name: m.recipe_remove_field(),
-        })[0]!,
-      ),
-    );
-    expect(
-      (
-        within(host).getByRole('button', {
-          name: m.correction_add(),
-        }) as HTMLButtonElement
-      ).disabled,
-    ).toBe(false);
+    expect((within(host).getByRole('button', { name: m.correction_add() }) as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => user.click(within(host).getAllByRole('button', { name: m.recipe_remove_field() })[0]!));
+    expect((within(host).getByRole('button', { name: m.correction_add() }) as HTMLButtonElement).disabled).toBe(false);
     const removed = structuredClone(release);
     delete removed.properties['schema:inLanguage'];
     await render(<Initial key="removed" index={0} current={removed} />);
@@ -350,9 +290,7 @@ test('Game and Addon complete fields family preserves independent labels, native
         }}
       />,
     );
-    const type = await within(host).findByRole('combobox', {
-      name: m.catalogue_create_type(),
-    });
+    const type = await within(host).findByRole('combobox', { name: m.catalogue_create_type() });
     await act(async () => user.selectOptions(type, 'schema:VideoGame'));
     await act(async () =>
       user.type(within(host).getByRole('textbox', { name: m.catalogue_create_label() }), 'The Lantern Game'),
@@ -362,14 +300,7 @@ test('Game and Addon complete fields family preserves independent labels, native
     );
     await act(async () => user.click(within(host).getByRole('button', { name: m.correction_add() })));
     const creationFrame = host.querySelector<HTMLElement>('[data-slot="game-initial-fact"]')!;
-    await act(async () =>
-      user.type(
-        within(creationFrame).getByRole('textbox', {
-          name: m.correction_value(),
-        }),
-        'ja',
-      ),
-    );
+    await act(async () => user.type(within(creationFrame).getByRole('textbox', { name: m.correction_value() }), 'ja'));
     expect(gameCreations).toEqual([]);
     const readsBeforeCreate = creation.calls.filter((call) => call.method === 'GET').length;
     expect(readsBeforeCreate).toBe(2);
@@ -408,20 +339,13 @@ test('Game and Addon complete fields family preserves independent labels, native
     // Real classification selection retains its baseline, qualifiers, citations and candidate address.
     const secondPlatform = structuredClone(fixture.publicRead.subject.statements['schema:gamePlatform']![0]!);
     secondPlatform.id = '00000000-0000-4000-8000-00000000f106';
-    secondPlatform.value = {
-      type: 'value',
-      content: '00000000-0000-4000-8000-00000000f105',
-    };
+    secondPlatform.value = { type: 'value', content: '00000000-0000-4000-8000-00000000f105' };
     fixture.publicRead.subject.statements['schema:gamePlatform']!.push(secondPlatform);
     fixture.publicRead.related['00000000-0000-4000-8000-00000000f105'] = {
       type: 'skos:Concept',
       labels: { en: longName },
     };
-    const read = {
-      ok: true as const,
-      release: fixture.release,
-      public: fixture.publicRead,
-    };
+    const read = { ok: true as const, release: fixture.release, public: fixture.publicRead };
     const selected = structuredClone(fixture.publicRead);
     const pending = deferred<FactResult>();
     const commands: FactCommand[] = [];
@@ -457,9 +381,7 @@ test('Game and Addon complete fields family preserves independent labels, native
     const submit = within(host).getByRole('button', { name: m.facts_submit() });
     await act(async () => user.click(field.getAllByRole('button', { name: m.facts_edit_field() })[1]!));
     expect((submit as HTMLButtonElement).disabled).toBe(true);
-    const qualifier = field.getByRole('textbox', {
-      name: m.correction_value(),
-    });
+    const qualifier = field.getByRole('textbox', { name: m.correction_value() });
     await act(async () => {
       await user.clear(qualifier);
       await user.type(qualifier, 'fr');
@@ -507,11 +429,7 @@ test('Game and Addon complete fields family preserves independent labels, native
 
     // Empty classification Add and the real item picker keep target filtering and per-field outcomes independent.
     const partial = gameProfileFixture('ready', 'en', true);
-    const partialRead = {
-      ok: true as const,
-      release: partial.release,
-      public: partial.publicRead,
-    };
+    const partialRead = { ok: true as const, release: partial.release, public: partial.publicRead };
     const partialCommands: FactCommand[] = [];
     const pickerCalls: { text: string; signal: AbortSignal }[] = [];
     const nextPlatform = '00000000-0000-4000-8000-00000000f105';
@@ -523,13 +441,7 @@ test('Game and Addon complete fields family preserves independent labels, native
         search={async (text, signal) => {
           pickerCalls.push({ text, signal });
           return [
-            {
-              id: nextPlatform,
-              title: longName,
-              types: ['skos:Concept'],
-              typeLabel: 'Concept',
-              cover: null,
-            },
+            { id: nextPlatform, title: longName, types: ['skos:Concept'], typeLabel: 'Concept', cover: null },
             {
               id: gameCreatorId,
               title: 'Ineligible writer',
@@ -544,10 +456,7 @@ test('Game and Addon complete fields family preserves independent labels, native
           propose: (command) => {
             partialCommands.push(command);
             return command.statement.property.id === 'schema:genre'
-              ? Promise.resolve({
-                  ok: false as const,
-                  reason: 'denied' as const,
-                })
+              ? Promise.resolve({ ok: false as const, reason: 'denied' as const })
               : partial.transport.classifications.propose(command);
           },
         }}
@@ -563,39 +472,25 @@ test('Game and Addon complete fields family preserves independent labels, native
     expect(genre.getByText(m.facts_no_value())).toBeDefined();
     expect(genre.queryByRole('button', { name: m.facts_edit_field() })).toBeNull();
     await act(async () => user.click(genre.getByRole('button', { name: m.facts_add_value() })));
-    const picker = genre.getByRole('combobox', {
-      name: partial.release.properties['schema:genre']!.labels.en!,
-    });
+    const picker = genre.getByRole('combobox', { name: partial.release.properties['schema:genre']!.labels.en! });
     expect(pickerCalls).toEqual([]);
     await act(async () => user.type(picker, 'platform'));
     await waitFor(() =>
-      expect(
-        within(host.ownerDocument.body).getByRole('option', {
-          name: `${longName} Concept`,
-        }),
-      ).toBeDefined(),
+      expect(within(host.ownerDocument.body).getByRole('option', { name: `${longName} Concept` })).toBeDefined(),
     );
-    expect(
-      within(host.ownerDocument.body).queryByRole('option', {
-        name: /Ineligible writer/,
-      }),
-    ).toBeNull();
+    expect(within(host.ownerDocument.body).queryByRole('option', { name: /Ineligible writer/ })).toBeNull();
     await act(async () => user.keyboard('{ArrowDown}{Enter}'));
     expect((picker as HTMLInputElement).value).toBe(longName);
     expect(pickerCalls).toHaveLength(1);
     expect(pickerCalls[0]!.text).toBe('platform');
     expect(pickerCalls[0]!.signal).toBeInstanceOf(AbortSignal);
     await act(async () => user.click(platformScope.getByRole('button', { name: m.facts_edit_field() })));
-    const partialValue = platformScope.getByRole('textbox', {
-      name: m.correction_value(),
-    });
+    const partialValue = platformScope.getByRole('textbox', { name: m.correction_value() });
     await act(async () => {
       await user.clear(partialValue);
       await user.type(partialValue, 'fr');
     });
-    const partialSubmit = within(host).getByRole('button', {
-      name: m.facts_submit(),
-    });
+    const partialSubmit = within(host).getByRole('button', { name: m.facts_submit() });
     expect(partialCommands).toEqual([]);
     await act(async () => user.click(partialSubmit));
     expect(partialCommands).toHaveLength(2);
@@ -620,11 +515,7 @@ test('Game and Addon complete fields family preserves independent labels, native
     for (const scenario of ['denied', 'stale', 'uncertain', 'unavailable'] as const) {
       const failure = gameProfileFixture(scenario === 'unavailable' ? 'ready' : scenario, 'en', true);
       const attempts: FactCommand[] = [];
-      const current = {
-        ok: true as const,
-        release: failure.release,
-        public: failure.publicRead,
-      };
+      const current = { ok: true as const, release: failure.release, public: failure.publicRead };
       await render(
         <GameClassifications
           key={scenario}
@@ -636,10 +527,7 @@ test('Game and Addon complete fields family preserves independent labels, native
             propose: (command) => {
               attempts.push(command);
               return scenario === 'unavailable'
-                ? Promise.resolve({
-                    ok: false as const,
-                    reason: 'unavailable' as const,
-                  })
+                ? Promise.resolve({ ok: false as const, reason: 'unavailable' as const })
                 : failure.transport.classifications.propose(command);
             },
           }}
@@ -686,13 +574,7 @@ test('Game and Addon complete fields family preserves independent labels, native
       }
       expect(failure.calls.some((call) => call.method === 'GET')).toBe(false);
       if (scenario === 'denied') {
-        await act(async () =>
-          user.click(
-            scope.getByRole('button', {
-              name: m.catalogue_create_review_new(),
-            }),
-          ),
-        );
+        await act(async () => user.click(scope.getByRole('button', { name: m.catalogue_create_review_new() })));
         expect(region.querySelector('fieldset')?.disabled).toBe(false);
         await act(async () => {
           await user.clear(input);
@@ -702,10 +584,7 @@ test('Game and Addon complete fields family preserves independent labels, native
         await act(async () => user.click(send));
         expect(attempts).toHaveLength(3);
         expect(attempts[2]!.key).not.toBe(attempts[0]!.key);
-        expect(attempts[2]!.statement.qualifiers![0]!.value).toEqual({
-          type: 'value',
-          content: 'de',
-        });
+        expect(attempts[2]!.statement.qualifiers![0]!.value).toEqual({ type: 'value', content: 'de' });
       }
     }
 
@@ -812,23 +691,13 @@ test('Game and Addon complete fields family preserves independent labels, native
     )!;
     await act(async () => user.click(summary));
     const retiringRegion = host.querySelector<HTMLElement>('[data-slot="game-classification"]')!;
-    await act(async () =>
-      user.click(
-        within(retiringRegion).getByRole('button', {
-          name: m.facts_edit_field(),
-        }),
-      ),
-    );
-    const oldInput = within(retiringRegion).getByRole('textbox', {
-      name: m.correction_value(),
-    });
+    await act(async () => user.click(within(retiringRegion).getByRole('button', { name: m.facts_edit_field() })));
+    const oldInput = within(retiringRegion).getByRole('textbox', { name: m.correction_value() });
     await act(async () => {
       await user.clear(oldInput);
       await user.type(oldInput, 'fr');
     });
-    const oldSubmit = within(summary.closest('details')!).getByRole('button', {
-      name: m.facts_submit(),
-    });
+    const oldSubmit = within(summary.closest('details')!).getByRole('button', { name: m.facts_submit() });
     const propsKey = Object.keys(oldSubmit).find((key) => key.startsWith('__reactProps$'))!;
     const queued = Reflect.get(oldSubmit, propsKey).onClick as () => void;
     await act(async () => user.click(oldSubmit));
@@ -943,10 +812,7 @@ test('Game creation recovers rejected multilingual drafts and exact corrections 
             ok: false,
             reason: 'invalid',
             refreshDefinitions: true,
-            errors: errors.map((pointer) => ({
-              pointer,
-              code: 'invalid_format',
-            })),
+            errors: errors.map((pointer) => ({ pointer, code: 'invalid_format' })),
           };
         }
         if (mode === 'uncertain') return { ok: false, reason: 'unavailable', refreshDefinitions: true };
@@ -981,9 +847,7 @@ test('Game creation recovers rejected multilingual drafts and exact corrections 
       });
     };
     await show();
-    const select = await within(host).findByRole('combobox', {
-      name: m.catalogue_create_type(),
-    });
+    const select = await within(host).findByRole('combobox', { name: m.catalogue_create_type() });
     await act(async () => user.selectOptions(select, 'schema:VideoGame'));
     await type(host.querySelector<HTMLElement>('#create-label-0')!, 'Lantern');
     await click(button(m.catalogue_create_add_language()));
@@ -995,20 +859,11 @@ test('Game creation recovers rejected multilingual drafts and exact corrections 
       );
       await click(button(m.correction_add()));
       const rows = host.querySelectorAll<HTMLElement>('[data-slot="game-initial-fact"]');
-      await type(
-        within(rows[rows.length - 1]!).getByRole('textbox', {
-          name: m.correction_value(),
-        }),
-        value,
-      );
+      await type(within(rows[rows.length - 1]!).getByRole('textbox', { name: m.correction_value() }), value);
     }
     const rows = host.querySelectorAll<HTMLElement>('[data-slot="game-initial-fact"]');
     const second = rows[1]!;
-    await click(
-      within(second).getByRole('button', {
-        name: m.correction_add_reference(),
-      }),
-    );
+    await click(within(second).getByRole('button', { name: m.correction_add_reference() }));
     await act(async () =>
       user.selectOptions(within(second).getByRole('combobox', { name: m.correction_add_part() }), 'schema:url'),
     );

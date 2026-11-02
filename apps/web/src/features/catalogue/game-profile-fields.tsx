@@ -148,11 +148,7 @@ export function GameInitialFacts({
   const [property, setProperty] = useState('');
   const o = { locale: locale as never };
   const groups = gameGroups(release, type);
-  const context: StatementFieldsRead = {
-    release,
-    source: null,
-    public: { subject: { type }, related: {} },
-  };
+  const context: StatementFieldsRead = { release, source: null, public: { subject: { type }, related: {} } };
   return (
     <fieldset disabled={disabled} className="min-w-0 max-w-full space-y-5">
       <legend className="font-sans text-lg font-semibold">{m.game_profile_initial({}, o)}</legend>
@@ -272,11 +268,7 @@ export function GameClassifications({
   const [drafts, setDrafts] = useState<FactDraft[]>([]);
   const [busy, setBusy] = useState(false);
   const running = useRef(false);
-  const [address, setAddress] = useState<{
-    property: string;
-    candidate: string;
-    session?: string | undefined;
-  }>();
+  const [address, setAddress] = useState<{ property: string; candidate: string; session?: string | undefined }>();
   const [comparison, setComparison] = useState<CandidateTransport>();
   const o = { locale: locale as never };
   const context = { ...read, source: null };
@@ -391,12 +383,7 @@ export function GameClassifications({
                         setDrafts((rows) =>
                           rows.map((row) =>
                             row.property === property
-                              ? {
-                                  ...row,
-                                  statement,
-                                  result: undefined,
-                                  command: undefined,
-                                }
+                              ? { ...row, statement, result: undefined, command: undefined }
                               : row,
                           ),
                         )
@@ -412,11 +399,7 @@ export function GameClassifications({
                         type="button"
                         onClick={() => {
                           if (draft.result?.ok) {
-                            setAddress({
-                              property,
-                              candidate: draft.result.candidate,
-                              session: draft.result.session,
-                            });
+                            setAddress({ property, candidate: draft.result.candidate, session: draft.result.session });
                             setComparison(review(property, draft.result.session));
                           }
                         }}
@@ -433,13 +416,7 @@ export function GameClassifications({
                       onClick={() =>
                         setDrafts((rows) =>
                           rows.map((row) =>
-                            row.property === property
-                              ? {
-                                  ...row,
-                                  command: undefined,
-                                  result: undefined,
-                                }
-                              : row,
+                            row.property === property ? { ...row, command: undefined, result: undefined } : row,
                           ),
                         )
                       }

@@ -47,11 +47,7 @@ function CreationCorrection({
   locale: string;
 }) {
   const ref = useRef<HTMLSpanElement>(null);
-  const [current, setCurrent] = useState({
-    label: '',
-    language: undefined as string | undefined,
-    available: false,
-  });
+  const [current, setCurrent] = useState({ label: '', language: undefined as string | undefined, available: false });
   useLayoutEffect(() => {
     const form = ref.current?.closest('form');
     const target = id ? ref.current?.ownerDocument.getElementById(id) : undefined;
@@ -147,10 +143,7 @@ function CreateSubjectFormLive({
     labelLanguage?: (type: string) => string | undefined;
     descriptionLanguage?: (type: string) => string | undefined;
     fields: (type: string, disabled: boolean) => ReactNode;
-    prepare: (item: InitialSubject) => {
-      item: InitialSubject;
-      errors: Violation[];
-    };
+    prepare: (item: InitialSubject) => { item: InitialSubject; errors: Violation[] };
   };
   locale: string;
   session: Session;
@@ -170,19 +163,10 @@ function CreateSubjectFormLive({
     return result;
   }
   // Definitions and the route's session read start independently.
-  const definitions = useQuery({
-    queryKey,
-    queryFn: () => loadDefinitions(),
-    retry: false,
-  });
+  const definitions = useQuery({ queryKey, queryFn: () => loadDefinitions(), retry: false });
   async function reloadDefinitions() {
     await client
-      .fetchQuery({
-        queryKey,
-        queryFn: () => loadDefinitions(true),
-        retry: false,
-        staleTime: 0,
-      })
+      .fetchQuery({ queryKey, queryFn: () => loadDefinitions(true), retry: false, staleTime: 0 })
       .catch(() => undefined);
   }
   const [type, setType] = useState(profile?.type ?? '');
