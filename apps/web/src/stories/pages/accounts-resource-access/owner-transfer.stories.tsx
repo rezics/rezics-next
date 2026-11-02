@@ -8,7 +8,11 @@ import { m } from '../../../paraglide/messages.js';
 import { snapshot, managerId, readerId } from './fixtures';
 
 /** Presentation-only HTTP responses exercise the real local transport, never simulate native proof. */
-function Example({ scenario = 'current' }: { scenario?: 'current' | 'lost' | 'denied' | 'long' | 'unresolved' | 'deleted' }) {
+function Example({
+  scenario = 'current',
+}: {
+  scenario?: 'current' | 'lost' | 'denied' | 'long' | 'unresolved' | 'deleted';
+}) {
   const [setup] = useState(() => {
     const page: AccessSnapshot = {
       ...structuredClone(snapshot),
@@ -27,7 +31,8 @@ function Example({ scenario = 'current' }: { scenario?: 'current' | 'lost' | 'de
     if (scenario === 'long') {
       const source = page.identities[0]!;
       const recipient = page.identities[1]!;
-      if (source.state !== 'active' || recipient.state !== 'active') throw new Error('Expected active illustrative identities');
+      if (source.state !== 'active' || recipient.state !== 'active')
+        throw new Error('Expected active illustrative identities');
       page.identities[0] = { ...source, displayName: 'Mira · 管理者 · ' + 'Responsable de la communauté '.repeat(8) };
       page.identities[1] = { ...recipient, displayName: 'Aki · 新しい所有者 · ' + '독서 모임 관리자 '.repeat(12) };
     }
@@ -133,7 +138,14 @@ async function review({ canvasElement }: { canvasElement: HTMLElement }) {
   const element = await screen.findByRole('alertdialog');
   const dialog = within(element);
   await expect(dialog.getByText(m.access_identity_resource_id())).toBeVisible();
-  for (const value of [snapshot.resource.id, 'community.realm', String(snapshot.resource.route), managerId, readerId, snapshot.grants[0]!.valid]) {
+  for (const value of [
+    snapshot.resource.id,
+    'community.realm',
+    String(snapshot.resource.route),
+    managerId,
+    readerId,
+    snapshot.grants[0]!.valid,
+  ]) {
     const exact = dialog.getByText(value, { exact: true, selector: 'dd' });
     await expect(exact).toBeVisible();
     await expect(exact.closest('details')).toBeNull();
@@ -147,10 +159,14 @@ async function review({ canvasElement }: { canvasElement: HTMLElement }) {
 }
 export const CurrentTransferReview: Story = { play: review };
 export const LongTransferReviewPhone: Story = {
-  args: { scenario: 'long' }, globals: { viewport: { value: 'phone390', isRotated: false } }, play: review,
+  args: { scenario: 'long' },
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  play: review,
 };
 export const LongTransferReviewDesktop: Story = {
-  args: { scenario: 'long' }, globals: { viewport: { value: 'desktop1280', isRotated: false } }, play: review,
+  args: { scenario: 'long' },
+  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  play: review,
 };
 export const UnresolvedOwnerReview: Story = { args: { scenario: 'unresolved' }, play: review };
 export const DeletedOwnerReview: Story = { args: { scenario: 'deleted' }, play: review };

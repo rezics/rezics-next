@@ -41,8 +41,7 @@ function identityName(identity: Identity | undefined) {
 }
 function subjectTitle(subject: Subject, identity: Identity | undefined) {
   if (subject.kind === 'active_accounts') return m.access_active_accounts();
-  if (subject.kind === 'realm')
-    return subject.role === 'owner' ? m.access_realm_owners() : m.access_realm_members();
+  if (subject.kind === 'realm') return subject.role === 'owner' ? m.access_realm_owners() : m.access_realm_members();
   const name = identityName(identity);
   return subject.kind === 'organization'
     ? `${name} · ${subject.role === 'owner' ? m.access_org_owners() : m.access_org_members()}`
@@ -51,11 +50,7 @@ function subjectTitle(subject: Subject, identity: Identity | undefined) {
 function SubjectName({ subject, page }: { subject: Subject; page: AccessSnapshot }) {
   if (subject.kind === 'active_accounts') return <>{m.access_active_accounts()}</>;
   if (subject.kind === 'realm')
-    return (
-      <>
-        {subject.role === 'owner' ? m.access_realm_owners() : m.access_realm_members()}
-      </>
-    );
+    return <>{subject.role === 'owner' ? m.access_realm_owners() : m.access_realm_members()}</>;
   const identity = page.identities.find((identity) => identity.id === subject.id);
   if (identity?.state === 'deleted')
     return (

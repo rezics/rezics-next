@@ -20,7 +20,20 @@ function Example({
   scenario = 'current',
 }: {
   status?: AccessState['status'];
-  scenario?: 'current' | 'empty' | 'lost' | 'refused' | 'realm' | 'scheduled' | 'deleted-unknown' | 'organization' | 'delegated' | 'long' | 'generic' | 'reload' | 'retired';
+  scenario?:
+    | 'current'
+    | 'empty'
+    | 'lost'
+    | 'refused'
+    | 'realm'
+    | 'scheduled'
+    | 'deleted-unknown'
+    | 'organization'
+    | 'delegated'
+    | 'long'
+    | 'generic'
+    | 'reload'
+    | 'retired';
 }) {
   const [setup] = useState(() => {
     let page = structuredClone(snapshot);
@@ -30,7 +43,8 @@ function Example({
     if (scenario === 'long') {
       const acting = page.identities[0]!;
       const identity = page.identities[1]!;
-      if (acting.state !== 'active' || identity.state !== 'active') throw new Error('Expected active illustrative identities');
+      if (acting.state !== 'active' || identity.state !== 'active')
+        throw new Error('Expected active illustrative identities');
       page.identities = [
         { ...acting, displayName: 'Mira · 管理者 · Administratrice · 관리자' },
         { ...identity, id: '0192f3a0-6c1e-7b2a-a001-000200000098', displayName: 'Delegating account · 委任元' },
@@ -42,7 +56,8 @@ function Example({
       ];
       page.authority.principalId = page.identities[1]!.id;
       page.grants = page.identities.slice(2).map((identity) => ({
-        ...page.grants[0]!, subject: { kind: 'account', id: identity.id },
+        ...page.grants[0]!,
+        subject: { kind: 'account', id: identity.id },
       }));
     }
     if (scenario === 'empty') page.grants = [];
@@ -96,7 +111,10 @@ function Example({
           if (url.pathname === '/v1/accounts') return Response.json({ accounts: [page.identities[1]], next: null });
           return (status === 'ready' || scenario === 'reload') && scenario !== 'retired'
             ? Response.json(page)
-            : Response.json({ type: 'not_found' }, { status: status === 'denied' || scenario === 'retired' ? 404 : 503 });
+            : Response.json(
+                { type: 'not_found' },
+                { status: status === 'denied' || scenario === 'retired' ? 404 : 503 },
+              );
         }
         if (scenario === 'refused') return Response.json({ type: 'forbidden' }, { status: 403 });
         const key = request.headers.get('idempotency-key')!;
@@ -258,10 +276,12 @@ export const DeletedAndUnknown: Story = {
     await expect(deleted.getByText(m.access_deleted_account(), { selector: 'p' })).toBeVisible();
     await expect(deleted.queryByText('Aki')).toBeNull();
     await expect(deleted.queryByText('@aki')).toBeNull();
+    await expect(within(rows[1]!).getByRole('heading', { level: 3, name: m.access_unknown_account() })).toBeVisible();
     await expect(
-      within(rows[1]!).getByRole('heading', { level: 3, name: m.access_unknown_account() }),
-    ).toBeVisible();
-    await expect(within(rows[1]!).queryAllByRole('button').filter((control) => control.tagName !== 'SUMMARY')).toHaveLength(0);
+      within(rows[1]!)
+        .queryAllByRole('button')
+        .filter((control) => control.tagName !== 'SUMMARY'),
+    ).toHaveLength(0);
     await inspectIdentity(rows[1]!, '0192f3a0-6c1e-7b2a-a001-000200000099');
     for (const row of rows) {
       await expect(within(row).getAllByRole('heading')).toHaveLength(1);
@@ -327,10 +347,14 @@ async function longIdentities({ canvasElement }: { canvasElement: HTMLElement })
   await expect(canvasElement.scrollWidth).toBeLessThanOrEqual(canvasElement.clientWidth + 1);
 }
 export const LongIdentitiesPhone: Story = {
-  args: { scenario: 'long' }, globals: { viewport: { value: 'phone390', isRotated: false } }, play: longIdentities,
+  args: { scenario: 'long' },
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  play: longIdentities,
 };
 export const LongIdentitiesDesktop: Story = {
-  args: { scenario: 'long' }, globals: { viewport: { value: 'desktop1280', isRotated: false } }, play: longIdentities,
+  args: { scenario: 'long' },
+  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  play: longIdentities,
 };
 export const GenericResource: Story = {
   args: { scenario: 'generic' },

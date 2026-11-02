@@ -6,23 +6,40 @@ import type { OwnerTransfer } from '../src/accounts/resource-access/owner-transf
 import { snapshot, managerId, readerId } from '../src/stories/pages/accounts-resource-access/fixtures';
 
 // UNRUN. Actual React renderer assertions; neither Happy DOM nor authored stories establish browser/native proof.
-const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+);
 const window = new Window({ url: 'https://site.test/en/accounts/resource-access', width: 1280, height: 900 });
 const globals = {
-  window, document: window.document, navigator: window.navigator,
-  HTMLElement: window.HTMLElement, HTMLInputElement: window.HTMLInputElement,
-  HTMLButtonElement: window.HTMLButtonElement, HTMLFormElement: window.HTMLFormElement,
-  Element: window.Element, Node: window.Node, NodeFilter: window.NodeFilter,
-  Document: window.Document, ShadowRoot: window.ShadowRoot, DocumentFragment: window.DocumentFragment,
-  MutationObserver: window.MutationObserver, ResizeObserver: window.ResizeObserver,
-  Event: window.Event, KeyboardEvent: window.KeyboardEvent, FocusEvent: window.FocusEvent,
-  MouseEvent: window.MouseEvent, PointerEvent: window.PointerEvent, CSS: window.CSS,
+  window,
+  document: window.document,
+  navigator: window.navigator,
+  HTMLElement: window.HTMLElement,
+  HTMLInputElement: window.HTMLInputElement,
+  HTMLButtonElement: window.HTMLButtonElement,
+  HTMLFormElement: window.HTMLFormElement,
+  Element: window.Element,
+  Node: window.Node,
+  NodeFilter: window.NodeFilter,
+  Document: window.Document,
+  ShadowRoot: window.ShadowRoot,
+  DocumentFragment: window.DocumentFragment,
+  MutationObserver: window.MutationObserver,
+  ResizeObserver: window.ResizeObserver,
+  Event: window.Event,
+  KeyboardEvent: window.KeyboardEvent,
+  FocusEvent: window.FocusEvent,
+  MouseEvent: window.MouseEvent,
+  PointerEvent: window.PointerEvent,
+  CSS: window.CSS,
   getComputedStyle: window.getComputedStyle.bind(window),
   requestAnimationFrame: window.requestAnimationFrame.bind(window),
-  cancelAnimationFrame: window.cancelAnimationFrame.bind(window), IS_REACT_ACT_ENVIRONMENT: true,
+  cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+  IS_REACT_ACT_ENVIRONMENT: true,
 };
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-for (const [key, value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+for (const [key, value] of Object.entries(globals))
+  Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 const { createRoot } = await import('react-dom/client');
 const { within, userEvent } = await import('storybook/test');
 const { ResourceAccessPage } = await import('../src/accounts/resource-access/page');
@@ -40,7 +57,10 @@ beforeEach(() => {
   window.document.body.append(host);
   root = createRoot(host);
 });
-afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
+afterEach(async () => {
+  await act(async () => root.unmount());
+  host.remove();
+});
 afterAll(async () => {
   setLocale(previousLocale, { reload: false });
   await window.happyDOM.close();
@@ -49,7 +69,9 @@ afterAll(async () => {
     else Reflect.deleteProperty(globalThis, key);
   }
 });
-const show = async (node: ReactNode) => { await act(async () => root.render(node)); };
+const show = async (node: ReactNode) => {
+  await act(async () => root.render(node));
+};
 function activeIdentity(id: string) {
   const identity = snapshot.identities.find((item) => item.id === id);
   if (identity?.state !== 'active') throw new Error('Expected active illustrative identity');
@@ -67,7 +89,9 @@ function realm(): AccessSnapshot {
   const page = structuredClone(snapshot);
   page.resource.type = 'community.realm';
   page.roles = [{ id: realmOwnerRole, actions: ['realm:read', 'access:grant'], delegable: true }];
-  page.grants = [{ ...page.grants[0]!, kind: 'role', role: realmOwnerRole, subject: { kind: 'account', id: managerId } }];
+  page.grants = [
+    { ...page.grants[0]!, kind: 'role', role: realmOwnerRole, subject: { kind: 'account', id: managerId } },
+  ];
   return page;
 }
 async function details(element: HTMLElement, expected: Array<string | number>) {
@@ -75,7 +99,10 @@ async function details(element: HTMLElement, expected: Array<string | number>) {
   const panel = summary.closest('details')!;
   expect(panel.getAttribute('aria-label')).toBe(m.access_identity_details());
   expect(panel.open).toBe(false);
-  await act(async () => { summary.focus(); await user.keyboard('{Enter}'); });
+  await act(async () => {
+    summary.focus();
+    await user.keyboard('{Enter}');
+  });
   expect(window.document.activeElement).toBe(summary);
   expect(panel.open).toBe(true);
   const values = [...panel.querySelectorAll('dd')];
@@ -89,42 +116,59 @@ async function details(element: HTMLElement, expected: Array<string | number>) {
     node.focus();
     expect(window.document.activeElement).toBe(node);
   }
-  await act(async () => { summary.focus(); await user.keyboard(' '); });
+  await act(async () => {
+    summary.focus();
+    await user.keyboard(' ');
+  });
   expect(panel.open).toBe(false);
 }
 
-for (const width of [390, 1280]) test(`full 20-grant/22-identity DTO keeps long labels and references at ${width} without added reads`, async () => {
-  window.happyDOM.setWindowSize({ width, height: 900 });
-  const page = structuredClone(snapshot);
-  const long = '読書会 · Cercle de lecture · 독서 모임 · ' + '共同研究'.repeat(60);
-  page.identities.push(...Array.from({ length: 20 }, (_, index) => ({
-    ...activeIdentity(readerId), id: `0192f3a0-6c1e-7b2a-a001-${String(300000000 + index).padStart(12, '0')}`, displayName: `${long} ${index}`,
-  })));
-  page.grants = page.identities.slice(2).map((identity) => ({ ...page.grants[0]!, subject: { kind: 'account', id: identity.id } }));
-  page.authority.principalId = readerId;
-  const io = ioFor(page);
-  await show(<ResourceAccessPage initial={{ status: 'ready', page }} io={io} />);
-  const canvas = within(host);
-  expect(canvas.getByRole('heading', { name: m.library_following_kind_collection() }).textContent).toBe('Collection');
-  expect(canvas.getByText(m.access_acting_as({ name: 'Mira' })).closest('details')).toBeNull();
-  expect(canvas.getByText(m.access_delegated_by({ name: 'Aki' })).closest('details')).toBeNull();
-  const rows = canvas.getAllByRole('listitem');
-  expect(rows).toHaveLength(20);
-  for (const [index, row] of rows.entries()) {
-    expect(within(row).getAllByRole('heading')).toHaveLength(1);
-    expect(row.querySelector('h3')!.textContent).toBe(`${long} ${index}`);
-    expect(row.className).toContain('[&_[data-content-item-slot=title]]:line-clamp-none');
-    expect(row.className).toContain('[&_[data-content-item-slot=title]]:[overflow-wrap:anywhere]');
-    expect(row.querySelector('a')).toBeNull();
-    for (let repeat = 0; repeat < 2; repeat++) await details(row, [page.identities[index + 2]!.id, page.grants[index]!.valid]);
-  }
-  await details(canvas.getByRole('region', { name: m.access_resource() }), [page.resource.id, page.resource.type, page.resource.route, managerId, readerId]);
-  expect(io.read.mock.calls).toHaveLength(0);
-  expect(io.lookup.mock.calls).toHaveLength(0);
-  expect(io.save.mock.calls).toHaveLength(0);
-  expect(io.transfer.mock.calls).toHaveLength(0);
-  // Real wrapping geometry is authored in both canonical browser stories, and remains UNRUN.
-});
+for (const width of [390, 1280])
+  test(`full 20-grant/22-identity DTO keeps long labels and references at ${width} without added reads`, async () => {
+    window.happyDOM.setWindowSize({ width, height: 900 });
+    const page = structuredClone(snapshot);
+    const long = '読書会 · Cercle de lecture · 독서 모임 · ' + '共同研究'.repeat(60);
+    page.identities.push(
+      ...Array.from({ length: 20 }, (_, index) => ({
+        ...activeIdentity(readerId),
+        id: `0192f3a0-6c1e-7b2a-a001-${String(300000000 + index).padStart(12, '0')}`,
+        displayName: `${long} ${index}`,
+      })),
+    );
+    page.grants = page.identities
+      .slice(2)
+      .map((identity) => ({ ...page.grants[0]!, subject: { kind: 'account', id: identity.id } }));
+    page.authority.principalId = readerId;
+    const io = ioFor(page);
+    await show(<ResourceAccessPage initial={{ status: 'ready', page }} io={io} />);
+    const canvas = within(host);
+    expect(canvas.getByRole('heading', { name: m.library_following_kind_collection() }).textContent).toBe('Collection');
+    expect(canvas.getByText(m.access_acting_as({ name: 'Mira' })).closest('details')).toBeNull();
+    expect(canvas.getByText(m.access_delegated_by({ name: 'Aki' })).closest('details')).toBeNull();
+    const rows = canvas.getAllByRole('listitem');
+    expect(rows).toHaveLength(20);
+    for (const [index, row] of rows.entries()) {
+      expect(within(row).getAllByRole('heading')).toHaveLength(1);
+      expect(row.querySelector('h3')!.textContent).toBe(`${long} ${index}`);
+      expect(row.className).toContain('[&_[data-content-item-slot=title]]:line-clamp-none');
+      expect(row.className).toContain('[&_[data-content-item-slot=title]]:[overflow-wrap:anywhere]');
+      expect(row.querySelector('a')).toBeNull();
+      for (let repeat = 0; repeat < 2; repeat++)
+        await details(row, [page.identities[index + 2]!.id, page.grants[index]!.valid]);
+    }
+    await details(canvas.getByRole('region', { name: m.access_resource() }), [
+      page.resource.id,
+      page.resource.type,
+      page.resource.route,
+      managerId,
+      readerId,
+    ]);
+    expect(io.read.mock.calls).toHaveLength(0);
+    expect(io.lookup.mock.calls).toHaveLength(0);
+    expect(io.save.mock.calls).toHaveLength(0);
+    expect(io.transfer.mock.calls).toHaveLength(0);
+    // Real wrapping geometry is authored in both canonical browser stories, and remains UNRUN.
+  });
 
 test('missing identity is unavailable, only explicit deletion is tombstoned, and exact IDs remain keyboard reachable', async () => {
   const page = structuredClone(snapshot);
@@ -156,7 +200,13 @@ test('missing identity is unavailable, only explicit deletion is tombstoned, and
   expect(canvas.getByRole('heading', { name: m.access_resource() })).toBeTruthy();
   await details(rows[1]!, [missing, page.grants[1]!.valid]);
   await details(rows[2]!, [unnamed, page.grants[2]!.valid]);
-  await details(canvas.getByRole('region', { name: m.access_resource() }), [page.resource.id, page.resource.type, page.resource.route, missing, missing]);
+  await details(canvas.getByRole('region', { name: m.access_resource() }), [
+    page.resource.id,
+    page.resource.type,
+    page.resource.route,
+    missing,
+    missing,
+  ]);
   expect(io.read.mock.calls).toHaveLength(0);
   expect(io.lookup.mock.calls).toHaveLength(0);
 });
@@ -166,14 +216,21 @@ test('organization and unnamed Realm owner/member groups keep human qualificatio
   page.mutationState = 'realm_guard_unavailable';
   page.actions = [];
   page.roles = [];
-  page.grants = (['organization', 'realm'] as const).flatMap((kind) => (['owner', 'member'] as const).map((role) => ({
-    ...snapshot.grants[0]!, subject: { kind, id: kind === 'realm' ? page.resource.id : readerId, role }, manageable: false,
-  })));
+  page.grants = (['organization', 'realm'] as const).flatMap((kind) =>
+    (['owner', 'member'] as const).map((role) => ({
+      ...snapshot.grants[0]!,
+      subject: { kind, id: kind === 'realm' ? page.resource.id : readerId, role },
+      manageable: false,
+    })),
+  );
   await show(<ResourceAccessPage initial={{ status: 'ready', page }} io={ioFor(page)} />);
   const canvas = within(host);
   const rows = canvas.getAllByRole('listitem');
   expect(rows.map((row) => within(row).getByRole('heading', { level: 3 }).textContent)).toEqual([
-    `Aki · ${m.access_org_owners()}`, `Aki · ${m.access_org_members()}`, m.access_realm_owners(), m.access_realm_members(),
+    `Aki · ${m.access_org_owners()}`,
+    `Aki · ${m.access_org_members()}`,
+    m.access_realm_owners(),
+    m.access_realm_members(),
   ]);
   expect(canvas.getByText(m.access_realm_guard()).closest('details')).toBeNull();
   for (const [index, row] of rows.entries()) {
@@ -186,7 +243,9 @@ test('organization and unnamed Realm owner/member groups keep human qualificatio
 async function selectTransfer() {
   const canvas = within(host);
   await act(async () => user.click(canvas.getByRole('button', { name: m.access_grant_actions() })));
-  const item = await within(window.document.body as unknown as HTMLElement).findByText(m.access_transfer_owner(), { selector: '[role="menuitem"], button' });
+  const item = await within(window.document.body as unknown as HTMLElement).findByText(m.access_transfer_owner(), {
+    selector: '[role="menuitem"], button',
+  });
   await act(async () => user.click(item));
 }
 async function reviewTransfer() {
@@ -201,7 +260,15 @@ test('unavailable reload and current grant/permission retirement remove stale id
   const page = realm();
   let current: AccessState = { status: 'ready', page };
   let finish: ((value: AccessState) => void) | undefined;
-  const io = { ...ioFor(page), read: mock(() => new Promise<AccessState>((resolve) => { finish = resolve; })) };
+  const io = {
+    ...ioFor(page),
+    read: mock(
+      () =>
+        new Promise<AccessState>((resolve) => {
+          finish = resolve;
+        }),
+    ),
+  };
   await show(<ResourceAccessPage initial={{ status: 'unavailable' }} io={io} />);
   const canvas = within(host);
   expect(canvas.getByRole('alert').textContent).toBe(m.access_unavailable());
@@ -211,7 +278,14 @@ test('unavailable reload and current grant/permission retirement remove stale id
   expect(canvas.getByRole('heading', { name: m.access_transfer_owner() })).toBeTruthy();
   for (const next of [
     { status: 'ready', page: { ...page, grants: [] } },
-    { status: 'ready', page: { ...page, roles: page.roles.map((role) => ({ ...role, delegable: false })), grants: page.grants.map((grant) => ({ ...grant, manageable: false })) } },
+    {
+      status: 'ready',
+      page: {
+        ...page,
+        roles: page.roles.map((role) => ({ ...role, delegable: false })),
+        grants: page.grants.map((grant) => ({ ...grant, manageable: false })),
+      },
+    },
     { status: 'denied' },
   ] satisfies AccessState[]) {
     current = next;
@@ -229,30 +303,54 @@ test('unavailable reload and current grant/permission retirement remove stale id
   expect(io.transfer.mock.calls).toHaveLength(0);
 });
 
-for (const state of ['missing', 'deleted'] as const) test(`transfer review keeps ${state} source honest and exact callback operands visible before confirmation`, async () => {
-  const page = realm();
-  page.identities = page.identities.filter((identity) => identity.id !== managerId);
-  if (state === 'deleted') page.identities.push({ id: managerId, state: 'deleted', kind: 'actor' });
-  const io = ioFor(page);
-  const onConfirm = mock();
-  await show(<OwnerTransferForm page={page} grant={page.grants[0]!} io={io} onConfirm={onConfirm} onCancel={() => {}} />);
-  const element = await reviewTransfer();
-  const dialog = within(element);
-  expect(dialog.getByText((text) => text.includes(state === 'deleted' ? m.access_deleted_account() : m.access_unknown_account())).closest('details')).toBeNull();
-  const values = [...element.querySelectorAll('dd')];
-  expect(values.map((node) => node.textContent)).toEqual(['Realm', page.resource.id, page.resource.type, String(page.resource.route), managerId, readerId, page.grants[0]!.valid]);
-  for (const value of values) {
-    expect(value.closest('details, [hidden]')).toBeNull();
-    expect(value.classList.contains('select-all')).toBe(true);
-    expect(value.classList.contains('break-all')).toBe(true);
-  }
-  expect(element.textContent).toContain(m.access_transfer_responsibility());
-  expect(onConfirm.mock.calls).toHaveLength(0);
-  await act(async () => user.click(dialog.getByRole('button', { name: m.access_transfer_owner() })));
-  expect(JSON.stringify(onConfirm.mock.calls[0]![0])).toBe(JSON.stringify({ resource: { id: page.resource.id, route: page.resource.route }, fromAccountId: managerId, toAccountId: readerId, previousValid: page.grants[0]!.valid }));
-  expect(io.read.mock.calls).toHaveLength(0);
-  expect(io.lookup.mock.calls).toHaveLength(1);
-});
+for (const state of ['missing', 'deleted'] as const)
+  test(`transfer review keeps ${state} source honest and exact callback operands visible before confirmation`, async () => {
+    const page = realm();
+    page.identities = page.identities.filter((identity) => identity.id !== managerId);
+    if (state === 'deleted') page.identities.push({ id: managerId, state: 'deleted', kind: 'actor' });
+    const io = ioFor(page);
+    const onConfirm = mock();
+    await show(
+      <OwnerTransferForm page={page} grant={page.grants[0]!} io={io} onConfirm={onConfirm} onCancel={() => {}} />,
+    );
+    const element = await reviewTransfer();
+    const dialog = within(element);
+    expect(
+      dialog
+        .getByText((text) =>
+          text.includes(state === 'deleted' ? m.access_deleted_account() : m.access_unknown_account()),
+        )
+        .closest('details'),
+    ).toBeNull();
+    const values = [...element.querySelectorAll('dd')];
+    expect(values.map((node) => node.textContent)).toEqual([
+      'Realm',
+      page.resource.id,
+      page.resource.type,
+      String(page.resource.route),
+      managerId,
+      readerId,
+      page.grants[0]!.valid,
+    ]);
+    for (const value of values) {
+      expect(value.closest('details, [hidden]')).toBeNull();
+      expect(value.classList.contains('select-all')).toBe(true);
+      expect(value.classList.contains('break-all')).toBe(true);
+    }
+    expect(element.textContent).toContain(m.access_transfer_responsibility());
+    expect(onConfirm.mock.calls).toHaveLength(0);
+    await act(async () => user.click(dialog.getByRole('button', { name: m.access_transfer_owner() })));
+    expect(JSON.stringify(onConfirm.mock.calls[0]![0])).toBe(
+      JSON.stringify({
+        resource: { id: page.resource.id, route: page.resource.route },
+        fromAccountId: managerId,
+        toAccountId: readerId,
+        previousValid: page.grants[0]!.valid,
+      }),
+    );
+    expect(io.read.mock.calls).toHaveLength(0);
+    expect(io.lookup.mock.calls).toHaveLength(1);
+  });
 
 test('actual page confirmation and uncertain retry send byte-identical original operands, key and credential without extra reads', async () => {
   const page = realm();
@@ -261,17 +359,31 @@ test('actual page confirmation and uncertain retry send byte-identical original 
   let effects = 0;
   const read = mock(async (): Promise<AccessState> => ({ status: 'ready', page: structuredClone(page) }));
   const io: AccessIO = {
-    ...ioFor(page), read,
-    transfer: (input) => transferOwner('https://kernel.test', 'Bearer original', input, read, (async (_url, init) => {
-      const headers = new Headers(init?.headers);
-      commands.push({ body: String(init?.body), key: headers.get('idempotency-key'), authorization: headers.get('authorization'), input: structuredClone(input) });
-      if (commands.length === 1) {
-        effects++;
-        page.grants = [{ ...page.grants[0]!, subject: { kind: 'account', id: readerId }, valid: '[2026-11-02,)' }];
-        throw new Error('Response lost after effect');
-      }
-      return Response.json({ roleGrant: { resource: input.resource, subject: { kind: 'account', id: readerId }, role: realmOwnerRole, valid: page.grants[0]!.valid } });
-    }) as typeof fetch),
+    ...ioFor(page),
+    read,
+    transfer: (input) =>
+      transferOwner('https://kernel.test', 'Bearer original', input, read, (async (_url, init) => {
+        const headers = new Headers(init?.headers);
+        commands.push({
+          body: String(init?.body),
+          key: headers.get('idempotency-key'),
+          authorization: headers.get('authorization'),
+          input: structuredClone(input),
+        });
+        if (commands.length === 1) {
+          effects++;
+          page.grants = [{ ...page.grants[0]!, subject: { kind: 'account', id: readerId }, valid: '[2026-11-02,)' }];
+          throw new Error('Response lost after effect');
+        }
+        return Response.json({
+          roleGrant: {
+            resource: input.resource,
+            subject: { kind: 'account', id: readerId },
+            role: realmOwnerRole,
+            valid: page.grants[0]!.valid,
+          },
+        });
+      }) as typeof fetch),
   };
   await show(<ResourceAccessPage initial={{ status: 'ready', page: structuredClone(page) }} io={io} />);
   await selectTransfer();
@@ -289,7 +401,14 @@ test('actual page confirmation and uncertain retry send byte-identical original 
   await act(async () => user.click(canvas.getByRole('button', { name: m.access_retry_operation() })));
   expect(commands).toHaveLength(2);
   expect(commands[1]).toEqual(commands[0]);
-  expect(commands[0]!.body).toBe(JSON.stringify({ resource: { route: page.resource.route, id: page.resource.id }, fromAccountId: managerId, toAccountId: readerId, previousValid: originalValid }));
+  expect(commands[0]!.body).toBe(
+    JSON.stringify({
+      resource: { route: page.resource.route, id: page.resource.id },
+      fromAccountId: managerId,
+      toAccountId: readerId,
+      previousValid: originalValid,
+    }),
+  );
   expect(commands[0]!.key).toBe(JSON.stringify(commands[0]!.input.key));
   expect(commands[0]!.authorization).toBe('Bearer original');
   expect(read.mock.calls).toHaveLength(4);
