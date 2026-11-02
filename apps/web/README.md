@@ -3028,7 +3028,9 @@ qualification, complete UTC windows, ranking, expiry and current/final anonymous
 previous 30 complete UTC days; Trending covers the previous complete UTC day. The client supplies no timestamp,
 Explore fallback, permission or popularity estimate. Native failures become unavailable, and `platform_closed`
 becomes closed; neither becomes an empty success. Empty pages keep their continuation. Callers replace outdated
-state, hide prior results on failures, and deduplicate Realm IDs if accumulating multiple pages.
+state and deduplicate Realm IDs if accumulating multiple pages. Both installed callers retain accumulated public
+rows and the exact cursor on a failed continuation, retry that page manually and allow only one pending page;
+`platform_closed` still clears prior rows. Sparse pages advance only through their returned continuation.
 
 The attached [Realm discovery Pattern](src/stories/patterns/realm-discovery/realm-discovery.mdx) has the shared IDs
 `patterns-community-realm-discovery--available`, `--image`, `--initials`, `--sparse`, `--empty`, `--loading`,

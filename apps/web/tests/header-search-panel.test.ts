@@ -608,18 +608,18 @@ test('the existing global empty-query phone search surface composes the sole nat
 
   const second = page.next();
   void page.next();
-  expect(states.at(-1)).toEqual({ kind: 'loading' });
+  expect(states.at(-1)).toEqual({ kind: 'ready', realms: [card], next: cursor });
   expect(requests[1]).toEqual({ locale: 'zh-Hans', sort: 'trending', cursor, limit: 20 });
   completions[1]!({ kind: 'unavailable' });
   await second;
-  expect(states.at(-1)).toEqual({ kind: 'unavailable' });
+  expect(states.at(-1)).toEqual({ kind: 'ready', realms: [card], next: cursor });
   const retry = page.retry();
   void page.retry();
   expect(requests[2]).toEqual(requests[1]);
   completions[2]!({ kind: 'ready', realms: [], next: 'empty-with-next' });
   await retry;
-  expect(states.at(-1)).toEqual({ kind: 'ready', realms: [], next: 'empty-with-next' });
-  // A sparse page retains its exact continuation, without restoring or accumulating the previous card.
+  expect(states.at(-1)).toEqual({ kind: 'ready', realms: [card], next: 'empty-with-next' });
+  // A sparse page retains its exact continuation and the accumulated public cards.
   await Promise.resolve();
   expect(requests).toHaveLength(3);
   const last = page.next();
@@ -627,7 +627,7 @@ test('the existing global empty-query phone search surface composes the sole nat
   completions[3]!({ kind: 'ready', realms: [], next: null });
   await last;
   void page.next();
-  expect(states.at(-1)).toEqual({ kind: 'ready', realms: [], next: null });
+  expect(states.at(-1)).toEqual({ kind: 'ready', realms: [card], next: null });
   expect(requests).toHaveLength(4);
   page.dispose();
 });

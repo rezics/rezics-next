@@ -1,8 +1,6 @@
 import { useEffect, useReducer, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Button } from '@rezics/ui/shadcn/button';
 import { RealmDiscoverySection, type RealmDiscoverySort, type RealmDiscoveryState } from '../community/realm-discovery';
-import { m } from '../paraglide/messages.js';
 import { realmDiscoveryQueryOptions, reduceRealmDiscovery, type RealmDiscoveryReader } from './realm-discovery-loader';
 
 /** Search owns request/continuation state; Content owns the only card renderer and GET adapter. */
@@ -41,31 +39,17 @@ export function SearchRealmDiscovery({
     }
   }
 
-  const options = { locale: locale as never };
   return (
     <div className="space-y-3" aria-busy={pending}>
       <RealmDiscoverySection
         sort={sort}
         state={state}
         locale={locale}
-        {...(!pending && !retry && state.kind === 'ready' && state.next !== null ? { onNext: load } : {})}
-        {...(!pending && retry && state.kind === 'unavailable' ? { onRetry: load } : {})}
+        pending={pending}
+        retry={retry}
+        {...(!retry && state.kind === 'ready' && state.next !== null ? { onNext: load } : {})}
+        {...(!pending && retry ? { onRetry: load } : {})}
       />
-      {state.kind === 'ready' && pending && (
-        <p role="status" className="text-sm text-muted-foreground">
-          {m.discovery_loading({}, options)}
-        </p>
-      )}
-      {state.kind === 'ready' && retry && (
-        <div className="space-y-2">
-          <p role="status" className="text-sm text-muted-foreground">
-            {m.search_failed({}, options)}
-          </p>
-          <Button type="button" variant="outline" onClick={load}>
-            {m.search_facet_retry({}, options)}
-          </Button>
-        </div>
-      )}
     </div>
   );
 }

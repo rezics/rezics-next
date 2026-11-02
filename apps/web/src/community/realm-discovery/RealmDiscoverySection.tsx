@@ -13,6 +13,8 @@ export function RealmDiscoverySection({
   sort,
   state,
   locale,
+  pending = false,
+  retry = false,
   onNext,
   onRetry,
 }: RealmDiscoverySectionProps): ReactElement {
@@ -24,7 +26,7 @@ export function RealmDiscoverySection({
       data-slot="realm-discovery"
       data-sort={sort}
       aria-label={title}
-      aria-busy={state.kind === 'loading'}
+      aria-busy={pending || state.kind === 'loading'}
       className="min-w-0 space-y-3 text-foreground"
     >
       <header className="space-y-1">
@@ -90,9 +92,19 @@ export function RealmDiscoverySection({
               {state.next === null ? m.realm_discovery_empty({}, options) : m.realm_discovery_page_empty({}, options)}
             </p>
           )}
-          {state.next !== null && onNext ? (
-            <Button variant="outline" className="min-h-11" onClick={onNext}>
+          {state.next !== null && onNext && !retry ? (
+            <Button variant="outline" className="min-h-11" disabled={pending} onClick={onNext}>
               {m.realm_discovery_continue({}, options)}
+            </Button>
+          ) : null}
+          {pending || retry ? (
+            <p role="status" className="text-sm text-muted-foreground">
+              {pending ? m.realm_discovery_loading({}, options) : m.realm_discovery_unavailable({}, options)}
+            </p>
+          ) : null}
+          {retry && !pending && onRetry ? (
+            <Button variant="outline" className="min-h-11" onClick={onRetry}>
+              {m.realm_discovery_retry({}, options)}
             </Button>
           ) : null}
           {state.realms.map((realm) =>

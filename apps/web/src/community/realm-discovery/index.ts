@@ -19,6 +19,8 @@ export type RealmDiscoverySectionProps = Readonly<{
   sort: RealmDiscoverySort;
   state: RealmDiscoveryState;
   locale: string;
+  pending?: boolean;
+  retry?: boolean;
   onNext?: () => void;
   onRetry?: () => void;
 }>;
