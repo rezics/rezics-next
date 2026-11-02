@@ -177,8 +177,9 @@ test('Character local choices preserve exact recovery on Stay and fence abandone
     await click(m.thread_authoring_leave(), screen);
     await waitFor(() => expect(loads.at(-1)?.work).toBeUndefined());
     await act(async () => finishRelation({ ok: true, candidate: 'late-candidate', revision: 2 }));
-    expect(canvas.queryByRole('status', { name: m.relation_proposed() })).toBeNull();
+    expect(canvas.queryByText(m.relation_proposed())).toBeNull();
     expect(proposals).toHaveLength(2);
+    await waitFor(() => expect(canvas.getByText(m.character_choose_work())).toBeDefined());
     const oldWorkPicker = pickers.get(m.character_choose_work())!;
     await choose(m.character_choose_work(), fixture.work.id);
     await waitFor(() => expect(host.querySelector('[data-slot="fictional-work-reference"]')).not.toBeNull());
