@@ -2590,12 +2590,7 @@ export class MergeTrain {
           )
             return 'Unchanged claim no longer matches its task and current attempt';
           if (request.sourceDirtyAtSettlement) return 'Unchanged claim source was dirty at settlement';
-          if (
-            !request.workerCommit ||
-            workerCommit !== request.workerCommit ||
-            tip !== workerCommit ||
-            worked
-          )
+          if (!request.workerCommit || workerCommit !== request.workerCommit || tip !== workerCommit || worked)
             return 'Unchanged claim source changed after settlement';
           if (
             !request.contractHash ||
@@ -2649,11 +2644,7 @@ export class MergeTrain {
             )
               installShared(trainTree);
             const checked = await runGate(request.gate, trainTree, logPath);
-            retainedSourceAcceptance.status = checked.passed
-              ? 'passed'
-              : checked.timedOut
-                ? 'unavailable'
-                : 'failed';
+            retainedSourceAcceptance.status = checked.passed ? 'passed' : checked.timedOut ? 'unavailable' : 'failed';
             assertCandidate(trainTree, workerCommit!, 'retained-source acceptance', logPath);
             if (git(trainTree, 'status', '--porcelain', '--untracked-files=all'))
               throw new Error('Retained-source acceptance left a dirty source worktree');

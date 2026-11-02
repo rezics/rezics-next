@@ -79,7 +79,9 @@ test('dirty or changed source and contract refuse an unchanged claim before acce
   }
 });
 
-test.each([false, true])('historical empty commits complete without advancing dev (frozen acceptance: %s)', async (frozen) => {
+test.each([false, true])(
+  'historical empty commits complete without advancing dev (frozen acceptance: %s)',
+  async (frozen) => {
     const h = integrationHarness();
     try {
       h.ensureDev();
@@ -114,10 +116,12 @@ test.each([false, true])('historical empty commits complete without advancing de
     } finally {
       h.dispose();
     }
-});
+  },
+);
 
 test.each(['unavailable', 'dirty', 'source', 'contract', 'stale'] as const)(
-  '%s during acceptance never completes an unchanged claim', async (change) => {
+  '%s during acceptance never completes an unchanged claim',
+  async (change) => {
     const h = integrationHarness();
     try {
       const { source, task } = await unchangedClaim(h, ['true']);
