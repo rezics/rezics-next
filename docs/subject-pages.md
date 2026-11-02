@@ -449,6 +449,8 @@ Character and StoryArc classification keyboard Edit/Add focuses the new private 
 Generic fact corrections protect pathname and search-address departure and browser unload for all changed private drafts, including excluded drafts and drafts retained during read recovery, and pending or unknown proposals; Stay preserves exact retries and siblings, while Leave retires local recovery without undoing sent proposals. Confirmed results alone do not block departure, and their inline candidate review remains available without leaving the workspace.
 
 The workspace reuses the scalar editor's native value, qualifier and grouped-citation controls and validators.
+Invalid scalar feedback reuses the single-statement correction guidance and stable control associations; editing clears the
+submitted violations, and unresolved nested targets link to their matching section fallback.
 Existing unsupported parts stay intact. Names and descriptions use the separate actual terms PATCH editor;
 relations/credits use their exact-slot editor. Types with document fields link to the existing
 [authored composer](#original-authored-catalogue-text) at `/authored` for a new original-text candidate.

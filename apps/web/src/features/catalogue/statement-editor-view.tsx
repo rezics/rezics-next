@@ -104,6 +104,41 @@ export function EditorFailure({ reason, locale }: { reason: string; locale: stri
   );
 }
 
+export function StatementViolationLinks({
+  feedback,
+  locale,
+  active,
+}: {
+  feedback: StatementFeedback;
+  locale: string;
+  active: () => boolean;
+}) {
+  if (!feedback.errors.length) return null;
+  const o = { locale: locale as never };
+  return (
+    <ul className="list-disc space-y-2 ps-5 text-sm" aria-label={m.correction_errors({}, o)}>
+      {feedback.errors.map((error) => (
+        <li key={error.id} id={error.id}>
+          <a
+            className={`${linkClassName} font-medium`}
+            href={`#${error.target}`}
+            onClick={(event) => {
+              event.preventDefault();
+              if (!active()) return;
+              const target = event.currentTarget.ownerDocument.getElementById(error.target);
+              target?.focus();
+              target?.scrollIntoView?.({ block: 'center' });
+            }}
+          >
+            {error.label}
+          </a>
+          <p>{error.instruction}</p>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function StatementEditorNavigation({ dirty, pending }: { dirty: boolean; pending: boolean }) {
   const lifetime = useEditorLifetime();
   useAuthoringDeparture(
@@ -1206,28 +1241,7 @@ function StatementEditorLive({
       {failure && (
         <div className="space-y-3 rounded-lg border border-destructive/50 p-4">
           <EditorFailure reason={failure.reason} locale={locale} />
-          {!!feedback.errors.length && (
-            <ul className="list-disc space-y-2 ps-5 text-sm" aria-label={m.correction_errors({}, o)}>
-              {feedback.errors.map((error) => (
-                <li key={error.id} id={error.id}>
-                  <a
-                    className={`${linkClassName} font-medium`}
-                    href={`#${error.target}`}
-                    onClick={(event) => {
-                      event.preventDefault();
-                      if (!lifetime.active()) return;
-                      const target = event.currentTarget.ownerDocument.getElementById(error.target);
-                      target?.focus();
-                      target?.scrollIntoView?.({ block: 'center' });
-                    }}
-                  >
-                    {error.label}
-                  </a>
-                  <p>{error.instruction}</p>
-                </li>
-              ))}
-            </ul>
-          )}
+          <StatementViolationLinks feedback={feedback} locale={locale} active={() => lifetime.active()} />
         </div>
       )}
       {busy && <p role="status">{m.correction_saving({}, o)}</p>}

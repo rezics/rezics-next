@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { act, createElement as h, useState, type ReactNode } from 'react';
-import { stageFact, type FactCommand, type FactDraft } from '../src/features/catalogue/subject-facts';
+import { sealFacts, stageFact, type FactCommand, type FactDraft } from '../src/features/catalogue/subject-facts';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
@@ -522,5 +522,78 @@ test('A withdrawn fact source needs an explicit replacement, including after an 
     await act(async () => edit().click());
     expect(staged[0]?.source).toBe(replacement.id);
     expect(staged[0]?.baseline?.value).toEqual(replacement.value);
+  });
+});
+
+test('Mounted fact correction links quantity and nested violations, clears revised feedback, and falls back for stale parts', async () => {
+  await mounted(async ({ host, render, enter }) => {
+    const { FactField } = await import('../src/features/catalogue/subject-facts-view');
+    const { mangaFixture, mangaVolumeId } = await import('../src/kernel/fake/catalogue-manga-profile');
+    const { readMangaProfile } = await import('../src/features/catalogue/manga-profile');
+    const { m } = await import('../src/paraglide/messages.js');
+    const fixture = mangaFixture();
+    const read = await readMangaProfile(fixture.client, mangaVolumeId);
+    if (!read.ok || !read.public) throw new Error('Expected current Manga volume');
+    const property = 'schema:numberOfPages';
+    read.release.properties[property]!.qualifiers = ['schema:position'];
+    const source = read.public.subject.statements[property]![0]!;
+    const draft = stageFact(read, property, source.id)!;
+    draft.statement.value = { type: 'value', content: { amount: '+bad', unit: '1' } };
+    draft.statement.qualifiers = [{ property: { id: 'schema:position' }, value: { type: 'value', content: '' } }];
+    draft.statement.references[0]!.parts[0]!.value = { type: 'value', content: 'not-a-url' };
+    const [sealed] = sealFacts(mangaVolumeId, read.release, [draft]);
+    if (!sealed || sealed.result?.ok !== false || sealed.result.reason !== 'invalid')
+      throw new Error('Expected precise fact violations');
+    let current: FactDraft = {
+      ...sealed,
+      result: {
+        ...sealed.result,
+        errors: [
+          ...(sealed.result.errors ?? []),
+          { pointer: '/statement/qualifiers/7/value/content', code: 'invalid_format' as const },
+        ],
+      },
+    };
+    const field = () =>
+      h(FactField, {
+        property,
+        read,
+        locale: 'en',
+        draft: current,
+        busy: false,
+        canStage: true,
+        href: `/en/subjects/${mangaVolumeId}/volume-2`,
+        onStage() {},
+        onChange: (next) => (current = next),
+        onReview() {},
+      });
+    const control = (label: string) => {
+      const node = [...host.querySelectorAll('label')].find((item) => item.textContent?.trim() === label)!;
+      return host.ownerDocument.getElementById(node.htmlFor) as HTMLInputElement;
+    };
+    await render(field());
+    const summary = () => host.querySelector<HTMLUListElement>(`ul[aria-label="${m.correction_errors()}"]`)!;
+    const amount = control(m.correction_amount());
+    const errors = summary();
+    const described = new Set([...errors.querySelectorAll('li')].map((item) => item.id));
+    const invalid = [...host.querySelectorAll<HTMLElement>('[aria-invalid="true"]')];
+    expect(invalid).toHaveLength(3);
+    expect(invalid.every((item) => described.has(item.getAttribute('aria-describedby')!))).toBe(true);
+    expect(errors.textContent).toContain(m.correction_error_quantity());
+    expect(errors.textContent).toContain(m.correction_error_url());
+    const amountLink = [...errors.querySelectorAll('a')].find((item) =>
+      item.textContent?.includes(m.correction_amount()),
+    )!;
+    expect(amountLink.getAttribute('href')).toBe(`#${amount.id}`);
+    await act(async () => amountLink.click());
+    expect(host.ownerDocument.activeElement).toBe(amount);
+    const fallback = [...summary().querySelectorAll('a')].find((item) => item.textContent === m.correction_qualifiers())!;
+    const section = host.ownerDocument.getElementById(fallback.getAttribute('href')!.slice(1))!;
+    expect(section.tagName).toBe('SECTION');
+    expect(section.id).toContain('qualifiers');
+    await enter(amount, '+192');
+    await render(field(), true);
+    expect(summary()).toBeNull();
+    expect(control(m.correction_amount()).hasAttribute('aria-invalid')).toBe(false);
   });
 });

@@ -24,8 +24,9 @@ import { subjectHref } from '../../subject/subject-href';
 import { CandidateReview, type CandidateTransport } from '../../subject/candidate-review';
 import { DefinitionGuideLink } from './definition-guide-view';
 import { AuthoredFieldEntry } from './authored-field-entry';
-import { EditorFailure, PartValue, StatementFields } from './statement-editor-view';
+import { EditorFailure, PartValue, StatementFields, StatementViolationLinks } from './statement-editor-view';
 import type { EditorRead } from './statement-editor';
+import { presentStatementViolations, type StatementFeedback } from './statement-validation-presentation';
 import {
   factChanged,
   factGroups,
@@ -318,11 +319,28 @@ function FactField({
   const sourceId = useId();
   const recoveryId = useId();
   const includeId = useId();
+  const feedbackId = useId();
   // A withdrawn correction must never fall through to staging an additional assertion.
   const sourceSelected = selected.some((statement) => statement.id === source);
   const canEdit = canStage && !busy && (sourceSelected || (!selected.length && !sourceUnavailable));
   const sourceIndex = draft?.source ? selected.findIndex((item) => item.id === draft.source) : -1;
   const locked = !!draft && factLocked(draft);
+  const invalidResult =
+    draft?.result?.ok === false && draft.result.reason === 'invalid' ? draft.result : undefined;
+  // Result and statement travel in the same draft; editing any part clears this positional feedback.
+  const feedback: StatementFeedback | undefined =
+    draft && invalidResult?.errors?.length
+      ? {
+          id: feedbackId,
+          errors: presentStatementViolations(
+            invalidResult.errors,
+            draft.statement,
+            read.release,
+            locale,
+            feedbackId,
+          ),
+        }
+      : undefined;
   const row = useRef<HTMLElement>(null);
   const privateHeadingId = useId();
   const latestOpening = useRef({ read, property, locale, href, editorHref, draft, visible });
@@ -473,6 +491,7 @@ function FactField({
                   draft={draft.statement}
                   current={{ ...read, source: selected.find((item) => item.id === draft.source) ?? null }}
                   locale={locale}
+                  feedback={feedback}
                   change={(statement) =>
                     onChange({ ...draft, statement, command: undefined, result: undefined }, draft)
                   }
@@ -551,9 +570,12 @@ function FactField({
                       <EditorFailure reason={draft.result.reason} locale={locale} />
                     )}
                     {draft.result.reason === 'invalid' && (
-                      <p>
-                        {m.correction_invalid_part({}, o)} {label}
-                      </p>
+                      <>
+                        <p>
+                          {m.correction_invalid_part({}, o)} {label}
+                        </p>
+                        {feedback && <StatementViolationLinks feedback={feedback} locale={locale} active={active} />}
+                      </>
                     )}
                   </>
                 )}
