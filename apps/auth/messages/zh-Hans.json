@@ -99,6 +99,8 @@
   "auth_inventory_unavailable": "暂时无法加载此列表，你的责任和权限仍未知。",
   "auth_inventory_unknown": "结果未知。请重新登录并加载列表后再更改。",
   "auth_inventory_unnamed": "未命名应用",
+  "auth_login_departure_description": "已输入的凭据将被清除。离开页面无法取消已发送到服务器的登录请求。",
+  "auth_login_departure_heading": "离开登录页面？",
   "auth_login_email": "电子邮箱",
   "auth_login_heading": "登录",
   "auth_login_help": "登录帮助",

@@ -99,6 +99,8 @@
   "auth_inventory_unavailable": "暫時無法載入此清單，你的責任和權限仍未知。",
   "auth_inventory_unknown": "結果未知。請重新登入並載入清單後再變更。",
   "auth_inventory_unnamed": "未命名應用程式",
+  "auth_login_departure_description": "已輸入的憑證將被清除。離開頁面無法取消已傳送至伺服器的登入請求。",
+  "auth_login_departure_heading": "離開登入頁面？",
   "auth_login_email": "電子郵件",
   "auth_login_heading": "登入",
   "auth_login_help": "登入協助",

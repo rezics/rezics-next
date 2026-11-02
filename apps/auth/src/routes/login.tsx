@@ -1,9 +1,18 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useBlocker, useRouter } from '@tanstack/react-router';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from '@rezics/ui/shadcn/alert-dialog';
 import { AuthButton as Button } from '../button';
 import { Field, FieldError, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { KeyRound } from 'lucide-react';
-import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import { PasswordInput } from '../password-input';
 import { m } from '../paraglide/messages.js';
 import { AuthPage } from '../frame';
@@ -40,7 +49,89 @@ function LoginPage() {
   );
 }
 
+// Keep navigation ownership local to this form; credentials never enter the blocker or its copy.
+function LoginDeparture({
+  unfinished,
+  leave,
+  focus,
+}: {
+  unfinished: { current: boolean };
+  leave: () => void;
+  focus: () => void;
+}) {
+  const callbacks = useRef({ leave, focus });
+  callbacks.current = { leave, focus };
+  const returnFocus = useRef<HTMLElement | null>(null);
+  const shouldWarn = useCallback(() => unfinished.current, [unfinished]);
+  const blocker = useBlocker({
+    shouldBlockFn: useCallback(
+      ({ next }: { next: { pathname: string } }) => {
+        // A replacement authentication request revokes the previous request before any async continuation.
+        if (next.pathname === '/login') {
+          callbacks.current.leave();
+          return false;
+        }
+        if (!unfinished.current) return false;
+        returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        return true;
+      },
+      [unfinished],
+    ),
+    enableBeforeUnload: shouldWarn,
+    withResolver: true,
+  });
+  const resolver = useRef(blocker);
+  resolver.current = blocker;
+  useLayoutEffect(
+    () => () => {
+      if (resolver.current.status === 'blocked') resolver.current.reset();
+    },
+    [],
+  );
+  useLayoutEffect(() => {
+    // A completed sign-in owns its validated destination, even while a departure choice is open.
+    if (blocker.status === 'blocked' && !unfinished.current) blocker.reset();
+  });
+  const stay = () => {
+    if (blocker.status === 'blocked') blocker.reset();
+  };
+  return (
+    <AlertDialog
+      open={blocker.status === 'blocked'}
+      onOpenChange={(open) => {
+        if (!open) stay();
+      }}
+    >
+      <AlertDialogContent
+        finalFocus={() => {
+          if (returnFocus.current?.isConnected) returnFocus.current.focus();
+          else callbacks.current.focus();
+          return false;
+        }}
+      >
+        <AlertDialogTitle>{m.auth_login_departure_heading()}</AlertDialogTitle>
+        <AlertDialogDescription>{m.auth_login_departure_description()}</AlertDialogDescription>
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={stay}>{m.auth_organization_departure_stay()}</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              if (blocker.status !== 'blocked') return;
+              callbacks.current.leave();
+              blocker.proceed();
+            }}
+          >
+            {m.auth_organization_departure_leave()}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt }) {
+  const { history } = useRouter();
+  const released = useRef(false);
+  const unfinished = useRef(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [pending, setPending] = useState(false);
@@ -53,6 +144,37 @@ function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt })
   const [passkeyPending, setPasskeyPending] = useState(false);
   const alert = useRef<HTMLDivElement>(null);
   const emailInput = useRef<HTMLInputElement>(null);
+  unfinished.current = !released.current && Boolean(email.trim() || password || pending);
+
+  function leave() {
+    released.current = true;
+    unfinished.current = false;
+    attempt.retire();
+    setEmail('');
+    setPassword('');
+    setPending(false);
+    setPasskeyPending(false);
+  }
+
+  function complete(target: string) {
+    leave();
+    window.location.assign(target);
+  }
+
+  function navigate(event: MouseEvent<HTMLAnchorElement>) {
+    if (
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    )
+      return;
+    event.preventDefault();
+    // Push the original href so repeated, empty and signed query parameters keep their exact encoding.
+    history.push(event.currentTarget.getAttribute('href')!);
+  }
 
   useLayoutEffect(() => {
     if (emailError) emailInput.current?.focus();
@@ -99,7 +221,7 @@ function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt })
 
   function finishPasskey(result: PasskeySignInResult) {
     if (result.ok) {
-      window.location.assign(signInTarget(query, window.location.origin));
+      complete(signInTarget(query, window.location.origin));
       return;
     }
     setPending(false);
@@ -120,7 +242,7 @@ function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt })
       const outcome = await confirmStepUpWithPasskey(query, window.location.origin, completion.isCurrent);
       if (!completion.finish()) return;
       if (outcome.ok) {
-        window.location.assign(outcome.target);
+        complete(outcome.target);
         return;
       }
       setPending(false);
@@ -159,7 +281,7 @@ function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt })
       if (!completion.finish()) return;
       setPassword('');
       if (outcome.ok) {
-        window.location.assign(outcome.target);
+        complete(outcome.target);
         return;
       }
       setPending(false);
@@ -170,7 +292,7 @@ function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt })
     if (!completion.finish()) return;
     setPassword('');
     if (result.ok) {
-      window.location.assign(signInTarget(query, window.location.origin));
+      complete(signInTarget(query, window.location.origin));
       return;
     }
     setPending(false);
@@ -185,6 +307,7 @@ function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt })
 
   return (
     <AuthPage heading={m.auth_login_heading()}>
+      <LoginDeparture unfinished={unfinished} leave={leave} focus={() => emailInput.current?.focus()} />
       <form className="auth-login-form" method="post" action="/signin" noValidate onSubmit={submit}>
         <Field data-invalid={Boolean(emailError)}>
           <FieldLabel htmlFor={emailId}>{m.auth_login_email()}</FieldLabel>
@@ -251,8 +374,12 @@ function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt })
         </div>
       ) : null}
       <nav className="auth-login-links" aria-label={m.auth_login_help()}>
-        <a href="/recovery">{m.auth_login_recovery()}</a>
-        <a href={`/signup${query}`}>{m.auth_login_signup()}</a>
+        <a href="/recovery" onClick={navigate}>
+          {m.auth_login_recovery()}
+        </a>
+        <a href={`/signup${query}`} onClick={navigate}>
+          {m.auth_login_signup()}
+        </a>
       </nav>
     </AuthPage>
   );

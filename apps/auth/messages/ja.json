@@ -99,6 +99,8 @@
   "auth_inventory_unavailable": "一覧を取得できません。管理責任と権限は未確認です。",
   "auth_inventory_unknown": "結果は不明です。再度サインインし、一覧を読み込んでから変更してください。",
   "auth_inventory_unnamed": "名前のないアプリ",
+  "auth_login_departure_description": "入力した認証情報は消去されます。サーバーに送信済みのログインは、このページを離れても取り消せません。",
+  "auth_login_departure_heading": "ログインを中断しますか？",
   "auth_login_email": "メールアドレス",
   "auth_login_heading": "ログイン",
   "auth_login_help": "ログインのヘルプ",

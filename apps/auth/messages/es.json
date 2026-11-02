@@ -99,6 +99,8 @@
   "auth_inventory_unavailable": "Esta lista no está disponible. Tus responsabilidades y permisos son desconocidos.",
   "auth_inventory_unknown": "Se desconoce el resultado. Inicia sesión y vuelve a cargar la lista antes de hacer otro cambio.",
   "auth_inventory_unnamed": "Aplicación sin nombre",
+  "auth_login_departure_description": "Se borrarán las credenciales introducidas. Salir no cancela un inicio de sesión que ya se haya enviado al servidor.",
+  "auth_login_departure_heading": "¿Salir del inicio de sesión?",
   "auth_login_email": "Correo electrónico",
   "auth_login_heading": "Iniciar sesión",
   "auth_login_help": "Ayuda para iniciar sesión",

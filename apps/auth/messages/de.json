@@ -99,6 +99,8 @@
   "auth_inventory_unavailable": "Diese Liste ist nicht verfügbar. Deine Verantwortlichkeiten und Berechtigungen sind unbekannt.",
   "auth_inventory_unknown": "Das Ergebnis ist unbekannt. Melde dich erneut an und lade die Liste vor weiteren Änderungen neu.",
   "auth_inventory_unnamed": "Unbenannte Anwendung",
+  "auth_login_departure_description": "Deine eingegebenen Anmeldedaten werden gelöscht. Eine bereits an den Server gesendete Anmeldung kann durch das Verlassen nicht abgebrochen werden.",
+  "auth_login_departure_heading": "Anmeldung verlassen?",
   "auth_login_email": "E-Mail-Adresse",
   "auth_login_heading": "Anmelden",
   "auth_login_help": "Hilfe bei der Anmeldung",

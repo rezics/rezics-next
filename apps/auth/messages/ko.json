@@ -99,6 +99,8 @@
   "auth_inventory_unavailable": "목록을 불러올 수 없습니다. 책임과 권한은 확인되지 않았습니다.",
   "auth_inventory_unknown": "결과를 알 수 없습니다. 다시 로그인하고 목록을 불러온 후 변경하세요.",
   "auth_inventory_unnamed": "이름 없는 앱",
+  "auth_login_departure_description": "입력한 인증 정보가 지워집니다. 이미 서버로 전송된 로그인은 페이지를 떠나도 취소되지 않습니다.",
+  "auth_login_departure_heading": "로그인 페이지를 떠나시겠어요?",
   "auth_login_email": "이메일",
   "auth_login_heading": "로그인",
   "auth_login_help": "로그인 도움말",

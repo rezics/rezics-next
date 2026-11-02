@@ -45,6 +45,8 @@ URL, leaving the page or restoring a cached document discards old callbacks and 
 submission can replace a passkey ceremony; only its current completion may unlock the form or navigate.
 Replacement cancels the browser ceremony, without undoing a server sign-in or retrying an uncertain request.
 
+Decision: login Stay/Leave protects non-whitespace email, any password or a pending explicit sign-in in memory; Stay retains validation, the current request and focus, Leave clears inputs and retires callbacks, reload/close uses the browser warning, and replacement login requests or successful validated returns bypass the choice. Background conditional passkey autofill alone does not warn.
+
 The submit button stays enabled until a request is pending. Submission validates the email and password, marks each
 invalid field with a linked error, and focuses the first invalid field. The password uses the shared in-field show and
 hide control. A refusal keeps the email, clears the password and focuses a destructive alert with an icon and title:

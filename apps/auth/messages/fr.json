@@ -99,6 +99,8 @@
   "auth_inventory_unavailable": "Cette liste est indisponible. Vos responsabilités et autorisations restent inconnues.",
   "auth_inventory_unknown": "Le résultat est inconnu. Reconnectez-vous et rechargez la liste avant toute autre modification.",
   "auth_inventory_unnamed": "Application sans nom",
+  "auth_login_departure_description": "Les identifiants saisis seront effacés. Quitter ne peut pas annuler une connexion déjà envoyée au serveur.",
+  "auth_login_departure_heading": "Quitter la connexion ?",
   "auth_login_email": "Adresse e-mail",
   "auth_login_heading": "Se connecter",
   "auth_login_help": "Aide à la connexion",
