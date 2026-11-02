@@ -373,10 +373,7 @@ export function useSpaceSetupRead(spaceId: string) {
       session.subject,
     ],
   );
-  useEffect(
-    () => () => queryClient?.removeQueries({ queryKey, exact: true }),
-    [queryClient, queryKey],
-  );
+  useEffect(() => () => queryClient?.removeQueries({ queryKey, exact: true }), [queryClient, queryKey]);
   const { data, isError } = useQuery({
     queryKey,
     queryFn: async () => {
@@ -393,13 +390,7 @@ export function useSpaceSetupRead(spaceId: string) {
   return current() && !isError ? data : undefined;
 }
 
-function SpaceSetupEntryLink({
-  spaceId,
-  read,
-}: {
-  spaceId: string;
-  read: SetupSnapshot | SetupFailure | undefined;
-}) {
+function SpaceSetupEntryLink({ spaceId, read }: { spaceId: string; read: SetupSnapshot | SetupFailure | undefined }) {
   if (read?.kind !== 'ready' || !Object.values(read.permitted).some(Boolean)) return null;
   return (
     <Link
@@ -418,10 +409,7 @@ function NativeSpaceSetupEntry({ spaceId }: { spaceId: string }) {
 }
 
 /** Home shares its read; standalone entries retain their original guarded native reader. */
-export function SpaceSetupEntry(props: {
-  spaceId: string;
-  read?: SetupSnapshot | SetupFailure | undefined;
-}) {
+export function SpaceSetupEntry(props: { spaceId: string; read?: SetupSnapshot | SetupFailure | undefined }) {
   return 'read' in props ? (
     <SpaceSetupEntryLink spaceId={props.spaceId} read={props.read} />
   ) : (

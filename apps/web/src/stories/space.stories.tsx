@@ -31,8 +31,7 @@ function setupActionsStory(operations: 'space_address.change'[]) {
     const previous = globalThis.fetch;
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = new URL(input instanceof Request ? input.url : String(input), 'http://rezics.local');
-      if (url.origin !== 'http://kernel.local' || url.pathname !== '/v1/viewerActions')
-        return previous(input, init);
+      if (url.origin !== 'http://kernel.local' || url.pathname !== '/v1/viewerActions') return previous(input, init);
       const request = new Request(input, init);
       if (request.method !== 'POST') return previous(input, init);
       const { resources } = (await request.clone().json()) as { resources: { type: string; id: string }[] };

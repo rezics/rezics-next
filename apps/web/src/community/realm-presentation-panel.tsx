@@ -56,10 +56,7 @@ export function RealmAppearancePanel({ realmId }: { realmId: string }) {
       caller.lifetime.locale,
     ],
   );
-  useEffect(
-    () => () => queries.removeQueries({ queryKey, exact: true }),
-    [queries, queryKey],
-  );
+  useEffect(() => () => queries.removeQueries({ queryKey, exact: true }), [queries, queryKey]);
   const { data, isError } = useQuery({
     queryKey,
     queryFn: async () => {
