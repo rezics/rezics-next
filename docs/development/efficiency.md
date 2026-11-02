@@ -59,9 +59,11 @@ Maintain an hourly diagnostic ledger of allowance, wait requests, replacement in
 failures alongside the flow report. Use it to locate avoidable costs in briefs, exploration, rereads, polling,
 retries, conflicts, checks and idle capacity; apply the daily bottleneck change above.
 
-Investigate a task needing a third attempt before any further retry. Classify each lost attempt as infrastructure,
-contract, rebase or model failure, fix the class and record the evidence before continuing. An increased retry limit
-is not a repair. Controller retry limits still apply.
+Product work integrating into dev retries without a limit or an approval: retry it, with an amended brief when that
+helps, and keep it moving. For a task needing a third attempt, classify each lost attempt as infrastructure, contract,
+rebase or model failure, fix the class and record the evidence alongside those retries, not before them; a retry is
+not a repair. Control-plane, stabilize and verification work keep the controller's retry limits and wait for that
+investigation before a further retry.
 
 “Selected model is at capacity” and an ambiguous “usage limit” with fresh allowance remaining are provider faults.
 Use the controller's bounded retry policy; never switch service tier or mark an allowance exhausted on that evidence

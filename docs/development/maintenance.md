@@ -26,9 +26,9 @@ configuration interfaces without private values.
 Stop processes through owned task handles or a verified PID and start identity. Do not kill pattern matches or other
 tasks' containers. A lost tool handle is not proof that a process ended.
 
-Escalate a repeated infrastructure signature before further retries: two attempts, or one attempt plus another
-manager's matching report within an hour. Include the exact error and affected environment through the private
-operating channel.
+Escalate a repeated infrastructure signature: two attempts, or one attempt plus another manager's matching report
+within an hour. Include the exact error and affected environment through the private operating channel. Product work
+integrating into dev is retried without waiting for that escalation; other work waits for it before further retries.
 
 Functional Goals deliver the repository's complete scoped behaviour. Record external launch conditions without
 scheduling private provisioning or account work. Product safety, disclosure and erasure remain functional requirements.

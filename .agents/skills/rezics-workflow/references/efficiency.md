@@ -17,7 +17,8 @@ private account readings or configuration into tracked documents.
 - [ ] Include lost attempts and resumed usage deltas once. Separate measured durations from estimates.
 - [ ] Inspect the hourly ledger and preceding twelve-hour window at the required cadence. Find the largest avoidable
       cost: unready contracts, replacement input, rereads, polling, checks, conflicts or idle capacity.
-- [ ] Before a third attempt, classify losses and repair their cause. Preserve independent ready work while doing so.
+- [ ] When a task needs a third attempt, classify its losses and repair their cause. Product work on dev keeps
+      retrying meanwhile; other work waits for the repair. Preserve independent ready work while doing so.
 - [ ] Apply the [incident method](../../../../docs/development/efficiency.md#incident-method) to every evidenced cause;
       record before/after evidence on comparable accepted work and inspect post-landing defects.
       A retry cap or a cheaper token price alone does not demonstrate savings.

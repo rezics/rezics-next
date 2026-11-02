@@ -43,5 +43,6 @@ git status --short
 Read the contract's failing outcomes and likely files, implement the complete outcome, then follow
 [verification](verification.md). Preserve frozen files. For a minimal adjacent correction, check risk ownership,
 cover every changed outside-path file with its affected tests and list the reason in the handoff for owner notice.
-Do not rebase or merge. Keep temporary files under `.temp/`. If the contract conflicts, report the conflicting
-assertions and owner text with concrete evidence rather than weakening acceptance.
+Do not rebase. Merge or cherry-pick only a branch or commit the contract names explicitly, and only for product work
+on dev in your own worktree; never in a shared workspace. Keep temporary files under `.temp/`. If the contract
+conflicts, report the conflicting assertions and owner text with concrete evidence rather than weakening acceptance.
