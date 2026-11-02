@@ -433,7 +433,7 @@ test('JSON-RPC errors propagate and an exiting app-server rejects pending reques
   }
 });
 
-test('an active Goal waits for inbox decisions and recovery dispatches one on the same thread', async () => {
+test('controller inbox recovery wakes the same active Goal once without changing its lifecycle', async () => {
   const s = await setup();
   let recovered: ManagerSessions | undefined;
   const closeTransport = s.client.close.bind(s.client);
@@ -449,6 +449,9 @@ test('an active Goal waits for inbox decisions and recovery dispatches one on th
       activeTurnId: null,
       goalState: { status: 'active', objective: s.spec.objective, tokenBudget: s.spec.budget },
     });
+    expect(s.requests().filter((r) => r.method === 'turn/start')).toHaveLength(1);
+    s.inbox.record(state.id, { kind: 'merged' });
+    await s.managers.wake(state.id);
     expect(s.requests().filter((r) => r.method === 'turn/start')).toHaveLength(1);
     // The managed daemon survives a host disconnect; retain that fake transport across the handoff.
     s.client.close = () => {};
@@ -479,6 +482,9 @@ test('an active Goal waits for inbox decisions and recovery dispatches one on th
     await recovered.recover();
     await recovered.flush();
     expect(s.requests().filter((r) => r.method === 'turn/start')).toHaveLength(2);
+    expect(s.requests().filter((r) => r.method === 'turn/steer')).toHaveLength(0);
+    expect(s.requests().filter((r) => r.method === 'thread/goal/set')).toHaveLength(1);
+    expect(s.requests().some((r) => ['thread/fork', 'thread/goal/clear', 'turn/interrupt'].includes(r.method))).toBe(false);
   } finally {
     await recovered?.close();
     closeTransport();
