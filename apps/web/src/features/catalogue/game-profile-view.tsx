@@ -1,6 +1,6 @@
 import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { pickText } from '@rezics/composition';
 import type { EntityPickerSearch } from '@rezics/ui/entity-picker';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
@@ -21,6 +21,7 @@ import { RelationEditor } from './relation-editor';
 import { DefinitionGuideLink } from './definition-guide-view';
 import { EditorFailure } from './statement-editor-view';
 import type { StatementInput } from './statement-editor';
+import { gameCreationAddress } from './game-creation-address';
 import { GameClassifications, GameInitialFacts, gameGroupLabel } from './game-profile-fields';
 import { gameDefinitions, gameDraft, gameGroups, type GameCommand, type GameRead } from './game-profile';
 
@@ -68,14 +69,14 @@ function GameProfileLive({
   const [drafts, setDrafts] = useState<Record<string, { key: string; statement: StatementInput }[]>>({});
   const [observed, setObserved] = useState(query.data);
   const [lastReading, setLastReading] = useState<Extract<GameRead, { ok: true }> | undefined>(
-    query.data?.ok && query.data.public ? query.data : undefined,
+    query.data?.ok && (!id || query.data.public) ? query.data : undefined,
   );
   // Retain one admitted reading within this editor lifetime, only across transient failures.
   // Retiring responses clear it synchronously, so a later outage cannot revive concealed content.
   if (observed !== query.data) {
     setObserved(query.data);
     setLastReading(
-      query.data?.ok && query.data.public
+      query.data?.ok && (!id || query.data.public)
         ? query.data
         : query.data && !query.data.ok && query.data.reason === 'unavailable'
           ? lastReading
@@ -84,7 +85,7 @@ function GameProfileLive({
   }
   const refreshFailed = query.isError || (!!query.data && !query.data.ok && query.data.reason === 'unavailable');
   const o = { locale: locale as never };
-  const read = id && refreshFailed ? lastReading : query.data;
+  const read = refreshFailed ? lastReading : query.data;
   if (!read || !read.ok)
     return (
       <article className="mx-auto min-w-0 max-w-4xl space-y-5">
@@ -112,6 +113,7 @@ function GameProfileLive({
           profile={{
             title: m.game_profile_title({}, o),
             scope: 'game',
+            control: (pointer, type) => gameCreationAddress(pointer, drafts[type] ?? [], read.release, locale),
             labelLanguage: (type) => pickText(read.release.types[type]?.labels ?? {}, locale).lang ?? undefined,
             descriptionLanguage: (type) =>
               pickText(read.release.types[type]?.descriptions ?? {}, locale).lang ?? undefined,
@@ -136,7 +138,8 @@ function GameProfileLive({
           }}
           transport={{
             definitions: async (refresh) => {
-              const current = refresh ? (await query.refetch()).data : read;
+              const refreshed = refresh ? await query.refetch() : undefined;
+              const current = refreshed ? (refreshed.isError ? undefined : refreshed.data) : read;
               if (!lifetime.active()) return { ok: false as const, reason: 'denied' as const };
               return current?.ok ? { ok: true, types: gameDefinitions(current.release, locale) } : { ok: false };
             },
@@ -191,6 +194,7 @@ function GameCorrection({
   transport: GameProfileTransport;
   search: EntityPickerSearch;
 }) {
+  const client = useQueryClient();
   const o = { locale: locale as never };
   const subject = read.public.subject;
   const title = pickText(subject.labels, locale);
@@ -291,7 +295,16 @@ function GameCorrection({
           </section>
         ))}
       {session !== 'signed-in' ? (
-        <p role="status">{session === 'signed-out' ? m.relation_sign_in({}, o) : m.catalogue_create_loading({}, o)}</p>
+        session === 'unavailable' ? (
+          <div role="alert" className="space-y-3">
+            <p>{m.catalogue_create_unavailable({}, o)}</p>
+            <Button className={gameActionClass} onClick={() => void client.invalidateQueries({ queryKey: ['session'] })}>
+              {m.catalogue_create_retry({}, o)}
+            </Button>
+          </div>
+        ) : (
+          <p role="status">{session === 'signed-out' ? m.relation_sign_in({}, o) : m.catalogue_create_loading({}, o)}</p>
+        )
       ) : (
         <>
           <details className="min-w-0 max-w-full rounded-xl border border-border p-4">

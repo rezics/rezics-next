@@ -9,6 +9,7 @@ import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-selec
 import { coverSrc } from '../../media/cover-src';
 import { m } from '../../paraglide/messages.js';
 import { CandidateReview, type CandidateTransport } from '../../subject/candidate-review';
+import { controlId } from './statement-validation-presentation';
 import { gameGroups, gameTarget, type GameRead } from './game-profile';
 import { StatementFields, PartValue, EditorFailure, type StatementFieldsRead } from './statement-editor-view';
 import { statementInput, type SnakInput, type StatementInput } from './statement-editor';
@@ -89,20 +90,31 @@ export function GameStatementFields({
   locale,
   search,
   change,
+  id,
 }: {
+  id?: string;
   statement: StatementInput;
   context: StatementFieldsRead;
   locale: string;
   search: EntityPickerSearch;
   change: (next: StatementInput) => void;
 }) {
-  const control = (part: SnakInput, update: (value: SnakInput['value']) => void) =>
-    context.release.properties[part.property.id]?.datatype === 'wikibase-item' ? (
-      <GameItemControl part={part} context={context} locale={locale} search={search} change={update} />
-    ) : undefined;
+  const control = (part: SnakInput, update: (value: SnakInput['value']) => void) => {
+    if (context.release.properties[part.property.id]?.datatype !== 'wikibase-item') return;
+    const qualifier = statement.qualifiers?.indexOf(part) ?? -1;
+    const reference = statement.references.findIndex((item) => item.parts.includes(part));
+    const address = part === statement ? 'fact' : qualifier >= 0 ? `qualifier-${qualifier}`
+      : `reference-${reference}-part-${statement.references[reference]?.parts.indexOf(part)}`;
+    return (
+      <div id={id ? controlId(id, address, 'value') : undefined}>
+        <GameItemControl part={part} context={context} locale={locale} search={search} change={update} />
+      </div>
+    );
+  };
   return (
     <StatementFields
       draft={statement}
+      feedback={id ? { id, errors: [] } : undefined}
       current={context}
       locale={locale}
       change={change}
@@ -211,6 +223,7 @@ export function GameInitialFacts({
                 {label.text}
               </ContentItemHeading>
               <GameStatementFields
+                id={`game-initial-${row.key}`}
                 statement={row.statement}
                 context={context}
                 locale={locale}

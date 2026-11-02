@@ -96,7 +96,7 @@ function CreationCorrection({
             // Profile mappings can point to a named field group rather than its inner input.
             for (let parent = target.parentElement; parent; parent = parent.parentElement)
               if (parent.tagName === 'DETAILS') (parent as HTMLDetailsElement).open = true;
-            const focus = target.matches('input, select, textarea, button, [tabindex]')
+            const focus = target.matches('input, select, textarea, button')
               ? target
               : target.querySelector<HTMLElement>(
                   'input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled])',
@@ -135,7 +135,7 @@ function CreateSubjectFormLive({
     scope: string;
     hideHeading?: boolean;
     readOnlyType?: boolean;
-    control?: (pointer: string) => string | undefined;
+    control?: (pointer: string, type: string) => string | { id: string; label: string } | undefined;
     errorLabel?: (id: string) => string | undefined;
     type?: string;
     intro?: string;
@@ -172,6 +172,16 @@ function CreateSubjectFormLive({
   const [type, setType] = useState(profile?.type ?? '');
   const [rows, setRows] = useState<TermDraft[]>([{ language: locale, label: '', description: '', aliases: '' }]);
   const [failure, setFailure] = useState<CreateFailure>();
+  // Capture profile addresses at rejection, before row deletion or Type changes can shift native indices.
+  const targets = useRef(new Map<string, { id: string; label?: string }>());
+  function reject(result: CreateFailure) {
+    targets.current = new Map();
+    for (const error of result.errors ?? []) {
+      const target = profile?.control?.(error.pointer, type);
+      if (target) targets.current.set(error.pointer, typeof target === 'string' ? { id: target } : target);
+    }
+    setFailure(result);
+  }
   const [busy, setBusy] = useState(false);
   const [created, setCreated] = useState<Created>();
   const outcome = useRef<HTMLDivElement>(null);
@@ -198,12 +208,12 @@ function CreateSubjectFormLive({
   const definitionsBlocked = !request.current && (definitions.isError || definitions.isFetching || types.length === 0);
 
   const termControl = createSubjectControls(rows);
-  const control = (pointer: string) => profile?.control?.(pointer) || termControl(pointer);
-  const corrections = new Map<string, { id: string | undefined; errors: Violation[] }>();
+  const control = (pointer: string) => targets.current.get(pointer)?.id || termControl(pointer);
+  const corrections = new Map<string, { id: string | undefined; label?: string; errors: Violation[] }>();
   for (const error of errors) {
     const id = control(error.pointer);
     const key = id ? `control:${id}` : `pointer:${error.pointer}`;
-    const group = corrections.get(key) ?? { id, errors: [] as Violation[] };
+    const group = corrections.get(key) ?? { id, label: targets.current.get(error.pointer)?.label, errors: [] as Violation[] };
     group.errors.push(error);
     corrections.set(key, group);
   }
@@ -212,7 +222,7 @@ function CreateSubjectFormLive({
     return [
       ...new Set(
         (corrections.get(`control:${id}`)?.errors ?? []).map((error) =>
-          profile?.control?.(error.pointer)
+          targets.current.has(error.pointer)
             ? m.catalogue_create_invalid_field({}, options)
             : createSubjectGuidance(error, field, { type, rows, index: index ?? 0 }, locale),
         ),
@@ -239,7 +249,7 @@ function CreateSubjectFormLive({
       }
       if (!types.some((entry) => entry.id === type)) draft.errors.push({ pointer: '/type', code: 'unsupported' });
       if (draft.errors.length) {
-        setFailure({ ok: false, reason: 'invalid', errors: draft.errors });
+        reject({ ok: false, reason: 'invalid', errors: draft.errors });
         return;
       }
       request.current = { item: draft.item, key: crypto.randomUUID() };
@@ -255,7 +265,7 @@ function CreateSubjectFormLive({
         onCreated?.(result);
         if (result.reader.state === 'ready') onNavigate(result.reader.href);
       } else {
-        setFailure(result);
+        reject(result);
         if (profile && result.reason === 'unavailable') unresolvedProfile.current = true;
         // Uncertain delivery and key conflicts retain the exact frozen command. Never silently create a second identity.
         if (!unresolvedProfile.current && result.reason !== 'unavailable' && result.reason !== 'conflict')
@@ -573,11 +583,11 @@ function CreateSubjectFormLive({
                   )}
                   {errors.length > 0 && (
                     <ul className="flex min-w-0 list-inside list-disc flex-col gap-2">
-                      {[...corrections].map(([key, { id, errors: fieldErrors }]) => (
+                      {[...corrections].map(([key, { id, label, errors: fieldErrors }]) => (
                         <li key={key}>
                           <CreationCorrection
                             id={id}
-                            label={id ? profile?.errorLabel?.(id) : undefined}
+                            label={label ?? (id ? profile?.errorLabel?.(id) : undefined)}
                             pointer={fieldErrors[0]!.pointer}
                             locale={locale}
                           />

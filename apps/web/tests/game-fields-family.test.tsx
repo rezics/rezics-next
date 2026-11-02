@@ -784,3 +784,107 @@ test('Game and Addon complete fields family preserves independent labels, native
     }
   });
 }, 60_000);
+
+test('Game creation recovers rejected multilingual drafts and exact corrections without replacing uncertain intent', async () => {
+  await mounted(async ({ host, render, user, within, waitFor }) => {
+    const { GameProfile } = await import('../src/features/catalogue/game-profile-view');
+    const { gameProfileFixture, gameId } = await import('../src/kernel/fake/catalogue-game-profile');
+    const { m } = await import('../src/paraglide/messages.js');
+    const fixture = gameProfileFixture();
+    const commands: Parameters<typeof fixture.transport.create>[0][] = [];
+    const navigations: string[] = [];
+    let unavailable = false, mode = 'reject';
+    const errors = ['/statements/schema:inLanguage/1/value/content', '/statements/schema:inLanguage/1/references/0/parts/0/value/content', '/statements/schema:inLanguage/1/future'];
+    const transport: typeof fixture.transport = {
+      ...fixture.transport,
+      load: async () => unavailable ? { ok: false, reason: 'unavailable' } : { ok: true, release: fixture.release, public: null },
+      create: async (command) => {
+        commands.push(structuredClone(command));
+        if (mode === 'reject') {
+          unavailable = true;
+          return { ok: false, reason: 'invalid', refreshDefinitions: true, errors: errors.map((pointer) => ({ pointer, code: 'invalid_format' })) };
+        }
+        if (mode === 'uncertain') return { ok: false, reason: 'unavailable', refreshDefinitions: true };
+        if (mode === 'conflict') return { ok: false, reason: 'conflict' };
+        return { ok: true, id: gameId, reader: { state: 'unavailable' } };
+      },
+      read: async (id) => { expect(id).toBe(gameId); return { state: 'ready', href: '/exact/returned-reader' }; },
+    };
+    const show = (reader?: string, session: 'signed-in' | 'unavailable' = 'signed-in', id?: string) => render(
+      <GameProfile id={id} locale="en" session={session} transport={transport} search={async () => []} onNavigate={(href) => navigations.push(href)} />, reader,
+    );
+    const click = async (node: HTMLElement) => { await act(async () => user.click(node)); };
+    const button = (name: string) => within(host).getByRole('button', { name });
+    const type = async (node: HTMLElement, value: string) => { await act(async () => { await user.clear(node); await user.type(node, value); }); };
+    await show();
+    const select = await within(host).findByRole('combobox', { name: m.catalogue_create_type() });
+    await act(async () => user.selectOptions(select, 'schema:VideoGame'));
+    await type(host.querySelector<HTMLElement>('#create-label-0')!, 'Lantern');
+    await click(button(m.catalogue_create_add_language()));
+    await type(host.querySelector<HTMLElement>('#create-language-1')!, 'ja');
+    await type(host.querySelector<HTMLElement>('#create-label-1')!, '灯り');
+    for (const value of ['en', 'ja']) {
+      await act(async () => user.selectOptions(within(host).getByRole('combobox', { name: m.character_add_fact() }), 'schema:inLanguage'));
+      await click(button(m.correction_add()));
+      const rows = host.querySelectorAll<HTMLElement>('[data-slot="game-initial-fact"]');
+      await type(within(rows[rows.length - 1]!).getByRole('textbox', { name: m.correction_value() }), value);
+    }
+    const rows = host.querySelectorAll<HTMLElement>('[data-slot="game-initial-fact"]');
+    const second = rows[1]!;
+    await click(within(second).getByRole('button', { name: m.correction_add_reference() }));
+    await act(async () => user.selectOptions(within(second).getByRole('combobox', { name: m.correction_add_part() }), 'schema:url'));
+    await click(within(second).getByRole('button', { name: m.correction_add() }));
+    await type(within(second).getByRole('textbox', { name: m.correction_url() }), 'https://example.test/original');
+    // Switching Type retains its own rows, independently of the terms.
+    await act(async () => user.selectOptions(select, 'wd:Q689445'));
+    expect(host.querySelectorAll('[data-slot="game-initial-fact"]')).toHaveLength(0);
+    await act(async () => user.selectOptions(select, 'schema:VideoGame'));
+    const term = host.querySelector<HTMLInputElement>('#create-label-1')!;
+    await click(button(m.catalogue_create_submit()));
+    await waitFor(() => expect(host.textContent).toContain(m.catalogue_create_unavailable()));
+    expect(term.isConnected).toBe(true);
+    expect(term.value).toBe('灯り');
+    expect((button(m.catalogue_create_submit()) as HTMLButtonElement).disabled).toBe(true);
+    expect(host.querySelectorAll('[data-slot="game-initial-fact"]')).toHaveLength(2);
+    unavailable = false;
+    await click(button(m.catalogue_create_retry()));
+    await waitFor(() => expect((button(m.catalogue_create_submit()) as HTMLButtonElement).disabled).toBe(false));
+    const links = [...host.querySelectorAll<HTMLAnchorElement>('[role="alert"] li a')];
+    expect(links).toHaveLength(2);
+    expect(links.every((link) => link.textContent?.includes('2'))).toBe(true);
+    const targets = links.map((link) => host.ownerDocument.getElementById(decodeURIComponent(link.hash.slice(1)))!);
+    for (const [index, link] of links.entries()) {
+      await click(link);
+      expect(host.ownerDocument.activeElement).toBe(targets[index]!);
+    }
+    // Deleting a preceding repeat must not move the rejected address to another row.
+    await click(within(host.querySelector<HTMLElement>('[data-slot="game-initial-fact"]')!).getByRole('button', { name: m.recipe_remove_field() }));
+    expect(targets.every((target) => target.isConnected)).toBe(true);
+    await type(targets[0]!, 'fr');
+    await type(targets[1]!, 'https://example.test/corrected');
+    mode = 'conflict';
+    await click(button(m.catalogue_create_submit()));
+    expect((button(m.catalogue_create_submit()) as HTMLButtonElement).disabled).toBe(true);
+    await click(button(m.catalogue_create_review_new()));
+    mode = 'uncertain'; unavailable = true;
+    await click(button(m.catalogue_create_submit()));
+    const sealed = structuredClone(commands.at(-1));
+    expect(host.querySelector('form fieldset')?.hasAttribute('disabled')).toBe(true);
+    mode = 'ready';
+    const submit = host.querySelector<HTMLElement>('button[type="submit"]')!;
+    expect((submit as HTMLButtonElement).disabled).toBe(false);
+    await click(submit);
+    expect(commands.at(-1)).toEqual(sealed);
+    expect(commands[0]!.item.labels).toEqual({ en: 'Lantern', ja: '灯り' });
+    await click(button(m.catalogue_create_retry()));
+    expect(navigations).toEqual(['/exact/returned-reader']);
+    await show(replacementReader);
+    await waitFor(() => expect(term.isConnected).toBe(false));
+    unavailable = false;
+    transport.load = async () => ({ ok: true, release: fixture.release, public: gameProfileFixture('ready', 'en', true).publicRead });
+    await show(originalReader, 'unavailable', gameId);
+    await waitFor(() => expect(host.textContent).toContain(m.catalogue_create_unavailable()));
+    expect(host.textContent).not.toContain(m.catalogue_create_loading());
+    expect(button(m.catalogue_create_retry())).toBeDefined();
+  });
+});
