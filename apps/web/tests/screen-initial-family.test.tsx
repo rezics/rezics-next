@@ -661,7 +661,11 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
     expect(host.querySelector<HTMLInputElement>('#create-label-0')!.value).toBe('The observatory');
     expect(host.querySelector<HTMLInputElement>('#create-label-1')!.value).toBe('天文台');
     expect(host.textContent).toContain(m.catalogue_create_unavailable());
-    expect((within(host).getByRole('button', { name: m.catalogue_create_submit() }) as HTMLButtonElement).disabled).toBe(true);
+    expect(
+      (within(host).getByRole('button', { name: m.catalogue_create_submit() }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    const metadata = client.getQueryCache().findAll({ queryKey: ['screen-profile'] }).at(-1)!;
+    expect(metadata.state).toMatchObject({ status: 'error', data: { ok: true } });
     await act(async () => queuedSubmit()());
     expect(submitted).toHaveLength(1);
     const correctionLinks = () => [...host.querySelectorAll<HTMLAnchorElement>('[role="alert"] a[href^="#"]')];
@@ -675,7 +679,11 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
     }
     for (const count of [3, 4]) {
       await click(host, m.catalogue_create_retry());
-      await until(() => metadataReads === count && !(within(host).getByRole('button', { name: m.catalogue_create_retry() }) as HTMLButtonElement).disabled);
+      await until(
+        () =>
+          metadataReads === count &&
+          !(within(host).getByRole('button', { name: m.catalogue_create_retry() }) as HTMLButtonElement).disabled,
+      );
       expect(host.textContent).toContain(m.catalogue_create_unavailable());
       expect(submitted).toHaveLength(1);
     }
