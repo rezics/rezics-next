@@ -483,13 +483,264 @@ const fake = Bun.serve({
   },
 });
 
-function freePort(): Promise<number> {
+class SuiteRetiredError extends Error {
+  constructor(label: string) {
+    super(`${label} stopped because Home search rebuild suite teardown started`);
+    this.name = 'SuiteRetiredError';
+  }
+}
+
+type PendingSuiteOperation = { label: string; settled: Promise<void> };
+type LateSuiteResource = { label: string; close: () => Promise<void> };
+type SuiteCleanupAction = Parameters<typeof cleanupAll>[0][number];
+
+class SuiteLifetime {
+  private retiring = false;
+  private cleanupFinished = false;
+  private readonly pending = new Set<PendingSuiteOperation>();
+  private readonly lateResources = new Set<LateSuiteResource>();
+  private readonly lateFailures: unknown[] = [];
+  private readonly retainedCleanups = new Set<SuiteCleanupAction>();
+
+  get retired() {
+    return this.retiring;
+  }
+
+  retire() {
+    this.retiring = true;
+  }
+
+  assertActive(label: string) {
+    if (this.retiring) throw new SuiteRetiredError(label);
+  }
+
+  run<T>(label: string, operation: () => T | PromiseLike<T>): Promise<T> {
+    return this.observe(label, operation);
+  }
+
+  acquire<T>(
+    label: string,
+    acquire: () => T | PromiseLike<T>,
+    adopt: (resource: T) => void,
+    close: (resource: T) => Promise<void>,
+  ): Promise<T> {
+    return this.observe(label, acquire, adopt, (resource) => this.closeLate(label, resource, close));
+  }
+
+  retainCleanup(label: string, close: () => Promise<void>, timeoutMs = 5000) {
+    let action: SuiteCleanupAction;
+    let closing: Promise<void> | undefined;
+    action = {
+      label,
+      timeoutMs,
+      run: () => {
+        closing ??= Promise.resolve()
+          .then(close)
+          .then(() => {
+            this.retainedCleanups.delete(action);
+          });
+        return closing;
+      },
+    };
+    this.retainedCleanups.add(action);
+    return () => this.retainedCleanups.delete(action);
+  }
+
+  cleanupActions(): SuiteCleanupAction[] {
+    return [...this.retainedCleanups];
+  }
+
+  private observe<T>(
+    label: string,
+    start: () => T | PromiseLike<T>,
+    adopt?: (resource: T) => void,
+    closeLate?: (resource: T) => Promise<void>,
+  ): Promise<T> {
+    this.assertActive(label);
+    const record: PendingSuiteOperation = { label, settled: Promise.resolve() };
+    this.pending.add(record);
+    const observed = Promise.resolve()
+      .then(() => {
+        this.assertActive(label);
+        return start();
+      })
+      .then(async (resource) => {
+        if (this.retiring) {
+          if (closeLate) await closeLate(resource);
+          throw new SuiteRetiredError(label);
+        }
+        adopt?.(resource);
+        return resource;
+      });
+    record.settled = observed.then(
+      () => {
+        this.pending.delete(record);
+      },
+      (error) => {
+        this.pending.delete(record);
+        if (this.retiring && !(error instanceof SuiteRetiredError)) this.recordLateFailure(label, error);
+      },
+    );
+    void observed.catch(() => {});
+    return observed;
+  }
+
+  private async closeLate<T>(label: string, resource: T, close: (resource: T) => Promise<void>) {
+    const retained: LateSuiteResource = { label, close: () => close(resource) };
+    this.lateResources.add(retained);
+    try {
+      await cleanupAll([{ label: `Home search rebuild late ${label}`, run: retained.close, timeoutMs: 5000 }]);
+      this.lateResources.delete(retained);
+    } catch (error) {
+      throw new Error(`Home search rebuild late ${label} cleanup failed`, { cause: error });
+    }
+  }
+
+  async settlePending() {
+    await Promise.all([...this.pending].map(({ settled }) => settled));
+    if (this.lateFailures.length > 0)
+      throw new AggregateError(this.lateFailures, 'Home search rebuild late setup or acquisition failed');
+    if (this.lateResources.size > 0)
+      throw new AggregateError(
+        [...this.lateResources].map(({ label }) => new Error(`Home search rebuild still owns late ${label}`)),
+        'Home search rebuild late resources remain unsettled',
+      );
+    if (this.retainedCleanups.size > 0)
+      throw new AggregateError(
+        [...this.retainedCleanups].map(({ label }) => new Error(`Home search rebuild still owns ${label}`)),
+        'Home search rebuild retained cleanup remains unsettled',
+      );
+  }
+
+  pendingDiagnostics() {
+    return [
+      ...[...this.pending].map(({ label }) => `pending ${label}`),
+      ...[...this.lateResources].map(({ label }) => `late ${label}`),
+      ...[...this.retainedCleanups].map(({ label }) => `retained ${label}`),
+    ].join('; ');
+  }
+
+  finishCleanup() {
+    this.cleanupFinished = true;
+  }
+
+  private recordLateFailure(label: string, error: unknown) {
+    const failure = new Error(`Home search rebuild ${label} failed after teardown began`, { cause: error });
+    this.lateFailures.push(failure);
+    if (this.cleanupFinished) console.error(failure);
+  }
+}
+
+const suiteLifetime = new SuiteLifetime();
+
+function retireSuite(
+  lifetime: SuiteLifetime,
+  label: string,
+  actions: Parameters<typeof cleanupAll>[0],
+) {
+  lifetime.retire();
+  return cleanupAll([
+    ...lifetime.cleanupActions(),
+    ...actions,
+    { label: `${label} pending startup and setup`, run: () => lifetime.settlePending(), timeoutMs: 8000 },
+  ])
+    .catch((error) => {
+      const pending = lifetime.pendingDiagnostics();
+      if (!pending) throw error;
+      throw new AggregateError(
+        [error, new Error(`${label} retained resources remain: ${pending}`)],
+        `${label} cleanup did not settle`,
+      );
+    })
+    .finally(() => lifetime.finishCleanup());
+}
+
+function startWithPort<T>(
+  lifetime: SuiteLifetime,
+  label: string,
+  getPort: () => Promise<number>,
+  launch: (port: number) => T | PromiseLike<T>,
+): Promise<T> {
+  return lifetime.run(label, async () => {
+    const port = await getPort();
+    lifetime.assertActive(`${label} launch after port resolution`);
+    return launch(port);
+  });
+}
+
+function singletonAcquisition<T>(
+  lifetime: SuiteLifetime,
+  label: string,
+  current: () => T | undefined,
+  pending: () => Promise<T> | undefined,
+  remember: (acquisition: Promise<T> | undefined) => void,
+  acquire: () => T | PromiseLike<T>,
+  adopt: (resource: T) => void,
+  close: (resource: T) => Promise<void>,
+): Promise<T> {
+  lifetime.assertActive(label);
+  const owned = current();
+  if (owned) return Promise.resolve(owned);
+  const inFlight = pending();
+  if (inFlight) return inFlight;
+  const acquisition = lifetime.acquire(label, acquire, adopt, close);
+  remember(acquisition);
+  void acquisition.catch(() => {
+    if (!lifetime.retired && pending() === acquisition) remember(undefined);
+  });
+  return acquisition;
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((complete) => {
+    resolve = complete;
+  });
+  return { promise, resolve };
+}
+
+function freePort(lifetime: SuiteLifetime, label: string): Promise<number> {
   return new Promise((resolve, reject) => {
     const probe = createServer();
-    probe.once('error', reject);
+    let closePromise: Promise<void> | undefined;
+    const closeListeningProbe = () =>
+      new Promise<void>((complete, fail) => {
+        probe.close((error) => (error ? fail(error) : complete()));
+      });
+    const closeProbe = () => {
+      if (closePromise) return closePromise;
+      if (probe.listening) {
+        closePromise = closeListeningProbe();
+        return closePromise;
+      }
+      closePromise = new Promise<void>((complete, fail) => {
+        const onListening = () => {
+          probe.off('error', onError);
+          void closeListeningProbe().then(complete, fail);
+        };
+        const onError = () => {
+          probe.off('listening', onListening);
+          complete();
+        };
+        probe.once('listening', onListening);
+        probe.once('error', onError);
+      });
+      return closePromise;
+    };
+    const release = lifetime.retainCleanup(`${label} port probe`, closeProbe);
+    probe.once('error', (error) => {
+      release();
+      reject(error);
+    });
     probe.listen(0, '127.0.0.1', () => {
       const { port } = probe.address() as { port: number };
-      probe.close(() => resolve(port));
+      void closeProbe().then(
+        () => {
+          release();
+          resolve(port);
+        },
+        reject,
+      );
     });
   });
 }
@@ -500,61 +751,70 @@ let started: Promise<string> | undefined;
 
 // The documented command, pointed at the fake through the environment it reads in development.
 function site(): Promise<string> {
-  started ??= (async () => {
-    const port = await freePort();
-    child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
-      cwd: app,
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: {
-        ...process.env,
-        KERNEL_ORIGIN: fake.url.origin,
-        AUTH_ISSUER: `${fake.url.origin}/auth`,
-        WEBSITE_CLIENT_ID: clientId,
-        WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
-        API_RESOURCE: resource,
-        WEBSITE_SCOPES: scopes.join(' '),
-      },
-    });
-    const custody = (serverCustody = ownNodeProcess(child, {
-      label: 'Home search rebuild Vite server',
-      outputLimit: 8000,
-    }));
-    let spawnError: Error | undefined;
-    child.once('error', (error) => {
-      spawnError = error;
-    });
-    const origin = `http://127.0.0.1:${port}`;
-    const deadline = Date.now() + 150_000;
-    try {
-      for (;;) {
-        if (spawnError)
-          throw new Error(
-            `dev server failed to spawn: ${spawnError.message}\nCaptured output:\n${custody.diagnostics()}`,
-            {
-              cause: spawnError,
-            },
-          );
-        const exit = child.exitCode ?? child.signalCode;
-        if (exit !== null) throw new Error(`dev server exited with ${exit}:\n${custody.diagnostics()}`);
-        try {
-          const response = await fetch(`${origin}/en`, {
-            redirect: 'manual',
-            signal: AbortSignal.timeout(60_000),
-          });
-          if (response.status < 500) return origin;
-        } catch {
-          // The dev server is still starting.
+  started ??= startWithPort(
+    suiteLifetime,
+    'Home search rebuild Vite startup',
+    () => freePort(suiteLifetime, 'Home search rebuild Vite startup'),
+    async (port) => {
+      suiteLifetime.assertActive('Home search rebuild Vite spawn');
+      child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
+        cwd: app,
+        detached: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: {
+          ...process.env,
+          KERNEL_ORIGIN: fake.url.origin,
+          AUTH_ISSUER: `${fake.url.origin}/auth`,
+          WEBSITE_CLIENT_ID: clientId,
+          WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
+          API_RESOURCE: resource,
+          WEBSITE_SCOPES: scopes.join(' '),
+        },
+      });
+      const custody = (serverCustody = ownNodeProcess(child, {
+        label: 'Home search rebuild Vite server',
+        outputLimit: 8000,
+      }));
+      let spawnError: Error | undefined;
+      child.once('error', (error) => {
+        spawnError = error;
+      });
+      const origin = `http://127.0.0.1:${port}`;
+      const deadline = Date.now() + 150_000;
+      try {
+        for (;;) {
+          suiteLifetime.assertActive('Home search rebuild Vite readiness');
+          if (spawnError)
+            throw new Error(
+              `dev server failed to spawn: ${spawnError.message}\nCaptured output:\n${custody.diagnostics()}`,
+              {
+                cause: spawnError,
+              },
+            );
+          const exit = child.exitCode ?? child.signalCode;
+          if (exit !== null) throw new Error(`dev server exited with ${exit}:\n${custody.diagnostics()}`);
+          try {
+            const response = await fetch(`${origin}/en`, {
+              redirect: 'manual',
+              signal: AbortSignal.timeout(60_000),
+            });
+            suiteLifetime.assertActive('Home search rebuild Vite readiness after response');
+            if (response.status < 500) return origin;
+          } catch (error) {
+            if (suiteLifetime.retired) throw error;
+            // The dev server is still starting.
+          }
+          if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${custody.diagnostics()}`);
+          await Bun.sleep(500);
+          suiteLifetime.assertActive('Home search rebuild Vite readiness after delay');
         }
-        if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${custody.diagnostics()}`);
-        await Bun.sleep(500);
+      } catch (error) {
+        return await withCleanup(async () => {
+          throw error;
+        }, [{ label: 'Home search rebuild Vite startup', run: () => custody.close(), timeoutMs: 7000 }]);
       }
-    } catch (error) {
-      return await withCleanup(async () => {
-        throw error;
-      }, [{ label: 'Home search rebuild Vite startup', run: () => custody.close(), timeoutMs: 7000 }]);
-    }
-  })();
+    },
+  );
   return started;
 }
 
@@ -567,108 +827,163 @@ const cookieValue = (response: Response, name: string) =>
 
 // Starts a sign-in, answers it as Auth would after the person signs in there, and returns the session cookie.
 async function signIn(returnTo = '/en', grant: Partial<Grant> = {}) {
-  const origin = await site();
-  const start = await fetch(`${origin}/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`, { redirect: 'manual' });
-  const location = new URL(start.headers.get('location')!);
-  const params = location.searchParams;
-  const code = `code-${randomUUID()}`;
-  codes.set(code, {
-    challenge: params.get('code_challenge')!,
-    nonce: params.get('nonce')!,
-    redirectUri: params.get('redirect_uri')!,
-    scope: params.get('scope')!,
-    sub: 'alice',
-    expiresIn: 3600,
-    ...grant,
+  return suiteLifetime.run('Home search rebuild sign-in setup', async () => {
+    const origin = await site();
+    suiteLifetime.assertActive('Home search rebuild sign-in request');
+    const start = await fetch(`${origin}/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`, { redirect: 'manual' });
+    suiteLifetime.assertActive('Home search rebuild sign-in response');
+    const location = new URL(start.headers.get('location')!);
+    const params = location.searchParams;
+    const code = `code-${randomUUID()}`;
+    codes.set(code, {
+      challenge: params.get('code_challenge')!,
+      nonce: params.get('nonce')!,
+      redirectUri: params.get('redirect_uri')!,
+      scope: params.get('scope')!,
+      sub: 'alice',
+      expiresIn: 3600,
+      ...grant,
+    });
+    const loginCookie = cookieValue(start, login);
+    const answer = await fetch(`${params.get('redirect_uri')}?code=${code}&state=${params.get('state')}`, {
+      redirect: 'manual',
+      headers: loginCookie ? { cookie: `${login}=${loginCookie}` } : {},
+    });
+    suiteLifetime.assertActive('Home search rebuild OpenID callback response');
+    expect([302, 303], 'OpenID callback setup').toContain(answer.status);
+    const sessionCookie = cookieValue(answer, session);
+    expect(sessionCookie, 'signed-in session setup').toBeTruthy();
+    return sessionCookie!;
   });
-  const loginCookie = cookieValue(start, login);
-  const answer = await fetch(`${params.get('redirect_uri')}?code=${code}&state=${params.get('state')}`, {
-    redirect: 'manual',
-    headers: loginCookie ? { cookie: `${login}=${loginCookie}` } : {},
-  });
-  expect([302, 303], 'OpenID callback setup').toContain(answer.status);
-  const sessionCookie = cookieValue(answer, session);
-  expect(sessionCookie, 'signed-in session setup').toBeTruthy();
-  return sessionCookie!;
 }
 
 let aliceCookie: Promise<string> | undefined;
 const alice = async () => {
+  suiteLifetime.assertActive('Home search rebuild shared sign-in');
   aliceCookie ??= signIn('/en', { sub: 'alice' });
   return aliceCookie;
 };
 
 // Public home content works without script; personal Continue cards load after hydration.
 async function render(path: string, cookie?: string): Promise<Page> {
-  const response = await fetch(`${await site()}${path}`, {
-    headers: cookie ? { cookie: `${session}=${cookie}` } : {},
-  });
-  expect(response.status).toBe(200);
-  browser ??= await chromium.launch();
-  let context: BrowserContext | undefined;
-  try {
-    context = await browser.newContext({
-      viewport: { width: 1280, height: 860 },
-      javaScriptEnabled: Boolean(cookie),
+  return suiteLifetime.run('Home search rebuild page setup', async () => {
+    const origin = await site();
+    suiteLifetime.assertActive('Home search rebuild page request');
+    const response = await fetch(`${origin}${path}`, {
+      headers: cookie ? { cookie: `${session}=${cookie}` } : {},
     });
-    contexts.add(context);
-    if (cookie)
-      await context.addCookies([
-        { name: session, value: cookie, domain: '127.0.0.1', path: '/', httpOnly: true, secure: true, sameSite: 'Lax' },
-      ]);
-    // This fixture supplies cover metadata; live browser rendering also needs a successful image response.
-    await context.route(
-      (url) => url.pathname.startsWith('/media/'),
-      (route) =>
-        route.fulfill({
-          contentType: 'image/png',
-          body: Buffer.from(
-            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lS8AAAAASUVORK5CYII=',
-            'base64',
-          ),
-        }),
-    );
-    const page = await context.newPage();
-    if (cookie) {
-      await page.goto(`${await site()}${path}`, { waitUntil: 'networkidle' });
-      await waitForPersonalRead(page, ['home-continue', path.split('/')[1]!]);
-      await page.locator('[data-slot="personal"] article').first().waitFor({ state: 'attached' });
-      // Keep this markup proof unstyled, as the script-free snapshots below are.
-      await page.evaluate(() => {
-        for (const stylesheet of document.querySelectorAll('style, link[rel="stylesheet"]')) stylesheet.remove();
-      });
-    } else await page.setContent(await response.text());
-    return page;
-  } catch (error) {
-    if (!context) throw error;
-    return await withCleanup(async () => {
-      throw error;
-    }, [{ label: 'Home search rebuild partial render context', run: () => closeContext(context!), timeoutMs: 6000 }]);
-  }
+    suiteLifetime.assertActive('Home search rebuild page response');
+    expect(response.status).toBe(200);
+    const activeBrowser = await getBrowser();
+    suiteLifetime.assertActive('Home search rebuild render context setup');
+    let context: BrowserContext | undefined;
+    try {
+      context = await createContext(
+        activeBrowser,
+        { viewport: { width: 1280, height: 860 }, javaScriptEnabled: Boolean(cookie) },
+        'Home search rebuild render context acquisition',
+      );
+      suiteLifetime.assertActive('Home search rebuild render context acquisition completion');
+      if (cookie) {
+        await context.addCookies([
+          {
+            name: session,
+            value: cookie,
+            domain: '127.0.0.1',
+            path: '/',
+            httpOnly: true,
+            secure: true,
+            sameSite: 'Lax',
+          },
+        ]);
+        suiteLifetime.assertActive('Home search rebuild render cookie setup');
+      }
+      // This fixture supplies cover metadata; live browser rendering also needs a successful image response.
+      await context.route(
+        (url) => url.pathname.startsWith('/media/'),
+        (route) =>
+          route.fulfill({
+            contentType: 'image/png',
+            body: Buffer.from(
+              'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lS8AAAAASUVORK5CYII=',
+              'base64',
+            ),
+          }),
+      );
+      suiteLifetime.assertActive('Home search rebuild media route setup');
+      const page = await context.newPage();
+      suiteLifetime.assertActive('Home search rebuild render page creation');
+      if (cookie) {
+        await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
+        suiteLifetime.assertActive('Home search rebuild render navigation');
+        await waitForPersonalRead(page, ['home-continue', path.split('/')[1]!]);
+        suiteLifetime.assertActive('Home search rebuild personal readiness');
+        await page.locator('[data-slot="personal"] article').first().waitFor({ state: 'attached' });
+        suiteLifetime.assertActive('Home search rebuild personal card readiness');
+        // Keep this markup proof unstyled, as the script-free snapshots below are.
+        await page.evaluate(() => {
+          for (const stylesheet of document.querySelectorAll('style, link[rel="stylesheet"]')) stylesheet.remove();
+        });
+        suiteLifetime.assertActive('Home search rebuild unstyled snapshot setup');
+      } else {
+        const html = await response.text();
+        suiteLifetime.assertActive('Home search rebuild script-free response body');
+        await page.setContent(html);
+        suiteLifetime.assertActive('Home search rebuild script-free page setup');
+      }
+      return page;
+    } catch (error) {
+      if (!context) throw error;
+      return await withCleanup(async () => {
+        throw error;
+      }, [{ label: 'Home search rebuild partial render context', run: () => closeContext(context!), timeoutMs: 6000 }]);
+    }
+  });
 }
 
 async function openLive(path: string): Promise<Page> {
-  const origin = await site();
-  browser ??= await chromium.launch();
-  let context: BrowserContext | undefined;
-  try {
-    context = await browser.newContext({ viewport: { width: 1280, height: 860 }, reducedMotion: 'reduce' });
-    contexts.add(context);
-    const page = await context.newPage();
-    await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
-    await page.locator('html[data-hydrated]').waitFor({ state: 'attached' });
-    return page;
-  } catch (error) {
-    if (!context) throw error;
-    return await withCleanup(async () => {
-      throw error;
-    }, [{ label: 'Home search rebuild partial live context', run: () => closeContext(context!), timeoutMs: 6000 }]);
-  }
+  return suiteLifetime.run('Home search rebuild live page setup', async () => {
+    const origin = await site();
+    suiteLifetime.assertActive('Home search rebuild live browser launch');
+    const activeBrowser = await getBrowser();
+    suiteLifetime.assertActive('Home search rebuild live context setup');
+    let context: BrowserContext | undefined;
+    try {
+      context = await createContext(
+        activeBrowser,
+        { viewport: { width: 1280, height: 860 }, reducedMotion: 'reduce' },
+        'Home search rebuild live context acquisition',
+      );
+      suiteLifetime.assertActive('Home search rebuild live context acquisition completion');
+      const page = await context.newPage();
+      suiteLifetime.assertActive('Home search rebuild live page creation');
+      await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
+      suiteLifetime.assertActive('Home search rebuild live navigation');
+      await page.locator('html[data-hydrated]').waitFor({ state: 'attached' });
+      suiteLifetime.assertActive('Home search rebuild live hydration');
+      return page;
+    } catch (error) {
+      if (!context) throw error;
+      return await withCleanup(async () => {
+        throw error;
+      }, [{ label: 'Home search rebuild partial live context', run: () => closeContext(context!), timeoutMs: 6000 }]);
+    }
+  });
 }
 
 let browser: Browser | undefined;
+let browserAcquisition: Promise<Browser> | undefined;
 const contexts = new Set<BrowserContext>();
+const browserClosures = new WeakMap<Browser, Promise<void>>();
 const contextClosures = new WeakMap<BrowserContext, Promise<void>>();
+
+function closeBrowser(browser: Browser): Promise<void> {
+  const existing = browserClosures.get(browser);
+  if (existing) return existing;
+  const closing = cleanupAll([{ label: 'Home search rebuild browser', run: () => browser.close(), timeoutMs: 5000 }]);
+  browserClosures.set(browser, closing);
+  return closing;
+}
 
 function closeContext(context: BrowserContext): Promise<void> {
   const existing = contextClosures.get(context);
@@ -682,6 +997,32 @@ function closeContext(context: BrowserContext): Promise<void> {
   return closing;
 }
 
+function getBrowser(): Promise<Browser> {
+  return singletonAcquisition(
+    suiteLifetime,
+    'Home search rebuild browser launch',
+    () => browser,
+    () => browserAcquisition,
+    (acquisition) => {
+      browserAcquisition = acquisition;
+    },
+    () => chromium.launch(),
+    (launched) => {
+      browser = launched;
+    },
+    closeBrowser,
+  );
+}
+
+function createContext(browser: Browser, options: Parameters<Browser['newContext']>[0], label: string) {
+  return suiteLifetime.acquire(
+    label,
+    () => browser.newContext(options),
+    (context) => contexts.add(context),
+    closeContext,
+  );
+}
+
 async function messageOf(locale: string, key: string, values: Record<string, string> = {}): Promise<string> {
   const file = new URL(`../messages/${locale}.json`, import.meta.url);
   const text = ((await Bun.file(file).json()) as Record<string, string>)[key]!;
@@ -690,17 +1031,104 @@ async function messageOf(locale: string, key: string, values: Record<string, str
 const calledPaths = (path: string) => calls.filter((call) => call.path === path);
 const squash = (text: string) => text.replace(/\s+/g, ' ').trim();
 
-afterAll(async () => {
-  await cleanupAll([
+afterAll(() =>
+  retireSuite(suiteLifetime, 'Home search rebuild', [
     ...[...contexts].map((context) => ({
       label: 'Home search rebuild browser context',
       run: () => closeContext(context),
       timeoutMs: 6000,
     })),
-    { label: 'Home search rebuild browser', run: () => browser?.close(), timeoutMs: 5000 },
+    { label: 'Home search rebuild browser', run: () => (browser ? closeBrowser(browser) : undefined), timeoutMs: 6000 },
     { label: 'Home search rebuild fake API and OIDC listener', run: () => fake.stop(true), timeoutMs: 5000 },
     { label: 'Home search rebuild Vite process group', run: () => serverCustody?.close(), timeoutMs: 7000 },
+  ]),
+);
+
+test('Home search rebuild retirement fences the Vite port, shares browser launch, and closes late contexts', async () => {
+  const lifetime = new SuiteLifetime();
+  const portStarted = deferred<void>();
+  const pendingPort = deferred<number>();
+  let viteLaunches = 0;
+  const startup = startWithPort(lifetime, 'fixture Vite startup', () => {
+    portStarted.resolve();
+    return pendingPort.promise;
+  }, async () => {
+    viteLaunches += 1;
+    return 'http://127.0.0.1:4173';
+  });
+  await portStarted.promise;
+
+  const browserStarted = deferred<void>();
+  const pendingBrowser = deferred<{ name: string }>();
+  let browser: { name: string } | undefined;
+  let browserAcquisition: Promise<{ name: string }> | undefined;
+  let launches = 0;
+  let browserCloses = 0;
+  const acquireBrowser = () =>
+    singletonAcquisition(
+      lifetime,
+      'fixture browser launch',
+      () => browser,
+      () => browserAcquisition,
+      (acquisition) => {
+        browserAcquisition = acquisition;
+      },
+      () => {
+        launches += 1;
+        browserStarted.resolve();
+        return pendingBrowser.promise;
+      },
+      (acquired) => {
+        browser = acquired;
+      },
+      async () => {
+        browserCloses += 1;
+      },
+    );
+  const firstBrowser = acquireBrowser();
+  const secondBrowser = acquireBrowser();
+  expect(secondBrowser).toBe(firstBrowser);
+  await browserStarted.promise;
+
+  lifetime.retire();
+  pendingPort.resolve(4173);
+  pendingBrowser.resolve({ name: 'late browser' });
+  const [startupResult, firstResult, secondResult] = await Promise.allSettled([
+    startup,
+    firstBrowser,
+    secondBrowser,
   ]);
+  await lifetime.settlePending();
+  expect(startupResult.status).toBe('rejected');
+  expect(firstResult.status).toBe('rejected');
+  expect(secondResult.status).toBe('rejected');
+  expect(viteLaunches).toBe(0);
+  expect(launches).toBe(1);
+  expect(browserCloses).toBe(1);
+
+  const contextLifetime = new SuiteLifetime();
+  const contextStarted = deferred<void>();
+  const pendingContext = deferred<{ name: string }>();
+  let contextCloses = 0;
+  const context = contextLifetime.acquire(
+    'fixture browser context acquisition',
+    () => {
+      contextStarted.resolve();
+      return pendingContext.promise;
+    },
+    () => {
+      throw new Error('retired context must not be adopted');
+    },
+    async () => {
+      contextCloses += 1;
+    },
+  );
+  await contextStarted.promise;
+  contextLifetime.retire();
+  pendingContext.resolve({ name: 'late context' });
+  await Promise.allSettled([context]);
+  await contextLifetime.settlePending();
+  expect(contextCloses).toBe(1);
 });
 
 test(

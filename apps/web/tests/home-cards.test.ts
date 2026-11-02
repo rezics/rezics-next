@@ -365,13 +365,271 @@ const fake = Bun.serve({
   },
 });
 
-function freePort(): Promise<number> {
+class SuiteRetiredError extends Error {
+  constructor(label: string) {
+    super(`${label} stopped because Home suite teardown started`);
+    this.name = 'SuiteRetiredError';
+  }
+}
+
+type PendingSuiteOperation = { label: string; settled: Promise<void> };
+type LateSuiteResource = { label: string; close: () => Promise<void> };
+type SuiteCleanupAction = Parameters<typeof cleanupAll>[0][number];
+
+class SuiteLifetime {
+  private retiring = false;
+  private cleanupFinished = false;
+  private readonly pending = new Set<PendingSuiteOperation>();
+  private readonly lateResources = new Set<LateSuiteResource>();
+  private readonly lateFailures: unknown[] = [];
+  private readonly retainedCleanups = new Set<SuiteCleanupAction>();
+
+  get retired() {
+    return this.retiring;
+  }
+
+  retire() {
+    this.retiring = true;
+  }
+
+  assertActive(label: string) {
+    if (this.retiring) throw new SuiteRetiredError(label);
+  }
+
+  run<T>(label: string, operation: () => T | PromiseLike<T>): Promise<T> {
+    return this.observe(label, operation);
+  }
+
+  acquire<T>(
+    label: string,
+    acquire: () => T | PromiseLike<T>,
+    adopt: (resource: T) => void,
+    close: (resource: T) => Promise<void>,
+  ): Promise<T> {
+    return this.observe(
+      label,
+      acquire,
+      adopt,
+      (resource) => this.closeLate(label, resource, close),
+    );
+  }
+
+  retainCleanup(label: string, close: () => Promise<void>, timeoutMs = 5000) {
+    let action: SuiteCleanupAction;
+    let closing: Promise<void> | undefined;
+    action = {
+      label,
+      timeoutMs,
+      run: () => {
+        closing ??= Promise.resolve()
+          .then(close)
+          .then(() => {
+            this.retainedCleanups.delete(action);
+          });
+        return closing;
+      },
+    };
+    this.retainedCleanups.add(action);
+    return () => this.retainedCleanups.delete(action);
+  }
+
+  cleanupActions(): SuiteCleanupAction[] {
+    return [...this.retainedCleanups];
+  }
+
+  private observe<T>(
+    label: string,
+    start: () => T | PromiseLike<T>,
+    adopt?: (resource: T) => void,
+    closeLate?: (resource: T) => Promise<void>,
+  ): Promise<T> {
+    this.assertActive(label);
+    const record: PendingSuiteOperation = { label, settled: Promise.resolve() };
+    this.pending.add(record);
+    const observed = Promise.resolve()
+      .then(() => {
+        this.assertActive(label);
+        return start();
+      })
+      .then(async (resource) => {
+        if (this.retiring) {
+          if (closeLate) await closeLate(resource);
+          throw new SuiteRetiredError(label);
+        }
+        adopt?.(resource);
+        return resource;
+      });
+    record.settled = observed.then(
+      () => {
+        this.pending.delete(record);
+      },
+      (error) => {
+        this.pending.delete(record);
+        if (this.retiring && !(error instanceof SuiteRetiredError)) this.recordLateFailure(label, error);
+      },
+    );
+    void observed.catch(() => {});
+    return observed;
+  }
+
+  private async closeLate<T>(label: string, resource: T, close: (resource: T) => Promise<void>) {
+    const retained: LateSuiteResource = { label, close: () => close(resource) };
+    this.lateResources.add(retained);
+    try {
+      await cleanupAll([
+        { label: `Home cards late ${label}`, run: retained.close, timeoutMs: 5000 },
+      ]);
+      this.lateResources.delete(retained);
+    } catch (error) {
+      throw new Error(`Home cards late ${label} cleanup failed`, { cause: error });
+    }
+  }
+
+  async settlePending() {
+    await Promise.all([...this.pending].map(({ settled }) => settled));
+    if (this.lateFailures.length > 0)
+      throw new AggregateError(this.lateFailures, 'Home cards late setup or acquisition failed');
+    if (this.lateResources.size > 0)
+      throw new AggregateError(
+        [...this.lateResources].map(({ label }) => new Error(`Home cards still owns late ${label}`)),
+        'Home cards late resources remain unsettled',
+      );
+    if (this.retainedCleanups.size > 0)
+      throw new AggregateError(
+        [...this.retainedCleanups].map(({ label }) => new Error(`Home cards still owns ${label}`)),
+        'Home cards retained cleanup remains unsettled',
+      );
+  }
+
+  pendingDiagnostics() {
+    return [
+      ...[...this.pending].map(({ label }) => `pending ${label}`),
+      ...[...this.lateResources].map(({ label }) => `late ${label}`),
+      ...[...this.retainedCleanups].map(({ label }) => `retained ${label}`),
+    ].join('; ');
+  }
+
+  finishCleanup() {
+    this.cleanupFinished = true;
+  }
+
+  private recordLateFailure(label: string, error: unknown) {
+    const failure = new Error(`Home cards ${label} failed after teardown began`, { cause: error });
+    this.lateFailures.push(failure);
+    if (this.cleanupFinished) console.error(failure);
+  }
+}
+
+const suiteLifetime = new SuiteLifetime();
+
+function retireSuite(
+  lifetime: SuiteLifetime,
+  label: string,
+  actions: Parameters<typeof cleanupAll>[0],
+) {
+  lifetime.retire();
+  return cleanupAll([
+    ...lifetime.cleanupActions(),
+    ...actions,
+    { label: `${label} pending startup and setup`, run: () => lifetime.settlePending(), timeoutMs: 8000 },
+  ])
+    .catch((error) => {
+      const pending = lifetime.pendingDiagnostics();
+      if (!pending) throw error;
+      throw new AggregateError(
+        [error, new Error(`${label} retained resources remain: ${pending}`)],
+        `${label} cleanup did not settle`,
+      );
+    })
+    .finally(() => lifetime.finishCleanup());
+}
+
+function startWithPort<T>(
+  lifetime: SuiteLifetime,
+  label: string,
+  getPort: () => Promise<number>,
+  launch: (port: number) => T | PromiseLike<T>,
+): Promise<T> {
+  return lifetime.run(label, async () => {
+    const port = await getPort();
+    lifetime.assertActive(`${label} launch after port resolution`);
+    return launch(port);
+  });
+}
+
+function singletonAcquisition<T>(
+  lifetime: SuiteLifetime,
+  label: string,
+  current: () => T | undefined,
+  pending: () => Promise<T> | undefined,
+  remember: (acquisition: Promise<T> | undefined) => void,
+  acquire: () => T | PromiseLike<T>,
+  adopt: (resource: T) => void,
+  close: (resource: T) => Promise<void>,
+): Promise<T> {
+  lifetime.assertActive(label);
+  const owned = current();
+  if (owned) return Promise.resolve(owned);
+  const inFlight = pending();
+  if (inFlight) return inFlight;
+  const acquisition = lifetime.acquire(label, acquire, adopt, close);
+  remember(acquisition);
+  void acquisition.catch(() => {
+    if (!lifetime.retired && pending() === acquisition) remember(undefined);
+  });
+  return acquisition;
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((complete) => {
+    resolve = complete;
+  });
+  return { promise, resolve };
+}
+
+function freePort(lifetime: SuiteLifetime, label: string): Promise<number> {
   return new Promise((resolve, reject) => {
     const probe = createServer();
-    probe.once('error', reject);
+    let closePromise: Promise<void> | undefined;
+    const closeListeningProbe = () =>
+      new Promise<void>((complete, fail) => {
+        probe.close((error) => (error ? fail(error) : complete()));
+      });
+    const closeProbe = () => {
+      if (closePromise) return closePromise;
+      if (probe.listening) {
+        closePromise = closeListeningProbe();
+        return closePromise;
+      }
+      closePromise = new Promise<void>((complete, fail) => {
+        const onListening = () => {
+          probe.off('error', onError);
+          void closeListeningProbe().then(complete, fail);
+        };
+        const onError = () => {
+          probe.off('listening', onListening);
+          complete();
+        };
+        probe.once('listening', onListening);
+        probe.once('error', onError);
+      });
+      return closePromise;
+    };
+    const release = lifetime.retainCleanup(`${label} port probe`, closeProbe);
+    probe.once('error', (error) => {
+      release();
+      reject(error);
+    });
     probe.listen(0, '127.0.0.1', () => {
       const { port } = probe.address() as { port: number };
-      probe.close(() => resolve(port));
+      void closeProbe().then(
+        () => {
+          release();
+          resolve(port);
+        },
+        reject,
+      );
     });
   });
 }
@@ -383,65 +641,74 @@ let siteOutput = '';
 
 // The documented command, pointed at the fake through the environment it reads in development.
 function site(): Promise<string> {
-  started ??= (async () => {
-    const port = await freePort();
-    child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
-      cwd: app,
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: {
-        ...process.env,
-        KERNEL_ORIGIN: fake.url.origin,
-        PUBLIC_ORIGIN: 'https://www.rezics.test',
-        AUTH_ISSUER: `${fake.url.origin}/auth`,
-        WEBSITE_CLIENT_ID: clientId,
-        WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
-        API_RESOURCE: resource,
-        WEBSITE_SCOPES: scopes.join(' '),
-      },
-    });
-    const custody = (serverCustody = ownNodeProcess(child, {
-      label: 'Home cards Vite server',
-      outputLimit: 8000,
-      onOutput: (chunk) => {
-        siteOutput = (siteOutput + Buffer.from(chunk).toString()).slice(-8000);
-      },
-    }));
-    let spawnError: Error | undefined;
-    child.once('error', (error) => {
-      spawnError = error;
-    });
-    const origin = `http://127.0.0.1:${port}`;
-    const deadline = Date.now() + 150_000;
-    try {
-      for (;;) {
-        if (spawnError)
-          throw new Error(
-            `dev server failed to spawn: ${spawnError.message}\nCaptured output:\n${custody.diagnostics()}`,
-            {
-              cause: spawnError,
-            },
-          );
-        const exit = child.exitCode ?? child.signalCode;
-        if (exit !== null) throw new Error(`dev server exited with ${exit}:\n${custody.diagnostics()}`);
-        try {
-          const response = await fetch(`${origin}/en`, {
-            redirect: 'manual',
-            signal: AbortSignal.timeout(60_000),
-          });
-          if (response.status < 500) return origin;
-        } catch {
-          // The dev server is still starting.
+  started ??= startWithPort(
+    suiteLifetime,
+    'Home cards Vite startup',
+    () => freePort(suiteLifetime, 'Home cards Vite startup'),
+    async (port) => {
+      suiteLifetime.assertActive('Home cards Vite spawn');
+      child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
+        cwd: app,
+        detached: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: {
+          ...process.env,
+          KERNEL_ORIGIN: fake.url.origin,
+          PUBLIC_ORIGIN: 'https://www.rezics.test',
+          AUTH_ISSUER: `${fake.url.origin}/auth`,
+          WEBSITE_CLIENT_ID: clientId,
+          WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
+          API_RESOURCE: resource,
+          WEBSITE_SCOPES: scopes.join(' '),
+        },
+      });
+      const custody = (serverCustody = ownNodeProcess(child, {
+        label: 'Home cards Vite server',
+        outputLimit: 8000,
+        onOutput: (chunk) => {
+          siteOutput = (siteOutput + Buffer.from(chunk).toString()).slice(-8000);
+        },
+      }));
+      let spawnError: Error | undefined;
+      child.once('error', (error) => {
+        spawnError = error;
+      });
+      const origin = `http://127.0.0.1:${port}`;
+      const deadline = Date.now() + 150_000;
+      try {
+        for (;;) {
+          suiteLifetime.assertActive('Home cards Vite readiness');
+          if (spawnError)
+            throw new Error(
+              `dev server failed to spawn: ${spawnError.message}\nCaptured output:\n${custody.diagnostics()}`,
+              {
+                cause: spawnError,
+              },
+            );
+          const exit = child.exitCode ?? child.signalCode;
+          if (exit !== null) throw new Error(`dev server exited with ${exit}:\n${custody.diagnostics()}`);
+          try {
+            const response = await fetch(`${origin}/en`, {
+              redirect: 'manual',
+              signal: AbortSignal.timeout(60_000),
+            });
+            suiteLifetime.assertActive('Home cards Vite readiness after response');
+            if (response.status < 500) return origin;
+          } catch (error) {
+            if (suiteLifetime.retired) throw error;
+            // The dev server is still starting.
+          }
+          if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${custody.diagnostics()}`);
+          await Bun.sleep(500);
+          suiteLifetime.assertActive('Home cards Vite readiness after delay');
         }
-        if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${custody.diagnostics()}`);
-        await Bun.sleep(500);
+      } catch (error) {
+        return await withCleanup(async () => {
+          throw error;
+        }, [{ label: 'Home cards Vite startup', run: () => custody.close(), timeoutMs: 7000 }]);
       }
-    } catch (error) {
-      return await withCleanup(async () => {
-        throw error;
-      }, [{ label: 'Home cards Vite startup', run: () => custody.close(), timeoutMs: 7000 }]);
-    }
-  })();
+    },
+  );
   return started;
 }
 
@@ -454,60 +721,78 @@ const cookieValue = (response: Response, name: string) =>
 
 // Starts a sign-in, answers it as Auth would after the person signs in there, and returns the session cookie.
 async function signIn(returnTo = '/en', grant: Partial<Grant> = {}) {
-  const origin = await site();
-  const start = await fetch(`${origin}/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`, { redirect: 'manual' });
-  const location = new URL(start.headers.get('location')!);
-  const params = location.searchParams;
-  const code = `code-${randomUUID()}`;
-  codes.set(code, {
-    challenge: params.get('code_challenge')!,
-    nonce: params.get('nonce')!,
-    redirectUri: params.get('redirect_uri')!,
-    scope: params.get('scope')!,
-    sub: 'alice',
-    expiresIn: 3600,
-    ...grant,
+  return suiteLifetime.run('Home cards sign-in setup', async () => {
+    const origin = await site();
+    suiteLifetime.assertActive('Home cards sign-in request');
+    const start = await fetch(`${origin}/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`, { redirect: 'manual' });
+    suiteLifetime.assertActive('Home cards sign-in response');
+    const location = new URL(start.headers.get('location')!);
+    const params = location.searchParams;
+    const code = `code-${randomUUID()}`;
+    codes.set(code, {
+      challenge: params.get('code_challenge')!,
+      nonce: params.get('nonce')!,
+      redirectUri: params.get('redirect_uri')!,
+      scope: params.get('scope')!,
+      sub: 'alice',
+      expiresIn: 3600,
+      ...grant,
+    });
+    oidcTokenRequests = 0;
+    oidcClientRejection = 'none';
+    const loginCookie = cookieValue(start, login);
+    const answer = await fetch(`${params.get('redirect_uri')}?code=${code}&state=${params.get('state')}`, {
+      redirect: 'manual',
+      headers: loginCookie ? { cookie: `${login}=${loginCookie}` } : {},
+    });
+    suiteLifetime.assertActive('Home cards OpenID callback response');
+    const body = (await answer
+      .clone()
+      .json()
+      .catch(() => undefined)) as { status?: unknown; code?: unknown; title?: unknown } | undefined;
+    suiteLifetime.assertActive('Home cards OpenID callback body');
+    const safeProblem = body
+      ? {
+          status: typeof body.status === 'number' ? body.status : undefined,
+          code: typeof body.code === 'string' ? body.code.slice(0, 64) : undefined,
+          title: typeof body.title === 'string' ? body.title.slice(0, 64) : undefined,
+        }
+      : undefined;
+    const oidcDiagnostic = siteOutput
+      .split('\n')
+      .filter((line) => line.includes('[web auth] OpenID authorization-code grant failed:'))
+      .at(-1);
+    expect(
+      [302, 303],
+      `OpenID callback setup; HTTP ${answer.status}; problem=${JSON.stringify(safeProblem)}; ${oidcDiagnostic ?? 'no named OIDC grant error logged'}; client_id=${params.get('client_id')}; fake_token_requests=${oidcTokenRequests}; fake_client_rejection=${oidcClientRejection}`,
+    ).toContain(answer.status);
+    const sessionCookie = cookieValue(answer, session);
+    expect(sessionCookie, 'signed-in session setup').toBeTruthy();
+    return sessionCookie!;
   });
-  oidcTokenRequests = 0;
-  oidcClientRejection = 'none';
-  const loginCookie = cookieValue(start, login);
-  const answer = await fetch(`${params.get('redirect_uri')}?code=${code}&state=${params.get('state')}`, {
-    redirect: 'manual',
-    headers: loginCookie ? { cookie: `${login}=${loginCookie}` } : {},
-  });
-  const body = (await answer
-    .clone()
-    .json()
-    .catch(() => undefined)) as { status?: unknown; code?: unknown; title?: unknown } | undefined;
-  const safeProblem = body
-    ? {
-        status: typeof body.status === 'number' ? body.status : undefined,
-        code: typeof body.code === 'string' ? body.code.slice(0, 64) : undefined,
-        title: typeof body.title === 'string' ? body.title.slice(0, 64) : undefined,
-      }
-    : undefined;
-  const oidcDiagnostic = siteOutput
-    .split('\n')
-    .filter((line) => line.includes('[web auth] OpenID authorization-code grant failed:'))
-    .at(-1);
-  expect(
-    [302, 303],
-    `OpenID callback setup; HTTP ${answer.status}; problem=${JSON.stringify(safeProblem)}; ${oidcDiagnostic ?? 'no named OIDC grant error logged'}; client_id=${params.get('client_id')}; fake_token_requests=${oidcTokenRequests}; fake_client_rejection=${oidcClientRejection}`,
-  ).toContain(answer.status);
-  const sessionCookie = cookieValue(answer, session);
-  expect(sessionCookie, 'signed-in session setup').toBeTruthy();
-  return sessionCookie!;
 }
 
 let aliceCookie: Promise<string> | undefined;
 const alice = async () => {
+  suiteLifetime.assertActive('Home cards shared sign-in');
   aliceCookie ??= signIn('/en', { sub: 'alice' });
   return aliceCookie;
 };
 
 let browser: Browser | undefined;
+let browserAcquisition: Promise<Browser> | undefined;
 const contexts = new Set<BrowserContext>();
+const browserClosures = new WeakMap<Browser, Promise<void>>();
 const contextClosures = new WeakMap<BrowserContext, Promise<void>>();
+
+function closeBrowser(browser: Browser): Promise<void> {
+  const existing = browserClosures.get(browser);
+  if (existing) return existing;
+  const closing = cleanupAll([{ label: 'Home cards browser', run: () => browser.close(), timeoutMs: 5000 }]);
+  browserClosures.set(browser, closing);
+  return closing;
+}
+
 function closeContext(context: BrowserContext): Promise<void> {
   const existing = contextClosures.get(context);
   if (existing) return existing;
@@ -520,18 +805,133 @@ function closeContext(context: BrowserContext): Promise<void> {
   return closing;
 }
 
-afterAll(async () => {
-  await cleanupAll([
+function getBrowser(): Promise<Browser> {
+  return singletonAcquisition(
+    suiteLifetime,
+    'Home cards browser launch',
+    () => browser,
+    () => browserAcquisition,
+    (acquisition) => {
+      browserAcquisition = acquisition;
+    },
+    () => chromium.launch(),
+    (launched) => {
+      browser = launched;
+    },
+    closeBrowser,
+  );
+}
+
+afterAll(() =>
+  retireSuite(suiteLifetime, 'Home cards', [
     ...[...contexts].map((context) => ({
       label: 'Home cards browser context',
       run: () => closeContext(context),
       timeoutMs: 6000,
     })),
-    { label: 'Home cards browser', run: () => browser?.close(), timeoutMs: 5000 },
+    { label: 'Home cards browser', run: () => (browser ? closeBrowser(browser) : undefined), timeoutMs: 6000 },
     { label: 'Home cards fake API and OIDC listener', run: () => fake.stop(true), timeoutMs: 5000 },
     { label: 'Home cards Vite process group', run: () => serverCustody?.close(), timeoutMs: 7000 },
-  ]);
+  ]),
+);
+
+test('Home cards teardown fences a late port, closes late browser/context handles, and retires resumed setup', async () => {
+  const lifetime = new SuiteLifetime();
+  const portRequestStarted = deferred<void>();
+  const pendingPort = deferred<number>();
+  let viteLaunches = 0;
+  const startup = startWithPort(lifetime, 'fixture Vite startup', () => {
+    portRequestStarted.resolve();
+    return pendingPort.promise;
+  }, async () => {
+    viteLaunches += 1;
+    return 'http://127.0.0.1:4173';
+  });
+  await portRequestStarted.promise;
+
+  const browserLaunchStarted = deferred<void>();
+  const pendingBrowser = deferred<{ name: string }>();
+  let currentBrowser: { name: string } | undefined;
+  let browserAcquisition: Promise<{ name: string }> | undefined;
+  let browserLaunches = 0;
+  let lateBrowserCloses = 0;
+  const getFixtureBrowser = () =>
+    singletonAcquisition(
+      lifetime,
+      'fixture browser launch',
+      () => currentBrowser,
+      () => browserAcquisition,
+      (acquisition) => {
+        browserAcquisition = acquisition;
+      },
+    () => {
+      browserLaunches += 1;
+      browserLaunchStarted.resolve();
+      return pendingBrowser.promise;
+    },
+      (resource) => {
+        currentBrowser = resource;
+      },
+    async () => {
+      lateBrowserCloses += 1;
+    },
+  );
+  const browser = getFixtureBrowser();
+  const sharedBrowser = getFixtureBrowser();
+  expect(sharedBrowser).toBe(browser);
+  await browserLaunchStarted.promise;
+
+  lifetime.retire();
+  pendingPort.resolve(4173);
+  pendingBrowser.resolve({ name: 'late browser' });
+  const [startupResult, browserResult] = await Promise.allSettled([startup, browser, sharedBrowser]);
+  await lifetime.settlePending();
+
+  expect(startupResult.status).toBe('rejected');
+  expect(browserResult.status).toBe('rejected');
+  expect(viteLaunches).toBe(0);
+  expect(browserLaunches).toBe(1);
+  expect(lateBrowserCloses).toBe(1);
+  lifetime.retire();
+  await lifetime.settlePending();
+  expect(lateBrowserCloses).toBe(1);
+
+  const contextLifetime = new SuiteLifetime();
+  const contextStarted = deferred<void>();
+  const pendingContext = deferred<{ name: string }>();
+  const resumeSetup = deferred<void>();
+  const setupStarted = deferred<void>();
+  let lateContextCloses = 0;
+  let setupContinued = false;
+  const context = contextLifetime.acquire(
+    'fixture browser context acquisition',
+    () => {
+      contextStarted.resolve();
+      return pendingContext.promise;
+    },
+    () => {
+      throw new Error('retired context must not be adopted');
+    },
+    async () => {
+      lateContextCloses += 1;
+    },
+  );
+  const setup = contextLifetime.run('fixture page setup', async () => {
+    setupStarted.resolve();
+    await resumeSetup.promise;
+    contextLifetime.assertActive('fixture navigation after suite retirement');
+    setupContinued = true;
+  });
+  await Promise.all([contextStarted.promise, setupStarted.promise]);
+  contextLifetime.retire();
+  pendingContext.resolve({ name: 'late context' });
+  resumeSetup.resolve();
+  await Promise.allSettled([context, setup]);
+  await contextLifetime.settlePending();
+  expect(lateContextCloses).toBe(1);
+  expect(setupContinued).toBe(false);
 });
+
 type Viewport = { width: number; height: number };
 
 // A live page in a real browser: the layout tests need the stylesheet and the script that hydrates the page.
@@ -542,86 +942,103 @@ async function open(
   theme?: 'light' | 'dark',
   browserErrors?: string[],
 ) {
-  const origin = await site();
-  browser ??= await chromium.launch();
-  const context = await browser.newContext({
-    viewport,
-    reducedMotion: 'reduce',
-  });
-  contexts.add(context);
-  try {
-    const cookies = [
-      ...(cookie
-        ? [
-            {
-              name: session,
-              value: cookie,
-              domain: '127.0.0.1',
-              path: '/',
-              httpOnly: true,
-              secure: true,
-              sameSite: 'Lax' as const,
-            },
-          ]
-        : []),
-      ...(theme
-        ? [
-            {
-              name: 'rezics_theme',
-              value: theme,
-              domain: '127.0.0.1',
-              path: '/',
-              sameSite: 'Lax' as const,
-            },
-          ]
-        : []),
-    ];
-    if (cookies.length) await context.addCookies(cookies);
-    const page = await context.newPage();
-    const pageErrors: string[] = [];
-    const recordPageError = (error: string) => {
-      pageErrors.push(error);
-      browserErrors?.push(error);
-    };
-    page.on('pageerror', (error) => recordPageError(error.message));
-    page.on('console', (message) => {
-      if (message.type() === 'error') {
-        const location = message.location().url;
-        recordPageError(location ? `${message.text()} (${location})` : message.text());
-      }
-    });
-    await context.route(
-      (url) => url.pathname.startsWith('/media/'),
-      (route) =>
-        route.fulfill({
-          contentType: 'image/png',
-          body: Buffer.from(
-            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lS8AAAAASUVORK5CYII=',
-            'base64',
-          ),
-        }),
-    );
-    setFakeAdmitted(cookie ? viewerAdmissions : []);
-    await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
+  return suiteLifetime.run('Home cards browser page setup', async () => {
+    const origin = await site();
+    suiteLifetime.assertActive('Home cards browser launch after server readiness');
+    const activeBrowser = await getBrowser();
+    suiteLifetime.assertActive('Home cards context setup');
+    let context: BrowserContext | undefined;
     try {
-      await page.locator('html[data-hydrated]').waitFor({ state: 'attached' });
-    } catch (error) {
-      const body = await page
-        .locator('body')
-        .innerText({ timeout: 1_000 })
-        .catch(() => '');
-      throw new Error(
-        `Page did not hydrate at ${page.url()}: ${error instanceof Error ? error.message : String(error)}\n` +
-          `Browser errors: ${pageErrors.join('\n') || '(none)'}\n` +
-          `Rendered page: ${squash(body).slice(0, 1200) || '(empty)'}`,
+      context = await suiteLifetime.acquire(
+        'Home cards browser context acquisition',
+        () => activeBrowser.newContext({ viewport, reducedMotion: 'reduce' }),
+        (acquired) => contexts.add(acquired),
+        closeContext,
       );
+      suiteLifetime.assertActive('Home cards browser context acquisition completion');
+      const cookies = [
+        ...(cookie
+          ? [
+              {
+                name: session,
+                value: cookie,
+                domain: '127.0.0.1',
+                path: '/',
+                httpOnly: true,
+                secure: true,
+                sameSite: 'Lax' as const,
+              },
+            ]
+          : []),
+        ...(theme
+          ? [
+              {
+                name: 'rezics_theme',
+                value: theme,
+                domain: '127.0.0.1',
+                path: '/',
+                sameSite: 'Lax' as const,
+              },
+            ]
+          : []),
+      ];
+      if (cookies.length) {
+        await context.addCookies(cookies);
+        suiteLifetime.assertActive('Home cards cookies setup');
+      }
+      const page = await context.newPage();
+      suiteLifetime.assertActive('Home cards page setup');
+      const pageErrors: string[] = [];
+      const recordPageError = (error: string) => {
+        pageErrors.push(error);
+        browserErrors?.push(error);
+      };
+      page.on('pageerror', (error) => recordPageError(error.message));
+      page.on('console', (message) => {
+        if (message.type() === 'error') {
+          const location = message.location().url;
+          recordPageError(location ? `${message.text()} (${location})` : message.text());
+        }
+      });
+      await context.route(
+        (url) => url.pathname.startsWith('/media/'),
+        (route) =>
+          route.fulfill({
+            contentType: 'image/png',
+            body: Buffer.from(
+              'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lS8AAAAASUVORK5CYII=',
+              'base64',
+            ),
+          }),
+      );
+      suiteLifetime.assertActive('Home cards media route setup');
+      setFakeAdmitted(cookie ? viewerAdmissions : []);
+      await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
+      suiteLifetime.assertActive('Home cards navigation completion');
+      try {
+        await page.locator('html[data-hydrated]').waitFor({ state: 'attached' });
+        suiteLifetime.assertActive('Home cards hydration completion');
+      } catch (error) {
+        if (suiteLifetime.retired) throw error;
+        const body = await page
+          .locator('body')
+          .innerText({ timeout: 1_000 })
+          .catch(() => '');
+        suiteLifetime.assertActive('Home cards hydration diagnostics');
+        throw new Error(
+          `Page did not hydrate at ${page.url()}: ${error instanceof Error ? error.message : String(error)}\n` +
+            `Browser errors: ${pageErrors.join('\n') || '(none)'}\n` +
+            `Rendered page: ${squash(body).slice(0, 1200) || '(empty)'}`,
+        );
+      }
+      return page;
+    } catch (error) {
+      if (!context) throw error;
+      return await withCleanup(async () => {
+        throw error;
+      }, [{ label: 'Home cards partial browser setup', run: () => closeContext(context!), timeoutMs: 6000 }]);
     }
-    return page;
-  } catch (error) {
-    return await withCleanup(async () => {
-      throw error;
-    }, [{ label: 'Home cards partial browser setup', run: () => closeContext(context), timeoutMs: 6000 }]);
-  }
+  });
 }
 
 async function messageOf(locale: string, key: string, values: Record<string, string> = {}): Promise<string> {
