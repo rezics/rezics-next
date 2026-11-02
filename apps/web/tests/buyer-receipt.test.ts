@@ -3,7 +3,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, isNotFound, RouterProvider } from '@tanstack/react-router';
-import type { OrderPageData } from '../src/checkout/order';
+import type { OrderPageData, OrderMoney } from '../src/checkout/order';
 import paid from '../src/kernel/recorded/order-paid.json';
 import { fixedEditionTerms } from '../src/kernel/fake/entitlements';
 import { receiptStoryMoney } from '../src/kernel/fake/checkout';
@@ -24,7 +24,7 @@ mock.module('cloudflare:workers', () => ({
     SESSIONS: {
       idFromName: (id: string) => id,
       get: () => ({
-        credential: async () => ({ status: 'active', subject: buyer, accessToken: 'buyer', csrfToken: 'csrf' }),
+        credential: async () => ({ status: 'active', subject: buyer, accessToken: 'buyer', csrfToken: null }),
       }),
     },
   },
@@ -56,7 +56,14 @@ async function receipt(order: OrderPageData, checkout?: 'success' | 'canceled') 
 // Native persistence/provider acceptance remains a separate integration obligation; this test starts no services.
 test('Buyer receipt shows recorded charge and truthful payment/access state', async () => {
   const calls: Request[] = [];
-  let native = { ...paid.order, ...receiptStoryMoney, contentEdition: fixedEditionTerms };
+  let native = {
+    ...paid.order,
+    ...receiptStoryMoney,
+    contentEdition: fixedEditionTerms,
+    recordedPresentment: {
+      currency: 'cad', moneyUnit: receiptStoryMoney.moneyUnit!, amountTotalMinor: 1647,
+    } as OrderMoney['recordedPresentment'],
+  };
   let current: unknown = {
     id: paid.order.entitlementId,
     offerId: paid.order.offerId,
@@ -97,6 +104,8 @@ test('Buyer receipt shows recorded charge and truthful payment/access state', as
     expect(headers.get('cache-control')).toBe('private, no-store');
     expect(original).toContain('$12.00');
     expect(original).toContain('$12.96');
+    expect(first.money?.recordedPresentment).toEqual(native.recordedPresentment);
+    expect(original).toContain('CA$16.47 CAD');
     expect(original).toContain('$0.96');
     expect(original).toContain('USD');
     expect(original).toContain('txcd_10302000');
@@ -137,13 +146,15 @@ test('Buyer receipt shows recorded charge and truthful payment/access state', as
         expect(markup).not.toContain(m.entitlements_delivery_unknown());
         expect(markup).not.toContain(m.benefit_open_reader());
         expect(markup).not.toContain('$12.96');
+        expect(markup).not.toContain('CA$16.47');
       }
     }
-    native = { ...native, settlement: 'paid', recordedCharge: null, amountTaxMinor: null };
+    native = { ...native, settlement: 'paid', recordedCharge: null, amountTaxMinor: null, recordedPresentment: null };
     const absent = await receipt(await load());
     expect(absent).toContain('$12.00');
     expect(absent).toContain(m.order_paid_total_unavailable());
     expect(absent).toContain(m.order_tax_unavailable());
+    expect(absent).toContain(m.order_presentment_unavailable());
     expect(absent).not.toContain('$0.00');
 
     const unit = { system: 'stripe-api', exponent: 0, factsVersion: 'stripe-money-v1' } as const;
@@ -153,10 +164,12 @@ test('Buyer receipt shows recorded charge and truthful payment/access state', as
       unitAmountMinor: 1200,
       moneyUnit: unit,
       recordedCharge: { currency: 'jpy', moneyUnit: unit, amountTotalMinor: 1200, amountTaxMinor: 0 },
+      recordedPresentment: { currency: 'jpy', moneyUnit: unit, amountTotalMinor: 1200 },
     };
     const scaleZero = await receipt(await load());
     expect(scaleZero).toContain(formatMinorAmount('en', 'jpy', 1200, unit)!);
     expect(scaleZero).toContain(formatMinorAmount('en', 'jpy', 0, unit)!);
+    expect(scaleZero).toContain(`${formatMinorAmount('en', 'jpy', 1200, unit)} JPY`);
 
     for (const status of [403, 404, 503]) {
       entitlementStatus = status;

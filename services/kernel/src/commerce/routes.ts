@@ -202,6 +202,10 @@ const orderReadSchema = t.Object(
         object,
       ),
     ]),
+    recordedPresentment: t.Union([
+      t.Null(),
+      t.Object({ currency: t.String(), moneyUnit: moneyUnitSchema, amountTotalMinor: t.Integer() }, object),
+    ]),
     targetSubjectId: id,
     subject: t.Union([SubjectSummarySchema, t.Null()]),
     settlement: t.Union([t.Literal('pending'), t.Literal('paid'), t.Literal('failed'), t.Literal('unknown')]),
@@ -904,7 +908,7 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
         return admission.run('normal', job, async () => {
           const receipt = await store.readBuyerOrder(pool, route, params.orderId);
           if (!receipt || receipt.order.buyerAccountId !== actor.accountId) throw new ProblemError('not_found');
-          const { order, recordedCharge } = receipt;
+          const { order, recordedCharge, recordedPresentment } = receipt;
           const summaryDependencies = {
             pool,
             routeKey: deps.routeKey,
@@ -925,6 +929,7 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
               taxCode: order.taxCode,
               amountTaxMinor: order.amountTaxMinor ?? null,
               recordedCharge,
+              recordedPresentment,
               targetSubjectId: order.targetSubjectId,
               subject: summaries.get(order.targetSubjectId) ?? null,
             },

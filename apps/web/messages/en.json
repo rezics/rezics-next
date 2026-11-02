@@ -4131,6 +4131,8 @@
   "order_recorded_price_exclusive": "Recorded unit price (excluding tax)",
   "order_paid_total": "Recorded paid total",
   "order_paid_total_unavailable": "The charged total was not recorded or is unavailable.",
+  "order_presentment_total": "Recorded customer-currency total",
+  "order_presentment_unavailable": "The customer-currency total was not recorded or is unavailable.",
   "order_recorded_tax": "Recorded tax",
   "order_tax_unavailable": "Tax information is unavailable.",
   "order_technical_details": "Order technical details",

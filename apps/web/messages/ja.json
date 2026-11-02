@@ -4130,6 +4130,8 @@
   "order_recorded_price_exclusive": "記録された単価（税抜）",
   "order_paid_total": "記録された支払総額",
   "order_paid_total_unavailable": "請求総額が記録されていないか、取得できません。",
+  "order_presentment_total": "記録された顧客通貨での合計",
+  "order_presentment_unavailable": "顧客通貨での合計は記録されていないか、利用できません。",
   "order_recorded_tax": "記録された税額",
   "order_tax_unavailable": "税情報を取得できません。",
   "order_technical_details": "注文の技術情報",

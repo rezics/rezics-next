@@ -13,5 +13,13 @@ SELECT order_id AS id, buyer_account_id AS "buyerAccountId", offer_id AS "offerI
            AND m.provider_object_id = p.checkout_session_id AND m.context = 'checkout.integration'
            AND m.money_unit IS NOT NULL
          ORDER BY m.recorded_at DESC, m.provider_api_version DESC, m.economics_hash DESC LIMIT 1
-       ) END AS "chargeEvidence"
+       ) END AS "chargeEvidence",
+       CASE WHEN :receipt::boolean AND settlement = 'paid' THEN (
+         SELECT jsonb_build_object('moneyUnit', m.money_unit, 'amounts', m.amounts)::text
+         FROM commerce.money_observation m
+         WHERE m.route = p.route AND m.order_id = p.order_id
+           AND m.provider_object_id = p.checkout_session_id AND m.context = 'checkout.presentment'
+           AND m.money_unit IS NOT NULL
+         ORDER BY m.recorded_at DESC, m.provider_api_version DESC, m.economics_hash DESC LIMIT 1
+       ) END AS "presentmentEvidence"
 FROM commerce.purchase_order p WHERE route = :route AND order_id = :id;

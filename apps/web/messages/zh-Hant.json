@@ -4130,6 +4130,8 @@
   "order_recorded_price_exclusive": "記錄的單價（未稅）",
   "order_paid_total": "記錄的實付總額",
   "order_paid_total_unavailable": "未記錄扣款總額，或目前無法取得。",
+  "order_presentment_total": "已記錄的客戶幣別總額",
+  "order_presentment_unavailable": "客戶幣別總額未記錄或暫不可用。",
   "order_recorded_tax": "記錄的稅額",
   "order_tax_unavailable": "無法取得稅務資訊。",
   "order_technical_details": "訂單技術詳細資料",

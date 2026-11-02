@@ -4130,6 +4130,8 @@
   "order_recorded_price_exclusive": "Prix unitaire enregistré (hors taxes)",
   "order_paid_total": "Total payé enregistré",
   "order_paid_total_unavailable": "Le total débité n’a pas été enregistré ou est indisponible.",
+  "order_presentment_total": "Total enregistré dans la devise du client",
+  "order_presentment_unavailable": "Le total dans la devise du client n’a pas été enregistré ou est indisponible.",
   "order_recorded_tax": "Taxe enregistrée",
   "order_tax_unavailable": "Les informations fiscales sont indisponibles.",
   "order_technical_details": "Détails techniques de la commande",

@@ -4130,6 +4130,8 @@
   "order_recorded_price_exclusive": "Gespeicherter Stückpreis (ohne Steuern)",
   "order_paid_total": "Gespeicherter Zahlungsbetrag",
   "order_paid_total_unavailable": "Der belastete Gesamtbetrag wurde nicht gespeichert oder ist nicht verfügbar.",
+  "order_presentment_total": "Erfasster Gesamtbetrag in Kundenwährung",
+  "order_presentment_unavailable": "Der Gesamtbetrag in Kundenwährung wurde nicht erfasst oder ist nicht verfügbar.",
   "order_recorded_tax": "Gespeicherte Steuer",
   "order_tax_unavailable": "Steuerinformationen sind nicht verfügbar.",
   "order_technical_details": "Technische Bestelldetails",

@@ -10,7 +10,14 @@ type NativeOrder = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['order
 export type OrderMoney = Pick<
   NativeOrder,
   'currency' | 'unitAmountMinor' | 'taxCode' | 'amountTaxMinor' | 'moneyUnit' | 'taxBehavior' | 'recordedCharge'
->;
+> & {
+  /** Absent on historical responses; never inferred from integration money. */
+  recordedPresentment?: {
+    currency: string;
+    moneyUnit: NonNullable<NativeOrder['moneyUnit']>;
+    amountTotalMinor: number;
+  } | null;
+};
 
 export type Settlement = 'failed' | 'paid' | 'pending' | 'unknown';
 export type CurrentEntitlement = { kind: 'current'; active: boolean } | { kind: 'none' | 'unavailable' | 'refresh' };

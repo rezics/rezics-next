@@ -4130,6 +4130,8 @@
   "order_recorded_price_exclusive": "기록된 단가(세금 별도)",
   "order_paid_total": "기록된 결제 총액",
   "order_paid_total_unavailable": "청구 총액이 기록되지 않았거나 확인할 수 없습니다.",
+  "order_presentment_total": "기록된 고객 통화 총액",
+  "order_presentment_unavailable": "고객 통화 총액이 기록되지 않았거나 사용할 수 없습니다.",
   "order_recorded_tax": "기록된 세금",
   "order_tax_unavailable": "세금 정보를 확인할 수 없습니다.",
   "order_technical_details": "주문 기술 정보",

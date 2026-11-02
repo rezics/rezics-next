@@ -5,12 +5,15 @@ import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
-import type { CurrentEntitlement, OrderPageData, Settlement } from './order';
+import type { CurrentEntitlement, OrderMoney, OrderPageData, Settlement } from './order';
 import { UUID } from './price';
 import { subjectCover } from './subject-cover';
 import { benefitCreatorName, capturedBenefit, sameCapturedBenefit, type CapturedBenefit } from './benefit';
 
-type OrderRead = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['orders']>['get']>>['data']>;
+// Named receipt wire seam also accepts retained client declarations predating presentment.
+type ReceiptOrderRead = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['orders']>['get']>>['data']> & {
+  order: { recordedPresentment?: OrderMoney['recordedPresentment'] };
+};
 type BuyerOrder = { kind: 'order'; order: OrderPageData } | { kind: 'missing' } | { kind: 'unavailable' };
 
 type CurrentAccess = { entitlement: CurrentEntitlement; canUseBenefit: boolean };
@@ -112,7 +115,7 @@ async function readOnce(credential: string, id: string, locale: string | undefin
     if (status === 404) return { kind: 'missing' };
     return { kind: 'unavailable' };
   }
-  const order = (result.data as OrderRead).order;
+  const order = (result.data as ReceiptOrderRead).order;
   if (order.id !== id) return { kind: 'unavailable' };
   const settlement = settlements.has(order.settlement) ? order.settlement : 'unknown';
   return {
@@ -135,6 +138,7 @@ async function readOnce(credential: string, id: string, locale: string | undefin
         moneyUnit: order.moneyUnit,
         taxBehavior: order.taxBehavior,
         recordedCharge: order.recordedCharge,
+        recordedPresentment: order.recordedPresentment ?? null,
       },
     },
   };

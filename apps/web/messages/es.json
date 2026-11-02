@@ -4130,6 +4130,8 @@
   "order_recorded_price_exclusive": "Precio unitario registrado (sin impuestos)",
   "order_paid_total": "Total pagado registrado",
   "order_paid_total_unavailable": "El total cobrado no se registró o no está disponible.",
+  "order_presentment_total": "Total registrado en la moneda del cliente",
+  "order_presentment_unavailable": "El total en la moneda del cliente no se registró o no está disponible.",
   "order_recorded_tax": "Impuesto registrado",
   "order_tax_unavailable": "La información fiscal no está disponible.",
   "order_technical_details": "Detalles técnicos del pedido",

@@ -518,6 +518,23 @@ through; other brace placeholders fail startup. Provider bank payout (`po_`), ac
 creator payment reference remain separate identities. Neither a Stripe payout status nor a statement row proves
 an outside-Stripe creator payment.
 
+### Private receipt transaction amounts
+
+Decision: expose actual captured customer presentment separately from the integration total and tax; absent
+presentment stays unavailable, with no conversion or assumption that integration currency was charged.
+`GET /v1/orders/:orderId` returns nullable `recordedPresentment` with `currency`, captured `moneyUnit` and
+`amountTotalMinor`. It is independent of nullable `recordedCharge` (integration total and tax). Both require a
+historically paid order, never a benefit record or redirect. The receipt keeps current Access independent.
+Web consumes this additive field through the named `ReceiptOrderRead` wire seam, including retained client declarations.
+The existing ordinary buyer authority and list/cursor contract are unchanged; history lists do not load this evidence.
+
+The financial projection's static producer bounds are one full `(route,order_id)` order anchor plus one retained
+interpretation per exact `(route,order_id,checkout_session_id,context)` key, each using the money observation index
+and `LIMIT 1`. Two contexts give a composed ceiling of **3 examined rows**, raised from 2; one statement, two scalar
+seeks, no fan-out or history pagination. Internal/status-independent command reads skip both evidence seeks.
+`test/commerce/order-receipt-financial.test.ts` covers retained tuples and growth at 1, 8 and 64 unrelated histories.
+This projection adds no offer, provider, subject, Access or entitlement reads to the existing composed route.
+
 ## Native money policy and captured prices
 
 [money.ts](money.ts) owns `StripeMoneyUnit` (`system:'stripe-api'`, `exponent:0|2`,

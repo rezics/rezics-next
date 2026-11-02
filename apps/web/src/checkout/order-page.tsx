@@ -276,6 +276,9 @@ function OrderLifetime({
   const locale = getLocale();
   const money = order.money;
   const charge = order.settlement === 'paid' ? money?.recordedCharge : null;
+  const presentment = order.settlement === 'paid' ? money?.recordedPresentment : null;
+  const customerTotal =
+    presentment && formatMinorAmount(locale, presentment.currency, presentment.amountTotalMinor, presentment.moneyUnit);
   const price = money && formatMinorAmount(locale, money.currency, money.unitAmountMinor, money.moneyUnit);
   const total = charge && formatMinorAmount(locale, charge.currency, charge.amountTotalMinor, charge.moneyUnit);
   const tax =
@@ -345,6 +348,12 @@ function OrderLifetime({
                 <>
                   <dt className="text-muted-foreground">{m.order_paid_total()}</dt>
                   <dd>{total || m.order_paid_total_unavailable()}</dd>
+                  <dt className="text-muted-foreground">{m.order_presentment_total()}</dt>
+                  <dd>
+                    {customerTotal && presentment
+                      ? `${customerTotal} ${presentment.currency.toUpperCase()}`
+                      : m.order_presentment_unavailable()}
+                  </dd>
                   <dt className="text-muted-foreground">{m.order_recorded_tax()}</dt>
                   <dd>{tax || m.order_tax_unavailable()}</dd>
                 </>

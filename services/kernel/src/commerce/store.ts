@@ -1,5 +1,6 @@
 import { canActivateBenefit, lockBenefitAcquisition } from './acquisition.ts';
-import { recordedMoneyUnit, type StripeMoneyUnit } from './money.ts';
+import type { StripeMoneyUnit } from './money.ts';
+import { orderReceiptMoney } from './order-read.ts';
 import offerLock from './store-offer-lock.sql';
 import { routeOf } from '../route/route.ts';
 import { decodeCapturedContentEdition, encodeCapturedContentEdition } from './benefit.ts';
@@ -10,7 +11,6 @@ import type {
   Entitlement,
   Offer,
   Order,
-  RecordedOrderCharge,
   SettlementState,
   StripeTransaction,
 } from './model.ts';
@@ -50,7 +50,7 @@ function queryClient(client: Client): Client {
 }
 type WriteContext = { transactionId: string; time: string };
 type OfferRow = NonNullable<Awaited<ReturnType<typeof offerRead.run>>>;
-type OrderRow = Omit<NonNullable<Awaited<ReturnType<typeof orderRead.run>>>, 'chargeEvidence'>;
+type OrderRow = Omit<NonNullable<Awaited<ReturnType<typeof orderRead.run>>>, 'chargeEvidence' | 'presentmentEvidence'>;
 type EntitlementRow = NonNullable<Awaited<ReturnType<typeof entitlementRead.run>>>;
 
 function required<T>(value: T | null): T {
@@ -217,44 +217,17 @@ export async function listBuyerOrders(
 export async function readOrder(client: Client, route: number, id: string): Promise<Order | null> {
   const row = await orderRead.run(queryClient(client), { route, id, receipt: false });
   if (!row) return null;
-  const { chargeEvidence: _, ...order } = row;
+  const { chargeEvidence: _, presentmentEvidence: __, ...order } = row;
   return asOrder(order);
 }
 
-/** One order anchor and one indexed Session/context scalar in the same statement and snapshot. */
-export async function readBuyerOrder(
-  client: Client,
-  route: number,
-  id: string,
-): Promise<{ order: Order; recordedCharge: RecordedOrderCharge | null } | null> {
+/** One order anchor plus two exact Session/context seeks, each capped at one row. */
+export async function readBuyerOrder(client: Client, route: number, id: string) {
   const row = await orderRead.run(queryClient(client), { route, id, receipt: true });
   if (!row) return null;
-  const { chargeEvidence, ...captured } = row;
+  const { chargeEvidence, presentmentEvidence, ...captured } = row;
   const order = asOrder(captured);
-  let recordedCharge: RecordedOrderCharge | null = null;
-  if (chargeEvidence !== null && order.settlement === 'paid') {
-    const evidence = JSON.parse(chargeEvidence) as {
-      moneyUnit?: unknown;
-      amounts?: Record<string, unknown>;
-    };
-    const unit = recordedMoneyUnit(evidence.moneyUnit);
-    const amounts = evidence.amounts;
-    const total = amounts?.amount_total;
-    const tax = amounts?.['total_details.amount_tax'];
-    if (
-      unit &&
-      amounts?.currency === order.currency &&
-      amounts.amount_subtotal === order.unitAmountMinor &&
-      typeof total === 'number' &&
-      Number.isSafeInteger(total) &&
-      total > 0 &&
-      (tax === null || (typeof tax === 'number' && Number.isSafeInteger(tax) && tax >= 0)) &&
-      (order.amountTaxMinor == null || order.amountTaxMinor === tax)
-    ) {
-      recordedCharge = { currency: order.currency, moneyUnit: unit, amountTotalMinor: total, amountTaxMinor: tax };
-    }
-  }
-  return { order, recordedCharge };
+  return { order, ...orderReceiptMoney(order, chargeEvidence, presentmentEvidence) };
 }
 /** Caller retains this transaction and lock through completion lookup, claim or apply. */
 export async function lockOrder(client: Client, route: number, id: string): Promise<Order | null> {
