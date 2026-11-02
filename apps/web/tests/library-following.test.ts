@@ -458,7 +458,10 @@ test('Following marks only a successful single stale-cursor fallback and never r
     expect(calls.every((call) => call.cache === 'no-store' && call.redirect === 'manual')).toBe(true);
     expect(calls.every((call) => new URL(call.url).searchParams.get('limit') === '100')).toBe(true);
   }
-  for (const [cursor, status] of [[undefined, 409], ['current/page+', 503]] as const) {
+  for (const [cursor, status] of [
+    [undefined, 409],
+    ['current/page+', 503],
+  ] as const) {
     let calls = 0;
     const client = createKernelClient('https://kernel.example.test', {
       fetch: async () => {
