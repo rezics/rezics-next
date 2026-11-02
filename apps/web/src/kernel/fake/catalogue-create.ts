@@ -134,15 +134,16 @@ export function catalogueCreateFixture(scenario: CreateScenario = 'ready', local
         if (activeScenario === 'loading') return new Promise(() => {});
         if (activeScenario === 'definitions-unavailable' && directoryReads === 1)
           return { ok: false, reason: 'unavailable' };
-        if (activeScenario === 'cursor-changed' && input.cursor !== undefined)
-          return { ok: false, reason: 'stale' };
+        if (activeScenario === 'cursor-changed' && input.cursor !== undefined) return { ok: false, reason: 'stale' };
         const types = directoryTypes();
         if (input.typeId !== undefined) {
           return { ok: true, types: types.filter((type) => type.id === input.typeId), next: null };
         }
         const matching = types
           .filter((type) => type.label.startsWith(input.query ?? ''))
-          .sort((a, b) => (a.id === 'schema:Movie' ? -1 : b.id === 'schema:Movie' ? 1 : a.label.localeCompare(b.label)));
+          .sort((a, b) =>
+            a.id === 'schema:Movie' ? -1 : b.id === 'schema:Movie' ? 1 : a.label.localeCompare(b.label),
+          );
         const after = input.cursor ? Number(input.cursor) : 0;
         return {
           ok: true,

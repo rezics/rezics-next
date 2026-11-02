@@ -20,9 +20,7 @@ export type TypeDirectoryQuery = { query?: string; typeId?: string; cursor?: str
 export type TypeDirectoryPage =
   | { ok: true; types: CreateType[]; next: string | null }
   | { ok: false; reason: 'stale' | 'unavailable' };
-export type TypeDescriptorRead =
-  | { ok: true; type: CreateType }
-  | { ok: false; reason: 'missing' | 'unavailable' };
+export type TypeDescriptorRead = { ok: true; type: CreateType } | { ok: false; reason: 'missing' | 'unavailable' };
 export type TypeDirectoryTransport = {
   page: (input: TypeDirectoryQuery) => Promise<TypeDirectoryPage>;
   descriptor: (typeId: string) => Promise<TypeDescriptorRead>;

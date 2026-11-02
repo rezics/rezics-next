@@ -3,10 +3,7 @@ import { editorRequest } from '../../features/catalogue/editor-request';
 import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import { createFileRoute } from '@tanstack/react-router';
 import { CreateSubjectForm } from '../../features/catalogue/create-subject-form';
-import {
-  createCatalogueSubject,
-  readCreatedCatalogueSubject,
-} from '../../features/catalogue/create-subject-actions';
+import { createCatalogueSubject, readCreatedCatalogueSubject } from '../../features/catalogue/create-subject-actions';
 import { readCreateTypeDescriptor, readCreateTypePage } from '../../features/catalogue/type-directory';
 import { useSession } from '../../session/query';
 import { m } from '../../paraglide/messages.js';

@@ -1,12 +1,7 @@
 import { createServerFn } from '@tanstack/react-start';
 import { setResponseHeader } from '@tanstack/react-start/server';
 import { kernelClient, requestLocale } from '../../kernel/client';
-import type {
-  CreateType,
-  TypeDescriptorRead,
-  TypeDirectoryPage,
-  TypeDirectoryQuery,
-} from './create-subject';
+import type { CreateType, TypeDescriptorRead, TypeDirectoryPage, TypeDirectoryQuery } from './create-subject';
 
 type TypeDirectorySummary = {
   typeId: string;
@@ -79,8 +74,7 @@ export const readCreateTypePage = createServerFn({ method: 'GET' })
           limit: 20,
         },
       });
-      if (response.error)
-        return { ok: false, reason: httpStatus(response.error) === 409 ? 'stale' : 'unavailable' };
+      if (response.error) return { ok: false, reason: httpStatus(response.error) === 409 ? 'stale' : 'unavailable' };
       if (!response.data) return { ok: false, reason: 'unavailable' };
       return { ok: true, types: response.data.types.map(createType), next: response.data.next };
     } catch {
@@ -99,8 +93,7 @@ export const readCreateTypeDescriptor = createServerFn({ method: 'GET' })
     const locale = requestLocale() ?? 'en';
     try {
       const response = await definitionTypes(locale)({ typeId: data }).get({ query: { locale } });
-      if (response.error)
-        return { ok: false, reason: httpStatus(response.error) === 404 ? 'missing' : 'unavailable' };
+      if (response.error) return { ok: false, reason: httpStatus(response.error) === 404 ? 'missing' : 'unavailable' };
       if (!response.data) return { ok: false, reason: 'unavailable' };
       return { ok: true, type: createType(response.data) };
     } catch {

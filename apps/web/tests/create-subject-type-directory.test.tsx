@@ -47,8 +47,7 @@ test('paged results cannot replace a current selection, and exact lookup selects
       if (input.typeId) return { ok: true, types: input.typeId === book.id ? [book] : [], next: null };
       return { ok: true, types: [movie], next: input.query === 'later' ? null : 'cursor-1' };
     },
-    descriptor: async (id) =>
-      id === book.id ? { ok: true, type: book } : { ok: false, reason: 'missing' },
+    descriptor: async (id) => (id === book.id ? { ok: true, type: book } : { ok: false, reason: 'missing' }),
   };
   const host = window.document.createElement('main') as unknown as HTMLElement;
   window.document.body.append(host);

@@ -227,11 +227,7 @@ export function TypeDirectoryPicker({
               </p>
               <code className="break-all text-xs">{result.id}</code>
               {result.description && (
-                <DefinitionMeaning
-                  text={result.description}
-                  language={result.descriptionLanguage}
-                  locale={locale}
-                />
+                <DefinitionMeaning text={result.description} language={result.descriptionLanguage} locale={locale} />
               )}
               <Button
                 type="button"

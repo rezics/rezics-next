@@ -153,7 +153,9 @@ export const PagedTypeSelectionRetainsDraft: Story = {
     await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_type_search_action() }));
     expect(await canvas.findByText(m.catalogue_create_type_no_matches())).toBeVisible();
     expect(
-      canvas.getAllByRole('textbox', { name: m.catalogue_create_label() }).map((field) => (field as HTMLInputElement).value),
+      canvas
+        .getAllByRole('textbox', { name: m.catalogue_create_label() })
+        .map((field) => (field as HTMLInputElement).value),
     ).toEqual(['A new film', '新しい映画']);
     expect(canvas.getByRole('button', { name: m.catalogue_create_submit() })).toBeEnabled();
 

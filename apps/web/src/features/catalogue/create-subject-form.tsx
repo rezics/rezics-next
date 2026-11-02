@@ -223,7 +223,8 @@ function CreateSubjectFormLive({
   // Retrying an uncertain command needs its original identity, even while definitions are unavailable.
   const definitionsFailed = directoryMode ? false : profile?.metadata ? !profile.metadata.ready : definitions.isError;
   const hasCurrentType = directoryMode ? directoryType?.id === type : types.some((entry) => entry.id === type);
-  const definitionsBlocked = !request.current &&
+  const definitionsBlocked =
+    !request.current &&
     (directoryMode
       ? directoryPending || (!!type && !hasCurrentType)
       : definitionsFailed || definitions.isFetching || types.length === 0);
@@ -552,7 +553,7 @@ function CreateSubjectFormLive({
                     <p id="create-type-label" className="text-sm font-medium">
                       {m.catalogue_create_type({}, options)}
                     </p>
-                    <p lang={hasTypeName ? profile?.labelLanguage?.(type) ?? selectedType?.labelLanguage : locale}>
+                    <p lang={hasTypeName ? (profile?.labelLanguage?.(type) ?? selectedType?.labelLanguage) : locale}>
                       {hasTypeName ? selectedTypeName : m.catalogue_creation_type_unlabelled({}, options)}
                     </p>
                   </div>
@@ -619,7 +620,7 @@ function CreateSubjectFormLive({
                         </NativeSelectOption>
                       ))}
                     </NativeSelect>
-                      <FieldDescription id="create-grain">{m.catalogue_create_grain({}, options)}</FieldDescription>
+                    <FieldDescription id="create-grain">{m.catalogue_create_grain({}, options)}</FieldDescription>
                   </>
                 )}
                 <FieldDescription id="create-type-help">
