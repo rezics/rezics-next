@@ -1157,20 +1157,43 @@ function evidenceHash(raw: string): string {
 }
 
 async function sendLegacyDecision(
-  fixture: Fixture, path: string, document: Record<string, unknown>, owner = OWNER,
+  fixture: Fixture,
+  path: string,
+  document: Record<string, unknown>,
+  owner = OWNER,
 ): Promise<number> {
   writeJson(join(fixture.stateDirectory, path), document);
-  expect(await invoke(fixture, ['inbox', 'send', OPERATIONS, 'decision', 'Retained original custody evidence',
-    '--document', `.temp/goal/${path}`], owner)).toBe(0);
-  return Number(stateRow<{ id: number }>(fixture,
-    'SELECT id FROM manager_inbox WHERE manager=? ORDER BY id DESC LIMIT 1', OPERATIONS)!.id);
+  expect(
+    await invoke(
+      fixture,
+      [
+        'inbox',
+        'send',
+        OPERATIONS,
+        'decision',
+        'Retained original custody evidence',
+        '--document',
+        `.temp/goal/${path}`,
+      ],
+      owner,
+    ),
+  ).toBe(0);
+  return Number(
+    stateRow<{ id: number }>(
+      fixture,
+      'SELECT id FROM manager_inbox WHERE manager=? ORDER BY id DESC LIMIT 1',
+      OPERATIONS,
+    )!.id,
+  );
 }
 
 function legacyEntries(fixture: Fixture): Array<Record<string, any>> {
   const db = openDb(fixture.dbPath);
   try {
     return db.query('SELECT * FROM publication_legacy_entries ORDER BY id').all() as Array<Record<string, any>>;
-  } finally { db.close(); }
+  } finally {
+    db.close();
+  }
 }
 
 function publicationCounts(fixture: Fixture): Record<string, unknown> {
@@ -1183,46 +1206,95 @@ function publicationCounts(fixture: Fixture): Record<string, unknown> {
 }
 
 async function sendUnavailableOriginals(fixture: Fixture): Promise<number> {
-  expect(await invoke(fixture, ['inbox', 'send', OWNER, 'decision', 'Receive unavailable original custody'], OPERATIONS)).toBe(0);
-  const agreement = stateRow<{ id: number }>(fixture,
-    'SELECT id FROM manager_inbox WHERE manager=? ORDER BY id DESC LIMIT 1', OWNER)!;
+  expect(
+    await invoke(fixture, ['inbox', 'send', OWNER, 'decision', 'Receive unavailable original custody'], OPERATIONS),
+  ).toBe(0);
+  const agreement = stateRow<{ id: number }>(
+    fixture,
+    'SELECT id FROM manager_inbox WHERE manager=? ORDER BY id DESC LIMIT 1',
+    OWNER,
+  )!;
   return sendLegacyDecision(fixture, `${OWNER}/legacy-disposition.json`, {
-    owner: OWNER, reply: agreement.id,
+    owner: OWNER,
+    reply: agreement.id,
     disposition: 'unavailable-exact-capture-terminal-identity; unknown custody remains occupied',
     evidenceLimits: 'Original observations only; no current absence attestation',
-    capture: { metadata: { state: 'running', jobs: 4960, completed: 4135, sourceCommit: fixture.observedDev },
-      terminalFilePresent: false, nativeProcessIdentity: null, originalTerminalHandle: null },
-    previewCompanion: { pid: 910001, serverSession: 17,
+    capture: {
+      metadata: { state: 'running', jobs: 4960, completed: 4135, sourceCommit: fixture.observedDev },
+      terminalFilePresent: false,
+      nativeProcessIdentity: null,
+      originalTerminalHandle: null,
+    },
+    previewCompanion: {
+      pid: 910001,
+      serverSession: 17,
       startupHistory: [{ pid: 910002, exitCode: 1 }],
-      refreshHistory: [{ pid: 910003 }, { pid: 910004 }] },
-    legacyPublisher: { state: 'terminal', process: processFixtureIdentity(910005),
-      exitCode: 0, children: [processFixtureIdentity(910006)], physicalSettlement: { pipesSettled: true } },
-    legacyKnownCustody: [{ identity: processFixtureIdentity(910007), sameIncarnationLive: false },
-      { identity: processFixtureIdentity(910008), sameIncarnationLive: false }],
+      refreshHistory: [{ pid: 910003 }, { pid: 910004 }],
+    },
+    legacyPublisher: {
+      state: 'terminal',
+      process: processFixtureIdentity(910005),
+      exitCode: 0,
+      children: [processFixtureIdentity(910006)],
+      physicalSettlement: { pipesSettled: true },
+    },
+    legacyKnownCustody: [
+      { identity: processFixtureIdentity(910007), sameIncarnationLive: false },
+      { identity: processFixtureIdentity(910008), sameIncarnationLive: false },
+    ],
   });
 }
 
 async function sendVersionedOriginal(
-  fixture: Fixture, key: string, surface: 'capture' | 'publisher' | 'preview',
-  original: Record<string, unknown>, owner = OWNER,
+  fixture: Fixture,
+  key: string,
+  surface: 'capture' | 'publisher' | 'preview',
+  original: Record<string, unknown>,
+  owner = OWNER,
 ): Promise<number> {
   const evidencePath = `${owner}/${key}.original.json`;
   writeJson(join(fixture.stateDirectory, evidencePath), original);
-  return sendLegacyDecision(fixture, `${owner}/${key}.decision.json`, {
-    version: 1, kind: 'publication-legacy-disposition', owner, controller: OPERATIONS,
-    records: [{ key, surface, evidencePath,
-      sha256: evidenceHash(readFileSync(join(fixture.stateDirectory, evidencePath), 'utf8')) }],
-  }, owner);
+  return sendLegacyDecision(
+    fixture,
+    `${owner}/${key}.decision.json`,
+    {
+      version: 1,
+      kind: 'publication-legacy-disposition',
+      owner,
+      controller: OPERATIONS,
+      records: [
+        {
+          key,
+          surface,
+          evidencePath,
+          sha256: evidenceHash(readFileSync(join(fixture.stateDirectory, evidencePath), 'utf8')),
+        },
+      ],
+    },
+    owner,
+  );
 }
 
 async function sendResolution(
-  fixture: Fixture, key: string, row: Record<string, any>, originalIdentity: ProcessIdentity,
-  extra: Record<string, unknown> = {}, owner = OWNER,
+  fixture: Fixture,
+  key: string,
+  row: Record<string, any>,
+  originalIdentity: ProcessIdentity,
+  extra: Record<string, unknown> = {},
+  owner = OWNER,
 ): Promise<number> {
-  return sendLegacyDecision(fixture, `${owner}/${key}.resolution.json`, {
-    version: 1, kind: 'publication-legacy-resolution', owner, controller: OPERATIONS,
-    resolutions: [{ id: row.id, evidenceSha256: row.evidence_hash, originalIdentity, ...extra }],
-  }, owner);
+  return sendLegacyDecision(
+    fixture,
+    `${owner}/${key}.resolution.json`,
+    {
+      version: 1,
+      kind: 'publication-legacy-resolution',
+      owner,
+      controller: OPERATIONS,
+      resolutions: [{ id: row.id, evidenceSha256: row.evidence_hash, originalIdentity, ...extra }],
+    },
+    owner,
+  );
 }
 
 test('Legacy reconciliation receives genuine identity-less disposition with authenticated bilateral provenance and no false bootstrap', async () => {
@@ -1237,19 +1309,29 @@ test('Legacy reconciliation receives genuine identity-less disposition with auth
     expect(await invoke(fixture, ['publication', 'legacy-receive', String(message)])).toBe(0);
     const first = legacyEntries(fixture);
     expect(first).toHaveLength(8);
-    expect(first.every((row) => row.resolution === null && row.evidence === raw && row.evidence_hash === evidenceHash(raw))).toBe(true);
+    expect(
+      first.every((row) => row.resolution === null && row.evidence === raw && row.evidence_hash === evidenceHash(raw)),
+    ).toBe(true);
     const capture = first.find((row) => row.surface === 'capture')!;
     expect(capture.identity).toBeNull();
     expect(JSON.parse(capture.original).nativeProcessIdentity).toBeNull();
     expect(first.filter((row) => row.surface === 'preview')).toHaveLength(4);
     expect(first.filter((row) => row.surface === 'preview').every((row) => row.identity === null)).toBe(true);
-    const request = stateRow<{ receipt: string; provenance: string }>(fixture,
-      'SELECT receipt, provenance FROM publication_legacy_requests WHERE message_id=?', message)!;
+    const request = stateRow<{ receipt: string; provenance: string }>(
+      fixture,
+      'SELECT receipt, provenance FROM publication_legacy_requests WHERE message_id=?',
+      message,
+    )!;
     expect(JSON.parse(request.provenance).ownerSession).toBe('web-thread');
     expect(JSON.parse(request.receipt).state).toBe('UNKNOWN OCCUPIED');
     expect(await invoke(fixture, ['publication', 'legacy-receive', String(message)])).toBe(0);
-    expect(stateRow<{ receipt: string }>(fixture,
-      'SELECT receipt FROM publication_legacy_requests WHERE message_id=?', message)!.receipt).toBe(request.receipt);
+    expect(
+      stateRow<{ receipt: string }>(
+        fixture,
+        'SELECT receipt FROM publication_legacy_requests WHERE message_id=?',
+        message,
+      )!.receipt,
+    ).toBe(request.receipt);
     expect(legacyEntries(fixture)).toEqual(first);
     expect(await invoke(fixture, ['publication', 'legacy-status'])).toBe(0);
     expect(await invoke(fixture, ['publication', 'status'])).toBe(0);
@@ -1260,19 +1342,30 @@ test('Legacy reconciliation receives genuine identity-less disposition with auth
     // A newly opened controller/migration sees exactly the same immutable occupied originals.
     expect(await invoke(fixture, ['publication', 'legacy-status'])).toBe(0);
     expect(legacyEntries(fixture)).toEqual(first);
-  } finally { fixture.temporary.close(); }
+  } finally {
+    fixture.temporary.close();
+  }
 }, 10_000);
 
 test('Legacy receiving supports operations-owned records without owner impersonation and rejects foreign malformed and stale provenance', async () => {
   const fixture = createFixture();
   try {
     initializeManagers(fixture);
-    const own = await sendVersionedOriginal(fixture, 'own-capture', 'capture', { state: 'running', identity: null }, OPERATIONS);
+    const own = await sendVersionedOriginal(
+      fixture,
+      'own-capture',
+      'capture',
+      { state: 'running', identity: null },
+      OPERATIONS,
+    );
     const before = publicationCounts(fixture);
     expect(await invoke(fixture, ['publication', 'legacy-receive', String(own)])).toBe(0);
     expect(legacyEntries(fixture)[0]!.owner).toBe(OPERATIONS);
     const foreign = await sendLegacyDecision(fixture, `${OWNER}/foreign.json`, {
-      version: 1, kind: 'publication-legacy-disposition', owner: OPERATIONS, records: [],
+      version: 1,
+      kind: 'publication-legacy-disposition',
+      owner: OPERATIONS,
+      records: [],
     });
     expect(await invoke(fixture, ['publication', 'legacy-receive', String(foreign)])).toBe(1);
     const earlier = await sendVersionedOriginal(fixture, 'earlier', 'capture', { identity: { pid: 910010 } });
@@ -1280,18 +1373,26 @@ test('Legacy receiving supports operations-owned records without owner impersona
     expect(await invoke(fixture, ['publication', 'legacy-receive', String(later)])).toBe(0);
     expect(await invoke(fixture, ['publication', 'legacy-receive', String(earlier)])).toBe(1);
     const pointer = await sendVersionedOriginal(fixture, 'pointer', 'capture', {
-      identityField: 'preview', preview: processFixtureIdentity(910012),
+      identityField: 'preview',
+      preview: processFixtureIdentity(910012),
     });
     expect(await invoke(fixture, ['publication', 'legacy-receive', String(pointer)])).toBe(1);
     const wrongHash = await sendVersionedOriginal(fixture, 'wrong-hash', 'capture', { state: 'running' });
     writeJson(join(fixture.stateDirectory, `${OWNER}/wrong-hash.original.json`), { state: 'terminal', exitCode: 0 });
     expect(await invoke(fixture, ['publication', 'legacy-receive', String(wrongHash)])).toBe(1);
     const wrongNamespace = await sendLegacyDecision(fixture, `${OPERATIONS}/wrong-namespace.json`, {
-      version: 1, kind: 'publication-legacy-disposition', owner: OWNER, controller: OPERATIONS, records: [],
+      version: 1,
+      kind: 'publication-legacy-disposition',
+      owner: OWNER,
+      controller: OPERATIONS,
+      records: [],
     });
     expect(await invoke(fixture, ['publication', 'legacy-receive', String(wrongNamespace)])).toBe(1);
     const mismatch = await sendVersionedOriginal(fixture, 'workflow-pid', 'publisher', {
-      workflowPid: 910014, process: processFixtureIdentity(910013), state: 'terminal', exitCode: 0,
+      workflowPid: 910014,
+      process: processFixtureIdentity(910013),
+      state: 'terminal',
+      exitCode: 0,
     });
     expect(await invoke(fixture, ['publication', 'legacy-receive', String(mismatch)])).toBe(1);
     const unauthenticated = await sendVersionedOriginal(fixture, 'no-session', 'capture', { identity: null });
@@ -1301,11 +1402,15 @@ test('Legacy receiving supports operations-owned records without owner impersona
       const event = JSON.parse(inbox.event);
       delete event.senderSessionId;
       db.query('UPDATE manager_inbox SET event=? WHERE id=?').run(JSON.stringify(event), unauthenticated);
-    } finally { db.close(); }
+    } finally {
+      db.close();
+    }
     expect(await invoke(fixture, ['publication', 'legacy-receive', String(unauthenticated)])).toBe(1);
     expect(legacyEntries(fixture)).toHaveLength(2);
     expect(publicationCounts(fixture)).toEqual(before);
-  } finally { fixture.temporary.close(); }
+  } finally {
+    fixture.temporary.close();
+  }
 }, 10_000);
 
 test('Legacy duplicate conflicts evidence changes refresh omissions and receipt-file failure preserve occupied originals across restart', async () => {
@@ -1323,12 +1428,17 @@ test('Legacy duplicate conflicts evidence changes refresh omissions and receipt-
     unlinkSync(join(fixture.stateDirectory, 'publication/legacy', `request-${message}.json`));
     mkdirSync(join(fixture.stateDirectory, 'publication/legacy', `request-${message}.json`));
     expect(await invoke(fixture, ['publication', 'legacy-receive', String(message)])).toBe(1);
-    const saved = stateRow<{ receipt: string }>(fixture,
-      'SELECT receipt FROM publication_legacy_requests WHERE message_id=?', message)!.receipt;
+    const saved = stateRow<{ receipt: string }>(
+      fixture,
+      'SELECT receipt FROM publication_legacy_requests WHERE message_id=?',
+      message,
+    )!.receipt;
     expect(legacyEntries(fixture)).toHaveLength(8);
     rmdirSync(join(fixture.stateDirectory, 'publication/legacy', `request-${message}.json`));
     expect(await invoke(fixture, ['publication', 'legacy-receive', String(message)])).toBe(0);
-    expect(readFileSync(join(fixture.stateDirectory, 'publication/legacy', `request-${message}.json`), 'utf8')).toBe(saved);
+    expect(readFileSync(join(fixture.stateDirectory, 'publication/legacy', `request-${message}.json`), 'utf8')).toBe(
+      saved,
+    );
     const first = legacyEntries(fixture);
     const decisionPath = join(fixture.stateDirectory, `${OWNER}/legacy-disposition.json`);
     const original = readFileSync(decisionPath, 'utf8');
@@ -1336,13 +1446,25 @@ test('Legacy duplicate conflicts evidence changes refresh omissions and receipt-
     expect(await invoke(fixture, ['publication', 'legacy-receive', String(message)])).toBe(1);
     expect(legacyEntries(fixture)).toEqual(first);
     writeFileSync(decisionPath, original);
-    const changed = await sendVersionedOriginal(fixture, 'different-capture', 'capture', { state: 'terminal', exitCode: 0 });
+    const changed = await sendVersionedOriginal(fixture, 'different-capture', 'capture', {
+      state: 'terminal',
+      exitCode: 0,
+    });
     expect(await invoke(fixture, ['publication', 'legacy-receive', String(changed)])).toBe(0);
     expect(legacyEntries(fixture)).toHaveLength(9);
-    const changedAgain = await sendVersionedOriginal(fixture, 'different-capture', 'capture', { state: 'running', completed: 1 });
+    const changedAgain = await sendVersionedOriginal(fixture, 'different-capture', 'capture', {
+      state: 'running',
+      completed: 1,
+    });
     expect(await invoke(fixture, ['publication', 'legacy-receive', String(changedAgain)])).toBe(0);
     expect(legacyEntries(fixture)).toHaveLength(10);
-    expect(first.every((old) => legacyEntries(fixture).some((row) => row.id === old.id && row.evidence === old.evidence && row.resolution === null))).toBe(true);
+    expect(
+      first.every((old) =>
+        legacyEntries(fixture).some(
+          (row) => row.id === old.id && row.evidence === old.evidence && row.resolution === null,
+        ),
+      ),
+    ).toBe(true);
     // Omit all unknown records from a newer otherwise complete original bootstrap: no retirement is permitted.
     writeBootstrap(fixture);
     expect(await invoke(fixture, ['publication', 'bootstrap'])).toBe(1);
@@ -1350,7 +1472,9 @@ test('Legacy duplicate conflicts evidence changes refresh omissions and receipt-
     expect(await invoke(fixture, ['publication', 'legacy-prepare'])).toBe(1);
     expect(legacyEntries(fixture).every((row) => row.resolution === null)).toBe(true);
     expect(publicationCounts(fixture)).toEqual(before);
-  } finally { fixture.temporary.close(); }
+  } finally {
+    fixture.temporary.close();
+  }
 }, 10_000);
 
 test('Concurrent reconciliation publisher and capture contenders share the native cross-process custody lease without consuming authority', async () => {
@@ -1363,28 +1487,39 @@ test('Concurrent reconciliation publisher and capture contenders share the nativ
     const leaseModule = pathToFileURL(join(import.meta.dir, 'lease.ts')).href;
     const ready = join(fixture.stateDirectory, 'lease-holder.ready');
     const source = join(fixture.stateDirectory, 'lease-holder.ts');
-    writeFileSync(source, `import { acquireDirectoryLease } from ${JSON.stringify(leaseModule)};
+    writeFileSync(
+      source,
+      `import { acquireDirectoryLease } from ${JSON.stringify(leaseModule)};
       import { writeFileSync } from 'node:fs';
       const lease = acquireDirectoryLease(${JSON.stringify(join(fixture.stateDirectory, 'publication/custody.lease'))});
       writeFileSync(${JSON.stringify(ready)}, 'ready');
       await new Promise(resolve => setTimeout(resolve, 2000));
-      lease.release();`);
+      lease.release();`,
+    );
     const child = Bun.spawn([process.execPath, source], { stdout: 'pipe', stderr: 'pipe' });
     try {
       await waitForFile(ready);
-      const results = await withManager(OPERATIONS, () => Promise.all([
-        run(['publication', 'legacy-receive', String(message)], () => runtimeFor(fixture)),
-        run(['publication', 'start', authority], () => runtimeFor(fixture)),
-        run(['publication', 'capture-register', String(process.pid), `${OWNER}/legacy-disposition.json`], () => runtimeFor(fixture)),
-      ]));
+      const results = await withManager(OPERATIONS, () =>
+        Promise.all([
+          run(['publication', 'legacy-receive', String(message)], () => runtimeFor(fixture)),
+          run(['publication', 'start', authority], () => runtimeFor(fixture)),
+          run(['publication', 'capture-register', String(process.pid), `${OWNER}/legacy-disposition.json`], () =>
+            runtimeFor(fixture),
+          ),
+        ]),
+      );
       expect(results).toEqual([1, 1, 1]);
       expect(publicationCounts(fixture)).toEqual(before);
       expect(legacyEntries(fixture)).toHaveLength(0);
-    } finally { expect(await child.exited).toBe(0); }
+    } finally {
+      expect(await child.exited).toBe(0);
+    }
     expect(await invoke(fixture, ['publication', 'legacy-receive', String(message)])).toBe(0);
     expect(await invoke(fixture, ['publication', 'start', authority])).toBe(1);
     expect(publicationCounts(fixture)).toEqual(before);
-  } finally { fixture.temporary.close(); }
+  } finally {
+    fixture.temporary.close();
+  }
 }, 10_000);
 
 test('Legacy preparation refuses stale incomplete fabricated inventory and release markers and reports concrete credentials and host capabilities', async () => {
@@ -1395,23 +1530,47 @@ test('Legacy preparation refuses stale incomplete fabricated inventory and relea
     expect(await invoke(fixture, ['publication', 'legacy-receive', String(message)])).toBe(0);
     const before = publicationCounts(fixture);
     expect(await invoke(fixture, ['publication', 'legacy-prepare'])).toBe(1);
-    const preparation = () => JSON.parse(stateRow<{ receipt: string }>(fixture,
-      'SELECT receipt FROM publication_legacy_preparations ORDER BY rowid DESC LIMIT 1')!.receipt);
+    const preparation = () =>
+      JSON.parse(
+        stateRow<{ receipt: string }>(
+          fixture,
+          'SELECT receipt FROM publication_legacy_preparations ORDER BY rowid DESC LIMIT 1',
+        )!.receipt,
+      );
     const unavailable = preparation();
     expect(unavailable.state).toBe('unavailable');
     expect(unavailable.launchReady).toBe(false);
     expect(unavailable.unresolved).toHaveLength(8);
     expect(unavailable.blockers.some((item: any) => item.field === 'capture.originalIdentity')).toBe(true);
     expect(unavailable.blockers.some((item: any) => item.field === 'providerCredential')).toBe(true);
-    expect(unavailable.blockers.some((item: any) => item.field === 'nativePublisherCaptureInventoryProducer')).toBe(true);
+    expect(unavailable.blockers.some((item: any) => item.field === 'nativePublisherCaptureInventoryProducer')).toBe(
+      true,
+    );
     const runtime = runtimeFor(fixture);
-    const original = (runtime as unknown as { publicationController: PublicationController }).publicationController.process.identity()!;
+    const original = (
+      runtime as unknown as { publicationController: PublicationController }
+    ).publicationController.process.identity()!;
     runtime.db.close();
-    const inventory = { version: 1, kind: 'publication-native-inventory', owner: OPERATIONS, host: hostname(), boot: original.boot,
-      observedAt: new Date(fixture.now).toISOString(), retainedSetSha256: unavailable.retainedSetSha256,
+    const inventory = {
+      version: 1,
+      kind: 'publication-native-inventory',
+      owner: OPERATIONS,
+      host: hostname(),
+      boot: original.boot,
+      observedAt: new Date(fixture.now).toISOString(),
+      retainedSetSha256: unavailable.retainedSetSha256,
       controller: { manager: OPERATIONS, sessionId: 'control-plane-thread', identity: original },
-      noUnknown: true, visibility: 'complete', release: { state: 'validated' }, entries: [] };
-    const forgedComplete = await sendLegacyDecision(fixture, `${OPERATIONS}/native-inventory.json`, inventory, OPERATIONS);
+      noUnknown: true,
+      visibility: 'complete',
+      release: { state: 'validated' },
+      entries: [],
+    };
+    const forgedComplete = await sendLegacyDecision(
+      fixture,
+      `${OPERATIONS}/native-inventory.json`,
+      inventory,
+      OPERATIONS,
+    );
     expect(await invoke(fixture, ['publication', 'legacy-prepare', String(forgedComplete)])).toBe(1);
     expect(preparation().launchReady).toBe(false);
     expect(preparation().inventoryProvenance.owner).toBe(OPERATIONS);
@@ -1423,13 +1582,20 @@ test('Legacy preparation refuses stale incomplete fabricated inventory and relea
       ['omitted-originals', { retainedSetSha256: '0'.repeat(64) }],
       ['missing-controller', { controller: null }],
     ] as const) {
-      const bad = await sendLegacyDecision(fixture, `${OPERATIONS}/${name}.inventory.json`, { ...inventory, ...change }, OPERATIONS);
+      const bad = await sendLegacyDecision(
+        fixture,
+        `${OPERATIONS}/${name}.inventory.json`,
+        { ...inventory, ...change },
+        OPERATIONS,
+      );
       expect(await invoke(fixture, ['publication', 'legacy-prepare', String(bad)])).toBe(1);
       expect(preparation().id).toBe(last);
     }
     expect(publicationCounts(fixture)).toEqual(before);
     expect(legacyEntries(fixture).every((row) => row.resolution === null)).toBe(true);
-  } finally { fixture.temporary.close(); }
+  } finally {
+    fixture.temporary.close();
+  }
 }, 10_000);
 
 test('Legacy preparation keeps known reused incarnations surviving descendants pipes and incomplete visibility occupied', async () => {
@@ -1439,13 +1605,17 @@ test('Legacy preparation keeps known reused incarnations surviving descendants p
     const original = processFixtureIdentity(920001);
     const descendant = processFixtureIdentity(920002);
     const message = await sendVersionedOriginal(fixture, 'known-original', 'publisher', {
-      state: 'terminal', exitCode: 0, process: original, children: [descendant], physicalSettlement: { pipesSettled: false },
+      state: 'terminal',
+      exitCode: 0,
+      process: original,
+      children: [descendant],
+      physicalSettlement: { pipesSettled: false },
     });
     expect(await invoke(fixture, ['publication', 'legacy-receive', String(message)])).toBe(0);
     const before = publicationCounts(fixture);
     for (const incomplete of [false, true]) {
       const processApi: PublicationProcessObservation = {
-        identity: (pid) => pid === original.pid ? { ...original, start: String(BigInt(original.start) + 1n) } : null,
+        identity: (pid) => (pid === original.pid ? { ...original, start: String(BigInt(original.start) + 1n) } : null),
         same: () => false,
         members: (group) => {
           if (incomplete) throw new Error('fixture missing host visibility');
@@ -1453,15 +1623,23 @@ test('Legacy preparation keeps known reused incarnations surviving descendants p
         },
       };
       expect(await invoke(fixture, ['publication', 'legacy-prepare'], OPERATIONS, { process: processApi })).toBe(1);
-      const receipt = JSON.parse(stateRow<{ receipt: string }>(fixture,
-        'SELECT receipt FROM publication_legacy_preparations ORDER BY rowid DESC LIMIT 1')!.receipt);
-      expect(receipt.blockers.some((item: any) => item.field === (incomplete ? 'groupVisibility' : 'originalIncarnation'))).toBe(true);
+      const receipt = JSON.parse(
+        stateRow<{ receipt: string }>(
+          fixture,
+          'SELECT receipt FROM publication_legacy_preparations ORDER BY rowid DESC LIMIT 1',
+        )!.receipt,
+      );
+      expect(
+        receipt.blockers.some((item: any) => item.field === (incomplete ? 'groupVisibility' : 'originalIncarnation')),
+      ).toBe(true);
       if (!incomplete) expect(receipt.blockers.some((item: any) => item.field === 'groupMembers')).toBe(true);
       expect(receipt.blockers.some((item: any) => item.field === 'publisher.originalTerminalHandle')).toBe(true);
     }
     expect(publicationCounts(fixture)).toEqual(before);
     expect(legacyEntries(fixture)[0]!.resolution).toBeNull();
-  } finally { fixture.temporary.close(); }
+  } finally {
+    fixture.temporary.close();
+  }
 }, 10_000);
 
 test('Legacy resolution refuses preview substitution foreign ownership arbitrary pointers and absent capture terminal producers', async () => {
@@ -1474,21 +1652,45 @@ test('Legacy resolution refuses preview substitution foreign ownership arbitrary
     const before = publicationCounts(fixture);
     const substituted = await sendResolution(fixture, 'preview-substitution', capture, processFixtureIdentity(910001));
     expect(await invoke(fixture, ['publication', 'legacy-resolve', String(substituted)])).toBe(1);
-    const foreign = await sendResolution(fixture, 'foreign-owner', capture, processFixtureIdentity(930001), {}, OPERATIONS);
+    const foreign = await sendResolution(
+      fixture,
+      'foreign-owner',
+      capture,
+      processFixtureIdentity(930001),
+      {},
+      OPERATIONS,
+    );
     expect(await invoke(fixture, ['publication', 'legacy-resolve', String(foreign)])).toBe(1);
-    const pointer = await sendResolution(fixture, 'arbitrary-pointer', capture, processFixtureIdentity(930001), { identityField: 'preview' });
+    const pointer = await sendResolution(fixture, 'arbitrary-pointer', capture, processFixtureIdentity(930001), {
+      identityField: 'preview',
+    });
     expect(await invoke(fixture, ['publication', 'legacy-resolve', String(pointer)])).toBe(1);
-    const unavailable = await sendResolution(fixture, 'capture-terminal-unavailable', capture, processFixtureIdentity(930001));
+    const unavailable = await sendResolution(
+      fixture,
+      'capture-terminal-unavailable',
+      capture,
+      processFixtureIdentity(930001),
+    );
     expect(await invoke(fixture, ['publication', 'legacy-resolve', String(unavailable)])).toBe(1);
-    const receipt = stateRow<{ receipt: string }>(fixture,
-      'SELECT receipt FROM publication_legacy_requests WHERE message_id=?', unavailable)!.receipt;
+    const receipt = stateRow<{ receipt: string }>(
+      fixture,
+      'SELECT receipt FROM publication_legacy_requests WHERE message_id=?',
+      unavailable,
+    )!.receipt;
     expect(JSON.parse(receipt).unavailable[0].field).toBe('capture.nativeTerminalProducer');
     expect(await invoke(fixture, ['publication', 'legacy-resolve', String(unavailable)])).toBe(1);
-    expect(stateRow<{ receipt: string }>(fixture,
-      'SELECT receipt FROM publication_legacy_requests WHERE message_id=?', unavailable)!.receipt).toBe(receipt);
+    expect(
+      stateRow<{ receipt: string }>(
+        fixture,
+        'SELECT receipt FROM publication_legacy_requests WHERE message_id=?',
+        unavailable,
+      )!.receipt,
+    ).toBe(receipt);
     expect(legacyEntries(fixture).every((row) => row.resolution === null)).toBe(true);
     expect(publicationCounts(fixture)).toEqual(before);
-  } finally { fixture.temporary.close(); }
+  } finally {
+    fixture.temporary.close();
+  }
 }, 10_000);
 
 test('Legacy positive settlement binds the actual original finite native workflow and never creates an allowance or redispatch', async () => {
@@ -1498,24 +1700,38 @@ test('Legacy positive settlement binds the actual original finite native workflo
     await withFixtureEnvironment(fixture, '0.15', async () => {
       expect(await invoke(fixture, ['publication', 'start', authority])).toBe(0);
     });
-    const native = stateRow<{ id: string; process_identity: string; receipt: string }>(fixture,
-      'SELECT id, process_identity, receipt FROM publication_invocations')!;
+    const native = stateRow<{ id: string; process_identity: string; receipt: string }>(
+      fixture,
+      'SELECT id, process_identity, receipt FROM publication_invocations',
+    )!;
     const original = JSON.parse(native.process_identity) as ProcessIdentity;
     const message = await sendVersionedOriginal(fixture, 'original-native-publisher', 'publisher', {
-      state: 'terminal', process: original, workflowPid: original.pid, sourceCommit: fixture.sourceCommit,
+      state: 'terminal',
+      process: original,
+      workflowPid: original.pid,
+      sourceCommit: fixture.sourceCommit,
     });
     expect(await invoke(fixture, ['publication', 'legacy-receive', String(message)])).toBe(0);
     const row = legacyEntries(fixture)[0]!;
     const before = publicationCounts(fixture);
     const proof = { nativeInvocationId: native.id, terminalReceiptSha256: evidenceHash(native.receipt) };
-    const reused = await sendResolution(fixture, 'reused', row, { ...original, start: String(BigInt(original.start) + 1n) }, proof);
+    const reused = await sendResolution(
+      fixture,
+      'reused',
+      row,
+      { ...original, start: String(BigInt(original.start) + 1n) },
+      proof,
+    );
     expect(await invoke(fixture, ['publication', 'legacy-resolve', String(reused)])).toBe(1);
     const surviving = await sendResolution(fixture, 'surviving', row, original, proof);
     const observed: PublicationProcessObservation = {
-      identity: () => null, same: () => false,
-      members: (group) => group === original.group ? [{ ...original, pid: original.pid + 1 }] : [],
+      identity: () => null,
+      same: () => false,
+      members: (group) => (group === original.group ? [{ ...original, pid: original.pid + 1 }] : []),
     };
-    expect(await invoke(fixture, ['publication', 'legacy-resolve', String(surviving)], OPERATIONS, { process: observed })).toBe(1);
+    expect(
+      await invoke(fixture, ['publication', 'legacy-resolve', String(surviving)], OPERATIONS, { process: observed }),
+    ).toBe(1);
     expect(legacyEntries(fixture)[0]!.resolution).toBeNull();
     const resolved = await sendResolution(fixture, 'exact-original', row, original, proof);
     expect(await invoke(fixture, ['publication', 'legacy-resolve', String(resolved)])).toBe(0);
@@ -1530,7 +1746,9 @@ test('Legacy positive settlement binds the actual original finite native workflo
     expect(publicationCounts(fixture)).toEqual(before);
     expect(invocationCount(fixture)).toBe(1);
     expect(readFileSync(fixture.invocationLog, 'utf8').trim().split('\n')).toHaveLength(1);
-  } finally { fixture.temporary.close(); }
+  } finally {
+    fixture.temporary.close();
+  }
 }, 10_000);
 
 test('Identity-less publisher receiving cannot acquire an original identity from a resolution request', async () => {
@@ -1538,22 +1756,31 @@ test('Identity-less publisher receiving cannot acquire an original identity from
   try {
     initializeManagers(fixture);
     const message = await sendVersionedOriginal(fixture, 'missing-original-publisher', 'publisher', {
-      state: 'unknown', originalTerminalHandle: null,
+      state: 'unknown',
+      originalTerminalHandle: null,
     });
     expect(await invoke(fixture, ['publication', 'legacy-receive', String(message)])).toBe(0);
     const row = legacyEntries(fixture)[0]!;
     const before = publicationCounts(fixture);
     const request = await sendResolution(fixture, 'supplied-publisher-identity', row, processFixtureIdentity(930003), {
-      nativeInvocationId: 'unrelated-native-invocation', terminalReceiptSha256: '0'.repeat(64),
+      nativeInvocationId: 'unrelated-native-invocation',
+      terminalReceiptSha256: '0'.repeat(64),
     });
     expect(await invoke(fixture, ['publication', 'legacy-resolve', String(request)])).toBe(1);
-    const receipt = JSON.parse(stateRow<{ receipt: string }>(fixture,
-      'SELECT receipt FROM publication_legacy_requests WHERE message_id=?', request)!.receipt);
+    const receipt = JSON.parse(
+      stateRow<{ receipt: string }>(
+        fixture,
+        'SELECT receipt FROM publication_legacy_requests WHERE message_id=?',
+        request,
+      )!.receipt,
+    );
     expect(receipt.unavailable[0].field).toBe('publisher.nativeOriginalIdentityBinding');
     expect(legacyEntries(fixture)[0]!.identity).toBeNull();
     expect(legacyEntries(fixture)[0]!.resolution).toBeNull();
     expect(publicationCounts(fixture)).toEqual(before);
-  } finally { fixture.temporary.close(); }
+  } finally {
+    fixture.temporary.close();
+  }
 }, 10_000);
 
 test('Legacy receiving crash around its real SQLite commit retains one journal and original occupied evidence on reopen', async () => {
@@ -1566,13 +1793,20 @@ test('Legacy receiving crash around its real SQLite commit retains one journal a
     const dbModule = pathToFileURL(join(import.meta.dir, 'db.ts')).href;
     const controllerModule = pathToFileURL(join(import.meta.dir, 'publication.ts')).href;
     const cliModule = pathToFileURL(join(import.meta.dir, 'cli.ts')).href;
-    writeFileSync(source, `
+    writeFileSync(
+      source,
+      `
       import { openDb } from ${JSON.stringify(dbModule)};
       import { PublicationController } from ${JSON.stringify(controllerModule)};
       import { run } from ${JSON.stringify(cliModule)};
       const db = openDb(${JSON.stringify(fixture.dbPath)});
-      const options = ${JSON.stringify({ mainCheckout: fixture.mainCheckout, stateDirectory: fixture.stateDirectory,
-        worktreeRoot: fixture.worktreeRoot, integrationBranch: 'dev', operationsManager: OPERATIONS })};
+      const options = ${JSON.stringify({
+        mainCheckout: fixture.mainCheckout,
+        stateDirectory: fixture.stateDirectory,
+        worktreeRoot: fixture.worktreeRoot,
+        integrationBranch: 'dev',
+        operationsManager: OPERATIONS,
+      })};
       const publicationController = new PublicationController({ ...options, db, now: () => ${fixture.now} });
       if (process.env.LEGACY_CRASH === 'before') process.exit(85);
       const transaction = db.transaction.bind(db);
@@ -1586,9 +1820,18 @@ test('Legacy receiving crash around its real SQLite commit retains one journal a
         ...options, db, publicationController,
         settings: { integration: { operationsManager: 'control-plane' } }
       }));
-    `);
-    for (const [when, exit] of [['before', 85], ['after', 86]] as const) {
-      const env: NodeJS.ProcessEnv = { ...process.env, GOAL_MANAGER: OPERATIONS, CODEX_THREAD_ID: 'control-plane-thread', LEGACY_CRASH: when };
+    `,
+    );
+    for (const [when, exit] of [
+      ['before', 85],
+      ['after', 86],
+    ] as const) {
+      const env: NodeJS.ProcessEnv = {
+        ...process.env,
+        GOAL_MANAGER: OPERATIONS,
+        CODEX_THREAD_ID: 'control-plane-thread',
+        LEGACY_CRASH: when,
+      };
       delete env.GOAL_TASK_ID;
       delete env.GOAL_ATTEMPT;
       delete env.CLAUDE_CODE_SESSION_ID;
@@ -1597,13 +1840,22 @@ test('Legacy receiving crash around its real SQLite commit retains one journal a
       expect(legacyEntries(fixture)).toHaveLength(when === 'before' ? 0 : 8);
       expect(publicationCounts(fixture)).toEqual(before);
     }
-    const committed = stateRow<{ receipt: string }>(fixture,
-      'SELECT receipt FROM publication_legacy_requests WHERE message_id=?', message)!.receipt;
+    const committed = stateRow<{ receipt: string }>(
+      fixture,
+      'SELECT receipt FROM publication_legacy_requests WHERE message_id=?',
+      message,
+    )!.receipt;
     expect(await invoke(fixture, ['publication', 'legacy-status', String(message)])).toBe(0);
     expect(await invoke(fixture, ['publication', 'legacy-receive', String(message)])).toBe(0);
     expect(legacyEntries(fixture)).toHaveLength(8);
-    expect(stateRow<{ count: number }>(fixture, 'SELECT COUNT(*) AS count FROM publication_legacy_requests')!.count).toBe(1);
-    expect(readFileSync(join(fixture.stateDirectory, 'publication/legacy', `request-${message}.json`), 'utf8')).toBe(committed);
+    expect(
+      stateRow<{ count: number }>(fixture, 'SELECT COUNT(*) AS count FROM publication_legacy_requests')!.count,
+    ).toBe(1);
+    expect(readFileSync(join(fixture.stateDirectory, 'publication/legacy', `request-${message}.json`), 'utf8')).toBe(
+      committed,
+    );
     expect(publicationCounts(fixture)).toEqual(before);
-  } finally { fixture.temporary.close(); }
+  } finally {
+    fixture.temporary.close();
+  }
 }, 10_000);

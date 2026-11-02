@@ -1792,8 +1792,12 @@ export class PublicationController {
     for (const original of [identity, ...members]) {
       const group = this.observeGroup(original.group);
       const current = this.process.identity(original.pid);
-      if (!group.complete || group.members.length || this.process.same(original) ||
-        (current && !sameIdentity(current, original))) {
+      if (
+        !group.complete ||
+        group.members.length ||
+        this.process.same(original) ||
+        (current && !sameIdentity(current, original))
+      ) {
         this.markVisibilityUnknown(invocationId, 'recorded member or group did not settle with the original workflow');
         return;
       }

@@ -1094,7 +1094,12 @@ per request. Symlink escapes, arbitrary identity-field pointers and mismatched w
   "records": [
     { "key": "original-capture", "surface": "capture", "evidencePath": "<owner>/capture.json", "sha256": "<sha256>" },
     { "key": "original-preview", "surface": "preview", "evidencePath": "<owner>/preview.json", "sha256": "<sha256>" },
-    { "key": "original-publisher", "surface": "publisher", "evidencePath": "<owner>/publisher.json", "sha256": "<sha256>" }
+    {
+      "key": "original-publisher",
+      "surface": "publisher",
+      "evidencePath": "<owner>/publisher.json",
+      "sha256": "<sha256>"
+    }
   ]
 }
 ```

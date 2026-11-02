@@ -45,7 +45,9 @@ function statusCode(status: Record<string, unknown>): number {
 export async function runPublicationCommand(args: string[], runtime: CommandRuntime): Promise<number> {
   const [subcommand, first, second] = args;
   if (!subcommand)
-    throw new Error('usage: goal publication <receive|legacy-receive|legacy-prepare|legacy-status|legacy-resolve|bootstrap|capture-register|capture-retire|start|status|recover>');
+    throw new Error(
+      'usage: goal publication <receive|legacy-receive|legacy-prepare|legacy-status|legacy-resolve|bootstrap|capture-register|capture-retire|start|status|recover>',
+    );
   if (process.env.GOAL_TASK_ID || process.env.GOAL_ATTEMPT)
     throw new Error('worker sessions cannot receive or operate native publication custody');
   const operationsManager = runtime.settings.integration.operationsManager;
@@ -60,21 +62,26 @@ export async function runPublicationCommand(args: string[], runtime: CommandRunt
     if (!first || second || args.length !== 2)
       throw new Error(`usage: goal publication ${subcommand} <owner-inbox-message-id>`);
     const messageId = positiveId(first, 'owner inbox message id');
-    const receipt = subcommand === 'legacy-receive'
-      ? controller.legacy.receive(messageId, actor)
-      : controller.legacy.resolve(messageId, actor);
+    const receipt =
+      subcommand === 'legacy-receive'
+        ? controller.legacy.receive(messageId, actor)
+        : controller.legacy.resolve(messageId, actor);
     console.log(JSON.stringify(receipt));
     return receipt.state === 'unavailable' ? 1 : 0;
   }
   if (subcommand === 'legacy-prepare') {
     if (second || args.length > 2)
       throw new Error('usage: goal publication legacy-prepare [native-inventory-inbox-message-id]');
-    console.log(JSON.stringify(controller.legacy.prepare(actor,
-      first ? positiveId(first, 'native inventory inbox message id') : undefined)));
+    console.log(
+      JSON.stringify(
+        controller.legacy.prepare(actor, first ? positiveId(first, 'native inventory inbox message id') : undefined),
+      ),
+    );
     return 1;
   }
   if (subcommand === 'legacy-status') {
-    if (second || args.length > 2) throw new Error('usage: goal publication legacy-status [inbox-message-or-preparation-id]');
+    if (second || args.length > 2)
+      throw new Error('usage: goal publication legacy-status [inbox-message-or-preparation-id]');
     console.log(JSON.stringify(controller.legacy.status(first)));
     return 0;
   }
