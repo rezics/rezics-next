@@ -15,7 +15,8 @@ function strictViolations(node: Schema, path: string): string[] {
     const required = (node.required as string[] | undefined) ?? [];
     for (const key of keys) if (!required.includes(key)) found.push(`${path}.required lacks ${key}`);
     if (node.additionalProperties !== false) found.push(`${path}.additionalProperties`);
-    for (const key of keys) found.push(...strictViolations((node.properties as Record<string, Schema>)[key]!, `${path}.${key}`));
+    for (const key of keys)
+      found.push(...strictViolations((node.properties as Record<string, Schema>)[key]!, `${path}.${key}`));
   }
   if (node.items) found.push(...strictViolations(node.items as Schema, `${path}[]`));
   for (const [index, branch] of ((node.anyOf as Schema[] | undefined) ?? []).entries())

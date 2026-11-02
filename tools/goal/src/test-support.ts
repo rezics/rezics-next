@@ -15,6 +15,95 @@ import { MergeTrain } from './merge-train.ts';
 import { PROMOTION_GATE_TIMEOUT_MS, promote } from './promotion.ts';
 import { gateRunner, type GateRunner } from './merge.ts';
 import { parseBrief, readRiskOwnership } from './briefs.ts';
+import {
+  checkedProcessGroup,
+  inspectProcessIdentity,
+  sameProcess,
+  signalProcessIdentity,
+  waitForWorkerExit,
+  type ProcessIdentity,
+} from './process.ts';
+import {
+  beginFixtureProcessDisposal,
+  createFixtureProcessOwner,
+  fixtureOwnedProcesses,
+  hasUnsettledFixtureWaits,
+  settleFixtureWaits,
+} from './fixture-process-ownership.ts';
+
+const FIXTURE_TERM_GRACE_MS = 300;
+const FIXTURE_KILL_WAIT_MS = 1500;
+const FIXTURE_FAKE_WORKER_LIFETIME_MS = 60_000;
+
+function boundedFixtureWorkerScript(script: string): string {
+  const guard =
+    `const __goalFixtureWorkerLifetime = setTimeout(() => process.exit(124), ${FIXTURE_FAKE_WORKER_LIFETIME_MS});\n` +
+    '__goalFixtureWorkerLifetime.unref?.();\n';
+  return script.replace(/^(#![^\n]*\n)/, `$1${guard}`);
+}
+
+function checkedFixtureGroup(identity: ProcessIdentity, _allowLeaderExit = false): ProcessIdentity[] {
+  return checkedProcessGroup(identity);
+}
+
+async function signalFixtureGroup(identity: ProcessIdentity, signal: NodeJS.Signals): Promise<void> {
+  for (const member of checkedFixtureGroup(identity)) await signalProcessIdentity(member, signal);
+}
+
+async function waitForFixtureGroupExit(identity: ProcessIdentity, timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (checkedFixtureGroup(identity, true).length) {
+    if (Date.now() >= deadline) return false;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  return true;
+}
+
+async function reapFixtureGroup(identity: ProcessIdentity): Promise<void> {
+  if (!checkedFixtureGroup(identity).length) return;
+  await signalFixtureGroup(identity, 'SIGTERM');
+  if (await waitForFixtureGroupExit(identity, FIXTURE_TERM_GRACE_MS)) return;
+  await signalFixtureGroup(identity, 'SIGKILL');
+  if (!(await waitForFixtureGroupExit(identity, FIXTURE_KILL_WAIT_MS)))
+    throw new Error(
+      `owned fixture process group ${identity.group} did not exit after SIGKILL within ${FIXTURE_KILL_WAIT_MS}ms`,
+    );
+}
+
+function checkedFixtureWaiter(identity: ProcessIdentity): boolean {
+  const current = inspectProcessIdentity(identity.pid);
+  if (current && !sameProcess(identity))
+    throw new Error('fixture-owned waiter identity changed; refusing to signal reused PID');
+  return Boolean(current);
+}
+
+async function waitForFixtureWaiterExit(identity: ProcessIdentity, timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (checkedFixtureWaiter(identity)) {
+    if (Date.now() >= deadline) return false;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  return true;
+}
+
+async function reapFixtureWaiter(identity: ProcessIdentity): Promise<void> {
+  if (!checkedFixtureWaiter(identity)) return;
+  await signalProcessIdentity(identity, 'SIGTERM');
+  if (await waitForFixtureWaiterExit(identity, FIXTURE_TERM_GRACE_MS)) return;
+  if (checkedFixtureWaiter(identity)) {
+    await signalProcessIdentity(identity, 'SIGKILL');
+  }
+  if (!(await waitForFixtureWaiterExit(identity, FIXTURE_KILL_WAIT_MS)))
+    throw new Error(`owned fixture waiter ${identity.pid} did not exit after SIGKILL within ${FIXTURE_KILL_WAIT_MS}ms`);
+}
+
+function hasLiveFixtureProcess(stateDirectory: string, token: string): boolean {
+  const processes = fixtureOwnedProcesses(stateDirectory, token);
+  if (hasUnsettledFixtureWaits(stateDirectory, token)) return true;
+  return processes.some((owned) =>
+    owned.role === 'worker' ? checkedFixtureGroup(owned.identity).length > 0 : checkedFixtureWaiter(owned.identity),
+  );
+}
 
 /** Copy the actual worker-check runtime closure from one immutable development commit. */
 export function checkScriptFixture(ref = 'refs/heads/dev') {
@@ -195,7 +284,16 @@ console.log(JSON.stringify({type:'item.completed',item:{id:'commit',type:'comman
 console.log(JSON.stringify({type:'item.completed',item:{id:'message',type:'agent_message',text:'RESULT: success'}}));
 console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:120,cached_input_tokens:80,output_tokens:20}}));
 `,
-): { root: string; settings: Settings; store: WorkerStore; tasks: WorkerTasks; briefFile: string; dispose(): void } {
+): {
+  root: string;
+  settings: Settings;
+  store: WorkerStore;
+  tasks: WorkerTasks;
+  briefFile: string;
+  ownerToken: string;
+  dispose(): void;
+  disposeAsync(options?: { beforeRemove?: () => void | Promise<void> }): Promise<void>;
+} {
   const root = tempDirectory();
   git(root, ['init', '-b', 'main']);
   git(root, ['config', 'user.name', 'Fixture']);
@@ -222,26 +320,96 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:120,cached
   const state = join(root, '.temp/goal');
   mkdirSync(state, { recursive: true });
   const command = join(state, 'codex');
-  writeFileSync(command, script.replaceAll('__GOAL_TEST_DATABASE_PATH__', JSON.stringify(join(state, 'goal.sqlite'))));
+  writeFileSync(
+    command,
+    boundedFixtureWorkerScript(script).replaceAll(
+      '__GOAL_TEST_DATABASE_PATH__',
+      JSON.stringify(join(state, 'goal.sqlite')),
+    ),
+  );
   chmodSync(command, 0o755);
   const pool = { ...fixturePool(join(state, 'account')), command };
   writeFileSync(join(state, 'local.json'), JSON.stringify({ version: 1, terminationGraceMs: 1000, pools: [pool] }));
   const settings = loadSettings({ cwd: root, env: {} });
   settings.integrationChecks = [];
   mkdirSync(settings.stateDirectory, { recursive: true });
+  const ownerToken = createFixtureProcessOwner(settings.stateDirectory);
   const store = new WorkerStore(openDb(join(settings.stateDirectory, 'goal.sqlite'))),
     tasks = new WorkerTasks(settings, store);
   const briefFile = join(state, 'source.md');
   writeFileSync(briefFile, markdown);
+  let disposed = false;
+  let disposing: Promise<void> | undefined;
+  let databaseClosed = false;
   return {
     root,
     settings,
     store,
     tasks,
     briefFile,
+    ownerToken,
     dispose() {
+      if (disposed) return;
+      if (disposing) throw new Error('fixture disposal is in progress; await h.disposeAsync()');
+      beginFixtureProcessDisposal(settings.stateDirectory, ownerToken);
+      if (hasLiveFixtureProcess(settings.stateDirectory, ownerToken))
+        throw new Error('fixture has live owned processes; await h.disposeAsync() before removing its directory');
       store.db.close();
+      databaseClosed = true;
       rmSync(root, { recursive: true, force: true });
+      disposed = true;
+    },
+    disposeAsync(options = {}) {
+      if (disposed) return Promise.resolve();
+      if (disposing) return disposing;
+      const cleanup = async () => {
+        beginFixtureProcessDisposal(settings.stateDirectory, ownerToken);
+        const processes = fixtureOwnedProcesses(settings.stateDirectory, ownerToken);
+        const seenGroups = new Set<string>();
+        for (const owned of processes) {
+          if (owned.role !== 'worker') continue;
+          const { identity } = owned;
+          const key = `${identity.boot}:${identity.pid}:${identity.start}:${identity.group}`;
+          if (seenGroups.has(key)) continue;
+          seenGroups.add(key);
+          const waiter = waitForWorkerExit(identity, owned.logPath);
+          void waiter.catch(() => {});
+        }
+        for (const owned of processes) {
+          if (owned.role !== 'worker') continue;
+          const { identity } = owned;
+          const key = `${identity.boot}:${identity.pid}:${identity.start}:${identity.group}`;
+          if (!seenGroups.has(key)) continue;
+          seenGroups.delete(key);
+          await reapFixtureGroup(identity);
+        }
+        await settleFixtureWaits(settings.stateDirectory, ownerToken);
+        const seenWaiters = new Set<string>();
+        for (const owned of fixtureOwnedProcesses(settings.stateDirectory, ownerToken)) {
+          if (owned.role !== 'waiter') continue;
+          const { identity } = owned;
+          const key = `${identity.boot}:${identity.pid}:${identity.start}`;
+          if (seenWaiters.has(key)) continue;
+          seenWaiters.add(key);
+          await reapFixtureWaiter(identity);
+        }
+        if (hasLiveFixtureProcess(settings.stateDirectory, ownerToken))
+          throw new Error('fixture-owned process remained live after bounded teardown');
+        await options.beforeRemove?.();
+        if (hasLiveFixtureProcess(settings.stateDirectory, ownerToken))
+          throw new Error('fixture-owned process or continuation appeared before fixture removal');
+        if (!databaseClosed) {
+          store.db.close();
+          databaseClosed = true;
+        }
+        rmSync(root, { recursive: true, force: true });
+        disposed = true;
+      };
+      disposing = cleanup().catch((error) => {
+        disposing = undefined;
+        throw error;
+      });
+      return disposing;
     },
   };
 }

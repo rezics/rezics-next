@@ -1,16 +1,13 @@
 /**
- * Places a stack-heavy run. On a check host means the working directory is under the remote run root
- * (`ROOT/runs/` in `remote-check.ts`). With a readable hosts file and a host that answers, the run waits for a slot.
- * It runs locally only when no host answers, and says so on stderr. A local run then takes the stack lease
- * (`stack-lease.ts`).
+ * Places a stack-heavy run on an approved check host. A run already in a confined remote-check cgroup stays there;
+ * every other run fails closed when hosts or transport are unavailable.
  *
  * The hosts file is KERNEL_CHECK_REMOTE when that name is non-empty, otherwise the shared file
  * `<main checkout>/.temp/goal/remote-check-hosts.json` when it is readable. The main checkout is the parent of
- * `git rev-parse --git-common-dir`. A run that keeps files it writes stays local unless it declares workspace-relative
- * paths to copy back.
+ * `git rev-parse --git-common-dir`. Kept outputs must use declared workspace-relative return paths.
  *
- * A person (GOAL_TASK_ID unset or empty) can keep a run local with REZICS_STACK_REMOTE=off or an inherited
- * REZICS_STACK_SLOT. A worker cannot. KERNEL_CHECK_ON_REMOTE and REZICS_STACK_LEASE never decide placement.
+ * Local/off markers and inherited local leases do not change placement. KERNEL_CHECK_ON_REMOTE alone never decides
+ * that a run is already remote.
  *
  * A host runs the same command in a copy of the workspace, with the caller's environment left behind. Stderr says
  * where the run went, and when it is waiting.
@@ -19,13 +16,34 @@ import { accessSync, constants, existsSync, readFileSync, writeFileSync } from '
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import {
   Aborted,
-  answeringHosts,
+  executionCancellation,
+  executionCancellationFromEnvironment,
+  observeExecutionCancellation,
+  ownedLocalCommand,
+  type ExecutionCancellation,
   readHosts,
-  remoteCheckUnlessUnreachable,
-  ROOT,
+  remoteCheck,
+  RemoteTransportError,
+  REMOTE_TRANSPORT_FAILURE,
+  type RemoteCheck,
   validateEstimateMs,
 } from './remote-check.ts';
+import { hasOutputTreeReturn, outputTreeProfile, withKernelClientOutput } from './check-output-tree.ts';
 import { withStackSlot } from './stack-lease.ts';
+import {
+  captureArtifactReturns,
+  clearDeclaredArtifacts,
+  registerArtifactDeclarations,
+  validateArtifactDeclarations,
+  writeArtifactCatalog,
+} from './check-artifacts.ts';
+import {
+  isCheckHostRun,
+  isCheckHostRunCandidate,
+  performanceHosts,
+  recognizeCheckHostRun,
+  type CheckHostRecognitionDisposition,
+} from './check-placement.ts';
 
 export type StackRun = {
   label: string;
@@ -34,14 +52,13 @@ export type StackRun = {
   /** The directory the command runs in, inside the root. */
   cwd: string;
   command: string[];
+  cancellation?: ExecutionCancellation;
   /** Host slots the run holds, for a run whose peak memory exceeds a host's per-slot share. Default 1. */
   slots?: number;
   estimateMs?: number;
   /** Called after the host slot is acquired and the remote command is about to start. */
   started?: (host: string) => void;
-  /** The run writes files the caller keeps (updated snapshots, recordings, reports), so it stays local unless it
-   * declares returned paths.
-   */
+  /** The run writes files the caller keeps; remote placement requires declared return paths. */
   keepsFiles?: boolean;
   /**
    * Workspace-relative paths copied back after the run, including when it fails. Declaring them means the run does
@@ -76,9 +93,7 @@ export function isWorker(env: Environment): boolean {
 
 /** The working directory is inside a check host's run directory. Environment variables do not count. */
 export function onCheckHost(cwd: string): boolean {
-  const runs = join(ROOT, 'runs');
-  const inside = relative(runs, resolve(cwd));
-  return inside === '' || (inside !== '..' && !inside.startsWith(`..${sep}`) && !isAbsolute(inside));
+  return isCheckHostRun(cwd);
 }
 
 /** Parent of `git rev-parse --git-common-dir` for `root`, or null when `root` is not a checkout. */
@@ -118,23 +133,15 @@ export function hostsLocation(root: string, env: Environment): { file: string } 
 }
 
 export const LOCAL_CONTAINER_REFUSAL =
-  'A worker cannot start a local stack container while a check host is reachable. ' +
+  'A worker cannot start a local stack container outside an approved remote-check run. ' +
   'Hand the run to `bun run --cwd services/kernel check <files>`, ' +
   '`bun run --cwd services/auth check <files>`, or root `bun test`.';
 
 /**
- * The error a worker must see instead of starting a local stack container, or null when this start may proceed:
- * a person, a run already on a check host, or no check host answering.
+ * The error a worker must see instead of starting a local stack container outside an approved remote-check run.
  */
 export async function workerLocalContainerError(env: Environment, cwd: string): Promise<string | null> {
   if (!isWorker(env) || onCheckHost(cwd)) return null;
-  const located = hostsLocation(cwd, env);
-  if (!('file' in located)) return null;
-  try {
-    if ((await answeringHosts(readHosts(located.file))).length === 0) return null;
-  } catch {
-    return null;
-  }
   return LOCAL_CONTAINER_REFUSAL;
 }
 
@@ -145,11 +152,8 @@ function pollMs(env: Environment): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-function localReason(run: StackRun, env: Environment): string | { hostsFile: string } {
-  if (onCheckHost(run.cwd)) return 'already on a check host';
-  if (!isWorker(env) && env.REZICS_STACK_REMOTE === 'off') return 'REZICS_STACK_REMOTE=off';
-  if (!isWorker(env) && env.REZICS_STACK_SLOT !== undefined) return 'already inside a stack slot';
-  if (run.keepsFiles && run.returns === undefined) return 'the run keeps files it writes';
+function remoteReason(run: StackRun, env: Environment): string | { hostsFile: string } {
+  if (run.keepsFiles && run.returns === undefined) return 'the run keeps files it writes and declares no returns';
   const inside = relative(resolve(run.root), resolve(run.cwd));
   if (inside === '..' || inside.startsWith('../') || isAbsolute(inside))
     return 'the directory is outside the workspace';
@@ -159,11 +163,29 @@ function localReason(run: StackRun, env: Environment): string | { hostsFile: str
 }
 
 /**
- * Runs the command on a check host and returns its exit code, waiting for a slot when a host answers. Returns null
- * when the run belongs on this machine. The null is a placement, never an exit code.
+ * Runs the command on host a or b and returns its exit code. Null means the process is already in an approved remote
+ * run directory; it never means an unavailable host may fall back to this machine.
  */
-export async function runOnCheckHost(run: StackRun, env: Environment = process.env): Promise<number | null> {
+export async function runOnCheckHost(
+  run: StackRun,
+  env: Environment = process.env,
+  runRemote: (options: RemoteCheck, signal: AbortSignal) => Promise<number> = remoteCheck,
+  recognize: (cwd: string) => CheckHostRecognitionDisposition = recognizeCheckHostRun,
+): Promise<number | null> {
   validateEstimateMs(run.estimateMs);
+  const recognition = recognize(run.cwd);
+  if (recognition.outcome === 'admitted') {
+    console.error(`stack-run: ${run.label} already on an approved remote-check run`);
+    return null;
+  }
+  const checkHostCandidate = isCheckHostRunCandidate(run.cwd);
+  if (checkHostCandidate)
+    console.error(`stack-run: ${run.label} physical run recognition refused (${recognition.reason})`);
+  const cancellation = run.cancellation ?? executionCancellationFromEnvironment(env);
+  const cancelled = () => executionCancellation(cancellation);
+  const intent = cancelled();
+  if (intent) return 128 + intent.signal;
+  if (checkHostCandidate) return REMOTE_TRANSPORT_FAILURE;
   const requestedPriority = env.REMOTE_CHECK_PRIORITY;
   if (requestedPriority !== undefined && requestedPriority !== 'landing' && requestedPriority !== 'critical') {
     throw new Error(`REMOTE_CHECK_PRIORITY must be landing or critical when set, received ${requestedPriority}`);
@@ -184,10 +206,13 @@ export async function runOnCheckHost(run: StackRun, env: Environment = process.e
     const profileFile = join(root, profile);
     if (existsSync(profileFile)) priorProfile = readFileSync(profileFile);
   }
-  const reason = localReason(run, env);
+  const reason = remoteReason(run, env);
   if (typeof reason === 'string') {
-    console.error(`stack-run: ${run.label} local, ${reason}`);
-    return null;
+    if (reason === 'no check host is configured' || reason.startsWith('the hosts file ')) {
+      console.error(`stack-run: ${run.label} unavailable: ${reason}`);
+      return REMOTE_TRANSPORT_FAILURE;
+    }
+    throw new Error(`stack-run: ${run.label} cannot be placed remotely: ${reason}`);
   }
   const controller = new AbortController();
   let received: number | undefined;
@@ -199,37 +224,53 @@ export async function runOnCheckHost(run: StackRun, env: Environment = process.e
     process.on(name, handler);
     return [name, handler] as const;
   });
-  let started = false;
-  let answered = false;
   try {
     const interval = pollMs(env);
-    const outcome = await remoteCheckUnlessUnreachable(
-      {
-        hosts: readHosts(reason.hostsFile),
-        workspace: run.root,
-        cwd: relative(resolve(run.root), resolve(run.cwd)) || '.',
-        command: profile ? ['env', `GROWTH_PROFILE=${profile}`, ...run.command] : run.command,
-        ...(run.slots === undefined ? {} : { slots: run.slots }),
-        ...(run.estimateMs === undefined ? {} : { estimateMs: run.estimateMs }),
-        ...(priority === undefined ? {} : { priority }),
-        ...(interval === undefined ? {} : { pollMs: interval }),
-        ...(run.returns === undefined && profile === undefined && env.GROWTH_PROFILE === undefined
-          ? {}
-          : { returns: [...(run.returns ?? []), ...(profile === undefined ? [] : [profile])] }),
-        answered: () => {
-          answered = true;
+    let hosts: RemoteCheck['hosts'];
+    try {
+      hosts = performanceHosts(readHosts(reason.hostsFile));
+    } catch (error) {
+      console.error(
+        `stack-run: ${run.label} unavailable: invalid check hosts: ${error instanceof Error ? error.message : error}`,
+      );
+      return REMOTE_TRANSPORT_FAILURE;
+    }
+    if (hosts.length === 0) {
+      console.error(`stack-run: ${run.label} unavailable: hosts file ${reason.hostsFile} has no approved a/b host`);
+      return REMOTE_TRANSPORT_FAILURE;
+    }
+    let outcome: number;
+    try {
+      outcome = await runRemote(
+        {
+          ...(cancellation === undefined ? {} : { cancellation }),
+          hosts,
+          allowedHosts: ['a', 'b'],
+          hostsFile: reason.hostsFile,
+          workspace: run.root,
+          cwd: relative(resolve(run.root), resolve(run.cwd)) || '.',
+          command: profile ? ['env', `GROWTH_PROFILE=${profile}`, ...run.command] : run.command,
+          ...(run.slots === undefined ? {} : { slots: run.slots }),
+          ...(run.estimateMs === undefined ? {} : { estimateMs: run.estimateMs }),
+          ...(priority === undefined ? {} : { priority }),
+          ...(interval === undefined ? {} : { pollMs: interval }),
+          ...(run.returns === undefined && profile === undefined && env.GROWTH_PROFILE === undefined
+            ? {}
+            : { returns: [...(run.returns ?? []), ...(profile === undefined ? [] : [profile])] }),
+          started: (host) => {
+            run.started?.(host);
+            console.error(`stack-run: ${run.label}${priority ? ` priority ${priority}` : ''} on ${host}`);
+          },
         },
-        started: (host) => {
-          started = true;
-          run.started?.(host);
-          console.error(`stack-run: ${run.label}${priority ? ` priority ${priority}` : ''} on ${host}`);
-        },
-      },
-      controller.signal,
-    );
-    if (outcome === null) {
-      console.error(`stack-run: ${run.label} local, no check host answered`);
-      return null;
+        controller.signal,
+      );
+    } catch (error) {
+      if (
+        error instanceof RemoteTransportError ||
+        (error instanceof Error && error.message === 'remote-check: no check host answered')
+      )
+        return REMOTE_TRANSPORT_FAILURE;
+      throw error;
     }
     if (profile && priorProfile) {
       const profileFile = join(resolve(run.root), profile);
@@ -241,23 +282,80 @@ export async function runOnCheckHost(run: StackRun, env: Environment = process.e
     }
     return outcome;
   } catch (error) {
-    if (error instanceof Aborted) return 128 + (received ?? 15);
-    if (answered || started) throw error;
-    // Only an unanswered host probe is a local placement; do not bypass a reachable host after another error.
-    console.error(`stack-run: ${run.label} local, ${error instanceof Error ? error.message : error}`);
-    return null;
+    if (error instanceof Aborted || received !== undefined || cancelled())
+      return 128 + (received ?? cancelled()?.signal ?? 15);
+    throw error;
   } finally {
     for (const [name, handler] of handlers) process.off(name, handler);
   }
 }
 
-/** The one place a stack-heavy run is placed: on a check host, waiting for a slot, or `local` under the local lease. */
+/** The one place a stack-heavy run is placed: host a/b or an already-confined remote-check run. */
 export async function stackRun(
   run: StackRun,
   local: (env: Record<string, string>) => Promise<number>,
   env: Environment = process.env,
+  runRemote: (options: RemoteCheck, signal: AbortSignal) => Promise<number> = remoteCheck,
 ): Promise<number> {
-  return (await runOnCheckHost(run, env)) ?? (await withStackSlot(run.label, local));
+  const returned = validateArtifactDeclarations(run.returns ?? []);
+  if (returned.length) clearDeclaredArtifacts(run.root, returned);
+  const remoteCode = await runOnCheckHost(run, env, runRemote);
+  const logicalCheckId = env.REZICS_CHECK_ID;
+  if (remoteCode !== null) {
+    if (logicalCheckId && returned.length) {
+      try {
+        writeArtifactCatalog(run.root, logicalCheckId, returned);
+      } catch (error) {
+        console.error(
+          `stack-run: could not record declared outputs: ${error instanceof Error ? error.message : error}`,
+        );
+      }
+    }
+    return remoteCode;
+  }
+  const cancellation = run.cancellation ?? executionCancellationFromEnvironment(env);
+  const intent = executionCancellation(cancellation);
+  if (intent) return 128 + intent.signal;
+  const stageDirectory = env.REZICS_CHECK_ARTIFACTS_DIR;
+  const physicalRunId = env.REZICS_CHECK_ARTIFACTS_PHYSICAL_RUN_ID;
+  let handoff = false;
+  if (stageDirectory !== undefined && physicalRunId !== undefined && returned.length > 0) {
+    try {
+      await registerArtifactDeclarations(run.root, stageDirectory, physicalRunId, returned);
+      handoff = true;
+    } catch (error) {
+      if (hasOutputTreeReturn(returned)) throw error;
+      console.error(`stack-run: artifact handoff unavailable: ${error instanceof Error ? error.message : error}`);
+    }
+  }
+  let code: number | undefined;
+  try {
+    code = await withStackSlot(run.label, (leaseEnv) => {
+      const intent = executionCancellation(cancellation);
+      return intent
+        ? Promise.resolve(128 + intent.signal)
+        : hasOutputTreeReturn(returned)
+          ? withKernelClientOutput(run.root, () => local(leaseEnv), { returns: returned })
+          : local(leaseEnv);
+    });
+  } finally {
+    if (handoff && stageDirectory !== undefined && physicalRunId !== undefined) {
+      try {
+        await captureArtifactReturns(run.root, stageDirectory, physicalRunId, returned);
+      } catch (error) {
+        if (hasOutputTreeReturn(returned) && (code === undefined || code === 0)) throw error;
+        console.error(`stack-run: could not stage declared outputs: ${error instanceof Error ? error.message : error}`);
+      }
+    }
+  }
+  if (logicalCheckId && returned.length) {
+    try {
+      writeArtifactCatalog(run.root, logicalCheckId, returned);
+    } catch (error) {
+      console.error(`stack-run: could not record declared outputs: ${error instanceof Error ? error.message : error}`);
+    }
+  }
+  return code!;
 }
 
 if (import.meta.main) {
@@ -271,7 +369,10 @@ if (import.meta.main) {
   while (rest[0]?.startsWith('--') && rest[0] !== '--') {
     const flag = rest.shift();
     if (flag === '--keeps-files') keepsFiles = true;
-    else if (flag === '--returns' && rest.length > 0) {
+    else if (flag === '--output-tree') {
+      returns ??= [];
+      returns.push(outputTreeProfile(rest.shift() ?? '').transport);
+    } else if (flag === '--returns' && rest.length > 0) {
       returns ??= [];
       returns.push(rest.shift()!);
     } else if (flag === '--slots' && rest.length > 0) slots = Number(rest.shift());
@@ -302,7 +403,13 @@ if (import.meta.main) {
           ...(estimateMs === undefined ? {} : { estimateMs }),
         },
         async (env) => {
-          const child = Bun.spawn(command, {
+          const cancellation = executionCancellationFromEnvironment();
+          const observed = observeExecutionCancellation(cancellation);
+          if (observed.signal.aborted) {
+            observed.close();
+            return 128 + (executionCancellation(cancellation)?.signal ?? 15);
+          }
+          const child = Bun.spawn(ownedLocalCommand(command), {
             cwd: resolve(cwd),
             env: { ...process.env, ...env },
             stdin: 'inherit',
@@ -315,9 +422,15 @@ if (import.meta.main) {
             process.on(name, forward);
             return [name, forward] as const;
           });
+          const cancel = () => child.kill('SIGTERM');
+          observed.signal.addEventListener('abort', cancel, { once: true });
           try {
-            return await child.exited;
+            const code = await child.exited;
+            const intent = executionCancellation(cancellation);
+            return intent ? 128 + intent.signal : code;
           } finally {
+            observed.close();
+            observed.signal.removeEventListener('abort', cancel);
             for (const [name, forward] of forwarders) process.off(name, forward);
           }
         },

@@ -18,7 +18,9 @@ test('a dependent starts from dev when its dependency landed after dev-verified,
     await h.start(dependent);
 
     const started = h.store.task(dependent.id);
-    expect(git(h.root, 'merge-base', '--is-ancestor', h.store.task(dependency.id).integratedCommit!, started.base)).toBe('');
+    expect(
+      git(h.root, 'merge-base', '--is-ancestor', h.store.task(dependency.id).integratedCommit!, started.base),
+    ).toBe('');
     expect(existsSync(join(started.worktree, 'dependency-file'))).toBe(true);
   } finally {
     h.dispose();

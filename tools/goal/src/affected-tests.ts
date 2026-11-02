@@ -25,3 +25,55 @@ export function siblingTestCommand(
 ): string[] | undefined {
   return files.length ? [...runner, ...files] : undefined;
 }
+
+const KERNEL = 'services/kernel/';
+const WEB = 'apps/web/';
+const WEB_RUNNER = 'apps/web/scripts/focused.ts';
+
+/**
+ * Commands that run the tests for a worker's changed paths the way landing verification runs them, so the worker runs
+ * each once before it finishes: kernel test files through the kernel check, Web test files through the focused Web
+ * runner, and other changed test files with the sibling tests of changed sources through the sibling runner. Host tests
+ * need a check host and are left to verification.
+ */
+export function workerTestCommands(
+  changedPaths: readonly string[],
+  worktree: string,
+  runner: readonly string[] = ['bun', 'test'],
+): string[][] {
+  const changed = changedPaths.filter((path) => !path.startsWith('spec/') && !path.startsWith('specs/'));
+  const tests = [
+    ...new Set([
+      ...changed.filter((path) => TEST_EXTENSION.test(path) && existsSync(join(worktree, path))),
+      ...siblingTestFiles(changed, worktree),
+    ]),
+  ]
+    .filter((path) => !/\.host\.test\./.test(path))
+    .sort();
+  const focusedWeb = existsSync(join(worktree, WEB_RUNNER));
+  const kernel = tests.filter((path) => path.startsWith(KERNEL));
+  const web = focusedWeb ? tests.filter((path) => path.startsWith(WEB)) : [];
+  const other = tests.filter((path) => !kernel.includes(path) && !web.includes(path));
+  const commands: string[][] = [];
+  if (kernel.length)
+    commands.push([
+      'bun',
+      'run',
+      '--cwd',
+      'services/kernel',
+      'check',
+      ...kernel.map((path) => path.slice(KERNEL.length)),
+    ]);
+  if (web.length)
+    commands.push([
+      'bun',
+      WEB_RUNNER,
+      '--private-network',
+      '--',
+      'bun',
+      'test',
+      ...web.map((p) => p.slice(WEB.length)),
+    ]);
+  if (other.length) commands.push([...runner, ...other]);
+  return commands;
+}

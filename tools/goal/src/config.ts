@@ -2,7 +2,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, mkdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import defaults from '../defaults.json';
-import type { DerivedFile, Pool, Settings } from './types.ts';
+import type { DerivedFile, Pool, PromotionPlacementSettings, Settings } from './types.ts';
 import { validatePath } from './briefs.ts';
 import { readWebModules } from './workspace.ts';
 import { readPoolPolicies } from './pools.ts';
@@ -23,8 +23,9 @@ import { watch } from './watchdog.ts';
 import { readRouting } from './routing.ts';
 import { FORMAT_FLAGS, MergeTrain, type IntegrationCheck, type TrainOptions } from './merge-train.ts';
 import { promote, PROMOTION_GATE_TIMEOUT_MS } from './promotion.ts';
+import { preparePromotionGate } from './promotion-placement.ts';
 import { verifyDev } from './dev-verifier.ts';
-import { gateRunner, type GateRunner } from './merge.ts';
+import { gateRunner, processGroupRunner, type GateRunner } from './merge.ts';
 import { codeVersion } from './runtime-version.ts';
 import { completionChecker } from './completion.ts';
 import { TermspacesWindows } from './windows.ts';
@@ -40,6 +41,7 @@ import {
 } from './flow.ts';
 import { emitHourlyLifecycleMetrics, lifecycleMetricsAsync } from './lifecycle-metrics.ts';
 import { sweepWidthGovernor } from './width-governor.ts';
+import { backlogDirectory, sweepBacklog } from './backlog.ts';
 
 export type SettingsOptions = { cwd?: string; env?: NodeJS.ProcessEnv; localFile?: string };
 export type ConfiguredSettings = Settings & { integrationChecks: IntegrationCheck[] };
@@ -93,6 +95,48 @@ export function readIntegrationChecks(
       throw new Error(`${label}[${index}].command must be a command array`);
     return { paths: [...check.paths], command: [...check.command] };
   });
+}
+function readSiblingTests(value: unknown = defaults.siblingTests, label = 'siblingTests') {
+  const sibling = object(value, label);
+  keys(sibling, ['command'], label);
+  if (
+    !Array.isArray(sibling.command) ||
+    !sibling.command.length ||
+    sibling.command.some((part) => typeof part !== 'string' || !part)
+  )
+    throw new Error(`${label}.command must be a command array`);
+  return { command: [...sibling.command] as string[] };
+}
+
+function uniqueChecks(checks: readonly IntegrationCheck[]): IntegrationCheck[] {
+  const byCommand = new Map<string, IntegrationCheck>();
+  for (const check of checks) {
+    const key = JSON.stringify(check.command);
+    const existing = byCommand.get(key);
+    if (existing) existing.paths = [...new Set([...existing.paths, ...check.paths])];
+    else byCommand.set(key, { paths: [...check.paths], command: [...check.command] });
+  }
+  return [...byCommand.values()];
+}
+
+function verifierChecksFromLegacy(
+  defaultsChecks: readonly IntegrationCheck[],
+  defaultsAffected: readonly IntegrationCheck[],
+  legacyAffected: readonly IntegrationCheck[],
+  legacyIntegration: readonly IntegrationCheck[] | undefined,
+  affectedWasOverridden: boolean,
+): IntegrationCheck[] {
+  const replacedAffected = new Set(defaultsAffected.map((check) => JSON.stringify(check)));
+  const retainedDefaults = affectedWasOverridden
+    ? defaultsChecks.filter((check) => !replacedAffected.has(JSON.stringify(check)))
+    : [...defaultsChecks];
+  const additional =
+    legacyIntegration?.filter(
+      (check) =>
+        !check.command.some((part) => part === 'install') &&
+        !check.command.some((part) => part.includes('scripts/typecheck.ts')),
+    ) ?? [];
+  return uniqueChecks([...retainedDefaults, ...legacyAffected, ...additional]);
 }
 const packageDerivedFiles = readDerivedFiles();
 
@@ -155,6 +199,7 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
       'integrationBranch',
       'stabilizeBranch',
       'promotionParallelism',
+      'promotionPlacement',
       'branchPrefix',
       'terminationGraceMs',
       'silenceMs',
@@ -162,6 +207,8 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
       'formatCommand',
       'integrationChecks',
       'affectedTests',
+      'verifierChecks',
+      'siblingTests',
       'derivedFiles',
       'codex',
       'routingFile',
@@ -181,6 +228,16 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
   const path = (value: unknown, fallback: string, variable?: string) =>
     resolve(main, variable ?? (value === undefined ? fallback : text(value, 'path')));
   const stateDirectory = path(local.stateDirectory, '.temp/goal', env.GOAL_STATE_DIRECTORY);
+  const promotionPlacement: PromotionPlacementSettings | undefined =
+    local.promotionPlacement === undefined
+      ? undefined
+      : (() => {
+          const placement = object(local.promotionPlacement, 'promotionPlacement');
+          keys(placement, ['ordinaryHostsFile'], 'promotionPlacement');
+          return {
+            ordinaryHostsFile: path(text(placement.ordinaryHostsFile, 'promotionPlacement.ordinaryHostsFile'), ''),
+          };
+        })();
   const integration: Record<string, unknown> = {
     ...defaults.integration,
     ...object(local.integration ?? {}, 'integration'),
@@ -216,6 +273,22 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
   const integrationChecks = readIntegrationChecks(
     local.integrationChecks === undefined ? defaults.integrationChecks : local.integrationChecks,
   );
+  const affectedTests = readIntegrationChecks(
+    local.affectedTests === undefined ? defaults.affectedTests : local.affectedTests,
+    'affectedTests',
+  );
+  const defaultVerifierChecks = readIntegrationChecks(defaults.verifierChecks ?? [], 'verifierChecks');
+  const verifierChecks =
+    local.verifierChecks === undefined
+      ? verifierChecksFromLegacy(
+          defaultVerifierChecks,
+          readIntegrationChecks(defaults.affectedTests),
+          local.affectedTests === undefined ? [] : affectedTests,
+          local.integrationChecks === undefined ? undefined : readIntegrationChecks(local.integrationChecks),
+          local.affectedTests !== undefined,
+        )
+      : readIntegrationChecks(local.verifierChecks, 'verifierChecks');
+  const siblingTests = readSiblingTests(local.siblingTests === undefined ? defaults.siblingTests : local.siblingTests);
   const codex: Record<string, unknown> = { ...defaults.codex, ...object(local.codex ?? {}, 'codex') };
   keys(codex, Object.keys(defaults.codex), 'codex');
   const compact = { ...defaults.codex.compactTokens, ...object(codex.compactTokens, 'compactTokens') };
@@ -248,14 +321,14 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
     integrationBranch: text(local.integrationBranch ?? 'dev', 'integrationBranch'),
     stabilizeBranch: text(local.stabilizeBranch ?? 'stabilize', 'stabilizeBranch'),
     promotionParallelism: positive(local.promotionParallelism ?? 4, 'promotionParallelism'),
+    ...(promotionPlacement === undefined ? {} : { promotionPlacement }),
     routingFile: path(local.routingFile, join(import.meta.dir, '../routing.json')),
     gate: gate as string[],
     formatCommand: formatCommand as string[],
     integrationChecks,
-    affectedTests: readIntegrationChecks(
-      local.affectedTests === undefined ? defaults.affectedTests : local.affectedTests,
-      'affectedTests',
-    ),
+    verifierChecks,
+    siblingTests,
+    affectedTests,
     derivedFiles: readDerivedFiles(local.derivedFiles === undefined ? defaults.derivedFiles : local.derivedFiles),
     riskAreasFile: path(local.riskAreasFile, join(import.meta.dir, '../risk-areas.json')),
     pools,
@@ -398,6 +471,8 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
       {},
       checkResultOptions,
     );
+  // The prelanding compiler guard is a direct process group. It never enters remote check-host slot admission.
+  const typecheckGate = processGroupRunner(settings.integration.gateTimeoutMs, settings.stateDirectory, process.env);
   let train!: MergeTrain;
   const pump = () => train.pump();
   const managerContext = () => {
@@ -478,12 +553,14 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     codeIsCurrent,
     handOff,
     ...options.train,
+    runTypecheck: typecheckGate,
   });
   function promoteNow(): Promise<void> {
     return promote({
       settings,
       job,
       runGate: promotionGate,
+      prepareGateCommand: (run, command) => preparePromotionGate(settings, run, command)?.command ?? null,
       derivedFiles: options.train?.derivedFiles ?? settings.derivedFiles ?? packageDerivedFiles,
       ...(options.train?.beforePromotionAdvance ? { beforeAdvance: options.train.beforePromotionAdvance } : {}),
     });
@@ -522,6 +599,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
   ];
   const managerServices: ManagerServices = {
     command,
+    backlogDirectory: backlogDirectory(settings.stateDirectory),
     checkCompletion,
     windows: new TermspacesWindows({
       socket: settings.integration.tmuxSocket,
@@ -611,6 +689,21 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     sweepWidth: async () => {
       await sweepWidthGovernor(db, inbox);
     },
+    // Runs in the host's single-flight `backlog dispatch` child: dispatch is synchronous Git and install work.
+    backlog: () =>
+      sweepBacklog({
+        db,
+        stateDirectory: settings.stateDirectory,
+        inbox,
+        async dispatch(brief) {
+          // The `goal dispatch` path. Its first start is a durable request that the host's sweep runs and follows,
+          // so this short-lived process never waits for host capacity or a worker.
+          const task = tasks.dispatch(brief, null);
+          if (task.state !== 'held') store.saveRetryIntent({ taskId: task.id, attempt: 0 }, {});
+          return task.id;
+        },
+        cancel: (taskId) => tasks.cancel(taskId),
+      }),
     promote: () => promoteNow(),
     verify: () => verifyDev({ settings, store, inbox, runGate: verifierGate }),
     async evaluateFlow() {

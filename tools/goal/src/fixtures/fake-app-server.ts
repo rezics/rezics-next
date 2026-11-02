@@ -1,4 +1,4 @@
-import { appendFileSync, readFileSync } from 'node:fs';
+import { appendFileSync, readFileSync, rmSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { processIdentity } from '../process.ts';
 
@@ -21,8 +21,26 @@ function stalled(method: string, params: any): boolean {
   }
 }
 
+/** FAKE_RPC_FAIL_FILE names a JSON `{ "method": ... }` rule that fails the next matching request once. */
+function failOnce(method: string): boolean {
+  const path = process.env.FAKE_RPC_FAIL_FILE;
+  if (!path) return false;
+  try {
+    const rule = JSON.parse(readFileSync(path, 'utf8')) as { method?: string };
+    if (rule.method !== method) return false;
+    rmSync(path, { force: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function respond(message: any): void {
   const p = message.params;
+  if (failOnce(message.method)) {
+    send({ id: message.id, error: { code: -32600, message: 'Thread not loaded' } });
+    return;
+  }
   let result: any = {};
   switch (message.method) {
     case 'thread/start':

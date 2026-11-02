@@ -1,28 +1,43 @@
 import { expect, test } from 'bun:test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { ManagerEvent } from './contracts.ts';
 import { makeRecord, readMeasurement } from './records.ts';
 import { WorkerJob } from './job.ts';
+import { git } from './tasks.ts';
+import { blockerFingerprint, toolRetryDelay } from './attempt-progress.ts';
 import { harness } from './test-support.ts';
 
 const failingCommand = ['bun', 'test', 'tools/goal/src/failure.test.ts'];
 const errorLine = 'ENOSPC: no space left on device on host b';
 
-function failAttempt(h: ReturnType<typeof harness>, taskId: string, number: number, commandRan = false): void {
+function failAttempt(
+  h: ReturnType<typeof harness>,
+  taskId: string,
+  number: number,
+  options: { commandRan?: boolean; error?: string; commit?: boolean } = {},
+): void {
   const ref = { taskId, attempt: number };
+  const error = options.error ?? errorLine;
+  if (options.commit) {
+    const worktree = h.store.task(taskId).worktree;
+    writeFileSync(join(worktree, 'result.txt'), `progress in attempt ${number}\n`);
+    git(worktree, ['add', 'result.txt']);
+    git(worktree, ['commit', '-qm', `Progress in attempt ${number}`]);
+  }
   const attempt = h.store.updateAttempt(ref, (current) => {
     current.state = 'exited';
     current.endedAt = new Date().toISOString();
     current.failureKind = 'tool';
     current.failureCommand = failingCommand;
-    current.blocker = errorLine;
-    current.result = `BLOCKER: tool\n${errorLine}`;
+    current.blocker = error;
+    current.result = `BLOCKER: tool\n${error}`;
   });
   h.store.updateTask(ref, (task) => {
     task.state = 'running';
   });
   h.store.putRecord(makeRecord(h.store.task(taskId), attempt, readMeasurement(attempt), 'stopped'));
-  if (commandRan) {
+  if (options.commandRan) {
     writeFileSync(
       attempt.logPath,
       `${JSON.stringify({ type: 'item.completed', item: { type: 'command_execution', id: 'check', command: failingCommand.join(' ') } })}\n`,
@@ -42,64 +57,150 @@ console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',tex
 console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_tokens:2}}));
 `;
 
-async function withRetryFixture(run: (job: WorkerJob, h: ReturnType<typeof harness>, taskId: string) => Promise<void>) {
-  const h = harness(captureAndSucceed);
+async function withRetryFixture(
+  run: (job: WorkerJob, h: ReturnType<typeof harness>, taskId: string, inbox: ManagerEvent[]) => Promise<void>,
+  first: { commandRan?: boolean; error?: string; commit?: boolean } = {},
+) {
+  const h = harness(captureAndSucceed),
+    inbox: ManagerEvent[] = [];
   try {
     const task = h.tasks.dispatch(h.briefFile);
-    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver: (event) => inbox.push(event) });
     await job.start(task.id);
-    failAttempt(h, task.id, 1);
+    failAttempt(h, task.id, 1, first);
     job.onAttemptExit({ taskId: task.id, attempt: 1 });
     await job.drain();
-    await run(job, h, task.id);
+    await run(job, h, task.id, inbox);
   } finally {
     h.dispose();
   }
 }
 
-test('a stale tool blocker with no check or matching command gets one relaunch and the retry prompt says to rerun it', async () => {
-  await withRetryFixture(async (job, h, taskId) => {
-    failAttempt(h, taskId, 2);
+for (const commandRan of [false, true])
+  test(`the same tool blocker twice parks the task with one environment event (command ${commandRan ? 'rerun' : 'not rerun'})`, async () => {
+    await withRetryFixture(async (job, h, taskId, inbox) => {
+      expect(h.store.task(taskId).currentAttempt).toBe(2);
+      expect(inbox).toEqual([]);
+      failAttempt(h, taskId, 2, { commandRan, commit: true });
+      job.onAttemptExit({ taskId, attempt: 2 });
+      await job.drain();
+
+      expect(h.store.task(taskId)).toMatchObject({ currentAttempt: 2, state: 'stopped' });
+      expect(h.store.record({ taskId, attempt: 2 })?.escalation).toBe('stalled');
+      expect(inbox.map((event) => [event.kind, event.summary])).toEqual([
+        ['environment', `environment: the same tool blocker twice; task parked: ${errorLine}`],
+      ]);
+      expect(h.store.events(taskId, 2).map((event) => event.kind)).not.toContain('stale-tool-blocker-retry');
+    });
+  });
+
+test('a different tool blocker resumes the same session and the retry prompt says to rerun the failing command', async () => {
+  await withRetryFixture(
+    async (job, h, taskId, inbox) => {
+      failAttempt(h, taskId, 2, { error: 'EMFILE: too many open files, watch', commit: true });
+      job.onAttemptExit({ taskId, attempt: 2 });
+      await job.drain();
+
+      expect(inbox).toEqual([]);
+      expect(h.store.task(taskId).currentAttempt).toBe(3);
+      expect(h.store.attempt({ taskId, attempt: 2 }).escalation).toBe('environment');
+      expect(h.store.attempt({ taskId, attempt: 3 }).session).toBe('fixture-session');
+      const prompt = readFileSync(join(h.store.task(taskId).worktree, '.temp/goal-test-prompts', '3'), 'utf8');
+      expect(prompt).toContain('The retry manifest records a failure from an earlier attempt');
+      expect(prompt).toContain('Rerun the failing command before reporting any blocker');
+    },
+    { commit: true },
+  );
+});
+
+test('two consecutive dev product tool blockers without a new commit stop the task', async () => {
+  await withRetryFixture(async (job, h, taskId, inbox) => {
+    failAttempt(h, taskId, 2, { error: 'EMFILE: too many open files, watch' });
     job.onAttemptExit({ taskId, attempt: 2 });
     await job.drain();
 
-    expect(h.store.task(taskId).currentAttempt).toBe(3);
-    expect(h.store.events(taskId, 2).map((event) => event.kind)).toContain('stale-tool-blocker-retry');
-    expect(h.store.record({ taskId, attempt: 2 })?.escalation).not.toBe('stalled');
-    const prompt = readFileSync(join(h.store.task(taskId).worktree, '.temp/goal-test-prompts', '3'), 'utf8');
-    expect(prompt).toContain('The retry manifest records a failure from an earlier attempt');
-    expect(prompt).toContain('Hosts and tools may have been fixed since then');
-    expect(prompt).toContain('Rerun the failing command before reporting any blocker');
+    expect(h.store.task(taskId)).toMatchObject({ currentAttempt: 2, state: 'stopped' });
+    expect(inbox.map((event) => [event.kind, event.summary])).toEqual([
+      ['stalled', 'No new commit in two consecutive attempts: EMFILE: too many open files, watch'],
+    ]);
   });
 });
 
-test('a tool blocker whose failing command ran in this attempt is counted and escalated as environment', async () => {
-  await withRetryFixture(async (job, h, taskId) => {
-    failAttempt(h, taskId, 2, true);
-    job.onAttemptExit({ taskId, attempt: 2 });
-    await job.drain();
-
-    expect(h.store.events(taskId, 2).map((event) => event.kind)).toContain('attempt-exit-classified');
-    expect(h.store.events(taskId, 2).map((event) => event.kind)).not.toContain('stale-tool-blocker-retry');
-    expect(h.store.attempt({ taskId, attempt: 2 }).escalation).toBe('environment');
-    expect(h.store.task(taskId).currentAttempt).toBe(3);
-  });
+test('tool-blocker retries back off by fingerprint across tasks: first, second, then later sightings', () => {
+  const h = harness();
+  try {
+    h.settings.toolRetryBackoffMs = [120_000, 600_000, 1_800_000];
+    const ids = [1, 2, 3, 4].map(() => h.tasks.dispatch(h.briefFile).id);
+    const fingerprint = blockerFingerprint({
+      blocker: 'ssh: connect to host b port 22: Connection refused',
+      result: '',
+    });
+    expect(fingerprint).toBe(
+      blockerFingerprint({ blocker: 'ssh: connect to host b port 2222: Connection refused', result: '' }),
+    );
+    const delays = ids.map((taskId) => toolRetryDelay(h.store, h.settings, { taskId, attempt: 0 }, fingerprint));
+    expect(delays).toEqual([120_000, 600_000, 1_800_000, 1_800_000]);
+    expect(toolRetryDelay(h.store, h.settings, { taskId: ids[0]!, attempt: 0 }, 'another blocker')).toBe(120_000);
+    // Sightings older than an hour no longer count.
+    expect(
+      toolRetryDelay(h.store, h.settings, { taskId: ids[0]!, attempt: 0 }, fingerprint, Date.now() + 3_700_000),
+    ).toBe(120_000);
+  } finally {
+    h.dispose();
+  }
 });
 
-test('a second stale tool blocker on the task is counted normally', async () => {
-  await withRetryFixture(async (job, h, taskId) => {
-    failAttempt(h, taskId, 2);
-    job.onAttemptExit({ taskId, attempt: 2 });
-    await job.drain();
+test('a pending retry waits for its backoff time and for check hosts in a probed outage', async () => {
+  await withRetryFixture(
+    async (job, h, taskId) => {
+      const ref = { taskId, attempt: 2 };
+      failAttempt(h, taskId, 2, { error: 'Connection closed by 10.0.0.2 port 22', commit: true });
+      h.store.updateTask(ref, (task) => {
+        task.state = 'ready';
+      });
+      h.store.saveRetryIntent(ref, {
+        escalation: 'environment',
+        notBefore: new Date(Date.now() + 600_000).toISOString(),
+        awaitCheckHosts: true,
+      });
+      job.resumePendingRetries();
+      await job.drain();
+      expect(h.store.task(taskId).currentAttempt).toBe(2);
+      expect(h.store.retryIntent(ref)?.status).toBe('pending');
 
-    failAttempt(h, taskId, 3);
-    job.onAttemptExit({ taskId, attempt: 3 });
-    await job.drain();
+      // The backoff has passed, but the watchdog saw check host b fail its last two probes.
+      const state = h.settings.stateDirectory;
+      writeFileSync(
+        join(state, 'remote-check-hosts.json'),
+        JSON.stringify({ hosts: [{ name: 'b', address: 'check@b.example', identity: '/fixture/identity' }] }),
+      );
+      writeFileSync(join(state, 'watchdog.json'), JSON.stringify({ alerts: {}, hostProbeFailures: { b: 2 } }));
+      h.store.updateRetryIntent(ref, (intent) => {
+        intent.options.notBefore = new Date(Date.now() - 1_000).toISOString();
+      });
+      job.resumePendingRetries();
+      await job.drain();
+      expect(h.store.task(taskId).currentAttempt).toBe(2);
+      expect(h.store.events(taskId, 2).filter((event) => event.kind === 'retry-awaits-check-hosts')).toHaveLength(1);
 
-    expect(h.store.events(taskId, 2).map((event) => event.kind)).toContain('stale-tool-blocker-retry');
-    expect(h.store.events(taskId, 3).map((event) => event.kind)).toContain('attempt-exit-classified');
-    expect(h.store.events(taskId, 3).map((event) => event.kind)).not.toContain('stale-tool-blocker-retry');
-    expect(h.store.record({ taskId, attempt: 3 })?.escalation).toBe('stalled');
-    expect(h.store.task(taskId).state).toBe('stopped');
-  });
+      // A successful probe clears the outage; the next sweep resumes the session.
+      writeFileSync(join(state, 'watchdog.json'), JSON.stringify({ alerts: {}, hostProbeFailures: {} }));
+      job.resumePendingRetries();
+      await job.drain();
+      expect(h.store.task(taskId).currentAttempt).toBe(3);
+      expect(h.store.attempt({ taskId, attempt: 3 }).session).toBe('fixture-session');
+    },
+    { commit: true },
+  );
+});
+
+test('a check-host transport blocker asks its retry to wait for healthy check hosts', async () => {
+  await withRetryFixture(
+    async (_job, h, taskId) => {
+      const intent = h.store.retryIntent({ taskId, attempt: 1 });
+      expect(intent?.options.awaitCheckHosts).toBe(true);
+      expect(h.store.task(taskId).currentAttempt).toBe(2);
+    },
+    { error: 'rsync error: unexplained error (code 255)', commit: true },
+  );
 });

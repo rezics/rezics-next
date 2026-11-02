@@ -35,7 +35,9 @@ test('a branch whose later commit reverts an earlier conflicting change rebases 
     expect(message).toContain('Introduce conflicting worker change');
     expect(message).toContain('Revert conflict and add independent change');
     expect(git(worker, 'status', '--porcelain')).toBe('');
-  } finally { repo.close(); }
+  } finally {
+    repo.close();
+  }
 });
 
 test('a branch whose net diff still conflicts leaves the conflict for its caller', () => {
@@ -56,5 +58,7 @@ test('a branch whose net diff still conflicts leaves the conflict for its caller
     expect(() => rebaseOnto(worker, base, originalBase, join(repo.path, 'rebase.log'))).toThrow();
     expect(git(worker, 'diff', '--name-only', '--diff-filter=U')).toBe('base');
     expect(git(worker, 'status', '--porcelain')).toContain('UU base');
-  } finally { repo.close(); }
+  } finally {
+    repo.close();
+  }
 });

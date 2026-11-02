@@ -2,7 +2,9 @@
 /** Durable records for physical check runs. Ledger writes are best effort. */
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
+
+export const CHECK_LEDGER_DIRECTORY_ENV = 'REZICS_CHECK_LEDGER_DIR';
 
 export type CheckLedgerEntry = {
   runId: string;
@@ -16,7 +18,9 @@ export type CheckLedgerEntry = {
   exitStatus?: number;
   terminalStatus: string;
   infrastructureCause?: string;
+  /** Monotonic time awaiting local memory or remote host admission; excludes command execution. */
   slotWaitSeconds?: number;
+  /** Physical command phases plus wrapperTotal, which includes admission and setup for this row. */
   phases?: Record<string, number>;
   commandPhases?: Record<string, number>;
   memoryGiBSeconds?: number;
@@ -39,18 +43,25 @@ export function mainCheckout(cwd: string): string {
   return result.exitCode === 0 && common ? dirname(common) : resolve(cwd);
 }
 
-export function ledgerPath(entry: CheckLedgerEntry, checkout: string): string {
+export function ledgerPath(entry: CheckLedgerEntry, checkout: string, env: NodeJS.ProcessEnv = process.env): string {
   const day = entry.start.slice(0, 10);
-  return join(checkout, '.temp', 'check-ledger', day, `${entry.runId}.json`);
+  return join(checkLedgerDirectory(checkout, env), day, `${entry.runId}.json`);
+}
+
+export function checkLedgerDirectory(checkout: string, env: NodeJS.ProcessEnv = process.env): string {
+  const override = env[CHECK_LEDGER_DIRECTORY_ENV]?.trim();
+  if (!override) return join(checkout, '.temp', 'check-ledger');
+  return isAbsolute(override) ? resolve(override) : resolve(checkout, override);
 }
 
 export function writeLedger(
   entry: CheckLedgerEntry,
   checkout: string,
   warn: (message: string) => void = console.warn,
+  env: NodeJS.ProcessEnv = process.env,
 ): void {
   try {
-    const file = ledgerPath(entry, checkout);
+    const file = ledgerPath(entry, checkout, env);
     mkdirSync(dirname(file), { recursive: true });
     const temporary = `${file}.${process.pid}.${randomUUID()}.tmp`;
     writeFileSync(temporary, `${JSON.stringify(entry)}\n`, { mode: 0o600 });
@@ -131,7 +142,7 @@ function main(argv: string[]): void {
   if (!Number.isFinite(since.getTime()) || !Number.isFinite(until.getTime()) || since >= until)
     throw new Error('summary requires a valid increasing time window');
   const checkout = mainCheckout(process.cwd()),
-    root = join(checkout, '.temp', 'check-ledger');
+    root = checkLedgerDirectory(checkout);
   const entries: CheckLedgerEntry[] = [];
   try {
     for (const day of readdirSync(root))

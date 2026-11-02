@@ -21,6 +21,7 @@ function positive(value: unknown, label: string, zero = false): number {
     throw new Error(`invalid ${label}`);
   return value;
 }
+/** Accept fractional rates without rounding, while rejecting zero and nonfinite values. */
 function positiveRate(value: unknown, label: string): number {
   if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) throw new Error(`invalid ${label}`);
   return value;

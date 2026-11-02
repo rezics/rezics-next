@@ -294,7 +294,7 @@ function widthEventSummary(goal: WidthGoalSnapshot): string {
     `Width governor: this Goal has ${goal.running} confirmed live workers (${goal.unknownRunning} current running attempts have unknown process identity); ` +
     `Codex subset ${goal.codexRunning} confirmed live (${codexUnknown} Codex evidence unknown); ` +
     `current work counts: ready ${goal.ready}, durable pending starts ${goal.pendingStarts}, held ${goal.held}, stopped ${goal.stopped}, waiting ${goal.waiting}. ` +
-    'Recover, reshape, or dispatch real work under the existing guards. Preserve source ownership, current-attempt, and physical-custody rules; do not restart stopped work automatically. ' +
+    'Recover, reshape, or dispatch real work. Act on each stopped task within an hour: retry with a rewritten brief, split it, or cancel it. Keep at least eight ready briefs in your backlog. ' +
     'Unsubmitted work is not observable from runtime metadata.'
   );
 }

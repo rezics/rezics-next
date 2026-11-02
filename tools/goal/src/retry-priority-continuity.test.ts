@@ -535,8 +535,11 @@ test('retry brief identity, stale generations and concurrent intent submission r
         env: owner.environment,
       }),
     ]);
-    expect([first.status, second.status].filter((status) => status === 'fulfilled')).toHaveLength(1);
-    expect([first.status, second.status].filter((status) => status === 'rejected')).toHaveLength(1);
+    // A product brief amends a retry that is still waiting to start; a plain retry after it, or a submission that
+    // finds the task's lease held, is refused. Either way the task keeps exactly one pending retry.
+    expect([first.status, second.status].filter((status) => status === 'fulfilled').length).toBeGreaterThanOrEqual(1);
+    if (second.status === 'fulfilled')
+      expect(h.store.task(task.id).brief.markdown).toContain('Current generation correction.');
     expect(h.store.retryIntents().filter((value) => value.taskId === task.id)).toHaveLength(1);
     expect(h.store.retryIntent(ref)?.status).toBe('pending');
     expect(h.store.attempt(ref).session).toBe('stopped-session');

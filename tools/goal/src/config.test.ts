@@ -5,6 +5,31 @@ import { loadSettings, readDerivedFiles } from './config.ts';
 import { git } from './tasks.ts';
 import { harness } from './test-support.ts';
 
+test('promotion placement requires an explicit ordinary host source in untracked local settings', () => {
+  const h = harness();
+  try {
+    const local = JSON.parse(readFileSync(h.settings.localFile, 'utf8'));
+    local.promotionPlacement = { ordinaryHostsFile: '.temp/goal/remote-check-hosts.json' };
+    writeFileSync(h.settings.localFile, JSON.stringify(local));
+    expect(loadSettings({ cwd: h.root, env: {} }).promotionPlacement).toEqual({
+      ordinaryHostsFile: join(h.root, '.temp/goal/remote-check-hosts.json'),
+    });
+
+    local.promotionPlacement = {};
+    writeFileSync(h.settings.localFile, JSON.stringify(local));
+    expect(() => loadSettings({ cwd: h.root, env: {} })).toThrow('promotionPlacement.ordinaryHostsFile');
+
+    local.promotionPlacement = {
+      ordinaryHostsFile: '.temp/goal/remote-check-hosts.json',
+      gateSlots: 3,
+    };
+    writeFileSync(h.settings.localFile, JSON.stringify(local));
+    expect(() => loadSettings({ cwd: h.root, env: {} })).toThrow('unknown promotionPlacement.gateSlots');
+  } finally {
+    h.dispose();
+  }
+});
+
 test('derived file input globs load with the declared generator', () => {
   expect(
     readDerivedFiles([
@@ -92,6 +117,62 @@ test('manager-only Claude pool configuration remains available while worker prof
     writeFileSync(h.settings.localFile, JSON.stringify(local));
     const settings = loadSettings({ cwd: h.root, env: {} });
     expect(settings.pools[0]!.cli).toBe('claude');
+  } finally {
+    h.dispose();
+  }
+});
+
+test('legacy affected and integration checks migrate to post-integration verifier settings', () => {
+  const h = harness();
+  try {
+    const local = JSON.parse(readFileSync(h.settings.localFile, 'utf8'));
+    local.affectedTests = [];
+    local.integrationChecks = [
+      { paths: ['apps/**'], command: ['bun', 'install', '--frozen-lockfile'] },
+      { paths: ['apps/**'], command: ['bun', 'scripts/typecheck.ts'] },
+      { paths: ['apps/**'], command: ['bun', 'scripts/workspace-imports.ts'] },
+      { paths: ['apps/widget/**'], command: ['bun', 'test', 'legacy-widget.test.ts'] },
+    ];
+    local.siblingTests = { command: ['bun', 'test', '--timeout', '30000'] };
+    writeFileSync(h.settings.localFile, JSON.stringify(local));
+
+    const settings = loadSettings({ cwd: h.root, env: {} });
+    const selected = settings.verifierChecks ?? [];
+    expect(selected).toContainEqual({ paths: ['apps/widget/**'], command: ['bun', 'test', 'legacy-widget.test.ts'] });
+    expect(selected.some((check) => check.command.includes('scripts/typecheck.ts'))).toBe(false);
+    expect(selected.some((check) => check.command.includes('install'))).toBe(false);
+    expect(selected.some((check) => check.command.includes('apps/web/scripts/remote-browser.test.ts'))).toBe(true);
+    expect(selected.some((check) => check.command.includes('page-stories.test.ts'))).toBe(true);
+    expect(selected.some((check) => check.paths.includes('services/kernel/**'))).toBe(false);
+    expect(selected.filter((check) => check.command.includes('scripts/workspace-imports.ts'))).toHaveLength(1);
+    expect(settings.siblingTests).toEqual({ command: ['bun', 'test', '--timeout', '30000'] });
+  } finally {
+    h.dispose();
+  }
+});
+
+test('an explicit verifierChecks setting is strict and replaces legacy validation selections', () => {
+  const h = harness();
+  try {
+    const local = JSON.parse(readFileSync(h.settings.localFile, 'utf8'));
+    local.verifierChecks = [{ paths: ['packages/widget/**'], command: ['bun', 'test', 'widget.test.ts'] }];
+    local.affectedTests = [{ paths: ['services/kernel/**'], command: ['legacy-kernel-check'] }];
+    local.integrationChecks = [{ paths: ['apps/**'], command: ['bun', 'test', 'legacy-app.test.ts'] }];
+    writeFileSync(h.settings.localFile, JSON.stringify(local));
+
+    const settings = loadSettings({ cwd: h.root, env: {} });
+    expect(settings.verifierChecks).toEqual(local.verifierChecks);
+    expect(() => {
+      writeFileSync(
+        h.settings.localFile,
+        JSON.stringify({ ...local, verifierChecks: [{ paths: [], command: ['true'] }] }),
+      );
+      loadSettings({ cwd: h.root, env: {} });
+    }).toThrow('paths must be a path list');
+    expect(() => {
+      writeFileSync(h.settings.localFile, JSON.stringify({ ...local, siblingTests: null }));
+      loadSettings({ cwd: h.root, env: {} });
+    }).toThrow('siblingTests must be an object');
   } finally {
     h.dispose();
   }

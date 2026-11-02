@@ -16,5 +16,7 @@ test('integration refuses a branch that adds nothing beyond its base and does no
     expect(h.store.task(task.id).state).not.toBe('integrated');
     expect(h.head()).toBe(devBefore);
     expect(h.store.task(dependent.id).state).toBe('held');
-  } finally { h.dispose(); }
+  } finally {
+    h.dispose();
+  }
 });

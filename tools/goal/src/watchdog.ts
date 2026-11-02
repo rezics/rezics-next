@@ -295,6 +295,22 @@ function writeProbeResult(path: string, result: CheckHostProbeResult, sweepAt: s
   }
 }
 
+/**
+ * Check hosts whose last two probes failed and have not succeeded since: the watchdog's host outage state. Retries of
+ * check-host transport failures wait while this is not empty. Without a hosts file or saved state nothing is out.
+ */
+export function checkHostsInOutage(stateDirectory: string): string[] {
+  try {
+    const saved = JSON.parse(readFileSync(join(stateDirectory, 'watchdog.json'), 'utf8')) as Partial<State>;
+    const listed = new Set(checkHosts(stateDirectory).map((host) => host.name));
+    return Object.entries(saved.hostProbeFailures ?? {})
+      .filter(([name, failures]) => listed.has(name) && failures >= 2)
+      .map(([name]) => name);
+  } catch {
+    return [];
+  }
+}
+
 function probeCheckHosts(state: State, stateDirectory: string, now: number, probe: CheckHostProbe): string[] {
   const hosts = checkHosts(stateDirectory);
   const directory = join(stateDirectory, 'host-probes');

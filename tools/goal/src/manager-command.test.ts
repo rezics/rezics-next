@@ -15,11 +15,8 @@ test('manager command names the main checkout and local config only, leaving roo
     const runtime = createRuntime({ settings });
     try {
       const command = runtime.managerServices.command;
-      const goalVariables = command.slice(1).filter(part => part.startsWith('GOAL_'));
-      expect(goalVariables).toEqual([
-        `GOAL_MAIN_CHECKOUT=${h.root}`,
-        `GOAL_LOCAL_CONFIG=${h.settings.localFile}`,
-      ]);
+      const goalVariables = command.slice(1).filter((part) => part.startsWith('GOAL_'));
+      expect(goalVariables).toEqual([`GOAL_MAIN_CHECKOUT=${h.root}`, `GOAL_LOCAL_CONFIG=${h.settings.localFile}`]);
     } finally {
       runtime.close();
     }

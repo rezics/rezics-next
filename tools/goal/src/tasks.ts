@@ -16,7 +16,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve, relative, isAbsolute } from 'node:path';
-import { parseBrief, readRiskOwnership, withStabilizeTarget } from './briefs.ts';
+import { devProductBrief, parseBrief, readRiskOwnership, withStabilizeTarget } from './briefs.ts';
 import { StaleAttemptError } from './contracts.ts';
 import { acquireDirectoryLease, acquireDirectoryLeaseWaiting, LeaseHeldError } from './lease.ts';
 import { classifyTask, readRouting, retryFallbacks, routeTask } from './routing.ts';
@@ -237,6 +237,10 @@ export type RetryOptions = {
   consultation?: string;
   excludePools?: string[];
   conflictFiles?: string[];
+  /** A backed-off retry starts no earlier than this ISO time. */
+  notBefore?: string;
+  /** A check-host transport failure retries only while no check host is in a probed outage. */
+  awaitCheckHosts?: boolean;
   /** Start only while this is still the current attempt: a retry another process already started is not repeated. */
   expectedAttempt?: number;
 };
@@ -875,6 +879,15 @@ export class WorkerTasks {
       lease.release();
     }
   }
+  /** Whether retrying this task, with an optional replacement brief, is product work on the integration branch. */
+  devProductRetry(taskId: string, briefFile?: string): boolean {
+    const current = this.store.task(taskId).brief;
+    const next =
+      briefFile === undefined
+        ? current
+        : parseBrief(readFileSync(briefFile, 'utf8'), readRiskOwnership(this.settings.riskAreasFile));
+    return devProductBrief(current) && devProductBrief(next);
+  }
   /** Persist an explicit retry for the host to start on its next recovery sweep. */
   queueRetry(
     taskId: string,
@@ -893,10 +906,13 @@ export class WorkerTasks {
     const task = this.store.task(taskId);
     if (task.currentAttempt !== options.expectedAttempt)
       throw new StaleAttemptError({ taskId, attempt: options.expectedAttempt! }, task.currentAttempt);
-    if (!task.currentAttempt) throw new Error('cannot queue a retry before the first attempt; use queueProofStart');
     if (!['ready', 'running', 'landing', 'stopped', 'held'].includes(task.state))
       throw new Error(`cannot retry ${task.state} task`);
     const nextBrief = options.brief === undefined ? task.brief : this.validateBrief(options.brief, taskId, actor).brief;
+    // Product work on the integration branch retries at any generation, including one that never started.
+    const devProduct = devProductBrief(task.brief) && devProductBrief(nextBrief);
+    if (!task.currentAttempt && !devProduct)
+      throw new Error('cannot queue a retry before the first attempt; use queueProofStart');
     if (task.brief.kind === 'verification' && nextBrief.kind !== 'verification')
       throw new Error('registered proof contracts cannot become product retries');
     let authorization: ProofAuthorization | undefined;
@@ -918,7 +934,9 @@ export class WorkerTasks {
     const ref = { taskId, attempt: task.currentAttempt };
     // A held task's brief can change while its retry waits for dependencies: refusing it made managers cancel held
     // tasks and lose their branches. The pending retry then starts the amended brief.
-    if (task.state !== 'held' && this.store.retryIntent(ref)?.status === 'pending')
+    // A product retry still waiting to start takes an amended brief; the pending retry then starts that brief.
+    const amendPending = devProduct && options.brief !== undefined;
+    if (task.state !== 'held' && !amendPending && this.store.retryIntent(ref)?.status === 'pending')
       throw new Error('a retry is already pending');
     if (task.state === 'held') {
       const reshaped = options.brief === undefined ? undefined : this.validateBrief(options.brief, taskId, actor);
@@ -1015,6 +1033,7 @@ export class WorkerTasks {
           } else if (current.state === 'stopped') current.state = 'ready';
         },
         retryOptions,
+        { amendPending },
       );
     } catch (error) {
       if (briefPath) rmSync(briefPath, { force: true });
@@ -1456,7 +1475,10 @@ export class WorkerTasks {
         options.profile || pinned || nextBrief.kind === 'verification' ? [] : retryFallbacks(routing, nextTaskClass);
       const paced = nextTaskClass === 'mechanical' || routing.classes[nextTaskClass]?.paced !== false;
       // A retry keeps its engine, but three failed attempts in a row on one model say the model is the problem: the
-      // next attempt goes to the route's first other model. Failures no model change can fix do not count.
+      // next attempt goes to the route's first other model. Failures no model change can fix do not count; for product
+      // work on dev these include environment failures, whose retries resume the same session.
+      const unswitchable = ['pool-exhausted', 'rebase-conflict', 'scope-growth'];
+      if (devProductBrief(nextBrief)) unswitchable.push('environment');
       const recent = task.currentAttempt
         ? Array.from({ length: Math.min(3, task.currentAttempt) }, (_, index) =>
             this.store.attempt({ taskId, attempt: task.currentAttempt - index }),
@@ -1471,7 +1493,7 @@ export class WorkerTasks {
             attempt.profile.model === old?.profile.model &&
             attempt.profile.cli === old?.profile.cli &&
             this.store.record({ taskId, attempt: attempt.attempt })?.outcome !== 'passed' &&
-            !['pool-exhausted', 'rebase-conflict', 'scope-growth'].includes(attempt.escalation ?? ''),
+            !unswitchable.includes(attempt.escalation ?? ''),
         );
       const switched = sameModelFailures
         ? fallbacks.find((candidate) => candidate.model !== old!.profile.model || candidate.cli !== old!.profile.cli)
@@ -1800,6 +1822,7 @@ export class WorkerTasks {
   }
   async stop(taskId: string, cancelled = false): Promise<void> {
     const lease = acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', taskId));
+    let settlementLease: ReturnType<typeof acquireDirectoryLease> | undefined;
     try {
       const task = this.store.task(taskId);
       const ref = { taskId, attempt: task.currentAttempt };
@@ -1812,6 +1835,11 @@ export class WorkerTasks {
         return;
       }
       const attempt = this.store.attempt(ref);
+      // A worker's exit may wake its follower while cancellation is still reaping descendants.
+      settlementLease = acquireDirectoryLeaseWaiting(`${attempt.logPath}.settle`);
+      await terminateProcessGroup(attempt.process, this.settings.terminationGraceMs);
+      for (const process of attempt.auxiliaryProcesses)
+        await terminateProcessGroup(process, this.settings.terminationGraceMs);
       if (attempt.state === 'stopped') {
         if (cancelled) this.store.cancelStopped(ref);
         return;
@@ -1837,10 +1865,8 @@ export class WorkerTasks {
           this.store.close(ref, cancelled ? 'cancelled' : 'stopped');
         }
       });
-      await terminateProcessGroup(attempt.process, this.settings.terminationGraceMs);
-      for (const process of attempt.auxiliaryProcesses)
-        await terminateProcessGroup(process, this.settings.terminationGraceMs);
     } finally {
+      settlementLease?.release();
       lease.release();
     }
   }

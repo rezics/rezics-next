@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { spawn } from 'node:child_process';
@@ -411,3 +411,31 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:5}}));
     h.dispose();
   }
 });
+
+test('a backlog run dispatches a brief through the dispatch path and the host sweep starts its worker', async () => {
+  const h = harness();
+  h.settings.gate = ['true'];
+  const backlog = join(h.settings.stateDirectory, 'backlog', 'fixture');
+  mkdirSync(backlog, { recursive: true });
+  const queued = join(backlog, 'result.md');
+  simpleBrief(queued);
+  const settled = (Date.now() - 60_000) / 1000;
+  utimesSync(queued, settled, settled);
+  try {
+    const runtime = createRuntime({ tasks: h.tasks });
+    await runtime.backlog!();
+    const [dispatched] = readdirSync(join(backlog, 'dispatched'));
+    expect(dispatched).toMatch(/^[0-9a-f-]{36}-result\.md$/);
+    const taskId = dispatched!.slice(0, 36);
+    expect(existsSync(queued)).toBe(false);
+    // The run only records the first start; nothing runs until the host's sweep takes the durable request.
+    expect(h.store.task(taskId)).toMatchObject({ state: 'ready', currentAttempt: 0 });
+    expect(h.store.retryIntent({ taskId, attempt: 0 })?.status).toBe('pending');
+    await runtime.recoverOrphans!();
+    await runtime.drain();
+    expect(['integrated', 'merged']).toContain(h.store.task(taskId).state);
+    expect(h.store.task(taskId).brief.markdown).toBe(readFileSync(join(backlog, 'dispatched', dispatched!), 'utf8'));
+  } finally {
+    await h.disposeAsync();
+  }
+}, 60_000);

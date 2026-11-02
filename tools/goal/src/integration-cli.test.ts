@@ -7,6 +7,7 @@ import { openDb } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { WorkerStore } from './store.ts';
 import { temporaryDirectory, repository } from './test-support.ts';
+import { singleFlight } from './integration-cli.ts';
 
 const cli = join(import.meta.dir, 'fixtures/cli-runtime.ts');
 const runtime = join(import.meta.dir, 'fixtures/cli-runtime.ts');
@@ -293,4 +294,20 @@ test('authenticated managers read cross-recipient filtered pages and threads wit
     db.close();
     t.close();
   }
+});
+
+test('a single-flight child starts again only after the previous one has exited', async () => {
+  const starts: ReturnType<typeof spawn>[] = [];
+  const start = singleFlight(() => {
+    const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 300)'], { stdio: 'ignore' });
+    starts.push(child);
+    return child;
+  });
+  const first = start();
+  expect(first).toBeDefined();
+  expect(start()).toBeUndefined();
+  await new Promise((resolve) => first!.once('exit', resolve));
+  expect(start()).toBeDefined();
+  await new Promise((resolve) => starts[1]!.once('exit', resolve));
+  expect(starts).toHaveLength(2);
 });

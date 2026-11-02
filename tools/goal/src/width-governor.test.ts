@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { formatLifecycleMetrics } from './report.ts';
 import { openDb } from './db.ts';
 import { WIDTH_BUCKET_MS, sweepWidthGovernor, type WidthSnapshotOptions } from './width-governor.ts';
-import { SqliteManagerInbox } from './inbox.ts';
+import { INBOX_DEDUPE_WINDOW_MS, SqliteManagerInbox } from './inbox.ts';
 import { emitHourlyLifecycleMetrics, lifecycleMetrics, readHourlyLifecycleMetrics } from './lifecycle-metrics.ts';
 import { processIdentity, type ProcessIdentity } from './process.ts';
 import { WorkerStore } from './store.ts';
@@ -22,9 +22,11 @@ function fixture() {
   const temporary = temporaryDirectory();
   const db = openDb(join(temporary.path, 'goal.sqlite'));
   new WorkerStore(db);
-  const inbox = new SqliteManagerInbox(db, temporary.path);
+  const clock = { now: Date.now() };
+  const now = () => clock.now;
+  const inbox = new SqliteManagerInbox(db, temporary.path, now);
   opened.push({ db, closeDirectory: temporary.close });
-  return { db, inbox, path: join(temporary.path, 'goal.sqlite'), directory: temporary.path };
+  return { db, inbox, now, clock, path: join(temporary.path, 'goal.sqlite'), directory: temporary.path };
 }
 
 function addTask(
@@ -128,11 +130,18 @@ test('a low-width active Goal receives accurate, durable wakeable counts once pe
   expect(pending[0]?.event.summary).toContain('Codex subset 1 confirmed live');
   expect(pending[0]?.event.summary).toContain('ready 2, durable pending starts 1, held 1, stopped 1, waiting 1');
   expect(pending[0]?.event.summary).toContain('Recover, reshape, or dispatch real work');
+  expect(pending[0]?.event.summary).toContain('Act on each stopped task within an hour');
+  expect(pending[0]?.event.summary).not.toContain('do not restart stopped work');
   expect(pending[0]?.event.summary).toContain('Unsubmitted work is not observable');
 
   await sweepWidthGovernor(f.db, f.inbox, at + 5 * 60_000, options);
   expect(f.inbox.pending('goal-a')).toHaveLength(1);
+  // The next bucket's identical text within the hour folds into the first row instead of waking the manager again.
   await sweepWidthGovernor(f.db, f.inbox, at + WIDTH_BUCKET_MS, options);
+  expect(f.inbox.pending('goal-a')).toHaveLength(1);
+  expect(f.inbox.pending('goal-a')[0]?.deliveries).toBe(2);
+  f.clock.now += INBOX_DEDUPE_WINDOW_MS;
+  await sweepWidthGovernor(f.db, f.inbox, at + 5 * WIDTH_BUCKET_MS, options);
   expect(f.inbox.pending('goal-a')).toHaveLength(2);
 });
 
@@ -174,13 +183,14 @@ test('concurrent and restarted sweeps deduplicate a bucket; high width and prote
   const firstConcurrent = sweepWidthGovernor(low.db, low.inbox, at, lowOptions);
   const restartedDb = openDb(low.path);
   new WorkerStore(restartedDb);
-  const restartedInbox = new SqliteManagerInbox(restartedDb, low.directory);
+  const restartedInbox = new SqliteManagerInbox(restartedDb, low.directory, low.now);
   opened.push({ db: restartedDb, closeDirectory() {} });
   const secondConcurrent = sweepWidthGovernor(restartedDb, restartedInbox, at, lowOptions);
   await Promise.all([firstConcurrent, secondConcurrent]);
   expect(low.inbox.pending('low-goal')).toHaveLength(1);
   await sweepWidthGovernor(restartedDb, restartedInbox, at + 60_000, lowOptions);
   expect(low.inbox.pending('low-goal')).toHaveLength(1);
+  low.clock.now += INBOX_DEDUPE_WINDOW_MS;
   await sweepWidthGovernor(restartedDb, restartedInbox, at + WIDTH_BUCKET_MS, lowOptions);
   expect(low.inbox.pending('low-goal')).toHaveLength(2);
 });

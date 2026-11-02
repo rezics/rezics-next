@@ -66,6 +66,21 @@ export type AffectedTestResult = {
   durationMs: number;
   output: string;
 };
+export type PromotionPlacementSettings = {
+  /** Untracked ordinary-host source; promotion derives a one-host gate file from this input. */
+  ordinaryHostsFile: string;
+};
+export type PromotionPlacementSnapshot = {
+  sourcePath: string;
+  sourceSha256: string;
+  hostsFile: string;
+  host: 'c';
+  hostProjectionSha256: string;
+  gateSlots: number;
+  ordinarySlots: number;
+  cOrdinarySlots: number;
+  retainedOrdinarySlots: number;
+};
 export type Settings = {
   version: 1;
   mainCheckout: string;
@@ -79,6 +94,7 @@ export type Settings = {
   integrationBranch: string;
   stabilizeBranch: string;
   promotionParallelism: number;
+  promotionPlacement?: PromotionPlacementSettings;
   branchPrefix: string;
   localFile: string;
   pools: Pool[];
@@ -98,6 +114,8 @@ export type Settings = {
   startGraceMs?: number;
   /** How long a running worker may go without run-log output; 40 minutes by default. */
   silenceMs?: number;
+  /** Tool-blocker retry delays by sightings of the same fingerprint; TOOL_RETRY_BACKOFF_MS by default. */
+  toolRetryBackoffMs?: readonly number[];
   codex: {
     serviceTier: string;
     compactTokens: { sol: number; luna: number };
@@ -250,6 +268,10 @@ export type RetryIntent = AttemptRef & {
     consultation?: string;
     excludePools?: string[];
     conflictFiles?: string[];
+    /** A backed-off retry starts no earlier than this ISO time. */
+    notBefore?: string;
+    /** A check-host transport failure retries only while no check host is in a probed outage. */
+    awaitCheckHosts?: boolean;
     profile?: Profile;
   };
   status: 'pending' | 'started';
@@ -291,6 +313,8 @@ export type PromotionRun = {
   taskIds: string[];
   rootGate: string[];
   promotionParallelism: number;
+  /** Snapshot of the ordinary host input used by every gate in this promotion run. */
+  placement?: PromotionPlacementSnapshot;
   boundaries: { taskId: string; commit: string }[];
   headResults: PromotionGateResult[];
   prefixResults: PromotionGateResult[];
@@ -391,6 +415,10 @@ export type AttemptRecord = AttemptRef & {
   fixRound: number;
   diffLines: number | null;
   changedFiles: string[] | null;
+  /** Changed files outside the brief's declared paths; absent when there were none and on older records. */
+  outsidePaths?: string[];
+  /** A dev product diff beyond its estimate's tolerance, recorded instead of a scope stop; absent within it. */
+  estimateOverrun?: { lines: number; files: number; estimate: { lines: number; files: number } };
   hostMs: number | null;
   classifierVersion: string;
   stepClasses: Record<StepClass, number>;

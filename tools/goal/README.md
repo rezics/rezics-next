@@ -24,7 +24,9 @@ bun tools/goal/src/cli.ts attempts --json
 ```
 
 Run dispatch from a checkout of this repository after configuring local pools and writing a brief. The main checkout
-must have main checked out. Workers commit on their assigned branches and do not rebase, merge or change acceptance tests.
+must have main checked out. Workers commit on their assigned branches, do not rebase and never edit frozen acceptance
+files; when a contract changes a behaviour an existing test asserts, the worker updates that test. They do not merge either, except that a product worker integrating into dev in its own worktree merges or
+cherry-picks a branch or commit its contract names explicitly.
 The controller rebases detached candidates onto the integration branch (by default `dev`), checks scope and
 fast-forwards that branch without running a gate. Promotion to `main` is a separate step. A passing attempt record is
 finalized through the real integration outcome sink.
@@ -40,8 +42,11 @@ for the same check ids; it uses the supplied records as evidence and runs a new 
 edits when the current contract requires it. A terminal success result has an empty `checks` array; only still-running
 checks appear in a waiting result. If `scripts/worker-check.ts` is absent from the worktree and the contract
 does not name another existing wrapper path, the worker runs the command in the foreground from the worktree root and
-does not add a wrapper. Workers do not run the root typecheck, affected checks or other
-regression checks. The task's acceptance command defines when its work is done.
+does not add a wrapper. Workers do not run the root typecheck or other regression suites. After their last edit they
+run the tests in the test files they created or changed once, with the command the landing's verification uses for
+them: `bun test <files>`, the kernel check for kernel tests and the focused Web runner for Web tests. The prompt names
+these commands for the files the branch already changes, including the sibling tests of changed sources. Waits use one
+call with a yield of at least 300 seconds. The task's acceptance command defines when its work is done.
 
 The dev landing train runs exactly one mandatory root typecheck on each final candidate: once for a combined batch or
 once for an individual landing. It does not run affected, sibling, acceptance, native, import or page-story checks
@@ -107,7 +112,8 @@ the lane lease and recheck the control-plane version while they wait. Every proc
 `main:tools/goal` when it starts; a stale train finishes its active landing, releases its lease and hands the remaining
 queue to current code before it can take another request. Pumps used by short commands still return quietly when
 another process holds the lane lease.
-Failures return to the same profile, trigger one consultation, or reach the owning manager's inbox as appropriate.
+Failures return to the same profile and session, trigger one consultation, or reach the owning manager's inbox as
+described under [integration](#integration-promotion-culprit-isolation-and-attempt-fencing).
 A stale manager host restarts after finishing its active request and recovers persisted sessions. Restarts are limited to
 one per ten minutes. Requests retry transient socket absence during handoff, and long recovery sweeps yield between
 small batches so manager requests continue to be serviced. Watchdog and settlement scans read at most the last 256 KiB
@@ -125,11 +131,11 @@ previous turn's `waiting` result. Attempt measurements still include the availab
 up to three resume launch attempts; if all fail before opening a session, Goal stops the attempt and sends one
 environment notice with the launch error line to the supermanager.
 
-Every fresh launch, retry, held-task release and check wake renders a bounded controller receipt from the current task
-generation under its lease. It records the current contract hash and path, task base and worktree identity, plus only the
-declared `after:` dependencies and their integrated commit and Git ancestry proof when available. Lifecycle completion
-does not prove that dependency code is in the task source. Missing, stale, cancelled, truncated or unverifiable facts
-stay unknown in the prompt. A new receipt supersedes future-tense instructions in an older prompt, retry manifest or
+Every fresh launch, retry, held-task release and check wake renders a bounded controller launch context from the current
+task generation under its lease. It records the current contract hash and path, task base and worktree identity, and one
+line for each declared `after:` dependency: integrated in the task's base at its commit, or not in the base, so the
+worker builds against its contract. Lifecycle completion alone never renders as integrated: the line requires the
+integrated commit to be an ancestor of the task source. A new context supersedes future-tense instructions in an older prompt, retry manifest or
 attempt result; recovery does not reuse an older attempt's context.
 
 When a waiting session wakes on a finished failed check, Goal includes the exact result identity, command, exit status
@@ -138,17 +144,20 @@ tail. Missing, unreadable, mismatched or truncated evidence is identified as unk
 attempt log are not used as substitutes.
 
 When the configured state directory's `verification-mode` file contains `minimal`, every launch and continuation
-receives the current source-completion policy alongside its canonical contract. Workers finish their own implementation
-and required changed-workspace typing, then commit and return `success`, `blocker:null`, `checks:[]`, naming the code
-completed and the original acceptance/native obligations deferred until after integration. This source result does not
-claim whole-feature, native or Goal completion. Typing alone does not establish product completion: unfinished own
-implementation or absent authority requires an exact blocker. Deferred acceptance alone is neither blocked nor waiting.
-Waiting requires genuinely running registered bare UUID checks owned by that task and attempt; an empty list, completed
-command or product blocker cannot justify it. Normal mode retains the wrapper continuation protocol above.
+receives the current source-completion policy alongside its canonical contract. Workers finish their contract and the
+typing of the workspaces they changed, run the tests of the test files they changed once, then commit and return
+`success`, `blocker:null`, `checks:[]`, naming the code completed and the original acceptance/native obligations
+deferred until after integration. This source result does not claim whole-feature, native or Goal completion.
+Unfinished work is not a blocker: a worker whose contract does not fit commits a coherent working part and returns
+success with the remainder listed as follow-up (for product work on dev, a continuation brief). Deferred acceptance
+alone is neither blocked nor waiting. Waiting requires running registered bare UUID checks owned by that task and
+attempt; an empty list, completed command or product blocker cannot justify it. A retry manifest that records a tool
+or host failure has that command rerun once before the worker reports a `tool` blocker. Normal mode retains the wrapper
+continuation protocol above.
 
-Minimal mode permits the existing Kernel/Auth compiler database or check-host placement only for typechecking, with
-its real leases, results and terminal status preserved. It grants no acceptance, native, browser, root or worker-check
-permission. A foreground compiler must finish through its already-open tool command/session handle; workers must not
+Minimal mode permits the existing Kernel/Auth compiler database or check-host placement only for typechecking and for
+the tests of the test files the worker changed, with its real leases, results and terminal status preserved. It grants
+no acceptance, native, browser, root or worker-check permission. A foreground compiler must finish through its already-open tool command/session handle; workers must not
 invent check ids, return `waiting` with no checks, run process/help/status polling loops, duplicate commands or interrupt
 live compilers. The controller forwards this policy through its existing prompt seam; it does not steer live sessions.
 
@@ -563,11 +572,12 @@ using `worker-result.schema.json`, including any concrete blocker and the approa
 ### Research
 
 Before deciding how a surface or mechanism should work, find out how established products, open-source projects and
-standards already solve it. A manager dispatches a `research` task whenever the answer is not already in the
-repository's documents: a product surface that mature apps have (shelves, readers, editors, forums, catalogues), an
-external standard (SEO, accessibility, a protocol), or a library's current recommended practice. A worker that finds
-it needs such an answer finishes with a `spec-conflict` blocker whose detail starts with `Research needed:`, and its
-manager dispatches the research and returns the findings to the worker's contract.
+standards already solve it. A worker does the research its work needs itself: it reads `.reference/`, the owner
+documents and primary sources, and lists what it read in its summary. A manager dispatches a `research` task for a
+question that needs a large survey: a product surface that mature apps have (shelves, readers, editors, forums,
+catalogues), an external standard (SEO, accessibility, a protocol), or a library's current recommended practice across
+many sources. A worker that meets such a question finishes with a `spec-conflict` blocker whose detail starts with
+`Research needed:`, and its manager dispatches the research and returns the findings to the worker's contract.
 
 A research brief names one question and one report: `kind: research`, `paths: [docs/research/<topic>.md]`, an
 acceptance command such as `[test, -s, docs/research/<topic>.md]` and `tests: [the report exists]`. When the report
@@ -616,6 +626,7 @@ When `<state>/remote-check-hosts.json` exists, each watchdog sweep probes every 
 five minutes with a twenty-second SSH timeout. Two consecutive failed probes report one host incident with the first
 line of SSH stderr. A successful probe clears that outage, so a later pair of failures can report a new incident. The
 watchdog does not probe when no hosts file is present and does not include the configured identity path in its alert.
+While a listed host is in outage, retries of check-host transport failures stay pending instead of relaunching.
 
 ## Integration, promotion, culprit isolation and attempt fencing
 
@@ -642,7 +653,9 @@ Before an ordinary worker launches or resumes, the controller checks the final r
 the actual direct dependency and workspace links. Matching healthy installations are reused without installing. Private
 receipts also bind the installed direct links and package manifests; old key-only receipts are refreshed once. Changed
 manifests keep an existing private install private; stale shared workspace skeletons are replaced only in the owned
-worktree. An incomplete store falls back to a private install without repairing shared bytes in place. Lockfile
+worktree. An incomplete store falls back to a private install without repairing shared bytes in place. Store
+validation treats missing or malformed published store manifests as stale and uses this private preparation path;
+invalid manifests in the worker's current source still fail preparation before launch. Lockfile
 regeneration is not an installation receipt. Unresolved rebase paths stay with the same worker for source resolution;
 preparation runs on the resolved source before its next ordinary launch. A shared module whose dependencies need
 refreshing cannot launch while a peer holds live process, pending attempt or check custody; the controller reports that
@@ -655,6 +668,10 @@ published store is preserved and repaired through the requesting worktree's boun
 installs still reuse the immutable store. A failed install or identity validation prevents launch and retains its exact
 cause. Recovery uses the normal controller resume of the same current task/session after this preparation source is
 released; source validation alone does not repair or restart retained consumers or prove their compilers pass.
+
+Disposable train worktrees capture their directory identity when created. Before Git removes one, the train restores
+owner access on its own directories, including immutable fixture stores left by checks. Cleanup rejects replaced roots
+or parents, never follows dependency links, and never changes package file modes or outside store directories.
 
 Store builds use `--backend=copyfile`; the `.bun` tree is made read-only before publication. Run
 `bun tools/goal/src/cli.ts deps private` before changing a manifest or lockfile. A five-directory host-c comparison
@@ -774,7 +791,7 @@ complete while a required branch is missing the recorded release.
 
 Use the normal train for a local emergency patch: have the supermanager write a `control-plane` brief naming the
 changed `tools/goal/` paths and a regression case, dispatch it, then land it through the controller. Do not patch
-`main`, `stabilize` or `dev` directly.
+`main`, `stabilize` or `dev` directly; [cp-sync](#control-plane-on-dev-cp-sync) publishes dev's control plane to main.
 
 ```sh
 bun tools/goal/src/cli.ts dispatch .temp/goal/control-plane-emergency.md
@@ -847,19 +864,76 @@ After rebasing a single or batched landing, the train checks every path changed 
 Specification conflicts, tool failures and exhausted quota are attempt facts, parsed from a structured worker exit or
 native CLI failure, and stored on the attempt. A usage-limit refusal with a fresh reading that shows allowance left
 is retried on the same pool; a spent window, a stale reading, or three refusals within an hour routes the retry to a
-different allowed pool. A CLI failure before a session or commit is rerun once; a second
-consecutive launch failure or repeated environment fingerprint is escalated as stalled to the owning manager. Integration
-does not run gates or classify assertion text. A specification conflict reaches the manager inbox directly. Quota
-exhaustion chooses another allowed pool. Repeating the same first assertion after a fix round triggers one read-only Sol `medium` consultation;
-the original profile receives its answer in a fresh session. Scope growth, stalls, failure after consultation and the
-two-fix-round limit reach the owning manager. An early success claim followed by a failed gate is recorded and continued.
+different allowed pool. A provider capacity refusal continues after a short pause, however often it repeats.
+
+Every other tool failure, including a CLI that fails before a session, a silent worker and a check-host transport
+failure, resumes the same session after a backoff by its fingerprint: the failure's first line with numbers, hashes and
+identifiers removed. The first sighting of a fingerprint across all tasks in the last hour waits two minutes, the second
+ten and later ones thirty; each sighting is a `tool-blocker-retry` event. The delay is persisted as the retry intent's
+`notBefore`, so a restarted host honours it. A check-host transport failure also waits while the watchdog's probes
+show a listed check host in outage (two failed probes in a row, cleared by a success; see [Watchdog](#watchdog)), and
+every relaunch waits for [host capacity](#host-capacity-admission); the manager host's recovery sweep tries the pending
+retry again every minute. The same tool blocker in two consecutive attempts parks the task and sends its manager one
+`environment` event, whether or not the worker reran the failing command; two silence stalls in a row are reported as
+`stalled`. Work other than product work on dev also stops as stalled when a tool failure follows another without a
+rerun of the failing command. A repeated environment fingerprint at landing is escalated as stalled to the owning
+manager.
+
+Integration does not run gates or classify assertion text. A specification conflict reaches the manager inbox directly.
+Quota exhaustion chooses another allowed pool. Outside product work on dev, repeating the same first assertion after a
+fix round triggers one read-only Sol `medium` consultation; the original profile receives its answer in a fresh session.
+Scope growth, stalls, failure after consultation and the two-fix-round limit reach the owning manager. An early success
+claim followed by a failed gate is recorded and continued.
 Generated files marked `linguist-generated=true` are excluded from estimate totals, while every changed file remains subject to declared-path checks.
+
+Product work integrating into dev (not control-plane, stabilize-target or verification work) has no retry limit and
+needs no approval to retry. A landing failure (a rebase conflict, or a type check or format failure at landing) or a
+tool blocker resumes the same session with the error, without a manager turn: the two-fix-round limit and consultation
+do not apply, each retry continues on the task's branch, in its session when the pool and model are unchanged, and
+environment failures do not count toward the three-failure model switch. The task stops and notifies its manager only
+when the attempts stop making progress: the same failure in two consecutive attempts (the same first assertion, rebase
+conflict or tool blocker), or two consecutive attempts that end without a new commit. At its classification each failed
+attempt records an `attempt-progress` event: whether its branch head moved from the head recorded at its first prompt,
+or work was left uncommitted. Unknown progress never stops a task. A changed file outside its declared paths and a diff
+beyond twice its estimate do not stop it either: the attempt record lists such files in `outsidePaths` and the size in
+`estimateOverrun`. A scope-stage refusal for an undeclared risk area, a frozen acceptance change, a specification
+conflict and a stall still reach the owning manager. Control-plane, stabilize-target and verification work keep every
+limit above.
+
+A product worker on dev whose outcome does not fit one attempt lands a coherent part and writes the rest of its own
+outcome as a continuation brief at `.temp/continuation/<name>.md` in its worktree. When the attempt ends, settlement
+moves each brief to `<state>/backlog/<goal>/continuation-<task>-<attempt>-<name>.md`, where the backlog is dispatched
+like any other brief, and records a `continuation-queued` event. A brief moves only when it parses with the ordinary
+brief parser, keeps the task's goal and manager, is itself product work on dev and names only known dependencies;
+anything else is removed and its reason recorded in a `continuation-dropped` event. Workers in a shared module workspace
+list the remainder in their summary instead.
+
 Rebase-stage conflicts with the integration branch receive same-profile resolution attempts after the control plane
 starts that rebase in the task worktree. Controller-only rebase commits do not count as worker progress. The bounded
 guard sends one specification-conflict notice only after the same source worker commit, effective target commit and
-sorted conflict paths recur without progress; a newer target, changed paths or a new worker commit remains retryable.
+sorted conflict paths recur without progress: a second time in a row for product work on dev, a third time otherwise. A
+newer target, changed paths or a new worker commit remains retryable.
 
 Attempts persist the driver process identity alongside the worker identity. Orphan recovery waits for the worker group to exit, then settles its run log under the task lifecycle lease; unexpected driver exceptions are recorded as environment failures and delivered to the manager.
+
+Process cleanup verifies the leader's PID, start time, boot and detached group before sending signals. A reused
+leader PID may settle only when the original group has no live members and the kernel confirms it is absent with
+signal zero. The replacement incarnation receives no termination signal. A vanished leader with surviving original
+descendants is still followed and its identified members are reaped during terminal cleanup. Unreadable process state
+or denied group inspection is an explicit operational condition: recovery records `process-cleanup-unconfirmed`,
+notifies the manager once and retains the running attempt and its slot. A later sweep can settle it after visibility
+returns. Stop and cancellation publish terminal records only after cleanup succeeds. Each termination signal uses a
+pidfd and rechecks birth and group identity after opening it, so PID reuse between inspection and signalling cannot
+redirect a signal to a replacement process.
+
+Disposable Goal fixtures record each wrapper and pidfd waiter in an append-only ledger carrying their owner token.
+Cleanup uses those identities, including wrappers no longer present in attempt rows; it does not select processes by
+working directory. Tests that can leave children running must `await h.disposeAsync()`. It reaps the owned groups,
+awaits tracked exit/follow continuations and waiter cleanup, then closes SQLite and removes the fixture directory.
+Disposal seals the fixture against new workers before taking its child inventory; waiter registration remains available
+until existing work finishes. Ownership and pending work are checked again immediately before removal.
+Synchronous `h.dispose()` refuses live children or unfinished waits. A changed owner marker, unreadable state or failed
+cleanup retains fixture state for inspection. An unrelated child is spared even when it runs inside the fixture root.
 
 At settlement, Goal removes Docker containers carrying the exact `rezics.worker.attempt=<task>/<attempt>` label.
 Removal errors are logged and do not prevent attempt settlement; containers without that label are never selected.
@@ -889,24 +963,48 @@ the train.
 
 The supermanager sets direction and the managers own the work. This applies to every supermanager and every Goal.
 
+- **Workers own the how; managers own the what.** A brief states the outcome in user terms, its owner links and what
+  done means. A product worker on dev verifies the brief's premises against its base, designs the change and writes
+  the acceptance tests the brief does not name; frozen files stay untouchable and only cross-Goal contracts are frozen
+  in advance. It decides ambiguities itself, including a product choice the brief does not make, by taking the
+  reversible option most consistent with the owner documents and decided references; it records each decision in its
+  summary and the owning document, tells its manager with
+  `bun tools/goal/src/cli.ts inbox send <manager> info "<decision>" --task <task>`, and continues. A blocker is only a
+  contradiction between existing specs or tests, or missing access; undelivered code from another Goal, absent
+  receipts and unfinished work are not blockers. The worker does its own research and stops only for a large survey.
+  It may change any file its outcome needs outside risk areas, merges or cherry-picks only branches its brief names,
+  lands committed, type-checking increments, and writes the rest of a larger outcome as a continuation brief. Workers
+  build on their brief and the owner READMEs and do not read other workers' tasks.
+- **Managers keep the outcomes and drop the ceremony.** A manager keeps the ordered list of outcomes for its Goal and
+  short outcome briefs in its backlog, cross-Goal contracts and their frozen acceptance, answers to escalations, and a
+  review of a sample of about two landings an hour whose defects become briefs. It synthesizes what its workers report,
+  including conflicts and duplicated or missing work across tasks, into decisions and the next briefs. It does not
+  dispatch, approve retries, preflight briefs, write per-task acceptance, receive results, track custody, review
+  evidence per task or send status messages and receipts.
 - **Managers talk to each other first.** Any manager may message any other with
   `bun tools/goal/src/cli.ts inbox send <manager> instruction "<message>"`. A question about another Goal's contract goes
   to that Goal's manager. The producer decides its interface and the consumer adapts; the two settle it within one
   exchange and record it in the owner document.
 - **Managers decide inside their Goal.** Contract details, frozen expectations the Goal owns, design choices within the
   maintainer's references, and which slices to run are the manager's decisions. When unsure, research primary sources
-  first, then decide.
+  first, then decide. Managers are resident roles. If the supermanager or maintainer is unreachable, concerned managers
+  decide after one exchange: the producer chooses its interface and the outcome owner decides shared choices. Record
+  reasons and proceed with independent work; park only items that genuinely depend on an unavailable decision.
 - **Escalate rarely and once.** A manager sends the supermanager only a deadlock that one exchange between owners did
   not settle, a change to the maintainer's direction or scope, or something only the maintainer can provide, with the
   options and a recommendation.
 - **Operations belong to the delivery-system Goal.** Manager-host liveness, stuck or stale checks, hung remote runs,
-  worktree cleanup, recovery of tasks stopped by environment or tooling failures in any Goal, promotion and the hourly
-  efficiency report are owned by the manager of the Goal that owns `tools/goal`; check-host health is owned by the Goal
+  worktree cleanup, recovery of tasks stopped by environment or tooling failures in any Goal and promotion
+  are owned by the manager of the Goal that owns `tools/goal`; check-host health is owned by the Goal
   that owns the check scripts. System alerts go to those owners.
+- **Efficiency is measured by scripts.** An hourly report, stall alarms and the supermanager watchdog run without model
+  tokens ([delivery ownership](../../docs/development/delivery.md#delivery-ownership)). The supermanager acts on
+  alarms; Performance owns check-host health and its own Goal.
 - **Visual review belongs to the design-authority Goal.** The Goal that owns the shell and design system reviews every
   visible slice by screenshot against the maintainer's references and reopens defects with the owning Goal; each
   product Goal owns its user journeys end to end, pages included.
-- **The supermanager keeps direction.** Direction, priorities and scope with the maintainer, the allowance runway,
+- **The supermanager keeps direction.** [Resident supervision and recovery](../../docs/development/supermanager.md).
+  Direction, priorities and scope with the maintainer, the allowance runway,
   critical-priority grants, deadlocks between owners, efficiency strategy, and a sampled review of the product, not
   every slice. When a detail reaches the supermanager, it forwards it to the owner instead of doing it.
 
@@ -934,6 +1032,17 @@ the stored summary without inferring links. `--json` prints the complete page ob
 the page limit, continuation cursor and `hasMore`. The exported `SharedInboxQueries` API provides the same `log`,
 `thread` and `digest` reads to operations reports after they have actually been delivered; it does not schedule or send
 an hourly report.
+
+A delivery identical to one made to the same recipient within the last hour is not stored again: the earlier row's
+`delivery_count` and `last_delivered_at` change, nobody is woken, and `inbox read` shows the count as `deliveries`.
+Identity is the recipient, kind, sender, task, reply target and the summary's first line, so the same alarm for two
+tasks stays two events. Records and completion results (`goal-met`, `goal-unmet`) are never folded. A worker's
+`info` message (sender `worker:<task>/<attempt>`) reports a decision the worker already made: it is stored and
+returned by the manager's next `inbox read`, but it sends no wakeup, starts no turn and does not end an `inbox wait`.
+Worker questions, blockers and handoffs still wake. A Goal manager's `inbox send` is refused above six sends in the last
+hour or 600 characters, with an error that says which limit was reached; the configured supermanager, workers and
+system events are not capped, and the `continuation written` handshake neither counts nor is refused by the hourly
+limit.
 
 Inbox kinds are explicit. `question` starts an open question. Only a direct linked `info` or `decision` reply answers
 it; another `question` is a clarification and remains open. A `blocker`, `handoff`, `instruction`, system event, read,
@@ -986,6 +1095,10 @@ bun tools/goal/src/cli.ts publication start <authority-id>
 bun tools/goal/src/cli.ts publication status <authority-id>
 bun tools/goal/src/cli.ts publication recover <invocation-id>
 ```
+
+Legacy custody can be received before a complete inventory exists. The supported preparation journey is described
+below; an unresolved capture or preview must use it instead of fabricating bootstrap identities. Receiving the
+publication allowance and receiving physical custody are separate operations. Neither operation runs a workflow.
 
 The bootstrap document is ignored runtime evidence, not an approval document. It has `version: 1`,
 `visibility: "complete-native-publisher-capture-host-inventory"`, a current UTC `observedAt`,
@@ -1050,6 +1163,116 @@ bootstrap still needs that complete current census plus the exact retained evide
 configuration defaults and this documentation are not a release or permission to invoke publication. The full native
 controller lifecycle and compatibility checks remain deferred to the operations release.
 
+##### Legacy reconciliation preparation
+
+From its own authenticated provider session, the owning manager sends a `decision` with `--document` naming a private
+document in its own state-directory namespace. The configured operations manager receives that inbox ID from its
+current provider session. An operations-owned original uses an operations decision; Web never has to impersonate
+operations, and operations cannot substitute its own decision for a Web-owned original.
+
+```sh
+bun tools/goal/src/cli.ts inbox send <operations-manager> decision "Receive unresolved legacy custody" \
+  --document .temp/goal/<owner>/legacy-disposition.json
+bun tools/goal/src/cli.ts publication legacy-receive <owner-inbox-message-id>
+bun tools/goal/src/cli.ts publication legacy-status [inbox-message-or-preparation-id]
+bun tools/goal/src/cli.ts publication legacy-prepare
+bun tools/goal/src/cli.ts publication legacy-prepare <native-inventory-inbox-message-id>
+bun tools/goal/src/cli.ts publication legacy-resolve <owner-resolution-inbox-message-id>
+bun tools/goal/src/cli.ts publication status [authority-or-invocation-id]
+```
+
+The versioned receiving document has this bounded private schema. Paths in `records` are relative to the configured
+Goal state directory; document references in inbox commands are repository-relative. SHA-256 is over exact file bytes.
+Documents are regular files, at most 1 MiB, inside private state, with at most 16 referenced documents and 256 records
+per request. Symlink escapes, arbitrary identity-field pointers and mismatched workflow PIDs refuse receiving.
+
+```json
+{
+  "version": 1,
+  "kind": "publication-legacy-disposition",
+  "owner": "<owning-manager>",
+  "controller": "<operations-manager>",
+  "records": [
+    { "key": "original-capture", "surface": "capture", "evidencePath": "<owner>/capture.json", "sha256": "<sha256>" },
+    { "key": "original-preview", "surface": "preview", "evidencePath": "<owner>/preview.json", "sha256": "<sha256>" },
+    {
+      "key": "original-publisher",
+      "surface": "publisher",
+      "evidencePath": "<owner>/publisher.json",
+      "sha256": "<sha256>"
+    }
+  ]
+}
+```
+
+The genuine older unavailable disposition is also supported without editing its retained bytes. It has `owner`,
+`reply` identifying the authenticated operations-to-owner agreement, the exact disposition
+`unavailable-exact-capture-terminal-identity; unknown custody remains occupied`, and separate `capture`,
+`previewCompanion`, `legacyPublisher` and `legacyKnownCustody` objects/array. Preview startup and refresh records are
+received separately. The complete original document is retained with each selector and its SHA-256. An absent capture
+terminal file, running metadata, partial identity, preview PID/session, refresh PID, historical provider handle or
+historical publisher exit never becomes the capture's identity or terminal result. Known publisher and cancellation
+history still goes through the existing strict bootstrap importer, including its exact companion bindings and logs.
+
+The immutable inbox event, indexed sender/recipient/document references, retained provider-session provenance,
+operations receiver session and exact raw documents are journaled in `publication_legacy_requests`. Related source
+files are retained with their own hashes, or an explicit unavailable path; stdout includes hashes and receipt fields,
+never those raw documents. Evidence-bound entries in `publication_legacy_entries` start as **UNKNOWN OCCUPIED**,
+including complete historical identities until physical settlement is established. Original raw evidence never changes.
+A new document hash adds distinct occupied
+custody; it cannot replace an older unresolved entry. Restart, migration, refresh omissions and an empty host scan
+preserve every entry. Concurrent receiving, preparation, resolution, bootstrap, capture registration and start share
+the native `publication/custody.lease`. A live lease refuses the contender before an invocation is consumed.
+
+Replaying an inbox ID with identical provenance returns its original receipt. Changed bytes or provenance for that ID,
+an older owner decision overtaking a newer received decision, a foreign owner, or missing authenticated sender evidence
+refuses. A delivery-file error leaves the original SQLite receipt intact; replay rematerializes it under
+`publication/legacy/request-<message-id>.json`. Status exposes the immutable entry IDs, hashes, selectors, original
+identities, resolutions and latest preparation. `recover <invocation-id>` continues to observe only its original
+workflow and deliver its original terminal result; reconciliation never redispatches it.
+`legacy-status <inbox-message-or-preparation-id>` exposes the exact original durable receipt even if its file could
+not be materialized or the originating document has since changed.
+
+`legacy-prepare` records a durable **unavailable** receipt with host, controller incarnation/session, observation time,
+exact retained-set hash, known identities, unresolved IDs and per-field/per-operation blockers. It observes known
+groups through the existing native process API without signaling or adopting any process. Optional inventory input
+must be an operations-authenticated decision with a single document: `version: 1`,
+`kind: "publication-native-inventory"`, `owner`, actual `host` and `boot`, UTC `observedAt`, `retainedSetSha256`, and
+`controller: { manager, sessionId, identity: { pid, start, boot, group } }`. Its host/boot/controller and exact retained
+set must match, including the current receiving operations session; observations older than five minutes or more than
+30 seconds in the future refuse. All supplied bytes
+and provenance are retained. A caller's `noUnknown`, visibility flag or release marker never certifies completeness.
+
+The current native API exposes incarnation and process-group membership. It does **not** supply a complete host-wide
+native/legacy publisher/capture discovery producer, or recover a missing original capture/preview terminal and its
+child/pipe settlement. Preparation reports those exact unavailable capabilities instead of repeatedly demanding a
+nonexistent original PID. It also reports that the installed controller's lifecycle/compatibility release receipt and
+private Wrangler deployment/account credential availability have not been verified. It does not read or disclose
+credentials, contact a provider or treat a public GET as custody evidence. Even when all individually known originals
+settle, a reconciled journal cannot make launch eligible with the old caller-authored bootstrap attestation. Complete
+native inventory capability and validated runtime remain required; source presence is neither.
+
+Resolution is a separate owner-authenticated decision with `version: 1`, `kind: "publication-legacy-resolution"`,
+`owner`, `controller`, and `resolutions: [{ id, evidenceSha256, originalIdentity: { pid, start, boot, group },
+nativeInvocationId, terminalReceiptSha256 }]`. Positive resolution currently requires the **actual original** managed
+publisher invocation and exact terminal receipt in the native database, its recorded close/descriptor and complete
+known-member settlement, original source/identity equality, terminal custody and fresh empty groups for every retained
+member. Reused PIDs, surviving members, unknown children/visibility, mismatched preview/capture identities and arbitrary
+terminal JSON refuse. The descriptor assertion covers the controller's own log descriptor; it does not certify unknown
+inherited descriptors or host-wide visibility. Identity-less publisher evidence also needs an original native producer
+binding it to its invocation; a supplied identity cannot create that link. Capture and preview lack an existing managed
+terminal producer that can certify their original child/pipe settlement; the route durably returns the concrete
+unavailable field and keeps them occupied. There is no
+administrator override, TTL, dropped field or stopped-task shortcut. Resolution replay returns its original receipt;
+conflicting resolutions cannot rewrite it.
+
+Receiving returns zero for truthful durable acceptance, including occupied custody; status is observational. Preparation
+returns one with its unavailable receipt; a resolution with unavailable originals also returns one. Every preparation
+receipt states `launchReady: false`, `authorityChanged: false`, `workflowInvocations: 0`. These receipts are separate
+from publication execution, live-source equality and owner delivery. The retained single allowance and all failed-no-repeat
+history remain intact. Original acceptance, native lifecycle, installed compatibility, complete host visibility and
+release checks belong to the native controller after source integration; typing cannot establish that journey.
+
 #### Width governor
 
 The independent manager-host sweep checks worker width every minute and delivers at most one wakeable width event per
@@ -1057,12 +1280,45 @@ Goal in each UTC 15-minute bucket when fewer than ten current attempts have live
 pending-start, held or stopped work exists. The event reports the current running and Codex counts, unknown process
 evidence, and known work counts. Ready, held, waiting and stale-identity attempts do not count as running. The manager
 is alerted based on confirmed live workers only; unknown process identities remain explicit evidence and do not
-suppress a low-width notice. Events retain their Goal metadata for shared inbox queries. The manager
-chooses whether to recover, reshape or dispatch real work under the existing source-ownership, current-attempt and
-physical-custody guards; stopped work is never restarted automatically. Runtime metadata cannot observe unsubmitted
+suppress a low-width notice. Events retain their Goal metadata for shared inbox queries. The event tells the manager
+to recover, reshape or dispatch real work, to act on each stopped task within an hour (retry with a rewritten brief,
+split or cancel) and to keep at least eight ready briefs in its backlog. Runtime metadata cannot observe unsubmitted
 work, so Markdown files outside the task inventory are not counted. The notice uses the existing manager turn
-allowance, with at most one width event per Goal per 15-minute bucket; paused, budget-limited and completed managers
-are protected.
+allowance, with at most one width event per Goal per 15-minute bucket; an identical event within the hour folds into
+the earlier one (see [shared inbox](#shared-inbox)). Paused, budget-limited and completed managers are protected.
+
+#### Goal backlogs
+
+A manager's output is ready briefs; the controller dispatches them. Each Goal has a backlog directory,
+`<state>/backlog/<goal>/`. Every minute the manager host starts one backlog run, `goal backlog dispatch`, as a child
+process, like promotion: dispatch runs Git and dependency installation synchronously, which must never block the
+host's socket. The host skips the minute while the previous child is still running, and the run holds the
+`leases/backlog` lease, so only one run exists even across a host restart. Each run:
+
+- **Dispatch.** While running and ready tasks are fewer than the cap (`maxWorkers` in `<state>/capacity.json`, else
+  32), the sweep dispatches up to four of the oldest `*.md` briefs, by modification time, round-robin across Goals,
+  starting with the Goal served longest ago. A brief changed in the last ten seconds waits for the next run. It uses
+  the `goal dispatch` path to create the task and records its first start as a durable start request, which the host's
+  next orphan sweep runs and follows; the run itself never waits for host capacity or a worker. The brief moves to
+  `dispatched/<task-id>-<name>.md`. Research briefs dispatch the same way. A refused brief moves to `failed/<name>.md`
+  beside `failed/<name>.reason`, and the Goal's manager receives one event per run naming the refused briefs. A brief left in `.dispatching/` by a host that stopped mid-dispatch goes to `failed/` with
+  that reason, since its task may already exist.
+- **Stopped tasks.** A product task that has been `stopped` for more than 60 minutes since its last event, with no
+  pending retry, is cancelled through the `goal cancel` path, at most 20 per Goal per run, longest stopped first. Its
+  brief is written to `failed/<task-id>.md` and its blocker and branch to `failed/<task-id>.reason`; each owner
+  receives one event per run listing those tasks. Control-plane, stabilize and verification tasks are exempt.
+- **Low backlog.** A running Goal manager whose backlog holds fewer than four ready briefs receives at most one
+  event an hour asking for more.
+
+`goal backlog status [--json]` prints ready, dispatched and failed brief counts per Goal. It reads only the
+directories. The run's one-line JSON results are appended to `<state>/backlog-runner.log`.
+
+#### Cost: backlog run
+
+- **Touches:** one indexed count of running and ready tasks, the stopped tasks through the task-state index with one
+  latest-event lookup each, the running manager rows, and the backlog directories' entries.
+- **Bound:** at most four dispatches and 20 cancellations per Goal per run, outside the host process; the stopped scan
+  is proportional to stopped tasks, not task history.
 
 ### Check result reuse
 
@@ -1102,6 +1358,10 @@ bun tools/goal/src/cli.ts inbox send <manager> <kind> <summary> [--task <task>] 
 
 `retry <task> [--brief <file>]` retries a task, optionally replacing its brief after checking that its Goal and manager stay the same. Brief comparison canonicalizes line endings to LF and ignores trailing end-of-file whitespace. If the supplied brief matches the current contract after that normalization, the command reports that the contract is unchanged and exits without starting another attempt. A changed brief records SHA-256 hashes of the previous and new contract on the new attempt; a stopped task can still be restarted with plain `retry <task>`.
 Explicit retries are recorded with their amended brief as pending host start intents and return without waiting for capacity. The host consumes pending intents on recovery ticks in their saved order, starting each once as capacity becomes available.
+Product work integrating into dev can be retried at any generation: `retry <task>`, with or without
+`--expected-attempt 0`, also starts a never-started task, and `--brief` also amends a retry that is still waiting to
+start, which keeps its place in that order and its options. Other work refuses a second retry while one is pending;
+before its first start it is amended with `amend` or, for verification, registered with the proof start below.
 `cancel <task>` stops a running task, marks it cancelled, and removes it from its Goal's completion scope. Tasks held
 after it remain held because cancellation does not satisfy `after`; each manager that owns those held tasks receives one
 instruction naming the held tasks and cancelled dependency. During host recovery, a held task with a cancelled
@@ -1179,14 +1439,24 @@ probe is retried up to twice and remains unassigned if it still cannot run; it i
 moves expensive checks after integration and lets a batch share them while keeping unstable `dev` separate from
 promotion's verified input.
 
-When a Codex manager reaches 90% of its token budget, the host delivers one instruction to write
-`.temp/goal/<manager>/CONTINUATION.md` with live task IDs and states, current decisions, pending cross-owner agreements
-and next actions, then message its supermanager with `continuation written`. A confirmation or a `budgetLimited` Goal
+When a Codex manager reaches 90% of its token budget, the host delivers one instruction to replace
+`.temp/goal/<manager>/CONTINUATION.md` with at most 8,000 characters (live task IDs, decisions in force as links to
+owner documents, and next actions), without appending to the old file, then message its supermanager with
+`continuation written`. A confirmation or a `budgetLimited` Goal
 automatically pauses and renews the manager with a fresh thread. If the continuation file exists, the new thread's first
 prompt names it; the supermanager receives one environment event with the old token count and new thread. A manual
 `manager renew` also accepts Codex Goals in `budgetLimited` or `blocked` status without a separate stop.
 
 Manager events are committed to SQLite and signaled through filesystem notifications. Inbox waiting has no sleep loop.
+Codex managers are event-driven: the opening tells a manager to end the turn when no decision is pending. When an
+event is delivered, the host steers it into the manager's active turn or starts a new turn on the persisted thread; if
+the app-server has not loaded that thread, the host resumes it once and starts the turn there. The opening also states
+the manager's outputs (ready briefs in its backlog and decisions), the stopped-task hour, the message limits, and that
+the brief and continuation are read once per session. The host counts `clock.sleep` items per manager and UTC hour;
+the eleventh in an hour sends the supermanager one `environment` alarm and the manager one correction. For the
+turns-without-decision limit, a turn in which a ready brief in the Goal's backlog was written or moved back (by
+modification or status time), or a brief the backlog run dispatched was written, counts as a decision, as any
+control-plane command already does.
 Managers receive only decisions requiring judgment; gates, merges and mechanical reruns do not wake them. Completion is
 a proposal: `manager complete <goal>` records the request and returns immediately while the host checks that all scoped
 tasks are merged and the main gate passes in an isolated checkout. The gate checks the main commit captured when it
@@ -1210,6 +1480,68 @@ A manual smoke test for an authenticated local Codex manager is available withou
 ```sh
 CODEX_HOME="/absolute/path/to/<cli-config-directory>" bun tools/goal/scripts/smoke-codex-manager.ts
 ```
+
+## Control plane on dev: cp-sync
+
+Control-plane changes iterate on `dev` with the products. `cp-sync` makes dev's `tools/goal` live on `main` without
+the main-release proof:
+
+```sh
+bun tools/goal/scripts/cp-sync.ts --dry-run
+bun tools/goal/scripts/cp-sync.ts
+bun tools/goal/scripts/cp-sync.ts --rollback
+```
+
+Run it from any checkout; it finds the main checkout by its checked-out `main`, and requires `main` to be inside
+`dev`. It adds a temporary worktree of the current `main` head in `../worktrees` beside the main checkout, replaces
+its `tools/goal` with dev's (`git checkout --no-overlay`, so dev's deletions apply) and checks it there: root and
+`tools/goal` installs, the `tools/goal` type check, and a CLI smoke, `bun tools/goal/src/cli.ts status`, with
+`GOAL_MAIN_CHECKOUT` and `GOAL_LOCAL_CONFIG` naming the live checkout and its settings. The smoke's state directory
+holds a copy of the live `goal.sqlite` made by `VACUUM INTO` over a read-only connection, so the candidate's
+migrations and orphan recovery act on the copy; `GOAL_MANAGER` keeps that recovery from handing a train to a
+detached process that would act on live refs. cp-sync never writes the live database. Each step runs in its own
+process group under a time box. Children otherwise get no `GOAL_*`, `CLAUDE*`, `CODEX_*`, Git location or
+secret-named variables, and output is redacted before it is printed or written to `.temp/goal/cp-sync/<run>/`.
+
+Before the checks it lists the root files dev's `tools/goal` loads by relative path (imports and `import.meta.dir`
+joins, followed through their own imports) that differ from main's, as runtime or test references, and main's root
+configuration that names `tools/goal` paths the candidate lacks. The checks use main's copies of root files;
+`--include <path>` (repeatable) also syncs a named root path from dev. `tools/goal` has its own lockfile, so its
+dependencies travel with it.
+
+The candidate is committed as `control-plane: sync tools/goal from dev <short sha>` on the detached worktree before
+the checks, so tests that read the checkout's HEAD see it, as in the main-release proof.
+
+Every step must exit 0. `--full` adds the main-release proof's suite, `bun test --timeout 30000 tools/goal/src`,
+stopped and reported after 30 minutes. The suite does not pass on an unmodified fresh checkout of main, so it is
+gated on no new failures: it must finish with every counted failure named, and every failing test (keyed by file and
+name) must also fail when the installs and suite run on a worktree of unmodified main. That baseline runs only when
+the candidate's suite fails and is cached per main commit in `.temp/goal/cp-sync/baseline-<main>-<checks>.json`; a
+full sync records the published commit's result as the next baseline, and `--fresh-baseline` reruns it. Failures
+main lacks get one rerun of their test files; those that pass then are reported as flaky, and any that fail again
+refuse the sync. Each run's step results are in `.temp/goal/cp-sync/<run>/results.json`. Processes still running in
+a temporary worktree, such as detached test fixtures, are stopped before it is removed.
+
+Only when the gate passes does cp-sync publish. It first moves the main checkout's index and files with
+`git read-tree -m -u <old> <new>`, then moves the refs in one `git update-ref --stdin` transaction against their
+captured values: `main` to the sync commit, `stabilize` (when present) to a merge of it that takes main's
+control-plane paths, and `dev` to a merge that keeps dev's tree. Main stays inside stabilize and dev, so promotion
+still fast-forwards and the next sync finds main inside dev. A failed transaction moves the files back.
+(`git merge --ff-only` cannot do this step: once the ref has moved, the checkout's HEAD already names the new commit.)
+Running processes hand over on the new `main:tools/goal` as after any control-plane release. If
+`tools/goal/package.json` or its lockfile changed, cp-sync reinstalls in the main checkout. Each sync appends the
+previous and new main, stabilize and dev heads to `.temp/goal/cp-sync-history.log`.
+
+cp-sync refuses when the main checkout has uncommitted or untracked files under the synced paths, when `main`
+moved, when stabilize changed control-plane paths that dev lacks, or while another run holds `.temp/goal/cp-sync.lock`.
+`--dry-run` does everything except moving refs and the checkout, prints the diff stat, step results and the ref moves
+it would make, and exits 1 when a real run would refuse. Unlike a real run, it runs the later steps after a failed
+type check. `--keep-worktree` keeps the temporary worktree.
+
+`--rollback` restores the synced paths of the main commit before the newest sync not yet rolled back, and refuses
+if main moved since the last cp-sync. The repository's reference-transaction hook lets main move only forward, so the
+rollback is a new commit holding that tree, published the same way. Dev keeps its code; stabilize takes the rollback
+unless it already has newer control-plane code, which its next promotion republishes. Fix forward on dev, then sync.
 
 ## Pausing and resuming the Goal
 

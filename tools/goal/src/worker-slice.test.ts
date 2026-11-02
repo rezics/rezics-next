@@ -285,7 +285,9 @@ describe('worker systemd slice', () => {
     );
 
     expect(result.status).toBe(0);
-    expect(fake.read(fake.systemdRunCalls).some((line) => /^--unit=rezics-worker-task-2-[a-z0-9]+\.scope$/.test(line))).toBe(true);
+    expect(
+      fake.read(fake.systemdRunCalls).some((line) => /^--unit=rezics-worker-task-2-[a-z0-9]+\.scope$/.test(line)),
+    ).toBe(true);
     expect(reports).toHaveLength(1);
     expect(reports[0]).toContain('systemd-run exited with status 1');
   });

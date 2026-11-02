@@ -219,8 +219,14 @@ test('a later check still runs when an earlier one fails as on dev, and its new 
     h.ensureDev();
     h.advanceDev('broken');
     integrationChecks(h, [
-      { paths: ['**'], command: ['sh', '-c', "test ! -e broken || { echo 'src/a.ts(3,1): error TS2322: dev error'; exit 1; }"] },
-      { paths: ['**'], command: ['sh', '-c', "test ! -e worse || { echo 'error: imports an undeclared package'; exit 1; }"] },
+      {
+        paths: ['**'],
+        command: ['sh', '-c', "test ! -e broken || { echo 'src/a.ts(3,1): error TS2322: dev error'; exit 1; }"],
+      },
+      {
+        paths: ['**'],
+        command: ['sh', '-c', "test ! -e worse || { echo 'error: imports an undeclared package'; exit 1; }"],
+      },
     ]);
     const task = h.dispatch('worse');
     await h.start(task);
@@ -245,7 +251,12 @@ test('a branch whose only change is its frozen acceptance files is refused as ha
     // The fixture worker's one file stands for the controller's frozen acceptance commit.
     h.store.updateTask({ taskId: task.id, attempt: h.store.task(task.id).currentAttempt }, (current) => {
       (current as typeof current & { frozenFiles?: { path: string; hash: string }[] }).frozenFiles = [
-        { path: 'frozen.test.ts', hash: createHash('sha256').update(readFileSync(join(task.worktree, 'frozen.test.ts'))).digest('hex') },
+        {
+          path: 'frozen.test.ts',
+          hash: createHash('sha256')
+            .update(readFileSync(join(task.worktree, 'frozen.test.ts')))
+            .digest('hex'),
+        },
       ];
     });
     const dev = h.head();
@@ -261,7 +272,9 @@ test('a branch whose only change is its frozen acceptance files is refused as ha
 });
 
 test("a failure's excerpt shows the failing line with its real file even after long install output", () => {
-  const install = Array.from({ length: 400 }, (_, i) => `installed package-${i}@1.0.0 into node_modules/.store`).join('\n');
+  const install = Array.from({ length: 400 }, (_, i) => `installed package-${i}@1.0.0 into node_modules/.store`).join(
+    '\n',
+  );
   const output = `${install}\n$ tsc --noEmit -p tsconfig.json\nsrc/community/publication.ts(74,11): error TS2554: Expected 2 arguments, but got 1.\nerror: script "check" exited with code 2\n`;
   const failure = firstFailure(output);
   expect(failure.assertion).toContain('<path>');
@@ -270,11 +283,13 @@ test("a failure's excerpt shows the failing line with its real file even after l
   expect(failure.excerpt.endsWith('exited with code 2\n')).toBe(true);
 });
 
-test("an error dev already has is not new when the branch only grows the type TypeScript elides in it", () => {
+test('an error dev already has is not new when the branch only grows the type TypeScript elides in it', () => {
   const line = (more: number) =>
     `test/semantic/outcome-driver.ts(186,7): error TS2741: Property 'readAccount' is missing in type '{ registrationTarget(key: string): string; ... ${more} more ...; provisioningEvidence: () => Promise<...>; }' but required in type 'AccountWorkflowPorts<WorkflowContext>'.`;
   expect(newErrorLines(line(28), line(26))).toEqual([]);
-  expect(newErrorLines(`${line(28)}\nsrc/other.ts(1,1): error TS2304: Cannot find name 'x'.`, line(26))).toHaveLength(1);
+  expect(newErrorLines(`${line(28)}\nsrc/other.ts(1,1): error TS2304: Cannot find name 'x'.`, line(26))).toHaveLength(
+    1,
+  );
 });
 
 test('read-only integration checks run at once, and a check that writes the tree runs alone afterwards', async () => {
@@ -286,7 +301,11 @@ test('read-only integration checks run at once, and a check that writes the tree
     const log = join(dir, 'landing.log');
     const started = Date.now();
     const result = await runIntegrationChecks(
-      [['sh', '-c', 'sleep 1; echo first'], ['sh', '-c', 'sleep 1; echo second'], ['sh', '-c', 'echo generate step']],
+      [
+        ['sh', '-c', 'sleep 1; echo first'],
+        ['sh', '-c', 'sleep 1; echo second'],
+        ['sh', '-c', 'echo generate step'],
+      ],
       dir,
       log,
     );
@@ -295,7 +314,9 @@ test('read-only integration checks run at once, and a check that writes the tree
     const text = read(log, 'utf8');
     expect(text.indexOf('first')).toBeLessThan(text.indexOf('second'));
     expect(text.indexOf('second')).toBeLessThan(text.indexOf('generate step'));
-  } finally { remove(dir, { recursive: true, force: true }); }
+  } finally {
+    remove(dir, { recursive: true, force: true });
+  }
 });
 
 test("the workspace typecheck check receives the branch's changed files; other checks do not", async () => {

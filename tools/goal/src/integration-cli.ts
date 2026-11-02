@@ -1,5 +1,5 @@
 import type { Database } from 'bun:sqlite';
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer, createConnection } from 'node:net';
 import { createInterface } from 'node:readline';
 import {
@@ -28,6 +28,7 @@ import { SqliteLandingQueue } from './land.ts';
 import { MergeTrain } from './merge-train.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { SharedInboxQueries, type SharedInboxFilter } from './inbox-shared.ts';
+import { backlogStatus, formatBacklogStatus } from './backlog.ts';
 import { ManagerSessions, recordManagerDecision, type ManagerServices, type ManagerSpec } from './managers.ts';
 import { acquireDirectoryLease } from './lease.ts';
 import { ensureHostRunning, startHostSupervisor, recordHostLiveness } from './host-liveness.ts';
@@ -55,6 +56,8 @@ export type IntegrationRuntime = {
   deliverReminders?(): number;
   /** Periodic, bounded scan of current worker ownership that may wake an under-width Goal manager. */
   sweepWidth?(): Promise<void>;
+  /** One backlog run; the host runs it in a single-flight `backlog dispatch` child process. */
+  backlog?(): Promise<unknown>;
   /** One promotion step; returns at once when a promotion holds the lease or nothing changed. */
   promote?(): Promise<void>;
   verify?(): Promise<void>;
@@ -89,6 +92,19 @@ export type HostRequest = {
   summary?: string;
   sessionId?: string;
 };
+
+/**
+ * Start a child only when the previous one has exited. Work that runs Git synchronously must never run in the host,
+ * whose event loop serves the manager socket and app-server events.
+ */
+export function singleFlight(start: () => ChildProcess): () => ChildProcess | undefined {
+  let child: ChildProcess | undefined;
+  return () => {
+    if (child && child.exitCode === null && child.signalCode === null) return undefined;
+    child = start();
+    return child;
+  };
+}
 
 export function startOrphanRecoveryTimer(
   recoverOrphans: () => Promise<void>,
@@ -508,6 +524,25 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
       verifier.once('exit', () => closeSync(log));
       verifier.unref();
     };
+    const backlog = singleFlight(() => {
+      const log = openSync(join(runtime.stateDirectory, 'backlog-runner.log'), 'a');
+      const child = spawn(process.execPath, [process.argv[1]!, 'backlog', 'dispatch'], {
+        cwd: runtime.mainCheckout,
+        stdio: ['ignore', log, log],
+      });
+      child.once('exit', () => closeSync(log));
+      child.once('error', () => closeSync(log));
+      child.unref();
+      return child;
+    });
+    const runBacklog = () => {
+      if (!runtime.backlog) return;
+      try {
+        backlog();
+      } catch (error) {
+        console.error('backlog run failed to start:', error);
+      }
+    };
     // Containers that workers and checks leave running are removed every ten minutes, per <state>/containers.json.
     let reapedAt = 0;
     const reap = () => {
@@ -534,10 +569,12 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
       });
     };
     scheduleWidthSweep();
+    runBacklog();
     recoveryTimer = startOrphanRecoveryTimer(recoverOrphans, 60_000, () => {
       remind();
       reviewFlow();
       scheduleWidthSweep();
+      runBacklog();
       promote();
       verify();
       reap();
@@ -615,6 +652,20 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
   }
   if (command === 'verify') {
     await runtime.verify?.();
+    return 0;
+  }
+  if (command === 'backlog') {
+    const usage = 'usage: backlog status [--json] | backlog dispatch';
+    if (subcommand === 'dispatch') {
+      if (id !== undefined || flags.length) throw new Error(usage);
+      if (!runtime.backlog) throw new Error('The backlog run is unavailable in this runtime');
+      console.log(JSON.stringify({ at: new Date().toISOString(), ...((await runtime.backlog()) as object) }));
+      return 0;
+    }
+    const json = flags.length === 0 && id === '--json';
+    if (subcommand !== 'status' || flags.length || (id !== undefined && !json)) throw new Error(usage);
+    const rows = backlogStatus(runtime.stateDirectory);
+    console.log(json ? JSON.stringify(rows) : formatBacklogStatus(rows));
     return 0;
   }
   if (command === 'train') {
@@ -759,9 +810,18 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
         // Keep the attempt fence valid through insert so a concurrent retry cannot race source attribution.
         sender = runtime.db.transaction(() => deliver(resolveInboxSender(runtime))).immediate();
       } else {
-        sender = resolveInboxSender(runtime);
+        const manager = resolveInboxSender(runtime);
+        sender = manager;
         await recordManagerCommand(runtime);
-        deliver(sender);
+        // Goal managers send decisions, questions and handoffs only; the supermanager directs every Goal.
+        if (manager.managerId !== runtime.supermanager && !isResidentSupermanagerRecord(runtime, manager.managerId))
+          runtime.db
+            .transaction(() => {
+              inbox.assertManagerSend(manager.from, summary);
+              deliver(manager);
+            })
+            .immediate();
+        else deliver(manager);
       }
       if (
         !sender.worker &&

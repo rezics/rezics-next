@@ -20,10 +20,20 @@ const workerCommands = [
   'import-attempt',
   'event',
 ];
-const integrationCommands = ['land', 'train', 'promote', 'verify', 'manager', 'inbox', 'publication', '_manager-host'];
+const integrationCommands = [
+  'land',
+  'train',
+  'promote',
+  'verify',
+  'manager',
+  'inbox',
+  'backlog',
+  'publication',
+  '_manager-host',
+];
 export const commands = [...workerCommands, ...integrationCommands];
 /** Commands that run often and never settle workers themselves; the manager host's sweep recovers orphans. */
-export const SWEEP_FREE_COMMANDS = new Set(['train', 'inbox', 'publication', 'amend']);
+export const SWEEP_FREE_COMMANDS = new Set(['train', 'inbox', 'backlog', 'publication', 'amend']);
 
 /** Runtime injection is confined to the programmatic test entry point. */
 export async function run(

@@ -24,7 +24,41 @@ const wakingKinds = new Set<ManagerEventKind>([
   'handoff',
   'info',
 ]);
-export type InboxEntry = { id: number; event: ManagerEvent; readAt: number | null; acknowledgedAt: number | null };
+export type InboxEntry = {
+  id: number;
+  event: ManagerEvent;
+  readAt: number | null;
+  acknowledgedAt: number | null;
+  /** Present when identical deliveries within an hour were folded into this row. */
+  deliveries?: number;
+};
+/** Identical deliveries to one recipient within this window are stored once, with a count. */
+export const INBOX_DEDUPE_WINDOW_MS = 60 * 60_000;
+/** A completion result answers the manager's own request, so a repeated result still wakes it. */
+const unfoldedKinds = new Set<string>(['goal-met', 'goal-unmet']);
+export const MANAGER_SENDS_PER_HOUR = 6;
+export const MANAGER_SEND_MAX_CHARACTERS = 600;
+const SEND_WINDOW_MS = 60 * 60_000;
+
+export class InboxSendRefusedError extends Error {
+  override name = 'InboxSendRefusedError';
+}
+
+/**
+ * A worker's `info` reports a decision it already made: it is stored for the manager's next read but never wakes the
+ * manager on its own. Worker questions and blockers still wake.
+ */
+export function quietDelivery(event: Pick<ManagerEvent, 'kind' | 'from'>): boolean {
+  return event.kind === 'info' && typeof event.from === 'string' && event.from.startsWith('worker:');
+}
+
+/** The delivery identity: recipient, kind, sender, task, reply target and the first line of the summary. */
+function dedupeKey(manager: string, fields: ReturnType<typeof sharedInboxFields>): string {
+  const firstLine = (fields.summary ?? '').split(/\r?\n/, 1)[0]!.trim();
+  return createHash('sha256')
+    .update(JSON.stringify([manager, fields.kind, fields.sender, fields.taskId, fields.replyToId, firstLine]))
+    .digest('hex');
+}
 
 export class SqliteManagerInbox implements ManagerInbox {
   readonly signalDirectory: string;
@@ -40,10 +74,15 @@ export class SqliteManagerInbox implements ManagerInbox {
   signalPath(manager: string): string {
     return join(this.signalDirectory, createHash('sha256').update(manager).digest('hex'));
   }
+  /**
+   * An identical delivery within the last hour only increments that row's count and wakes nobody. A quiet delivery
+   * (see `quietDelivery`) is read with the next `inbox read` but sends no wakeup.
+   */
   deliver(event: ManagerEvent): void {
     if (!wakingKinds.has(event.kind)) throw new Error(`Recorded-only event cannot be delivered: ${event.kind}`);
     if (/[\r\n]/.test(event.summary)) throw new Error('Manager event summary must be one line');
-    this.insert(event.managerId, event, true);
+    const quiet = quietDelivery(event);
+    if (!this.insert(event.managerId, event, true, quiet) || quiet) return;
     // The committed row is authoritative. A signal is only a wakeup hint.
     const signal = () => writeFileSync(this.signalPath(event.managerId), String(Date.now()));
     // Worker decisions may call us inside their shared synchronous transaction. Signal after its commit.
@@ -61,12 +100,50 @@ export class SqliteManagerInbox implements ManagerInbox {
       });
     else signal();
   }
+  /**
+   * Refuse a Goal manager's send above six an hour or 600 characters. Call it in the transaction that delivers the
+   * send. The continuation handshake is exempt from the hourly cap, since renewal waits for it.
+   */
+  assertManagerSend(sender: string, summary: string): void {
+    if (summary.length > MANAGER_SEND_MAX_CHARACTERS)
+      throw new InboxSendRefusedError(
+        `inbox send refused: the summary has ${summary.length} characters and a manager message may have at most ${MANAGER_SEND_MAX_CHARACTERS} (about 60 words). Send the decision, question or handoff; put details in the brief or owner document.`,
+      );
+    if (/continuation written/i.test(summary)) return;
+    const since = this.now() - SEND_WINDOW_MS;
+    const { count } = this.db
+      .query(
+        "SELECT count(*) AS count FROM manager_inbox WHERE sender = ? AND created_at > ? AND summary NOT LIKE '%continuation written%'",
+      )
+      .get(sender, since) as { count: number };
+    if (count >= MANAGER_SENDS_PER_HOUR)
+      throw new InboxSendRefusedError(
+        `inbox send refused: ${sender} has sent ${count} messages in the last hour and the limit is ${MANAGER_SENDS_PER_HOUR}. Send only decisions, blocking questions and handoffs; status, receipts and acknowledgements are not messages.`,
+      );
+  }
   record(manager: string, event: unknown): void {
     this.insert(manager, event, false);
   }
-  private insert(manager: string, event: unknown, wakeable: boolean): void {
-    const write = () => {
+  private insert(manager: string, event: unknown, wakeable: boolean, quiet = false): boolean {
+    const write = (): boolean => {
       const fields = sharedInboxFields(event);
+      const key = wakeable && !unfoldedKinds.has(fields.kind ?? '') ? dedupeKey(manager, fields) : null;
+      const createdAt = this.now();
+      if (!Number.isSafeInteger(createdAt) || createdAt < 0)
+        throw new Error('inbox clock returned an invalid timestamp');
+      if (key) {
+        const repeat = this.db
+          .query(
+            'SELECT id FROM manager_inbox WHERE dedupe_key = ? AND created_at > ? ORDER BY created_at DESC, id DESC LIMIT 1',
+          )
+          .get(key, createdAt - INBOX_DEDUPE_WINDOW_MS) as { id: number } | null;
+        if (repeat) {
+          this.db
+            .query('UPDATE manager_inbox SET delivery_count = delivery_count + 1, last_delivered_at = ? WHERE id = ?')
+            .run(createdAt, repeat.id);
+          return false;
+        }
+      }
       const replyToId = fields.replyToId;
       type ParentRow = {
         id: number;
@@ -95,14 +172,11 @@ export class SqliteManagerInbox implements ManagerInbox {
         event && typeof event === 'object' && !Array.isArray(event)
           ? { ...event, ...(taskId ? { taskId } : {}), ...(goalId ? { goalId } : {}) }
           : event;
-      const createdAt = this.now();
-      if (!Number.isSafeInteger(createdAt) || createdAt < 0)
-        throw new Error('inbox clock returned an invalid timestamp');
       const inserted = this.db
         .query(`INSERT INTO manager_inbox(
         manager, event, wakeable, created_at, sender, goal_id, task_id, kind, summary,
-        reply_to_id, thread_root_id, document_refs, escalation
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        reply_to_id, thread_root_id, document_refs, escalation, dedupe_key, quiet
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(
           manager,
           JSON.stringify(storedEvent),
@@ -117,14 +191,17 @@ export class SqliteManagerInbox implements ManagerInbox {
           rootId,
           fields.documentRefs ? JSON.stringify(fields.documentRefs) : null,
           fields.escalation ? JSON.stringify(fields.escalation) : null,
+          key,
+          Number(quiet),
         );
       const id = Number(inserted.lastInsertRowid);
       if (rootId === null) {
         this.db.query('UPDATE manager_inbox SET thread_root_id = ? WHERE id = ?').run(id, id);
       }
+      return true;
     };
-    if (this.db.inTransaction) write();
-    else this.db.transaction(write).immediate();
+    if (this.db.inTransaction) return write();
+    return this.db.transaction(write).immediate();
   }
   private replyRoot(id: number): number {
     const ancestry = this.db
@@ -172,21 +249,29 @@ export class SqliteManagerInbox implements ManagerInbox {
       return null;
     }
   }
+  /** Unread events that wake the manager; quiet ones wait for a read caused by something else. */
   pending(manager: string): InboxEntry[] {
-    return this.rows(manager, 'wakeable = 1 AND read_at IS NULL');
+    return this.rows(manager, 'wakeable = 1 AND quiet = 0 AND read_at IS NULL');
   }
   private rows(manager: string, condition: string): InboxEntry[] {
     return (
       this.db
         .query(
-          `SELECT id, event, read_at, acknowledged_at FROM manager_inbox WHERE manager = ? AND ${condition} ORDER BY id`,
+          `SELECT id, event, read_at, acknowledged_at, delivery_count FROM manager_inbox WHERE manager = ? AND ${condition} ORDER BY id`,
         )
-        .all(manager) as { id: number; event: string; read_at: number | null; acknowledged_at: number | null }[]
+        .all(manager) as {
+        id: number;
+        event: string;
+        read_at: number | null;
+        acknowledged_at: number | null;
+        delivery_count: number;
+      }[]
     ).map((row) => ({
       id: row.id,
       event: JSON.parse(row.event),
       readAt: row.read_at,
       acknowledgedAt: row.acknowledged_at,
+      ...(row.delivery_count > 1 ? { deliveries: row.delivery_count } : {}),
     }));
   }
   read(manager: string): InboxEntry[] {
@@ -220,7 +305,7 @@ export class SqliteManagerInbox implements ManagerInbox {
       .immediate();
   }
   notifications(manager: string): InboxEntry[] {
-    return this.rows(manager, 'wakeable = 1 AND notified = 0 AND read_at IS NULL');
+    return this.rows(manager, 'wakeable = 1 AND quiet = 0 AND notified = 0 AND read_at IS NULL');
   }
   notified(id: number): void {
     this.db.query('UPDATE manager_inbox SET notified = 1 WHERE id = ?').run(id);
