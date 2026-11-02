@@ -62,7 +62,7 @@ test('hourly report uses timestamped outcomes and leaves missing lifecycle evide
     expect(report).toContain('queued#1');
     expect(report).toContain('Orphaned landings: 1 (orphan).');
     expect(report).toContain('Promotion: blocked; phase stabilize-blocked; main gate result unknown; phase age unknown.');
-    expect(report).toContain('Worker diff churn: unknown.');
+    expect(report).toContain('worker diff churn: unknown.');
   } finally {
     h.close();
   }
@@ -82,14 +82,21 @@ test('hourly report uses timestamped outcomes and leaves missing lifecycle evide
   }
 });
 
-test('hourly delivery stores one timestamped outcome and never logs notifier credentials', async () => {
+test('hourly delivery stores one timestamped outcome and discards notifier output', async () => {
   const h = fixture();
   try {
     const bucket = '2026-10-31T01:00:00.000Z';
     expect(completedUtcHour(Date.parse('2026-10-31T02:15:00.000Z')).start).toBe(bucket);
     const capture = join(h.directory.path, 'sends.txt');
     const append = `import { appendFileSync } from 'node:fs'; appendFileSync(${JSON.stringify(capture)}, 'sent\\n');`;
-    const sent = await sendHourlyEfficiencyReport(h.db, bucket, 'hourly report', [process.execPath, '-e', append], 2000);
+    const sent = await sendHourlyEfficiencyReport(
+      h.db,
+      bucket,
+      'hourly report',
+      [process.execPath, '-e', append],
+      2000,
+      new Date('2026-10-31T02:15:00.000Z'),
+    );
     expect(sent.disposition).toBe('sent');
     const duplicate = await sendHourlyEfficiencyReport(
       h.db,
