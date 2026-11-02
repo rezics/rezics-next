@@ -70,15 +70,7 @@ export function AuthorErasureEntry(props: {
   const lastViewerId = useRef<string | null>(viewerId);
   const scope = authorErasureEntryScope(props.threadId, viewerId, source.read(), lastViewerId.current);
   if (scope.viewerId) lastViewerId.current = scope.viewerId;
-  return (
-    <AuthorErasureEntryVisit
-      key={scope.key}
-      {...props}
-      viewerId={viewerId}
-      source={source}
-      revision={revision}
-    />
-  );
+  return <AuthorErasureEntryVisit key={scope.key} {...props} viewerId={viewerId} source={source} revision={revision} />;
 }
 
 function AuthorErasureEntryVisit({
