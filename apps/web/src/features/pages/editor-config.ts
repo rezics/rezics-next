@@ -91,6 +91,19 @@ function objectChoices(schema: Schema): boolean {
   return schema['~kind'] === 'Union' && !!schema.anyOf?.length && schema.anyOf.every(closedObject);
 }
 
+function integerBounds(schema: Schema): { lower: number; upper: number } {
+  const lower = Math.max(
+    schema.minimum === undefined ? Number.NEGATIVE_INFINITY : Math.ceil(schema.minimum),
+    schema.exclusiveMinimum === undefined ? Number.NEGATIVE_INFINITY : Math.floor(schema.exclusiveMinimum) + 1,
+  );
+  const upper = Math.min(
+    schema.maximum === undefined ? Number.POSITIVE_INFINITY : Math.floor(schema.maximum),
+    schema.exclusiveMaximum === undefined ? Number.POSITIVE_INFINITY : Math.ceil(schema.exclusiveMaximum) - 1,
+  );
+  if (lower > upper) throw new TypeError('Integer schema has no valid default');
+  return { lower, upper };
+}
+
 function fieldFor(schema: Schema, component: string, prop: string, locale = 'en'): Record<string, unknown> {
   if (schema['~kind'] === 'PublicFilter') return { type: 'textarea' };
   const values = enumeration(schema);
@@ -111,10 +124,12 @@ function fieldFor(schema: Schema, component: string, prop: string, locale = 'en'
   }
 
   if (schema['~kind'] === 'Integer') {
+    const { lower, upper } = integerBounds(schema);
     return {
       type: 'number',
-      ...(schema.minimum !== undefined ? { min: schema.minimum } : {}),
-      ...(schema.maximum !== undefined ? { max: schema.maximum } : {}),
+      ...(Number.isFinite(lower) ? { min: lower } : {}),
+      ...(Number.isFinite(upper) ? { max: upper } : {}),
+      step: 1,
     };
   }
 
@@ -161,17 +176,9 @@ function fieldFor(schema: Schema, component: string, prop: string, locale = 'en'
 }
 
 function integerDefault(schema: Schema): number {
-  const lower = Math.max(
-    schema.minimum === undefined ? Number.NEGATIVE_INFINITY : Math.ceil(schema.minimum),
-    schema.exclusiveMinimum === undefined ? Number.NEGATIVE_INFINITY : Math.floor(schema.exclusiveMinimum) + 1,
-  );
-  const upper = Math.min(
-    schema.maximum === undefined ? Number.POSITIVE_INFINITY : Math.floor(schema.maximum),
-    schema.exclusiveMaximum === undefined ? Number.POSITIVE_INFINITY : Math.ceil(schema.exclusiveMaximum) - 1,
-  );
-  const value = Number.isFinite(lower) ? lower : 0;
-  if (value > upper) throw new TypeError('Integer schema has no valid default');
-  return value;
+  const { lower, upper } = integerBounds(schema);
+  if (Number.isFinite(lower)) return lower;
+  return upper < 0 ? upper : 0;
 }
 
 function defaultFor(schema: Schema, component: string, prop: string, locale: string): unknown {

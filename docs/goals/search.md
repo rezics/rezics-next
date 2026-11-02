@@ -30,6 +30,8 @@ page read aggregation. [Public scope](../scope.md) owns discovery boundaries. Pr
 owner's PostgreSQL partition; a public index is never an authorization authority. Web owns interface integration.
 Subject population switches clear `context`, `node` and `cursor`, preserve the localized subject/view and fragment, and add `realm` only for a Realm retry.
 Undecodable localized Subject paths stay as plain links to their original address; successfully decoded paths use canonical Subject routing.
+An Integer editor default is the lowest effective value when bounded below, zero when valid, or the highest effective
+value when only an upper bound below zero is present.
 
 ## Ownership
 
