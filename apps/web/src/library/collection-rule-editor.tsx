@@ -13,6 +13,7 @@ import { PageHeading } from '../shell/page-heading';
 import type { RuleChoicePage, RuleChoices, RulePage } from './collection-rule-read';
 import type { RuleWrite } from './collection-rule-actions';
 import type { CollectionWriteResult } from './collection-records';
+import { CollectionRuleControls } from './collection-rule-controls';
 
 type AvailablePage = Extract<RulePage, { state: 'new' | 'ready' }>;
 const presence: FilterDocument = { owner: { presence: true } };
@@ -568,6 +569,9 @@ function RuleForm({
     }
   }
   async function refresh() {
+    // Reloading the new-rule address cannot read the Collection just created. Keep its confirmation
+    // until navigation: clearing it would reenable POST and create a second Collection from this draft.
+    if (base.state === 'new' && savedId) return;
     const choiceOrigin = choiceAddress.current;
     const operation = start();
     if (!operation) return;
@@ -759,24 +763,15 @@ function RuleForm({
         {intent && !pending && <p role="status">{m.library_rule_uncertain()}</p>}
         {savedId && <p role="status">{m.library_rule_saved()}</p>}
         {base.state === 'new' && <p className="text-sm text-muted-foreground">{m.library_rule_private()}</p>}
-        <div className="flex flex-wrap gap-3">
-          <Button type="submit" disabled={pending || conflict || !filter || !!savedId}>
-            {pending
-              ? m.library_collection_save_pending()
-              : base.state === 'new'
-                ? m.library_collection_create()
-                : m.library_collection_save()}
-          </Button>
-          <Button type="button" variant="outline" disabled={pending} onClick={() => void refresh()}>
-            {m.library_collection_reload()}
-          </Button>
-        </div>
-        {savedId && (
-          <a href={`/${getLocale()}/collections/${encodeURIComponent(savedId)}`}>{m.library_rule_members()}</a>
-        )}
-        {!savedId && base.state === 'ready' && (
-          <a href={`/${getLocale()}/collections/${encodeURIComponent(base.id)}`}>{m.library_rule_members()}</a>
-        )}
+        <CollectionRuleControls
+          creating={base.state === 'new'}
+          pending={pending}
+          conflict={conflict}
+          hasFilter={!!filter}
+          savedId={savedId}
+          collectionId={base.state === 'ready' ? base.id : null}
+          refresh={() => void refresh()}
+        />
         <TechnicalDetails label={m.library_rule_details()}>
           <p className="text-muted-foreground">{m.library_rule_sort()}</p>
           {base.state === 'ready' && (
