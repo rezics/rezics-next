@@ -1,6 +1,7 @@
 import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { pickText } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
@@ -26,6 +27,10 @@ import { ScalarControl } from './statement-editor-view';
 import { DefinitionMeaning } from './definition-meaning';
 
 type Row = { id: string; statement: StatementInput };
+
+// Semantic form owners retain their native controls; the lower family supplies only presentation.
+const panelClassName =
+  'min-w-0 max-w-full space-y-4 p-4 sm:p-5 [overflow-wrap:anywhere] [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring [&_button:focus-visible]:outline-2 [&_button:focus-visible]:outline-offset-2 [&_button:focus-visible]:outline-ring [&_input:focus-visible]:outline-2 [&_input:focus-visible]:outline-offset-2 [&_input:focus-visible]:outline-ring [&_select:focus-visible]:outline-2 [&_select:focus-visible]:outline-offset-2 [&_select:focus-visible]:outline-ring [&_textarea:focus-visible]:outline-2 [&_textarea:focus-visible]:outline-offset-2 [&_textarea:focus-visible]:outline-ring';
 
 const actionClassName =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 md:pointer-fine:min-h-8 md:pointer-fine:py-1';
@@ -124,43 +129,51 @@ function AlbumProfileCreateLive({
 
   if (created)
     return (
-      <section className="min-w-0 space-y-4 rounded-xl border border-border p-5">
-        <p role="status">{m.catalogue_create_created({}, o)}</p>
-        <code className="break-all text-sm">{created.id}</code>
-        {created.reader.state === 'ready' ? (
-          <a className={buttonVariants({ className: actionClassName })} href={created.reader.href}>
-            {m.catalogue_create_open({}, o)}
-          </a>
-        ) : (
-          <>
-            <p>
-              {created.reader.state === 'concealed'
-                ? m.catalogue_create_concealed({}, o)
-                : m.catalogue_create_reader_unavailable({}, o)}
-            </p>
-            <Button
-              className={actionClassName}
-              disabled={busy}
-              onClick={async () => {
-                if (running.current) return;
-                running.current = true;
-                setBusy(true);
-                try {
-                  setCreated({ ...created, reader: await transport.read(created.id) });
-                } catch {
-                  if (!lifetime.active()) return;
-                  setCreated({ ...created, reader: { state: 'unavailable' } });
-                } finally {
-                  if (!lifetime.active()) return;
-                  running.current = false;
-                  setBusy(false);
-                }
-              }}
-            >
-              {m.catalogue_create_retry({}, o)}
-            </Button>
-          </>
-        )}
+      <section className="min-w-0">
+        <ContentItemFrame as="div" className={panelClassName}>
+          <ContentItemHeading className="text-xl font-semibold">
+            <span role="status">{m.catalogue_create_created({}, o)}</span>
+          </ContentItemHeading>
+          <div data-content-item-slot="preview" className="min-w-0 space-y-4">
+            <code className="block min-w-0 max-w-full whitespace-normal break-all text-sm" dir="ltr">
+              {created.id}
+            </code>
+            {created.reader.state === 'ready' ? (
+              <a className={buttonVariants({ className: actionClassName })} href={created.reader.href}>
+                {m.catalogue_create_open({}, o)}
+              </a>
+            ) : (
+              <>
+                <p>
+                  {created.reader.state === 'concealed'
+                    ? m.catalogue_create_concealed({}, o)
+                    : m.catalogue_create_reader_unavailable({}, o)}
+                </p>
+                <Button
+                  className={actionClassName}
+                  disabled={busy}
+                  onClick={async () => {
+                    if (running.current) return;
+                    running.current = true;
+                    setBusy(true);
+                    try {
+                      setCreated({ ...created, reader: await transport.read(created.id) });
+                    } catch {
+                      if (!lifetime.active()) return;
+                      setCreated({ ...created, reader: { state: 'unavailable' } });
+                    } finally {
+                      if (!lifetime.active()) return;
+                      running.current = false;
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  {m.catalogue_create_retry({}, o)}
+                </Button>
+              </>
+            )}
+          </div>
+        </ContentItemFrame>
       </section>
     );
 
@@ -179,85 +192,82 @@ function AlbumProfileCreateLive({
       >
         {m.catalogue_create_search({}, o)}
       </a>
-      <fieldset
-        id="album-terms"
-        disabled={locked}
-        className="min-w-0 space-y-5 rounded-xl border border-border p-4 sm:p-5"
-      >
-        <legend className="max-w-full px-2 font-semibold [overflow-wrap:anywhere]">
-          {m.catalogue_create_terms({}, o)}
-        </legend>
-        {terms.map((term, index) => (
-          <fieldset
-            key={term.id}
-            id={`${termsId}-${term.id}`}
-            className="grid min-w-0 gap-3 border-b border-border pb-4 sm:grid-cols-2"
-          >
-            <legend className="sr-only">{term.language || m.catalogue_create_language({}, o)}</legend>
-            {(['language', 'label', 'description', 'aliases'] as const).map((field) => {
-              const label = {
-                language: m.catalogue_create_language({}, o),
-                label: m.catalogue_create_label({}, o),
-                description: m.catalogue_create_description({}, o),
-                aliases: m.catalogue_create_aliases({}, o),
-              }[field];
-              const update = (value: string) =>
-                setTerms((previous) => previous.map((row) => (row.id === term.id ? { ...row, [field]: value } : row)));
-              return (
-                <Field key={field} className="min-w-0">
-                  <FieldLabel className={labelClassName} htmlFor={`${termsId}-${field}-${term.id}`}>
-                    {label}
-                  </FieldLabel>
-                  {field === 'aliases' ? (
-                    <Textarea
-                      className="min-w-0"
-                      id={`${termsId}-${field}-${term.id}`}
-                      value={term[field]}
-                      onChange={(event) => update(event.target.value)}
-                    />
-                  ) : (
-                    <Input
-                      className={inputClassName}
-                      id={`${termsId}-${field}-${term.id}`}
-                      value={term[field]}
-                      onChange={(event) => update(event.target.value)}
-                    />
-                  )}
-                </Field>
-              );
-            })}
-            {index > 0 && (
-              <CreateSubjectLanguageRemove
-                locale={locale}
-                rowId={`${termsId}-${term.id}`}
-                focusId={terms[index + 1] ? `${termsId}-language-${terms[index + 1]!.id}` : `${termsId}-add`}
-                disabled={locked}
-                onRemove={() => {
-                  if (locked || running.current || pending.current) return;
-                  setTerms((previous) => previous.filter((row) => row.id !== term.id));
-                  setFailure(undefined);
-                }}
-              />
-            )}
-          </fieldset>
-        ))}
-        <Button
-          id={`${termsId}-add`}
-          className="h-auto min-h-11 max-w-full whitespace-normal"
-          type="button"
-          variant="outline"
-          disabled={locked}
-          onClick={() => {
-            if (locked || running.current || pending.current) return;
-            const id = nextTermId.current++;
-            setTerms((previous) => [...previous, { id, language: '', label: '', description: '', aliases: '' }]);
-          }}
-        >
-          {m.catalogue_create_add_language({}, o)}
-        </Button>
+      <fieldset id="album-terms" disabled={locked} className="min-w-0">
+        <legend className="sr-only">{m.catalogue_create_terms({}, o)}</legend>
+        <ContentItemFrame as="div" className={panelClassName}>
+          <ContentItemHeading className="text-xl font-semibold">{m.catalogue_create_terms({}, o)}</ContentItemHeading>
+          <div data-content-item-slot="preview" className="min-w-0 space-y-5">
+            {terms.map((term, index) => (
+              <fieldset key={term.id} id={`${termsId}-${term.id}`} className="grid min-w-0 gap-3 pb-4 sm:grid-cols-2">
+                <legend className="sr-only">{term.language || m.catalogue_create_language({}, o)}</legend>
+                {(['language', 'label', 'description', 'aliases'] as const).map((field) => {
+                  const label = {
+                    language: m.catalogue_create_language({}, o),
+                    label: m.catalogue_create_label({}, o),
+                    description: m.catalogue_create_description({}, o),
+                    aliases: m.catalogue_create_aliases({}, o),
+                  }[field];
+                  const update = (value: string) =>
+                    setTerms((previous) =>
+                      previous.map((row) => (row.id === term.id ? { ...row, [field]: value } : row)),
+                    );
+                  return (
+                    <Field key={field} className="min-w-0">
+                      <FieldLabel className={labelClassName} htmlFor={`${termsId}-${field}-${term.id}`}>
+                        {label}
+                      </FieldLabel>
+                      {field === 'aliases' ? (
+                        <Textarea
+                          className="min-w-0"
+                          id={`${termsId}-${field}-${term.id}`}
+                          value={term[field]}
+                          onChange={(event) => update(event.target.value)}
+                        />
+                      ) : (
+                        <Input
+                          className={inputClassName}
+                          id={`${termsId}-${field}-${term.id}`}
+                          value={term[field]}
+                          onChange={(event) => update(event.target.value)}
+                        />
+                      )}
+                    </Field>
+                  );
+                })}
+                {index > 0 && (
+                  <CreateSubjectLanguageRemove
+                    locale={locale}
+                    rowId={`${termsId}-${term.id}`}
+                    focusId={terms[index + 1] ? `${termsId}-language-${terms[index + 1]!.id}` : `${termsId}-add`}
+                    disabled={locked}
+                    onRemove={() => {
+                      if (locked || running.current || pending.current) return;
+                      setTerms((previous) => previous.filter((row) => row.id !== term.id));
+                      setFailure(undefined);
+                    }}
+                  />
+                )}
+              </fieldset>
+            ))}
+            <Button
+              id={`${termsId}-add`}
+              className="h-auto min-h-11 max-w-full whitespace-normal"
+              type="button"
+              variant="outline"
+              disabled={locked}
+              onClick={() => {
+                if (locked || running.current || pending.current) return;
+                const id = nextTermId.current++;
+                setTerms((previous) => [...previous, { id, language: '', label: '', description: '', aliases: '' }]);
+              }}
+            >
+              {m.catalogue_create_add_language({}, o)}
+            </Button>
+          </div>
+        </ContentItemFrame>
       </fieldset>
-      <section className="space-y-4" aria-label={m.album_initial_facts({}, o)}>
-        <h2 className="text-xl font-semibold">{m.album_initial_facts({}, o)}</h2>
+      <section className="min-w-0 space-y-4 [overflow-wrap:anywhere]" aria-label={m.album_initial_facts({}, o)}>
+        <ContentItemHeading className="text-xl font-semibold">{m.album_initial_facts({}, o)}</ContentItemHeading>
         <p className="text-sm text-muted-foreground">{m.album_initial_help({}, o)}</p>
         {rows.map((row, index) => (
           <AlbumInitialField
@@ -459,145 +469,164 @@ function AlbumInitialField({
     async (text, signal) =>
       (await search(text, signal)).filter((item) => albumTarget(release, property, item.types));
   return (
-    <fieldset
-      id={`album-row-${row.id}`}
-      disabled={disabled}
-      className="min-w-0 space-y-4 rounded-xl border border-border p-4 sm:p-5"
-    >
-      <legend className="max-w-full px-2 font-semibold [overflow-wrap:anywhere]">
+    <fieldset id={`album-row-${row.id}`} disabled={disabled} className="min-w-0">
+      <legend className="sr-only">
         <DefinitionMeaning values={definition?.labels} locale={locale} />
       </legend>
-      {(!definition || !release.types[albumType]?.properties.includes(statement.property.id)) && (
-        <p role="alert">{m.correction_stale({}, o)}</p>
-      )}
-      <p className="text-sm text-muted-foreground">
-        <DefinitionMeaning values={definition?.descriptions} locale={locale} />
-      </p>
-      {definition?.datatype === 'wikibase-item' ? (
-        <EntityPicker
-          label={named(statement.property.id)}
-          search={targetSearch(statement.property.id)}
-          src={coverSrc}
-          disabled={disabled}
-          value={statement.value.type === 'value' ? target(statement.value.content) : []}
-          onValueChange={(items) => {
-            remember(items);
-            change({ ...statement, value: { type: 'value', content: items[0]?.id ?? '' } });
-          }}
-        />
-      ) : (
-        <ScalarControl
-          part={statement}
-          definition={definition}
-          read={{ release, public: { related: {} } }}
-          locale={locale}
-          onChange={(value) => change({ ...statement, value })}
-        />
-      )}
-      {qualifiers.map((part, at) => {
-        const metadata = release.properties[part.property.id];
-        return (
-          <div key={at} className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
-            <div className={qualifierClassName}>
-              <QualifierInput
-                definition={
-                  metadata
-                    ? {
-                        id: part.property.id,
-                        label: named(part.property.id),
-                        datatype: metadata.datatype,
-                        targets: metadata.targets ?? [],
-                      }
-                    : undefined
-                }
-                snak={{ ...part, property: { ...part.property, data_type: metadata?.datatype ?? 'string' } }}
-                index={index * 100 + at}
-                label={named(part.property.id)}
-                search={targetSearch(part.property.id)}
-                target={target}
-                remember={remember}
-                disabled={disabled}
-                onChange={(value) =>
-                  change({
-                    ...statement,
-                    qualifiers: qualifiers.map((item, pos) => (pos === at ? { ...item, value } : item)),
-                  })
-                }
-              />
-            </div>
-            <Button
-              className={actionClassName}
-              type="button"
-              variant="outline"
-              aria-label={`${m.relation_remove({}, o)}: ${named(part.property.id)}`}
-              onClick={() => change({ ...statement, qualifiers: qualifiers.filter((_, pos) => pos !== at) })}
+      <ContentItemFrame as="div" className={panelClassName}>
+        <ContentItemHeading level={3} className="text-lg font-semibold">
+          <DefinitionMeaning values={definition?.labels} locale={locale} />
+        </ContentItemHeading>
+        <div data-content-item-slot="preview" className="min-w-0 space-y-4">
+          {(!definition || !release.types[albumType]?.properties.includes(statement.property.id)) && (
+            <p role="alert">{m.correction_stale({}, o)}</p>
+          )}
+          <p className="text-sm text-muted-foreground">
+            <DefinitionMeaning values={definition?.descriptions} locale={locale} />
+          </p>
+          {definition?.datatype === 'wikibase-item' ? (
+            <EntityPicker
+              label={named(statement.property.id)}
+              search={targetSearch(statement.property.id)}
+              src={coverSrc}
+              disabled={disabled}
+              value={statement.value.type === 'value' ? target(statement.value.content) : []}
+              onValueChange={(items) => {
+                remember(items);
+                change({ ...statement, value: { type: 'value', content: items[0]?.id ?? '' } });
+              }}
+            />
+          ) : (
+            <ScalarControl
+              part={statement}
+              definition={definition}
+              read={{ release, public: { related: {} } }}
+              locale={locale}
+              onChange={(value) => change({ ...statement, value })}
+            />
+          )}
+          {definition?.datatype === 'url' && statement.value.type === 'value' && (
+            <p
+              dir="ltr"
+              className="min-w-0 max-w-full whitespace-normal text-sm text-muted-foreground [overflow-wrap:anywhere]"
             >
-              {m.relation_remove({}, o)}
-            </Button>
-          </div>
-        );
-      })}
-      {!!definition?.qualifiers.length && (
-        <Field className="min-w-0">
-          <FieldLabel className={labelClassName} htmlFor={`album-qualifier-${row.id}`}>
-            {m.relation_qualifier({}, o)}
-          </FieldLabel>
-          <NativeSelect
-            className={selectClassName}
-            id={`album-qualifier-${row.id}`}
-            value=""
-            onChange={(event) => {
-              const id = event.target.value;
-              if (definition.qualifiers.includes(id))
+              {String(statement.value.content)}
+            </p>
+          )}
+          {qualifiers.map((part, at) => {
+            const metadata = release.properties[part.property.id];
+            return (
+              <div key={at} className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+                <div className={qualifierClassName}>
+                  <QualifierInput
+                    definition={
+                      metadata
+                        ? {
+                            id: part.property.id,
+                            label: named(part.property.id),
+                            datatype: metadata.datatype,
+                            targets: metadata.targets ?? [],
+                          }
+                        : undefined
+                    }
+                    snak={{ ...part, property: { ...part.property, data_type: metadata?.datatype ?? 'string' } }}
+                    index={index * 100 + at}
+                    label={named(part.property.id)}
+                    search={targetSearch(part.property.id)}
+                    target={target}
+                    remember={remember}
+                    disabled={disabled}
+                    onChange={(value) =>
+                      change({
+                        ...statement,
+                        qualifiers: qualifiers.map((item, pos) => (pos === at ? { ...item, value } : item)),
+                      })
+                    }
+                  />
+                </div>
+                <Button
+                  className={actionClassName}
+                  type="button"
+                  variant="outline"
+                  aria-label={`${m.relation_remove({}, o)}: ${named(part.property.id)}`}
+                  onClick={() => change({ ...statement, qualifiers: qualifiers.filter((_, pos) => pos !== at) })}
+                >
+                  {m.relation_remove({}, o)}
+                </Button>
+              </div>
+            );
+          })}
+          {!!definition?.qualifiers.length && (
+            <Field className="min-w-0">
+              <FieldLabel className={labelClassName} htmlFor={`album-qualifier-${row.id}`}>
+                {m.relation_qualifier({}, o)}
+              </FieldLabel>
+              <NativeSelect
+                className={selectClassName}
+                id={`album-qualifier-${row.id}`}
+                value=""
+                onChange={(event) => {
+                  const id = event.target.value;
+                  if (definition.qualifiers.includes(id))
+                    change({
+                      ...statement,
+                      qualifiers: [...qualifiers, { property: { id }, value: { type: 'value', content: '' } }],
+                    });
+                }}
+              >
+                <NativeSelectOption value="">{m.relation_add_qualifier({}, o)}</NativeSelectOption>
+                {definition.qualifiers
+                  .filter((id) => !!release.properties[id] && !qualifiers.some((part) => part.property.id === id))
+                  .map((id) => (
+                    <NativeSelectOption key={id} value={id}>
+                      {named(id)}
+                    </NativeSelectOption>
+                  ))}
+              </NativeSelect>
+            </Field>
+          )}
+          <Field className="min-w-0">
+            <FieldLabel className={labelClassName} htmlFor={`album-citation-${row.id}`}>
+              {m.relation_citation({}, o)}
+            </FieldLabel>
+            <Input
+              className={inputClassName}
+              id={`album-citation-${row.id}`}
+              type="url"
+              value={
+                statement.references[0]?.parts[0]?.value.type === 'value'
+                  ? String(statement.references[0].parts[0].value.content)
+                  : ''
+              }
+              onChange={(event) =>
                 change({
                   ...statement,
-                  qualifiers: [...qualifiers, { property: { id }, value: { type: 'value', content: '' } }],
-                });
-            }}
-          >
-            <NativeSelectOption value="">{m.relation_add_qualifier({}, o)}</NativeSelectOption>
-            {definition.qualifiers
-              .filter((id) => !!release.properties[id] && !qualifiers.some((part) => part.property.id === id))
-              .map((id) => (
-                <NativeSelectOption key={id} value={id}>
-                  {named(id)}
-                </NativeSelectOption>
-              ))}
-          </NativeSelect>
-        </Field>
-      )}
-      <Field className="min-w-0">
-        <FieldLabel className={labelClassName} htmlFor={`album-citation-${row.id}`}>
-          {m.relation_citation({}, o)}
-        </FieldLabel>
-        <Input
-          className={inputClassName}
-          id={`album-citation-${row.id}`}
-          type="url"
-          value={
-            statement.references[0]?.parts[0]?.value.type === 'value'
-              ? String(statement.references[0].parts[0].value.content)
-              : ''
-          }
-          onChange={(event) =>
-            change({
-              ...statement,
-              references: event.target.value
-                ? [
-                    {
-                      parts: [
-                        { property: { id: 'schema:url' }, value: { type: 'value', content: event.target.value } },
-                      ],
-                    },
-                  ]
-                : [],
-            })
-          }
-        />
-      </Field>
-      <Button className={actionClassName} type="button" variant="ghost" onClick={remove}>
-        {m.recipe_remove_field({}, o)}
-      </Button>
+                  references: event.target.value
+                    ? [
+                        {
+                          parts: [
+                            { property: { id: 'schema:url' }, value: { type: 'value', content: event.target.value } },
+                          ],
+                        },
+                      ]
+                    : [],
+                })
+              }
+            />
+            <p
+              dir="ltr"
+              className="min-w-0 max-w-full whitespace-normal text-sm text-muted-foreground [overflow-wrap:anywhere]"
+            >
+              {statement.references[0]?.parts[0]?.value.type === 'value'
+                ? String(statement.references[0].parts[0].value.content)
+                : ''}
+            </p>
+          </Field>
+          <Button className={actionClassName} type="button" variant="ghost" onClick={remove}>
+            {m.recipe_remove_field({}, o)}
+          </Button>
+        </div>
+      </ContentItemFrame>
     </fieldset>
   );
 }
