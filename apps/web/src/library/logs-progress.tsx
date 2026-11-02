@@ -2,7 +2,7 @@ import { Exposure, useOperation } from '../kernel/exposure';
 import { getLocale } from '../paraglide/runtime.js';
 import { fullDateTime } from '../threads/byline';
 import { Link, useRouter } from '@tanstack/react-router';
-import { useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { useId, useLayoutEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import type { ProgressDetailOrigin } from './progress-session';
 import { m } from '../paraglide/messages.js';
 import { csrfHeaders } from '../threads/composer';
@@ -195,57 +195,125 @@ function PublishLog({
   );
 }
 
+function PublishedLogNote({ note }: { note: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const noteId = useId();
+  return (
+    <div className="min-w-0 space-y-1">
+      <p
+        id={noteId}
+        className={`whitespace-pre-wrap [overflow-wrap:anywhere] ${expanded ? 'relative z-10' : 'line-clamp-3'}`}
+      >
+        {note}
+      </p>
+      <Button
+        type="button"
+        variant="ghost"
+        className="min-h-11 max-w-full whitespace-normal text-start"
+        aria-expanded={expanded}
+        aria-controls={noteId}
+        onClick={() => setExpanded((value) => !value)}
+      >
+        {expanded ? m.library_progress_log_reader_collapse_note() : m.library_progress_log_reader_full_note()}
+      </Button>
+    </div>
+  );
+}
+
 function PublishedLogs({
   page,
   sessionId,
   search,
+  originating,
 }: {
   page: PublishedLogPage;
   sessionId: string;
-  search: { changes?: string; units?: string };
+  search: { changes?: string; units?: string; logs?: string };
+  originating?: ProgressDetailOrigin | undefined;
 }) {
   const headingId = 'published-logs-heading';
   const canRead = useOperation('published_log.read');
+  const [mounted, setMounted] = useState(false);
+  useLayoutEffect(() => {
+    // The supplied origin becomes current only after its owning view mounts.
+    setMounted(true);
+  }, []);
+  const navigation = originating?.capture?.('published_log.list');
+  const isCurrent = () => (navigation ? navigation.isCurrent() : originating ? originating.isCurrent() : true);
+  const guardNavigation = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (!isCurrent()) event.preventDefault();
+  };
+  const sessionSearch = {
+    ...(search.changes !== undefined ? { changes: search.changes } : {}),
+    ...(search.units !== undefined ? { units: search.units } : {}),
+  };
+  const occurrences = new Map<string, number>();
 
   return (
-    <section role="region" aria-labelledby={headingId} className="space-y-3">
+    <section role="region" aria-labelledby={headingId} className="min-w-0 space-y-3">
       <h2 id={headingId} className="text-xl font-semibold">
         {m.library_logs_heading()}
       </h2>
       {page.logs.length ? (
         <ol className="space-y-3">
-          {page.logs.map((log) => (
-            <ContentItem
-              key={log.id}
-              title={
-                [log.account?.displayName, log.account?.handle ? `@${log.account.handle}` : null]
-                  .filter(Boolean)
-                  .join(' ') || m.library_account_deleted()
-              }
-              headingLevel={3}
-              {...(canRead ? { href: `/${getLocale()}/logs/${encodeURIComponent(log.id)}` } : {})}
-              metadata={<RelativeTime value={log.publishedAt} />}
-              preview={log.note ? <p className="whitespace-pre-wrap">{log.note}</p> : null}
-            />
-          ))}
+          {page.logs.map((log) => {
+            const occurrence = occurrences.get(log.id) ?? 0;
+            occurrences.set(log.id, occurrence + 1);
+            return (
+              <ContentItem
+                key={JSON.stringify([log.id, occurrence])}
+                className="[&_h3]:[overflow-wrap:anywhere]"
+                title={
+                  [log.account?.displayName, log.account?.handle ? `@${log.account.handle}` : null]
+                    .filter(Boolean)
+                    .join(' ') || m.library_account_deleted()
+                }
+                headingLevel={3}
+                {...(canRead ? { href: `/${getLocale()}/logs/${encodeURIComponent(log.id)}` } : {})}
+                metadata={<RelativeTime value={log.publishedAt} />}
+                preview={log.note ? <PublishedLogNote note={log.note} /> : null}
+              />
+            );
+          })}
         </ol>
       ) : (
-        <p className="text-muted-foreground">{m.library_logs_empty()}</p>
+        <p className="text-muted-foreground">
+          {search.logs || page.next ? m.library_progress_log_reader_page_empty() : m.library_logs_empty()}
+        </p>
       )}
-      {page.next ? (
+      {(!originating || mounted) && isCurrent() && (search.logs || page.next) ? (
         <Exposure operation="published_log.list">
-          <Link
-            to="/library/progress/$id"
-            params={{ id: sessionId }}
-            search={{
-              logs: page.next,
-              ...(search.changes ? { changes: search.changes } : {}),
-              ...(search.units ? { units: search.units } : {}),
-            }}
-            className={buttonClass}
-          >
-            {m.library_logs_more()}
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            {search.logs ? (
+              <Link
+                to="/library/progress/$id"
+                params={{ id: sessionId }}
+                search={sessionSearch}
+                onClick={guardNavigation}
+                onAuxClick={guardNavigation}
+                onContextMenu={guardNavigation}
+                className={`${buttonClass} min-h-11 max-w-full`}
+              >
+                {m.library_progress_log_reader_first_page()}
+              </Link>
+            ) : null}
+            {page.next ? (
+              <Link
+                to="/library/progress/$id"
+                params={{ id: sessionId }}
+                search={{
+                  logs: page.next,
+                  ...sessionSearch,
+                }}
+                onClick={guardNavigation}
+                onAuxClick={guardNavigation}
+                onContextMenu={guardNavigation}
+                className={`${buttonClass} min-h-11 max-w-full`}
+              >
+                {m.library_logs_more()}
+              </Link>
+            ) : null}
+          </div>
         </Exposure>
       ) : null}
     </section>
@@ -267,14 +335,7 @@ export function ProgressLogs({
   return (
     <>
       <PublishLog page={page} originating={originating} />
-      <PublishedLogs
-        page={logs}
-        sessionId={page.session.id}
-        search={{
-          ...(search.changes ? { changes: search.changes } : {}),
-          ...(search.units ? { units: search.units } : {}),
-        }}
-      />
+      <PublishedLogs page={logs} sessionId={page.session.id} search={search} originating={originating} />
     </>
   );
 }
