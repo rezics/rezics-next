@@ -1,5 +1,10 @@
-import { CatalogueCurrentReading, catalogueEditor, useEditorLifetime } from './editor-lifetime';
-import { useQuery } from '@tanstack/react-query';
+import {
+  CatalogueCurrentReading,
+  catalogueEditor,
+  useEditorLifetime,
+  useCurrentReadingActive,
+} from './editor-lifetime';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { pickText } from '@rezics/composition';
 import { useId, useRef, useState, type ReactNode } from 'react';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
@@ -13,7 +18,7 @@ import type { CandidateTransport } from '../../subject/candidate-review';
 import { createTypes, type CreateTransport, type InitialSubject } from './create-subject';
 import { CreateSubjectForm } from './create-subject-form';
 import { EditorFailure, ScalarControl } from './statement-editor-view';
-import type { StatementInput } from './statement-editor';
+import type { EditorRead, StatementInput } from './statement-editor';
 import { SubjectFacts } from './subject-facts-view';
 import type { FactsTransport } from './subject-facts';
 import { isLiteraryType, literaryFields, literaryInitialItem, type LiteraryRead } from './literary-profile';
@@ -227,8 +232,10 @@ function LiteraryProfileLive({
 }) {
   const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
+  const client = useQueryClient();
+  const queryKey = ['literary-profile', id, locale, lifetime.generation];
   const query = useQuery({
-    queryKey: [...['literary-profile', id, locale], lifetime.generation],
+    queryKey,
     queryFn: transport.load,
     retry: false,
     staleTime: Infinity,
@@ -359,6 +366,13 @@ function LiteraryProfileLive({
       fetching={query.isFetching}
       revision={id ?? ''}
       reload={() => lifetime.active() && void query.refetch()}
+      observe={(next) => {
+        if (lifetime.active())
+          client.setQueryData<LiteraryRead>(
+            queryKey,
+            next.ok ? { ok: true, release: next.release, current: next } : next,
+          );
+      }}
     />
   );
 }
@@ -378,6 +392,7 @@ function LiteraryCorrection({
   fetching,
   revision,
   reload,
+  observe,
 }: {
   read: Ready | undefined;
   locale: string;
@@ -392,6 +407,7 @@ function LiteraryCorrection({
   fetching: boolean;
   revision: string;
   reload: () => void;
+  observe: (next: EditorRead) => void;
 }) {
   const o = { locale: locale as never };
   const retained = useRef<Ready | undefined>(undefined);
@@ -533,7 +549,13 @@ function LiteraryCorrection({
           <>
             <section aria-label={visible ? m.literary_bibliography({}, o) : undefined} className="space-y-4">
               {visible && <h2 className="text-xl font-semibold">{m.literary_bibliography({}, o)}</h2>}
-              <SubjectFacts initial={privateRead.current} locale={locale} transport={facts} review={review} />
+              <LiteraryFacts
+                initial={privateRead.current}
+                locale={locale}
+                transport={facts}
+                review={review}
+                observe={observe}
+              />
             </section>
             {!!privateFields?.relations.length && (
               <details
@@ -576,5 +598,40 @@ function LiteraryCorrection({
         )}
       </article>
     </CatalogueCurrentReading>
+  );
+}
+
+/** Scalar reloads observe the same subject authority as the page reload, without another read. */
+function LiteraryFacts({
+  observe,
+  transport,
+  ...props
+}: {
+  initial: EditorRead;
+  locale: string;
+  transport: FactsTransport;
+  review: (property: string, session?: string) => CandidateTransport;
+  observe: (next: EditorRead) => void;
+}) {
+  const active = useCurrentReadingActive();
+  return (
+    <SubjectFacts
+      {...props}
+      transport={{
+        ...transport,
+        read: async () => {
+          if (!active()) throw new Error('Retired catalogue editor');
+          let next: EditorRead;
+          try {
+            next = await transport.read();
+          } catch {
+            next = { ok: false, reason: 'unavailable' };
+          }
+          if (!active()) throw new Error('Retired catalogue editor');
+          observe(next);
+          return next;
+        },
+      }}
+    />
   );
 }

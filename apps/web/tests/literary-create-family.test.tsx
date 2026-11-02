@@ -556,7 +556,7 @@ test('Literary current refusal withdraws all old markup, fences pending work and
     let reading: LiteraryRead = initial;
     let unavailable = false;
     let settleWrite!: (value: { ok: true; candidate: string; revision: number }) => void;
-    let settleRead!: (value: NonNullable<typeof initial.current>) => void;
+    let settleRead!: (value: Awaited<ReturnType<typeof fixture.facts.read>>) => void;
     const commands: Parameters<typeof fixture.facts.propose>[0][] = [];
     const props = {
       id: literaryWorkId,
@@ -571,7 +571,7 @@ test('Literary current refusal withdraws all old markup, fences pending work and
       },
       facts: {
         read: () =>
-          new Promise<NonNullable<typeof initial.current>>((resolve) => {
+          new Promise<Awaited<ReturnType<typeof fixture.facts.read>>>((resolve) => {
             settleRead = resolve;
           }),
         propose: async (command: Parameters<typeof fixture.facts.propose>[0]) => {
@@ -589,7 +589,9 @@ test('Literary current refusal withdraws all old markup, fences pending work and
       await act(async () => {
         await client.invalidateQueries({ queryKey: ['literary-profile'] });
       });
-      await until(() => !client.isFetching());
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
     };
     const withheld = () => {
       for (const secret of [
@@ -663,6 +665,13 @@ test('Literary current refusal withdraws all old markup, fences pending work and
     withheld();
     expect(host.innerHTML).not.toContain('Unrelated identity');
     reading = fresh('Final recovered identity');
+    await reload();
+    await until(() => host.textContent!.includes('Final recovered identity'));
+    await click(m.correction_reload());
+    await act(async () => {
+      settleRead({ ok: false, reason: 'denied' });
+    });
+    withheld();
     await reload();
     await until(() => host.textContent!.includes('Final recovered identity'));
     await render(h(LiteraryProfile, { ...props, session: 'signed-out' }));
