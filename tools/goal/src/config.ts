@@ -48,6 +48,8 @@ import {
 import { emitHourlyLifecycleMetrics, lifecycleMetricsAsync } from './lifecycle-metrics.ts';
 import { sweepWidthGovernor } from './width-governor.ts';
 import { backlogDirectory, sweepBacklog } from './backlog.ts';
+import { authenticatedManager, type AuthenticatedManager } from './priority-authority.ts';
+import type { BriefContinuation } from './types.ts';
 
 export type SettingsOptions = { cwd?: string; env?: NodeJS.ProcessEnv; localFile?: string };
 export type ConfiguredSettings = Settings & { integrationChecks: IntegrationCheck[] };
@@ -461,6 +463,27 @@ export type RuntimeOptions = {
   >;
 };
 
+function backlogManagerActor(db: Database, managerId: string): AuthenticatedManager | undefined {
+  if (!db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='manager_sessions'").get()) return undefined;
+  const row = db.query('SELECT state FROM manager_sessions WHERE id=?').get(managerId) as { state: string } | null;
+  if (!row) return undefined;
+  try {
+    const state = JSON.parse(row.state) as { engine?: unknown; kind?: unknown; provider?: unknown; threadId?: unknown };
+    if (!state || typeof state !== 'object' || Array.isArray(state) || typeof state.threadId !== 'string')
+      return undefined;
+    const engine = state.engine ?? (state.kind === 'resident-supermanager' ? state.provider : undefined);
+    const env =
+      engine === 'claude'
+        ? { GOAL_MANAGER: managerId, CLAUDE_CODE_SESSION_ID: state.threadId }
+        : engine === 'codex'
+          ? { GOAL_MANAGER: managerId, CODEX_THREAD_ID: state.threadId }
+          : undefined;
+    return env ? authenticatedManager(db, env) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** The only production composition: every module shares this database connection and worker fence. */
 export const LANDING_CHECK_ENVIRONMENT = { REMOTE_CHECK_PRIORITY: 'landing' } as const;
 export function createRuntime(options: RuntimeOptions = {}): Runtime {
@@ -766,6 +789,14 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
           const task = tasks.dispatch(brief, null);
           if (task.state !== 'held') store.saveRetryIntent({ taskId: task.id, attempt: 0 }, {});
           return task.id;
+        },
+        async continueTask(goal: string, continuation: BriefContinuation, briefFile: string) {
+          const task = store.task(continuation.taskId);
+          if (task.brief.goal !== goal)
+            throw new Error(`task ${task.id} belongs to Goal ${task.brief.goal}, not backlog Goal ${goal}`);
+          const actor = backlogManagerActor(db, task.brief.manager);
+          if (!actor) throw new Error(`cannot authenticate the current session for task manager ${task.brief.manager}`);
+          tasks.queueBacklogContinuation(task.id, goal, continuation.expectedAttempt, briefFile, actor);
         },
         cancel: (taskId) => tasks.cancel(taskId),
       }),

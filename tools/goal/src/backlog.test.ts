@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from 'bun:test';
 import type { Database } from 'bun:sqlite';
-import { existsSync, mkdirSync, readdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   BACKLOG_WAKE_INTERVAL_MS,
@@ -12,10 +12,12 @@ import {
   type BacklogRuntime,
 } from './backlog.ts';
 import { openDb } from './db.ts';
+import { createRuntime } from './config.ts';
 import { SqliteManagerInbox } from './inbox.ts';
+import { runIntegration } from './integration-cli.ts';
 import { acquireDirectoryLease } from './lease.ts';
 import { WorkerStore } from './store.ts';
-import { temporaryDirectory } from './test-support.ts';
+import { brief as fixtureBrief, harness, markdown, temporaryDirectory } from './test-support.ts';
 
 const NOW = Date.UTC(2026, 10, 2, 12, 0);
 const cleanups: (() => void)[] = [];
@@ -30,6 +32,7 @@ function fixture(options: { workerCap?: number; perSweep?: number; refuse?: RegE
   const inbox = new SqliteManagerInbox(db, temporary.path, () => clock.now);
   const clock = { now: NOW };
   const dispatched: { file: string; text: string }[] = [];
+  const continued: { goal: string; taskId: string; attempt: number; file: string }[] = [];
   const cancelled: string[] = [];
   const runtime: BacklogRuntime = {
     db,
@@ -44,6 +47,9 @@ function fixture(options: { workerCap?: number; perSweep?: number; refuse?: RegE
       dispatched.push({ file, text });
       return `task-${dispatched.length}`;
     },
+    async continueTask(goal, continuation, file) {
+      continued.push({ goal, taskId: continuation.taskId, attempt: continuation.expectedAttempt, file });
+    },
     async cancel(taskId) {
       cancelled.push(taskId);
       const row = db.query('SELECT body FROM worker_tasks WHERE id=?').get(taskId) as { body: string };
@@ -57,7 +63,36 @@ function fixture(options: { workerCap?: number; perSweep?: number; refuse?: RegE
     db.close();
     temporary.close();
   });
-  return { db, inbox, runtime, clock, dispatched, cancelled, state: temporary.path };
+  return { db, inbox, runtime, clock, dispatched, continued, cancelled, state: temporary.path };
+}
+
+function existingTask(
+  h: ReturnType<typeof harness>,
+  id: string,
+  state: string,
+  goal = 'fixture',
+  attemptState = 'exited',
+) {
+  const source = fixtureBrief();
+  const created = h.store.createTask(
+    { ...source, goal },
+    { briefPath: h.briefFile, worktree: h.root, branch: `worker/${id}`, base: 'main' },
+    'implementation',
+    id,
+  );
+  h.store.db
+    .query('UPDATE worker_tasks SET current_attempt=1, body=? WHERE id=?')
+    .run(JSON.stringify({ ...created, currentAttempt: 1, state }), id);
+  h.store.db
+    .query('INSERT INTO worker_attempts(task_id, attempt, body) VALUES (?, 1, ?)')
+    .run(id, JSON.stringify({ state: attemptState, session: `paid-${id}`, process: null, driver: null, auxiliaryProcesses: [] }));
+  return created;
+}
+
+function continuationBrief(taskId: string, expectedAttempt: number, goal = 'fixture'): string {
+  return markdown
+    .replace('goal: fixture', `goal: ${goal}\nmanager: fixture\ncontinuation:\n  taskId: ${taskId}\n  expectedAttempt: ${expectedAttempt}`)
+    .replace('Write the requested result and commit it.', `Continue ${taskId} and keep its existing work.`);
 }
 
 function brief(state: string, goal: string, name: string, ageMs: number, text = `${goal}/${name}`): string {
@@ -188,6 +223,82 @@ test('a brief claimed by a host that stopped mid-dispatch is returned to its own
     'goal status',
   );
   expect(f.inbox.pending('web')).toHaveLength(1);
+});
+
+test('the controller resumes an exact owner task once and refuses stale, foreign, cancelled and live targets', async () => {
+  const h = harness();
+  cleanups.push(() => h.dispose());
+  const original = existingTask(h, 'retained', 'stopped');
+  h.store.db.exec('CREATE TABLE manager_sessions (id TEXT PRIMARY KEY, state TEXT NOT NULL)');
+  h.store.db
+    .query('INSERT INTO manager_sessions(id, state) VALUES (?, ?)')
+    .run('fixture', JSON.stringify({ id: 'fixture', kind: 'managed', engine: 'codex', status: 'running', threadId: 'owner-session' }));
+
+  const directory = join(h.settings.stateDirectory, 'backlog', 'fixture');
+  const claimed = join(directory, '.dispatching', 'resume.md');
+  mkdirSync(join(directory, '.dispatching'), { recursive: true });
+  writeFileSync(claimed, continuationBrief(original.id, 1));
+  utimesSync(claimed, new Date(Date.now() - 20_000), new Date(Date.now() - 20_000));
+  const runtime = createRuntime({ settings: h.settings, db: h.store.db });
+  const dispatch = async () => {
+    const lines: string[] = [];
+    const log = console.log;
+    const taskId = process.env.GOAL_TASK_ID;
+    const attempt = process.env.GOAL_ATTEMPT;
+    delete process.env.GOAL_TASK_ID;
+    delete process.env.GOAL_ATTEMPT;
+    console.log = (line?: unknown) => lines.push(String(line));
+    try {
+      await runIntegration(['backlog', 'dispatch'], runtime);
+    } finally {
+      console.log = log;
+      if (taskId === undefined) delete process.env.GOAL_TASK_ID;
+      else process.env.GOAL_TASK_ID = taskId;
+      if (attempt === undefined) delete process.env.GOAL_ATTEMPT;
+      else process.env.GOAL_ATTEMPT = attempt;
+    }
+    return JSON.parse(lines[0]!);
+  };
+
+  const first = await dispatch();
+  expect(first.continued).toEqual([{ goal: 'fixture', taskId: original.id, attempt: 1, brief: 'resume.md' }]);
+  expect(first.dispatched).toEqual([]);
+  const archived = join(directory, 'continued', 'retained-1-resume.md');
+  expect(existsSync(archived)).toBe(true);
+  rmSync(archived);
+  writeFileSync(claimed, continuationBrief(original.id, 1));
+  utimesSync(claimed, new Date(Date.now() - 20_000), new Date(Date.now() - 20_000));
+
+  const second = await dispatch();
+  expect(second.continued).toHaveLength(1);
+  expect(h.store.taskIds()).toEqual([original.id]);
+  expect(h.store.db.query('SELECT count(*) AS n FROM worker_retry_intents').get()).toEqual({ n: 1 });
+  const resumed = JSON.parse(
+    (h.store.db.query('SELECT body FROM worker_tasks WHERE id=?').get(original.id) as { body: string }).body,
+  );
+  expect(resumed.branch).toBe(original.branch);
+  expect(resumed.worktree).toBe(original.worktree);
+  expect(h.store.db.query('SELECT json_extract(body, \'$.session\') AS session FROM worker_attempts WHERE task_id=? AND attempt=1').get(original.id)).toEqual({ session: 'paid-retained' });
+
+  const refusals = [
+    ['stale', 'stopped', 'fixture', 'exited', 2],
+    ['foreign', 'stopped', 'other', 'exited', 1],
+    ['cancelled', 'cancelled', 'fixture', 'exited', 1],
+    ['live', 'running', 'fixture', 'running', 1],
+  ] as const;
+  for (const [id, state, goal, attemptState, expected] of refusals) {
+    existingTask(h, id, state, goal, attemptState);
+    const file = join(directory, `${id}.md`);
+    writeFileSync(file, continuationBrief(id, expected));
+    utimesSync(file, new Date(Date.now() - 20_000), new Date(Date.now() - 20_000));
+  }
+  const third = await dispatch();
+  const reasons = new Map(third.refused.map((entry: { brief: string; reason: string }) => [entry.brief, entry.reason]));
+  expect(reasons.get('stale.md')).toContain('is stale');
+  expect(reasons.get('foreign.md')).toContain('belongs to Goal other');
+  expect(reasons.get('cancelled.md')).toContain('is cancelled');
+  expect(reasons.get('live.md')).toContain('already live');
+  expect(h.store.taskIds()).toHaveLength(5);
 });
 
 test('a product task stopped for over an hour without action is cancelled into its failed backlog', async () => {

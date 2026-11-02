@@ -1375,6 +1375,22 @@ host's socket. The host skips the minute while the previous child is still runni
   `dispatched/<task-id>-<name>.md`. Research briefs dispatch the same way. A refused brief moves to `failed/<name>.md`
   beside `failed/<name>.reason`, and the Goal's manager receives one event per run naming the refused briefs. A brief left in `.dispatching/` by a host that stopped mid-dispatch goes to `failed/` with
   that reason, since its task may already exist.
+- **Continuation.** To resume an existing stopped task, put its rewritten brief in the same Goal backlog with
+  a `continuation` object in the YAML front matter containing the task ID and current attempt number. For example:
+
+  ```yaml
+  continuation:
+    taskId: 550e8400-e29b-41d4-a716-446655440000
+    expectedAttempt: 3
+  ```
+
+  The controller
+  authenticates the current owner session, checks the exact Goal, manager and attempt, then records a normal pending
+  retry under the task lease. It keeps the task's branch, worktree and provider session; the host starts the retry
+  through its existing recovery path. The consumed brief moves to `continued/<task-id>-<attempt>-<name>.md`. A valid
+  claimed continuation returns to the ready backlog after a controller interruption so the pending retry can be
+  recognized idempotently. Stale, foreign, cancelled, live or otherwise ineligible tasks move to `failed/` with a
+  reason. Briefs without this marker continue to create new tasks.
 - **Stopped tasks.** A product task that has been `stopped` for more than 60 minutes since its last event, with no
   pending retry, is cancelled through the `goal cancel` path, at most 20 per Goal per run, longest stopped first. Its
   brief is written to `failed/<task-id>.md` and its blocker and branch to `failed/<task-id>.reason`; each owner

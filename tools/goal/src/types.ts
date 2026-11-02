@@ -31,6 +31,7 @@ export type ProofMetadata = {
   sourceTasks: string[];
   sourceCommit: string;
 };
+export type BriefContinuation = { taskId: string; expectedAttempt: number };
 /** serviceTier is ignored at launch (the Codex tier is the codex.serviceTier setting); kept so older attempts still parse. */
 export type Profile = { cli: Cli; model: string; effort: Effort; poolClass: string; serviceTier?: 'default' | 'fast' };
 export type Pool = {
@@ -152,6 +153,7 @@ export type Settings = {
 };
 export type Brief = {
   proof?: ProofMetadata;
+  continuation?: BriefContinuation;
   goal: string;
   manager: string;
   kind: TaskKind;

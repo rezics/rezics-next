@@ -461,6 +461,8 @@ export class WorkerTasks {
   }
   dispatch(briefFile: string, actor?: AuthenticatedManager | null): Task {
     const { brief: submittedBrief, taskClass } = this.validateBrief(briefFile, undefined, actor);
+    if (submittedBrief.continuation)
+      throw new Error('continuation briefs must go through the backlog controller, not new-task dispatch');
     const authorization =
       submittedBrief.kind === 'verification'
         ? authorizeProof(
@@ -916,6 +918,53 @@ export class WorkerTasks {
     const lease = acquireDirectoryLease(join(this.settings.stateDirectory, 'leases', taskId));
     try {
       this.queueRetryLeased(taskId, { ...options, expectedAttempt }, actor);
+    } finally {
+      lease.release();
+    }
+  }
+  /** Queue one owner-authenticated backlog continuation under the same lease used by ordinary retries. */
+  queueBacklogContinuation(
+    taskId: string,
+    goal: string,
+    expectedAttempt: number,
+    briefFile: string,
+    actor: AuthenticatedManager,
+  ): void {
+    const lease = acquireDirectoryLease(join(this.settings.stateDirectory, 'leases', taskId));
+    try {
+      const task = this.store.task(taskId);
+      if (task.currentAttempt !== expectedAttempt)
+        throw new StaleAttemptError({ taskId, attempt: expectedAttempt }, task.currentAttempt);
+      if (task.brief.goal !== goal) throw new Error(`task ${taskId} belongs to Goal ${task.brief.goal}, not ${goal}`);
+      if (actor.id !== task.brief.manager) throw new Error(`only task manager ${task.brief.manager} may continue ${taskId}`);
+      if (task.state === 'cancelled') throw new Error(`task ${taskId} is cancelled; dispatch a new brief instead`);
+      if (task.currentAttempt < 1) throw new Error(`task ${taskId} has no existing attempt to continue`);
+      if (task.state === 'running' || task.state === 'landing')
+        throw new Error(`task ${taskId} is already live; wait for attempt ${expectedAttempt} to stop`);
+
+      const { brief: nextBrief } = this.validateBrief(briefFile, taskId, actor);
+      if (nextBrief.goal !== goal || nextBrief.manager !== task.brief.manager)
+        throw new Error(`continuation must keep Goal ${goal} and manager ${task.brief.manager}`);
+      const ref = { taskId, attempt: expectedAttempt };
+      const attempt = this.store.attempt(ref);
+      if (attempt.state === 'cancelled') throw new Error(`attempt ${expectedAttempt} for ${taskId} is cancelled`);
+      if (
+        ['pending', 'running', 'waiting'].includes(attempt.state) ||
+        [attempt.process, attempt.driver, ...(attempt.auxiliaryProcesses ?? [])].some((identity) => identity && sameProcess(identity))
+      )
+        throw new Error(`attempt ${expectedAttempt} for ${taskId} is still live; wait for it to stop`);
+
+      const pending = this.store.retryIntent(ref);
+      if (pending?.status === 'pending') {
+        if (['ready', 'held', 'stopped'].includes(task.state) && task.brief.markdown === nextBrief.markdown) return;
+        throw new Error(`a different retry is already pending for ${taskId}; wait for it to start or settle`);
+      }
+      if (task.state === 'held' && task.pendingBriefChange?.newBriefHash === briefHash(nextBrief.markdown)) return;
+      if (!['stopped', 'held'].includes(task.state))
+        throw new Error(`task ${taskId} is ${task.state}; continue it after its current work stops`);
+      if (!['exited', 'stopped'].includes(attempt.state))
+        throw new Error(`attempt ${expectedAttempt} for ${taskId} is ${attempt.state}; wait for it to stop`);
+      this.queueRetryLeased(taskId, { expectedAttempt, brief: briefFile }, actor);
     } finally {
       lease.release();
     }

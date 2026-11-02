@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { isAbsolute, win32 } from 'node:path';
-import type { AcceptancePlacement, Brief, TaskKind } from './types.ts';
+import type { AcceptancePlacement, Brief, BriefContinuation, TaskKind } from './types.ts';
 import { parseProofMetadata } from './verification.ts';
 
 export type RiskOwnership = { version: number; areas: Record<string, string[]> };
@@ -106,6 +106,22 @@ function boolean(value: unknown, label: string, fallback?: boolean): boolean {
   if (value === undefined && fallback !== undefined) return fallback;
   if (typeof value !== 'boolean') throw new Error(`${label} must be boolean`);
   return value;
+}
+function continuation(value: unknown): BriefContinuation | undefined {
+  if (value === undefined) return undefined;
+  const raw = object(value, 'continuation');
+  const taskId = text(raw.taskId, 'continuation.taskId');
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(taskId))
+    throw new Error('continuation.taskId must be a valid task ID');
+  if (!Number.isSafeInteger(raw.expectedAttempt) || (raw.expectedAttempt as number) < 1)
+    throw new Error('continuation.expectedAttempt must be a positive integer');
+  return { taskId, expectedAttempt: raw.expectedAttempt as number };
+}
+/** Read only the optional existing-task marker so claim recovery can distinguish safe retries from new dispatches. */
+export function readBriefContinuation(markdown: string): BriefContinuation | undefined {
+  const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(markdown);
+  if (!match) return undefined;
+  return continuation(object(Bun.YAML.parse(match[1]!), 'front matter').continuation);
 }
 function localTestFile(path: string): boolean {
   return (
@@ -321,7 +337,9 @@ export function parseBrief(markdown: string, ownership: RiskOwnership): Brief {
     throw new Error(
       'brief target must be stabilize or, for control-plane, main; a brief without a target line goes to dev',
     );
+  const continuationRequest = continuation(raw.continuation);
   const brief: Brief = {
+    ...(continuationRequest ? { continuation: continuationRequest } : {}),
     goal: text(raw.goal, 'goal'),
     manager: text(raw.manager ?? raw.goal, 'manager'),
     kind: raw.kind as TaskKind,

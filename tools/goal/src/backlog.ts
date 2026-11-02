@@ -1,9 +1,11 @@
 import type { Database } from 'bun:sqlite';
-import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import type { ManagerEvent, ManagerInbox } from './contracts.ts';
 import { migrate } from './db.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
+import { readBriefContinuation } from './briefs.ts';
+import type { BriefContinuation } from './types.ts';
 
 /** A manager is woken when its Goal has fewer ready briefs than this. */
 export const BACKLOG_LOW_WATER = 8;
@@ -44,6 +46,8 @@ export type BacklogRuntime = {
   inbox: ManagerInbox;
   /** The `goal dispatch` path: create the task and request its first attempt. Returns the new task ID. */
   dispatch(briefFile: string): Promise<string>;
+  /** Queue a continuation through the existing task retry path. */
+  continueTask(goal: string, continuation: BriefContinuation, briefFile: string): Promise<void>;
   /** The `goal cancel` path. */
   cancel(taskId: string): Promise<void>;
   now?: () => number;
@@ -56,6 +60,7 @@ export type BacklogSweep = {
   /** Another run held the backlog lease, so this one did nothing. */
   skipped?: true;
   dispatched: { goal: string; taskId: string; brief: string }[];
+  continued: { goal: string; taskId: string; attempt: number; brief: string }[];
   refused: { goal: string; brief: string; reason: string }[];
   expired: { goal: string; taskId: string }[];
   woken: string[];
@@ -192,6 +197,23 @@ function recoverClaims(runtime: BacklogRuntime, goal: string): { brief: string; 
   const goalDirectory = backlogDirectory(runtime.stateDirectory, goal);
   const recovered: { brief: string; reason: string }[] = [];
   for (const file of briefs(join(goalDirectory, CLAIM_DIRECTORY))) {
+    try {
+      if (readBriefContinuation(readFileSync(file, 'utf8'))) {
+        const ready = join(goalDirectory, basename(file));
+        if (existsSync(ready)) throw new Error(`cannot recover continuation because ${basename(file)} already exists`);
+        renameSync(file, ready);
+        continue;
+      }
+    } catch (error) {
+      const reason = errorText(error);
+      try {
+        fail(goalDirectory, file, reason);
+        recovered.push({ brief: basename(file), reason });
+      } catch (moveError) {
+        console.error(`backlog claim recovery failed for ${file}:`, moveError);
+      }
+      continue;
+    }
     const reason =
       'The controller stopped while dispatching this brief. Check `goal status` for a task with this brief before moving it back.';
     try {
@@ -239,10 +261,11 @@ function pickBriefs(runtime: BacklogRuntime, goals: string[], need: number, now:
 async function dispatchReady(
   runtime: BacklogRuntime,
   now: number,
-): Promise<Pick<BacklogSweep, 'dispatched' | 'refused'>> {
+): Promise<Pick<BacklogSweep, 'dispatched' | 'continued' | 'refused'>> {
   const root = backlogDirectory(runtime.stateDirectory);
   const goals = directories(root);
   const dispatched: BacklogSweep['dispatched'] = [];
+  const continued: BacklogSweep['continued'] = [];
   const refused: BacklogSweep['refused'] = [];
   const refusedByGoal = new Map<string, { brief: string; reason: string }[]>();
   const refuse = (goal: string, brief: string, reason: string) => {
@@ -269,8 +292,13 @@ async function dispatchReady(
       throw error;
     }
     let taskId: string;
+    let continuation: BriefContinuation | undefined;
     try {
-      taskId = await runtime.dispatch(claimed);
+      continuation = readBriefContinuation(readFileSync(claimed, 'utf8'));
+      if (continuation) {
+        await runtime.continueTask(pick.goal, continuation, claimed);
+        taskId = continuation.taskId;
+      } else taskId = await runtime.dispatch(claimed);
     } catch (error) {
       const reason = errorText(error);
       try {
@@ -281,9 +309,12 @@ async function dispatchReady(
       refuse(pick.goal, basename(pick.file), reason);
       continue;
     }
-    const target = join(goalDirectory, DISPATCHED_DIRECTORY);
+    const target = join(goalDirectory, continuation ? 'continued' : DISPATCHED_DIRECTORY);
     mkdirSync(target, { recursive: true });
-    renameSync(claimed, join(target, `${taskId}-${basename(pick.file)}`));
+    const targetName = continuation
+      ? `${taskId}-${continuation.expectedAttempt}-${basename(pick.file)}`
+      : `${taskId}-${basename(pick.file)}`;
+    renameSync(claimed, join(target, targetName));
     // The write time lets turn accounting see a brief its manager wrote in a turn that the run already dispatched.
     runtime.db
       .query(
@@ -292,10 +323,12 @@ async function dispatchReady(
           last_written_at = max(coalesce(last_written_at, 0), excluded.last_written_at)`,
       )
       .run(pick.goal, (runtime.now ?? Date.now)(), Math.floor(written));
-    dispatched.push({ goal: pick.goal, taskId, brief: basename(pick.file) });
+    if (continuation)
+      continued.push({ goal: pick.goal, taskId, attempt: continuation.expectedAttempt, brief: basename(pick.file) });
+    else dispatched.push({ goal: pick.goal, taskId, brief: basename(pick.file) });
   }
   for (const [goal, entries] of refusedByGoal) notifyRefusals(runtime, goal, entries);
-  return { dispatched, refused };
+  return { dispatched, continued, refused };
 }
 
 type StoppedRow = { id: string; current_attempt: number; body: string };
@@ -493,16 +526,17 @@ export async function sweepBacklog(runtime: BacklogRuntime): Promise<BacklogSwee
   try {
     lease = acquireDirectoryLease(join(runtime.stateDirectory, 'leases', 'backlog'));
   } catch (error) {
-    if (error instanceof LeaseHeldError) return { skipped: true, dispatched: [], refused: [], expired: [], woken: [] };
+    if (error instanceof LeaseHeldError)
+      return { skipped: true, dispatched: [], continued: [], refused: [], expired: [], woken: [] };
     throw error;
   }
   try {
     migrate(runtime.db, backlogMigrations);
     const now = (runtime.now ?? Date.now)();
     const expired = await expireStoppedTasks(runtime, now);
-    const { dispatched, refused } = await dispatchReady(runtime, now);
+    const { dispatched, continued, refused } = await dispatchReady(runtime, now);
     const woken = wakeLowBacklogs(runtime, now);
-    return { dispatched, refused, expired, woken };
+    return { dispatched, continued, refused, expired, woken };
   } finally {
     lease.release();
   }

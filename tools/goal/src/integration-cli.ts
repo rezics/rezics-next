@@ -737,6 +737,8 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
     const usage = 'usage: backlog status [--json] | backlog dispatch';
     if (subcommand === 'dispatch') {
       if (id !== undefined || flags.length) throw new Error(usage);
+      if (process.env.GOAL_TASK_ID || process.env.GOAL_ATTEMPT)
+        throw new Error('Workers cannot use the manager-owned backlog command');
       if (!runtime.backlog) throw new Error('The backlog run is unavailable in this runtime');
       console.log(JSON.stringify({ at: new Date().toISOString(), ...((await runtime.backlog()) as object) }));
       return 0;
