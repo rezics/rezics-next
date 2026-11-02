@@ -71,7 +71,15 @@ export function qualifiedNotes(statement: Stmt, related: unknown, locale: string
     )
       return [{ property, text: `${prefix}: ${content.text}`, language: content.language }];
     if (snak.property.data_type === 'quantity') {
-      const presentation = quantityPresentation(content, disclosed, locale);
+      // Relation reads disclose summaries, while the shared presenter reads localized label maps.
+      const units: Related = {};
+      if (isRecord(content) && typeof content.unit === 'string' && Object.hasOwn(disclosed, content.unit)) {
+        const summary = disclosed[content.unit] as SubjectSummary | undefined;
+        const label = summary?.label;
+        if (label && typeof label === 'object')
+          units[content.unit] = { labels: { [label.language]: label.value } };
+      }
+      const presentation = quantityPresentation(content, units, locale);
       return presentation && isRecord(content)
         ? [{ property, text: `${prefix}:`, quantity: { content: content as QuantityContent, presentation } }]
         : [{ property, text: `${prefix}: ${m.subject_value_unknown({}, options)}` }];

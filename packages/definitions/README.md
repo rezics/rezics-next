@@ -184,6 +184,7 @@ RFC 8785 canonical JSON. Validate first: the digest function does not validate.
 ### Exact quantities
 
 Qualified credit readers preserve quantity amount, unit and bounds through the shared quantity presentation; unknown and no-value qualifiers use distinct localized labels, and undisclosed related targets remain unlinked with an unknown-value label.
+Custom quantity units use the localized label from the current disclosed related summary; absent labels remain unavailable.
 
 `valueSchema('quantity', { exact: true, units, integer })` opts into a second
 fixed quantity schema: a closed object requiring `amount` and `unit`, with only
