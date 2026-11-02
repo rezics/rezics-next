@@ -3,6 +3,7 @@ import type { GrowthMetric } from './growth-bound.ts';
 import type { ReportSample, StatementAttribution } from './growth.ts';
 import { indexStatementRepetitions } from './growth-report-index.ts';
 import { walkPlanTree, type PlanNode } from './growth-plan-walk.ts';
+import { validateCaptureEvidence } from './growth-capture-evidence.ts';
 
 function normalizeStatement(statement: string): string {
   const leading = /^\s*(?:--[^\n]*(?:\n|$)|\/\*[\s\S]*?\*\/\s*)*/.exec(statement)?.[0] ?? '';
@@ -83,6 +84,7 @@ function planCost(root: PlanNode, location: string): { rows: number; blocks: num
 }
 
 export function statementAttributions(capture: Capture): StatementAttribution[] {
+  validateCaptureEvidence(capture);
   const statements = new Map<string, { rows: number; blocks: number; count: number; node?: string }>();
   for (const statement of capture.statements) {
     const key = normalizeStatement(statement);
@@ -123,6 +125,7 @@ export type StatementOccurrences = {
 
 /** Costs each statement occurrence only from plans linked to it at capture time. */
 export function statementOccurrences(capture: Capture): StatementOccurrences {
+  validateCaptureEvidence(capture);
   const occurrences = (
     statements: readonly string[],
     errors: readonly (string | null)[] | undefined,

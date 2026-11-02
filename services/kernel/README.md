@@ -454,6 +454,8 @@ node-postgres prepares it: UTF-8 bytes for strings, the length for buffers, and 
 bytes sum each returned data row's field payload before type parsing: null is zero, `bytea` (OID 17) uses its decoded
 length, and every other text field uses its UTF-8 byte length. Command tags, notices, `auto_explain` output and the
 harness's own `SET` statements are not counted. Foreground and background statement bytes are reported separately.
+Capture validation decision: optional legacy metadata may be omitted; any supplied parallel arrays must be dense and
+length-aligned, undefined plan owners remain unowned, and backend IDs are compared only when both sides are known.
 Growth checks support `step` and `series` rules. `series` is the default; `check.rule` selects an explicit rule, and
 `GROWTH_RULE=series` also runs checks on the step baseline under series. Any other set value of `GROWTH_RULE` is a
 configuration error. The only checks that use step by default are in `test/support/growth-baseline.ts`; each entry must

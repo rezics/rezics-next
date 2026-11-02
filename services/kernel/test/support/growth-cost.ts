@@ -9,6 +9,7 @@ import {
 import { indexCteScopes, unscannedCteBlocks, type CteBlocks } from './growth-cte-cost.ts';
 import { walkPlanTree, type PlanNode } from './growth-plan-walk.ts';
 import { classifyGrowthSql } from './growth-sql-kind.ts';
+import { validateCaptureEvidence } from './growth-capture-evidence.ts';
 
 export type Capture = {
   readonly statements: readonly string[];
@@ -283,6 +284,7 @@ function hasMatchingStatement(
 }
 
 export function catalogStatementBound(capture: Capture): CatalogClassification {
+  validateCaptureEvidence(capture);
   return classifyCatalogStatements(capture);
 }
 
@@ -291,6 +293,7 @@ export function withoutCatalogTexts(
   capture: Capture,
   classification: CatalogClassification | ReadonlySet<string>,
 ): Capture {
+  validateCaptureEvidence(capture);
   const catalog: CatalogClassification =
     'catalogKeys' in classification
       ? classification
@@ -503,6 +506,7 @@ export function costOf(capture: Capture): Cost {
 }
 
 function costOfAt(capture: Capture, planCollection: string): Cost {
+  validateCaptureEvidence(capture);
   validateByteMeasurements(capture.requestBytes, capture.statements.length, 'Request bytes');
   validateByteMeasurements(capture.responseBytes, capture.statements.length, 'Response bytes');
   validateByteMeasurements(
