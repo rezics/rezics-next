@@ -7,6 +7,7 @@ import { HistoryRegistry } from '../history/registry.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { type WorkerAuthorization } from './authorization.ts';
 import type { KindConsentParticipant } from '@rezics/auth-contract';
+import { type SelectedRuntime } from './selected-runtime.ts';
 export type WorkService = {
     stop(): Promise<void>;
 };
@@ -18,6 +19,7 @@ export type WorkContext = {
     readonly clock: KernelClock;
     readonly history?: HistoryRegistry;
     getAuthorization(): WorkerAuthorization;
+    getSelectedRuntime?(): SelectedRuntime;
     getKindConsentParticipant?(deadline: number): KindConsentParticipant | undefined;
     addEffects(effects: Effect[]): void;
     addNativeEffects?(effects: NativeEffect[]): void;

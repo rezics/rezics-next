@@ -19,16 +19,16 @@ const times = (n: number, part: SelectedCost) => sumSelectedCost(...Array.from({
 export const SELECTED_COST = Object.freeze({
   // Outer select + domain/status/fence/operation/input probes + attempt upsert + native return.
   // Upsert includes PK probe/insert/conflict-update; metadata projection and input <=8192.
-  issue: selectedCost(8, 9, 8, 24576),
+  issue: selectedCost(8, 9, 8, 49152),
   release: selectedCost(2, 2, 2, 4096),
-  // Outer held check + four locks + UPDATE; durable bit is never reset by replacement.
-  consume: selectedCost(8, 8, 7, 8192),
+  // Outer held check + five locks + UPDATE; durable bit is never reset by replacement.
+  consume: selectedCost(9, 9, 8, 24576),
   // Native SDK status/input exact read + continuation insert/FK/parent result probe.
   continuation: selectedCost(10, 12, 7, 49152),
   // Pinned enqueue status INSERT/conflict UPDATE and input guard, including trigger SQL.
   enqueue: selectedCost(10, 10, 9, 18432),
-  // Outer call + four locks; no independent transaction. Status/attempt return never exposes owner token.
-  hold: selectedCost(6, 6, 5, 8192),
+  // Outer call + five locks; no independent transaction. Status/attempt return never exposes owner token.
+  hold: selectedCost(7, 7, 6, 24576),
   // Existing operational time transaction, partition/account fences, controls through COMMIT.
   // Rollback is split below, before checkout, to keep cleanup disjoint from usable work.
   transaction: selectedCost(7, 3, 12, 1024),

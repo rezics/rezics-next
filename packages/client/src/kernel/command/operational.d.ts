@@ -1,6 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import { type WorkClient, type WorkIntent } from '../work/client.ts';
 import { type CommandAuthorization, type PrincipalCommandIdentity } from './command.ts';
+import { type SelectedOperationalPhase } from '../work/selected-runtime.ts';
 declare const operational: unique symbol;
 export type OperationalTransaction = Pick<PoolClient, 'query'> & {
     readonly [operational]: true;
@@ -15,6 +16,8 @@ type CommonOptions = {
     clock?: () => Date;
     /** Separate native History producer admission. Existing callers keep their ordinary behaviour. */
     operationalHistory?: true;
+    /** Private phase capability issued only by the authentic selected invocation runner. */
+    selectedRuntime?: SelectedOperationalPhase;
 };
 export type OperationalOptions = CommonOptions & ((Extract<PrincipalCommandIdentity, {
     basis: {

@@ -12,7 +12,7 @@ async function nativeScenario() {
   const db=await openGrowthDatabase();
   const work=await createWorkClient(db.url,db.pool);
   const sdk=DBOS as typeof DBOS & {
-    registerSelectedStep(body: (mode: string)=>Promise<string>, config: {name: string}, lifecycle: unknown): (mode: string)=>Promise<string>;
+    registerSelectedStep(body: (mode: string)=>Promise<string>, config: {name: string;retriesAllowed?:boolean;maxAttempts?:number;intervalSeconds?:number}, lifecycle: unknown): (mode: string)=>Promise<string>;
     getSelectedExecution(): object|undefined;
   };
   const client=work as typeof work & {
@@ -20,7 +20,7 @@ async function nativeScenario() {
     consumeSelectedExecutionAdmission(claim: object,pool: pg.Pool): Promise<boolean>;
     checkSelectedExecutionInTransaction(raw: pg.PoolClient,pool: pg.Pool,claim: object): Promise<void>;
   };
-  let opened=0, closed=0, bodies=0;
+  let opened=0, closed=0, bodies=0, interrupted=0;
   let escaped: object|undefined;
   const nativeIds: string[]=[];
   DBOS.setConfig({name:'rezics-kernel',systemDatabaseUrl:db.url,systemDatabasePool:db.pool,systemDatabaseSchemaName:'dbos'});
@@ -40,7 +40,8 @@ async function nativeScenario() {
     const raw=await db.pool.connect();
     try {
       await assert.rejects(client.checkSelectedExecutionInTransaction({query:raw.query.bind(raw)} as pg.PoolClient,db.pool,claim),/native checked-out/);
-      assert.equal(await client.consumeSelectedExecutionAdmission(claim,db.pool),true);
+      if (mode==='interrupted' && interrupted++===0) throw new Error('interrupt-before-consume');
+      assert.equal(await client.consumeSelectedExecutionAdmission(claim,db.pool),mode!=='interrupted');
       assert.equal(await client.consumeSelectedExecutionAdmission(claim,db.pool),false);
       // One claim legitimately spans released, sequential native transactions.
       for (let phase=0;phase<2;phase++) {
@@ -78,14 +79,14 @@ async function nativeScenario() {
       }
       return mode;
     } finally { await raw.query('ROLLBACK'); raw.release(); }
-  },{name:'fixture.selected.step'},{async open(){
+  },{name:'fixture.selected.step',retriesAllowed:true,maxAttempts:2,intervalSeconds:0},{async open(){
     opened++;
     return {deadline:Date.now()+5000,async reserve(){},async close(){closed++;},run<T>(body:()=>Promise<T>){return body();}};
   }});
   const workflow=DBOS.registerWorkflow(async (mode: string)=>step(mode),{name:'fixture.selected.workflow'});
   try {
     await DBOS.launch();
-    for (const mode of ['replay','attempt','restore']) {
+    for (const mode of ['replay','attempt','restore','interrupted']) {
       const id=`selected-native:${crypto.randomUUID()}`;nativeIds.push(id);
       const h=await DBOS.startWorkflow(workflow,{workflowID:id})(mode);
       assert.equal(await h.getResult(),mode);
@@ -102,7 +103,7 @@ async function nativeScenario() {
         assert.equal((await db.admin.query('SELECT 1 FROM dbos.selected_step_executions WHERE workflow_uuid=$1',[fork])).rowCount,0);
       }
     }
-    assert.equal(opened,3);assert.equal(closed,3);assert.equal(bodies,3);
+    assert.equal(opened,5);assert.equal(closed,5);assert.equal(bodies,5);
     // Native retired-owner refusal remains independent of selected-execution lifetime.
     const id=nativeIds[0]!;
     await work.retireWorkflow(id);

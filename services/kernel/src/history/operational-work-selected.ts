@@ -79,6 +79,7 @@ async function original(tx: OperationalTransaction, identity: SelectedIdentity, 
     !o.source_position || BigInt(head.position)<BigInt(o.source_position)) unavailable('selected-runtime-original-unavailable');
   validateOperationalMembersBinding(o.binding,o.intent);
   const binding = o.binding as OperationalMembersBinding;
+  if (binding.retired.length>16) unavailable('selected-runtime-original-cleanup-bound-exceeded');
   const reservation = binding.episodes.find(e=>e.collectionId===locator.collectionId && e.episodeId===locator.episodeId);
   if (binding.route!==locator.route || binding.ownerAccountId!==locator.ownerAccountId || !reservation ||
     o.operation_kind!=='library.membersPreparation' || o.operation_mode!=='request' ||

@@ -320,7 +320,7 @@ It adds `selected_step_executions`, `select_step_execution`, `hold_selected_exec
 `consume_selected_execution`, `release_selected_execution`, and ALWAYS admission-preservation guards. Issuance
 locks restore domain SHARE, actual workflow status SHARE, permanent writer fence UPDATE, then completed output/input
 and the selected attempt. Held validation uses domain SHARE -> status SHARE -> permanent fence UPDATE -> attempt
-SHARE, and compares the locked current records. Queue recovery/replacement changes `owner_xid` by updating status;
+SHARE -> committed input SHARE, and compares the locked current records and registration/input bytes. Queue recovery/replacement changes `owner_xid` by updating status;
 that update conflicts with SHARE until the operational COMMIT. Retirement's unchanged status-before-fence ordering
 also conflicts with that lock. Restore's domain UPDATE conflicts with domain SHARE. Reissuance advances the selected
 attempt and conflicts with its held SHARE. A second held validation occurs before each COMMIT. Existing permanent
@@ -343,12 +343,12 @@ They are prepaid cumulatively; misses, collisions, failed prefixes, SQL exceptio
 
 | Local dispatch | nativeRows | nativePoints | statements | bytes |
 | --- | ---: | ---: | ---: | ---: |
-| issue | 8 | 9 | 8 | 24576 |
+| issue | 8 | 9 | 8 | 49152 |
 | release | 2 | 2 | 2 | 4096 |
-| durable consume | 8 | 8 | 7 | 8192 |
+| durable consume | 9 | 9 | 8 | 24576 |
 | continuation lookup/association | 10 | 12 | 7 | 49152 |
 | SDK enqueue with exact-input capture | 10 | 10 | 9 | 18432 |
-| held native check | 6 | 6 | 5 | 8192 |
+| held native check | 7 | 7 | 6 | 24576 |
 | operational controls/fences | 7 | 3 | 12 | 1024 |
 | reserved two rollbacks | 0 | 0 | 2 | 128 |
 | immutable original verification | 5 | 5 | 5 | 2097152 |
@@ -359,7 +359,7 @@ They are prepaid cumulatively; misses, collisions, failed prefixes, SQL exceptio
 `SELECTED_LOCAL_DECLARATION` is issue + consume + enqueue + four continuation branches + three times
 (controls + two held checks + original + two tuple verifications + association + result) + cleanup.
 Its full axes in the order candidateKeys/nativeRows/identityMetadataRows/nativePoints/witnessKeys/statements/bytes/
-emptySeeks/engineRequests are **0/188/0/197/0/180/63366528/197/0**. Disjoint cleanup is release + three two-rollback
+emptySeeks/engineRequests are **0/195/0/204/0/187/63505792/204/0**. Disjoint cleanup is release + three two-rollback
 partitions: **0/2/0/2/0/8/4480/2/0**, removed from usable balance before any IO. Three phases is an absolute bound,
 not three new grants. Foreign declarations are summed with checked safe-integer arithmetic at registration, never
 inferred from an example or a measured parent. Missing foreign declarations close their dispatch.
@@ -408,3 +408,8 @@ explicit never-returning function declarations and explicit optional value types
 hardens first-issuance poisoning, transaction immutability and the table-specific native immutable guard.
 These later fixes are UNVERIFIED. The compiler was not repeated. No authored/native/unit/growth/full acceptance
 was run, and no passing compiler or native completion is claimed.
+
+Held validation also rereads the actual committed SDK input and status registration projection under native locks;
+changed arguments/name/queue/creator/serialization refuse. These bytes remain immutable in the selected native row.
+The interrupted-before-consume native retry fixture proves that an unspent bit cannot create a recovered grant.
+These additional source-hardening changes are also post-compiler and UNVERIFIED.
