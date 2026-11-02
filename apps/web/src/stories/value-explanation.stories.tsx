@@ -61,3 +61,33 @@ export const Concealed: Story = { args: { scenario: 'concealed' } };
 export const ReadError: Story = { args: { scenario: 'error' } };
 export const Loading: Story = { args: { scenario: 'loading' } };
 export const DocumentUnavailable: Story = { args: { scenario: 'document' } };
+
+export const DecisionNotIncluded: Story = {
+  args: { scenario: 'paged' },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'UNRUN: the real paged consumer fixture omits the selected candidate, then returns an empty page with another Next. No native or visual acceptance is claimed.',
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText(m.value_page_bound())).toBeVisible();
+    await expect(canvas.getByText('9780156012195')).toBeVisible();
+    expect(canvas.queryByText(m.candidate_rejected_state())).toBeNull();
+    const next = await canvas.findByRole('button', { name: m.value_more() });
+    await userEvent.click(next);
+    await expect(await canvas.findByText(m.value_page_bound())).toBeVisible();
+    await expect(canvas.getByRole('button', { name: m.value_more() })).toBeEnabled();
+    await expect(canvas.getByRole('button', { name: m.candidate_reload() })).toBeEnabled();
+    await userEvent.click(canvas.getByRole('button', { name: m.value_more() }));
+    await expect(await canvas.findByText(m.value_accepted())).toBeVisible();
+    expect(canvas.queryByText(m.value_page_bound())).toBeNull();
+    expect(canvas.queryByRole('button', { name: m.value_more() })).toBeNull();
+    const technical = canvas.getByText(m.catalogue_technical_details()).closest('details')!;
+    expect(technical.open).toBe(false);
+    expect(within(technical).getByText(m.value_basis())).toBeTruthy();
+  },
+};

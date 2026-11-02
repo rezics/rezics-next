@@ -41,7 +41,7 @@ export function ValueExplanationPage({
   const change = page?.change;
   return (
     <article
-      className="mx-auto flex w-full min-w-0 max-w-3xl flex-col gap-6"
+      className="mx-auto flex w-full min-w-0 max-w-3xl flex-col gap-6 [overflow-wrap:anywhere]"
       aria-busy={busy}
       data-slot="value-explanation"
     >
@@ -50,7 +50,7 @@ export function ValueExplanationPage({
           <a
             href={page.href}
             lang={page.title.lang}
-            className="text-xl font-semibold underline-offset-4 hover:underline"
+            className="inline-flex min-h-11 min-w-11 max-w-full items-center text-xl font-semibold underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             {page.title.text || m.subject_value_unlabelled({}, o)}
           </a>
@@ -79,7 +79,7 @@ export function ValueExplanationPage({
         <>
           <nav
             aria-label={m.value_why({}, o)}
-            className="flex flex-wrap gap-x-5 gap-y-3 text-sm text-primary [&_a]:underline [&_a]:underline-offset-4"
+            className="flex min-w-0 flex-wrap gap-x-5 gap-y-3 text-sm text-primary [&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:items-center [&_a]:underline [&_a]:underline-offset-4 [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring"
           >
             <a href={page.href}>{m.changes_current({}, o)}</a>
             <a href={`${page.href}/sources`}>{m.subject_sources({}, o)}</a>
@@ -164,7 +164,6 @@ export function ValueExplanationPage({
                     </dd>
                   </div>
                 </dl>
-                <p className="text-sm text-muted-foreground">{m.value_basis({}, o)}</p>
                 {competition?.kind === 'returned' && (
                   <p>
                     {competition.adoption === 'inherit'
@@ -176,12 +175,19 @@ export function ValueExplanationPage({
                           : m.value_adoption_unavailable({}, o)}
                   </p>
                 )}
+                {competition?.kind === 'not-returned' && (
+                  <p className="text-sm text-muted-foreground">{m.value_page_bound({}, o)}</p>
+                )}
                 {competition?.kind === 'not-returned' && competition.next !== null && onMore && (
-                  <Button variant="outline" disabled={busy} onClick={() => onMore(competition.next!)}>
+                  <Button
+                    variant="outline"
+                    className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere]"
+                    disabled={busy}
+                    onClick={() => onMore(competition.next!)}
+                  >
                     {m.value_more({}, o)}
                   </Button>
                 )}
-                <p className="text-sm text-muted-foreground">{m.value_page_bound({}, o)}</p>
               </section>
               <section className="space-y-2" aria-labelledby="value-change">
                 <h2 id="value-change" className="text-xl font-semibold">
@@ -214,7 +220,10 @@ export function ValueExplanationPage({
             </div>
           )}
           <details className="min-w-0 rounded-xl border border-border p-4 text-sm">
-            <summary className="cursor-pointer font-medium">{m.catalogue_technical_details({}, o)}</summary>
+            <summary className="min-h-11 cursor-pointer py-2 font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+              {m.catalogue_technical_details({}, o)}
+            </summary>
+            {statement && <p className="mt-4 text-muted-foreground">{m.value_basis({}, o)}</p>}
             <dl className="mt-4 space-y-3 [&_dd]:break-all [&_dd]:font-mono [&_dd]:text-xs">
               <div>
                 <dt>{m.creator_editions_subject({}, o)}</dt>
@@ -262,7 +271,12 @@ export function ValueExplanationPage({
       )}
       {onReload && (
         <div>
-          <Button variant="outline" disabled={busy} onClick={onReload}>
+          <Button
+            variant="outline"
+            className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere]"
+            disabled={busy}
+            onClick={onReload}
+          >
             {m.candidate_reload({}, o)}
           </Button>
         </div>

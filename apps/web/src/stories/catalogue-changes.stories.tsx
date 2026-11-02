@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { useMemo } from 'react';
-import { SubjectChanges } from '../features/catalogue/subject-changes-page';
+import { SubjectChanges, SubjectChangesPage } from '../features/catalogue/subject-changes-page';
 import { catalogueChangesFixture, type ChangesScenario } from '../kernel/fake/catalogue-changes';
 import { PatternStory } from './page';
 import { AppShell } from '../shell/shell';
@@ -223,5 +223,86 @@ export const DetailLoading: Story = {
   play: async ({ canvasElement }) => {
     const canvas = await select(canvasElement, 5);
     expect(await canvas.findByText(m.changes_detail_loading())).toBeTruthy();
+  },
+};
+
+/** Supplied presentation data only; this does not replace the native fixture's unavailable detail. */
+export const CurrentReading: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'UNRUN: a recorded proposal with an actual current reading supplied to the page. Mounted, browser and native proof are deferred.',
+      },
+    },
+  },
+  render: () => {
+    const locale = getLocale();
+    const { id, read } = catalogueChangesFixture();
+    return (
+      <PatternStory path="/" visitor="Signed Out">
+        <AppShell>
+          <SubjectChangesPage
+            locale={locale}
+            state={{
+              page: {
+                id,
+                title: pageText(read.subject.labels, locale),
+                typeLabel: pageText(sourceDefinitions.types[read.subject.type]?.labels, locale),
+                href: `/${locale}/subjects/${id}`,
+                revisions: [{ revision: 5, kind: 'propose' }],
+                next: null,
+              },
+              selected: 5,
+              detail: {
+                kind: 'ready',
+                detail: {
+                  id,
+                  revision: 5,
+                  propertyLabel: pageText(sourceDefinitions.properties['schema:datePublished']?.labels, locale),
+                  summary: {
+                    kind: 'candidate',
+                    candidate: '00000000-0000-8000-8000-000000000005',
+                    property: 'schema:datePublished',
+                    reading: {
+                      decision: { head: 8, verdict: 'accept', revision: 6 },
+                      selected: true,
+                      rank: 'preferred',
+                    },
+                  },
+                },
+              },
+            }}
+          />
+        </AppShell>
+      </PatternStory>
+    );
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const current = within(canvas.getByRole('region', { name: m.changes_current() }));
+    await expect(current.getByText(m.context_accepted())).toBeVisible();
+    await expect(current.getByText(m.context_selected())).toBeVisible();
+    await expect(current.getByText(new RegExp(m.candidate_rank_preferred()))).toBeVisible();
+    expect(canvas.queryByText(m.changes_current_notice())).toBeNull();
+  },
+};
+
+export const LimitedEvidence: Story = {
+  args: { limited: true },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'UNRUN: limited revision detail keeps its incomplete-evidence notice and the actual current-reading link. Mounted, browser and native proof are deferred.',
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = await select(canvasElement, 5);
+    await expect(await canvas.findByText(m.changes_limited())).toBeVisible();
+    await expect(canvas.getByText(m.changes_current_notice())).toBeVisible();
+    expect(canvas.queryByRole('region', { name: m.changes_current() })).toBeNull();
+    expect(canvas.getByRole('link', { name: m.changes_current() }).getAttribute('href')).toContain('/subjects/');
   },
 };

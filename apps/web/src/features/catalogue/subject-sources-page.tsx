@@ -1,5 +1,6 @@
 import { ContextNavigation, contextHref } from '../pages/context-navigation';
 import { Button } from '@rezics/ui/shadcn/button';
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { CandidateValue } from '../pages/data';
 import { SourcesSection, type OverviewValue } from '../pages/overview';
 import { PlainLink, type PageLink } from '../pages/shared';
@@ -10,6 +11,8 @@ import { m } from '../../paraglide/messages.js';
 import type { SourcePart, SourcesPageData, SourcesResult } from './subject-sources';
 
 type Props = { result: SourcesResult | { kind: 'loading' }; locale: string; onRetry?: () => void; busy?: boolean };
+const linkClassName =
+  'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 function CitationPart({
   part,
@@ -55,7 +58,12 @@ export function SubjectSourcesPage({ result, locale, onRetry, busy = false }: Pr
                     : m.sources_unavailable({}, o)}
         </p>
         {onRetry && result.kind !== 'loading' && result.kind !== 'missing' && (
-          <Button variant="outline" disabled={busy} onClick={onRetry}>
+          <Button
+            variant="outline"
+            className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere]"
+            disabled={busy}
+            onClick={onRetry}
+          >
             {m.sources_retry({}, o)}
           </Button>
         )}
@@ -86,7 +94,7 @@ export function SubjectSourcesPage({ result, locale, onRetry, busy = false }: Pr
   };
   const records = page.sources.records as { name: string; licence?: unknown; attribution?: string }[];
   return (
-    <article data-slot="subject-sources-detail" className="flex min-w-0 flex-col gap-8">
+    <article data-slot="subject-sources-detail" className="flex min-w-0 flex-col gap-8 [overflow-wrap:anywhere]">
       <SubjectFrame
         frame={{ id: page.id, type: '', title: page.title, summary: null }}
         locale={locale}
@@ -98,13 +106,10 @@ export function SubjectSourcesPage({ result, locale, onRetry, busy = false }: Pr
         view="details"
         navigation={
           <nav aria-label={m.subject_sources({}, o)} className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
-            <a className="underline underline-offset-4" href={page.href}>
+            <a className={linkClassName} href={page.href}>
               {m.sources_back({}, o)}
             </a>
-            <a
-              className="underline underline-offset-4"
-              href={contextHref(`${page.href.split('?', 1)[0]}/details`, page.realm)}
-            >
+            <a className={linkClassName} href={contextHref(`${page.href.split('?', 1)[0]}/details`, page.realm)}>
               {m.subject_details({}, o)}
             </a>
             <span aria-current="page" className="font-medium">
@@ -139,49 +144,64 @@ export function SubjectSourcesPage({ result, locale, onRetry, busy = false }: Pr
                 {field.label.text || unlabelled}
               </h3>
               {field.compareHref && (
-                <a className="text-sm text-primary underline underline-offset-4" href={field.compareHref}>
+                <a className={`${linkClassName} text-sm text-primary`} href={field.compareHref}>
                   {m.sources_compare({}, o)}
                 </a>
               )}
             </div>
-            <ul className="space-y-5">
+            <ul className="space-y-1">
               {field.facts.map((fact, factIndex) => (
-                <li key={factIndex} className="min-w-0 space-y-2 break-words">
-                  <div className="font-medium">
-                    {fact.display === 'document' ? (
-                      m.sources_authored({}, o)
-                    ) : fact.display === 'media' ? (
-                      m.sources_media({}, o)
-                    ) : (
-                      <CandidateValue snak={fact.snak} related={page.related} locale={locale} link={ContextLink} />
-                    )}
-                  </div>
-                  {fact.qualifiers.map((part, i) => (
-                    <CitationPart key={i} part={part} page={page} locale={locale} link={ContextLink} />
-                  ))}
-                  {fact.citations.length ? (
-                    <div className="space-y-2">
-                      <p className="text-sm text-muted-foreground">{m.sources_citations({}, o)}</p>
-                      <ol className="list-decimal space-y-2 ps-5">
-                        {fact.citations.map((citation, i) => (
-                          <li key={i}>
-                            {citation.map((part, j) => (
-                              <CitationPart key={j} part={part} page={page} locale={locale} link={ContextLink} />
-                            ))}
-                          </li>
+                <li key={factIndex} className="min-w-0">
+                  <ContentItemFrame
+                    as="div"
+                    data-slot="source-statement"
+                    className="min-w-0 space-y-2 py-3 [overflow-wrap:anywhere] sm:py-4 [&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:items-center [&_a]:rounded-sm [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring"
+                  >
+                    <ContentItemHeading
+                      level={4}
+                      className="text-[17px] font-semibold leading-snug sm:text-lg md:text-xl"
+                    >
+                      {fact.display === 'document' ? (
+                        m.sources_authored({}, o)
+                      ) : fact.display === 'media' ? (
+                        m.sources_media({}, o)
+                      ) : (
+                        <CandidateValue snak={fact.snak} related={page.related} locale={locale} link={ContextLink} />
+                      )}
+                    </ContentItemHeading>
+                    {!!fact.qualifiers.length && (
+                      <div data-content-item-slot="metadata" className="min-w-0 space-y-1 text-sm">
+                        {fact.qualifiers.map((part, i) => (
+                          <CitationPart key={i} part={part} page={page} locale={locale} link={ContextLink} />
                         ))}
-                      </ol>
+                      </div>
+                    )}
+                    <div data-content-item-slot="preview" className="min-w-0 space-y-2 text-sm leading-relaxed">
+                      {fact.citations.length ? (
+                        <div className="space-y-2">
+                          <p className="text-sm text-muted-foreground">{m.sources_citations({}, o)}</p>
+                          <ol className="list-decimal space-y-2 ps-5">
+                            {fact.citations.map((citation, i) => (
+                              <li key={i}>
+                                {citation.map((part, j) => (
+                                  <CitationPart key={j} part={part} page={page} locale={locale} link={ContextLink} />
+                                ))}
+                              </li>
+                            ))}
+                          </ol>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">{m.sources_no_citations({}, o)}</p>
+                      )}
                     </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">{m.sources_no_citations({}, o)}</p>
-                  )}
+                  </ContentItemFrame>
                 </li>
               ))}
             </ul>
           </section>
         ))}
       </section>
-      <div className="min-w-0 space-y-3">
+      <div className="min-w-0 space-y-3 [&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:items-center [&_a]:rounded-sm [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring">
         <SourcesSection value={value} sources={page.sources} />
         <p className="text-sm text-muted-foreground">{m.sources_rights_scope({}, o)}</p>
         {!records.length && <p className="text-sm text-muted-foreground">{m.sources_metadata_unavailable({}, o)}</p>}

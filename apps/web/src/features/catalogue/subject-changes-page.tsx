@@ -164,6 +164,9 @@ export function SubjectChangesPage({ state, locale, currentHref, onMore, onSelec
   const o = { locale: locale as never };
   const busy = !!state.loading;
   const page = state.page;
+  const detail = state.detail?.kind === 'ready' ? state.detail.detail : undefined;
+  const reading =
+    detail?.summary.kind === 'candidate' || detail?.summary.kind === 'decision' ? detail.summary.reading : undefined;
   return (
     <article
       data-slot="subject-changes"
@@ -262,7 +265,7 @@ export function SubjectChangesPage({ state, locale, currentHref, onMore, onSelec
               </h2>
               {state.selected === undefined && <p className="text-muted-foreground">{m.changes_choose({}, o)}</p>}
               {state.loading === 'detail' && <p role="status">{m.changes_detail_loading({}, o)}</p>}
-              {state.detail?.kind === 'ready' && <ChangeExplanation detail={state.detail.detail} locale={locale} />}
+              {detail && <ChangeExplanation detail={detail} locale={locale} />}
               {state.detail && state.detail.kind !== 'ready' && (
                 <div className="space-y-3">
                   <Failure failure={state.detail} locale={locale} />
@@ -273,9 +276,7 @@ export function SubjectChangesPage({ state, locale, currentHref, onMore, onSelec
                   )}
                 </div>
               )}
-              {state.selected !== undefined && (
-                <p className="text-sm text-muted-foreground">{m.changes_current_notice({}, o)}</p>
-              )}
+              {detail && !reading && <p className="text-sm text-muted-foreground">{m.changes_current_notice({}, o)}</p>}
             </section>
           )}
         </div>

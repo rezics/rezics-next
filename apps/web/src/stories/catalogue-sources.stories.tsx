@@ -86,3 +86,107 @@ export const UnavailableRetry: Story = {
     expect(await canvas.findByRole('heading', { name: m.sources_selected() })).toBeTruthy();
   },
 };
+
+const richTitle = '旅人の物語 — 長い道のりを越えて、ふたたび出会う人々と終わらない読書の記録';
+const qualifierUrl = 'https://catalogue.example.test/editions/original';
+const archiveUrl = 'https://archive.example.test/catalogue/second-citation-with-a-long-original-record-address';
+
+/** Finite supplied presentation examples; no native transport fixture is changed. */
+function RichStatementsStory() {
+  const locale = getLocale();
+  const fixture = catalogueSourcesFixture();
+  const page = explainSubjectSources(fixture.read, locale, sourceDefinitions);
+  const target = '00000000-0000-8000-8000-000000000042';
+  page.related[target] = { labels: { ja: richTitle } };
+  page.fields.push({
+    property: 'schema:author',
+    label: { text: 'المؤلف ومعلومات الطبعة الأصلية والمراجع المرتبطة', lang: 'ar' },
+    facts: [
+      {
+        snak: {
+          property: { id: 'schema:author', data_type: 'wikibase-item' },
+          value: { type: 'value', content: target },
+        },
+        qualifiers: [
+          {
+            label: { text: 'Édition', lang: 'fr' },
+            snak: {
+              property: { id: 'schema:name', data_type: 'monolingualtext' },
+              value: { type: 'value', content: { text: 'Édition originale', language: 'fr' } },
+            },
+          },
+          {
+            label: { text: 'Edition record', lang: 'en' },
+            snak: { property: { id: 'schema:url', data_type: 'url' }, value: { type: 'value', content: qualifierUrl } },
+          },
+        ],
+        citations: [
+          [
+            {
+              label: { text: 'Catalogue', lang: 'en' },
+              snak: {
+                property: { id: 'schema:url', data_type: 'url' },
+                value: { type: 'value', content: citationUrl },
+              },
+            },
+          ],
+          [
+            {
+              label: { text: 'Archive', lang: 'en' },
+              snak: { property: { id: 'schema:url', data_type: 'url' }, value: { type: 'value', content: archiveUrl } },
+            },
+          ],
+        ],
+      },
+    ],
+  });
+  return (
+    <PatternStory path="/" visitor="Signed Out">
+      <AppShell>
+        <div dir="rtl" style={{ width: 320, maxWidth: '100%' }}>
+          <SubjectSourcesPage result={{ kind: 'ready', page }} locale={locale} />
+        </div>
+      </AppShell>
+    </PatternStory>
+  );
+}
+
+export const RichStatements: Story = {
+  render: () => <RichStatementsStory />,
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'UNRUN: supplied rich statement, qualifiers and ordered independent citations in a 320px RTL reading. Keyboard, target geometry, browser, visual and native proof are deferred.',
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const value = canvas.getByRole('heading', { level: 4, name: richTitle });
+    const row = value.closest('[data-slot="source-statement"]') as HTMLElement;
+    expect(within(value).getByRole('link', { name: richTitle }).getAttribute('lang')).toBe(
+      getLocale() === 'ja' ? null : 'ja',
+    );
+    expect(within(row).getByText('Édition originale')).toHaveAttribute('lang', 'fr');
+    const citations = within(row).getAllByRole('listitem');
+    expect(citations).toHaveLength(2);
+    expect(within(citations[0]!).getByRole('link').getAttribute('href')).toBe(citationUrl);
+    expect(within(citations[1]!).getByRole('link').getAttribute('href')).toBe(archiveUrl);
+    expect(row.querySelector('a a, a button, [data-slot="list-row-link"]')).toBeNull();
+    const links = within(row).getAllByRole('link');
+    links[0]!.focus();
+    for (let index = 0; index < links.length; index++) {
+      const link = links[index]!;
+      await expect(link).toHaveFocus();
+      const bounds = link.getBoundingClientRect();
+      expect(bounds.width).toBeGreaterThanOrEqual(44);
+      expect(bounds.height).toBeGreaterThanOrEqual(44);
+      expect(bounds.left).toBeGreaterThanOrEqual(row.getBoundingClientRect().left - 1);
+      expect(bounds.right).toBeLessThanOrEqual(row.getBoundingClientRect().right + 1);
+      if (index < links.length - 1) await userEvent.tab();
+    }
+    expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth + 1);
+    await expect(canvas.getByText(m.sources_rights_scope())).toBeVisible();
+  },
+};
