@@ -195,6 +195,8 @@ async function guardedApply(
   let applied: Promise<void> | undefined;
   let duplicate = false;
   let open = true;
+  let guardFailure: unknown;
+  let guardFailed = false;
   try {
     await guard(partition, envelopes, () => {
       if (!open) throw new Error('Subject apply guard has already returned');
@@ -202,14 +204,33 @@ async function guardedApply(
         duplicate = true;
         throw new Error('Subject apply may only run once');
       }
-      applied = apply();
-      return applied;
+      const running = apply();
+      applied = running;
+      // The guard may reject while this work is pending, so observe its rejection immediately.
+      void running.catch(() => undefined);
+      return running;
     });
+  } catch (error) {
+    guardFailed = true;
+    guardFailure = error;
   } finally {
     open = false;
   }
+
+  let applyFailure: unknown;
+  let applyFailed = false;
+  if (applied) {
+    try {
+      await applied;
+    } catch (error) {
+      applyFailed = true;
+      applyFailure = error;
+    }
+  }
+
+  if (guardFailed) throw guardFailure;
   if (duplicate || !applied) throw new Error('Subject apply guard must run apply exactly once');
-  await applied;
+  if (applyFailed) throw applyFailure;
 }
 
 /** The sole ordinary writer path, shared by finite cold population and event replay. */
