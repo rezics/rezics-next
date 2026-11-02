@@ -326,6 +326,8 @@ Opening an editor creates a clearly labelled private draft, never a selected pub
 require an explicit choice of assertion; a multivalued field may instead propose an additional value. Cardinality
 still governs the later whole-slot selection, not a client-side collapse of existing assertions.
 
+Refresh retains a still-selected source; a withdrawn choice requires an explicit current replacement before editing, even if only one remains or no values remain, while an explicit additional-value action stays separate and other drafts stay intact.
+
 The workspace reuses the scalar editor's native value, qualifier and grouped-citation controls and validators.
 Existing unsupported parts stay intact. Names and descriptions use the separate actual terms PATCH editor;
 relations/credits use their exact-slot editor. Types with document fields link to the existing

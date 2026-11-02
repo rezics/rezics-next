@@ -108,6 +108,7 @@
   "facts_intro": "Modifiez plusieurs champs, puis soumettez explicitement les changements inclus. Les valeurs publiques restent visibles jusqu’à leur examen et leur sélection.",
   "facts_no_value": "Aucune valeur publique sélectionnée.",
   "facts_choose_value": "Choisir la valeur sélectionnée à corriger",
+  "facts_source_unavailable": "La valeur choisie n’est plus sélectionnée. Choisissez une valeur actuelle à corriger. Si aucune n’est disponible, actualisez à nouveau.",
   "facts_selected_value": "Valeur sélectionnée {number}",
   "facts_edit_field": "Modifier ce champ",
   "facts_add_value": "Proposer une autre valeur",

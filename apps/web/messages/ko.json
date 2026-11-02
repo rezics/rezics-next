@@ -108,6 +108,7 @@
   "facts_intro": "여러 필드를 수정한 뒤 포함할 변경 사항을 명시적으로 제출하세요. 공개 값은 검토와 선택 전까지 유지됩니다.",
   "facts_no_value": "선택된 공개 값이 없습니다.",
   "facts_choose_value": "수정할 선택 값 고르기",
+  "facts_source_unavailable": "고른 값이 더 이상 선택되어 있지 않습니다. 수정할 현재 값을 고르세요. 고를 수 있는 값이 없으면 다시 새로고침하세요.",
   "facts_selected_value": "선택 값 {number}",
   "facts_edit_field": "이 필드 편집",
   "facts_add_value": "다른 값 제안",

@@ -25,7 +25,8 @@ const correctedIsbn = '978-4-00-000001-7';
 
 test('refreshed fact sources follow current statements and preserve a surviving choice', () => {
   expect(reconcileFactSource(identifiersStatement, [])).toBe('');
-  expect(reconcileFactSource(identifiersStatement, [{ id: 'replacement' }])).toBe('replacement');
+  expect(reconcileFactSource(identifiersStatement, [{ id: 'replacement' }])).toBe('');
+  expect(reconcileFactSource('', [{ id: 'replacement' }])).toBe('');
   expect(reconcileFactSource(identifiersStatement, [{ id: identifiersStatement }])).toBe(identifiersStatement);
 });
 

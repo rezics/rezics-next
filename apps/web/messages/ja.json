@@ -108,6 +108,7 @@
   "facts_intro": "複数の項目を編集し、選択した変更を明示的に提案します。公開値は審査と選択が行われるまで変わりません。",
   "facts_no_value": "選択された公開値はありません。",
   "facts_choose_value": "修正する選択値を選ぶ",
+  "facts_source_unavailable": "選んだ値は現在選択されていません。修正する値を選び直してください。選べる値がない場合は、再度読み込んでください。",
   "facts_selected_value": "選択値 {number}",
   "facts_edit_field": "この項目を編集",
   "facts_add_value": "別の値を提案",

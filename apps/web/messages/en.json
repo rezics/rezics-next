@@ -120,6 +120,7 @@
   "facts_intro": "Change several fields, then explicitly submit the included changes. Existing public values stay visible until review and selection.",
   "facts_no_value": "No public value is selected.",
   "facts_choose_value": "Choose the selected value to correct",
+  "facts_source_unavailable": "The value you chose is no longer selected. Choose a current value to correct. If none are available, refresh again.",
   "facts_selected_value": "Selected value {number}",
   "facts_edit_field": "Edit this field",
   "facts_add_value": "Propose another value",

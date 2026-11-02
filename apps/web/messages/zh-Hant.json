@@ -108,6 +108,7 @@
   "facts_intro": "編輯多個欄位後，明確提交所選變更。公開值在審核和選擇前保持不變。",
   "facts_no_value": "尚無選定的公開值。",
   "facts_choose_value": "選擇要修正的已選值",
+  "facts_source_unavailable": "你選擇的值已不再被選用。請選擇一個目前的值進行更正。如果沒有可選的值，請再次重新整理。",
   "facts_selected_value": "已選值 {number}",
   "facts_edit_field": "編輯此欄位",
   "facts_add_value": "提議另一個值",

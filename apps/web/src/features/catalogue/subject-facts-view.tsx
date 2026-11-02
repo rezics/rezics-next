@@ -32,10 +32,9 @@ export { ExactReview };
 export { SelectedFacts };
 
 type ReviewAddress = { property: string; candidate: string; session?: string | undefined };
-/** Keep a staged field's source on the refreshed public selection when it still exists. */
+/** Refresh preserves an explicit source only while that exact statement remains selected. */
 export function reconcileFactSource(source: string, selected: readonly { id: string }[]): string {
-  if (selected.some((statement) => statement.id === source)) return source;
-  return selected.length === 1 ? selected[0]!.id : '';
+  return selected.some((statement) => statement.id === source) ? source : '';
 }
 
 export type FactsProfile = {
@@ -161,14 +160,26 @@ function FactField({
   const label = pageText(definition.labels, locale).text || m.subject_value_unlabelled({}, o);
   const selected = read.public.subject.statements[property] ?? [];
   const selection = JSON.stringify(selected.map((statement) => statement.id));
-  const [source, setSource] = useState(selected.length === 1 ? selected[0]!.id : '');
-  const [previousSelection, setPreviousSelection] = useState(selection);
-  if (previousSelection !== selection) {
-    setPreviousSelection(selection);
-    setSource((current) => reconcileFactSource(current, selected));
+  const [choice, setChoice] = useState({
+    source: selected.length === 1 ? selected[0]!.id : '',
+    unavailable: false,
+    selection,
+  });
+  const { source, unavailable: sourceUnavailable } = choice;
+  if (choice.selection !== selection) {
+    const next = reconcileFactSource(choice.source, selected);
+    setChoice({
+      source: next,
+      unavailable: choice.unavailable || (!!choice.source && !next),
+      selection,
+    });
   }
   const sourceId = useId();
+  const recoveryId = useId();
   const includeId = useId();
+  // A withdrawn correction must never fall through to staging an additional assertion.
+  const sourceSelected = selected.some((statement) => statement.id === source);
+  const canEdit = canStage && !busy && (sourceSelected || (!selected.length && !sourceUnavailable));
   const sourceIndex = draft?.source ? selected.findIndex((item) => item.id === draft.source) : -1;
   const locked = !!draft && factLocked(draft);
   return (
@@ -185,7 +196,12 @@ function FactField({
         <SelectedFacts property={property} read={read} locale={locale} />
         {!draft ? (
           <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
-            {!!selected.length && (
+            {sourceUnavailable && (
+              <p id={recoveryId} role="status" className="w-full text-sm text-muted-foreground">
+                {m.facts_source_unavailable({}, o)}
+              </p>
+            )}
+            {(!!selected.length || sourceUnavailable) && (
               <Field className="w-full min-w-0">
                 <FieldLabel className="min-w-0 flex-wrap [overflow-wrap:anywhere]" htmlFor={sourceId}>
                   {m.facts_choose_value({}, o)}
@@ -194,8 +210,18 @@ function FactField({
                   id={sourceId}
                   className="w-full min-w-0 [&>select]:min-h-11"
                   aria-label={m.facts_choose_value({}, o)}
+                  aria-describedby={sourceUnavailable ? recoveryId : undefined}
+                  aria-invalid={sourceUnavailable}
+                  disabled={busy || !canStage || !selected.length}
                   value={source}
-                  onChange={(event) => setSource(event.target.value)}
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    setChoice({
+                      source: next,
+                      selection,
+                      unavailable: sourceUnavailable && !selected.some((statement) => statement.id === next),
+                    });
+                  }}
                 >
                   <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
                   {selected.map((statement, index) => (
@@ -211,12 +237,14 @@ function FactField({
                 type="button"
                 variant="outline"
                 className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
-                disabled={busy || !canStage || (!!selected.length && !source)}
-                onClick={() => onStage(source || null)}
+                disabled={!canEdit}
+                onClick={() => {
+                  if (canEdit) onStage(sourceSelected ? source : null);
+                }}
               >
                 {m.facts_edit_field({}, o)}
               </Button>
-              {!!selected.length && definition.multivalued && (
+              {(!!selected.length || sourceUnavailable) && definition.multivalued && (
                 <Button
                   type="button"
                   variant="outline"
@@ -534,6 +562,7 @@ function SubjectFactsLive({
                         onChange={change}
                         onReview={setReviewing}
                         onStage={(source) => {
+                          if (!lifetime.active()) return;
                           const draft = stageFact(current, property, source);
                           if (draft)
                             setDrafts((previous) => (previous.length < factLimit ? [...previous, draft] : previous));

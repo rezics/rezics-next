@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { act, createElement as h, useState, type ReactNode } from 'react';
-import type { FactCommand, FactDraft } from '../src/features/catalogue/subject-facts';
+import { stageFact, type FactCommand, type FactDraft } from '../src/features/catalogue/subject-facts';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
@@ -9,7 +9,7 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 async function mounted(
   run: (page: {
     host: HTMLElement;
-    render: (node: ReactNode) => Promise<void>;
+    render: (node: ReactNode, retain?: boolean) => Promise<void>;
     choose: (select: HTMLSelectElement, value: string) => Promise<void>;
     enter: (input: HTMLInputElement, value: string) => Promise<void>;
   }) => Promise<void>,
@@ -51,8 +51,9 @@ async function mounted(
   try {
     await run({
       host,
-      render: async (node) => {
-        await act(async () => root.render(h('div', { key: ++generation }, node)));
+      render: async (node, retain = false) => {
+        if (!retain) generation++;
+        await act(async () => root.render(h('div', { key: generation }, node)));
       },
       choose: async (select, value) => {
         await act(async () => {
@@ -427,5 +428,52 @@ test('Mounted field outcomes preserve separate partial results and the exact ori
       expect(read.public).toEqual(before);
       expect(host.querySelector('a a, a button')).toBeNull();
     }
+  });
+});
+
+test('A withdrawn fact source needs an explicit replacement, including after an empty refresh', async () => {
+  await mounted(async ({ host, render, choose }) => {
+    const { FactField } = await import('../src/features/catalogue/subject-facts-view');
+    const { identifiersProfileFixture } = await import('../src/kernel/fake/catalogue-identifiers-profile');
+    const { m } = await import('../src/paraglide/messages.js');
+    const read = await identifiersProfileFixture().transport.read();
+    if (!read.ok) throw new Error('Expected current facts');
+    const property = 'schema:sameAs';
+    const replacement = {
+      ...read.public.subject.statements[property]![0]!,
+      id: crypto.randomUUID(),
+      value: { type: 'value' as const, content: '' },
+    };
+    const staged: (FactDraft | null)[] = [];
+    const field = () =>
+      h(FactField, {
+        property,
+        read,
+        locale: 'en',
+        busy: false,
+        canStage: true,
+        href: '/en/subjects/edition',
+        onReview() {},
+        onChange() {},
+        onStage: (source) => staged.push(stageFact(read, property, source)),
+      });
+    await render(field());
+    const edit = () => button(host, m.facts_edit_field());
+    read.public.subject.statements[property] = [];
+    await render(field(), true);
+    expect(edit().disabled).toBe(true);
+    expect(host.querySelector('[role="status"]')?.textContent).toBe(m.facts_source_unavailable());
+    read.public.subject.statements[property] = [replacement];
+    await render(field(), true);
+    expect([host.querySelector<HTMLSelectElement>('select')!.value, edit().disabled, staged.length]).toEqual([
+      '',
+      true,
+      0,
+    ]);
+    await choose(host.querySelector('select')!, replacement.id);
+    expect(host.querySelector('[role="status"]')).toBeNull();
+    await act(async () => edit().click());
+    expect(staged[0]?.source).toBe(replacement.id);
+    expect(staged[0]?.baseline?.value).toEqual(replacement.value);
   });
 });

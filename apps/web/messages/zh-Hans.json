@@ -108,6 +108,7 @@
   "facts_intro": "编辑多个字段后，明确提交所选更改。公开值在审核和选择前保持不变。",
   "facts_no_value": "尚无选定的公开值。",
   "facts_choose_value": "选择要修正的已选值",
+  "facts_source_unavailable": "你选择的值已不再被选用。请选择一个当前值进行更正。如果没有可选的值，请再次刷新。",
   "facts_selected_value": "已选值 {number}",
   "facts_edit_field": "编辑此字段",
   "facts_add_value": "提议另一个值",

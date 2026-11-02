@@ -108,6 +108,7 @@
   "facts_intro": "Cambia varios campos y envía expresamente los cambios incluidos. Los valores públicos siguen visibles hasta su revisión y selección.",
   "facts_no_value": "No hay ningún valor público seleccionado.",
   "facts_choose_value": "Elige el valor seleccionado que vas a corregir",
+  "facts_source_unavailable": "El valor que elegiste ya no está seleccionado. Elige un valor actual para corregirlo. Si no hay ninguno disponible, vuelve a actualizar.",
   "facts_selected_value": "Valor seleccionado {number}",
   "facts_edit_field": "Editar este campo",
   "facts_add_value": "Proponer otro valor",
