@@ -676,8 +676,10 @@ export const ConnectedSaveLifetime: Story = {
       '4|callback-1|null|resolved',
       '5|callback-1|15|rejected',
     );
-    await expect(within(primary).getByRole('status')).toHaveTextContent('Échec de l’enregistrement.');
-    await expect(output(primary)).toHaveTextContent('7 sur 10');
+    await waitFor(() =>
+      expect(within(primary).getByRole('status')).toHaveTextContent('Échec de l’enregistrement.'),
+    );
+    await waitFor(() => expect(output(primary)).toHaveTextContent('7 sur 10'));
     slider(primary).focus();
     await userEvent.keyboard('{ArrowRight}');
     await expectCalls(
@@ -766,9 +768,9 @@ export const ConnectedSaveLifetime: Story = {
       '7|callback-1|16|rejected',
       '8|callback-1|16|pending',
     );
-    await expect(primary).toHaveAttribute('aria-busy', 'true');
-    await expect(output(primary)).toHaveTextContent('8 sur 10');
-    await expect(within(primary).queryByRole('status')).not.toBeInTheDocument();
+    await waitFor(() => expect(primary).toHaveAttribute('aria-busy', 'true'));
+    await waitFor(() => expect(output(primary)).toHaveTextContent('8 sur 10'));
+    await waitFor(() => expect(within(primary).queryByRole('status')).not.toBeInTheDocument());
     await finish(8);
     await expect(primary).toHaveAttribute('aria-busy', 'false');
 
@@ -837,7 +839,6 @@ export const ConnectedSaveLifetime: Story = {
     await expect(within(primary).queryByRole('slider')).not.toBeInTheDocument();
     await fireEvent.keyDown(unmountedSlider, { key: 'End', code: 'End' });
     await fireEvent.click(unmountedClear);
-    await finish(11);
     await expect(callLines()).toHaveLength(11);
     await userEvent.click(canvas.getByRole('button', { name: 'Mount primary' }));
     await expect(output(primary)).toHaveTextContent('7,5 sur 10');
@@ -854,9 +855,27 @@ export const ConnectedSaveLifetime: Story = {
       '8|callback-1|16|resolved',
       '9|callback-1|20|resolved',
       '10|callback-1|20|resolved',
+      '11|callback-1|19|pending',
+      '12|callback-1|20|pending',
+    );
+    await finish(11);
+    await expectCalls(
+      '1|callback-0|20|resolved',
+      '2|callback-0|19|resolved',
+      '3|callback-1|17|resolved',
+      '4|callback-1|null|resolved',
+      '5|callback-1|15|rejected',
+      '6|callback-1|15|resolved',
+      '7|callback-1|16|rejected',
+      '8|callback-1|16|resolved',
+      '9|callback-1|20|resolved',
+      '10|callback-1|20|resolved',
       '11|callback-1|19|resolved',
       '12|callback-1|20|pending',
     );
+    await expect(primary).toHaveAttribute('aria-busy', 'true');
+    await expect(output(primary)).toHaveTextContent('10 sur 10');
+    await expect(within(primary).queryByRole('status')).not.toBeInTheDocument();
     await finish(12);
     await expect(primary).toHaveAttribute('aria-busy', 'false');
   },
