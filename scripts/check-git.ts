@@ -160,7 +160,10 @@ function verifySnapshotRepository(repository: string, packPath: string, manifest
   runGit(repository, ['update-ref', 'refs/rezics-check/staged-index', manifest.indexTree], gitEnv);
   runGit(repository, ['symbolic-ref', 'HEAD', 'refs/heads/check-snapshot'], gitEnv);
   runGit(repository, ['fsck', '--strict', '--connectivity-only', '--no-reflogs'], gitEnv);
-  if (manifest.dev !== null && git(repository, ['merge-base', manifest.head, manifest.dev], gitEnv) !== manifest.shallow) {
+  if (
+    manifest.dev !== null &&
+    git(repository, ['merge-base', manifest.head, manifest.dev], gitEnv) !== manifest.shallow
+  ) {
     throw new Error('check-git: restored snapshot does not preserve its development merge base');
   }
   runGit(repository, ['cat-file', '-e', `${manifest.head}^{commit}`], gitEnv);
@@ -266,9 +269,11 @@ export async function stageCheckGit(workspace: string, artifactDirectory: string
   const head = git(source, ['rev-parse', '--verify', 'HEAD^{commit}']);
   const devCandidate = optionalGit(source, ['rev-parse', '--verify', 'dev^{commit}'], 128);
   const dev = devCandidate && validObjectId(devCandidate, objectFormat) ? devCandidate : undefined;
-  if (devCandidate !== undefined && dev === undefined) throw new Error('check-git: development ref identity is invalid');
+  if (devCandidate !== undefined && dev === undefined)
+    throw new Error('check-git: development ref identity is invalid');
   const mergeBaseCandidate = dev ? optionalGit(source, ['merge-base', head, dev], 1) : undefined;
-  const mergeBase = mergeBaseCandidate && validObjectId(mergeBaseCandidate, objectFormat) ? mergeBaseCandidate : undefined;
+  const mergeBase =
+    mergeBaseCandidate && validObjectId(mergeBaseCandidate, objectFormat) ? mergeBaseCandidate : undefined;
   if (mergeBaseCandidate !== undefined && mergeBase === undefined) {
     throw new Error('check-git: development merge-base identity is invalid');
   }
@@ -477,7 +482,10 @@ export async function restoreCheckGit(manifestPath: string, checkout: string): P
       '\n# Files created by the bounded remote check runner.\n/.alive\n/.bun-install-complete\n/.remote-check-slot-count\n/bun-runtime-transpiler-cache/\n/command-phases.tsv\n/command-started\n/exit-status\n',
     );
     runGit(staging, ['--git-dir', metadata, 'fsck', '--strict', '--connectivity-only', '--no-reflogs'], gitEnv);
-    if (manifest.dev !== null && git(staging, ['--git-dir', metadata, 'merge-base', manifest.head, manifest.dev], gitEnv) !== manifest.shallow) {
+    if (
+      manifest.dev !== null &&
+      git(staging, ['--git-dir', metadata, 'merge-base', manifest.head, manifest.dev], gitEnv) !== manifest.shallow
+    ) {
       throw new Error('check-git: restored snapshot does not preserve its development merge base');
     }
     if (git(staging, ['--git-dir', metadata, 'rev-parse', 'HEAD'], gitEnv) !== manifest.head) {
