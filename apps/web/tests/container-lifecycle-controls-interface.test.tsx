@@ -158,12 +158,15 @@ test('keyboard lifecycle confirmation keeps focus on cancel and the current resu
       await user.keyboard('{Enter}');
     });
     await restoreRequest;
-    const elsewhere = button('Elsewhere');
+    const elsewhere = document.createElement('div');
+    elsewhere.textContent = 'Elsewhere';
+    host.append(elsewhere);
     await act(async () => user.click(elsewhere));
+    expect(document.activeElement).toBe(document.body);
     finishRestore!();
     finishRestore = null;
     await flush();
-    expect(document.activeElement).toBe(elsewhere);
+    expect(document.activeElement).toBe(document.body);
   } finally {
     if (finishRestore) finishRestore();
     await act(async () => root.unmount());

@@ -73,6 +73,7 @@ type LifecycleFocusRequest = {
   action: LifecycleAction;
   destination: 'confirmation' | 'action' | 'settlement';
   generation: number;
+  control: object;
   callerLifetime: ContainerLifecycleCallerLifetime;
   callerLifetimeId: number;
   connectionRevision: number;
@@ -126,6 +127,7 @@ function LifecycleControlsView({
       action,
       destination,
       generation,
+      control,
       callerLifetime: caller.lifetime,
       callerLifetimeId: caller.lifetime.id,
       connectionRevision: caller.connectionRevision,
@@ -150,6 +152,9 @@ function LifecycleControlsView({
   }, [control, caller.lifetime, caller.connectionRevision, caller.ready]);
   useEffect(() => {
     if (typeof document === 'undefined') return;
+    const cancelSettlementFocus = () => {
+      if (focusRequestRef.current?.destination === 'settlement') focusRequestRef.current = null;
+    };
     const keepCurrentFocus = (event: FocusEvent) => {
       const request = focusRequestRef.current;
       if (
@@ -161,9 +166,22 @@ function LifecycleControlsView({
         return;
       focusRequestRef.current = null;
     };
+    const cancelOnPointer = () => cancelSettlementFocus();
+    const cancelOnActivation = (event: Event) => {
+      if (event.type === 'keydown') {
+        const key = (event as KeyboardEvent).key;
+        if (key === 'Tab' || key === 'Enter' || key === ' ') cancelSettlementFocus();
+      } else cancelSettlementFocus();
+    };
     document.addEventListener('focusin', keepCurrentFocus, true);
+    document.addEventListener('pointerdown', cancelOnPointer, true);
+    document.addEventListener('keydown', cancelOnActivation, true);
+    document.addEventListener('click', cancelOnActivation, true);
     return () => {
       document.removeEventListener('focusin', keepCurrentFocus, true);
+      document.removeEventListener('pointerdown', cancelOnPointer, true);
+      document.removeEventListener('keydown', cancelOnActivation, true);
+      document.removeEventListener('click', cancelOnActivation, true);
       focusRequestRef.current = null;
     };
   }, []);
@@ -173,6 +191,7 @@ function LifecycleControlsView({
     if (
       request.generation !== focusGenerationRef.current ||
       request.targetKey !== targetKey ||
+      request.control !== control ||
       request.callerLifetime !== caller.lifetime ||
       request.callerLifetimeId !== caller.lifetime.id ||
       request.connectionRevision !== caller.connectionRevision ||
@@ -225,6 +244,7 @@ function LifecycleControlsView({
     destination.focus({ preventScroll: true });
   }, [
     targetKey,
+    control,
     caller.lifetime,
     caller.lifetime.id,
     caller.connectionRevision,
@@ -448,18 +468,20 @@ function LifecycleControlsView({
                 onClick={(event) => {
                   const action = confirmation;
                   const previousIntentKey = control.getSnapshot().intent?.idempotencyKey;
-                  const generation = requestFocus('settlement', action, event.currentTarget);
+                  const generation =
+                    event.detail === 0 ? requestFocus('settlement', action, event.currentTarget) : null;
                   setConfirmation(null);
                   const submission = control.submit(action);
                   const intent = control.getSnapshot().intent;
                   if (
+                    generation !== null &&
                     focusRequestRef.current?.generation === generation &&
                     intent?.action === action &&
                     intent.idempotencyKey !== previousIntentKey
                   )
                     focusRequestRef.current.intentKey = intent.idempotencyKey;
                   void submission.then(() => {
-                    if (focusRequestRef.current?.generation === generation)
+                    if (generation !== null && focusRequestRef.current?.generation === generation)
                       setSettlementRevision((revision) => revision + 1);
                   });
                 }}
