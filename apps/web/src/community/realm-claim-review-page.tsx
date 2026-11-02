@@ -139,8 +139,23 @@ function RealmClaimReviewContent({
   const retryPageButton = useRef<HTMLButtonElement>(null);
   const refreshButton = useRef<HTMLButtonElement>(null);
   const pendingQueueFocus = useRef<number | null>(null);
+  useEffect(() => {
+    const cancel = () => {
+      pendingQueueFocus.current = null;
+    };
+    document.addEventListener('focusin', cancel, true);
+    document.addEventListener('pointerdown', cancel, true);
+    window.addEventListener('blur', cancel);
+    return () => {
+      cancel();
+      document.removeEventListener('focusin', cancel, true);
+      document.removeEventListener('pointerdown', cancel, true);
+      window.removeEventListener('blur', cancel);
+    };
+  }, []);
   useRealmClaimDeparture(lifetime, control, ready);
   useEffect(() => {
+    pendingQueueFocus.current = null;
     control.reconnect();
     if (load || (lifetime && connectionRevision > 0)) {
       const ticket = lifetime?.ticket();
@@ -149,7 +164,10 @@ function RealmClaimReviewContent({
         void control.refresh();
       });
     }
-    return () => control.disconnect();
+    return () => {
+      pendingQueueFocus.current = null;
+      control.disconnect();
+    };
   }, [control, load, lifetime, connectionRevision]);
   const active = ready && (!lifetime || lifetime.current());
   const hidden: typeof snapshot = {
