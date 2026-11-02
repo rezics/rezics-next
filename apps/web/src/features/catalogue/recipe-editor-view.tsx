@@ -58,8 +58,8 @@ type Row = {
   original?: boolean;
   authored?: AuthoredField;
   picked?: EntityPickerSubject[];
-  command?: ProposalCommand;
-  result?: ProposalResult;
+  command?: ProposalCommand | undefined;
+  result?: ProposalResult | undefined;
   uncertain?: boolean;
   source?: NonNullable<Ready['public']>['subject']['statements'][string][number];
 };
