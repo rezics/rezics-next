@@ -132,9 +132,7 @@ test('Keyboard resolution focuses only its live admitted result and keeps exact 
   const fill = (value: string) => act(async () => user.type(screen.getByRole('textbox'), value));
   try {
     const initial = { outcome: 'upheld' as const, statement: 'Already resolved.' };
-    await act(async () =>
-      root.render(<AppealResolution appealId="initial" mayResolve={false} resolution={initial} />),
-    );
+    await act(async () => root.render(<AppealResolution appealId="initial" mayResolve={false} resolution={initial} />));
     const initialResult = screen.getByRole('status');
     await act(async () => root.render(<AppealResolution appealId="initial" mayResolve={false} resolution={initial} />));
     expect(window.document.activeElement).not.toBe(initialResult);
