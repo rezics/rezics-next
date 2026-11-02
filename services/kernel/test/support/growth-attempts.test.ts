@@ -243,51 +243,44 @@ test('declared attempts do not bypass an established inclusive rows violation', 
   }
 }, 120_000);
 
-test('attempted 40001 and 40P01 work retains inclusive costs and uses retries review', async () => {
+test('attempted 40001 and 40P01 failures retain inclusive costs without hiding unrelated growth', async () => {
   for (const sqlstate of ['40001', '40P01']) {
-    const captured = await captureReviews(() =>
-      checkGrowth(db, {
-        name: `attempt retry evidence ${sqlstate}`,
-        rule: 'series',
-        scales: [1, 4, 16],
-        repetitions: 1,
-        attempts: { commands: 1 },
-        bounds: { rows: 'linear', blocks: 'linear', statements: 'constant' },
-        grow: async () => {},
-        warmup: async (database) => database.pool.query('SELECT 1'),
-        operation: async (database, scale) => {
-          const statementCounts: Record<number, number> = { 1: 69, 4: 79, 16: 86 };
-          for (let index = 0; index < statementCounts[scale]!; index++)
-            await database.pool.query('SELECT $1::integer AS value', [index]);
-          await withConnection(database.pool, async (client) => {
-            await client.query('BEGIN');
-            try {
-              await client.query(`SELECT ${retryFunction}($1::text)`, [sqlstate]);
-            } catch (error) {
-              if ((error as { code?: string }).code !== sqlstate) throw error;
-            }
-            await client.query('ROLLBACK');
-            await client.query('BEGIN');
-            await client.query('SELECT 1 AS committed');
-            await client.query('COMMIT');
-          });
-        },
-      }),
-    );
-    expect(captured.value.verdicts.statements).toMatchObject({ outcome: 'inconclusive', reason: 'retries' });
-    expect(captured.value.samples.map(({ repetitions }) => repetitions[0]!.statements)).toEqual([71, 81, 88]);
-    expect(captured.value.samples[0]!.attempts?.repetitions[0]!.byOutcome[`aborted:${sqlstate}`]).toBe(1);
-    expect(captured.lines).toHaveLength(1);
-    expect(reviewJson(captured.lines[0]!)).toMatchObject({
-      check: `attempt retry evidence ${sqlstate}`,
-      metric: 'statements',
-      reason: 'retries',
-      failedStatements: [
-        { scale: 1, sqlstate, count: 1 },
-        { scale: 4, sqlstate, count: 1 },
-        { scale: 16, sqlstate, count: 1 },
-      ],
-    });
+    const error = await checkGrowth(db, {
+      name: `attempt retry evidence ${sqlstate}`,
+      rule: 'series',
+      scales: [1, 4, 16],
+      repetitions: 1,
+      attempts: { commands: 1 },
+      bounds: { rows: 'linear', blocks: 'linear', statements: 'constant' },
+      grow: async () => {},
+      warmup: async (database) => database.pool.query('SELECT 1'),
+      operation: async (database, scale) => {
+        const statementCounts: Record<number, number> = { 1: 69, 4: 79, 16: 86 };
+        for (let index = 0; index < statementCounts[scale]!; index++)
+          await database.pool.query('SELECT $1::integer AS value', [index]);
+        await withConnection(database.pool, async (client) => {
+          await client.query('BEGIN');
+          try {
+            await client.query(`SELECT ${retryFunction}($1::text)`, [sqlstate]);
+          } catch (error) {
+            if ((error as { code?: string }).code !== sqlstate) throw error;
+          }
+          await client.query('ROLLBACK');
+          await client.query('BEGIN');
+          await client.query('SELECT 1 AS committed');
+          await client.query('COMMIT');
+        });
+      },
+    })
+      .then(() => undefined, (failure: unknown) => failure);
+    expect(error).toBeInstanceOf(GrowthBoundError);
+    expect((error as Error).message).toContain('statements violates constant growth bound');
+    expect((error as Error).message).toContain(`failed attempts by SQLSTATE at scale: 1 {"${sqlstate}":1}`);
+    expect((error as Error).message).toContain(`4 {"${sqlstate}":1}`);
+    expect((error as Error).message).toContain(`16 {"${sqlstate}":1}`);
+    const samples = (error as GrowthBoundError & { samples: readonly ReportSample[] }).samples;
+    expect(samples.map(({ repetitions }) => repetitions[0]!.statements)).toEqual([71, 81, 88]);
+    expect(samples[0]!.attempts?.repetitions[0]!.byOutcome[`aborted:${sqlstate}`]).toBe(1);
   }
 }, 120_000);
 
@@ -450,10 +443,10 @@ test('attempt ledger: without a declaration inclusive statement growth still fai
   ).rejects.toThrow(/statements/);
 });
 
-test('attempt ledger: intermittent retry statements are judged only on executed work', () => {
+test('attempt ledger: retry-affected statements stay inconclusive unless successful work proves growth', async () => {
   const samples = [1, 4, 16].map((scale) => {
     const sample = reportSample(scale, [
-      [attempt('aborted:40001', 1), attempt('committed', 1)],
+      [attempt('aborted:40001', 1, [1]), attempt('committed', 1)],
       [attempt('committed', 1)],
     ]);
     const committed = sample.occurrenceRepetitions[0]!;
@@ -461,20 +454,37 @@ test('attempt ledger: intermittent retry statements are judged only on executed 
       ...committed.statements[0]!,
       index: 1,
       statement: 'SELECT retry_work',
-      rows: 100,
-      blocks: 100,
+      rows: scale * 100,
+      blocks: scale * 100,
     };
     return {
       ...sample,
       occurrenceRepetitions: [{ ...committed, statements: [...committed.statements, retryStatement] }, committed],
     };
   });
-  expect(() => validateAttemptSamples(attemptCheck, samples)).not.toThrow();
+  const captured = await captureReviews(async () => validateAttemptSamples(attemptCheck, samples));
+  expect(captured.lines).toHaveLength(2);
+  expect(captured.lines.map(reviewJson)).toMatchObject([
+    {
+      check: attemptCheck.name,
+      metric: 'rows',
+      reason: 'retries',
+      statement: 'SELECT retry_work',
+      explanation: expect.stringContaining('fewer than three scales'),
+    },
+    {
+      check: attemptCheck.name,
+      metric: 'blocks',
+      reason: 'retries',
+      statement: 'SELECT retry_work',
+      explanation: expect.stringContaining('fewer than three scales'),
+    },
+  ]);
   // Contention can disappear at the largest scale, including the retry-only statement itself.
   const last = samples[2]!;
   const fewerRetries = reportSample(16, [[attempt('committed', 1)], [attempt('committed', 1)]]);
   expect(() => validateAttemptSamples(attemptCheck, [samples[0]!, samples[1]!, fewerRetries])).not.toThrow();
-  expect(last.occurrenceRepetitions[0]!.statements[1]!.rows).toBe(100);
+  expect(last.occurrenceRepetitions[0]!.statements[1]!.rows).toBe(1600);
 });
 
 test('attempt ledger: failures without plans do not turn bounded executions into noisy row and block evidence', () => {

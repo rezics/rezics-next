@@ -50,6 +50,12 @@ import {
   type CountedCheck,
   type CountedSample,
 } from './growth-counters.ts';
+import {
+  isSuccessfulForegroundOccurrence,
+  retryAffectsOccurrence,
+  retainIndependentRetryViolation,
+  successfulMetricEvidence,
+} from './growth-retry-verdict.ts';
 
 export * from './growth-counters.ts';
 
@@ -264,7 +270,6 @@ export function validateAttemptSamples(check: GrowthCheck, samples: readonly Rep
           fail(
             `aborted attempt ${index} (${attempt.outcome}) at scale ${scale}, repetition ${repetition} ran ${attempt.statements} statements, exceeding committed attempt count ${committedCount}`,
           );
-  const retries = retryFailures(samples);
   for (const metric of ['rows', 'blocks'] as const) {
     const fingerprints = new Set(
       samples.flatMap(({ occurrenceRepetitions }) =>
@@ -272,27 +277,87 @@ export function validateAttemptSamples(check: GrowthCheck, samples: readonly Rep
       ),
     );
     for (const fingerprint of fingerprints) {
-      const points = samples.flatMap((sample) => {
-        const executions = sample.occurrenceRepetitions.flatMap(({ statements }) =>
-          statements.filter((item) => item.statement === fingerprint && (item.error === null || item.plans.length > 0)),
-        );
-        // A missing execution (or a failure without a plan) is not a measured zero. Compare the most expensive
-        // execution at each scale so retry incidence cannot change the verdict or hide an expensive repetition.
-        if (executions.length === 0) return [];
-        const maximum = Math.max(...executions.map((item) => item[metric]));
-        return [
-          {
-            scale: sample.scale,
-            repetitions: [maximum],
-            uncertainty: Math.max(GROWTH_UNCERTAINTY[metric].absolute, GROWTH_UNCERTAINTY[metric].relative * maximum),
-          },
-        ];
-      });
+      const pointsFor = (successfulOnly: boolean) =>
+        samples.flatMap((sample) => {
+          const executions = sample.occurrenceRepetitions.flatMap((run, repetition) => {
+            const ledger = sample.attempts!.repetitions[repetition]!.ledger;
+            return run.statements.filter(
+              (item) =>
+                item.statement === fingerprint &&
+                (successfulOnly
+                  ? isSuccessfulForegroundOccurrence(item, ledger)
+                  : item.error === null || item.plans.length > 0),
+            );
+          });
+          // A missing execution (or a failure without a plan) is not a measured zero. Compare the most expensive
+          // execution at each scale so an expensive repetition cannot be hidden by retry incidence.
+          if (executions.length === 0) return [];
+          const maximum = Math.max(...executions.map((item) => item[metric]));
+          return [
+            {
+              scale: sample.scale,
+              repetitions: [maximum],
+              uncertainty: Math.max(
+                GROWTH_UNCERTAINTY[metric].absolute,
+                GROWTH_UNCERTAINTY[metric].relative * maximum,
+              ),
+            },
+          ];
+        });
+      const points = pointsFor(false);
+      const successfulPoints = pointsFor(true);
       // Missing executions are diagnostic, not zero-cost observations or evidence insufficiency failures.
       if (points.length < 3) continue;
-      const verdict = classifySeries(points, check.bounds[metric], metric === 'blocks' ? (check.indexProbes ?? 0) : 0);
-      if (verdict.outcome === 'violation' && retries.length === 0)
+      const indexProbes = metric === 'blocks' ? (check.indexProbes ?? 0) : 0;
+      const verdict = classifySeries(points, check.bounds[metric], indexProbes);
+      if (verdict.outcome !== 'violation') continue;
+
+      const retryAffectsStatement = samples.some((sample) =>
+        sample.occurrenceRepetitions.some((run, repetition) =>
+          run.statements.some(
+            (item) =>
+              item.statement === fingerprint &&
+              retryAffectsOccurrence(item, sample.attempts!.repetitions[repetition]!.ledger),
+          ),
+        ),
+      );
+      if (!retryAffectsStatement) {
         fail(`statement ${fingerprint} ${metric} violates ${check.bounds[metric]} growth bound across attempts`);
+        continue;
+      }
+
+      if (successfulPoints.length >= 3) {
+        const successfulVerdict = classifySeries(successfulPoints, check.bounds[metric], indexProbes);
+        if (successfulVerdict.outcome === 'violation')
+          fail(`statement ${fingerprint} ${metric} violates ${check.bounds[metric]} growth bound in successful foreground work`);
+        else {
+          const explanation = `statement ${fingerprint} ${metric} violates ${check.bounds[metric]} only when retry-affected occurrences are included; successful committed or autocommit occurrences do not independently establish the violation`;
+          process.stderr.write(
+            `GROWTH_REVIEW ${JSON.stringify({
+              file: relative(process.cwd(), Bun.main),
+              check: check.name,
+              metric,
+              bound: check.bounds[metric],
+              reason: 'retries',
+              statement: fingerprint,
+              explanation,
+            })}\n`,
+          );
+        }
+      } else {
+        const explanation = `statement ${fingerprint} ${metric} has fewer than three scales of successful foreground evidence after retry-affected occurrences are excluded`;
+        process.stderr.write(
+          `GROWTH_REVIEW ${JSON.stringify({
+            file: relative(process.cwd(), Bun.main),
+            check: check.name,
+            metric,
+            bound: check.bounds[metric],
+            reason: 'retries',
+            statement: fingerprint,
+            explanation,
+          })}\n`,
+        );
+      }
     }
   }
 }
@@ -415,13 +480,12 @@ function retryFailures(samples: readonly ReportSample[]): FailedStatementCount[]
   return [...counts.values()];
 }
 
-function selectedVerdict(
+function classifiedVerdict(
   metric: GrowthMetric,
   classified: ClassifiedMetric,
   rule: GrowthReport['rule'],
   stepViolation: boolean,
   settleFailed: boolean,
-  failedStatements: readonly FailedStatementCount[],
 ): GrowthVerdict {
   const { classification, uncertainties } = classified;
   let outcome: GrowthVerdict['outcome'];
@@ -440,9 +504,6 @@ function selectedVerdict(
   if (outcome === 'violation' && metric === 'blocks' && settleFailed) {
     outcome = 'inconclusive';
     reason = 'settle';
-  } else if (outcome === 'violation' && failedStatements.length > 0) {
-    outcome = 'inconclusive';
-    reason = 'retries';
   }
   return {
     outcome,
@@ -450,6 +511,64 @@ function selectedVerdict(
     medians: classification.medians,
     ranges: classification.ranges,
     uncertainties,
+  };
+}
+
+function selectedVerdict(
+  metric: GrowthMetric,
+  classified: ClassifiedMetric,
+  rule: GrowthReport['rule'],
+  stepViolation: boolean,
+  settleFailed: boolean,
+  failedStatements: readonly FailedStatementCount[],
+  check: GrowthCheck,
+  samples: readonly ReportSample[],
+): { verdict: GrowthVerdict; retryExplanation?: string } {
+  const reported = classifiedVerdict(metric, classified, rule, stepViolation, settleFailed);
+  if (reported.outcome !== 'violation' || reported.reason === 'settle' || failedStatements.length === 0)
+    return { verdict: reported };
+
+  const evidence = successfulMetricEvidence(samples, metric);
+  let independent: GrowthVerdict | undefined;
+  if (evidence.values) {
+    const independentSamples = samples.map((sample, index) => {
+      const runs = evidence.values![index]!;
+      const ordered = [...runs].sort((left, right) => left - right);
+      const median = ordered[Math.floor((ordered.length - 1) / 2)]!;
+      return {
+        ...sample,
+        cost: { ...sample.cost, [metric]: median },
+        repetitions: sample.repetitions.map((cost, repetition) => ({
+          ...cost,
+          [metric]: runs[repetition]!,
+        })),
+      };
+    });
+    const independentClassified = classifyMetric(independentSamples, check, metric);
+    const independentStepViolation = growthViolations(independentSamples, check.bounds, check.slack).some(
+      (violation) => violation.metric === metric,
+    );
+    independent = classifiedVerdict(
+      metric,
+      independentClassified,
+      rule,
+      independentStepViolation,
+      settleFailed,
+    );
+  }
+
+  const explanation = evidence.explanation
+    ? `Successful foreground ${metric} evidence could not be separated: ${evidence.explanation}; retry work remains in the inclusive measurements.`
+    : independent?.outcome === 'compatible'
+      ? `Successful foreground ${metric} evidence is compatible with ${classified.bound}; retry work remains in the inclusive violation.`
+      : `Successful foreground ${metric} evidence is ${independent?.outcome ?? 'unavailable'} and does not independently establish the inclusive violation; retry work remains in the measurements.`;
+  const decision = retainIndependentRetryViolation(independent?.outcome, explanation);
+  return {
+    verdict:
+      decision.outcome === 'violation'
+        ? reported
+        : { ...reported, outcome: decision.outcome, reason: decision.reason },
+    ...(decision.outcome === 'inconclusive' ? { retryExplanation: decision.explanation } : {}),
   };
 }
 
@@ -461,6 +580,7 @@ function writeGrowthReview(
   verdict: GrowthVerdict,
   samples: readonly ReportSample[],
   failedStatements: readonly FailedStatementCount[],
+  retryExplanation?: string,
 ): void {
   if (verdict.outcome !== 'inconclusive') return;
   const settleFailures = samples.flatMap(({ scale, settleFailures: failures }) =>
@@ -478,6 +598,7 @@ function writeGrowthReview(
       ...(bound === undefined ? {} : { bound }),
       rule,
       reason: verdict.reason ?? 'noise',
+      ...(retryExplanation === undefined ? {} : { retryExplanation }),
       medians: verdict.medians,
       ranges: verdict.ranges,
       uncertainties: verdict.uncertainties,
@@ -880,6 +1001,7 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
   const stepViolationMetrics = new Set(stepViolations.map(({ metric }) => metric));
   const failedStatements = retryFailures(samples);
   const settleFailed = samples.some(({ settleFailures: failures }) => (failures?.length ?? 0) > 0);
+  const retryExplanations: Partial<Record<GrowthMetric, string>> = {};
   const verdicts: Record<GrowthMetric, GrowthVerdict | undefined> = {
     rows: undefined,
     blocks: undefined,
@@ -890,14 +1012,18 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
   for (const metric of ['rows', 'blocks', 'statements', 'requestBytes', 'responseBytes'] as const) {
     const source = classified[metric];
     if (!source) continue;
-    verdicts[metric] = selectedVerdict(
+    const selected = selectedVerdict(
       metric,
       source,
       rule,
       stepViolationMetrics.has(metric),
       settleFailed,
       failedStatements,
+      check,
+      samples,
     );
+    verdicts[metric] = selected.verdict;
+    if (selected.retryExplanation) retryExplanations[metric] = selected.retryExplanation;
   }
 
   const report: GrowthReport = {
@@ -934,7 +1060,17 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
   }
   for (const metric of ['rows', 'blocks', 'statements', 'requestBytes', 'responseBytes'] as const) {
     const verdict = report.verdicts[metric];
-    if (verdict) writeGrowthReview(check, rule, metric, classified[metric]?.bound, verdict, samples, failedStatements);
+    if (verdict)
+      writeGrowthReview(
+        check,
+        rule,
+        metric,
+        classified[metric]?.bound,
+        verdict,
+        samples,
+        failedStatements,
+        retryExplanations[metric],
+      );
   }
   assertBackgroundBound(check.name, samples);
   validateAttemptSamples(check, samples);

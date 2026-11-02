@@ -353,30 +353,24 @@ async function countStatements(database: GrowthDatabase, count: number, retrySta
   });
 }
 
-test('measured serialization and deadlock retries turn a violation into inconclusive review', async () => {
+test('unrelated serialization and deadlock retries do not conceal successful statement growth', async () => {
   for (const sqlstate of ['40001', '40P01']) {
-    const captured = await captureReviews(() =>
-      checkGrowth(db, {
-        name: `retry evidence ${sqlstate}`,
-        rule: 'series',
-        scales: [1, 4, 16],
-        repetitions: 1,
-        bounds: { rows: 'linear', blocks: 'linear', statements: 'constant' },
-        grow: async () => {},
-        warmup: async (database) => countStatements(database, 1),
-        operation: async (database, scale) => {
-          await countStatements(database, scale === 1 ? 1 : scale === 4 ? 2 : 4, scale === 1 ? sqlstate : undefined);
-        },
-      }),
-    );
-    expect(captured.value.verdicts.statements).toMatchObject({ outcome: 'inconclusive', reason: 'retries' });
-    expect(captured.lines).toHaveLength(1);
-    expect(reviewJson(captured.lines[0]!)).toMatchObject({
-      check: `retry evidence ${sqlstate}`,
-      metric: 'statements',
-      reason: 'retries',
-      failedStatements: [{ scale: 1, sqlstate, count: 1 }],
-    });
+    const error = await checkGrowth(db, {
+      name: `retry evidence ${sqlstate}`,
+      rule: 'series',
+      scales: [1, 4, 16],
+      repetitions: 1,
+      bounds: { rows: 'linear', blocks: 'linear', statements: 'constant' },
+      grow: async () => {},
+      warmup: async (database) => countStatements(database, 1),
+      operation: async (database, scale) => {
+        await countStatements(database, scale === 1 ? 1 : scale === 4 ? 2 : 4, scale === 1 ? sqlstate : undefined);
+      },
+    })
+      .then(() => undefined, (failure: unknown) => failure);
+    expect(error).toBeInstanceOf(GrowthBoundError);
+    expect((error as Error).message).toContain('statements violates constant growth bound');
+    expect((error as Error).message).toContain(`failed attempts by SQLSTATE at scale: 1 {"${sqlstate}":1}`);
   }
 }, 120_000);
 

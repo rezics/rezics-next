@@ -455,7 +455,10 @@ the medians, within their uncertainty, fits the bound's family. It fails with `G
 does not fit even when each scale takes any value in its median's distribution-free confidence interval (the
 repetitions' minimum and maximum for five runs), widened by its uncertainty. Otherwise the verdict is inconclusive and
 the check passes. A settle failure inside `checkGrowth` is recorded on its sample and makes a blocks violation
-inconclusive. Failed statements with SQLSTATE 40001 or 40P01 make any violation inconclusive. Every inconclusive
+inconclusive. Failed statements with SQLSTATE 40001 or 40P01 make an established violation inconclusive unless complete
+occurrence evidence independently establishes the same growth from successful foreground work. Successful statements
+inside aborted attempts do not count as successful work. Byte metrics have no per-occurrence evidence, so retry-related
+byte violations remain inconclusive; incomplete attribution is explained in `GROWTH_REVIEW`. Every inconclusive
 verdict is in the report's `verdicts` and in one `GROWTH_REVIEW` stderr line, which performance reviews; it never blocks
 the change under test. A cost that grows with data the operation does not need still fails. The series classifier and
 shadow verdict use calibrated uncertainty from `docs/research/growth-uncertainty-calibration.md`: rows allow max(22, 0%
@@ -495,12 +498,15 @@ for overall profiles; they combine matching SQL across runs and must not be spli
 Checks may declare `attempts: { commands }` to count top-level transaction attempts per backend. Reports retain
 inclusive statement, row and block totals and the failed-statement SQLSTATE ledger, while also listing committed and
 aborted attempts by SQLSTATE for each scale and repetition. Attempts add evidence and never replace the universal
-growth verdicts: inclusive rows, blocks, statements and declared byte metrics always use the check's selected rule,
-and recorded `40001` or `40P01` failures make any established violation inconclusive. Per-execution row and block costs
-remain in `occurrenceRepetitions`; when at least three scales have measured executions and no retry SQLSTATE evidence
-applies, the most expensive execution at each scale is judged against the same bound. Missing executions are not zero
-costs, and fewer than three observed scales remain diagnostic evidence rather than an insufficiency failure. Changes
-in retry incidence are retained in the attempt ledger and profile but do not themselves fail a growth check. Committed
+growth verdicts: inclusive rows, blocks, statements and declared byte metrics always use the check's selected rule.
+Recorded `40001` or `40P01` failures make an established violation inconclusive unless complete successful foreground
+occurrences independently establish it; retry work remains in inclusive costs and reports. Retry-affected byte
+violations remain inconclusive because bytes have no per-occurrence attribution. Per-execution row and block costs
+remain in `occurrenceRepetitions`; when at least three scales have measured executions, the most expensive successful
+committed or autocommit execution at each scale is judged against the same bound. Missing executions are not zero costs,
+and fewer than three observed scales remain diagnostic evidence rather than an insufficiency failure. Retry-affected
+attempts that cannot be separated from a per-execution violation are explicitly reported as inconclusive. Changes in
+retry incidence are retained in the attempt ledger and profile but do not themselves fail a growth check. Committed
 attempts must have the same statement count across scales and repetitions, and aborted attempts may run no more
 statements. Checks without `attempts` keep the same inclusive verdicts without the additional transaction ledger.
 Growth checks can also declare `counted` units: `read(value, scale)` extracts per-run integer counts, while `limits`
