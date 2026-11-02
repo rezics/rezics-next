@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, ftruncateSync, openSync, readFileSync, readdirSync, writeFileSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   ensureHostRunning,
@@ -143,6 +143,52 @@ test('restart failures preserve the exact cause and use durable bounded backoff 
   } finally {
     controller.abort();
     await running;
+    dir.close();
+  }
+}, 10_000);
+
+test('startup failure diagnostics are bounded to the current launch and report truncation', async () => {
+  const dir = temporaryDirectory();
+  const logPath = join(dir.path, 'manager-host.log');
+  const oldFailure = 'previous launch failure';
+  const log = openSync(logPath, 'w');
+  ftruncateSync(log, 128 * 1024 * 1024);
+  writeSync(log, oldFailure, 0, oldFailure.length, 128 * 1024 * 1024 - oldFailure.length);
+  closeSync(log);
+
+  const failing = join(dir.path, 'failure.js');
+  const config: HostLivenessConfig = {
+    stateDirectory: dir.path,
+    managerSocket: join(dir.path, 'manager.sock'),
+    mainCheckout: dir.path,
+    command: [process.execPath, failing],
+  };
+  const failAndRead = async () => {
+    const error = await ensureHostRunning(config).then(() => undefined, (reason) => reason as Error);
+    expect(error).toBeInstanceOf(Error);
+    return error!.message;
+  };
+
+  try {
+    const currentFailure = 'current launch failure';
+    writeFileSync(failing, `console.error(${JSON.stringify(currentFailure)}); process.exit(17);`);
+    const first = await failAndRead();
+    expect(first).toContain('exited with code 17');
+    expect(first).toContain(`log path: ${logPath}`);
+    expect(first).toContain('Current launch output complete');
+    expect(first).toContain(currentFailure);
+    expect(first).not.toContain(oldFailure);
+
+    const currentTail = 'current launch tail';
+    writeFileSync(failing, `console.error(${JSON.stringify(`${'x'.repeat(5000)}${currentTail}`)}); process.exit(18);`);
+    const second = await failAndRead();
+    expect(second).toContain('exited with code 18');
+    expect(second).toContain(`log path: ${logPath}`);
+    expect(second).toContain('Current launch output truncated');
+    expect(second).toContain(currentTail);
+    expect(second).not.toContain(oldFailure);
+    expect(second.length).toBeLessThan(4500);
+  } finally {
     dir.close();
   }
 }, 10_000);

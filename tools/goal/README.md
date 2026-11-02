@@ -127,6 +127,9 @@ A stale manager host restarts after finishing its active request and recovers pe
 one per ten minutes. Requests retry transient socket absence during handoff, and long recovery sweeps yield between
 small batches so manager requests continue to be serviced. Watchdog and settlement scans read at most the last 256 KiB
 of an attempt log, beginning at a complete line boundary; the recent commands and final failure events remain visible.
+Startup failures identify the exited code or signal and the manager-host log path. Diagnostics read at most the final
+4 KiB appended by that launch, report whether that launch's output was truncated or unavailable, and exclude prior log
+history from the failure evidence.
 
 Check slots remain shared across workers and the landing train. A detached check's terminal result stays controller
 owned: a worker returns while it is running, and Goal wakes that session after reading its result record. The wrapper's
