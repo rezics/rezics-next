@@ -19,6 +19,11 @@ export type WorkIntent = Readonly<{
     }>;
     /** Original positional SDK arguments, when the existing workflow predates scoped work. */
     arguments?: readonly unknown[];
+    /** Native queue controls; deduplication spans the entire queue, including partitions. */
+    queuePartitionKey?: string;
+    deduplicationID?: string;
+    priority?: number;
+    delaySeconds?: number;
 }>;
 /** Executor internals. The SDK uses this very connection; no pool checkout or relay. */
 export declare function enqueueWorkIntent(work: WorkClient, client: PoolClient, intent: WorkIntent, capture?: (created: boolean) => void): Promise<void>;

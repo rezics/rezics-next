@@ -12,6 +12,10 @@ type CommonOptions = {
     accounts: readonly string[];
     workClient: WorkClient;
     deadline?: number;
+    /** Bound source-side continuation attempts for owners that report one finite native operation. */
+    attemptLimit?: number;
+    /** Exact in-memory declaration for a single accounted native operation. */
+    admission?: object;
     /** Trusted service configuration only. */
     clock?: () => Date;
     /** Separate native History producer admission. Existing callers keep their ordinary behaviour. */
@@ -41,8 +45,11 @@ type Live = {
     partition: number;
     mode: OperationalOptions['mode'];
     kind: string;
+    admission?: object;
 };
 export declare function hasLiveOperationalTransaction(tx: Pick<PoolClient, 'query'>): tx is OperationalTransaction;
+/** Confirms the exact accounting declaration attached to this live native home. */
+export declare function hasOperationalAdmission(tx: Pick<PoolClient, 'query'>, admission: object): tx is OperationalTransaction;
 /** Server-only executor resources. The transaction remains the only usable query client. */
 export declare function currentOperationalResources(tx: OperationalTransaction): Readonly<Omit<Live, 'client'>>;
 /** Input is a consumer-owned locator object, including the fenced accounts. */

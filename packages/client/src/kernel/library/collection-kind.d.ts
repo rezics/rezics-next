@@ -6,7 +6,9 @@ import type { Access, Actor } from '../request/access.ts';
 import type { IdentityScopedObservations, IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
 import { type NativeLibrarySourceCustody } from './native-source-custody.ts';
 import { type CollectionSource, type CollectionAliasProgress, type CollectionSourceObservation, type CollectionSourceContext, type PreparedCollectionSource, type WorkAllowance, type WorkReceipt } from './collection-source.ts';
+import type { KindAudienceAccess } from '../access/kind-audience.ts';
 import type { WorkClient } from '../work/client.ts';
+import type { KindConsentConsumer, KindConsentReference } from '@rezics/auth-contract';
 /** Presentation arithmetic only. These values are not Source, identity or disclosure evidence. */
 export type AutomaticCollectionKind = {
     presentationKind: string;
@@ -15,12 +17,41 @@ export type AutomaticCollectionKind = {
     presentationKind: null;
     presentationKindSource: 'empty' | 'pending';
 };
-export type CollectionKind = AutomaticCollectionKind | {
+export type CollectionKind = {
+    presentationKind: null;
+    presentationKindSource: 'mixed';
+} | {
     presentationKind: string;
     presentationKindSource: 'owner';
 };
-/** A constant-size projection of an already admitted observation; an override needs no observation. */
-export declare function collectionKind(override: string | null, observation: AutomaticCollectionKind): CollectionKind;
+/** A declaration's native predicate result for one canonical item. Unknown is
+ * retained explicitly: it can only be ignored when a proven higher-ranked
+ * declaration already wins that item. */
+export type ConfiguredKindMatch = Readonly<{
+    id: string;
+    eligible: boolean;
+    precedence: number;
+    result: 'match' | 'no-match' | 'unknown';
+}>;
+export type ConfiguredKindVote = Readonly<{
+    subjectId: string;
+    matches: readonly ConfiguredKindMatch[];
+}>;
+export type ConfiguredKindReduction = Readonly<{
+    status: 'selected';
+    kindId: string;
+}> | Readonly<{
+    status: 'empty';
+}> | Readonly<{
+    status: 'unavailable';
+}>;
+/** Apply the versioned Kind policy after native evidence has classified each
+ * declaration for every unique canonical item. Each item casts at most one
+ * vote. A possibly winning unknown predicate makes the whole reduction
+ * unavailable instead of silently falling back to a lower-ranked result. */
+export declare function reduceConfiguredCollectionKinds(votes: readonly ConfiguredKindVote[]): ConfiguredKindReduction;
+/** Unset presentation uses each member's Type hints; a stored owner choice needs no member evidence. */
+export declare function collectionKind(override: string | null): CollectionKind;
 /**
  * Repair-side reduction of COMPLETE current canonical visible support, keyed by terminal subject ID.
  * The native producer must establish completeness, currentness and canonical identity before using this result.
@@ -37,6 +68,13 @@ export type CollectionKindCapture = Readonly<{
     audience: string;
     sourceGeneration: string;
     token: string;
+    /** Auth enrollment lookup plus the exact Source generation; never ordinary authorization. */
+    consent?: Readonly<{
+        reference: KindConsentReference;
+        consumer: KindConsentConsumer;
+        captureGeneration: string;
+        catalogueRoot: string;
+    }>;
 }>;
 export type CollectionKindVote = Readonly<{
     subjectId: string;
@@ -63,6 +101,8 @@ export type CollectionKindPage = Readonly<{
  * Revalidation resolves retained native records, never trusts this locator or an old custody hold as fresh authority.
  */
 export interface CollectionKindNative {
+    /** Ephemeral original entry only; never part of a DBOS locator or restored Actor. */
+    prepareInput?: KindAudienceAccess['resolveInput'];
     prepare(input: {
         collectionId: string;
         accountId: string;
@@ -187,12 +227,4 @@ export declare function readCollectionKindSourcePage(input: CollectionKindSource
     work: WorkReceipt;
 }>;
 export declare function validateCollectionKindPage(page: CollectionKindPage, after: string | null, frontier?: string | null): void;
-/** Fixed metadata/proof points only. Read callers retain their own Collection authorization and final reread. */
-export declare function createCollectionKindReads(dependencies: CollectionKindPreparationDependencies, native?: CollectionKindNative): (actor: Actor, row: {
-    id: string;
-    presentationKind: string | null;
-    sourceGeneration: string;
-    memberCount?: number;
-    membershipKind?: string;
-}, deadline: number) => Promise<CollectionKind>;
 export {};

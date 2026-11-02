@@ -2,6 +2,7 @@ export declare const DEFAULT_REQUEST_DEADLINE_MS = 2000;
 import type { Pool, PoolClient } from 'pg';
 import type { Actor } from '../request/access.ts';
 export { CommandUnavailableError } from '../access/unavailable.ts';
+import { type CommandWorkAssociation } from './work-context.ts';
 export type CommandEvent = {
     type: string;
     subject?: string;
@@ -125,6 +126,8 @@ export type CommandAttempt = Readonly<{
     partition: number;
     basis: Readonly<CommandAttribution> | null;
     time: AuthoritativeTime;
+    /** Optional trusted accounting context; it grants no request or authorization evidence. */
+    commandWork?: CommandWorkAssociation;
 }>;
 export type CommandAuthorizationMode = 'execute' | 'receipt-only';
 /** Trusted service binding, never operation JSON. prepare runs with no resource

@@ -3413,6 +3413,209 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
     };
 } & {
     v1: {
+        definitionTypes: {
+            get: {
+                body: unknown;
+                params: {};
+                query: {
+                    query?: string;
+                    typeId?: string;
+                    locale?: never;
+                    limit?: number;
+                    cursor?: string;
+                };
+                headers: unknown;
+                response: {
+                    200: {
+                        types: {
+                            typeId: string;
+                            releaseDigest: string;
+                            label: string;
+                            language: string | null;
+                            parents: string[];
+                            description: string | null;
+                            descriptionLanguage: string | null;
+                        }[];
+                        next: string | null;
+                    };
+                    400: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    401: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    404: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    409: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    422: Response | {
+                        type: 'validation';
+                        code: 'validation';
+                        title: 'Validation Error';
+                        status: 422;
+                        detail?: string;
+                        on: string;
+                        found?: unknown;
+                        property?: string;
+                        expected?: unknown;
+                        errors?: {
+                            message?: string;
+                            [key: string]: unknown;
+                        }[];
+                    };
+                    503: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                };
+                error: never;
+            };
+        };
+    };
+} & {
+    v1: {
+        definitionTypes: {
+            ":typeId": {
+                get: {
+                    body: unknown;
+                    params: {
+                        typeId: string;
+                    };
+                    query: {
+                        locale?: never;
+                    };
+                    headers: unknown;
+                    response: {
+                        200: {
+                            typeId: string;
+                            releaseDigest: string;
+                            label: string;
+                            language: string | null;
+                            parents: string[];
+                            description: string | null;
+                            descriptionLanguage: string | null;
+                            definition: Record<string, any>;
+                            properties: Record<string, Record<string, any>>;
+                        };
+                        400: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        401: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        404: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        409: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        422: Response | {
+                            type: 'validation';
+                            code: 'validation';
+                            title: 'Validation Error';
+                            status: 422;
+                            detail?: string;
+                            on: string;
+                            found?: unknown;
+                            property?: string;
+                            expected?: unknown;
+                            errors?: {
+                                message?: string;
+                                [key: string]: unknown;
+                            }[];
+                        };
+                        503: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                    };
+                    error: never;
+                };
+            };
+        };
+    };
+} & {
+    v1: {
         definitions: {
             catalogue: {
                 artifacts: {
@@ -5223,7 +5426,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     route: import("typebox").TInteger;
                     id: import("typebox").TString;
                 }>;
-                summary: import("typebox").TUnsafe<Pick<import("./reads.ts").ThreadView, "createdAt" | "id" | "kind" | "title">>;
+                summary: import("typebox").TUnsafe<Pick<import("./reads.ts").ThreadView, "createdAt" | "id" | "kind" | "title"> & import("./feed-contract.ts").FeedContentSummary>;
                 destination: import("typebox").TObject<{
                     kind: import("typebox").TLiteral<"thread">;
                     id: import("typebox").TString;
@@ -5239,7 +5442,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     route: import("typebox").TInteger;
                     id: import("typebox").TString;
                 }>;
-                summary: import("typebox").TUnsafe<Pick<import("./model.ts").ItemView, "createdAt" | "id" | "threadId"> & Pick<import("./reads.ts").ThreadView, "title">>;
+                summary: import("typebox").TUnsafe<Pick<import("./model.ts").ItemView, "createdAt" | "id" | "threadId"> & Pick<import("./reads.ts").ThreadView, "title"> & import("./feed-contract.ts").FeedContentSummary>;
                 destination: import("typebox").TObject<{
                     kind: import("typebox").TLiteral<"post">;
                     id: import("typebox").TString;
@@ -5614,7 +5817,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     route: number;
                     id: string;
                 };
-                summary: Pick<import("./reads.ts").ThreadView, "createdAt" | "id" | "kind" | "title">;
+                summary: Pick<import("./reads.ts").ThreadView, "createdAt" | "id" | "kind" | "title"> & import("./feed-contract.ts").FeedContentSummary;
                 destination: {
                     kind: "thread";
                     id: string;
@@ -5630,7 +5833,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     route: number;
                     id: string;
                 };
-                summary: Pick<import("./model.ts").ItemView, "createdAt" | "id" | "threadId"> & Pick<import("./reads.ts").ThreadView, "title">;
+                summary: Pick<import("./model.ts").ItemView, "createdAt" | "id" | "threadId"> & Pick<import("./reads.ts").ThreadView, "title"> & import("./feed-contract.ts").FeedContentSummary;
                 destination: {
                     kind: "post";
                     id: string;
@@ -5968,7 +6171,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     route: number;
                     id: string;
                 };
-                summary: Pick<import("./reads.ts").ThreadView, "createdAt" | "id" | "kind" | "title">;
+                summary: Pick<import("./reads.ts").ThreadView, "createdAt" | "id" | "kind" | "title"> & import("./feed-contract.ts").FeedContentSummary;
                 destination: {
                     kind: "thread";
                     id: string;
@@ -5984,7 +6187,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     route: number;
                     id: string;
                 };
-                summary: Pick<import("./model.ts").ItemView, "createdAt" | "id" | "threadId"> & Pick<import("./reads.ts").ThreadView, "title">;
+                summary: Pick<import("./model.ts").ItemView, "createdAt" | "id" | "threadId"> & Pick<import("./reads.ts").ThreadView, "title"> & import("./feed-contract.ts").FeedContentSummary;
                 destination: {
                     kind: "post";
                     id: string;
@@ -6330,7 +6533,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         route: import("typebox").TInteger;
                         id: import("typebox").TString;
                     }>;
-                    summary: import("typebox").TUnsafe<Pick<import("./reads.ts").ThreadView, "createdAt" | "id" | "kind" | "title">>;
+                    summary: import("typebox").TUnsafe<Pick<import("./reads.ts").ThreadView, "createdAt" | "id" | "kind" | "title"> & import("./feed-contract.ts").FeedContentSummary>;
                     destination: import("typebox").TObject<{
                         kind: import("typebox").TLiteral<"thread">;
                         id: import("typebox").TString;
@@ -6346,7 +6549,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         route: import("typebox").TInteger;
                         id: import("typebox").TString;
                     }>;
-                    summary: import("typebox").TUnsafe<Pick<import("./model.ts").ItemView, "createdAt" | "id" | "threadId"> & Pick<import("./reads.ts").ThreadView, "title">>;
+                    summary: import("typebox").TUnsafe<Pick<import("./model.ts").ItemView, "createdAt" | "id" | "threadId"> & Pick<import("./reads.ts").ThreadView, "title"> & import("./feed-contract.ts").FeedContentSummary>;
                     destination: import("typebox").TObject<{
                         kind: import("typebox").TLiteral<"post">;
                         id: import("typebox").TString;
@@ -6758,7 +6961,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             route: number;
             id: string;
         };
-        summary: Pick<import("./reads.ts").ThreadView, "createdAt" | "id" | "kind" | "title">;
+        summary: Pick<import("./reads.ts").ThreadView, "createdAt" | "id" | "kind" | "title"> & import("./feed-contract.ts").FeedContentSummary;
         destination: {
             kind: "thread";
             id: string;
@@ -6774,7 +6977,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             route: number;
             id: string;
         };
-        summary: Pick<import("./model.ts").ItemView, "createdAt" | "id" | "threadId"> & Pick<import("./reads.ts").ThreadView, "title">;
+        summary: Pick<import("./model.ts").ItemView, "createdAt" | "id" | "threadId"> & Pick<import("./reads.ts").ThreadView, "title"> & import("./feed-contract.ts").FeedContentSummary;
         destination: {
             kind: "post";
             id: string;
@@ -7060,7 +7263,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         route: number;
                         id: string;
                     };
-                    summary: Pick<import("./reads.ts").ThreadView, "createdAt" | "id" | "kind" | "title">;
+                    summary: Pick<import("./reads.ts").ThreadView, "createdAt" | "id" | "kind" | "title"> & import("./feed-contract.ts").FeedContentSummary;
                     destination: {
                         kind: "thread";
                         id: string;
@@ -7076,7 +7279,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         route: number;
                         id: string;
                     };
-                    summary: Pick<import("./model.ts").ItemView, "createdAt" | "id" | "threadId"> & Pick<import("./reads.ts").ThreadView, "title">;
+                    summary: Pick<import("./model.ts").ItemView, "createdAt" | "id" | "threadId"> & Pick<import("./reads.ts").ThreadView, "title"> & import("./feed-contract.ts").FeedContentSummary;
                     destination: {
                         kind: "post";
                         id: string;
@@ -7414,7 +7617,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         route: number;
                         id: string;
                     };
-                    summary: Pick<import("./reads.ts").ThreadView, "createdAt" | "id" | "kind" | "title">;
+                    summary: Pick<import("./reads.ts").ThreadView, "createdAt" | "id" | "kind" | "title"> & import("./feed-contract.ts").FeedContentSummary;
                     destination: {
                         kind: "thread";
                         id: string;
@@ -7430,7 +7633,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         route: number;
                         id: string;
                     };
-                    summary: Pick<import("./model.ts").ItemView, "createdAt" | "id" | "threadId"> & Pick<import("./reads.ts").ThreadView, "title">;
+                    summary: Pick<import("./model.ts").ItemView, "createdAt" | "id" | "threadId"> & Pick<import("./reads.ts").ThreadView, "title"> & import("./feed-contract.ts").FeedContentSummary;
                     destination: {
                         kind: "post";
                         id: string;
@@ -7778,7 +7981,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             route: number;
                             id: string;
                         };
-                        summary: Pick<import("./reads.ts").ThreadView, "createdAt" | "id" | "kind" | "title">;
+                        summary: Pick<import("./reads.ts").ThreadView, "createdAt" | "id" | "kind" | "title"> & import("./feed-contract.ts").FeedContentSummary;
                         destination: {
                             kind: "thread";
                             id: string;
@@ -7794,7 +7997,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             route: number;
                             id: string;
                         };
-                        summary: Pick<import("./model.ts").ItemView, "createdAt" | "id" | "threadId"> & Pick<import("./reads.ts").ThreadView, "title">;
+                        summary: Pick<import("./model.ts").ItemView, "createdAt" | "id" | "threadId"> & Pick<import("./reads.ts").ThreadView, "title"> & import("./feed-contract.ts").FeedContentSummary;
                         destination: {
                             kind: "post";
                             id: string;
@@ -8156,7 +8359,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     route: import("typebox").TInteger;
                     id: import("typebox").TString;
                 }>;
-                summary: import("typebox").TUnsafe<Pick<import("./reads.ts").ThreadView, "createdAt" | "id" | "kind" | "title">>;
+                summary: import("typebox").TUnsafe<Pick<import("./reads.ts").ThreadView, "createdAt" | "id" | "kind" | "title"> & import("./feed-contract.ts").FeedContentSummary>;
                 destination: import("typebox").TObject<{
                     kind: import("typebox").TLiteral<"thread">;
                     id: import("typebox").TString;
@@ -8172,7 +8375,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     route: import("typebox").TInteger;
                     id: import("typebox").TString;
                 }>;
-                summary: import("typebox").TUnsafe<Pick<import("./model.ts").ItemView, "createdAt" | "id" | "threadId"> & Pick<import("./reads.ts").ThreadView, "title">>;
+                summary: import("typebox").TUnsafe<Pick<import("./model.ts").ItemView, "createdAt" | "id" | "threadId"> & Pick<import("./reads.ts").ThreadView, "title"> & import("./feed-contract.ts").FeedContentSummary>;
                 destination: import("typebox").TObject<{
                     kind: import("typebox").TLiteral<"post">;
                     id: import("typebox").TString;

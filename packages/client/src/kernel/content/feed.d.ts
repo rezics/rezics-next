@@ -17,6 +17,15 @@ export type FeedDependencies = {
     discovery?: DiscoverySearch;
     search?: SearchService;
 };
+export declare const FEED_PAGE_LIMIT = 20;
+export declare const FEED_CANDIDATE_LIMIT = 160;
+export declare const FEED_CONTINUE_WIDTH = 6;
+export declare const FEED_CONTINUE_CANDIDATES = 39;
+export declare const FEED_DISCOVERY_CANDIDATES_PER_RESULT = 6;
+export declare const FEED_DISCOVERY_FIXED_CANDIDATES = 3;
+export declare const FEED_ACCOUNT_BATCH_LIMIT = 100;
+export declare const FEED_AUTHOR_KEYS_PER_CANDIDATE = 3;
+export declare const feedCandidateBound: (discovery: number, following: number, continued: boolean) => number;
 export declare function createFeedReads(deps: FeedDependencies): {
     list(actor: Actor, query: {
         stream?: 'home' | 'following';

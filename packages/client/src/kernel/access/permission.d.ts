@@ -5,6 +5,7 @@ import { type Account } from './account-data.ts';
 import { type AuthoritativeTime } from '../command/command.ts';
 import { type ResourcePage, type AccessRealmRoleReader, type ReadDecisions, type Access, type AccessClient, type AccessContext, type AccessCheck, type AccountActor, type ActionCatalogue, type Actor, type Resource } from '../request/access.ts';
 import { type ResourceRoleCatalogue } from './resource-roles.ts';
+import { type KindOriginalProducer } from './kind-audience-original.ts';
 /** Kernel-owned request evidence, populated by the one authoritative actor point read.
  * Identity and this record must come from verified Auth/Access, never request JSON.
  */
@@ -12,6 +13,8 @@ export type PermissionContext = AccessContext & {
     account?: Account | null;
 };
 export type PermissionConfig = {
+    /** Private installed-authenticator association for Kind originals only. */
+    kindOriginal?: KindOriginalProducer;
     actions: ActionCatalogue;
     resourceRoles?: ResourceRoleCatalogue | undefined;
     /** Retrieve the already-read account from the request; do not query again here. */

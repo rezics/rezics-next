@@ -13,6 +13,8 @@ export declare class NativeCollectionWork {
     admitResultBytes(key: string, bytes: number): void;
     resultByteBound(key: string): number | undefined;
     constructor(allowance: WorkAllowance, deadline: number);
+    /** The native caller binds this exact frame to its live operational transaction and deadline. */
+    get deadlineAt(): number;
     receipt(): WorkReceipt;
     available(axis: keyof WorkDimensions): number;
     /** Transfer the remaining reservation to ONE existing producer ledger, never a second allowance.

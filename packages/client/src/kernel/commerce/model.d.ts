@@ -18,6 +18,8 @@ export type RecordedOrderCharge = Readonly<{
     amountTotalMinor: number;
     amountTaxMinor: number | null;
 }>;
+/** Actual customer-currency total; integration tax is never converted into this tuple. */
+export type RecordedOrderPresentment = Omit<RecordedOrderCharge, 'amountTaxMinor'>;
 /** Closed native Content identity; a subject is never a substitute for this binding. */
 import type { ContentEditionBenefit } from '../access/authenticated-benefit.ts';
 export type { ContentEditionBenefit } from '../access/authenticated-benefit.ts';

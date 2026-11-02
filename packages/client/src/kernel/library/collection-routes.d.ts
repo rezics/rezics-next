@@ -23,7 +23,7 @@ export declare const collectionSchema: import("typebox").TObject<{
     description: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
     visibility: import("typebox").TUnion<[import("typebox").TLiteral<"private">, import("typebox").TLiteral<"unlisted">, import("typebox").TLiteral<"public">]>;
     presentationKind: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-    presentationKindSource: import("typebox").TUnion<[import("typebox").TLiteral<"owner">, import("typebox").TLiteral<"members">, import("typebox").TLiteral<"empty">, import("typebox").TLiteral<"pending">]>;
+    presentationKindSource: import("typebox").TUnion<[import("typebox").TLiteral<"owner">, import("typebox").TLiteral<"mixed">]>;
     cover: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
         media: import("typebox").TString;
         width: import("typebox").TInteger;
@@ -66,7 +66,7 @@ export declare const collectionReadSchema: import("typebox").TUnion<[import("typ
     description: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
     visibility: import("typebox").TUnion<[import("typebox").TLiteral<"private">, import("typebox").TLiteral<"unlisted">, import("typebox").TLiteral<"public">]>;
     presentationKind: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-    presentationKindSource: import("typebox").TUnion<[import("typebox").TLiteral<"owner">, import("typebox").TLiteral<"members">, import("typebox").TLiteral<"empty">, import("typebox").TLiteral<"pending">]>;
+    presentationKindSource: import("typebox").TUnion<[import("typebox").TLiteral<"owner">, import("typebox").TLiteral<"mixed">]>;
     cover: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
         media: import("typebox").TString;
         width: import("typebox").TInteger;
@@ -127,7 +127,7 @@ export declare const collectionReadSchema: import("typebox").TUnion<[import("typ
     visibility: import("typebox").TLiteral<"private">;
     revision: import("typebox").TInteger;
     presentationKind: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-    presentationKindSource: import("typebox").TUnion<[import("typebox").TLiteral<"owner">, import("typebox").TLiteral<"members">, import("typebox").TLiteral<"empty">, import("typebox").TLiteral<"pending">]>;
+    presentationKindSource: import("typebox").TUnion<[import("typebox").TLiteral<"owner">, import("typebox").TLiteral<"mixed">]>;
     cover: import("typebox").TNull;
     coverSource: import("typebox").TLiteral<"none">;
 } & {
@@ -144,7 +144,7 @@ export declare const savedDynamicCollectionSchema: import("typebox").TObject<{
     description: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
     visibility: import("typebox").TUnion<[import("typebox").TLiteral<"private">, import("typebox").TLiteral<"unlisted">, import("typebox").TLiteral<"public">]>;
     presentationKind: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-    presentationKindSource: import("typebox").TUnion<[import("typebox").TLiteral<"owner">, import("typebox").TLiteral<"members">, import("typebox").TLiteral<"empty">, import("typebox").TLiteral<"pending">]>;
+    presentationKindSource: import("typebox").TUnion<[import("typebox").TLiteral<"owner">, import("typebox").TLiteral<"mixed">]>;
     cover: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
         media: import("typebox").TString;
         width: import("typebox").TInteger;
@@ -193,7 +193,7 @@ export declare const collectionResourceSchema: import("typebox").TUnion<[import(
     description: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
     visibility: import("typebox").TUnion<[import("typebox").TLiteral<"private">, import("typebox").TLiteral<"unlisted">, import("typebox").TLiteral<"public">]>;
     presentationKind: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-    presentationKindSource: import("typebox").TUnion<[import("typebox").TLiteral<"owner">, import("typebox").TLiteral<"members">, import("typebox").TLiteral<"empty">, import("typebox").TLiteral<"pending">]>;
+    presentationKindSource: import("typebox").TUnion<[import("typebox").TLiteral<"owner">, import("typebox").TLiteral<"mixed">]>;
     cover: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
         media: import("typebox").TString;
         width: import("typebox").TInteger;
@@ -234,7 +234,7 @@ export declare const collectionResourceSchema: import("typebox").TUnion<[import(
     description: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
     visibility: import("typebox").TUnion<[import("typebox").TLiteral<"private">, import("typebox").TLiteral<"unlisted">, import("typebox").TLiteral<"public">]>;
     presentationKind: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-    presentationKindSource: import("typebox").TUnion<[import("typebox").TLiteral<"owner">, import("typebox").TLiteral<"members">, import("typebox").TLiteral<"empty">, import("typebox").TLiteral<"pending">]>;
+    presentationKindSource: import("typebox").TUnion<[import("typebox").TLiteral<"owner">, import("typebox").TLiteral<"mixed">]>;
     cover: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
         media: import("typebox").TString;
         width: import("typebox").TInteger;
@@ -286,7 +286,7 @@ export declare const collectionResourceSchema: import("typebox").TUnion<[import(
     visibility: import("typebox").TLiteral<"private">;
     revision: import("typebox").TInteger;
     presentationKind: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-    presentationKindSource: import("typebox").TUnion<[import("typebox").TLiteral<"owner">, import("typebox").TLiteral<"members">, import("typebox").TLiteral<"empty">, import("typebox").TLiteral<"pending">]>;
+    presentationKindSource: import("typebox").TUnion<[import("typebox").TLiteral<"owner">, import("typebox").TLiteral<"mixed">]>;
     cover: import("typebox").TNull;
     coverSource: import("typebox").TLiteral<"none">;
 }>]>;
@@ -3723,6 +3723,209 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
     };
 } & {
     v1: {
+        definitionTypes: {
+            get: {
+                body: unknown;
+                params: {};
+                query: {
+                    query?: string;
+                    typeId?: string;
+                    locale?: never;
+                    limit?: number;
+                    cursor?: string;
+                };
+                headers: unknown;
+                response: {
+                    200: {
+                        types: {
+                            typeId: string;
+                            releaseDigest: string;
+                            label: string;
+                            language: string | null;
+                            parents: string[];
+                            description: string | null;
+                            descriptionLanguage: string | null;
+                        }[];
+                        next: string | null;
+                    };
+                    400: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    401: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    404: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    409: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    422: Response | {
+                        type: 'validation';
+                        code: 'validation';
+                        title: 'Validation Error';
+                        status: 422;
+                        detail?: string;
+                        on: string;
+                        found?: unknown;
+                        property?: string;
+                        expected?: unknown;
+                        errors?: {
+                            message?: string;
+                            [key: string]: unknown;
+                        }[];
+                    };
+                    503: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                };
+                error: never;
+            };
+        };
+    };
+} & {
+    v1: {
+        definitionTypes: {
+            ":typeId": {
+                get: {
+                    body: unknown;
+                    params: {
+                        typeId: string;
+                    };
+                    query: {
+                        locale?: never;
+                    };
+                    headers: unknown;
+                    response: {
+                        200: {
+                            typeId: string;
+                            releaseDigest: string;
+                            label: string;
+                            language: string | null;
+                            parents: string[];
+                            description: string | null;
+                            descriptionLanguage: string | null;
+                            definition: Record<string, any>;
+                            properties: Record<string, Record<string, any>>;
+                        };
+                        400: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        401: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        404: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        409: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        422: Response | {
+                            type: 'validation';
+                            code: 'validation';
+                            title: 'Validation Error';
+                            status: 422;
+                            detail?: string;
+                            on: string;
+                            found?: unknown;
+                            property?: string;
+                            expected?: unknown;
+                            errors?: {
+                                message?: string;
+                                [key: string]: unknown;
+                            }[];
+                        };
+                        503: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                    };
+                    error: never;
+                };
+            };
+        };
+    };
+} & {
+    v1: {
         definitions: {
             catalogue: {
                 artifacts: {
@@ -5531,7 +5734,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     description: string | null;
                                     visibility: "private" | "public" | "unlisted";
                                     presentationKind: string | null;
-                                    presentationKindSource: "empty" | "members" | "owner" | "pending";
+                                    presentationKindSource: "mixed" | "owner";
                                     cover?: {
                                         media: string;
                                         width: number;
@@ -5854,7 +6057,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             description: string | null;
                             visibility: "private" | "public" | "unlisted";
                             presentationKind: string | null;
-                            presentationKindSource: "empty" | "members" | "owner" | "pending";
+                            presentationKindSource: "mixed" | "owner";
                             cover?: {
                                 media: string;
                                 width: number;
@@ -5909,7 +6112,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             visibility: "private";
                             revision: number;
                             presentationKind: string | null;
-                            presentationKindSource: "empty" | "members" | "owner" | "pending";
+                            presentationKindSource: "mixed" | "owner";
                             cover: null;
                             coverSource: "none";
                         } | {
@@ -5919,7 +6122,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             description: string | null;
                             visibility: "private" | "public" | "unlisted";
                             presentationKind: string | null;
-                            presentationKindSource: "empty" | "members" | "owner" | "pending";
+                            presentationKindSource: "mixed" | "owner";
                             cover?: {
                                 media: string;
                                 width: number;
@@ -6063,7 +6266,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             description: string | null;
                             visibility: "private" | "public" | "unlisted";
                             presentationKind: string | null;
-                            presentationKindSource: "empty" | "members" | "owner" | "pending";
+                            presentationKindSource: "mixed" | "owner";
                             cover?: {
                                 media: string;
                                 width: number;
@@ -6163,7 +6366,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             visibility: "private";
                             revision: number;
                             presentationKind: string | null;
-                            presentationKindSource: "empty" | "members" | "owner" | "pending";
+                            presentationKindSource: "mixed" | "owner";
                             cover: null;
                             coverSource: "none";
                             previewMembers?: {
@@ -6218,7 +6421,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             description: string | null;
                             visibility: "private" | "public" | "unlisted";
                             presentationKind: string | null;
-                            presentationKindSource: "empty" | "members" | "owner" | "pending";
+                            presentationKindSource: "mixed" | "owner";
                             cover?: {
                                 media: string;
                                 width: number;
@@ -6405,7 +6608,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     description: string | null;
                                     visibility: "private" | "public" | "unlisted";
                                     presentationKind: string | null;
-                                    presentationKindSource: "empty" | "members" | "owner" | "pending";
+                                    presentationKindSource: "mixed" | "owner";
                                     cover?: {
                                         media: string;
                                         width: number;
@@ -6465,7 +6668,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     visibility: "private";
                                     revision: number;
                                     presentationKind: string | null;
-                                    presentationKindSource: "empty" | "members" | "owner" | "pending";
+                                    presentationKindSource: "mixed" | "owner";
                                     cover: null;
                                     coverSource: "none";
                                 } | {
@@ -6480,7 +6683,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     description: string | null;
                                     visibility: "private" | "public" | "unlisted";
                                     presentationKind: string | null;
-                                    presentationKindSource: "empty" | "members" | "owner" | "pending";
+                                    presentationKindSource: "mixed" | "owner";
                                     cover?: {
                                         media: string;
                                         width: number;
@@ -6626,7 +6829,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 description: string | null;
                                 visibility: "private" | "public" | "unlisted";
                                 presentationKind: string | null;
-                                presentationKindSource: "empty" | "members" | "owner" | "pending";
+                                presentationKindSource: "mixed" | "owner";
                                 cover?: {
                                     media: string;
                                     width: number;
@@ -6686,7 +6889,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 visibility: "private";
                                 revision: number;
                                 presentationKind: string | null;
-                                presentationKindSource: "empty" | "members" | "owner" | "pending";
+                                presentationKindSource: "mixed" | "owner";
                                 cover: null;
                                 coverSource: "none";
                             } | {
@@ -6701,7 +6904,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 description: string | null;
                                 visibility: "private" | "public" | "unlisted";
                                 presentationKind: string | null;
-                                presentationKindSource: "empty" | "members" | "owner" | "pending";
+                                presentationKindSource: "mixed" | "owner";
                                 cover?: {
                                     media: string;
                                     width: number;
@@ -6952,7 +7155,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     description: string | null;
                                     visibility: "private" | "public" | "unlisted";
                                     presentationKind: string | null;
-                                    presentationKindSource: "empty" | "members" | "owner" | "pending";
+                                    presentationKindSource: "mixed" | "owner";
                                     cover?: {
                                         media: string;
                                         width: number;
@@ -7007,7 +7210,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     visibility: "private";
                                     revision: number;
                                     presentationKind: string | null;
-                                    presentationKindSource: "empty" | "members" | "owner" | "pending";
+                                    presentationKindSource: "mixed" | "owner";
                                     cover: null;
                                     coverSource: "none";
                                 } | {
@@ -7017,7 +7220,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     description: string | null;
                                     visibility: "private" | "public" | "unlisted";
                                     presentationKind: string | null;
-                                    presentationKindSource: "empty" | "members" | "owner" | "pending";
+                                    presentationKindSource: "mixed" | "owner";
                                     cover?: {
                                         media: string;
                                         width: number;
@@ -7164,7 +7367,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 description: string | null;
                                 visibility: "private" | "public" | "unlisted";
                                 presentationKind: string | null;
-                                presentationKindSource: "empty" | "members" | "owner" | "pending";
+                                presentationKindSource: "mixed" | "owner";
                                 cover?: {
                                     media: string;
                                     width: number;
@@ -7219,7 +7422,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 visibility: "private";
                                 revision: number;
                                 presentationKind: string | null;
-                                presentationKindSource: "empty" | "members" | "owner" | "pending";
+                                presentationKindSource: "mixed" | "owner";
                                 cover: null;
                                 coverSource: "none";
                             } | {
@@ -7229,7 +7432,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 description: string | null;
                                 visibility: "private" | "public" | "unlisted";
                                 presentationKind: string | null;
-                                presentationKindSource: "empty" | "members" | "owner" | "pending";
+                                presentationKindSource: "mixed" | "owner";
                                 cover?: {
                                     media: string;
                                     width: number;
@@ -7472,7 +7675,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     description: string | null;
                                     visibility: "private" | "public" | "unlisted";
                                     presentationKind: string | null;
-                                    presentationKindSource: "empty" | "members" | "owner" | "pending";
+                                    presentationKindSource: "mixed" | "owner";
                                     cover?: {
                                         media: string;
                                         width: number;
@@ -7527,7 +7730,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     visibility: "private";
                                     revision: number;
                                     presentationKind: string | null;
-                                    presentationKindSource: "empty" | "members" | "owner" | "pending";
+                                    presentationKindSource: "mixed" | "owner";
                                     cover: null;
                                     coverSource: "none";
                                 } | {
@@ -7537,7 +7740,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     description: string | null;
                                     visibility: "private" | "public" | "unlisted";
                                     presentationKind: string | null;
-                                    presentationKindSource: "empty" | "members" | "owner" | "pending";
+                                    presentationKindSource: "mixed" | "owner";
                                     cover?: {
                                         media: string;
                                         width: number;
@@ -8029,7 +8232,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         description: string | null;
                                         visibility: "private" | "public" | "unlisted";
                                         presentationKind: string | null;
-                                        presentationKindSource: "empty" | "members" | "owner" | "pending";
+                                        presentationKindSource: "mixed" | "owner";
                                         cover?: {
                                             media: string;
                                             width: number;
@@ -8186,7 +8389,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         description: string | null;
                                         visibility: "private" | "public" | "unlisted";
                                         presentationKind: string | null;
-                                        presentationKindSource: "empty" | "members" | "owner" | "pending";
+                                        presentationKindSource: "mixed" | "owner";
                                         cover?: {
                                             media: string;
                                             width: number;
@@ -8229,7 +8432,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         description: string | null;
                                         visibility: "private" | "public" | "unlisted";
                                         presentationKind: string | null;
-                                        presentationKindSource: "empty" | "members" | "owner" | "pending";
+                                        presentationKindSource: "mixed" | "owner";
                                         cover?: {
                                             media: string;
                                             width: number;

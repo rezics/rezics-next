@@ -45,9 +45,14 @@ export type NativeKindTypeAnchor = Readonly<{
 export declare const KIND_TYPE_MAX_BYTES = 4096;
 /** Eight exact/indexed head points: subject, fence, revision, revision write
  * basis, redirect, redirect write basis and agent link (seven), plus the wanted
- * key. No history payload, candidate, label, account or tuple hydration.
+ * key. Two additional exact provenance row locks serialize native write-basis
+ * erasure/updates. No history payload, candidate, label, account or tuple hydration.
  */
 export declare function kindTypeAnchorFootprint(inputBytes: number): WorkDimensions;
+/** INSERT/conflict enrollment plus the exact fence point. The row lock is held
+ * by the caller's native transaction; absent keys use the same full declaration.
+ */
+export declare function kindTypeAnchorLockFootprint(inputBytes: number): WorkDimensions;
 export declare function readNativeKindTypeAnchor(client: OperationalTransaction, input: Readonly<{
     route: number;
     subjectId: string;

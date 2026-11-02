@@ -3430,6 +3430,209 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
     };
 } & {
     v1: {
+        definitionTypes: {
+            get: {
+                body: unknown;
+                params: {};
+                query: {
+                    query?: string;
+                    typeId?: string;
+                    locale?: never;
+                    limit?: number;
+                    cursor?: string;
+                };
+                headers: unknown;
+                response: {
+                    200: {
+                        types: {
+                            typeId: string;
+                            releaseDigest: string;
+                            label: string;
+                            language: string | null;
+                            parents: string[];
+                            description: string | null;
+                            descriptionLanguage: string | null;
+                        }[];
+                        next: string | null;
+                    };
+                    400: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    401: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    404: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    409: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    422: Response | {
+                        type: 'validation';
+                        code: 'validation';
+                        title: 'Validation Error';
+                        status: 422;
+                        detail?: string;
+                        on: string;
+                        found?: unknown;
+                        property?: string;
+                        expected?: unknown;
+                        errors?: {
+                            message?: string;
+                            [key: string]: unknown;
+                        }[];
+                    };
+                    503: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                };
+                error: never;
+            };
+        };
+    };
+} & {
+    v1: {
+        definitionTypes: {
+            ":typeId": {
+                get: {
+                    body: unknown;
+                    params: {
+                        typeId: string;
+                    };
+                    query: {
+                        locale?: never;
+                    };
+                    headers: unknown;
+                    response: {
+                        200: {
+                            typeId: string;
+                            releaseDigest: string;
+                            label: string;
+                            language: string | null;
+                            parents: string[];
+                            description: string | null;
+                            descriptionLanguage: string | null;
+                            definition: Record<string, any>;
+                            properties: Record<string, Record<string, any>>;
+                        };
+                        400: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        401: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        404: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        409: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        422: Response | {
+                            type: 'validation';
+                            code: 'validation';
+                            title: 'Validation Error';
+                            status: 422;
+                            detail?: string;
+                            on: string;
+                            found?: unknown;
+                            property?: string;
+                            expected?: unknown;
+                            errors?: {
+                                message?: string;
+                                [key: string]: unknown;
+                            }[];
+                        };
+                        503: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                    };
+                    error: never;
+                };
+            };
+        };
+    };
+} & {
+    v1: {
         definitions: {
             catalogue: {
                 artifacts: {
@@ -5161,6 +5364,113 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
     };
 } & {
     v1: {
+        commerceSales: {
+            get: {
+                body: unknown;
+                params: {};
+                query: {
+                    cursor?: string;
+                    limit?: number;
+                };
+                headers: unknown;
+                response: {
+                    200: {
+                        sales: {
+                            moneyUnit: {
+                                system: "stripe-api";
+                                exponent: 0 | 2;
+                                factsVersion: "stripe-money-v1";
+                            } | null;
+                            taxBehavior: "exclusive" | null;
+                            orderId: string;
+                            offerId: string;
+                            title: string;
+                            targetSubjectId: string;
+                            currency: string;
+                            unitAmountMinor: number;
+                            settlement: "failed" | "paid" | "pending" | "unknown";
+                            createdAt: string;
+                        }[];
+                        next: string | null;
+                        projectionState: "preparing" | "ready";
+                    };
+                    400: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    401: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    403: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    409: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    422: Response | {
+                        type: 'validation';
+                        code: 'validation';
+                        title: 'Validation Error';
+                        status: 422;
+                        detail?: string;
+                        on: string;
+                        found?: unknown;
+                        property?: string;
+                        expected?: unknown;
+                        errors?: {
+                            message?: string;
+                            [key: string]: unknown;
+                        }[];
+                    };
+                    503: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                };
+                error: never;
+            };
+        };
+    };
+} & {
+    v1: {
         offers: {
             get: {
                 body: unknown;
@@ -5641,6 +5951,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                 patch: {
                     body: {
                         unitAmountMinor: number;
+                        expectedRevision: number;
                     };
                     params: {
                         offerId: string;
@@ -5815,7 +6126,9 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
             ":offerId": {
                 $delist: {
                     post: {
-                        body: unknown;
+                        body: {
+                            expectedRevision: number;
+                        };
                         params: {
                             offerId: string;
                         };
@@ -5923,6 +6236,17 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 errors: unknown;
                             };
                             404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -6338,6 +6662,15 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                     };
                                     amountTotalMinor: number;
                                     amountTaxMinor: number | null;
+                                } | null;
+                                recordedPresentment: {
+                                    currency: string;
+                                    moneyUnit: {
+                                        system: "stripe-api";
+                                        exponent: 0 | 2;
+                                        factsVersion: "stripe-money-v1";
+                                    };
+                                    amountTotalMinor: number;
                                 } | null;
                                 targetSubjectId: string;
                                 subject: {

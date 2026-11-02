@@ -1,6 +1,12 @@
 import { Type, type TSchema } from 'typebox';
 import { type Validator } from 'typebox/compile';
 declare const productEventTypes: {
+    readonly "com.rezics.semantic.identity-scope.native-associated.v1": Type.TObject<{
+        sourceKey: Type.TString;
+        scope: Type.TString;
+        phase: Type.TUnion<Type.TLiteral<string>[]>;
+        transactionId: Type.TString;
+    }>;
     readonly 'com.rezics.semantic.public-output.capture.v1': Type.TObject<{
         captureId: Type.TString;
     }>;
@@ -10,6 +16,10 @@ declare const productEventTypes: {
     }>;
     readonly "com.rezics.definitions.catalogue.build-requested.v1": Type.TObject<{
         rootDigest: Type.TString;
+    }>;
+    readonly "com.rezics.definitions.catalogue.activation-requested.v1": Type.TObject<{
+        rootDigest: Type.TString;
+        activationId: Type.TString;
     }>;
     readonly "com.rezics.definitions.catalogue.progress.v1": Type.TObject<{
         rootDigest: Type.TString;
@@ -678,6 +688,7 @@ declare const productEventTypes: {
         realmId: Type.TString;
         kind: Type.TUnion<[Type.TLiteral<"realm">, Type.TLiteral<"bucket">, Type.TLiteral<"thread">, Type.TLiteral<"board">]>;
     }>;
+    readonly "com.rezics.search.identity_writer.changed.v1": Type.TObject<{}>;
     readonly 'com.rezics.zone.created.v1': Type.TObject<{
         id: Type.TString;
         revision: Type.TString;
@@ -1432,6 +1443,10 @@ declare const productEventTypes: {
         serial: Type.TString;
         action: Type.TLiteral<"received">;
     }>]>;
+    readonly 'com.rezics.rating.erasure-page.applied.v1': Type.TObject<{
+        voterId: Type.TString;
+        pageId: Type.TString;
+    }>;
     readonly 'com.rezics.rating.voter-realm.changed.v1': Type.TObject<{
         voterId: Type.TString;
         realmId: Type.TString;
@@ -1487,6 +1502,7 @@ declare const productEventTypes: {
     }>, Type.TObject<{
         voterId: Type.TString;
         direction: Type.TUnion<[Type.TLiteral<"adding">, Type.TLiteral<"removing">]>;
+        erasurePageId: Type.TOptional<Type.TString>;
         votes: Type.TArray<Type.TObject<{
             questionId: Type.TString;
             targetId: Type.TString;
@@ -1524,7 +1540,6 @@ declare const productEventTypes: {
         survivor: Type.TString;
         voters: Type.TInteger;
     }>;
-    readonly "com.rezics.search.identity_writer.changed.v1": Type.TObject<{}>;
     readonly 'com.rezics.history.erasure-acknowledged.v1': Type.TObject<{
         version: Type.TInteger;
         outcome: Type.TUnion<[Type.TLiteral<"erased">, Type.TLiteral<"none">]>;

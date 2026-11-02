@@ -18,6 +18,9 @@ type Identity = IdentityExpiry & {
     pool: AccessContext['pool'];
     deadline: number;
     observedAt: number;
+    requestContext?: AccessContext;
+    requestWork?: AccessContext['work'];
+    requestTime?: AuthoritativeTime;
     durableTime?: AuthoritativeTime;
     durableAction?: string;
 };

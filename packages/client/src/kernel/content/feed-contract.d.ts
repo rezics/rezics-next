@@ -7,6 +7,12 @@ export declare const FeedKindSchema: import("typebox").TString;
 /** Use the native kind.in literal grammar, including its UTF-8 byte and control-character bounds.
  * Exact IDs are preserved: no trimming, case folding or catalogue-type coercion. */
 export declare function readFeedKind(kind: string | undefined): string | undefined;
+export declare const FeedAuthorSchema: import("typebox").TUnsafe<Pick<AccountDiscoverySummary, "avatar" | "displayName" | "handle">>;
+export type FeedAuthor = Static<typeof FeedAuthorSchema>;
+export type FeedContentSummary = {
+    author?: FeedAuthor;
+    excerpt?: string;
+};
 export declare const FeedItemSchema: import("typebox").TUnion<[import("typebox").TObject<{
     id: import("typebox").TString;
     occurredAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
@@ -243,7 +249,7 @@ export declare const FeedItemSchema: import("typebox").TUnion<[import("typebox")
         route: import("typebox").TInteger;
         id: import("typebox").TString;
     }>;
-    summary: import("typebox").TUnsafe<Pick<ThreadView, "createdAt" | "id" | "kind" | "title">>;
+    summary: import("typebox").TUnsafe<Pick<ThreadView, "createdAt" | "id" | "kind" | "title"> & FeedContentSummary>;
     destination: import("typebox").TObject<{
         kind: import("typebox").TLiteral<"thread">;
         id: import("typebox").TString;
@@ -259,7 +265,7 @@ export declare const FeedItemSchema: import("typebox").TUnion<[import("typebox")
         route: import("typebox").TInteger;
         id: import("typebox").TString;
     }>;
-    summary: import("typebox").TUnsafe<Pick<ItemView, "createdAt" | "id" | "threadId"> & Pick<ThreadView, "title">>;
+    summary: import("typebox").TUnsafe<Pick<ItemView, "createdAt" | "id" | "threadId"> & Pick<ThreadView, "title"> & FeedContentSummary>;
     destination: import("typebox").TObject<{
         kind: import("typebox").TLiteral<"post">;
         id: import("typebox").TString;
@@ -522,7 +528,7 @@ export declare const FeedPageSchema: import("typebox").TObject<{
             route: import("typebox").TInteger;
             id: import("typebox").TString;
         }>;
-        summary: import("typebox").TUnsafe<Pick<ThreadView, "createdAt" | "id" | "kind" | "title">>;
+        summary: import("typebox").TUnsafe<Pick<ThreadView, "createdAt" | "id" | "kind" | "title"> & FeedContentSummary>;
         destination: import("typebox").TObject<{
             kind: import("typebox").TLiteral<"thread">;
             id: import("typebox").TString;
@@ -538,7 +544,7 @@ export declare const FeedPageSchema: import("typebox").TObject<{
             route: import("typebox").TInteger;
             id: import("typebox").TString;
         }>;
-        summary: import("typebox").TUnsafe<Pick<ItemView, "createdAt" | "id" | "threadId"> & Pick<ThreadView, "title">>;
+        summary: import("typebox").TUnsafe<Pick<ItemView, "createdAt" | "id" | "threadId"> & Pick<ThreadView, "title"> & FeedContentSummary>;
         destination: import("typebox").TObject<{
             kind: import("typebox").TLiteral<"post">;
             id: import("typebox").TString;

@@ -4,6 +4,7 @@ import { type OperationalTransaction } from '../command/operational.ts';
 import { type MembersPreparationWorkDefinition, type PreparationLocator } from '../library/members-preparation.ts';
 import type { Access } from '../request/access.ts';
 import { type CollectionKindPreparationLocator, type CollectionKindWorkDefinition } from '../library/collection-kind-work-admission.ts';
+import type { NativeCollectionWork } from '../library/collection-source-work.ts';
 import { type CollectionPublicationLocator, type CollectionPublicationWorkDefinition } from '../library/collection-publication-work-admission.ts';
 /** SERVER ONLY. A native lookup, never an Actor, permission, DTO or persisted cursor value. */
 export type MembersPreparationWorkContext = Readonly<{
@@ -17,6 +18,10 @@ export type CollectionKindPreparationWorkContext = Readonly<{
     tx: OperationalTransaction;
     locator: CollectionKindPreparationLocator;
 }>;
+/** Mint a context only from the live transaction's exact admitted native frame. */
+export declare function bindCollectionKindPreparationWorkContext(tx: OperationalTransaction, locator: CollectionKindPreparationLocator, work: NativeCollectionWork): CollectionKindPreparationWorkContext;
+/** Accounts consumes the same private original Kind frame, never a structural context. */
+export declare function collectionKindPreparationNativeWork(context: CollectionKindPreparationWorkContext): NativeCollectionWork | undefined;
 /** SERVER ONLY. Whole-query publication B consumes its own Collection's private working input. */
 export type CollectionPublicationWorkContext = Readonly<{
     kind: 'collection-publication';

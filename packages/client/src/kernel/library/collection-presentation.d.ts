@@ -27,9 +27,7 @@ export declare function presentationSelection(input: PresentationSelection): Pre
 export declare function readablePresentationCover(dependencies: PresentationDependencies, actor: Actor, id: string, deadline: number): Promise<CoverSummary | null>;
 /** Preparation returns business errors as data: exact receipts still follow current Collection authorization. */
 export declare function preparePresentationSelection(dependencies: PresentationDependencies, actor: Actor, selection: PresentationSelection, deadline: number): Promise<ProblemError | null>;
-/** Storage/response seam for the separate complete derivation and ordered preview producers.
- * Only a proved empty curated source certifies absence. No member sampling or read-time work is started here.
- */
+/** Kind presentation is immediate; ordered cover readiness keeps its independent contract. */
 export declare function collectionPresentation(row: {
     presentationKind: string | null;
     memberCount: number;

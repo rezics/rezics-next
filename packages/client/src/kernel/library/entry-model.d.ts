@@ -75,3 +75,9 @@ export type CopyPage = {
     limit: number;
 };
 export declare const MAX_LIBRARY_PAGE_SIZE = 100;
+/** Original ordinary deletion receipt; replay never extends this deadline. */
+export type EntryDeletion = {
+    deletionId: string;
+    revision: number;
+    restoreUntil: string;
+};

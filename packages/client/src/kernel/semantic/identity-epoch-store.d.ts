@@ -1,13 +1,10 @@
+export { IdentityEpochStoreError } from './identity-terminal-closure-errors.ts';
 import { type CommandTransaction } from '../command/command.ts';
 import type { IdentityEpochStore, IdentityJobRef, IdentityReceipt, IdentityIntent } from './identity-epoch-contract.ts';
 export declare const IDENTITY_EPOCH_CONTROL_PARTITION = 0;
 /** Fixed initial production capacity, charged once per native (home,job). */
 export declare const IDENTITY_EPOCH_HOME_CAPACITY = 1;
 export declare const identityJobPartition: (job: IdentityJobRef) => number;
-export declare class IdentityEpochStoreError extends Error {
-    readonly code: string;
-    constructor(code: string, detail: string);
-}
 export declare function recordIdentityEpochNativeCommit(tx: CommandTransaction, purpose: string): void;
 export declare function serializeIdentityValue(value: unknown): string;
 export declare function identityReceiptValue(receipt: IdentityReceipt): Readonly<{
@@ -67,4 +64,3 @@ export declare function identityEpochRemainderTerminal(intent: IdentityIntent, s
 export declare function identityEpochChangeTerminal(intent: IdentityIntent, remainder: string | null, original: string, previous: string): string;
 /** Native source mappings and partition-scoped admission. Participant completion is never inferred. */
 export declare const identityEpochStore: IdentityEpochStore;
-export {};

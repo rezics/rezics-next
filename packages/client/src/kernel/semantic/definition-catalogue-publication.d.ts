@@ -58,7 +58,15 @@ export declare function stepCatalogueBuild(pool: Pool, options: WriteOptions & {
     };
     replayed: boolean;
 }>;
-export declare function runCatalogueBuildStep(pool: Pool, pin: KindCataloguePin, clock: () => Date): Promise<CatalogueBuildStatus>;
+export declare function runCatalogueBuildStep(pool: Pool, pin: KindCataloguePin, clock: () => Date, position?: string): Promise<CatalogueBuildStatus>;
+/** A bounded mechanical step consumes only the durable authorized activation intent.
+ * It cannot finish publication: that requires a new actual definitions:activate command.
+ */
+export declare function runCatalogueActivationStep(pool: Pool, pin: KindCataloguePin, activationId: string, clock: () => Date, position?: string): Promise<Readonly<{
+    activationId: string;
+    state: 'ready' | 'closing' | 'invalidating' | 'active';
+    pending: boolean;
+}>>;
 export declare function activateCatalogue(pool: Pool, options: WriteOptions & {
     pin: KindCataloguePin;
     expectedHead: number | null;

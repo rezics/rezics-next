@@ -1,7 +1,8 @@
 import type { AuthoritativeTime } from '../command/command.ts';
 import type { CollectionKindPreparationLocator, CollectionKindWorkDefinition } from '../library/collection-kind-work-admission.ts';
+import type { CollectionKindInputBinding } from '../library/collection-kind-input.ts';
 import type { WorkAllowance, WorkDimensions, WorkReceipt } from '../library/collection-source.ts';
-import type { AccessContext, Actor } from '../request/access.ts';
+import type { AccessContext, AccountActor, Actor } from '../request/access.ts';
 import type { CollectionKindPreparationWorkContext } from '../search/scope-work-context.ts';
 import type { AccessWork, AccessWorkAccounting } from './work.ts';
 /** SERVER ONLY. Every reference below is a native lookup key, never a principal,
@@ -16,7 +17,7 @@ export type KindAudienceOriginRef = Readonly<{
 /** Accounts' enrollment of ONE Library-committed bounded raw input interval.
  * Library remains the sole input producer. This record must resolve that owner's
  * actual interval/predecessor/version/custody, including exclusions and duplicates;
- * it contains no caller-selected Subject keys. The enrollment body is not delivered.
+ * it contains no caller-selected Subject keys.
  */
 export type KindAudienceInputRef = Readonly<{
     kind: 'collection-kind-audience-input';
@@ -101,10 +102,10 @@ export type CaptureKindAudienceOriginInput = Readonly<{
 export type CaptureKindAudienceOriginResult = Readonly<{
     status: 'captured';
     origin: KindAudienceOriginRef;
-    binding: KindAudienceBinding;
     work: WorkReceipt;
 }> | Readonly<{
     status: 'unavailable';
+    reason?: string;
     work: WorkReceipt;
 }>;
 /** Source-local lookup AFTER Library commits the bounded input and BEFORE Type
@@ -117,29 +118,55 @@ export type ResolveKindAudienceInput = Readonly<{
     origin: KindAudienceOriginRef;
     allowance: WorkAllowance;
     deadline: number;
+    /** The same fresh original request that is being prepared; never persisted. */
+    request?: KindAudienceFreshRequest;
 }>;
 export type ResolveKindAudienceResult = Readonly<{
     status: 'resolved';
     origin: KindAudienceOriginRef;
     input: KindAudienceInputRef;
-    binding: KindAudienceBinding;
+    /** Pre-Type native input; deliberately independent of repair/Type closures. */
+    binding: CollectionKindInputBinding;
     work: WorkReceipt;
 }> | Readonly<{
     status: 'unavailable';
+    reason?: string;
     work: WorkReceipt;
 }>;
-/** Detached native orchestration: NO Actor, JWT, client principal, claims,
- * arbitrary Subject keys, caller T or held Source transaction. The native bodies
- * resolve original committed origin/expiry/current consent/client/basis and exact
- * input custody. Each home requires ORIGINAL Core admission and its OWN live T,
- * with the SAME reservation. Release Source home before foreign preparation;
- * an ended Source invocation/T cannot be carried to another home.
+/**
+ * One genuine request-scoped original Access invocation. This is deliberately
+ * nested on the operation input: it is ephemeral evidence for the original
+ * evaluator, never part of an origin/evidence reference or a native record.
+ * Anonymous native work has no Actor field at all.
+ */
+export type KindAudienceFreshRequest = Readonly<{
+    kind: 'authenticated';
+    actor: AccountActor;
+    context: AccessContext & Readonly<{
+        work: AccessWorkAccounting;
+    }>;
+}> | Readonly<{
+    kind: 'anonymous';
+    context: AccessContext;
+}>;
+/** Request-local native orchestration. Authenticated quanta carry the genuine
+ * original Access Actor and accounting only until this call returns; the root
+ * Access factory verifies its private authentication identity before and after
+ * dispatch. Anonymous work remains actor-free. Neither branch can carry an
+ * Actor, JWT, claims, caller T or held Source transaction into retained state.
+ * The native bodies resolve original committed origin/expiry/current
+ * consent/client/basis and exact input custody. Each home requires ORIGINAL
+ * Core admission and its OWN live T, with the SAME reservation. Release the
+ * Source home before foreign preparation; an ended Source invocation/T cannot
+ * be carried to another home.
  */
 export type PrepareKindAudienceInput = Readonly<{
     origin: KindAudienceOriginRef;
     input: KindAudienceInputRef;
     context: Readonly<Pick<AccessContext, 'pool' | 'deadline'>>;
     allowance: WorkAllowance;
+    /** The original Access root requires this for dispatch; pure native call graphs may omit it. */
+    request?: KindAudienceFreshRequest;
 }>;
 export type PrepareKindAudienceResult = Readonly<{
     status: 'prepared';
@@ -151,6 +178,7 @@ export type PrepareKindAudienceResult = Readonly<{
     work: WorkReceipt;
 }> | Readonly<{
     status: 'unavailable';
+    reason?: string;
     work: WorkReceipt;
 }>;
 /** Final verification ONLY on the Source home under its live original Kind
@@ -163,6 +191,8 @@ export type VerifyKindAudienceSourceInput = Readonly<{
     evidence: KindAudienceEvidenceRef;
     allowance: WorkAllowance;
     deadline: number;
+    /** Fresh original request for private formula revalidation; never persisted. */
+    request?: KindAudienceFreshRequest;
 }>;
 export type VerifyKindAudienceSourceResult = Readonly<{
     status: 'current';
@@ -176,6 +206,7 @@ export type VerifyKindAudienceSourceResult = Readonly<{
     work: WorkReceipt;
 }> | Readonly<{
     status: 'stale' | 'unavailable';
+    reason?: string;
     work: WorkReceipt;
 }>;
 /** Purpose-bound extension of the ORIGINAL evaluator, never ordinary subject:read.
@@ -185,8 +216,8 @@ export type VerifyKindAudienceSourceResult = Readonly<{
  * Unknown never means exclusion, EOF or empty. Final viewer authorization and
  * exact audience selection remain independent; no public winner fallback.
  *
- * CONTRACT STAGING: native factories currently declare no bound and throw before
- * IO. This is not successful automatic Kind implementation or native proof.
+ * Native lookups use original admitted frames. Positive evidence remains unavailable
+ * until Semantic supplies the committed repair receipt and all five current closures.
  */
 export type KindAudienceAccess = Readonly<{
     capture: KindAudienceOperation<CaptureKindAudienceOriginInput, CaptureKindAudienceOriginResult>;
