@@ -1,5 +1,6 @@
-import { useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
+import { useId, useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
 import { pickText, UI_LOCALES, type ZoneConfiguration, type ZoneLanguage } from '@rezics/composition';
+import { ContentItemFrame } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel, FieldDescription } from '@rezics/ui/shadcn/field';
 import { ZoneNameFields } from '../editor/name-fields';
@@ -20,6 +21,9 @@ export type CreateProps = {
   onNavigate: (href: string) => void;
 };
 
+const actionClassName =
+  'h-auto min-w-0 max-w-full whitespace-normal break-words py-2 text-start focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11';
+
 const noSubscription = () => () => {};
 const fixtureSnapshot = () => null;
 export function CreateZone(props: CreateProps) {
@@ -32,6 +36,7 @@ export function CreateZone(props: CreateProps) {
 }
 
 function CreateVisit({ locale, session, owner, onCreate, onNavigate }: CreateProps) {
+  const starterId = useId();
   const options = { locale: locale as never };
   const [starter, setStarter] = useState('');
   const [labels, setLabels] = useState<ZoneConfiguration['labels'] | null>(null);
@@ -128,9 +133,9 @@ function CreateVisit({ locale, session, owner, onCreate, onNavigate }: CreatePro
           event.stopPropagation();
         }
       }}
-      className="mx-auto w-full max-w-3xl space-y-6 text-foreground"
+      className="mx-auto w-full max-w-3xl min-w-0 space-y-6 break-words text-foreground"
     >
-      <a className="underline" href={zonePaths(locale).list}>
+      <a className={`inline-flex items-center rounded-md px-2 underline ${actionClassName}`} href={zonePaths(locale).list}>
         {m.zones_owner_title({}, options)}
       </a>
       <header className="space-y-3">
@@ -138,13 +143,13 @@ function CreateVisit({ locale, session, owner, onCreate, onNavigate }: CreatePro
         <p className="text-muted-foreground">{m.zones_create_intro({}, options)}</p>
       </header>
       {result?.kind === 'saved' ? (
-        <section role="status" className="space-y-3">
+        <section role="status" className="min-w-0 space-y-3">
           <p>{m.zones_create_saved({}, options)}</p>
           <div className="flex flex-wrap gap-2">
-            <a className={buttonVariants()} href={zonePaths(locale, result.zone.id).edit}>
+            <a className={`${buttonVariants()} ${actionClassName}`} href={zonePaths(locale, result.zone.id).edit}>
               {m.zones_owner_configure({}, options)}
             </a>
-            <a className={buttonVariants({ variant: 'outline' })} href={zonePaths(locale, result.zone.id).reader}>
+            <a className={`${buttonVariants({ variant: 'outline' })} ${actionClassName}`} href={zonePaths(locale, result.zone.id).reader}>
               {m.zones_owner_open({}, options)}
             </a>
           </div>
@@ -161,51 +166,56 @@ function CreateVisit({ locale, session, owner, onCreate, onNavigate }: CreatePro
       ) : owner && !capture ? (
         <p role="status">{m.zones_owner_loading({}, options)}</p>
       ) : (
-        <form className="space-y-6" noValidate onSubmit={submit} aria-busy={busy}>
-          <Field data-invalid={invalid && !starter}>
-            <FieldLabel htmlFor="zone-starter">{m.zones_create_starter({}, options)}</FieldLabel>
-            <NativeSelect
-              id="zone-starter"
-              ref={choose}
-              value={starter}
-              disabled={frozen}
-              aria-invalid={invalid && !starter}
-              aria-describedby="zone-starter-help"
-              onChange={(event) => {
-                if (owner && !owner.isCurrent(capture)) return;
-                const id = event.target.value;
-                setStarter(id);
-                setLabels((current) => current ?? (copyStarter(id) ? {} : null));
-                setResult(null);
-              }}
-            >
-              <NativeSelectOption value="">{m.zones_create_choose({}, options)}</NativeSelectOption>
-              {starterChoices.map((choice) => (
-                <NativeSelectOption key={choice.id} value={choice.id}>
-                  {pickText(choice.labels, locale).text}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
-            <FieldDescription id="zone-starter-help">{m.zones_create_starter_help({}, options)}</FieldDescription>
-          </Field>
+        <form className="min-w-0 space-y-6" noValidate onSubmit={submit} aria-busy={busy}>
+          <ContentItemFrame as="div" className="min-w-0 space-y-4 p-3 sm:p-4">
+            <Field data-invalid={invalid && !starter}>
+              <FieldLabel className="whitespace-normal" htmlFor={`${starterId}-zone-starter`}>{m.zones_create_starter({}, options)}</FieldLabel>
+              <NativeSelect
+                id={`${starterId}-zone-starter`}
+                className="w-full max-w-full [&_select]:h-auto [&_select]:min-h-8 [&_select]:max-w-full [&_select]:whitespace-normal [&_select]:break-words [@media(pointer:coarse)]:[&_select]:min-h-11"
+                ref={choose}
+                value={starter}
+                disabled={frozen}
+                aria-invalid={invalid && !starter}
+                aria-describedby={`${starterId}-zone-starter-help`}
+                onChange={(event) => {
+                  if (owner && !owner.isCurrent(capture)) return;
+                  const id = event.target.value;
+                  setStarter(id);
+                  setLabels((current) => current ?? (copyStarter(id) ? {} : null));
+                  setResult(null);
+                }}
+              >
+                <NativeSelectOption value="">{m.zones_create_choose({}, options)}</NativeSelectOption>
+                {starterChoices.map((choice) => (
+                  <NativeSelectOption key={choice.id} value={choice.id} lang={pickText(choice.labels, locale).lang ?? undefined} dir="auto">
+                    {pickText(choice.labels, locale).text}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+              <FieldDescription id={`${starterId}-zone-starter-help`}>{m.zones_create_starter_help({}, options)}</FieldDescription>
+            </Field>
+            <p className="text-muted-foreground">{m.zones_create_visibility({}, options)}</p>
+          </ContentItemFrame>
           {labels ? (
-            <ZoneNameFields
-              locale={locale}
-              labels={labels}
-              primaryLanguage={primaryLanguage}
-              disabled={frozen}
-              errors={invalid ? result.fields : undefined}
-              onChange={(names) => {
-                if (owner && !owner.isCurrent(capture)) return;
-                setLabels(names.labels);
-                setPrimaryLanguage(names.primaryLanguage);
-                setResult(null);
-              }}
-            />
+            <ContentItemFrame as="div" className="min-w-0 p-3 sm:p-4">
+              <ZoneNameFields
+                locale={locale}
+                labels={labels}
+                primaryLanguage={primaryLanguage}
+                disabled={frozen}
+                errors={invalid ? result.fields : undefined}
+                onChange={(names) => {
+                  if (owner && !owner.isCurrent(capture)) return;
+                  setLabels(names.labels);
+                  setPrimaryLanguage(names.primaryLanguage);
+                  setResult(null);
+                }}
+              />
+            </ContentItemFrame>
           ) : null}
-          <p className="text-muted-foreground">{m.zones_create_visibility({}, options)}</p>
           {result ? (
-            <div ref={alert} tabIndex={-1} className="space-y-3">
+            <div ref={alert} tabIndex={-1} className="min-w-0 space-y-3">
               <ZoneFeedback
                 failure={result}
                 locale={locale}
@@ -221,6 +231,7 @@ function CreateVisit({ locale, session, owner, onCreate, onNavigate }: CreatePro
               {result.kind === 'conflict' ? (
                 <Button
                   variant="outline"
+                  className={actionClassName}
                   onClick={() => {
                     if (owner && !owner.isCurrent(capture)) return;
                     retained.current = null;
@@ -234,7 +245,7 @@ function CreateVisit({ locale, session, owner, onCreate, onNavigate }: CreatePro
               ) : null}
             </div>
           ) : null}
-          <Button type="submit" disabled={frozen || !canWrite}>
+          <Button className={actionClassName} type="submit" disabled={frozen || !canWrite}>
             {busy ? m.zones_owner_working({}, options) : m.zones_create_submit({}, options)}
           </Button>
         </form>

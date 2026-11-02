@@ -382,6 +382,13 @@ function confirmTrash() {
   if (!confirm) throw new Error('Missing Zone trash confirmation');
   confirm.click();
 }
+// Resolve only the starter label's own native control inside this existing visit.
+function starterSelector(host: HTMLElement): string {
+  const label = [...host.querySelectorAll('label')].find(
+    (node) => node.textContent?.trim() === m.zones_create_starter({}, { locale: 'en' }),
+  );
+  return `select[id="${label?.htmlFor ?? ''}"]`;
+}
 function setInput(host: HTMLElement, selector: string, value: string) {
   const target = host.querySelector<HTMLInputElement | HTMLSelectElement>(selector);
   if (!target) throw new Error(`Missing input: ${selector}`);
@@ -446,8 +453,8 @@ test('mounted My Zones to publish journey keeps async state in its original read
   ]);
 
   await settle(() => router.navigate({ to: '/my/zones/new' }));
-  await until(() => !!host.querySelector('#zone-starter'));
-  await settle(() => setInput(host, '#zone-starter', 'book'));
+  await until(() => !!host.querySelector(starterSelector(host)));
+  await settle(() => setInput(host, starterSelector(host), 'book'));
   await settle(() => setInput(host, '#zone-label-en', 'Field Notes'));
   await settle(() => button(host, m.zones_create_submit({}, { locale: 'en' })).click());
   await until(() => createCalls.length === 1);
@@ -525,10 +532,10 @@ test('mounted My Zones to publish journey keeps async state in its original read
   expect(oldReader.subject).toBe('A');
 
   await settle(() => router.navigate({ to: '/my/zones/new' }));
-  await until(() => !!host.querySelector('#zone-starter'));
+  await until(() => !!host.querySelector(starterSelector(host)));
   backendViewer = signedIn('B', csrfB);
   await settle(() => queryClient.setQueryData(sessionQuery.queryKey, backendViewer));
-  await settle(() => setInput(host, '#zone-starter', 'book'));
+  await settle(() => setInput(host, starterSelector(host), 'book'));
   await settle(() => setInput(host, '#zone-label-en', 'Late draft'));
   const lateCreate = deferred<CommandOutcome>();
   delayedCreateOutcome = lateCreate;
@@ -921,7 +928,7 @@ async function mountedVisit(path: string, strict = false, scenario: 'list' | 'tr
     path.includes('/edit')
       ? !!host.querySelector('#zone-label-en')
       : path.includes('/new')
-        ? !!host.querySelector('#zone-starter')
+        ? !!host.querySelector(starterSelector(host))
         : !!host.querySelector('article'),
   );
   return {
@@ -963,7 +970,7 @@ function changeSessionBeforeEffects(visit: MountedVisit, change: SessionChange) 
   else visit.client.removeQueries({ queryKey: sessionQuery.queryKey, exact: true });
 }
 async function fillCreate(visit: MountedVisit, label = 'Original private draft') {
-  await settle(() => setInput(visit.host, '#zone-starter', 'book'));
+  await settle(() => setInput(visit.host, starterSelector(visit.host), 'book'));
   await settle(() => setInput(visit.host, '#zone-label-en', label));
 }
 function totals(visit: MountedVisit) {
@@ -1006,7 +1013,7 @@ for (const change of ['equal-query', 'csrf-only', 'aba', 'error', 'remove'] as c
         // A fresh admission, including one that returns to the very same reader, is usable.
         backendViewer = signedIn('A', csrfC);
         await settle(() => visit.client.setQueryData(sessionQuery.queryKey, backendViewer));
-        await until(() => !!visit.host.querySelector('#zone-starter'));
+        await until(() => !!visit.host.querySelector(starterSelector(visit.host)));
         await fillCreate(visit, 'Fresh private site');
         await settle(() => button(visit.host, m.zones_create_submit({}, { locale: 'en' })).click());
         await until(() => visit.state.creates.length === (uncertain ? 2 : 1));
@@ -1205,7 +1212,7 @@ for (const change of ['equal-query', 'csrf-only', 'aba'] as const) {
           await settle(() => changeSessionBeforeEffects(visit, change));
           let fresh: ReturnType<typeof deferred<CommandOutcome>> | undefined;
           if (surface === 'create') {
-            await until(() => !!visit.host.querySelector('#zone-starter'));
+            await until(() => !!visit.host.querySelector(starterSelector(visit.host)));
             await fillCreate(visit, 'New pending draft');
             fresh = deferred<CommandOutcome>();
             visit.state.commandGate = fresh;
