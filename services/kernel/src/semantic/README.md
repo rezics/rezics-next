@@ -1989,9 +1989,6 @@ acceptance/native/browser execution is deferred to controller integration.
 
 ## Current Type directory
 
-Mounted operation IDs are `definition_types.list` and `definition_types.read`, following the kernel's lowercase
-operation naming contract; the HTTP paths and directory cursor identity remain unchanged.
-
 `GET /v1/definitionTypes` accepts a literal case-sensitive label-prefix `query`, or
 an exact `typeId`, `locale` (default `en`), `limit` (1–20, default 20), and `cursor`.
 It returns `{types,next}`. Each Type identifies `typeId`, `releaseDigest`, the selected
