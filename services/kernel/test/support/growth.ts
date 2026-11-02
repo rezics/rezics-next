@@ -1,4 +1,3 @@
-import { appendFileSync } from 'node:fs';
 import { relative } from 'node:path';
 import {
   DEFAULT_BYTE_SLACK,
@@ -42,6 +41,7 @@ import {
   statementOccurrences,
   type StatementOccurrences,
 } from './growth-report.ts';
+import { appendGrowthProfile, growthProfileExportMode, type GrowthProfileExportMode } from './growth-profile-output.ts';
 import {
   countedSample,
   countedViolations,
@@ -72,6 +72,7 @@ export {
 } from './growth-capture.ts';
 export * from './growth-seed.ts';
 export * from './growth-uncertainty.ts';
+export * from './growth-profile-output.ts';
 
 export function measure<T>(db: GrowthDatabase, operation: () => Promise<T>): Promise<{ value: T; cost: Cost }> {
   return capture(db, operation).then(({ value, capture: raw }) => ({ value, cost: costOf(raw) }));
@@ -600,16 +601,16 @@ function writeGrowthReview(
   );
 }
 
-let profileWarned = false;
-
-/** Appends one line per check to the file named by GROWTH_PROFILE; a failure warns once and never fails the check. */
-function appendProfile(report: GrowthReport): void {
-  const path = process.env.GROWTH_PROFILE;
-  if (!path) return;
-  try {
-    const file = relative(process.cwd(), Bun.main);
-    const { name, bounds, byteBounds, samples, shadow, verdicts } = report;
-    const line = JSON.stringify({
+/** Appends one JSONL record to GROWTH_PROFILE; best-effort warns once per destination, required mode throws. */
+function appendProfile(report: GrowthReport, mode: GrowthProfileExportMode): void {
+  const destination = process.env.GROWTH_PROFILE;
+  if (!destination) return;
+  const file = relative(process.cwd(), Bun.main);
+  const { name, bounds, byteBounds, samples, shadow, verdicts } = report;
+  appendGrowthProfile({
+    destination,
+    mode,
+    record: {
       file,
       check: name,
       scales: samples.map(({ scale }) => scale),
@@ -662,13 +663,8 @@ function appendProfile(report: GrowthReport): void {
           },
         ]),
       ),
-    });
-    appendFileSync(path, `${line}\n`);
-  } catch (error) {
-    if (profileWarned) return;
-    profileWarned = true;
-    console.warn(`GROWTH_PROFILE ${path} was not written: ${error instanceof Error ? error.message : String(error)}`);
-  }
+    },
+  });
 }
 
 function assertCatalogBound(
@@ -789,6 +785,7 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
   const growthRule = process.env.GROWTH_RULE;
   if (growthRule !== undefined && growthRule !== 'series')
     throw new TypeError(`${check.name}: GROWTH_RULE must be 'series' when set`);
+  const profileMode = growthProfileExportMode(process.env.GROWTH_PROFILE_REQUIRED);
   const listed = GROWTH_BASELINE.some(({ name }) => name === check.name);
   if (listed && check.rule !== undefined)
     throw new TypeError(`${check.name}: listed checks must not set rule in growth-baseline.ts`);
@@ -1051,7 +1048,7 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
           ),
         }),
   };
-  appendProfile(report);
+  appendProfile(report, profileMode);
   if (
     listed &&
     growthRule !== 'series' &&

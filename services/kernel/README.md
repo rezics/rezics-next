@@ -619,7 +619,13 @@ that appeared in only some repetitions are listed as intermittent with their rep
 parameters are normalized together while leading SQL comments remain, so comments can identify a tagged statement.
 Set `GROWTH_PROFILE` to a file inside the workspace to collect profiles on local and remote check runs. Remote stack
 runs forward its workspace-relative path and return the file with the result; earlier local lines are retained when the
-returned profile is merged. The `GROWTH_PROFILE` JSON line includes `statements`, with each scale's complete statement list and median rows,
+returned profile is merged. Write failures are best-effort by default: `checkGrowth` warns once per destination and still
+returns the growth report, so the growth verdict is unchanged. Each destination keeps its own warning.
+Set `GROWTH_PROFILE_REQUIRED=1` when calibration must have the artifact; any other set value is a configuration error.
+Required export applies only when `GROWTH_PROFILE` names a destination, and then a missing, oversized or incomplete JSONL
+record fails as `GrowthProfileExportError` with that destination and the original error. Each appended line is fully
+serialized before write and must stay within the reader's 2 MiB physical line limit.
+The `GROWTH_PROFILE` JSON line includes `statements`, with each scale's complete statement list and median rows,
 blocks and count across measured repetitions.
 The reader admits at most 64 MiB of total UTF-8 input, 250,000 physical lines, and 50,000 nonblank records per read;
 each physical line is limited to 2 MiB. It rejects excess input and reports the source and line where a limit is crossed.
