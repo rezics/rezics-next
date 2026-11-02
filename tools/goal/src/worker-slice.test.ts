@@ -114,9 +114,9 @@ test('Launch a worker truthfully when host memory discovery is unavailable.', ()
   expect(launch().status).toBe(0);
   expect(launch().status).toBe(0);
   expect(reads).toBe(1);
-  expect(calls).toEqual(['true', 'true']);
+  expect(calls).toEqual(['systemd-run', 'systemd-run']);
   expect(reports).toHaveLength(2);
-  expect(reports[0]).toContain('starting without a scope');
+  expect(reports[0]).toContain('attempting a protected scope');
   expect(reports[0]).toContain("open '/proc/meminfo'");
 });
 
@@ -130,7 +130,10 @@ test('REZICS_WORKER_MEMORY_HIGH_GIB overrides the derived value, and a value tha
   for (const value of ['', '0', '-1', '1.5', 'NaN', 'infinity', ' 31 ', '1G', '9007199254740992']) {
     const invalid = memoryPolicy(62 * 1024 ** 2);
     expect(invalid.launch({ REZICS_WORKER_MEMORY_HIGH_GIB: value }).status).toBe(0);
-    expect(invalid.calls).toEqual([{ command: 'true', args: [] }]);
+    expect(invalid.calls).toHaveLength(1);
+    expect(invalid.calls[0]!.command).toBe('systemd-run');
+    expect(invalid.calls[0]!.args).toContain('--scope');
+    expect(invalid.calls[0]!.args.at(-1)).toBe('true');
     expect(invalid.reads()).toBe(0);
     expect(invalid.reports).toHaveLength(1);
     expect(invalid.reports[0]).toContain('REZICS_WORKER_MEMORY_HIGH_GIB must be a positive integer');
@@ -419,7 +422,8 @@ describe('worker systemd slice', () => {
       (line) => startedReports.push(line),
     );
     expect(started.status).toBe(1);
-    expect(startedReports).toEqual([]);
+    expect(startedReports).toHaveLength(1);
+    expect(startedReports[0]).toContain('retaining the published worker start');
     expect(calls).toEqual([
       { command: 'systemctl', timeout: bound },
       { command: 'systemctl', timeout: bound },
