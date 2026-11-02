@@ -31,18 +31,16 @@ const meta = {
         desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
       },
     },
-  },
-  args: {
-    revision,
-    review: true,
-    subjects: [{ id: subjectId, types: ['schema:Book'], label: 'The first edition', labels: {}, cover: null }],
-  },
-  parameters: {
     docs: {
       description: {
         story: 'This composition uses supplied example values to show the reading hierarchy; it is not native response or authorization evidence.',
       },
     },
+  },
+  args: {
+    revision,
+    review: true,
+    subjects: [{ id: subjectId, types: ['schema:Book'], label: 'The first edition', labels: {}, cover: null }],
   },
 } satisfies Meta<typeof RevisionProvenance>;
 export default meta;
