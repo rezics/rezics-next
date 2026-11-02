@@ -19,6 +19,7 @@ import type { CandidateTransport } from '../../subject/candidate-review';
 import { createTypes, type CreateTransport, type InitialSubject } from './create-subject';
 import { CreateSubjectForm } from './create-subject-form';
 import { EditorFailure, ScalarControl } from './statement-editor-view';
+import { controlId, presentStatementViolations } from './statement-validation-presentation';
 import type { EditorRead, StatementInput } from './statement-editor';
 import { SubjectFacts } from './subject-facts-view';
 import type { FactsTransport } from './subject-facts';
@@ -35,6 +36,55 @@ const disclosureSummary = `min-h-8 min-w-0 cursor-pointer break-words text-xl fo
 
 const initialAction = `h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 [overflow-wrap:anywhere] ${keyboardFocus} max-md:w-full pointer-coarse:w-full`;
 const initialPropertySelect = `w-full min-w-0 max-w-full [&_select]:min-h-11 [&_select]:min-w-11 [&_select]:max-w-full [&_select]:whitespace-normal [&_select]:[overflow-wrap:anywhere] [&_select:focus-visible]:outline-2 [&_select:focus-visible]:outline-offset-2 [&_select:focus-visible]:outline-ring [&_select]:ps-3 [&_select]:pe-8 rtl:[&_[data-slot=native-select-icon]]:right-auto rtl:[&_[data-slot=native-select-icon]]:left-2.5`;
+
+/** Resolve native ordinals once; retained feedback must never follow a removed row's neighbour. */
+function initialFactControl(pointer: string, rows: InitialRow[], read: Ready, type: string, locale: string) {
+  if (!pointer.startsWith('/') || /~(?![01])/.test(pointer)) return;
+  const segments = pointer
+    .slice(1)
+    .split('/')
+    .map((segment) => segment.replaceAll('~1', '/').replaceAll('~0', '~'));
+  const [kind, property, ordinal, ...nested] = segments;
+  if (kind !== 'statements' || !property || !ordinal || !/^(0|[1-9]\d*)$/.test(ordinal)) return;
+  const index = Number(ordinal);
+  const siblings = rows.filter((row) => row.statement.property.id === property);
+  if (!Number.isSafeInteger(index) || index >= siblings.length) return;
+  const row = siblings[index]!;
+  if (!literaryFields(read.release, type, locale).scalars.includes(property)) return;
+  let address = 'fact';
+  let part = row.statement;
+  let path = nested;
+  // Initial facts render exactly one URL citation, with no qualifier or additional reference editors.
+  if (nested.slice(0, 4).join('/') === 'references/0/parts/0') {
+    const citation = row.statement.references[0]?.parts[0];
+    if (!citation) return;
+    part = { ...row.statement, ...citation };
+    address = 'reference-0-part-0';
+    path = nested.slice(4);
+  }
+  // Re-encode decoded segments so an escaped slash cannot become a supported nested address.
+  const suffix = '/' + path.map((segment) => segment.replaceAll('~', '~0').replaceAll('/', '~1')).join('/');
+  const tail = address === 'fact' ? suffix : `/references/0/parts/0${suffix}`;
+  const id = `literary-fact-${row.id}`;
+  const presented = presentStatementViolations(
+    [{ pointer: `/statement${tail}`, code: 'invalid_format' }],
+    row.statement,
+    read.release,
+    locale,
+    id,
+  )[0]!;
+  if (!presented.target.startsWith(`${id}-${address}-`)) return;
+  let target = presented.target;
+  // The shared editor groups dates; native time and precision errors can name its actual inputs.
+  if (read.release.properties[part.property.id]?.datatype === 'time') {
+    if (suffix === '/value/content/precision') target = controlId(id, address, 'precision');
+    else if (suffix === '/value/content/time') target = controlId(id, address, 'year');
+  }
+  return {
+    id: target,
+    label: `${pickText(read.release.properties[property]!.labels, locale).text} ${index + 1} · ${presented.label}`,
+  };
+}
 
 /** Keep confirmation attached to the private row, including when its definition retires. */
 function InitialFactRemoval({
@@ -214,6 +264,7 @@ export function InitialFacts({
                       </p>
                     )}
                     <ScalarControl
+                      feedback={{ id: `literary-fact-${id}`, address: 'fact', errors: [] }}
                       part={statement}
                       definition={definition}
                       read={context}
@@ -222,6 +273,7 @@ export function InitialFacts({
                     />
                     <h4 className="text-sm font-medium">{m.correction_references({}, o)}</h4>
                     <ScalarControl
+                      feedback={{ id: `literary-fact-${id}`, address: 'reference-0-part-0', errors: [] }}
                       part={citation}
                       definition={read.release.properties['schema:url']}
                       read={context}
@@ -423,7 +475,6 @@ function LiteraryProfileLive({
   const [drafts, setDrafts] = useState<Record<string, InitialRow[]>>({});
   // Keep independently entered facts when switching Types; only the currently chosen Type is submitted.
   const latest = useRef(drafts);
-  const submittingType = useRef('');
   latest.current = drafts;
   const heading = (
     <header className="space-y-3">
@@ -510,23 +561,7 @@ function LiteraryProfileLive({
             labelLanguage: (type) => pickText(read.release.types[type]?.labels ?? {}, locale).lang ?? undefined,
             descriptionLanguage: (type) =>
               pickText(read.release.types[type]?.descriptions ?? {}, locale).lang ?? undefined,
-            control: (pointer) => {
-              const [, kind, escaped, index] = pointer.split('/');
-              if (kind !== 'statements') return undefined;
-              const property = escaped?.replaceAll('~1', '/').replaceAll('~0', '~');
-              const rows = (latest.current[submittingType.current] ?? []).filter(
-                (row) => row.statement.property.id === property,
-              );
-              return rows[Number(index) || 0] ? `literary-fact-${rows[Number(index) || 0]!.id}` : undefined;
-            },
-            errorLabel: (id) => {
-              const row = Object.values(latest.current)
-                .flat()
-                .find((row) => `literary-fact-${row.id}` === id);
-              return row
-                ? pickText(read.release.properties[row.statement.property.id]?.labels ?? {}, locale).text
-                : undefined;
-            },
+            control: (pointer, type) => initialFactControl(pointer, latest.current[type] ?? [], read, type, locale),
             fields: (type, disabled) => (
               <InitialFacts
                 type={type}
@@ -538,7 +573,6 @@ function LiteraryProfileLive({
               />
             ),
             prepare: (item: InitialSubject) => {
-              submittingType.current = item.type;
               return literaryInitialItem(
                 creationMetadata.current!.value.release,
                 item,

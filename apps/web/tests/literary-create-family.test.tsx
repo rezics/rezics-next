@@ -135,6 +135,127 @@ function queuedSubmit(form: HTMLFormElement) {
   return Reflect.get(form, key).onSubmit as (event: { preventDefault: () => void }) => Promise<void>;
 }
 
+test('Literary native corrections name only current scalar and citation controls across sibling removal', async () => {
+  await mounted(async ({ host, client, render, click, change, input, until }) => {
+    const { LiteraryProfile } = await import('../src/features/catalogue/literary-profile-view');
+    const { literaryFixture, literaryRelease } = await import('../src/kernel/fake/catalogue-literary-profile');
+    const { m } = await import('../src/paraglide/messages.js');
+    const fixture = literaryFixture();
+    const release = structuredClone(literaryRelease);
+    const escaped = 'example:/language~name';
+    release.properties[escaped] = { ...release.properties['schema:inLanguage']!, labels: { en: 'Escaped language' } };
+    release.types['schema:Book']!.properties.push(escaped);
+    fixture.transport.load = async () => ({ ok: true, release, current: null });
+    const prefix = '/statements/schema:inLanguage';
+    const supported = [
+      `${prefix}/1/value/content`,
+      `${prefix}/1/references/0/parts/0/value/content`,
+      '/statements/schema:wordCount/0/value/content/amount',
+      '/statements/schema:wordCount/0/value/content/unit',
+      '/statements/schema:datePublished/0/value/content/time',
+      '/statements/schema:datePublished/0/value/content/precision',
+      '/statements/example:~1language~0name/0/value/content',
+      `${prefix}/0/value/type`,
+    ];
+    const unsupported = [
+      ...['', '/', '/-1', '/01', '/+0', '/1.0', '/1e0', '/ 0', '/2', '/9007199254740993'].map(
+        (index) => `${prefix}${index}/value/content`,
+      ),
+      `${prefix}/0/value/content/unknown`,
+      `${prefix}/0/value~1content`,
+      `${prefix}/0/qualifiers/0/value/content`,
+      `${prefix}/1/references/1/parts/0/value/content`,
+      `${prefix}/1/references/0/parts/01/value/content`,
+      '/statements/bad~2escape/0/value/content',
+      '/statements/unknown/0/value/content',
+      '/unknown',
+      '/statements/schema:wordCount/0/value/content/lowerBound',
+      '/statements/schema:datePublished/0/value/content/calendarmodel',
+    ];
+    const errors = [...supported, ...unsupported].map((pointer) => ({ pointer, code: 'invalid_format' as const }));
+    let original: unknown;
+    fixture.transport.submit = async (command) => {
+      original = structuredClone(command);
+      return { ok: false, reason: 'invalid', errors };
+    };
+    await render(h(LiteraryProfile, { locale: 'en', session: 'signed-in', ...fixture }));
+    await until(() => !!host.querySelector('#create-type'));
+    await change(host.querySelector<HTMLSelectElement>('#create-type')!, 'schema:Book');
+    await input(host.querySelector<HTMLInputElement>('#create-label-0')!, 'Private title');
+    const panel = initialPanel(host, m.literary_bibliography());
+    const add = async (property: string) => {
+      await change(propertyControl(panel), property);
+      await click(m.correction_add(), panel);
+      return [...panel.querySelectorAll<HTMLElement>('section[id]')].at(-1)!;
+    };
+    const first = await add('schema:inLanguage');
+    await input(labelledInput(first, m.correction_value()), 'en');
+    const second = await add('schema:inLanguage');
+    await input(labelledInput(second, m.correction_value()), 'ja');
+    await input(labelledInput(second, m.correction_url()), 'https://example.org/source');
+    const quantity = await add('schema:wordCount');
+    await input(labelledInput(quantity, m.correction_amount()), '+12');
+    await change(quantity.querySelector<HTMLSelectElement>('select[id$="-unit"]')!, '1');
+    const time = await add('schema:datePublished');
+    await change(time.querySelector<HTMLSelectElement>('select[id$="-precision"]')!, '9');
+    await input(labelledInput(time, m.correction_year()), '2024');
+    const escapedRow = await add(escaped);
+    await input(labelledInput(escapedRow, m.correction_value()), 'fr');
+    const targets = [
+      `${second.id}-fact-value`,
+      `${second.id}-reference-0-part-0-value`,
+      `${quantity.id}-fact-amount`,
+      `${quantity.id}-fact-unit`,
+      `${time.id}-fact-year`,
+      `${time.id}-fact-precision`,
+      `${escapedRow.id}-fact-value`,
+      `${first.id}-fact-state`,
+    ];
+    await click(m.catalogue_create_submit());
+    await until(() => !!host.querySelector('[role="alert"] code'));
+    const links = () => [...host.querySelectorAll<HTMLAnchorElement>('[role="alert"] a[href^="#"]')];
+    expect(links().map((link) => decodeURIComponent(link.hash.slice(1)))).toEqual(targets);
+    for (const [index, link] of links().entries()) {
+      await act(async () => link.click());
+      expect(host.ownerDocument.activeElement?.id).toBe(targets[index]!);
+    }
+    expect([...host.querySelectorAll('[role="alert"] dd code')].map((node) => node.textContent)).toEqual(
+      errors.flatMap(({ pointer, code }) => [pointer, code]),
+    );
+    expect(original).toMatchObject({
+      item: {
+        labels: { en: 'Private title' },
+        statements: {
+          'schema:inLanguage': [
+            { value: { type: 'value', content: 'en' }, references: [] },
+            {
+              value: { type: 'value', content: 'ja' },
+              references: [
+                {
+                  parts: [
+                    { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.org/source' } },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      },
+    });
+    await click(m.literary_remove_fact(), first);
+    await click(m.literary_remove_fact(), first);
+    expect(links().map((link) => decodeURIComponent(link.hash.slice(1)))).toEqual(targets.slice(0, -1));
+    await act(async () => links()[0]!.click());
+    expect(host.ownerDocument.activeElement?.id).toBe(targets[0]!);
+    delete release.properties['schema:datePublished'];
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ['literary-profile'] });
+    });
+    expect(links().some((link) => link.hash.includes(time.id))).toBe(false);
+    expect(second.querySelector<HTMLInputElement>('input')!.value).toBe('ja');
+  });
+});
+
 test('mounted Literary creation keeps the complete initial bibliography family and native command journey', async () => {
   await mounted(async ({ host, client, render, click, change, input, until }) => {
     const { LiteraryProfile } = await import('../src/features/catalogue/literary-profile-view');
@@ -142,7 +263,6 @@ test('mounted Literary creation keeps the complete initial bibliography family a
       await import('../src/kernel/fake/catalogue-literary-profile');
     const { CandidateReaderBoundary } = await import('../src/subject/candidate-lifetime');
     const { m } = await import('../src/paraglide/messages.js');
-    const { pickText } = await import('@rezics/composition');
     const panel = (scope: ParentNode = host) => initialPanel(scope, m.literary_bibliography());
     const row = (scope: ParentNode = host) => scope.querySelector<HTMLElement>('section[id^="literary-fact-"]')!;
     const type = (scope: ParentNode = host) => scope.querySelector<HTMLSelectElement>('select[id="create-type"]')!;
@@ -368,7 +488,7 @@ test('mounted Literary creation keeps the complete initial bibliography family a
     });
     expect(Object.keys((seriesPost.body as { statements: object }).statements)).toEqual(['wdt:P2635']);
 
-    // Exact error routing still links the native row ID and focuses its first actual scalar control.
+    // A property-level native diagnostic has no editable address; metadata recovery retains every draft.
     const invalid = literaryFixture('invalid');
     const invalidLoad = invalid.transport.load;
     let recovery: 'initial' | 'throw' | 'refused' | 'current' = 'initial';
@@ -391,12 +511,9 @@ test('mounted Literary creation keeps the complete initial bibliography family a
     const invalidRow = row();
     recovery = 'throw';
     await click(m.catalogue_create_submit());
-    await until(() => !!host.querySelector('[role="alert"] a[href^="#literary-fact-"]'));
-    const correction = host.querySelector<HTMLAnchorElement>('[role="alert"] a[href^="#literary-fact-"]')!;
-    expect(decodeURIComponent(correction.hash.slice(1))).toBe(invalidRow.id);
-    expect(correction.textContent).toBe(pickText(literaryRelease.properties['schema:wordCount']!.labels, 'en').text);
-    await act(async () => correction.click());
-    expect(host.ownerDocument.activeElement).toBe(invalidRow.querySelector('select'));
+    await until(() => !!host.querySelector('[role="alert"] code'));
+    expect(host.querySelector('[role="alert"] a[href^="#literary-fact-"]')).toBeNull();
+    expect(host.querySelector('[role="alert"] code')!.textContent).toBe('/statements/schema:wordCount');
     expect(labelledInput(invalidRow, m.correction_amount()).value).toBe('+12000');
     const invalidPosts = () => invalid.calls.filter((call) => call.method === 'POST');
     await until(() => host.textContent!.includes(m.catalogue_create_unavailable()));
