@@ -283,3 +283,91 @@ concrete gap. This extends preference cleanup without declaring other producers 
 needs the selected Semantic source authority and original record-to-copy inventory; account receipt custody alone
 cannot identify an ordinary record's copies. The Accounts receiving signatures exist but fail closed until those
 native source and inventory ports are delivered.
+
+## Selected command dispatch lifetime
+
+`command/dispatch-lifetime.ts` supplies the additive trusted-server entrypoint:
+
+```ts
+withCommandDispatchLifetime<T>(
+  pool: Pool,
+  deadline: number,
+  owner: CommandDispatchOwner,
+  body: () => Promise<T>,
+): Promise<T>
+
+type CommandDispatchOwner = Readonly<{
+  original: object;
+  validate(): void;
+  reserve(allowance: CommandDispatchAllowance): void | Promise<void>;
+}>;
+type CommandDispatchPrice = Readonly<{ work: WorkDimensions; engineRequests: 0 }>;
+```
+
+The owner closes over its genuine original grant, selected callback and reservation operation. `validate`
+**synchronously** rechecks that exact grant/callback, Pool, unchanged absolute deadline and revocation state;
+an async validator is refused before dispatch. `reserve` must hold the complete `allowance.total.work` in one
+atomic reservation on that original, including the disjoint `allowance.cleanup`, or throw. It may await;
+Core revalidates on return. Reservations remain spent on error, expiry, rollback or lost responses. Core does
+not mint a grant, select another Pool, construct a finite payer, refund work or price a foreign child.
+
+Inside `body`, invoke the genuine `runCommand(pool, { partition, deadline }, ...)` once, optionally through
+`withSingleCommandAttempt`, returning `noEffect` from its body. The exact native transaction alone has command,
+resource and callback association. The lifetime binds its raw checkout, controls, authoritative time, fence and
+commit, plus before/after-await liveness for Promise body queries. Body SQL remains charged by its genuine owner.
+Synchronous validation also runs on native context/callback access. Copied/reflected callback symbols confer no
+optional-path transaction authority. Callback and streaming pg query overloads are unsupported in this profile.
+
+One scope admits one command. Reuse, concurrency, nesting and overlapping scopes on the same `original` object
+are refused. A fresh sequential scope needs fresh genuine owner admission and reservation. Returning or throwing
+from the scope while its descendant command is running closes effects immediately and waits for that command's
+existing cleanup/release. Escaped transactions and late query results remain closed. Actor, principal, receipt,
+authorization and custom-clock options refuse before reservation/checkout. Events, registered work callbacks and
+native source/source-set associations refuse before final controls or source finalization. There is no retry,
+writable wait or second checkout in the optional profile. Ordinary overloads and policies remain in place.
+
+### Cost: selected native no-effect controls
+
+`COMMAND_DISPATCH_CONTROLS` exports the literal components below. Each exposes `work` with all eight
+`WorkDimensions` and `engineRequests: 0`. `COMMAND_DISPATCH_ALLOWANCE` exports `profile: 'single-no-effect'`,
+`components`, `effect`, `cleanup` and `total`; `CommandDispatchAllowance` is its exact type.
+Core admits each named effect control once in the stated order and records it before dispatch; unknown,
+repeated or out-of-order controls refuse before IO. Cleanup is one-shot, on the same client, held before BEGIN,
+and does not consult expired effect authority. Failed BEGIN and failed/lost COMMIT still consume their dispatch.
+Failed cleanup discards the client and reports both errors, retaining the original error as cause.
+
+| Operation | Touches | Bound (rows / points / statements / bytes / empty seeks) | Growth check |
+| --- | --- | --- | --- |
+| `checkout` and lifetime validation | Same Pool, original callback, immutable deadline; gate and one checkout | 0 / 0 / 0 / 0 / 0 | Fixed local association; no SQL |
+| `begin` | SERIALIZABLE BEGIN | 0 / 0 / 1 / 0 / 0 | Fixed control |
+| `lockTimeout` | Local 200ms setting | 0 / 0 / 1 / 0 / 0 | Fixed control |
+| `statementTimeout` | Local remaining absolute deadline | 0 / 0 / 1 / 12 / 0 | At most ten decimal digits plus `ms` |
+| `time` | One scalar UTC `transaction_timestamp`, no index | 1 / 0 / 1 / 40 / 0 | Native bounded scalar projection |
+| `finalStatementTimeout` | Refresh remaining deadline before fence | 0 / 0 / 1 / 12 / 0 | Same bound; no extension |
+| `noEffectFence` | One active partition PK `FOR SHARE`; null receipt branch writes nothing | 1 / 1 / 1 / 105 / 1 | One key at unrelated partition/history scales; logarithmic B-tree blocks |
+| `finalize` | Actual native finalizer with no declared source or source set | 0 / 0 / 0 / 0 / 0 | Foreign registrations refused; actual body returns without SQL |
+| `commit` | Native COMMIT | 0 / 0 / 1 / 0 / 0 | Fixed control, including failed/lost response |
+| `cleanupRollback` | Separate native ROLLBACK after any reached failure | 0 / 0 / 1 / 0 / 0 | At most once; no new allowance |
+
+The effect sum is **2 rows, 1 point, 7 statements, 169 bytes, 1 empty seek**. Adding cleanup gives
+**8 statements**, with the other dimensions unchanged. Candidate keys, identity metadata rows and witness keys
+are zero: these controls enumerate none of those foreign families. `engineRequests` counts external engine
+operations, not PostgreSQL statements, and is zero here. No control retries. A partition miss still pays its one
+index seek; the row bound stays prepaid even when no row is returned. No receipt/outbox/basis writes are reached.
+
+Bytes count compact JSON bindings and nonempty projected row arrays, plus variable timeout-literal payloads;
+fixed SQL text, protocol framing and empty control results have no payload charge. The time projection is bounded
+**in SQL before IO** by `varchar(29)` after UTC formatting: at most six year digits and 23 fixed date/time
+characters, giving `[{'at': value}]` 40 JSON bytes (with JSON double quotes). It preserves microseconds.
+The fence's validated partition (0–4095), native UUID and null receipt have at most 50 binding-array bytes;
+its one projected positive int32 epoch and nonnegative int64 decimal position have at most 55 row-array bytes.
+The native key/type/projection enforce those limits before IO. Deadlines beyond signed-int32 milliseconds are
+refused before checkout, bounding both timeout literals to 12 bytes. There is no caller-sized control payload.
+
+[Native lifecycle outcomes](../../test/command/dispatch-lifetime.test.ts) cover the exact executor and SQL, before
+and after-await refusal, copies/escape/reuse, insufficient funding, single-attempt fencing, failure/cleanup and
+ordinary receipt ordering/replay. They are authored and UNRUN at this source handoff. Full Kernel acceptance and
+native growth evidence remain owed through the controller; typing is not that proof. The fixture owner port is
+not physical/private Accounts History authority. Accounts must adapt its genuine original validator/reservation;
+Source scheduling/maxima, whole-original Source/Library prices, receiving and physical writer closure remain their
+owners' operands, unavailable rather than zero when absent. No History consumer is converted by this producer.

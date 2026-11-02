@@ -678,7 +678,6 @@ declare const productEventTypes: {
         realmId: Type.TString;
         kind: Type.TUnion<[Type.TLiteral<"realm">, Type.TLiteral<"bucket">, Type.TLiteral<"thread">, Type.TLiteral<"board">]>;
     }>;
-    readonly "com.rezics.search.identity_writer.changed.v1": Type.TObject<{}>;
     readonly 'com.rezics.zone.created.v1': Type.TObject<{
         id: Type.TString;
         revision: Type.TString;
@@ -1525,6 +1524,7 @@ declare const productEventTypes: {
         survivor: Type.TString;
         voters: Type.TInteger;
     }>;
+    readonly "com.rezics.search.identity_writer.changed.v1": Type.TObject<{}>;
     readonly 'com.rezics.history.erasure-acknowledged.v1': Type.TObject<{
         version: Type.TInteger;
         outcome: Type.TUnion<[Type.TLiteral<"erased">, Type.TLiteral<"none">]>;

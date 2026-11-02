@@ -13,6 +13,8 @@ type CommonOptions = {
     deadline?: number;
     /** Trusted service configuration only. */
     clock?: () => Date;
+    /** Separate native History producer admission. Existing callers keep their ordinary behaviour. */
+    operationalHistory?: true;
 };
 export type OperationalOptions = CommonOptions & ((Extract<PrincipalCommandIdentity, {
     basis: {
@@ -35,6 +37,7 @@ type Live = {
     deadline: number;
     partition: number;
     mode: OperationalOptions['mode'];
+    kind: string;
 };
 export declare function hasLiveOperationalTransaction(tx: Pick<PoolClient, 'query'>): tx is OperationalTransaction;
 /** Server-only executor resources. The transaction remains the only usable query client. */

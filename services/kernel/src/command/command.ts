@@ -1,4 +1,11 @@
-import { finalizeCommandRecordSources } from '../history/record-source.ts';
+import { commandRecordSources, finalizeCommandRecordSources } from '../history/record-source.ts';
+import { hasCommandRecordSourceSet } from '../history/record-source-set.ts';
+import { commandAgentIdentitySource } from '../history/agent-identity-source.ts';
+import {
+  claimCommandDispatchLifetime,
+  COMMAND_DISPATCH_TIME_SQL,
+  type CommandDispatchLifetime,
+} from './dispatch-lifetime.ts';
 export const DEFAULT_REQUEST_DEADLINE_MS = 2000;
 
 import type { Pool, PoolClient } from 'pg';
@@ -280,6 +287,7 @@ export function authoritativeTimeValue(time: AuthoritativeTime): string {
 export function currentCommand(tx: CommandTransaction): CurrentCommand {
   const context = commands.get(tx);
   if (!context) throw new TypeError('No authorized live command transaction');
+  assertSelectedCallback(tx);
   return context;
 }
 /** Trusted owner factories reuse the live executor resources; this grants no second checkout. */
@@ -328,6 +336,15 @@ export function releaseOperationalTime(time: AuthoritativeTime): void {
 const transactionCallbacks = Symbol('command callbacks');
 type CallbackState = { active: boolean; callbacks: CommandCallback[] };
 type CallbackTransaction = CommandTransaction & { [transactionCallbacks]?: CallbackState };
+// Optional-path copies must not inherit callback authority by copying a symbol.
+const selectedCallbacks = new WeakMap<CallbackState, { tx: CommandTransaction; dispatch: CommandDispatchLifetime }>();
+function assertSelectedCallback(tx: CommandTransaction): void {
+  const state = (tx as CallbackTransaction)[transactionCallbacks];
+  const selected = state && selectedCallbacks.get(state);
+  if (!selected) return;
+  if (selected.tx !== tx) throw new TypeError('No original dispatch transaction');
+  selected.dispatch.checkpoint();
+}
 
 /** Register work for the current command after its body and finalizer succeed.
  * The callback receives the executor-minted transaction id and runs before the
@@ -336,6 +353,7 @@ type CallbackTransaction = CommandTransaction & { [transactionCallbacks]?: Callb
 export function registerCommandCallback(tx: CommandTransaction, callback: CommandCallback): void {
   const state = (tx as CallbackTransaction)[transactionCallbacks];
   if (!state?.active) throw new TypeError('No live command transaction');
+  assertSelectedCallback(tx);
   if (typeof callback !== 'function') throw new TypeError('Command callback must be a function');
   state.callbacks.push(callback);
 }
@@ -344,13 +362,25 @@ export function registerCommandCallback(tx: CommandTransaction, callback: Comman
  * executor attempt is live. The symbol capability is private to this module.
  */
 export function hasLiveCommandTransaction(tx: CommandTransaction): boolean {
-  return (tx as CallbackTransaction)[transactionCallbacks]?.active === true;
+  if ((tx as CallbackTransaction)[transactionCallbacks]?.active !== true) return false;
+  try {
+    assertSelectedCallback(tx);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
-async function mintTime(client: CommandTransaction, clock?: () => Date): Promise<AuthoritativeTime> {
+async function mintTime(
+  client: CommandTransaction,
+  clock?: () => Date,
+  dispatch?: CommandDispatchLifetime,
+): Promise<AuthoritativeTime> {
   const configured = clock?.();
   if (configured && !Number.isFinite(configured.getTime())) throw new TypeError('Invalid command clock');
-  const row = await readTime.run(client, { at: configured?.toISOString() ?? '' });
+  const row = dispatch
+    ? (await dispatch.control('time', () => client.query<{ at: string }>(COMMAND_DISPATCH_TIME_SQL))).rows[0]
+    : await readTime.run(client, { at: configured?.toISOString() ?? '' });
   if (!row) throw new TypeError('No authoritative database time');
   const time = Object.freeze({}) as AuthoritativeTime;
   times.set(time, row.at);
@@ -541,9 +571,16 @@ export async function runCommand<T>(
   body: (tx: CommandTransaction, context: CommandContext) => Promise<CommandResult<T>>,
 ): Promise<CommandOutcome<T>> {
   commandPhase('command_overhead');
+  const dispatch = claimCommandDispatchLifetime(pool, input);
+  let succeeded = false;
   try {
-    return await executeCommand(pool, input, body);
+    if (dispatch) await dispatch.prepare();
+    const result = await executeCommand(pool, input, body, dispatch);
+    dispatch?.checkpoint();
+    succeeded = true;
+    return result;
   } finally {
+    dispatch?.finish(succeeded);
     commandPhase('request_completion');
   }
 }
@@ -552,8 +589,10 @@ async function executeCommand<T>(
   pool: Pool,
   input: LegacyCommandOptions | PrincipalCommandInput,
   body: (tx: CommandTransaction, context: CommandContext) => Promise<CommandResult<T>>,
+  dispatch?: CommandDispatchLifetime,
 ): Promise<CommandOutcome<T>> {
   const options = normalizeOptions(input);
+  dispatch?.assertOptions(pool, options);
   const { partition } = options;
   if (options.receipt) assertReceipt(options.receipt);
   if (!Number.isInteger(partition) || partition < 0 || partition > 4095) throw new RangeError('Invalid partition');
@@ -584,20 +623,34 @@ async function executeCommand<T>(
         attemptDeadlines.set(attempt, deadline);
         evidence = await measureCommandPhase('access_prepare', () => authorization.prepare!(attempt!));
       }
+      dispatch?.checkpoint();
       const gate = await measureCommandPhase('gate_wait', () => enterCommandGate(pool, partition, deadline));
       if (gate.status !== 'acquired') throw new CommandUnavailableError(gate.status, partition);
       commandPhase('transaction_pool_wait');
-      const result = await withConnection(pool, async (client) => {
+      const checkout = <R>(work: (client: PoolClient) => Promise<R>): Promise<R> => dispatch
+        ? dispatch.control('checkout', () => withConnection(pool, work))
+        : withConnection(pool, work);
+      const result = await checkout(async (client) => {
         commandPhase('transaction_body');
-        await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
+        if (!dispatch) await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
         const tx: CommandTransaction = { query: client.query.bind(client) };
+        dispatch?.bindQuery(tx, client);
         if (receiptKeys) bindReceiptKeys(tx, receiptKeys);
         const callbackState: CallbackState = { active: true, callbacks: [] };
         Object.defineProperty(tx, transactionCallbacks, { value: callbackState });
+        if (dispatch) selectedCallbacks.set(callbackState, { tx, dispatch });
         try {
-          await client.query("SET LOCAL lock_timeout = '200ms'");
-          await client.query(`SET LOCAL statement_timeout = '${remaining(deadline)}ms'`);
-          time ??= await measureCommandPhase('time_mint', () => mintTime(client, options.clock));
+          dispatch?.checkpoint();
+          if (dispatch)
+            await dispatch.control('begin', () => client.query('BEGIN ISOLATION LEVEL SERIALIZABLE'));
+          if (dispatch)
+            await dispatch.control('lockTimeout', () => client.query("SET LOCAL lock_timeout = '200ms'"));
+          else await client.query("SET LOCAL lock_timeout = '200ms'");
+          if (dispatch)
+            await dispatch.control('statementTimeout', () =>
+              client.query(`SET LOCAL statement_timeout = '${remaining(deadline)}ms'`));
+          else await client.query(`SET LOCAL statement_timeout = '${remaining(deadline)}ms'`);
+          time ??= await measureCommandPhase('time_mint', () => mintTime(client, options.clock, dispatch));
           attempt ??= Object.freeze({ partition, basis, time });
           attemptDeadlines.set(attempt, deadline);
           attempts.set(tx, attempt);
@@ -655,11 +708,19 @@ async function executeCommand<T>(
                 storageKey: receiptCandidates.find((key) => key.startsWith(`rk1.${receiptKeys!.current}.`))!,
               }),
             );
-          const response = await body(tx, { transactionId, time });
+          const response = dispatch
+            ? await dispatch.body(() => body(tx, { transactionId, time: time! }))
+            : await body(tx, { transactionId, time });
           const noEffect = response.events.length === 0 && noEffectResults.has(response);
           if (response.events.length === 0 && !noEffect) throw new TypeError('A command must emit at least one event');
           if (response.events.length > MAX_COMMAND_EVENTS)
             throw new TooManyEventsError(partition, response.events.length);
+          if (dispatch) {
+            dispatch.checkpoint();
+            if (!noEffect || callbackState.callbacks.length || commandRecordSources(tx).length ||
+                hasCommandRecordSourceSet(tx) || commandAgentIdentitySource(tx))
+              throw new TypeError('Unsupported dispatch lifetime history, callback or event profile');
+          }
           validateCommandHistoryScope(tx, options.receipt?.kind, response.events);
           const events = noEffect
             ? []
@@ -682,6 +743,7 @@ async function executeCommand<T>(
               });
           validateCommandHistory(tx, options.receipt?.kind, response.value, events);
           await authorization?.finalize?.(tx, attempt, evidence);
+          dispatch?.checkpoint();
           if (noEffect && callbackState.callbacks.length > 0)
             throw new TypeError('A no-effect command registers no work');
           for (let index = 0; index < callbackState.callbacks.length; index++)
@@ -702,13 +764,15 @@ async function executeCommand<T>(
               throw new TypeError('A command receipt value must be JSON serializable');
             value = receipt.response as T;
           }
-          await client.query(`SET LOCAL statement_timeout = '${remaining(deadline)}ms'`);
+          if (dispatch)
+            await dispatch.control('finalStatementTimeout', () =>
+              client.query(`SET LOCAL statement_timeout = '${remaining(deadline)}ms'`));
+          else await client.query(`SET LOCAL statement_timeout = '${remaining(deadline)}ms'`);
+          const noEffectFence = () => noEffectFenceStatement.run(client, {
+            partition_no: partition, transaction_id: transactionId, receipt,
+          });
           const row = noEffect
-            ? await noEffectFenceStatement.run(client, {
-                partition_no: partition,
-                transaction_id: transactionId,
-                receipt,
-              })
+            ? await (dispatch ? dispatch.control('noEffectFence', noEffectFence) : noEffectFence())
             : await fenceStatement.run(client, {
                 partition_no: partition,
                 events,
@@ -719,7 +783,7 @@ async function executeCommand<T>(
                 receipt,
               });
           if (row.length === 0) {
-            if (singleAttempt.getStore()) throw new CommandUnavailableError('contention', partition);
+            if (dispatch || singleAttempt.getStore()) throw new CommandUnavailableError('contention', partition);
             receiptOwners.delete(tx);
             try {
               await client.query('ROLLBACK');
@@ -746,8 +810,12 @@ async function executeCommand<T>(
               storageKey: receipt.key as string,
               position: BigInt(row[0]!.position),
             });
-          await finalizeCommandRecordSources(tx, BigInt(row[0]!.position));
-          await measureCommandPhase('commit', () => client.query('COMMIT'));
+          if (dispatch)
+            await dispatch.control('finalize', () => finalizeCommandRecordSources(tx, BigInt(row[0]!.position)));
+          else await finalizeCommandRecordSources(tx, BigInt(row[0]!.position));
+          await measureCommandPhase('commit', () => dispatch
+            ? dispatch.control('commit', () => client.query('COMMIT'))
+            : client.query('COMMIT'));
           sealEventTypes();
           return {
             value,
@@ -759,6 +827,14 @@ async function executeCommand<T>(
           };
         } catch (error) {
           receiptOwners.delete(tx);
+          if (dispatch) {
+            try { await dispatch.rollback(); }
+            catch (rollbackError) {
+              discardConnection(client, rollbackError as Error);
+              throw new AggregateError([error, rollbackError], 'Command and cleanup ROLLBACK failed', { cause: error });
+            }
+            throw error;
+          }
           if (!(error instanceof AccessUnavailableError) && classifyUnavailability(error) === 'deadline') {
             try {
               await client.query('ROLLBACK');
@@ -795,6 +871,19 @@ async function executeCommand<T>(
       await measureCommandPhase('writable_wait', () => waitForWritable(pool, partition, deadline));
     } catch (error) {
       if (time) times.delete(time);
+      if (dispatch) {
+        // Preserve native single-attempt classifications without retrying or
+        // dropping the original failure/uncertain COMMIT evidence.
+        if (error instanceof CommandUnavailableError || error instanceof AggregateError) throw error;
+        const reason = classifyUnavailability(error);
+        if (error instanceof AccessUnavailableError && reason !== 'contention') throw error;
+        if (reason) {
+          const unavailable = new CommandUnavailableError(reason, partition);
+          unavailable.cause = error;
+          throw unavailable;
+        }
+        throw error;
+      }
       if (error instanceof IdempotencyConflictError) throw error;
       if (error instanceof CommandUnavailableError) throw error;
       const reason = classifyUnavailability(error);
