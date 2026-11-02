@@ -24,11 +24,16 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: Number(listen.port || 0)
 console.error('  readyz: http://127.0.0.1:' + server.port + '/readyz');
 `;
 
+function installFake(directory: string, source: string): string {
+  const executable = join(directory, 'codex');
+  writeFileSync(executable, source);
+  chmodSync(executable, 0o755);
+  return executable;
+}
+
 test('a pool app-server listens on a loopback WebSocket owned by the caller and serves JSON-RPC', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'goal-ws-'));
-  const executable = join(directory, 'codex');
-  writeFileSync(executable, fake);
-  chmodSync(executable, 0o755);
+  const executable = installFake(directory, fake);
   const server = await connectPool({ id: 'pool', codexHome: join(directory, 'home'), executable });
   const endpoint = server.endpoint;
   try {
@@ -51,4 +56,53 @@ test('a pool app-server listens on a loopback WebSocket owned by the caller and 
       () => 'down',
     ),
   ).toBe('down');
+});
+
+test('a noisy app-server remains bounded after readiness and still connects when the readiness marker crosses stream chunks', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'goal-ws-split-'));
+  const executable = installFake(
+    directory,
+    fake.replace(
+      "console.error('  readyz: http://127.0.0.1:' + server.port + '/readyz');",
+      `process.stderr.write('  readyz: ht');
+await Bun.sleep(50);
+process.stderr.write('tp://127.0.0.1:' + server.port + '/readyz\\n');
+const noise = Buffer.alloc(32 * 1024, 0x78);
+for (let i = 0; i < 32; i++) process.stderr.write(noise);`,
+    ),
+  );
+  const server = await connectPool({ id: 'pool', codexHome: join(directory, 'home'), executable });
+  try {
+    expect(server.endpoint).toMatch(/^ws:\/\/127\.0\.0\.1:\d+$/);
+    expect(await server.request('thread/list', {})).toEqual({ echo: 'thread/list', params: {} });
+  } finally {
+    server.close();
+  }
+});
+
+test('a startup failure still reports a readiness marker split across chunks without retaining unbounded stderr', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'goal-ws-fail-'));
+  const executable = installFake(
+    directory,
+    `#!/usr/bin/env bun
+const args = process.argv.slice(2);
+if (args[0] !== 'app-server' || !args.includes('--listen')) process.exit(2);
+const write = (text) => new Promise((resolve) => process.stderr.write(text, resolve));
+await write('noise-start\\n' + 'x'.repeat(300000) + '\\n');
+await write('readyz: ht');
+await Bun.sleep(50);
+await write('tp://127.0.0.1:');
+process.exit(7);
+`,
+  );
+  let message = '';
+  try {
+    await connectPool({ id: 'pool', codexHome: join(directory, 'home'), executable });
+  } catch (error) {
+    message = error instanceof Error ? error.message : String(error);
+  }
+  expect(message).toContain('exited before readiness (7):');
+  expect(message).toContain('readyz: http://127.0.0.1:');
+  expect(message).not.toContain('noise-start');
+  expect(message.length).toBeLessThanOrEqual(256 * 1024 + 80);
 });

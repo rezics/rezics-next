@@ -126,6 +126,14 @@ export class StdioAppServer implements AppServer {
   }
 }
 
+const APP_SERVER_DIAGNOSTICS_LIMIT = 256 * 1024;
+const APP_SERVER_READY = /readyz:\s*(https?:\/\/127\.0\.0\.1:\d+\/readyz)/;
+
+function retainAppServerDiagnostics(current: string, chunk: string): string {
+  const next = current + chunk;
+  return next.length <= APP_SERVER_DIAGNOSTICS_LIMIT ? next : next.slice(-APP_SERVER_DIAGNOSTICS_LIMIT);
+}
+
 export type CodexPool = { id: string; codexHome: string; executable?: string };
 
 /** JSON-RPC over the WebSocket app-server owned by this manager host. */
@@ -266,8 +274,9 @@ export async function connectPool(
     };
     const timer = setTimeout(() => finish(new Error(`Timed out waiting for app-server readiness: ${stderr}`)), 30_000);
     child.stderr.on('data', (chunk) => {
-      stderr += String(chunk);
-      const match = stderr.match(/readyz:\s*(https?:\/\/127\.0\.0\.1:\d+\/readyz)/);
+      if (settled) return;
+      stderr = retainAppServerDiagnostics(stderr, String(chunk));
+      const match = stderr.match(APP_SERVER_READY);
       if (match) finish(undefined, match[1]);
     });
     child.on('error', (error) => finish(error));
