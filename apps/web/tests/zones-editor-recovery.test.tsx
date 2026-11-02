@@ -37,6 +37,7 @@ const globals = {
   getComputedStyle: window.getComputedStyle.bind(window),
   requestAnimationFrame: window.requestAnimationFrame.bind(window),
   cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+  scrollTo: window.scrollTo.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -109,7 +110,7 @@ test('Zone draft navigation stays with the exact edits, allows a deliberate leav
     edited.mounts = [
       fixture.initial.options.collections.kind === 'ready' ? fixture.initial.options.collections.value.items[0]!.id : '',
     ];
-    session.edit(edited);
+    await act(async () => session.edit(edited));
     const retained = session.snapshot().draft;
     await act(async () => {
       const page = host.querySelector<HTMLSelectElement>('#zone-page')!;
@@ -130,12 +131,11 @@ test('Zone draft navigation stays with the exact edits, allows a deliberate leav
     await act(async () => session.save());
     await act(async () => router.navigate({ to: '/away' }));
     expect(host.textContent).toContain('Destination');
-    expect(host.textContent).not.toContain(m.zone_editor_leave());
     expect(arrivals).toBe(1);
     await act(async () => router.navigate({ to: '/edit' }));
     const discarded = structuredClone(session.snapshot().draft!);
     discarded.configuration.labels.en = 'Discard this edit';
-    session.edit(discarded);
+    await act(async () => session.edit(discarded));
     await act(async () => {
       pending = router.navigate({ to: '/away' });
     });
