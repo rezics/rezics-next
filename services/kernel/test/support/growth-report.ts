@@ -216,9 +216,18 @@ function profileStatementRuns(runs: readonly (readonly StatementAttribution[])[]
   const statements = new Map<string, ProfiledStatement>();
   for (const [statement, summary] of index.statements)
     statements.set(statement, {
-      rows: medianWithMissingZeros(summary.entries.map(({ rows }) => rows), index.repetitionCount),
-      blocks: medianWithMissingZeros(summary.entries.map(({ blocks }) => blocks), index.repetitionCount),
-      count: medianWithMissingZeros(summary.entries.map(({ count }) => count), index.repetitionCount),
+      rows: medianWithMissingZeros(
+        summary.entries.map(({ rows }) => rows),
+        index.repetitionCount,
+      ),
+      blocks: medianWithMissingZeros(
+        summary.entries.map(({ blocks }) => blocks),
+        index.repetitionCount,
+      ),
+      count: medianWithMissingZeros(
+        summary.entries.map(({ count }) => count),
+        index.repetitionCount,
+      ),
       repetitions: summary.repetitions,
       ...(summary.node === undefined ? {} : { node: summary.node }),
     });
