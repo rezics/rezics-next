@@ -25,17 +25,20 @@ function sameUnits(left: PropertyDefinition, right: PropertyDefinition): boolean
 }
 
 function sameValueDefinition(left: PropertyDefinition, right: PropertyDefinition): boolean {
-  return !!left && !!right && !!left.datatype && left.datatype === right.datatype &&
-    sameUnits(left, right) && canonical(left.value) === canonical(right.value);
+  return (
+    !!left &&
+    !!right &&
+    !!left.datatype &&
+    left.datatype === right.datatype &&
+    sameUnits(left, right) &&
+    canonical(left.value) === canonical(right.value)
+  );
 }
 
-function sameRangeMeaning(
-  left: PropertyDefinition,
-  right: PropertyDefinition,
-  range: FilterRange,
-): boolean {
+function sameRangeMeaning(left: PropertyDefinition, right: PropertyDefinition, range: FilterRange): boolean {
   if (!left || !right || !left.datatype || left.datatype !== right.datatype) return false;
-  if (range.unit !== undefined) return left.units?.includes(range.unit) === true && right.units?.includes(range.unit) === true;
+  if (range.unit !== undefined)
+    return left.units?.includes(range.unit) === true && right.units?.includes(range.unit) === true;
   return sameUnits(left, right);
 }
 
