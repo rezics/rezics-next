@@ -1,4 +1,6 @@
 {
+  "member_window_cycle": "La liste a répété une continuation. Recommencez pour lire les entrées actuelles.",
+  "member_window_restart": "Recommencer",
   "collection_filter_address_rejected": "Ce lien de filtre ne peut pas être appliqué. Aucun membre n’a été demandé pour cette adresse. Corrigez ou effacez les filtres pour continuer.",
   "collection_filter_address_limit": "Utilisez au maximum 64 valeurs pour cette facette. La correction supprime toute la facette.",
   "collection_filter_address_ambiguous": "Utilisez une seule plage par propriété. La correction supprime toutes les plages répétées.",

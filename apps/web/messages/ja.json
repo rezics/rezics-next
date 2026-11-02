@@ -1,4 +1,6 @@
 {
+  "member_window_cycle": "一覧の続きが繰り返されました。現在の項目を最初から読み直してください。",
+  "member_window_restart": "最初から読む",
   "collection_filter_address_rejected": "このフィルターリンクは適用できません。このアドレスのメンバーはリクエストされていません。フィルターを修正または解除して続行してください。",
   "collection_filter_address_limit": "このファセットの値は64個以下にしてください。修正すると、このファセット全体が削除されます。",
   "collection_filter_address_ambiguous": "プロパティごとに範囲を1つだけ指定してください。修正すると、重複した範囲がすべて削除されます。",

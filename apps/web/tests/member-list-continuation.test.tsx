@@ -488,6 +488,46 @@ test('Default composed member recovery admits only its live reader and preserves
       { node: 'other-members', cursor: 'other-end' },
     ]);
 
+    // Successful More replaces the window; sparse pages do not fill themselves. Transport retries keep it.
+    initial = { ...initial, next: 'window-0' };
+    await render();
+    for (let index = 1; index <= 32; index++) {
+      responses.push(page([recording.members[2]!], `window-${index}`));
+      await press();
+      expect(list().querySelectorAll('[data-slot="cover-card"]')).toHaveLength(1);
+      expect(list().textContent).not.toContain('Snow Country');
+    }
+    const failWindow = holdFailure();
+    await press();
+    expect(list().textContent).toContain('The Little Prince');
+    await act(async () => failWindow(new Error('Transport unavailable')));
+    await flush();
+    expect(list().textContent).toContain('The Little Prince');
+    responses.push(page([], 'window-33'));
+    await press();
+    expect(nativeCalls.slice(-2).map(({ input }) => input.continuation?.cursor)).toEqual(['window-32', 'window-32']);
+    expect(list().querySelectorAll('[data-slot="cover-card"]')).toHaveLength(0);
+    const callsBeforeSparse = nativeCalls.length;
+    await flush();
+    expect(nativeCalls).toHaveLength(callsBeforeSparse);
+    responses.push(page([recording.members[2]!], 'window-32'));
+    await press();
+    expect(button().textContent).toBe('Start again');
+    expect(list().textContent).not.toContain('The Little Prince');
+    responses.push(new Error('Restart unavailable'));
+    await press();
+    expect(nativeCalls.at(-1)?.input.continuation).toBeUndefined();
+    expect(button().textContent).toBe('Start again');
+    const retiredRestart = hold();
+    await press();
+    expect(nativeCalls.at(-1)?.input.continuation).toBeUndefined();
+    target = { account: 'replacement-window' };
+    await render();
+    await act(async () => retiredRestart(page([recording.members[2]!], null)));
+    await flush();
+    expect(list().textContent).toContain('Snow Country');
+    expect(list().textContent).not.toContain('The Little Prince');
+
     // Each existing reading boundary retires status and ignores its late response, without moving focus.
     for (const boundary of ['target', 'node', 'section', 'reader', 'viewer', 'context', 'locale']) {
       initial = { ...initial, next: `before-${boundary}` };
@@ -666,6 +706,14 @@ test('Default composed member recovery admits only its live reader and preserves
       );
       expect(status().textContent).toContain('0. End of this list.');
     }
+    document = {
+      ...document,
+      content: document.content.map((node) => ({ ...node, props: { ...node.props, paged: false } })),
+    };
+    initial = { ...initial, next: 'preview' };
+    await render();
+    expect(list().querySelector('button')).toBeNull();
+    expect(list().querySelectorAll('[data-slot="cover-card"]')).toHaveLength(1);
   } finally {
     await act(async () => root.unmount());
     client.clear();

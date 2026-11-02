@@ -12,6 +12,7 @@ import { OverviewContext, pageRepresentation, type Item, type OverviewValue, typ
 import { isRecord, pageText } from './shared';
 import { loadMemberList, type MemberListRequest, type MemberPageTarget } from './member-list-query';
 import { useListReaderAdmission, type ListReaderSession } from './list-reader-admission';
+import { createMemberPageProgress, memberPageCursor } from './member-page-progress';
 
 const emptySection: Section = { ok: false };
 
@@ -254,7 +255,7 @@ function MemberReader({
   );
 }
 
-/** Each node owns its cursor, pending request and retained pages. Errors never turn into an empty success. */
+/** Each node retains one native page (at most its planned limit), including its native facts. */
 export function MemberList({
   value,
   section,
@@ -277,7 +278,9 @@ export function MemberList({
   paged?: boolean;
 }) {
   const queryClient = useQueryClient();
-  const [pages, setPages] = useState<Section[]>([section]);
+  const [page, setPage] = useState(section);
+  const [restart, setRestart] = useState(false);
+  const progress = useRef(createMemberPageProgress(section.ok ? memberPageCursor(section.body) : undefined));
   const [error, setError] = useState<Section>();
   const [pending, setPending] = useState(false);
   const [completion, setCompletion] = useState<{
@@ -320,18 +323,15 @@ export function MemberList({
     )
       end.current?.focus({ preventScroll: true });
   }, [completion, lifetime, admission, incarnation]);
-  const latest = pages.at(-1)!;
-  const cursor = latest.ok && typeof latest.body.next === 'string' ? latest.body.next : undefined;
-  const failed = error && !error.ok ? error : !latest.ok ? latest : undefined;
+  const cursor = !restart && page.ok ? memberPageCursor(page.body) : undefined;
+  const failed = error && !error.ok ? error : !page.ok ? page : undefined;
   const options = { locale: value.locale as never };
-  const items = pages.flatMap((page) => memberItems(page, value));
+  const items = memberItems(page, value);
   // The native cursor is opaque; a repeated canonical row is shown once without changing the remaining order.
   const memberFacts: Record<string, Record<string, Fact[]>> = {};
-  for (const page of pages) {
-    if (!page.ok) continue;
+  if (page.ok) {
     const rows = page.read.kind === 'search' ? page.body.subjects : page.body.members;
-    if (!Array.isArray(rows)) continue;
-    for (const row of rows) {
+    for (const row of Array.isArray(rows) ? rows : []) {
       if (!isRecord(row) || !isRecord(row.facts)) continue;
       const id = page.read.kind === 'search' ? row.id : row.subjectId;
       if (typeof id === 'string' && !Object.hasOwn(memberFacts, id))
@@ -380,11 +380,24 @@ export function MemberList({
       if (!isCurrent()) return;
       if (!next.ok) {
         setError((previous) => (isCurrent() ? next : previous));
-        if ([401, 403, 404, 409].includes(next.status ?? 0)) setPages((previous) => (isCurrent() ? [next] : previous));
+        if ([401, 403, 404, 409].includes(next.status ?? 0)) {
+          setPage(next);
+          progress.current = createMemberPageProgress();
+          setRestart(false);
+        }
       } else {
+        // A fresh restart gets fresh progress only after native admission succeeds. A transport failure keeps
+        // the accepted window and repeats this exact request, including an absent cursor for a fresh restart.
+        const nextProgress = cursor ? progress.current : createMemberPageProgress();
+        if (!nextProgress.accept(memberPageCursor(next.body))) {
+          setRestart(true);
+          return;
+        }
+        progress.current = nextProgress;
         const visible = new Set(unique.keys());
         for (const item of memberItems(next, value)) visible.add(item.id);
-        setPages((previous) => (isCurrent() ? (cursor ? [...previous, next] : [next]) : previous));
+        setPage(next);
+        setRestart(false);
         setCompletion((previous) =>
           isCurrent()
             ? {
@@ -431,8 +444,9 @@ export function MemberList({
               : m.subject_section_failed({}, options)}
         </p>
       ) : (
-        !failed && unique.size === 0 && <p>{m.subject_relation_empty_page({}, options)}</p>
+        !failed && !restart && unique.size === 0 && <p>{m.subject_relation_empty_page({}, options)}</p>
       )}
+      {restart && <p role="alert">{m.member_window_cycle({}, options)}</p>}
       <p
         id={`${instance}-status`}
         role="status"
@@ -460,7 +474,7 @@ export function MemberList({
           {m.subject_relation_end({ label: title }, options)}
         </p>
       )}
-      {target && continuationEnabled && (failed || (paged && cursor)) && (
+      {target && continuationEnabled && (restart || failed || (paged && cursor)) && (
         <button
           type="button"
           onClick={more}
@@ -471,7 +485,11 @@ export function MemberList({
             'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 text-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
           )}
         >
-          {failed ? m.subject_section_retry({}, options) : m.subject_section_more({ label: title }, options)}
+          {restart
+            ? m.member_window_restart({}, options)
+            : failed
+              ? m.subject_section_retry({}, options)
+              : m.subject_section_more({ label: title }, options)}
         </button>
       )}
     </section>

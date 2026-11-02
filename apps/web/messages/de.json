@@ -1,4 +1,6 @@
 {
+  "member_window_cycle": "Die Liste hat eine Fortsetzung wiederholt. Beginne erneut, um aktuelle Einträge zu lesen.",
+  "member_window_restart": "Neu beginnen",
   "collection_filter_address_rejected": "Dieser Filterlink kann nicht angewendet werden. Für diese Adresse wurden keine Mitglieder angefordert. Korrigiere oder lösche die Filter, um fortzufahren.",
   "collection_filter_address_limit": "Verwende höchstens 64 Werte für diese Facette. Die Korrektur entfernt die gesamte Facette.",
   "collection_filter_address_ambiguous": "Verwende einen Bereich pro Eigenschaft. Die Korrektur entfernt alle wiederholten Bereiche.",

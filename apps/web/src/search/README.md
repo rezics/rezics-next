@@ -64,3 +64,5 @@ Search page and default shell across desktop/phone, English/Simplified Chinese a
 geometry, surface paint, focused controls, registered filter entry and retained phone drafts. Execution of that
 acceptance and native/browser evidence is deferred under the current delivery policy; workspace typing alone
 does not establish those outcomes.
+
+Composed Members replaces its single accepted native page only after successful explicit More (at most the planned limit, capped at 12 rows with facts when paged, or 24 in previews); sparse pages stay sparse, failures retry the same cursor, and cycles offer a fresh restart with at most 12 recent cursors plus one cycle checkpoint and two bounded counters per node.

@@ -1,4 +1,6 @@
 {
+  "member_window_cycle": "清單的後續頁面出現重複。請重新開始讀取目前的項目。",
+  "member_window_restart": "重新開始",
   "collection_filter_address_rejected": "無法套用此篩選連結。尚未為此位址請求任何成員。請修正或清除篩選條件以繼續。",
   "collection_filter_address_limit": "每個分面最多可提供64個值。修正將移除整個分面。",
   "collection_filter_address_ambiguous": "每個屬性只能指定一個範圍。修正將移除所有重複範圍。",

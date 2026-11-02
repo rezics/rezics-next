@@ -1,4 +1,6 @@
 {
+  "member_window_cycle": "목록의 다음 페이지가 반복되었습니다. 현재 항목을 처음부터 다시 읽어 주세요.",
+  "member_window_restart": "처음부터 다시 읽기",
   "collection_filter_address_rejected": "이 필터 링크를 적용할 수 없습니다. 이 주소에 대한 멤버 요청은 전송되지 않았습니다. 계속하려면 필터를 수정하거나 지우세요.",
   "collection_filter_address_limit": "이 패싯에는 최대 64개의 값을 사용하세요. 수정하면 패싯 전체가 제거됩니다.",
   "collection_filter_address_ambiguous": "속성마다 범위를 하나만 사용하세요. 수정하면 반복된 범위가 모두 제거됩니다.",
