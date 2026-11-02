@@ -5,7 +5,7 @@ import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { cn } from '@rezics/ui/utils';
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { PageHeading } from '../../shell/page-heading';
 import { unitSymbols } from './statement-editor';
@@ -13,8 +13,10 @@ import { DefinitionMeaning as Meaning } from './definition-meaning';
 import {
   definitionGuideHref,
   definitionText,
+  guideIdentifierLimit,
   guideReturnTo,
   guideTypes,
+  type GuideLocale,
   type GuideAddress,
   type GuideRead,
   type GuideRelease,
@@ -177,7 +179,7 @@ function Constraints({
                 <ContentItemFrame key={id} as="div" className="min-w-0 p-3">
                   <details className="min-w-0">
                     <summary className={summaryClassName}>
-                      <Meaning values={qualifier?.labels} locale={locale} />
+                      {qualifier ? <Meaning values={qualifier.labels} locale={locale} /> : <code>{id}</code>}
                     </summary>
                     {qualifier && (
                       <div className="mt-3 space-y-3">
@@ -210,7 +212,7 @@ export function DefinitionGuide({
 }) {
   const query = useQuery({
     queryKey: ['definition-guide', address, locale],
-    queryFn: transport.read,
+    queryFn: () => transport.read(locale as GuideLocale),
     initialData: initial,
     retry: false,
     staleTime: 0,
@@ -255,6 +257,7 @@ export function DefinitionGuide({
     <DefinitionGuideContent
       address={address}
       locale={locale}
+      transport={transport}
       read={read}
       retry={retry}
       retryPending={current?.pending || query.isFetching}
@@ -263,9 +266,315 @@ export function DefinitionGuide({
   );
 }
 
+function ActiveGuide({
+  address,
+  locale,
+  initial,
+  transport,
+}: {
+  address: GuideAddress;
+  locale: string;
+  initial?: GuideRead;
+  transport: GuideTransport;
+}) {
+  const o = { locale: locale as never };
+  const prefixId = useId();
+  const exactId = useId();
+  const key = JSON.stringify([address.type, address.property, address.release, address.returnTo, locale]);
+  const [search, setSearch] = useState({ draft: '', query: '', cursor: undefined as string | undefined, active: false });
+  const [selection, setSelection] = useState({ key, type: address.type ?? '', requested: false, attempt: 0 });
+  const [searchExactDraft, setSearchExactDraft] = useState(address.type ?? '');
+  const currentSelection = selection.key === key ? selection : { key, type: address.type ?? '', requested: false, attempt: 0 };
+  if (selection.key !== key) setSelection(currentSelection);
+
+  const pageQuery = useQuery({
+    queryKey: ['definition-guide-directory', locale, search.query, search.cursor ?? null],
+    queryFn: () => transport.directory(locale as GuideLocale, search.query, search.cursor),
+    enabled: search.active,
+    retry: false,
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
+  });
+  const typeQuery = useQuery({
+    queryKey: ['definition-guide-type', locale, currentSelection.type, currentSelection.attempt],
+    queryFn: () => transport.exact(locale as GuideLocale, currentSelection.type),
+    enabled: currentSelection.requested && currentSelection.type.length > 0,
+    retry: false,
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
+  });
+
+  const initialPage = initial?.ok && initial.pin === 'active' && 'page' in initial ? initial.page : undefined;
+  const pageRead = search.active ? pageQuery.data : initialPage ? { ok: true as const, page: initialPage } : undefined;
+  const initialDescriptor =
+    !currentSelection.requested &&
+    initial?.ok &&
+    initial.pin === 'active' &&
+    'descriptor' in initial &&
+    initial.descriptor.typeId === currentSelection.type
+      ? { ok: true as const, descriptor: initial.descriptor }
+      : undefined;
+  const selectedRead = currentSelection.requested ? typeQuery.data : initialDescriptor;
+  const descriptor = selectedRead?.ok ? selectedRead.descriptor : undefined;
+  const release: GuideRelease | undefined = descriptor
+    ? {
+        digest: descriptor.releaseDigest,
+        types: { [descriptor.typeId]: descriptor.definition },
+        properties: descriptor.properties,
+      }
+    : undefined;
+  const type = descriptor?.definition;
+  const property = currentSelection.type === address.type ? address.property : undefined;
+  const field =
+    property && type?.properties.includes(property) && release && Object.hasOwn(release.properties, property)
+      ? release.properties[property]
+      : undefined;
+  const page = pageRead?.ok ? pageRead.page : undefined;
+  const query = search.active ? search.query : '';
+  const submitPrefix = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSearch({ draft: search.draft, query: search.draft, cursor: undefined, active: true });
+  };
+  const submitExact = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSelection({ key, type: searchExactDraft, requested: searchExactDraft.length > 0, attempt: currentSelection.attempt + 1 });
+  };
+  const selectType = (typeId: string) => {
+    setSearchExactDraft(typeId);
+    setSelection({ key, type: typeId, requested: typeId.length > 0, attempt: currentSelection.attempt + 1 });
+  };
+  const retryPage = () => {
+    if (pageRead && !pageRead.ok && pageRead.reason === 'stale' && search.cursor) {
+      setSearch({ ...search, cursor: undefined, active: true });
+      return;
+    }
+    void pageQuery.refetch();
+  };
+  const typeResult = selectedRead;
+  const typeFailure = typeResult && !typeResult.ok ? typeResult.reason : undefined;
+  const invalidAddressProperty = Boolean(property && type && !field);
+
+  return (
+    <section className="space-y-6">
+      <form className="space-y-3" onSubmit={submitPrefix}>
+        <Field>
+          <FieldLabel htmlFor={prefixId}>{m.guide_prefix_label({}, o)}</FieldLabel>
+          <input
+            className="flex min-h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-base shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring md:pointer-fine:min-h-8 md:pointer-fine:text-sm"
+            id={prefixId}
+            maxLength={512}
+            value={search.draft}
+            placeholder={m.guide_prefix_placeholder({}, o)}
+            onChange={(event) => setSearch({ ...search, draft: event.target.value })}
+          />
+        </Field>
+        <Button type="submit" variant="outline" className={actionClassName}>
+          {m.guide_search({}, o)}
+        </Button>
+      </form>
+      <form className="space-y-3" onSubmit={submitExact}>
+        <Field>
+          <FieldLabel htmlFor={exactId}>{m.guide_exact_id_label({}, o)}</FieldLabel>
+          <input
+            className="flex min-h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-base shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring md:pointer-fine:min-h-8 md:pointer-fine:text-sm"
+            id={exactId}
+            maxLength={guideIdentifierLimit}
+            value={searchExactDraft}
+            placeholder={m.guide_exact_id_placeholder({}, o)}
+            onChange={(event) => setSearchExactDraft(event.target.value)}
+          />
+        </Field>
+        <Button type="submit" variant="outline" className={actionClassName}>
+          {m.guide_lookup({}, o)}
+        </Button>
+      </form>
+
+      {search.active && pageQuery.isFetching && <p role="status">{m.guide_loading({}, o)}</p>}
+      {search.active && pageRead && !pageRead.ok && (
+        <section className="space-y-3">
+          <p role="alert" tabIndex={-1} data-guide-recovery className={recoveryClassName}>
+            {pageRead.reason === 'stale'
+              ? m.guide_stale_results({}, o)
+              : pageRead.reason === 'invalid'
+                ? m.guide_invalid({}, o)
+                : pageRead.reason === 'denied'
+                  ? m.guide_denied({}, o)
+                  : pageRead.reason === 'concealed'
+                    ? m.guide_concealed({}, o)
+                    : m.guide_unavailable({}, o)}
+          </p>
+          {pageRead.reason !== 'invalid' && pageRead.reason !== 'concealed' && (
+            <Button
+              variant="outline"
+              className={actionClassName}
+              onClick={retryPage}
+              disabled={pageQuery.isFetching}
+              aria-busy={pageQuery.isFetching || undefined}
+            >
+              {pageRead.reason === 'stale' ? m.guide_search({}, o) : m.guide_retry({}, o)}
+            </Button>
+          )}
+        </section>
+      )}
+      {page && (
+        <section className="space-y-3" aria-label={m.guide_search_results({}, o)}>
+          {page.types.length === 0 ? (
+            <p role="status" tabIndex={-1} data-guide-recovery className={recoveryClassName}>
+              {query ? m.guide_no_prefix_matches({}, o) : m.guide_empty({}, o)}
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {page.types.map((entry) => (
+                <li key={entry.typeId}>
+                  <button
+                    type="button"
+                    className={cn(linkClassName, 'text-left')}
+                    onClick={() => selectType(entry.typeId)}
+                    aria-current={currentSelection.type === entry.typeId ? 'true' : undefined}
+                  >
+                    <span>{entry.label}</span>
+                    <code className="break-all text-sm">{entry.typeId}</code>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {page.next && (
+            <Button
+              type="button"
+              variant="outline"
+              className={actionClassName}
+              disabled={pageQuery.isFetching}
+              onClick={() => setSearch({ draft: search.draft, query, cursor: page.next ?? undefined, active: true })}
+            >
+              {m.guide_next_page({}, o)}
+            </Button>
+          )}
+        </section>
+      )}
+      {search.active && !pageRead && !pageQuery.isFetching && (
+        <p role="status">{m.guide_loading({}, o)}</p>
+      )}
+
+      {currentSelection.requested && typeQuery.isFetching && <p role="status">{m.guide_loading({}, o)}</p>}
+      {typeFailure && (
+        <section className="space-y-3">
+          <p role={typeFailure === 'no-match' ? 'status' : 'alert'} tabIndex={-1} data-guide-recovery className={recoveryClassName}>
+            {typeFailure === 'no-match'
+              ? m.guide_no_exact_match({}, o)
+              : typeFailure === 'stale'
+                ? m.guide_stale_results({}, o)
+                : typeFailure === 'invalid'
+                  ? m.guide_invalid({}, o)
+                  : typeFailure === 'denied'
+                    ? m.guide_denied({}, o)
+                    : typeFailure === 'concealed'
+                      ? m.guide_concealed({}, o)
+                      : m.guide_unavailable({}, o)}
+          </p>
+          {(typeFailure === 'unavailable' || typeFailure === 'denied' || typeFailure === 'stale') && (
+            <Button
+              variant="outline"
+              className={actionClassName}
+              onClick={() => void typeQuery.refetch()}
+              disabled={typeQuery.isFetching}
+              aria-busy={typeQuery.isFetching || undefined}
+            >
+              {m.guide_retry({}, o)}
+            </Button>
+          )}
+        </section>
+      )}
+      {currentSelection.requested && !selectedRead && typeQuery.isFetching === false && currentSelection.type && (
+        <p role="status">{m.guide_loading({}, o)}</p>
+      )}
+
+      {descriptor && release && type && !invalidAddressProperty && (
+        <section className="space-y-5">
+          <details className="text-sm text-muted-foreground">
+            <summary className={summaryClassName}>{m.guide_active({}, o)}</summary>
+            <p className="mt-2 break-all">
+              {m.guide_digest({}, o)}: <code>{descriptor.releaseDigest}</code>
+            </p>
+          </details>
+          <header className="space-y-2">
+            <ContentItemHeading
+              level={2}
+              id={`${exactId}-meaning`}
+              tabIndex={-1}
+              data-guide-recovery
+              className={cn('text-xl font-semibold', recoveryClassName)}
+            >
+              <Meaning values={type.labels} locale={locale} />
+            </ContentItemHeading>
+            <p><Meaning values={type.descriptions} locale={locale} /></p>
+          </header>
+          {field && property ? (
+            <section>
+              <ContentItemFrame as="div" className="flex min-w-0 flex-col gap-5 p-4 sm:p-6">
+                <header className="space-y-2">
+                  <ContentItemHeading level={3} tabIndex={-1} data-guide-recovery className={cn('text-lg font-semibold', recoveryClassName)}>
+                    <Meaning values={field.labels} locale={locale} />
+                  </ContentItemHeading>
+                  <p><Meaning values={field.descriptions} locale={locale} /></p>
+                </header>
+                <Constraints definition={field} release={release} locale={locale} />
+                <p className="text-sm">
+                  {field.disclosure === 'sourceOrConsent' ? m.guide_consent({}, o) : m.guide_references({}, o)}
+                </p>
+                <details className="text-sm text-muted-foreground">
+                  <summary className={summaryClassName}>{m.guide_identifier({}, o)}</summary>
+                  <code className="break-all">{property}</code>
+                </details>
+                <a className={linkClassName} href={definitionGuideHref(locale, { ...address, type: currentSelection.type, property: undefined })}>
+                  {m.guide_fields({}, o)}
+                </a>
+              </ContentItemFrame>
+            </section>
+          ) : (
+            <>
+              <ContentItemHeading level={3} className="font-semibold">{m.guide_fields({}, o)}</ContentItemHeading>
+              {type.properties.length === 0 ? (
+                <p>{m.guide_no_fields({}, o)}</p>
+              ) : (
+                <ul className="space-y-3">
+                  {type.properties.map((id) => (
+                    <li key={id} className="min-w-0">
+                      <ContentItemFrame as="div" className="min-w-0 px-3 py-2">
+                        {release.properties[id] ? (
+                          <ContentItemTitleLink
+                            className={cn(linkClassName, 'w-full')}
+                            href={definitionGuideHref(locale, { ...address, type: currentSelection.type, property: id })}
+                          >
+                            <Meaning values={release.properties[id]?.labels} locale={locale} />
+                          </ContentItemTitleLink>
+                        ) : (
+                          <p>{m.guide_missing({}, o)}</p>
+                        )}
+                      </ContentItemFrame>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
+          <p className="text-sm text-muted-foreground">{m.guide_native({}, o)}</p>
+        </section>
+      )}
+    </section>
+  );
+}
+
 export function DefinitionGuideContent({
   address,
   locale,
+  transport,
   read,
   retry,
   retryPending = false,
@@ -273,6 +582,7 @@ export function DefinitionGuideContent({
 }: {
   address: GuideAddress;
   locale: string;
+  transport?: GuideTransport;
   read?: GuideRead | undefined;
   retry: () => void;
   retryPending?: boolean;
@@ -305,7 +615,7 @@ export function DefinitionGuideContent({
     setSelection({ addressKey, type: selected });
   }
   const back = guideReturnTo(address.returnTo, locale) ?? `/${locale}/catalogue/new`;
-  const release = read?.ok && !retryPending ? read.release : undefined;
+  const release = read?.ok && read.pin === 'pinned' && !retryPending ? read.release : undefined;
   const types = release ? guideTypes(release, locale) : [];
   const type = selected && release?.types[selected];
   const property = selected === address.type ? address.property : undefined;
@@ -331,6 +641,10 @@ export function DefinitionGuideContent({
             <p role="alert" tabIndex={-1} data-guide-recovery className={recoveryClassName}>
               {read.reason === 'invalid'
                 ? m.guide_invalid({}, o)
+                : read.reason === 'no-match'
+                  ? m.guide_no_exact_match({}, o)
+                  : read.reason === 'stale'
+                    ? m.guide_stale_results({}, o)
                 : read.reason === 'denied'
                   ? m.guide_denied({}, o)
                   : read.reason === 'concealed'
@@ -351,24 +665,25 @@ export function DefinitionGuideContent({
           )}
         </section>
       )}
+      {transport && address.release === undefined && (
+        <ActiveGuide address={address} locale={locale} initial={retryPending ? undefined : read} transport={transport} />
+      )}
       {read?.ok && release && (
         <>
           <details className="text-sm text-muted-foreground">
             <summary className={summaryClassName}>
-              {read.pin === 'active' ? m.guide_active({}, o) : m.guide_pinned({}, o)}
+              {m.guide_pinned({}, o)}
             </summary>
             <p className="mt-2 break-all">
               {m.guide_digest({}, o)}: <code>{release.digest}</code>
             </p>
           </details>
-          {read.pin === 'pinned' && (
-            <a
-              className={cn(linkClassName, 'text-sm')}
-              href={definitionGuideHref(locale, { ...address, release: undefined })}
-            >
-              {m.guide_active({}, o)}
-            </a>
-          )}
+          <a
+            className={cn(linkClassName, 'text-sm')}
+            href={definitionGuideHref(locale, { ...address, release: undefined })}
+          >
+            {m.guide_active({}, o)}
+          </a>
           {types.length === 0 ? (
             <p role="status" tabIndex={-1} data-guide-recovery className={recoveryClassName}>
               {m.guide_empty({}, o)}

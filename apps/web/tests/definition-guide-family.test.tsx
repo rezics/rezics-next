@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import type { ReactNode } from 'react';
-import type { GuideAddress, GuideRead } from '../src/features/catalogue/definition-guide';
+import type { GuideAddress, GuidePageRead, GuideRead, GuideTransport, GuideTypeRead } from '../src/features/catalogue/definition-guide';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
@@ -53,7 +53,7 @@ async function surface() {
   const { DefinitionGuide, DefinitionGuideContent, DefinitionGuideLink } =
     await import('../src/features/catalogue/definition-guide-view');
   const { definitionGuideFixture, historicalGuideDigest } = await import('../src/kernel/fake/definition-guide');
-  const { definitionText, guideTypes } = await import('../src/features/catalogue/definition-guide');
+  const { definitionText } = await import('../src/features/catalogue/definition-guide');
   const { m } = await import('../src/paraglide/messages.js');
   const { languageName } = await import('../src/subject/language');
   const { getLocale, overwriteGetLocale } = await import('../src/paraglide/runtime.js');
@@ -76,6 +76,12 @@ async function surface() {
       select.dispatchEvent(new window.Event('change', { bubbles: true }));
     });
   };
+  const changeText = async (input: HTMLInputElement, value: string) => {
+    await act(async () => {
+      input.value = value;
+      input.dispatchEvent(new window.Event('input', { bubbles: true }));
+    });
+  };
   return {
     act,
     root,
@@ -83,92 +89,144 @@ async function surface() {
     host,
     render,
     change,
+    changeText,
     DefinitionGuide,
     DefinitionGuideContent,
     DefinitionGuideLink,
     definitionGuideFixture,
     historicalGuideDigest,
     definitionText,
-    guideTypes,
     m,
     languageName,
     restoreLocale: () => overwriteGetLocale(previousLocale),
   };
 }
 
-test('same-address mounted guides associate labels with unique stable native selects and select independently without extra reads', async () => {
-  await mounted(
-    async ({ host, render, change, act, client, DefinitionGuide, definitionGuideFixture, guideTypes, m }) => {
-      const fixture = definitionGuideFixture();
-      await render(
-        <>
-          <DefinitionGuide {...fixture} locale="en" />
-          <DefinitionGuide {...fixture} locale="en" />
-        </>,
-      );
-      const guides = [...host.querySelectorAll('article')];
-      expect(guides).toHaveLength(2);
-      const selects = [...host.querySelectorAll<HTMLSelectElement>('select')];
-      expect(selects).toHaveLength(2);
-      expect(selects[0]!.id).not.toBe(selects[1]!.id);
-      const ids = selects.map((select) => select.id);
-      for (const [index, guide] of guides.entries()) {
-        const label = guide.querySelector('label')!;
-        expect(label.textContent).toBe(m.catalogue_create_type());
-        expect(label.htmlFor).toBe(selects[index]!.id);
-        expect(label.control).toBe(selects[index]);
-        expect(document.getElementById(label.htmlFor)).toBe(selects[index]);
-      }
-      const read = client.getQueryData<GuideRead>(['definition-guide', fixture.address, 'en']);
-      if (!read?.ok) throw new Error('Expected active definitions');
-      expect([...selects[0]!.options].slice(1).map((option) => option.value)).toEqual(
-        guideTypes(read.release, 'en').map((entry) => entry.id),
-      );
-      // Both mounted consumers share the existing query and its single active/release lookup.
-      expect(fixture.calls.map((call) => call.path)).toEqual([
-        '/v1/definitions/active',
-        `/v1/definitions/releases/${read.release.digest}`,
-      ]);
-      const calls = structuredClone(fixture.calls);
-      await act(async () => guides[1]!.querySelector('label')!.click());
-      await change(selects[1]!, 'schema:Recipe');
-      expect(selects.map((select) => select.value)).toEqual(['schema:Book', 'schema:Recipe']);
-      expect(guides[0]!.querySelector('h2')!.textContent).toBe('book');
-      expect(guides[1]!.querySelector('h2')!.textContent).toBe('recipe');
-      expect(selects.map((select) => select.id)).toEqual(ids);
-      for (const guide of guides) {
-        const disclosure = guide.querySelector('details')!;
-        await act(async () => disclosure.querySelector('summary')!.click());
-      }
-      expect(fixture.calls).toEqual(calls);
-      expect(fixture.calls.every((call) => call.method === 'GET')).toBe(true);
-      const { readGuide, fetchGuideRelease } = await import('../src/features/catalogue/definition-guide');
-      for (const address of [
-        { type: 'schema:Recipe', property: 'schema:cookTime' },
-        { type: 'schema:Book', property: 'schema:author' },
-        { type: 'schema:Book', property: 'schema:datePublished' },
-        fixture.address,
-        definitionGuideFixture('pinned').address,
-        {},
-        { type: 'missing:type' },
-        { type: 'schema:Book', property: 'missing:field' },
-      ]) {
-        const initial = await readGuide(address, (digest) => fetchGuideRelease(fixture.client, digest));
-        const props = { address, initial, locale: 'en', transport: { read: async () => initial } };
-        await render(<DefinitionGuide {...props} />);
-        expect(host.querySelector('select')?.value).toBe(initial.ok ? (address.type ?? '') : undefined);
-        expect(host.querySelector('code')?.textContent).toBe(initial.ok ? initial.release.digest : undefined);
-        if (initial.ok && address.property) expect(host.textContent).toContain(address.property);
-      }
-    },
-  );
+test('paged prefix browsing, exact lookup and selected Type ignore late results from an older query or selection', async () => {
+  await mounted(async ({ host, render, act, changeText, DefinitionGuide, definitionGuideFixture, m, definitionText }) => {
+    const fixture = definitionGuideFixture();
+    const [bookRead, recipeRead] = await Promise.all([
+      fixture.transport.exact('en', 'schema:Book'),
+      fixture.transport.exact('en', 'schema:Recipe'),
+    ]);
+    if (!bookRead.ok || !recipeRead.ok) throw new Error('Expected Type descriptors');
+    const summary = (typeId: string, label: string) => ({
+      typeId,
+      releaseDigest: bookRead.descriptor.releaseDigest,
+      label,
+      language: 'en',
+      parents: [],
+      description: null,
+      descriptionLanguage: null,
+    });
+    const first = Array.from({ length: 20 }, (_, index) => summary(`schema:Type${index}`, `Type ${index}`));
+    const initial: GuideRead = {
+      ok: true,
+      pin: 'active',
+      page: { types: first, next: 'cursor-2' },
+    };
+    let settleOldPrefix!: (page: GuidePageRead) => void;
+    let settleOldType!: (result: GuideTypeRead) => void;
+    const directoryCalls: { query: string; cursor?: string }[] = [];
+    const exactCalls: string[] = [];
+    let delayedBook = true;
+    let directoryUnavailable = true;
+    const transport: GuideTransport = {
+      read: async () => initial,
+      directory: async (_locale: string, query: string, cursor?: string) => {
+        directoryCalls.push({ query, ...(cursor ? { cursor } : {}) });
+        if (cursor === 'cursor-2') return { ok: true as const, page: { types: [summary('schema:Type20', 'Type 20')], next: null } };
+        if (query === 'Bo')
+          return new Promise<GuidePageRead>((resolve) => {
+            settleOldPrefix = resolve;
+          });
+        if (query === 'Rec')
+          return {
+            ok: true as const,
+            page: { types: [summary('schema:Book', 'Book result'), summary('schema:Recipe', 'Recipe result')], next: null },
+          };
+        if (query === 'Down') {
+          if (directoryUnavailable) {
+            directoryUnavailable = false;
+            return { ok: false as const, reason: 'unavailable' as const };
+          }
+          return { ok: true as const, page: { types: [summary('schema:Down', 'Down result')], next: null } };
+        }
+        return { ok: true as const, page: { types: [], next: null } };
+      },
+      exact: async (_locale: string, typeId: string) => {
+        exactCalls.push(typeId);
+        if (typeId === 'schema:Book' && delayedBook) {
+          delayedBook = false;
+          return new Promise<GuideTypeRead>((resolve) => {
+            settleOldType = resolve;
+          });
+        }
+        if (typeId === 'schema:Book') return bookRead;
+        if (typeId === 'schema:Recipe') return recipeRead;
+        return { ok: false as const, reason: 'no-match' as const };
+      },
+    };
+    const component = <DefinitionGuide address={{}} locale="en" transport={transport} initial={initial} />;
+    await render(component);
+    expect(host.querySelectorAll('article ul li')).toHaveLength(20);
+    const prefix = host.querySelector<HTMLInputElement>('input')!;
+    const search = [...host.querySelectorAll('button')].find((button) => button.textContent === m.guide_search())!;
+    const next = [...host.querySelectorAll('button')].find((button) => button.textContent === m.guide_next_page())!;
+    await act(async () => next.click());
+    await render(component);
+    expect(directoryCalls).toContainEqual({ query: '', cursor: 'cursor-2' });
+    expect(host.querySelectorAll('article ul li')).toHaveLength(1);
+    expect(host.textContent).toContain('Type 20');
+
+    await changeText(prefix, 'Bo');
+    await act(async () => search.click());
+    await render(component);
+    await changeText(prefix, 'Rec');
+    await act(async () => search.click());
+    await render(component);
+    expect(host.textContent).toContain('Book result');
+    expect(host.textContent).toContain('Recipe result');
+    await act(async () => settleOldPrefix({ ok: true, page: { types: [summary('schema:Old', 'Old result')], next: null } }));
+    await render(component);
+    expect(host.textContent).not.toContain('Old result');
+
+    await act(async () => [...host.querySelectorAll('button')].find((button) => button.textContent?.includes('Book result'))!.click());
+    await render(component);
+    await act(async () => [...host.querySelectorAll('button')].find((button) => button.textContent?.includes('Recipe result'))!.click());
+    await render(component);
+    expect(host.querySelector('h2')!.textContent).toBe(definitionText(recipeRead.descriptor.definition.labels, 'en').text);
+    await act(async () => settleOldType(bookRead));
+    await render(component);
+    expect(host.querySelector('h2')!.textContent).toBe(definitionText(recipeRead.descriptor.definition.labels, 'en').text);
+    expect(exactCalls).toEqual(['schema:Book', 'schema:Recipe']);
+
+    const exact = host.querySelectorAll<HTMLInputElement>('input')[1]!;
+    await changeText(exact, 'missing:type');
+    await act(async () => [...host.querySelectorAll('button')].find((button) => button.textContent === m.guide_lookup())!.click());
+    await render(component);
+    expect(host.textContent).toContain(m.guide_no_exact_match());
+    await changeText(exact, 'schema:Book');
+    await act(async () => [...host.querySelectorAll('button')].find((button) => button.textContent === m.guide_lookup())!.click());
+    await render(component);
+    expect(host.querySelector('h2')!.textContent).toBe(definitionText(bookRead.descriptor.definition.labels, 'en').text);
+    expect(directoryCalls.some((call) => call.query === 'Rec')).toBe(true);
+
+    await changeText(prefix, 'Down');
+    await act(async () => [...host.querySelectorAll('button')].find((button) => button.textContent === m.guide_search())!.click());
+    await render(component);
+    expect(host.textContent).toContain(m.guide_unavailable());
+    await act(async () => [...host.querySelectorAll('button')].find((button) => button.textContent === m.guide_retry())!.click());
+    await render(component);
+    expect(host.textContent).toContain('Down result');
+  });
 });
 
-test('supplied field rows retain native list order, exact links, missing meaning and language fallback in the shared frame', async () => {
+test('pinned field rows retain native list order, exact links, missing meaning and language fallback in the shared frame', async () => {
   await mounted(async ({ host, render, DefinitionGuideContent, definitionGuideFixture, m, languageName }) => {
-    const fixture = definitionGuideFixture();
+    const fixture = definitionGuideFixture('pinned');
     const read = await fixture.transport.read();
-    if (!read.ok) throw new Error('Expected active definitions');
+    if (!read.ok || read.pin !== 'pinned') throw new Error('Expected pinned definitions');
     const release = structuredClone(read.release);
     release.properties['schema:author']!.labels = { fr: 'Auteur de cette œuvre dans son édition originale' };
     release.properties['schema:wordCount']!.labels = {};
@@ -176,7 +234,7 @@ test('supplied field rows retain native list order, exact links, missing meaning
     const back = '/en/subjects/00000000-0000-4000-8000-000000000001/a-book/edit?statement=selected#value';
     await render(
       <DefinitionGuideContent
-        address={{ type: 'schema:Book', returnTo: back }}
+        address={{ type: 'schema:Book', release: fixture.address.release, returnTo: back }}
         locale="en"
         read={{ ...read, release }}
         retry={() => {
@@ -199,7 +257,7 @@ test('supplied field rows retain native list order, exact links, missing meaning
         expect(row.textContent).toBe(m.guide_missing());
       } else {
         expect(link?.getAttribute('href')).toBe(
-          `/en/catalogue/definitions?type=schema%3ABook&property=${encodeURIComponent(id)}&returnTo=${encodeURIComponent(back)}`,
+          `/en/catalogue/definitions?type=schema%3ABook&property=${encodeURIComponent(id)}&release=${encodeURIComponent(fixture.address.release!)}&returnTo=${encodeURIComponent(back)}`,
         );
         expect(link!.querySelector('a, button, summary')).toBeNull();
       }
@@ -212,11 +270,11 @@ test('supplied field rows retain native list order, exact links, missing meaning
     expect(rows[order.indexOf('schema:wordCount')]!.querySelector('[lang="en"]')!.textContent).toBe(m.guide_missing());
     expect(host.querySelector('h3')!.textContent).toBe(m.guide_fields());
     expect(host.querySelector('h4')).toBeNull();
-    expect(fixture.calls).toHaveLength(2);
+    expect(fixture.calls).toHaveLength(1);
   });
 });
 
-test('active and immutable pinned field constraints, ordered qualifiers, consent and exact references survive the family composition', async () => {
+test('immutable pinned field constraints, ordered qualifiers, consent and exact references survive the family composition', async () => {
   await mounted(
     async ({
       host,
@@ -227,10 +285,10 @@ test('active and immutable pinned field constraints, ordered qualifiers, consent
       definitionText,
       m,
     }) => {
-      for (const scenario of ['active', 'pinned'] as const) {
+      for (const scenario of ['pinned'] as const) {
         const fixture = definitionGuideFixture(scenario);
         const read = await fixture.transport.read();
-        if (!read.ok) throw new Error('Expected released definitions');
+        if (!read.ok || read.pin !== 'pinned') throw new Error('Expected released definitions');
         const address: GuideAddress = {
           type: 'schema:Recipe',
           property: 'schema:cookTime',
@@ -245,9 +303,7 @@ test('active and immutable pinned field constraints, ordered qualifiers, consent
             retry={() => {}}
           />,
         );
-        expect(host.querySelector('summary')!.textContent).toBe(
-          scenario === 'active' ? m.guide_active() : m.guide_pinned(),
-        );
+        expect(host.querySelector('summary')!.textContent).toBe(m.guide_pinned());
         expect(host.querySelector('code')!.textContent).toBe(read.release.digest);
         for (const meaning of [
           m.guide_quantity(),
@@ -262,12 +318,10 @@ test('active and immutable pinned field constraints, ordered qualifiers, consent
         expect([...host.querySelectorAll('code')].map((node) => node.textContent)).toContain(
           'http://www.wikidata.org/entity/Q7727',
         );
-        if (scenario === 'pinned') {
-          const current = [...host.querySelectorAll('a')].find((link) => link.textContent === m.guide_active())!;
-          expect(current.getAttribute('href')).toBe(
-            '/en/catalogue/definitions?type=schema%3ARecipe&property=schema%3AcookTime',
-          );
-        }
+        const current = [...host.querySelectorAll('a')].find((link) => link.textContent === m.guide_active())!;
+        expect(current.getAttribute('href')).toBe(
+          '/en/catalogue/definitions?type=schema%3ARecipe&property=schema%3AcookTime',
+        );
         await render(
           <DefinitionGuideContent
             key={`${scenario}:author`}
@@ -313,21 +367,17 @@ test('active and immutable pinned field constraints, ordered qualifiers, consent
           />,
         );
         expect(host.textContent).toContain(m.guide_consent());
-        expect(fixture.calls.map((call) => call.path)).toEqual(
-          scenario === 'active'
-            ? ['/v1/definitions/active', `/v1/definitions/releases/${read.release.digest}`]
-            : [`/v1/definitions/releases/${historicalGuideDigest}`],
-        );
+        expect(fixture.calls.map((call) => call.path)).toEqual([`/v1/definitions/releases/${historicalGuideDigest}`]);
       }
     },
   );
 });
 
-test('long supplied names and exact regex, target, unit and field references remain complete with missing qualifiers distinct', async () => {
+test('pinned long names and exact regex, target, unit and field references remain complete with missing qualifiers distinct', async () => {
   await mounted(async ({ host, render, DefinitionGuideContent, definitionGuideFixture, m }) => {
-    const fixture = definitionGuideFixture();
+    const fixture = definitionGuideFixture('pinned');
     const read = await fixture.transport.read();
-    if (!read.ok) throw new Error('Expected active definitions');
+    if (!read.ok || read.pin !== 'pinned') throw new Error('Expected pinned definitions');
     const release = structuredClone(read.release);
     const longName = 'Full localized field meaning — '.repeat(16);
     const exact = `https://example.test/${'original-reference-'.repeat(24)}?language=ja#unchanged`;
@@ -350,7 +400,7 @@ test('long supplied names and exact regex, target, unit and field references rem
     };
     await render(
       <DefinitionGuideContent
-        address={{ type: 'schema:Book', property: fieldId }}
+        address={{ type: 'schema:Book', property: fieldId, release: fixture.address.release }}
         locale="en"
         read={{ ...read, release }}
         retry={() => {}}
@@ -368,16 +418,16 @@ test('long supplied names and exact regex, target, unit and field references rem
       true,
     );
     expect(host.querySelector('[title]')).toBeNull();
-    expect(fixture.calls).toHaveLength(2);
+    expect(fixture.calls).toHaveLength(1);
   });
 });
 
 test('loading, failure eligibility, empty and missing meaning stay distinct and DOM identity survives recovery', async () => {
   await mounted(
     async ({ host, render, act, DefinitionGuideContent, DefinitionGuideLink, definitionGuideFixture, m }) => {
-      const fixture = definitionGuideFixture();
+      const fixture = definitionGuideFixture('pinned');
       const read = await fixture.transport.read();
-      if (!read.ok) throw new Error('Expected active definitions');
+      if (!read.ok || read.pin !== 'pinned') throw new Error('Expected pinned definitions');
       const address = fixture.address;
       let retries = 0;
       const show = (next?: GuideRead) =>
@@ -422,41 +472,42 @@ test('loading, failure eligibility, empty and missing meaning stay distinct and 
       expect(link.rel).toBe('noopener noreferrer');
       expect(new URL(link.href).searchParams.get('returnTo')).toBe(back);
       expect(link.textContent).toBe(`${m.guide_field_help()} · ${m.guide_new_tab()}`);
-      expect(fixture.calls).toHaveLength(2);
+      expect(fixture.calls).toHaveLength(1);
     },
   );
 });
 
-test('actual query consumers retry only on explicit eligible actions with unchanged native read counts', async () => {
+test('active exact descriptor reads retry only on explicit eligible actions and never fetch a Release', async () => {
   for (const scenario of ['unavailable', 'denied'] as const) {
-    await mounted(async ({ host, render, act, client, DefinitionGuide, definitionGuideFixture, m }) => {
+    await mounted(async ({ host, render, act, DefinitionGuide, definitionGuideFixture, m }) => {
       const fixture = definitionGuideFixture(scenario);
       const component = <DefinitionGuide locale="en" address={fixture.address} transport={fixture.transport} />;
       await render(component);
       expect(host.querySelector('[role="alert"]')!.textContent).toBe(
         scenario === 'unavailable' ? m.guide_unavailable() : m.guide_denied(),
       );
-      expect(fixture.calls.map((call) => call.path)).toEqual(['/v1/definitions/active']);
-      const retry = host.querySelector('button')!;
+      expect(fixture.calls.map((call) => call.path)).toEqual(['/v1/definitionTypes/schema:Book']);
+      const retry = [...host.querySelectorAll('button')].find((button) => button.textContent === m.guide_retry())!;
       expect(retry.textContent).toBe(m.guide_retry());
       await act(async () => retry.click());
       await render(component);
       if (scenario === 'unavailable') {
         expect(host.querySelector('[role="alert"]')).toBeNull();
-        expect(host.querySelector('select')).not.toBeNull();
-        const read = client.getQueryData<GuideRead>(['definition-guide', fixture.address, 'en']);
-        if (!read?.ok) throw new Error('Expected recovered active definitions');
+        expect(host.querySelector('h2')).not.toBeNull();
         expect(fixture.calls.map((call) => call.path)).toEqual([
-          '/v1/definitions/active',
-          '/v1/definitions/active',
-          `/v1/definitions/releases/${read.release.digest}`,
+          '/v1/definitionTypes/schema:Book',
+          '/v1/definitionTypes/schema:Book',
         ]);
-        expect(host.querySelectorAll('button')).toHaveLength(0);
+        expect([...host.querySelectorAll('button')].some((button) => button.textContent === m.guide_retry())).toBe(false);
       } else {
         expect(host.querySelector('[role="alert"]')!.textContent).toBe(m.guide_denied());
-        expect(host.querySelector('select')).toBeNull();
-        expect(fixture.calls.map((call) => call.path)).toEqual(['/v1/definitions/active', '/v1/definitions/active']);
+        expect(host.querySelector('input')).not.toBeNull();
+        expect(fixture.calls.map((call) => call.path)).toEqual([
+          '/v1/definitionTypes/schema:Book',
+          '/v1/definitionTypes/schema:Book',
+        ]);
       }
+      expect(fixture.calls.every((call) => !call.path.startsWith('/v1/definitions/releases/'))).toBe(true);
       expect(fixture.calls.every((call) => call.method === 'GET')).toBe(true);
     });
   }
@@ -467,18 +518,20 @@ test('deliberate pinned retries lock one read and focus returned guidance or the
     await mounted(async ({ host, render, act, DefinitionGuide, definitionGuideFixture, definitionText, m }) => {
       const fixture = definitionGuideFixture('pinned');
       const read = await fixture.transport.read();
-      if (!read.ok) throw new Error('Expected pinned definitions');
+      if (!read.ok || read.pin !== 'pinned') throw new Error('Expected pinned definitions');
       const back = '/en/subjects/00000000-0000-4000-8000-000000000001/a-book/edit?statement=uncertain#value';
       const address = { ...fixture.address, returnTo: back };
       let reads = 0;
       let settle!: (read: GuideRead) => void;
-      const transport = {
+      const transport: GuideTransport = {
         read: () => {
           reads++;
           return new Promise<GuideRead>((resolve) => {
             settle = resolve;
           });
         },
+        directory: async () => ({ ok: true, page: { types: [], next: null } }),
+        exact: async () => ({ ok: false, reason: 'no-match' }),
       };
       const component = (
         <DefinitionGuide
@@ -540,15 +593,18 @@ test('initial and retired-address completions stay silent across departure and r
   await mounted(async ({ host, render, act, DefinitionGuide, definitionGuideFixture }) => {
     const fixture = definitionGuideFixture('pinned');
     const read = await fixture.transport.read();
+    if (!read.ok || read.pin !== 'pinned') throw new Error('Expected pinned definitions');
     let settle!: (read: GuideRead) => void;
     let reads = 0;
-    const transport = {
+    const transport: GuideTransport = {
       read: () => {
         reads++;
         return new Promise<GuideRead>((resolve) => {
           settle = resolve;
         });
       },
+      directory: async () => ({ ok: true, page: { types: [], next: null } }),
+      exact: async () => ({ ok: false, reason: 'no-match' }),
     };
     const show = (address: GuideAddress, initial?: GuideRead) =>
       render(<DefinitionGuide address={address} locale="en" transport={transport} initial={initial} />);

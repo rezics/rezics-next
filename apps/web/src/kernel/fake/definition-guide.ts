@@ -3,9 +3,15 @@ import type { Release } from '@rezics/definitions';
 import historical from '../../../../../packages/definitions/test/fixtures/bundled-historical-construction.json';
 import definitions from '../recorded/definitions-release.json';
 import {
+  definitionText,
+  fetchGuideDirectory,
   fetchGuideRelease,
+  fetchGuideType,
+  readGuideDirectory,
+  readGuideType,
   readGuide,
   type GuideAddress,
+  type GuideLocale,
   type GuideTransport,
 } from '../../features/catalogue/definition-guide';
 import type { FakeRoute } from '../fake-modules';
@@ -34,7 +40,6 @@ export function definitionGuideFixture(scenario: GuideScenario = 'active') {
       if (scenario === 'loading') return new Promise<Response>(() => {});
       if (scenario === 'denied') return Response.json({ code: 'invalid_credentials' }, { status: 401 });
       if (scenario === 'unavailable' && attempts++ === 0) return Response.json({ code: 'overloaded' }, { status: 503 });
-      if (path === '/v1/definitions/active') return Response.json({ digest: definitions.digest, head: 1 });
       if (path === `/v1/definitions/releases/${historicalGuideDigest}`)
         return Response.json({ digest: historicalGuideDigest, release: historical as Release });
       if (path === `/v1/definitions/releases/${definitions.digest}`) {
@@ -42,6 +47,62 @@ export function definitionGuideFixture(scenario: GuideScenario = 'active') {
         return Response.json(
           scenario === 'empty' ? { digest: definitions.digest, release: { types: {}, properties: {} } } : definitions,
         );
+      }
+      if (path === '/v1/definitionTypes') {
+        const locale = (new URL(request.url).searchParams.get('locale') ?? 'en') as GuideLocale;
+        const search = new URL(request.url).searchParams;
+        const prefix = search.get('query') ?? '';
+        const offset = Number(search.get('cursor') ?? 0);
+        const all = Object.entries(scenario === 'empty' ? {} : definitions.release.types)
+          .map(([typeId, definition]) => {
+            const label = definitionText(definition.labels, locale);
+            const description = definitionText(definition.descriptions, locale);
+            return {
+              typeId,
+              releaseDigest: scenario === 'invalid' ? 'wrong-release' : definitions.digest,
+              label: label.text || typeId,
+              language: label.lang,
+              parents: [],
+              description: description.text || null,
+              descriptionLanguage: description.lang,
+            };
+          })
+          .sort((left, right) =>
+            left.label === right.label
+              ? left.typeId < right.typeId
+                ? -1
+                : left.typeId > right.typeId
+                  ? 1
+                  : 0
+              : left.label < right.label
+                ? -1
+                : 1,
+          )
+          .filter((entry) => entry.label.startsWith(prefix));
+        const limit = Number(search.get('limit') ?? 20);
+        const types = all.slice(offset, offset + limit);
+        return Response.json({ types, next: offset + limit < all.length ? String(offset + limit) : null });
+      }
+      if (path.startsWith('/v1/definitionTypes/')) {
+        const typeId = path.slice('/v1/definitionTypes/'.length);
+        const definition = definitions.release.types[typeId];
+        if (!definition) return Response.json({ code: 'not_found' }, { status: 404 });
+        const locale = (new URL(request.url).searchParams.get('locale') ?? 'en') as GuideLocale;
+        const label = definitionText(definition.labels, locale);
+        const description = definitionText(definition.descriptions, locale);
+        return Response.json({
+          typeId,
+          releaseDigest: scenario === 'invalid' ? 'wrong-release' : definitions.digest,
+          label: label.text || typeId,
+          language: label.lang,
+          parents: [],
+          description: description.text || null,
+          descriptionLanguage: description.lang,
+          definition,
+          properties: Object.fromEntries(
+            definition.properties.map((id) => [id, definitions.release.properties[id]]),
+          ),
+        });
       }
       return Response.json({ code: 'not_found' }, { status: 404 });
     }) as typeof fetch,
@@ -52,7 +113,17 @@ export function definitionGuideFixture(scenario: GuideScenario = 'active') {
     ...(scenario === 'pinned' ? { release: historicalGuideDigest } : {}),
   };
   if (scenario === 'empty') delete address.type;
-  const transport: GuideTransport = { read: () => readGuide(address, (digest) => fetchGuideRelease(client, digest)) };
+  const transport: GuideTransport = {
+    read: (selectedLocale = 'en') =>
+      readGuide(
+        address,
+        (digest) => fetchGuideRelease(client, digest),
+        () => readGuideDirectory(client, selectedLocale),
+        (typeId) => readGuideType(client, typeId, selectedLocale),
+      ),
+    directory: (locale, query, cursor) => fetchGuideDirectory(client, locale, query, cursor),
+    exact: (locale, typeId) => fetchGuideType(client, typeId, locale),
+  };
   return { client, transport, address, calls };
 }
 

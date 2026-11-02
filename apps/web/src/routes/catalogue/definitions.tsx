@@ -1,6 +1,11 @@
 import { createFileRoute, notFound } from '@tanstack/react-router';
 import { DefinitionGuide } from '../../features/catalogue/definition-guide-view';
-import { guideAddress, readDefinitionGuide } from '../../features/catalogue/definition-guide-actions';
+import {
+  guideAddress,
+  readDefinitionGuide,
+  readDefinitionGuideDirectory,
+  readDefinitionGuideType,
+} from '../../features/catalogue/definition-guide-actions';
 import { getLocale } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
 import { pageHead } from '../../shell/head';
@@ -11,7 +16,7 @@ export const Route = createFileRoute('/catalogue/definitions')({
   validateSearch: guideAddress,
   loaderDeps: ({ search }) => search,
   loader: async ({ deps }) => {
-    const result = await readDefinitionGuide({ data: deps });
+    const result = await readDefinitionGuide({ data: { address: deps, locale: getLocale() } });
     if (!result.ok && result.reason === 'concealed') throw notFound();
     return result;
   },
@@ -29,7 +34,12 @@ function GuideRoute() {
       locale={getLocale()}
       address={address}
       initial={initial}
-      transport={{ read: () => readDefinitionGuide({ data: address }) }}
+      transport={{
+        read: (locale = getLocale()) => readDefinitionGuide({ data: { address, locale } }),
+        directory: (locale, query, cursor) =>
+          readDefinitionGuideDirectory({ data: { query, ...(cursor ? { cursor } : {}), locale } }),
+        exact: (locale, typeId) => readDefinitionGuideType({ data: { typeId, locale } }),
+      }}
     />
   );
 }

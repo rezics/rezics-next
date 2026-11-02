@@ -1,20 +1,43 @@
 import type { KernelClient } from '@rezics/client';
 import { pickText } from '@rezics/composition';
-import type { Release } from '@rezics/definitions';
+import type { PropertyDefinition, Release } from '@rezics/definitions';
 import { createTypes } from './create-subject';
 
 export type GuideRelease = Pick<Release, 'types' | 'properties'> & { digest: string };
+export type GuideLocale = 'de' | 'en' | 'es' | 'fr' | 'ja' | 'ko' | 'zh-Hans' | 'zh-Hant';
 export type GuideAddress = {
   type?: string | undefined;
   property?: string | undefined;
   release?: string | undefined;
   returnTo?: string | undefined;
 };
-export type GuideFailure = 'denied' | 'concealed' | 'invalid' | 'unavailable';
+export type GuideFailure = 'denied' | 'concealed' | 'invalid' | 'unavailable' | 'no-match' | 'stale';
+export type GuideTypeSummary = {
+  typeId: string;
+  releaseDigest: string;
+  label: string;
+  language: string | null;
+  parents: string[];
+  description: string | null;
+  descriptionLanguage: string | null;
+};
+export type GuideDirectoryPage = { types: GuideTypeSummary[]; next: string | null };
+export type GuideTypeDescriptor = GuideTypeSummary & {
+  definition: Release['types'][string];
+  properties: Record<string, PropertyDefinition>;
+};
+export type GuidePageRead = { ok: false; reason: GuideFailure } | { ok: true; page: GuideDirectoryPage };
+export type GuideTypeRead = { ok: false; reason: GuideFailure } | { ok: true; descriptor: GuideTypeDescriptor };
 export type GuideRead =
   | { ok: false; reason: GuideFailure }
-  | { ok: true; release: GuideRelease; pin: 'active' | 'pinned' };
-export type GuideTransport = { read: () => Promise<GuideRead> };
+  | { ok: true; release: GuideRelease; pin: 'pinned' }
+  | { ok: true; page: GuideDirectoryPage; pin: 'active' }
+  | { ok: true; descriptor: GuideTypeDescriptor; pin: 'active' };
+export type GuideTransport = {
+  read: (locale?: GuideLocale) => Promise<GuideRead>;
+  directory: (locale: GuideLocale, query: string, cursor?: string) => Promise<GuidePageRead>;
+  exact: (locale: GuideLocale, typeId: string) => Promise<GuideTypeRead>;
+};
 
 export class DefinitionReadError extends Error {
   constructor(public readonly reason: GuideFailure) {
@@ -23,6 +46,9 @@ export class DefinitionReadError extends Error {
 }
 
 const digestPattern = /^sha256:[a-f0-9]{64}$/;
+export const guidePageSize = 20;
+export const guideIdentifierLimit = 4_194_304;
+export const guideLocales: readonly GuideLocale[] = ['en', 'de', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant'];
 const record = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 const textMap = (value: unknown) => record(value) && Object.values(value).every((text) => typeof text === 'string');
@@ -67,6 +93,60 @@ function requireSuccess(status: number): void {
   );
 }
 
+function requireDirectorySuccess(status: number, exact = false): void {
+  if (status === 200) return;
+  if (status === 404 && exact) throw new DefinitionReadError('no-match');
+  if (status === 409) throw new DefinitionReadError('stale');
+  requireSuccess(status);
+}
+
+type KernelResult = { status: number; data?: unknown };
+type TypeDirectoryClient = {
+  definitionTypes: {
+    get(options: {
+      query: { locale: GuideLocale; limit: number; query?: string; cursor?: string };
+      headers?: Record<string, string>;
+    }): Promise<KernelResult>;
+    (params: { typeId: string }): {
+      get(options: { query: { locale: GuideLocale }; headers?: Record<string, string> }): Promise<KernelResult>;
+    };
+  };
+};
+
+function typeSummary(value: unknown): value is GuideTypeSummary {
+  return (
+    record(value) &&
+    typeof value.typeId === 'string' &&
+    typeof value.releaseDigest === 'string' &&
+    digestPattern.test(value.releaseDigest) &&
+    typeof value.label === 'string' &&
+    (typeof value.language === 'string' || value.language === null) &&
+    strings(value.parents) &&
+    (typeof value.description === 'string' || value.description === null) &&
+    (typeof value.descriptionLanguage === 'string' || value.descriptionLanguage === null)
+  );
+}
+
+function directoryPage(value: unknown): value is GuideDirectoryPage {
+  return (
+    record(value) &&
+    Array.isArray(value.types) &&
+    value.types.length <= guidePageSize &&
+    value.types.every(typeSummary) &&
+    (typeof value.next === 'string' || value.next === null)
+  );
+}
+
+function typeDescriptor(value: unknown): value is GuideTypeDescriptor {
+  if (!typeSummary(value) || !record(value) || !record(value.definition) || !record(value.properties)) return false;
+  if (!releasedMetadata({ types: { [value.typeId]: value.definition }, properties: value.properties })) return false;
+  const properties = value.properties as Record<string, unknown>;
+  return (
+    strings(value.definition.properties) &&
+    value.definition.properties.every((id) => Object.hasOwn(properties, id))
+  );
+}
+
 /** Generated native GETs, with current caller headers. Never cache a caller's authority or guess a release file. */
 export async function fetchGuideRelease(
   client: KernelClient,
@@ -88,24 +168,113 @@ export async function fetchGuideRelease(
   return { ...response.data.release, digest: selected };
 }
 
+/** Read only one bounded active-directory page. Cursor bindings remain owned by Kernel. */
+export async function fetchGuideDirectory(
+  client: KernelClient,
+  locale: GuideLocale,
+  query = '',
+  cursor?: string,
+  headers: Record<string, string> = {},
+): Promise<GuideDirectoryPage> {
+  if (query.length > 512 || (cursor !== undefined && cursor.length > 4096))
+    throw new DefinitionReadError('invalid');
+  const directory = (client as unknown as TypeDirectoryClient).definitionTypes;
+  const response = await directory.get({
+    query: { locale, limit: guidePageSize, query, ...(cursor === undefined ? {} : { cursor }) },
+    headers,
+  });
+  requireDirectorySuccess(response.status);
+  if (!directoryPage(response.data)) throw new DefinitionReadError('invalid');
+  return response.data;
+}
+
+/** Read one exact active Type descriptor; never fetch or enumerate its Release. */
+export async function fetchGuideType(
+  client: KernelClient,
+  typeId: string,
+  locale: GuideLocale,
+  headers: Record<string, string> = {},
+): Promise<GuideTypeDescriptor> {
+  if (typeId.length === 0 || typeId.length > guideIdentifierLimit) throw new DefinitionReadError('invalid');
+  const route = (client as unknown as TypeDirectoryClient).definitionTypes({ typeId });
+  const response = await route.get({ query: { locale }, headers });
+  requireDirectorySuccess(response.status, true);
+  if (!typeDescriptor(response.data) || response.data.typeId !== typeId)
+    throw new DefinitionReadError('invalid');
+  return response.data;
+}
+
+function failure(error: unknown, exact = false): GuideFailure {
+  if (error instanceof DefinitionReadError) return error.reason;
+  if (exact && typeof error === 'object' && error !== null && 'status' in error && error.status === 404)
+    return 'no-match';
+  return 'unavailable';
+}
+
+export async function readGuideDirectory(
+  client: KernelClient,
+  locale: GuideLocale,
+  query = '',
+  cursor?: string,
+  headers: Record<string, string> = {},
+): Promise<GuidePageRead> {
+  try {
+    return { ok: true, page: await fetchGuideDirectory(client, locale, query, cursor, headers) };
+  } catch (error) {
+    return { ok: false, reason: failure(error) };
+  }
+}
+
+export async function readGuideType(
+  client: KernelClient,
+  typeId: string,
+  locale: GuideLocale,
+  headers: Record<string, string> = {},
+): Promise<GuideTypeRead> {
+  try {
+    return { ok: true, descriptor: await fetchGuideType(client, typeId, locale, headers) };
+  } catch (error) {
+    return { ok: false, reason: failure(error, true) };
+  }
+}
+
 export async function readGuide(
   address: GuideAddress,
-  read: (digest?: string) => Promise<GuideRelease>,
+  readRelease: (digest?: string) => Promise<GuideRelease>,
+  readDirectory: () => Promise<GuidePageRead>,
+  readType: (typeId: string) => Promise<GuideTypeRead>,
 ): Promise<GuideRead> {
   try {
     if (address.release !== undefined && !digestPattern.test(address.release)) return { ok: false, reason: 'invalid' };
-    const release = await read(address.release);
-    if (address.type && !Object.hasOwn(release.types, address.type)) return { ok: false, reason: 'invalid' };
-    if (
-      address.property &&
-      (!address.type ||
-        !release.types[address.type]?.properties.includes(address.property) ||
-        !Object.hasOwn(release.properties, address.property))
-    )
-      return { ok: false, reason: 'invalid' };
-    return { ok: true, release, pin: address.release === undefined ? 'active' : 'pinned' };
+    if (address.property && !address.type) return { ok: false, reason: 'invalid' };
+    if (address.release !== undefined) {
+      const release = await readRelease(address.release);
+      if (address.type && !Object.hasOwn(release.types, address.type)) return { ok: false, reason: 'invalid' };
+      if (
+        address.property &&
+        (!release.types[address.type!]?.properties.includes(address.property) ||
+          !Object.hasOwn(release.properties, address.property))
+      )
+        return { ok: false, reason: 'invalid' };
+      return { ok: true, release, pin: 'pinned' };
+    }
+    if (address.type) {
+      const result = await readType(address.type);
+      if (!result.ok) return result;
+      if (
+        result.descriptor.typeId !== address.type ||
+        (address.property &&
+          (!result.descriptor.definition.properties.includes(address.property) ||
+            !Object.hasOwn(result.descriptor.properties, address.property)))
+      )
+        return { ok: false, reason: 'invalid' };
+      return { ok: true, descriptor: result.descriptor, pin: 'active' };
+    }
+    if (address.property) return { ok: false, reason: 'invalid' };
+    const result = await readDirectory();
+    return result.ok ? { ok: true, page: result.page, pin: 'active' } : result;
   } catch (error) {
-    return { ok: false, reason: error instanceof DefinitionReadError ? error.reason : 'unavailable' };
+    return { ok: false, reason: failure(error) };
   }
 }
 

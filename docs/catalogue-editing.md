@@ -638,3 +638,10 @@ Original long descriptions are contributed through the existing authored-documen
 Classification facts may be entered at creation when emitted; their current values are shown on correction,
 where the missing common classification correction control is explicit. No substitute writer or fabricated
 successful classification mutation is supplied.
+
+## Browser flow: definition guide
+
+Decision: the active guide opens on the first bounded page and provides separate localized label-prefix and
+exact-Type-ID inputs; next-page navigation follows the current prefix cursor. Active browsing uses the released
+Type directory and exact selected-Type descriptors. An explicit release digest continues to mean its immutable
+historical release.

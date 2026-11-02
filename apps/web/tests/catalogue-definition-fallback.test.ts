@@ -108,12 +108,12 @@ test('A contributor recognizes the language of exceptional definition guidance w
       expect(character.calls.every((call) => call.method === 'GET')).toBe(true);
       if (language === 'en') expect(host.textContent).not.toContain(fallback);
 
-      const guide = definitionGuideFixture();
+      const guide = definitionGuideFixture('pinned');
       const guideRead = await guide.transport.read();
-      if (!guideRead.ok) throw new Error('Expected the canonical guide transport');
+      if (!guideRead.ok || guideRead.pin !== 'pinned') throw new Error('Expected the pinned guide transport');
       await render(
         h(DefinitionGuideContent, {
-          address: { type: characterType, property: 'schema:height' },
+          address: { type: characterType, property: 'schema:height', release: guide.address.release },
           locale: 'en',
           read: {
             ...guideRead,
@@ -179,16 +179,17 @@ test('A contributor recognizes the language of exceptional definition guidance w
     expect(help.textContent).not.toContain(fallback);
 
     const guide = definitionGuideFixture();
-    const guideRead = await guide.transport.read();
-    if (!guideRead.ok) throw new Error('Expected the guide read');
-    const release = structuredClone(guideRead.release);
-    delete release.types[characterType]!.descriptions;
-    delete release.properties['schema:height']!.descriptions;
+    const guideRead = await guide.transport.exact('en', characterType);
+    if (!guideRead.ok) throw new Error('Expected the exact guide descriptor');
+    const descriptor = structuredClone(guideRead.descriptor);
+    delete descriptor.definition.descriptions;
+    delete descriptor.properties['schema:height']!.descriptions;
     await render(
       h(DefinitionGuideContent, {
-        address: { type: characterType, property: 'schema:height' },
+        address: { type: characterType, property: 'schema:height', release: guide.address.release },
         locale: 'en',
-        read: { ...guideRead, release },
+        read: { ok: true, pin: 'active', descriptor },
+        transport: guide.transport,
         retry: () => {},
       }),
     );

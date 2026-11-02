@@ -22,11 +22,18 @@ test('Understand released Types and fields before contributing a valid fact thro
   if (!initial.ok || !initial.source) throw new Error('Expected selected fact');
   const original = structuredClone(initial.source);
   const address = { type: initial.public.subject.type, property: fixture.address.property };
-  const guide = await readGuide(address, (digest) => fetchGuideRelease(fixture.client, digest));
-  if (!guide.ok) throw new Error('Expected released guide');
-  expect(guide.pin).toBe('active');
-  expect(guide.release.types[address.type]!.properties).toContain(address.property);
-  expect(guide.release.properties[address.property]!.datatype).toBe('time');
+  const guideFixture = definitionGuideFixture();
+  const guide = await guideFixture.transport.exact('en', address.type);
+  if (!guide.ok) throw new Error('Expected released Type descriptor');
+  expect(guide.descriptor.definition.properties).toContain(address.property);
+  expect(guide.descriptor.properties[address.property]!.datatype).toBe('time');
+  const matches = await guideFixture.transport.directory('en', 'book');
+  expect(matches.ok && matches.page.types.some((type) => type.typeId === address.type)).toBe(true);
+  expect(guideFixture.calls.map((call) => call.path)).toEqual([
+    `/v1/definitionTypes/${address.type}`,
+    '/v1/definitionTypes',
+  ]);
+  expect(guideFixture.calls.some((call) => call.path.startsWith('/v1/definitions/releases/'))).toBe(false);
   const statement = statementInput(initial.source);
   statement.value = {
     type: 'value',
@@ -78,8 +85,16 @@ test('reads the exact historical release without an active lookup and retains la
   expect(html).toContain(m.guide_pinned({}, { locale: 'ja' }));
   expect(html).toContain(m.guide_missing({}, { locale: 'ja' }));
   const current = definitionGuideFixture();
+  const currentRelease = await fetchGuideRelease(current.client);
+  const pinned = (address: { type: string; property: string }) =>
+    readGuide(
+      { ...address, release: currentRelease.digest },
+      (digest) => fetchGuideRelease(current.client, digest),
+      async () => ({ ok: true as const, page: { types: [], next: null } }),
+      async () => ({ ok: false as const, reason: 'no-match' as const }),
+    );
   const consentAddress = { type: 'schema:Person', property: 'rezics:penNameOf' };
-  const consent = await readGuide(consentAddress, () => fetchGuideRelease(current.client));
+  const consent = await pinned(consentAddress);
   if (!consent.ok) throw new Error('Expected released consent field');
   const consentHtml = renderToStaticMarkup(
     createElement(DefinitionGuideContent, { address: consentAddress, locale: 'en', read: consent, retry: () => {} }),
@@ -87,7 +102,7 @@ test('reads the exact historical release without an active lookup and retains la
   expect(consentHtml).toContain(m.guide_consent({}, { locale: 'en' }));
   expect(consentHtml).toContain(m.guide_targets({}, { locale: 'en' }));
   const authorAddress = { type: 'schema:Book', property: 'schema:author' };
-  const author = await readGuide(authorAddress, () => fetchGuideRelease(current.client));
+  const author = await pinned(authorAddress);
   const authorHtml = renderToStaticMarkup(
     createElement(DefinitionGuideContent, { address: authorAddress, locale: 'en', read: author, retry: () => {} }),
   );
@@ -112,8 +127,11 @@ test('native read failures never become empty metadata or fall back from a pin; 
       }) as typeof fetch,
     });
     expect(
-      await readGuide({ release: historicalGuideDigest }, (digest) =>
-        fetchGuideRelease(client, digest, { authorization: 'Bearer current-viewer' }),
+      await readGuide(
+        { release: historicalGuideDigest },
+        (digest) => fetchGuideRelease(client, digest, { authorization: 'Bearer current-viewer' }),
+        async () => ({ ok: true as const, page: { types: [], next: null } }),
+        async () => ({ ok: false as const, reason: 'no-match' as const }),
       ),
     ).toEqual({ ok: false, reason });
     expect(calls).toHaveLength(1);
@@ -123,11 +141,17 @@ test('native read failures never become empty metadata or fall back from a pin; 
   expect(await invalid.transport.read()).toEqual({ ok: false, reason: 'invalid' });
   const empty = definitionGuideFixture('empty');
   const emptyRead = await empty.transport.read();
-  expect(emptyRead.ok && Object.keys(emptyRead.release.types)).toEqual([]);
+  expect(emptyRead.ok && emptyRead.pin === 'active' && 'page' in emptyRead && emptyRead.page.types).toEqual([]);
   const current = definitionGuideFixture();
   expect(
-    await readGuide({ type: 'schema:Book', property: 'schema:numberOfPages' }, () => fetchGuideRelease(current.client)),
+    await readGuide(
+      { type: 'schema:Book', property: 'missing:field' },
+      (digest) => fetchGuideRelease(current.client, digest),
+      () => current.transport.directory('en', ''),
+      (typeId) => current.transport.exact('en', typeId),
+    ),
   ).toEqual({ ok: false, reason: 'invalid' });
+  expect(await current.transport.exact('en', 'missing:type')).toEqual({ ok: false, reason: 'no-match' });
   const back =
     '/en/subjects/00000000-0000-4000-8000-000000000001/a-book/edit?property=schema%3AdatePublished&statement=selected#value';
   expect(guideReturnTo(back, 'en')).toBe(back);
