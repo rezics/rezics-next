@@ -455,6 +455,9 @@ including array framing; an individual row that cannot fit is rejected before in
 2 rows or 10%, 4 blocks or 50%, and no statement slack. Other modules
 import the public API from `test/support/growth.ts`. A check uses three to five scales, and its largest scale must not
 exceed 4096.
+`seed` snapshots the population definition and range before callbacks, uses captured callback references throughout
+the call, and passes `finish` a detached `{ from, to }` copy; row-value snapshots remain owned by
+`growth-seed-batches.ts`.
 
 Every capture drains registered query and connection setup work, including tasks added while earlier work settles,
 before restoring attribution on success or failure. If cleanup also fails, the initiating error remains the aggregate's

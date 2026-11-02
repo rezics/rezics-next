@@ -4,7 +4,13 @@ import { placement, seed, type Population } from './growth-seed.ts';
 
 let database: GrowthDatabase;
 let pool: GrowthDatabase['pool'];
-const schemas = ['growth_seed_test', 'growth_seed_cumulative_a', 'growth_seed_cumulative_b', 'growth_seed_write'];
+const schemas = [
+  'growth_seed_test',
+  'growth_seed_cumulative_a',
+  'growth_seed_cumulative_b',
+  'growth_seed_write',
+  'growth_seed_mutable_rows',
+];
 
 beforeAll(async () => {
   database = await openGrowthDatabase();
@@ -82,6 +88,78 @@ test('seeds through a production write path when the population supplies write',
   await seed({ pool, admin: database.admin }, population, { from: 0, to: 12 });
   expect(calls).toBe(12);
   expect((await pool.query('SELECT count(*)::int AS count FROM growth_seed_write.parent')).rows[0]!.count).toBe(12);
+});
+
+test('keeps one admitted definition and range while concurrent writes are pending', async () => {
+  const range = { from: 100, to: 108 };
+  const original: Population = { name: 'mutable-write', hotPartition: 4, hotShare: 0.75 };
+  const expected = Array.from({ length: 8 }, (_, offset) => placement(original, 100 + offset));
+  const writes: ReturnType<typeof placement>[] = [];
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => (release = resolve));
+  let signalStarted!: () => void;
+  const fourStarted = new Promise<void>((resolve) => (signalStarted = resolve));
+  let finishedRange: { from: number; to: number } | undefined;
+  let replacementWrites = 0;
+  let replacementFinishes = 0;
+  const population: Population = {
+    ...original,
+    write: async (_target, value) => {
+      writes.push(value);
+      if (writes.length === 4) signalStarted();
+      await pending;
+    },
+    finish: async (_admin, value) => {
+      finishedRange = value;
+    },
+  };
+  const seeding = seed({ pool, admin: database.admin }, population, range);
+  await fourStarted;
+  population.name = 'changed';
+  population.hotPartition = 11;
+  population.hotShare = 0;
+  population.write = async () => {
+    replacementWrites++;
+  };
+  population.finish = async () => {
+    replacementFinishes++;
+  };
+  range.from = 120;
+  range.to = 104;
+  release();
+  await seeding;
+  expect(writes).toEqual(expected);
+  expect(replacementWrites).toBe(0);
+  expect(replacementFinishes).toBe(0);
+  expect(finishedRange).toEqual({ from: 100, to: 108 });
+  expect(finishedRange).not.toBe(range);
+});
+
+test('keeps the admitted placement and rows callback when rows mutate the population', async () => {
+  const original: Population = { name: 'mutable-rows', hotPartition: 7, hotShare: 0.5 };
+  const expected = [placement(original, 210), placement(original, 211)];
+  const placements: ReturnType<typeof placement>[] = [];
+  let replacementRows = 0;
+  let population!: Population;
+  population = {
+    ...original,
+    rows: (value) => {
+      placements.push(value);
+      if (value.ordinal === 210) {
+        population.name = 'changed';
+        population.hotPartition = 10;
+        population.hotShare = 0;
+        population.rows = ({ ordinal, route }) => {
+          replacementRows++;
+          return { 'growth_seed_mutable_rows.parent': [{ route, id: ordinal }] };
+        };
+      }
+      return { 'growth_seed_mutable_rows.parent': [{ route: value.route, id: value.ordinal }] };
+    },
+  };
+  await seed({ pool, admin: database.admin }, population, { from: 210, to: 212 });
+  expect(placements).toEqual(expected);
+  expect(replacementRows).toBe(0);
 });
 
 test('stops admitting production writes after failure and waits for admitted writes', async () => {
