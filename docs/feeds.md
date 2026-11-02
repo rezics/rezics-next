@@ -190,7 +190,8 @@ Module schema dumps are derived by the controller through the normal supported p
 
 ## Home dimensions
 
-Native kind selection and Space membership of the existing Following inbox are delivered.
+Native kind selection is delivered. Space membership of the existing Following inbox is implemented;
+complete native/API and browser acceptance remains with the controller.
 Following threads/replies use their currently disclosed board's native Space; adopted
 Subjects use the current publication and that Space's current Realm slot. A stale follow
 reason cannot establish membership. Collections have no native Space membership; contained
