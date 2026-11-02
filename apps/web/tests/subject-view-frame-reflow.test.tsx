@@ -169,9 +169,11 @@ describe('Companion Subject views retain the complete supplied title, original t
 
   test('one real stream owns its heading and continuation; the wrapper adds neither', async () => {
     const { html } = await mount({ streams: 'one', realm: qualifiedRealm });
-    // The existing relation stream owns a section heading; do not introduce a duplicate wrapper heading.
-    expect(html).not.toContain('<h1');
-    expect(html.match(/<h2[^>]*>Cast<\/h2>/g)).toHaveLength(1);
+    // The required h1 must come from the stream; adding a wrapper would duplicate its heading.
+    // The current read-only stream emits h2, so this acceptance remains unresolved.
+    expect(html.match(/<h1\b/g)).toHaveLength(1);
+    expect(html.match(/<h1[^>]*>Cast<\/h1>/g)).toHaveLength(1);
+    expect(html.match(/<h[12][^>]*>Cast<\/h[12]>/g)).toHaveLength(1);
     expect(html).not.toContain('data-slot="view-heading"');
     expect(html).not.toContain('data-slot="next-page"');
     expect(html.match(/data-slot="continue-group"/g)).toHaveLength(1);

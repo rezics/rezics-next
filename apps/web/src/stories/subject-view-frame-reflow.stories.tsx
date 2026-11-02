@@ -181,9 +181,13 @@ const meta = {
           `${base}/${view}?node=${node}&cursor=${node}-next${args.realm ? `&realm=${qualifiedRealm}` : ''}`,
         );
       }
-      // Preserve the stream's existing section heading when it owns the page heading decision.
-      await expect(canvas.queryAllByRole('heading', { level: 1 })).toHaveLength(args.streams === 'one' ? 0 : 1);
-      await expect(canvas.getAllByRole('heading', { name: 'Cast', level: 2 })).toHaveLength(1);
+      // Single-stream h1 acceptance is unresolved: its read-only renderer currently emits h2.
+      await expect(canvas.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+      await expect(canvas.getAllByRole('heading', { name: 'Cast' })).toHaveLength(1);
+      await expect(canvas.getByRole('heading', { name: 'Cast' })).toHaveProperty(
+        'tagName',
+        args.streams === 'one' ? 'H1' : 'H2',
+      );
     }
     const action = canvas.queryByRole('link', { name: m.thread_review_sign_in() });
     if (args.actionSession === 'signed-out') {
