@@ -568,9 +568,7 @@ function DecisionVisit({
         </ContentItemFrame>
       </section>
       <details className="border-t border-border pt-3">
-        <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">
-          {m.reporter_status_reference()}
-        </summary>
+        <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">{m.reporter_status_reference()}</summary>
         <ContentItemFrame as="div" className="space-y-4 p-4">
           <dl className="space-y-4 text-sm">
             <div className="space-y-1">

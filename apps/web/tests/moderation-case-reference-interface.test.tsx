@@ -143,9 +143,9 @@ test('Moderation cases prioritize human outcomes while exact support references 
       expect(host.querySelector('h1')?.textContent).toContain(m.moderation_appeals_heading());
       const appealHeadings = [...host.querySelectorAll('h1, h2, h3')].map((heading) => heading.textContent).join(' ');
       for (const id of [appealId, decisionId, targetId]) expect(appealHeadings).not.toContain(id);
-      expect([...host.querySelectorAll('h3')].some((heading) => heading.textContent === m.moderation_current_target_label())).toBe(
-        true,
-      );
+      expect(
+        [...host.querySelectorAll('h3')].some((heading) => heading.textContent === m.moderation_current_target_label()),
+      ).toBe(true);
       expect(host.textContent).toContain(m.reporter_status_post());
       expect(host.textContent).toContain(m.moderation_target_unavailable());
       expect(host.textContent).not.toContain(targetId);
@@ -217,7 +217,10 @@ test('Moderation cases prioritize human outcomes while exact support references 
       expect(host.textContent).not.toContain(targetId);
       expect(host.innerHTML).not.toContain(targetId);
       expect(host.textContent).not.toContain('PRIVATE target body');
-      expect([...host.querySelectorAll('details dd')].map((value) => value.textContent)).toEqual([appealId, decisionId]);
+      expect([...host.querySelectorAll('details dd')].map((value) => value.textContent)).toEqual([
+        appealId,
+        decisionId,
+      ]);
     } finally {
       await markedWithheldAppeal.window.happyDOM.close();
     }
@@ -253,10 +256,7 @@ test('Moderation cases prioritize human outcomes while exact support references 
 
       const details = host.querySelector('details');
       expect(details?.open).toBe(false);
-      expect([...details!.querySelectorAll('dd')].map((value) => value.textContent)).toEqual([
-        decisionId,
-        appealId,
-      ]);
+      expect([...details!.querySelectorAll('dd')].map((value) => value.textContent)).toEqual([decisionId, appealId]);
       for (const value of details!.querySelectorAll('dd')) {
         expect(value.className).toContain('select-text');
         expect(value.className).toContain('break-all');
@@ -286,7 +286,10 @@ test('Moderation cases prioritize human outcomes while exact support references 
       expect(form?.contains(refresh ?? null)).toBe(false);
       expect(host.querySelector('details')?.closest('form')).toBeNull();
       expect(host.querySelector('h2')?.textContent).toContain(m.decision_current_outcome());
-      expect([...host.querySelectorAll('details dd')].map((value) => value.textContent)).toEqual([decisionId, targetId]);
+      expect([...host.querySelectorAll('details dd')].map((value) => value.textContent)).toEqual([
+        decisionId,
+        targetId,
+      ]);
       expect(host.querySelector('details dd')?.className).toContain('break-all');
     } finally {
       await currentDecision.window.happyDOM.close();
@@ -313,7 +316,11 @@ test('Moderation cases prioritize human outcomes while exact support references 
 
     const reporter = parseMarkup(
       renderToStaticMarkup(
-        createElement('div', { style: { width: `${width}px` } }, createElement(ReporterStatusPage, { report: privateReport })),
+        createElement(
+          'div',
+          { style: { width: `${width}px` } },
+          createElement(ReporterStatusPage, { report: privateReport }),
+        ),
       ),
     );
     try {
@@ -350,7 +357,9 @@ test('Moderation cases prioritize human outcomes while exact support references 
   }
 
   const loadingAppeals = parseMarkup(
-    renderToStaticMarkup(createElement(ModerationAppealsView, { appeals: [], targets: [], next: null, state: 'loading' })),
+    renderToStaticMarkup(
+      createElement(ModerationAppealsView, { appeals: [], targets: [], next: null, state: 'loading' }),
+    ),
   );
   try {
     expect(loadingAppeals.host.textContent).toContain(m.moderation_appeals_read_loading());
@@ -368,9 +377,7 @@ test('Moderation cases prioritize human outcomes while exact support references 
     await refusedDecision.window.happyDOM.close();
   }
 
-  const concealedReport = parseMarkup(
-    renderToStaticMarkup(createElement(ReporterStatusPage, { state: 'concealed' })),
-  );
+  const concealedReport = parseMarkup(renderToStaticMarkup(createElement(ReporterStatusPage, { state: 'concealed' })));
   try {
     expect(concealedReport.host.textContent).toContain(m.reporter_status_read_concealed());
     expect(concealedReport.host.textContent).not.toContain(privateReport.evidence!);

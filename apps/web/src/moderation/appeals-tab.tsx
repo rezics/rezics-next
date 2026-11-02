@@ -124,11 +124,13 @@ function AppealsVisit(props: AppealsPageProps) {
 const emptySubscribe = () => () => {};
 const zeroSnapshot = () => 0;
 
-function currentTargetIsAvailable(target: ModerationTarget | undefined, identity: { kind: 'post' | 'thread'; id: string }) {
+function currentTargetIsAvailable(
+  target: ModerationTarget | undefined,
+  identity: { kind: 'post' | 'thread'; id: string },
+) {
   if (!target?.value || target.key !== `${identity.kind}:${identity.id}`) return false;
   const evidence = moderationEvidence(target.value);
-  if (evidence)
-    return evidence.kind === identity.kind && evidence.id === identity.id && evidence.state === 'available';
+  if (evidence) return evidence.kind === identity.kind && evidence.id === identity.id && evidence.state === 'available';
   if (typeof target.value !== 'object' || Array.isArray(target.value)) return false;
   const value = target.value as Record<string, unknown>;
   const raw = value[identity.kind] ?? value;
@@ -329,9 +331,7 @@ function AppealCard({
             {m.moderation_current_target_label()}
           </ContentItemHeading>
           <Badge variant="outline">{targetKind}</Badge>
-          <blockquote className="min-w-0 border-l-2 pl-3 wrap-anywhere">
-            {moderationTargetContent(target)}
-          </blockquote>
+          <blockquote className="min-w-0 border-l-2 pl-3 wrap-anywhere">{moderationTargetContent(target)}</blockquote>
         </section>
         <section aria-labelledby={`${id}-statement`} className="space-y-2">
           <ContentItemHeading id={`${id}-statement`} level={3} className="text-sm font-semibold">
