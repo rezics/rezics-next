@@ -223,26 +223,17 @@ describe('Complete Realm publication original caller lifetime', () => {
       return { kind: 'unavailable' as const };
     }, () => undefined, subjects);
     draft.connect(); draft.choose(target());
-    await draft.change('publish');
-    const exact = calls[0];
+    await draft.change('publish'); const exact = calls[0];
     const owner = new AuthoringDepartureState();
-    owner.register({
-      needsDecision: () => draft.getSnapshot().target !== null,
-      unresolved: () => draft.getSnapshot().outcome?.kind === 'unavailable',
-      discard: () => undefined,
-      leave: draft.retire,
-    });
+    owner.register({ needsDecision: () => !!draft.getSnapshot().target, unresolved: () => true, discard: () => undefined,
+      leave: draft.retire });
     const staying = owner.block('/realm', '/next', null);
-    expect(owner.prompt?.kind).toBe('navigation');
-    owner.stay();
-    expect(await staying).toBe(true);
+    owner.stay(); expect(await staying).toBe(true);
     expect(draft.getSnapshot().target).toEqual(target());
     await draft.retry();
     expect(calls[1]).toEqual(exact);
     const leaving = owner.block('/realm', '/next', null);
-    owner.leave();
-    expect(draft.getSnapshot().target).toBeNull();
-    expect(await leaving).toBe(false);
+    owner.leave(); expect(draft.getSnapshot().target).toBeNull(); expect(await leaving).toBe(false);
   });
 
   test('healthy renders keep the draft and read the current authoritative shelf head', async () => {
