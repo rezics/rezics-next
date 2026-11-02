@@ -4,11 +4,24 @@ import { CopiesFallback } from '../src/library/copies-fallback';
 import type { CopiesPageData } from '../src/library/copies-read';
 
 const kinds = [
-  { id: 'print', label: 'Print edition', statuses: [{ id: 'owned', label: 'On shelf' }, { id: 'lent', label: 'On loan' }] },
+  {
+    id: 'print',
+    label: 'Print edition',
+    statuses: [
+      { id: 'owned', label: 'On shelf' },
+      { id: 'lent', label: 'On loan' },
+    ],
+  },
   { id: 'digital', label: 'Digital edition', statuses: [{ id: 'owned', label: 'Available online' }] },
 ];
 const page: CopiesPageData = {
-  signedIn: true, subjectId: 'edition', copies: [], next: null, addKey: 'original-key', sendKind: true, profile: { kinds },
+  signedIn: true,
+  subjectId: 'edition',
+  copies: [],
+  next: null,
+  addKey: 'original-key',
+  sendKind: true,
+  profile: { kinds },
 };
 const render = (data = page, csrfToken: string | null = 'current-token') =>
   renderToStaticMarkup(<CopiesFallback page={data} csrfToken={csrfToken} />);
@@ -19,12 +32,23 @@ test('each ordinary POST keeps its kind context, advertised statuses and origina
   expect(forms).toHaveLength(kinds.length);
   forms.forEach(([form], index) => {
     const kind = kinds[index]!;
-    const fields = Object.fromEntries([...form.matchAll(/<input[^>]*name="([^"]+)"[^>]*value="([^"]*)"/g)].map(([, name, value]) => [name, value]));
-    expect(fields).toEqual({ csrf_token: 'current-token', idempotencyKey: page.addKey, sendKind: 'true', subjectId: page.subjectId, intent: 'create', kind: kind.id });
+    const fields = Object.fromEntries(
+      [...form.matchAll(/<input[^>]*name="([^"]+)"[^>]*value="([^"]*)"/g)].map(([, name, value]) => [name, value]),
+    );
+    expect(fields).toEqual({
+      csrf_token: 'current-token',
+      idempotencyKey: page.addKey,
+      sendKind: 'true',
+      subjectId: page.subjectId,
+      intent: 'create',
+      kind: kind.id,
+    });
     expect(form).toContain(`<legend`);
     expect(form).toContain(kind.label);
     const select = form.match(/<select\b([^>]*)>([\s\S]*?)<\/select>/)!;
-    expect([...select[2]!.matchAll(/<option[^>]*value="([^"]+)"/g)].map(([, value]) => value)).toEqual(kind.statuses.map(({ id }) => id));
+    expect([...select[2]!.matchAll(/<option[^>]*value="([^"]+)"/g)].map(([, value]) => value)).toEqual(
+      kind.statuses.map(({ id }) => id),
+    );
     kind.statuses.forEach(({ label }) => expect(select[2]).toContain(label));
     const id = select[1]!.match(/id="([^"]+)"/)![1];
     expect(form).toContain(`for="${id}"`);
