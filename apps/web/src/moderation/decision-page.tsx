@@ -284,7 +284,11 @@ function DecisionVisit({
   const pending = useRef(false);
   const reading = useRef(false);
   const lifetime = useRef({ active: true, retired: false, serial: 0, readSerial: 0 });
-  const outcomeFocus = useRef<{ serial: number; decision: DecisionPage['decision']; control: HTMLButtonElement } | null>(null);
+  const outcomeFocus = useRef<{
+    serial: number;
+    decision: DecisionPage['decision'];
+    control: HTMLButtonElement;
+  } | null>(null);
   const keyboardActivation = useRef<HTMLButtonElement | null>(null);
   const keyboardClick = useRef<HTMLButtonElement | null>(null);
   const pendingOutcome = useRef<HTMLParagraphElement | null>(null);
@@ -520,9 +524,7 @@ function DecisionVisit({
       onKeyDownCapture={(event) => {
         const target = event.target;
         keyboardActivation.current =
-          target instanceof HTMLButtonElement && (event.key === 'Enter' || event.key === ' ')
-            ? target
-            : null;
+          target instanceof HTMLButtonElement && (event.key === 'Enter' || event.key === ' ') ? target : null;
       }}
       onClickCapture={(event) => {
         const target = event.target;

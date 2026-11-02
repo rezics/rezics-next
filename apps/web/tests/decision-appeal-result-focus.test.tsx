@@ -10,10 +10,17 @@ const { Window } = await import(
 );
 const browser = new Window({ url: 'https://site.test/en/moderation/decisions/one' });
 const globals = {
-  window: browser, document: browser.document, navigator: browser.navigator, HTMLElement: browser.HTMLElement,
-  HTMLButtonElement: browser.HTMLButtonElement, HTMLTextAreaElement: browser.HTMLTextAreaElement,
-  HTMLFormElement: browser.HTMLFormElement, Element: browser.Element, Node: browser.Node,
-  MutationObserver: browser.MutationObserver, IS_REACT_ACT_ENVIRONMENT: true,
+  window: browser,
+  document: browser.document,
+  navigator: browser.navigator,
+  HTMLElement: browser.HTMLElement,
+  HTMLButtonElement: browser.HTMLButtonElement,
+  HTMLTextAreaElement: browser.HTMLTextAreaElement,
+  HTMLFormElement: browser.HTMLFormElement,
+  Element: browser.Element,
+  Node: browser.Node,
+  MutationObserver: browser.MutationObserver,
+  IS_REACT_ACT_ENVIRONMENT: true,
 };
 const saved = Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const);
 for (const [key, value] of Object.entries(globals))
@@ -23,8 +30,14 @@ const { m } = await import('../src/paraglide/messages.js');
 const page = {
   viewerId: 'author',
   decision: {
-    id: 'decision-one', targetKind: 'post', targetId: 'target-one', action: 'takedown', statement: 'Original decision.',
-    decidedAt: '2026-10-01T09:30:00.000Z', appealDeadline: '2027-04-02T09:30:00.000Z', appeal: null,
+    id: 'decision-one',
+    targetKind: 'post',
+    targetId: 'target-one',
+    action: 'takedown',
+    statement: 'Original decision.',
+    decidedAt: '2026-10-01T09:30:00.000Z',
+    appealDeadline: '2027-04-02T09:30:00.000Z',
+    appeal: null,
   },
   target: { id: 'target-one', authorId: 'author', threadId: 'thread-one', text: 'Current target', href: '/thread-one' },
 } satisfies DecisionPage;
@@ -47,11 +60,24 @@ async function mount(source: DecisionPage, onAppeal: DecisionAppealAction, isCur
   host = document.createElement('div');
   document.body.append(host);
   root = createRoot(host);
-  await act(async () => root!.render(createElement(DecisionPageView, {
-    page: source, onAppeal, onRefresh: async () => source, isCurrent, now: Date.parse('2026-11-01'),
-  })));
+  await act(async () =>
+    root!.render(
+      createElement(DecisionPageView, {
+        page: source,
+        onAppeal,
+        onRefresh: async () => source,
+        isCurrent,
+        now: Date.parse('2026-11-01'),
+      }),
+    ),
+  );
 }
-async function unmount() { if (root) await act(async () => root!.unmount()); host?.remove(); root = null; host = null; }
+async function unmount() {
+  if (root) await act(async () => root!.unmount());
+  host?.remove();
+  root = null;
+  host = null;
+}
 function button(label: string) {
   return [...host!.querySelectorAll<HTMLButtonElement>('button')].find((item) => item.textContent?.trim() === label)!;
 }
@@ -77,12 +103,21 @@ async function enterStatement() {
   });
 }
 afterEach(unmount);
-afterAll(async () => { await browser.happyDOM.close(); for (const [key, descriptor] of saved) if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); });
+afterAll(async () => {
+  await browser.happyDOM.close();
+  for (const [key, descriptor] of saved)
+    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+    else Reflect.deleteProperty(globalThis, key);
+});
 
 test('a stale completion stays on the caller; an exact keyboard retry focuses its pending summary', async () => {
   const stale = deferred<Awaited<ReturnType<DecisionAppealAction>>>();
   let current = true;
-  await mount(page, () => stale.promise, () => current);
+  await mount(
+    page,
+    () => stale.promise,
+    () => current,
+  );
   await enterStatement();
   await activate(button(m.decision_appeal_submit()));
   current = false;
@@ -90,7 +125,8 @@ test('a stale completion stays on the caller; an exact keyboard retry focuses it
     stale.resolve({ state: 'pending', decision: pending(page).decision });
     await stale.promise;
   });
-  expect(host!.querySelector('form')).not.toBeNull(); expect(host!.querySelector('[tabindex="-1"]')).toBeNull();
+  expect(host!.querySelector('form')).not.toBeNull();
+  expect(host!.querySelector('[tabindex="-1"]')).toBeNull();
   await unmount();
 
   const commands: Parameters<DecisionAppealAction>[0][] = [];
@@ -102,7 +138,9 @@ test('a stale completion stays on the caller; an exact keyboard retry focuses it
   await enterStatement();
   const submit = button(m.decision_appeal_submit());
   await activate(submit);
-  expect(document.activeElement).toBe(submit); expect(host!.textContent).toContain(m.decision_appeal_uncertain());
+  expect(document.activeElement).toBe(submit);
+  expect(host!.textContent).toContain(m.decision_appeal_uncertain());
   await activate(button(m.decision_retry_same()));
-  expect(commands[1]).toEqual(commands[0]); expect(document.activeElement).toBe(summary());
+  expect(commands[1]).toEqual(commands[0]);
+  expect(document.activeElement).toBe(summary());
 });
