@@ -3,7 +3,17 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { withConnection } from '../../src/database/pool.ts';
-import { checkGrowth, openGrowthDatabase, type GrowthCheck, type GrowthDatabase } from './growth.ts';
+import {
+  capture,
+  checkGrowth,
+  costOf,
+  openGrowthDatabase,
+  placement,
+  seed,
+  type GrowthCheck,
+  type GrowthDatabase,
+  type Population,
+} from './growth.ts';
 import {
   COUNTED_UNIT_LIMITS,
   countedNames,
@@ -268,3 +278,170 @@ test('oversized counted configuration is rejected before grow, warmup or operati
   );
   expect(calls).toEqual([]);
 });
+
+const nativeSchema = 'growth_counted_native';
+const recordsTable = `${nativeSchema}.records`;
+const historyTable = `${nativeSchema}.history`;
+const neighborhoodIds = [1, 2, 3, 4];
+const keepSlots = 2;
+const ordinalsPerScale = 32;
+
+function presentRemovedRows(plans: readonly unknown[]): number | undefined {
+  let removed: number | undefined;
+  const visit = (node: Record<string, unknown>) => {
+    const loops = typeof node['Actual Loops'] === 'number' ? node['Actual Loops'] : 1;
+    for (const field of ['Rows Removed by Filter', 'Rows Removed by Index Recheck'] as const) {
+      const value = node[field];
+      if (typeof value === 'number') removed = (removed ?? 0) + value * loops;
+    }
+    if (Array.isArray(node.Plans)) for (const child of node.Plans) visit(child as Record<string, unknown>);
+  };
+  for (const document of plans) {
+    const entries = Array.isArray(document) ? document : [document];
+    for (const entry of entries) {
+      if (typeof entry === 'object' && entry !== null && 'Plan' in entry)
+        visit((entry as { Plan: Record<string, unknown> }).Plan);
+    }
+  }
+  return removed;
+}
+
+async function runWithPoller(pool: GrowthDatabase['pool'], work: () => Promise<void>): Promise<void> {
+  let pending = Promise.resolve();
+  const timer = setInterval(() => {
+    pending = pending
+      .then(() => pool.query('SELECT 1'))
+      .then(
+        () => {},
+        () => {},
+      );
+  }, 5);
+  try {
+    await work();
+  } finally {
+    clearInterval(timer);
+    await pending;
+  }
+}
+
+test('counted-unit-ceilings-at-three-scales', async () => {
+  const database = db!;
+  await database.admin.query(`DROP SCHEMA IF EXISTS ${nativeSchema} CASCADE`);
+  try {
+    await database.admin.query(`CREATE SCHEMA ${nativeSchema}`);
+    await database.admin.query(`CREATE TABLE ${recordsTable} (
+      route integer NOT NULL,
+      id integer NOT NULL,
+      payload jsonb NOT NULL,
+      PRIMARY KEY (route, id)
+    )`);
+    await database.admin.query(`CREATE TABLE ${historyTable} (
+      route integer NOT NULL,
+      id integer NOT NULL,
+      payload jsonb NOT NULL,
+      PRIMARY KEY (route, id)
+    )`);
+    const recordsPopulation: Population = {
+      name: 'counted-native-records',
+      hotPartition: 41,
+      rows: ({ ordinal, route }) => ({
+        [recordsTable]: [{ route, id: ordinal + 100, payload: { group: 'unrelated' } }],
+      }),
+    };
+    const historyPopulation: Population = {
+      name: 'counted-native-history',
+      hotPartition: 77,
+      rows: ({ ordinal, route }) => ({
+        [historyTable]: [{ route, id: ordinal + 1, payload: { group: 'history' } }],
+      }),
+    };
+    const selected = placement(recordsPopulation, 0);
+    await database.admin.query(
+      `INSERT INTO ${recordsTable} (route, id, payload) VALUES
+        ($1, 0, $2), ($1, 1, $3), ($1, 2, $3), ($1, 3, $4), ($1, 4, $4)`,
+      [selected.route, { group: 'anchor' }, { group: 'keep' }, { group: 'drop' }],
+    );
+
+    const operation: GrowthCheck['operation'] = (growthDb) =>
+      withConnection(growthDb.pool, async (client) => {
+        await client.query(`SELECT payload FROM ${recordsTable} WHERE route = $1 AND id = 0`, [selected.route]);
+        let slots = 0;
+        for (const id of neighborhoodIds) {
+          const filtered = await client.query(
+            `SELECT id FROM ${recordsTable} WHERE route = $1 AND id = $2 AND payload->>'group' = 'keep'`,
+            [selected.route, id],
+          );
+          slots += filtered.rowCount ?? 0;
+        }
+        await client.query('SELECT pg_sleep(0.02)');
+        return { slots };
+      });
+
+    const poller = database.openPool({ max: 2 });
+    await poller.query('SELECT 1');
+    let report: Awaited<ReturnType<typeof checkGrowth>>;
+    await runWithPoller(poller, async () => {
+      report = await checkGrowth(database, {
+        name: 'counted-unit-ceilings-at-three-scales',
+        rule: 'step',
+        bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+        byteBounds: { requestBytes: 'constant', responseBytes: 'constant' },
+        includeBackends: true,
+        repetitions: 3,
+        warmups: 1,
+        counted: {
+          read: (value) => ({ slots: (value as { slots: number }).slots }),
+          limits: { slots: keepSlots, connections: 1 },
+          bounds: { slots: 'constant', connections: 'constant' },
+        },
+        grow: async (growthDb, scale, previous) => {
+          const range = { from: previous * ordinalsPerScale, to: scale * ordinalsPerScale };
+          await seed({ pool: growthDb.pool, admin: growthDb.admin }, recordsPopulation, range);
+          await seed({ pool: growthDb.pool, admin: growthDb.admin }, historyPopulation, range);
+        },
+        operation,
+      });
+    });
+
+    expect(report!.samples.map(({ scale }) => scale)).toEqual([1, 8, 64]);
+    for (const sample of report!.samples) {
+      expect(sample.counted?.slots).toBeDefined();
+      expect(sample.counted?.connections).toBeDefined();
+      expect(sample.counted!.slots.repetitions).toHaveLength(3);
+      expect(sample.counted!.connections.repetitions).toHaveLength(3);
+      expect(sample.backendRepetitions).toHaveLength(3);
+      for (const [index, cost] of sample.repetitions.entries()) {
+        const repetition = index + 1;
+        expect(cost.rows, `examined rows at scale ${sample.scale} repetition ${repetition}`).toBeGreaterThan(
+          sample.counted!.slots.repetitions[index]!,
+        );
+        expect(cost.blocks, `shared blocks at scale ${sample.scale} repetition ${repetition}`).toBeGreaterThan(0);
+        expect(cost.sharedHit + cost.sharedRead).toBe(cost.blocks);
+        expect(cost.statements, `statements at scale ${sample.scale} repetition ${repetition}`).toBeGreaterThan(0);
+        expect(cost.requestBytes, `request bytes at scale ${sample.scale} repetition ${repetition}`).toBeGreaterThan(0);
+        expect(cost.responseBytes, `response bytes at scale ${sample.scale} repetition ${repetition}`).toBeGreaterThan(
+          0,
+        );
+        expect(sample.counted!.slots.repetitions[index]).toBe(keepSlots);
+        expect(sample.counted!.connections.repetitions[index]).toBe(1);
+        expect(sample.backendRepetitions[index]).toHaveLength(1);
+        expect(
+          cost.backgroundStatements,
+          `background statements at scale ${sample.scale} repetition ${repetition}`,
+        ).toBeGreaterThan(0);
+      }
+    }
+
+    const measured = await capture(database, () => operation(database, 64, 0), { includeBackends: true });
+    const nativeCost = costOf(measured.capture);
+    const removed = presentRemovedRows(measured.capture.plans);
+    expect(removed, 'Rows Removed by Filter or Index Recheck is present on the native plan').toBeGreaterThan(0);
+    expect(nativeCost.rows).toBeGreaterThan(keepSlots);
+    expect(nativeCost.blocks).toBeGreaterThan(0);
+    expect(nativeCost.requestBytes).toBeGreaterThan(0);
+    expect(nativeCost.responseBytes).toBeGreaterThan(0);
+    expect(new Set(measured.capture.statementBackends).size).toBe(1);
+  } finally {
+    await database.admin.query(`DROP SCHEMA IF EXISTS ${nativeSchema} CASCADE`);
+  }
+}, 60_000);

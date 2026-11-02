@@ -109,6 +109,8 @@ are all not applicable: this is test support with no list surface.
 Reserve `counted-unit-ceilings-at-three-scales` for `growth-counters.test.ts`: examined/removed rows, shared blocks,
 statements, request/response bytes, connections per backend and native counted units must be captured, attributed
 and asserted at every scale. Independent background work is reported separately, with its own bounded statements.
+Decision: native engine units come from harness Cost on every scale and repetition; `connections` and `slots` are the
+declared counted ceilings; a plan node without `Rows Removed by *` is omitted from the removed total.
 
 **Native acceptance command:**
 
@@ -116,9 +118,10 @@ and asserted at every scale. Independent background work is reported separately,
 bun run --cwd services/kernel check test/support/growth.test.ts test/support/growth-counters.test.ts
 ```
 
-**Stage:** implementation exposed for the existing harness API only; the complete capability has no recorded
-user-case acceptance or promotion. `growth-counters.test.ts` is absent, so its reserved scenario is not yet
-specified red or driver registered. Existing supporting suites are inventoried below, not treated as its substitute.
+**Stage:** implementation exposed for the existing harness API and the reserved
+`counted-unit-ceilings-at-three-scales` scenario in `growth-counters.test.ts`. The complete capability has no
+recorded user-case acceptance or promotion. A file's presence is not a pass; native acceptance remains the command
+above at a recorded revision. Existing supporting suites are inventoried below, not treated as its substitute.
 
 ## hot-path-bounds
 
