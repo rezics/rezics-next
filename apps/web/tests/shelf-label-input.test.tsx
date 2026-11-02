@@ -49,8 +49,7 @@ test('assign and unassign label search keeps raw drafts, validates normalized pr
   mock.module('../src/library/labels-actions', () => ({
     readSubjectLabelPage: ({ data }: { data: { query: string; cursor?: string } }) => {
       reads.push(data);
-      if (defer)
-        return new Promise((resolve) => pending.push({ query: data.query, viewer, resolve }));
+      if (defer) return new Promise((resolve) => pending.push({ query: data.query, viewer, resolve }));
       return Promise.resolve(page(data.query, viewer));
     },
   }));
@@ -101,7 +100,9 @@ test('assign and unassign label search keeps raw drafts, validates normalized pr
     return host.querySelector('input')!;
   };
   const open = async () => {
-    await act(async () => host.querySelector('button')!.dispatchEvent(new window.MouseEvent('click', { bubbles: true })));
+    await act(async () =>
+      host.querySelector('button')!.dispatchEvent(new window.MouseEvent('click', { bubbles: true })),
+    );
   };
   const correction = (input: HTMLInputElement) => {
     const id = input.getAttribute('aria-describedby');
@@ -123,7 +124,9 @@ test('assign and unassign label search keeps raw drafts, validates normalized pr
       expect(reads.at(-1)).toEqual({ query: 'é x' });
       expect(input.value).toBe(raw);
 
-      await act(async () => host.querySelector('[role="checkbox"]')!.dispatchEvent(new window.MouseEvent('click', { bubbles: true })));
+      await act(async () =>
+        host.querySelector('[role="checkbox"]')!.dispatchEvent(new window.MouseEvent('click', { bubbles: true })),
+      );
       const beforeInvalid = reads.length;
       for (const invalid of ['😀'.repeat(101), 'has\u0001control', 'lone\ud800surrogate']) {
         const draft = await edit(invalid);
