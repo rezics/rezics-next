@@ -18,7 +18,7 @@ export function updateLanguagePreferences(current: readonly string[], action: La
   if (action.type === 'add') {
     if (
       current.length >= MAX_LANGUAGE_PREFERENCES ||
-      !locales.includes(action.tag) ||
+      !locales.some((locale) => locale === action.tag) ||
       current.some((tag) => tag.toLowerCase() === action.tag.toLowerCase())
     )
       return [...current];
