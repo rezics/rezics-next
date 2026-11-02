@@ -149,7 +149,9 @@ test('replacing an injected Realm reader at the same locale/sort hides its windo
     expect(host.querySelector('[data-consumer="second"]')!.textContent).not.toContain('Shared Realm');
     expect(anonymousReads.length).toBeGreaterThan(0);
     await act(async () =>
-      anonymousReads.forEach((read) => read.resolve(ready('Shared Realm', '01a1a000-0000-7000-8000-000000000005', null))),
+      anonymousReads.forEach((read) =>
+        read.resolve(ready('Shared Realm', '01a1a000-0000-7000-8000-000000000005', null)),
+      ),
     );
     expect(host.querySelector('[data-consumer="second"]')!.textContent).toContain('Shared Realm');
     expect(cancelQueries).not.toHaveBeenCalled();

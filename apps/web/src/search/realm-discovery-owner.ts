@@ -14,16 +14,13 @@ export type RealmDiscoveryOwner = Readonly<{
   client: QueryClient;
 }>;
 
-export function sameRealmDiscoveryOwner(
-  left: RealmDiscoveryOwner | undefined,
-  right: RealmDiscoveryOwner,
-): boolean {
+export function sameRealmDiscoveryOwner(left: RealmDiscoveryOwner | undefined, right: RealmDiscoveryOwner): boolean {
   return Boolean(
     left &&
-      left.locale === right.locale &&
-      left.sort === right.sort &&
-      left.read === right.read &&
-      left.client === right.client,
+    left.locale === right.locale &&
+    left.sort === right.sort &&
+    left.read === right.read &&
+    left.client === right.client,
   );
 }
 

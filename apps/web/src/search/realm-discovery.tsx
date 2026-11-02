@@ -7,11 +7,7 @@ import {
   type RealmDiscoveryReader,
   type RealmDiscoveryWindow,
 } from './realm-discovery-loader';
-import {
-  realmDiscoveryOwnedWindow,
-  sameRealmDiscoveryOwner,
-  type RealmDiscoveryOwner,
-} from './realm-discovery-owner';
+import { realmDiscoveryOwnedWindow, sameRealmDiscoveryOwner, type RealmDiscoveryOwner } from './realm-discovery-owner';
 import { createRealmPageProgress } from './realm-page-progress';
 
 /** Search owns request/continuation state; Content owns the only card renderer and GET adapter. */
@@ -39,15 +35,14 @@ function SearchRealmDiscoveryPage({
   const client = useQueryClient();
   const owner = useMemo<RealmDiscoveryOwner>(() => ({ locale, sort, read, client }), [locale, sort, read, client]);
   const initialState = useRef(initial).current;
-  const [snapshot, setSnapshot] = useState<(RealmDiscoveryWindow & { owner: RealmDiscoveryOwner })>();
+  const [snapshot, setSnapshot] = useState<RealmDiscoveryWindow & { owner: RealmDiscoveryOwner }>();
   const snapshotRef = useRef(snapshot);
   snapshotRef.current = snapshot;
   const active = useRef<ReturnType<typeof createRealmPageProgress> | null>(null);
   const window = realmDiscoveryOwnedWindow(snapshot, owner, initialState);
 
   useEffect(() => {
-    const replacing =
-      snapshotRef.current !== undefined && !sameRealmDiscoveryOwner(snapshotRef.current.owner, owner);
+    const replacing = snapshotRef.current !== undefined && !sameRealmDiscoveryOwner(snapshotRef.current.owner, owner);
     const page = createRealmPageProgress({
       ...(initialState.kind !== 'loading' && !replacing ? { initial: initialState } : {}),
       read: async ({ cursor }) => client.fetchQuery(realmDiscoveryQueryOptions(locale, sort, cursor, read)),
