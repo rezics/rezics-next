@@ -288,7 +288,12 @@ export function RecentHistoryView(props: NativeViewProps | (RecentHistory & { hi
   const visibleEntries = entries.slice(0, history ? 100 : 5);
   const focus = useHistoryRemovalFocus(entries, visibleEntries, announce);
   return (
-    <section ref={focus.regionRef} tabIndex={-1} className="space-y-2 px-3 py-3" aria-label={history ? m.search_history() : m.search_recent()}>
+    <section
+      ref={focus.regionRef}
+      tabIndex={-1}
+      className="space-y-2 px-3 py-3"
+      aria-label={history ? m.search_history() : m.search_recent()}
+    >
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold">{history ? m.search_history() : m.search_recent()}</h2>
         {history ? (
@@ -326,7 +331,9 @@ export function RecentHistoryView(props: NativeViewProps | (RecentHistory & { hi
       {!entries.length && status !== 'loading' && (
         <p className="text-sm text-muted-foreground">{m.search_history_empty()}</p>
       )}
-      <p className="sr-only" role="status" aria-live="polite">{announcement}</p>
+      <p className="sr-only" role="status" aria-live="polite">
+        {announcement}
+      </p>
       <ul ref={focus.listRef}>
         {visibleEntries.map((item, index) => {
           const name =

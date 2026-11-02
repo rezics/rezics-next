@@ -16,10 +16,29 @@ test('history removals and clear keep focus useful, announce completion, and lea
   const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
   const window = new Window({ url: 'https://site.invalid/en' });
   const globals = [
-    'window', 'document', 'navigator', 'HTMLElement', 'HTMLButtonElement', 'HTMLInputElement', 'Element', 'Node',
-    'Document', 'DocumentFragment', 'ShadowRoot', 'MutationObserver', 'ResizeObserver', 'Event', 'MouseEvent',
-    'PointerEvent', 'KeyboardEvent', 'FocusEvent', 'CSS', 'getComputedStyle', 'requestAnimationFrame',
-    'cancelAnimationFrame', 'IS_REACT_ACT_ENVIRONMENT',
+    'window',
+    'document',
+    'navigator',
+    'HTMLElement',
+    'HTMLButtonElement',
+    'HTMLInputElement',
+    'Element',
+    'Node',
+    'Document',
+    'DocumentFragment',
+    'ShadowRoot',
+    'MutationObserver',
+    'ResizeObserver',
+    'Event',
+    'MouseEvent',
+    'PointerEvent',
+    'KeyboardEvent',
+    'FocusEvent',
+    'CSS',
+    'getComputedStyle',
+    'requestAnimationFrame',
+    'cancelAnimationFrame',
+    'IS_REACT_ACT_ENVIRONMENT',
   ];
   const saved = new Map(globals.map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const key of globals) {
@@ -67,23 +86,40 @@ test('history removals and clear keep focus useful, announce completion, and lea
 
   try {
     await act(async () => root.render(createElement(Harness)));
-    await act(async () => { remove('Beta').focus(); remove('Beta').click(); });
+    await act(async () => {
+      remove('Beta').focus();
+      remove('Beta').click();
+    });
     expect(active()).toBe(remove('Gamma'));
     expect(status()).toBe(m.search_history_management_removed({ name: 'Beta' }));
-    await act(async () => { remove('Gamma').focus(); remove('Gamma').click(); });
+    await act(async () => {
+      remove('Gamma').focus();
+      remove('Gamma').click();
+    });
     expect(active()).toBe(remove('Alpha'));
-    await act(async () => { remove('Alpha').focus(); remove('Alpha').click(); });
+    await act(async () => {
+      remove('Alpha').focus();
+      remove('Alpha').click();
+    });
     expect(active()).toBe(host.querySelector('section'));
 
     await act(async () => update([entry('a', 'Alpha')]));
-    const clear = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === m.search_history_clear())!;
-    await act(async () => { clear.focus(); clear.click(); });
+    const clear = Array.from(host.querySelectorAll('button')).find(
+      (button) => button.textContent === m.search_history_clear(),
+    )!;
+    await act(async () => {
+      clear.focus();
+      clear.click();
+    });
     expect(active()).toBe(host.querySelector('section'));
     expect(status()).toBe(m.search_history_management_cleared());
 
     await act(async () => update([entry('a', 'Alpha'), entry('b', 'Beta')]));
     preserveFocus = true;
-    await act(async () => { remove('Alpha').focus(); remove('Alpha').click(); });
+    await act(async () => {
+      remove('Alpha').focus();
+      remove('Alpha').click();
+    });
     expect(active()).toBe(external);
     preserveFocus = false;
     await act(async () => update([entry('a', 'Alpha'), entry('b', 'Beta')]));

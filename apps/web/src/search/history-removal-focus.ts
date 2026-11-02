@@ -33,7 +33,8 @@ export function useHistoryRemovalFocus(
     const request = pending.current;
     if (!request) return;
     const remaining = new Set(entries.map(({ id }) => id));
-    const completed = request.kind === 'remove' ? !remaining.has(request.id) : request.ids.every((id) => !remaining.has(id));
+    const completed =
+      request.kind === 'remove' ? !remaining.has(request.id) : request.ids.every((id) => !remaining.has(id));
     if (!completed) return;
     pending.current = null;
 
@@ -42,7 +43,7 @@ export function useHistoryRemovalFocus(
       const target =
         request.kind === 'clear'
           ? regionRef.current
-          : action(listRef.current, request.next) ?? action(listRef.current, request.previous) ?? regionRef.current;
+          : (action(listRef.current, request.next) ?? action(listRef.current, request.previous) ?? regionRef.current);
       target?.focus();
     }
     onComplete(request.message);
