@@ -70,6 +70,7 @@ afterAll(async () => {
 });
 
 async function mount(initial: RenameSource) {
+  console.log('mount:start');
   let replaceSource!: (next: RenameSource) => void;
   function Rename() {
     const [currentSource, setSource] = useState(initial);
@@ -87,6 +88,7 @@ async function mount(initial: RenameSource) {
   document.body.append(host);
   const root = createRoot(host);
   await flush(() => root.render(<RouterProvider router={router} />));
+  console.log('mount:rendered');
   close = async () => {
     await flush(() => root.unmount());
     host.remove();
@@ -103,18 +105,22 @@ const confirm = (host: HTMLElement) => flush(() => host.querySelector<HTMLInputE
 const submit = (host: HTMLElement) =>
   flush(() => host.querySelector('form')!.dispatchEvent(new dom.Event('submit', { bubbles: true, cancelable: true })));
 async function startNavigation(router: ReturnType<typeof createRouter>, to: string) {
+  console.log('navigate:start', to);
   let navigation!: Promise<unknown>;
   await act(async () => {
     navigation = router.navigate({ to } as never);
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
+  console.log('navigate:started', to);
   return navigation;
 }
 
 test('clean navigation is quiet; Stay preserves the proposed handle and confirmation', async () => {
+  console.log('test:clean');
   const ui = await mount(source());
   const clean = await startNavigation(ui.router, '/next');
   await flush(() => clean);
+  console.log('clean:done');
   const back = await startNavigation(ui.router, '/account/rename');
   await flush(() => back);
   await setHandle(ui.host, 'after');
