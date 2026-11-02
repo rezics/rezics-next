@@ -1031,6 +1031,9 @@ the train.
 
 ## Commands and managers
 
+The CLI validates worker command arguments before runtime recovery or command recording. Invalid arguments return usage
+feedback without settling unrelated workers.
+
 ### Roles and delegation
 
 The supermanager sets direction and the managers own the work. This applies to every supermanager and every Goal.

@@ -2,6 +2,7 @@
 import { checkSettings, createRuntime, settingsFile, type Runtime } from './config.ts';
 import { runIntegration, type IntegrationRuntime, recordManagerCommand } from './integration-cli.ts';
 import { runWorkerCommand } from './worker-commands.ts';
+import { parseWorkerCommandArguments, type ParsedWorkerCommandArguments } from './command-arguments.ts';
 import { installPrivate } from './shared-dependencies.ts';
 import { runPublicationCommand } from './publication-command.ts';
 
@@ -75,7 +76,9 @@ export async function run(
   // Only the train itself and land drain the train in this process; everything else, the host included, hands it
   // off, so a promotion never holds a command or the manager socket.
   const trainMode = ['land', 'train'].includes(command) ? 'inline' : 'detached';
+  let parsedWorkerArguments: ParsedWorkerCommandArguments | undefined;
   try {
+    if (workerCommands.includes(command)) parsedWorkerArguments = parseWorkerCommandArguments(command, args);
     runtime = await factory({ trainMode });
     // A command settles only orphans whose worker has exited; the host adopts the ones still running. The train and
     // the inbox leave that to the host's sweep: every settle spawns a train, and each spawned train swept the whole
@@ -89,12 +92,11 @@ export async function run(
         if (!('tasks' in runtime)) throw new Error('Worker commands require the shared runtime');
         if (process.env.GOAL_TASK_ID && process.env.GOAL_ATTEMPT)
           runtime.store.assertCurrent({ taskId: process.env.GOAL_TASK_ID, attempt: Number(process.env.GOAL_ATTEMPT) });
-        const [taskId, target] = args;
-        if (!taskId || !target || args.length !== 2) throw new Error('usage: retarget <task> stabilize');
-        runtime.tasks.retarget(taskId, target);
+        if (parsedWorkerArguments?.command !== 'retarget') throw new Error('Worker command arguments were not parsed');
+        runtime.tasks.retarget(parsedWorkerArguments.taskId, parsedWorkerArguments.target);
         return 0;
       }
-      return await runWorkerCommand(command, args, { runtime });
+      return await runWorkerCommand(command, args, { runtime, parsedArguments: parsedWorkerArguments });
     }
     if (command === 'publication') {
       if (!('settings' in runtime)) throw new Error('Publication commands require the configured Goal runtime');

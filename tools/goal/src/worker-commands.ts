@@ -1,5 +1,5 @@
 import { agentAdapter } from './agents.ts';
-import { mkdirSync, statSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadSettings, createRuntime, type Runtime } from './config.ts';
 import { openDb } from './db.ts';
@@ -17,6 +17,7 @@ import { retryWait } from './watchdog.ts';
 import { authenticatedCallingManager } from './integration-cli.ts';
 import { authenticatedManager } from './priority-authority.ts';
 import { listOpenToolIncidents, toolIncidentForRetry } from './tool-incidents.ts';
+import { parseWorkerCommandArguments, type ParsedWorkerCommandArguments } from './command-arguments.ts';
 
 export type WorkerCommandOptions = {
   runtime?: Runtime;
@@ -27,6 +28,7 @@ export type WorkerCommandOptions = {
   inbox?: ManagerInbox;
   print?: (value: string) => void;
   env?: NodeJS.ProcessEnv;
+  parsedArguments?: ParsedWorkerCommandArguments;
 };
 /** Tests may inject individual services. Production commands always use the shared runtime. */
 export async function runWorkerCommand(
@@ -34,6 +36,19 @@ export async function runWorkerCommand(
   argv: string[],
   options: WorkerCommandOptions = {},
 ): Promise<number> {
+  let parsedArguments = options.parsedArguments;
+  if (!parsedArguments) {
+    try {
+      parsedArguments = parseWorkerCommandArguments(command, argv);
+    } catch (error) {
+      console.error(error instanceof Error ? `${error.name}: ${error.message}` : String(error));
+      return 1;
+    }
+  }
+  if (parsedArguments.command !== command) {
+    console.error(`Error: parsed worker arguments do not match ${command}`);
+    return 1;
+  }
   const settings =
     options.runtime?.settings ??
     options.settings ??
@@ -58,29 +73,24 @@ export async function runWorkerCommand(
     if (!['status', 'attempts', 'report'].includes(command) && env.GOAL_TASK_ID && env.GOAL_ATTEMPT) {
       store.assertCurrent({ taskId: env.GOAL_TASK_ID, attempt: Number(env.GOAL_ATTEMPT) });
     }
-    const [arg] = argv;
-    if (command === 'dispatch') {
-      if (!arg || argv.length !== 1) throw new Error('usage: dispatch <brief>');
-      const task = tasks.dispatch(arg, priorityActor);
+    if (parsedArguments.command === 'dispatch') {
+      const task = tasks.dispatch(parsedArguments.brief, priorityActor);
       print(task.id);
       if (task.state === 'held') return 0;
       // The first start only: if the host already started the task, this command leaves it alone.
       await job.start(task.id, { expectedAttempt: 0 });
-    } else if (command === 'amend') {
-      let brief: string | undefined;
-      let expectedAttempt: number | undefined;
-      for (let index = 1; index < argv.length; index += 2) {
-        const flag = argv[index],
-          value = argv[index + 1];
-        if (flag === '--brief' && value && brief === undefined) brief = value;
-        else if (flag === '--expected-attempt' && value === '0' && expectedAttempt === undefined) expectedAttempt = 0;
-        else throw new Error('usage: amend <task> --expected-attempt 0 --brief <file>');
-      }
-      if (!arg || expectedAttempt !== 0 || !brief)
-        throw new Error('usage: amend <task> --expected-attempt 0 --brief <file>');
-      print(JSON.stringify(tasks.amend(arg, { expectedAttempt, brief }, authenticatedManager(store.db, env) ?? null)));
-    } else if (command === 'status') {
-      if (argv.length > 1) throw new Error('usage: status [task]');
+    } else if (parsedArguments.command === 'amend') {
+      print(
+        JSON.stringify(
+          tasks.amend(
+            parsedArguments.taskId,
+            { expectedAttempt: parsedArguments.expectedAttempt, brief: parsedArguments.brief },
+            authenticatedManager(store.db, env) ?? null,
+          ),
+        ),
+      );
+    } else if (parsedArguments.command === 'status') {
+      const arg = parsedArguments.taskId;
       const show = (task: Task) => {
         const intent = task.currentAttempt
           ? store.retryIntent({ taskId: task.id, attempt: task.currentAttempt })
@@ -129,27 +139,17 @@ export async function runWorkerCommand(
           2,
         ),
       );
-    } else if (command === 'attempts') {
-      if (argv.some((a) => a !== '--json')) throw new Error('usage: attempts [--json]');
+    } else if (parsedArguments.command === 'attempts') {
       print(
-        argv.includes('--json')
+        parsedArguments.json
           ? JSON.stringify(store.records(), null, 2)
           : store
               .attempts()
               .map((a) => `${a.taskId} ${a.attempt} ${a.state} ${a.profile.model}/${a.profile.effort} ${a.pool}`)
               .join('\n'),
       );
-    } else if (command === 'report') {
-      const flow = argv.includes('--flow');
-      let since: string | undefined;
-      const accepted = new Set(['--json', '--flow', '--since']);
-      for (let i = 0; i < argv.length; i++) {
-        if (!accepted.has(argv[i]!)) throw new Error('usage: report [--flow] [--since <time>] [--json]');
-        if (argv[i] === '--since') {
-          since = argv[++i];
-          if (!since || !Number.isFinite(Date.parse(since))) throw new Error('--since requires a valid time');
-        }
-      }
+    } else if (parsedArguments.command === 'report') {
+      const { flow, since, json } = parsedArguments;
       if (flow) {
         const now = new Date();
         const metrics = lifecycleMetrics(store.db, now);
@@ -157,7 +157,7 @@ export async function runWorkerCommand(
           ...flowReport(readFlow(store.db, since), readFlowTasks(store.db), now.getTime()),
           lifecycle: metrics,
         };
-        if (argv.includes('--json')) print(JSON.stringify(result, null, 2));
+        if (json) print(JSON.stringify(result, null, 2));
         else
           print(
             [
@@ -174,7 +174,7 @@ export async function runWorkerCommand(
         return 0;
       }
       const result = report(store.records());
-      if (argv.includes('--json')) print(JSON.stringify(result, null, 2));
+      if (json) print(JSON.stringify(result, null, 2));
       else {
         const rate = (value: number | null) => (value === null ? 'n/a' : `${(value * 100).toFixed(1)}%`);
         const duration = (value: number | null) => (value === null ? 'n/a' : `${(value / 60_000).toFixed(1)} min`);
@@ -188,73 +188,28 @@ export async function runWorkerCommand(
           ].join('\n'),
         );
       }
-    } else if (command === 'retry') {
-      if (!arg)
-        throw new Error(
-          'usage: retry <task> [--proof-start | --release-proof] [--expected-attempt <n>] [--brief <file>] [--remove-after <task>] [--fresh-session]',
-        );
-      let brief: string | undefined;
-      let expectedAttempt: number | undefined;
-      const removeAfter: string[] = [];
-      let proofStart = false;
-      let releaseProof = false;
-      let freshSession = false;
-      for (let index = 1; index < argv.length;) {
-        if (argv[index] === '--fresh-session' && !freshSession) {
-          freshSession = true;
-          index++;
-          continue;
-        }
-        if (argv[index] === '--release-proof' && !releaseProof) {
-          releaseProof = true;
-          index++;
-          continue;
-        }
-        if (argv[index] === '--proof-start' && !proofStart) {
-          proofStart = true;
-          index++;
-          continue;
-        }
-        const flag = argv[index],
-          value = argv[index + 1];
-        if (!value) throw new Error(`missing value for ${flag}`);
-        if (flag === '--brief' && brief === undefined) brief = value;
-        else if (
-          flag === '--expected-attempt' &&
-          expectedAttempt === undefined &&
-          /^(0|[1-9]\d*)$/.test(value) &&
-          Number.isSafeInteger(Number(value))
-        )
-          expectedAttempt = Number(value);
-        else if (flag === '--remove-after') removeAfter.push(value);
-        else throw new Error(`invalid retry option: ${flag}`);
-        index += 2;
-      }
-      if (freshSession && (releaseProof || proofStart))
-        throw new Error('--fresh-session applies only to an ordinary retry');
+    } else if (parsedArguments.command === 'retry') {
+      const { taskId, brief, expectedAttempt, removeAfter, proofStart, releaseProof, freshSession } = parsedArguments;
       if (releaseProof) {
-        if (expectedAttempt === undefined || proofStart || brief || removeAfter.length)
-          throw new Error('--release-proof requires only --expected-attempt <current-generation>');
-        print(JSON.stringify(tasks.releaseProof(arg, expectedAttempt, priorityActor)));
+        print(JSON.stringify(tasks.releaseProof(taskId, expectedAttempt!, priorityActor)));
       } else if (
         proofStart ||
         // Generation zero of product work on the integration branch is an ordinary retry, not a proof start.
-        (expectedAttempt === 0 && (removeAfter.length > 0 || !tasks.devProductRetry(arg, brief)))
+        (expectedAttempt === 0 && (removeAfter.length > 0 || !tasks.devProductRetry(taskId, brief)))
       ) {
-        if (expectedAttempt === undefined) throw new Error('--proof-start requires --expected-attempt');
         print(
           JSON.stringify(
-            tasks.queueProofStart(arg, { expectedAttempt, ...(brief ? { brief } : {}), removeAfter }, priorityActor),
+            tasks.queueProofStart(
+              taskId,
+              { expectedAttempt: expectedAttempt!, ...(brief ? { brief } : {}), removeAfter },
+              priorityActor,
+            ),
           ),
         );
       } else {
-        if (removeAfter.length)
-          throw new Error(
-            '--remove-after requires --proof-start with an expected generation (or --expected-attempt 0)',
-          );
         try {
           tasks.queueRetry(
-            arg,
+            taskId,
             {
               ...(brief ? { brief } : {}),
               ...(expectedAttempt === undefined ? {} : { expectedAttempt }),
@@ -267,95 +222,59 @@ export async function runWorkerCommand(
           print(error.message);
         }
       }
-    } else if (command === 'priority') {
-      if (argv[0] === 'grant') {
-        if (!argv[1] || argv.length !== 2) throw new Error('usage: priority grant <task>');
+    } else if (parsedArguments.command === 'priority') {
+      if (parsedArguments.action === 'grant') {
         if (!priorityActor) throw new Error('priority grants require an authenticated manager session');
-        print(JSON.stringify(tasks.grantPriority(argv[1], priorityActor)));
-      } else if (argv[0] === 'revoke') {
-        if (!argv[1] || !argv[2] || argv.length !== 3) throw new Error('usage: priority revoke <task> <grant-id>');
+        print(JSON.stringify(tasks.grantPriority(parsedArguments.taskId, priorityActor)));
+      } else if (parsedArguments.action === 'revoke') {
         if (!priorityActor) throw new Error('priority revocation requires an authenticated manager session');
-        print(JSON.stringify(tasks.revokePriority(argv[1], argv[2], priorityActor)));
+        print(JSON.stringify(tasks.revokePriority(parsedArguments.taskId, parsedArguments.grantId, priorityActor)));
       } else {
-        if (!arg || argv.length !== 2 || !['critical', 'normal'].includes(argv[1]!))
-          throw new Error(
-            'usage: priority <task> critical|normal | priority grant <task> | priority revoke <task> <grant-id>',
-          );
         if (options.runtime && !priorityActor)
           throw new Error('priority changes require an authenticated manager session');
-        tasks.setPriority(arg, argv[1] as 'critical' | 'normal', priorityActor);
+        tasks.setPriority(parsedArguments.taskId, parsedArguments.priority, priorityActor);
       }
-    } else if (command === 'stop' || command === 'cancel' || command === 'consult') {
-      if (!arg || argv.length !== 1) throw new Error(`usage: ${command} <task>`);
-      if (command === 'stop') await tasks.stop(arg);
-      else if (command === 'cancel') await tasks.cancel(arg);
-      else await job.consultTask(arg);
-    } else if (command === 'event') {
-      const [taskId, n, kind, body = '{}'] = argv;
-      if (!taskId || !n || !kind || argv.length > 4 || !Number.isSafeInteger(Number(n)))
-        throw new Error('usage: event <task> <attempt> <kind> [json]');
-      store.event({ taskId, attempt: Number(n) }, kind, JSON.parse(body));
-    } else if (command === 'import-attempt') {
-      if (!arg)
-        throw new Error(
-          'usage: import-attempt <log> (--task <task> | --brief <brief>) --start <ISO> --end <ISO> --pool <pool> --model <model> --effort <effort>',
-        );
-      if (statSync(arg).isDirectory()) {
-        if (argv.length !== 1)
-          throw new Error('capture directories take their metadata from meta.start.json and meta.end.json');
-        print(JSON.stringify(importRunDirectory(tasks, arg), null, 2));
+    } else if (
+      parsedArguments.command === 'stop' ||
+      parsedArguments.command === 'cancel' ||
+      parsedArguments.command === 'consult'
+    ) {
+      if (parsedArguments.command === 'stop') await tasks.stop(parsedArguments.taskId);
+      else if (parsedArguments.command === 'cancel') await tasks.cancel(parsedArguments.taskId);
+      else await job.consultTask(parsedArguments.taskId);
+    } else if (parsedArguments.command === 'event') {
+      store.event(
+        { taskId: parsedArguments.taskId, attempt: parsedArguments.attempt },
+        parsedArguments.kind,
+        parsedArguments.body,
+      );
+    } else if (parsedArguments.command === 'import-attempt') {
+      if (parsedArguments.captureDirectory) {
+        const { path } = parsedArguments;
+        print(JSON.stringify(importRunDirectory(tasks, path), null, 2));
         return 0;
       }
-      const flags: Record<string, string> = {};
-      for (let i = 1; i < argv.length; i += 2) {
-        const name = argv[i],
-          value = argv[i + 1];
-        if (
-          !name?.startsWith('--') ||
-          value === undefined ||
-          ![
-            'task',
-            'brief',
-            'start',
-            'end',
-            'pool',
-            'model',
-            'effort',
-            'baseline',
-            'table-version',
-            'outcome',
-          ].includes(name.slice(2))
-        )
-          throw new Error('invalid import option');
-        flags[name.slice(2)] = value;
-      }
-      for (const name of ['start', 'end', 'pool', 'model', 'effort'])
-        if (!flags[name]) throw new Error(`import requires --${name}`);
-      if ((!flags.task && !flags.brief) || (flags.task && flags.brief))
-        throw new Error('import requires exactly one of --task or --brief');
-      if (flags.outcome && !['passed', 'gate-failed', 'stopped', 'cancelled', 'pending-gate'].includes(flags.outcome))
-        throw new Error('invalid import outcome');
+      const { path, flags } = parsedArguments;
       const pool = settings.pools.find((p) => p.name === flags.pool);
       if (!pool || agentAdapter(pool.cli).canImport === false) throw new Error('unknown worker import pool');
       const profile = {
         cli: pool.cli,
-        model: flags.model!,
-        effort: flags.effort! as Effort,
+        model: flags.model,
+        effort: flags.effort as Effort,
         poolClass: pool.classes[0]!,
       };
-      if (!['low', 'medium', 'high', 'xhigh', 'max'].includes(profile.effort)) throw new Error('invalid effort');
       const taskId = flags.task ?? tasks.dispatch(flags.brief!).id;
       print(
         JSON.stringify(
-          importAttempt(tasks, arg, {
+          importAttempt(tasks, path, {
             taskId,
-            startedAt: flags.start!,
-            endedAt: flags.end!,
+            startedAt: flags.start,
+            endedAt: flags.end,
             profile,
             pool: pool.name,
             ...(flags.outcome ? { outcome: flags.outcome as AttemptRecord['outcome'] } : {}),
-            ...(flags.baseline ? { baseline: JSON.parse(flags.baseline) as Tokens } : {}),
-            ...(flags['table-version'] ? { tableVersion: flags['table-version'] } : {}),
+            ...(flags.baseline ? { baseline: flags.baseline as Tokens } : {}),
+            ...(flags.tableVersion ? { tableVersion: flags.tableVersion } : {}),
           }),
           null,
           2,
