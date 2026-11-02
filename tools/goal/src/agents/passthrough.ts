@@ -22,9 +22,10 @@ export function passthroughAdapter(cli: 'grok' | 'cursor'): AgentAdapter {
     },
     parseEvent(event, hasRollout) {
       if (
-        event.type !== 'result' &&
-        event.result === undefined &&
-        !(event.text !== undefined && event.stopReason !== undefined)
+        event.type === 'error' ||
+        (event.type !== 'result' &&
+          event.result === undefined &&
+          !(event.text !== undefined && event.stopReason !== undefined))
       )
         return null;
       const answer = event.result ?? event.text;
@@ -51,7 +52,11 @@ export function passthroughAdapter(cli: 'grok' | 'cursor'): AgentAdapter {
                 : null;
     },
     isRateLimit(event) {
-      return /usage limit|rate limit|quota exhausted/i.test(String(event.error?.message ?? event.result ?? ''));
+      const text =
+        event.type === 'error'
+          ? (event.error?.message ?? event.message ?? event.result ?? '')
+          : (event.error?.message ?? event.result ?? '');
+      return /usage limit|rate limit|quota exhausted/i.test(String(text));
     },
     matchesEvent(event) {
       return Boolean(
@@ -66,6 +71,8 @@ export function passthroughAdapter(cli: 'grok' | 'cursor'): AgentAdapter {
       return null;
     },
     failure(event) {
+      if (event.type === 'error')
+        return String(event.error?.message ?? event.message ?? event.result ?? 'Agent turn failed');
       return event.type === 'result' && (event.is_error === true || event.error)
         ? String(event.error?.message ?? event.result ?? 'Agent turn failed')
         : null;
