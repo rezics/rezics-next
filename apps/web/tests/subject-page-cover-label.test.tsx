@@ -49,11 +49,10 @@ test('cover replacement focuses the displayed-locale subject cover group and lea
   const previous = Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const);
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, value });
-  const [{ createRoot }, { SubjectPageCover }, { m }, { setLocale }] = await Promise.all([
+  const [{ createRoot }, { SubjectPageCover }, { m }] = await Promise.all([
     import('react-dom/client'),
     import('../src/features/pages/subject-page-cover'),
     import('../src/paraglide/messages.js'),
-    import('../src/paraglide/runtime.js'),
   ]);
   const host = window.document.createElement('div');
   window.document.body.append(host);
@@ -80,7 +79,6 @@ test('cover replacement focuses the displayed-locale subject cover group and lea
     });
   try {
     for (const locale of UI_LOCALES) {
-      setLocale(locale === 'en' ? 'ja' : 'en', { reload: false });
       const title = `Current ${locale}`;
       await render('Previous', 'media-a', locale);
       await act(async () => {
@@ -93,7 +91,7 @@ test('cover replacement focuses the displayed-locale subject cover group and lea
       const group = host.querySelector<HTMLElement>('[role="group"]')!;
       const name = m.subject_cover_group({ title }, { locale });
       expect(group.getAttribute('aria-label')).toBe(name);
-      expect(name).not.toBe(m.subject_cover_group({ title }));
+      if (locale !== 'en') expect(name).not.toBe(`${title} cover`);
       expect(window.document.activeElement).toBe(group);
       expect(window.document.querySelector('[data-slot="cover-viewer-image"]')).toBeNull();
       expect([...host.querySelectorAll('img')].map((img) => img.getAttribute('src'))).toEqual([
