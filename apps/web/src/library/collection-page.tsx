@@ -717,6 +717,11 @@ function CollectionPageLifetime({
     resetEditor(page);
   }
 
+  const draftTextInvalid = () =>
+    collectionTextIssue('title', title) ||
+    collectionTextIssue('description', description) ||
+    members.some((member) => collectionTextIssue('note', member.note));
+
   async function save(event?: FormEvent<HTMLFormElement>, confirmed = false) {
     event?.preventDefault();
     if (!isCurrent('collection.update') || !hydrated || pending || conflict || !editing || !owner) return;
@@ -724,12 +729,7 @@ function CollectionPageLifetime({
     // An uncertain plan already owns its exact operands, sender and credential.
     if (saveIntent.current === null) {
       setTextSubmitted(true);
-      if (
-        collectionTextIssue('title', title) ||
-        collectionTextIssue('description', description) ||
-        members.some((member) => collectionTextIssue('note', member.note))
-      )
-        return;
+      if (draftTextInvalid()) return;
     }
     if (!confirmed && saveIntent.current === null && removalCount > 0) {
       setRemovalConfirmation(true);
