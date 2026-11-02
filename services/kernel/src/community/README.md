@@ -780,6 +780,11 @@ while a reader is in flight. Space viewer reads repeat their own anchor after th
 Publication point/page reads release their source snapshot, then check current publication-head keys and the retained
 lifecycle/binding anchor immediately before disclosure; a stale preparation returns unavailable.
 
+Sitemap final source reads bind both lifecycle versions as well as the exact heads and carried slot, so a
+remove/restore cycle after the last Access check suppresses that in-flight entry. A fresh feed read recomputes
+current anonymous eligibility; restoring a protected Realm or its host cannot publish that family or turn the
+occupied host into a standalone Space. Lifecycle transitions never rewrite generic Search Source entries.
+
 `ContainerBindingSchema`, `ContainerBinding`, `readContainerBinding(client,{realmId,subjectId?,at})` and
 `revalidateContainerBinding(client,expected,at)` are the delivered Semantic data port. Its closed version-1 shape is
 `{schemaVersion:1,realmId,spaceId,contextId,realmHead,spaceHead,realmVersion,spaceVersion,subjectId,publicationId}`.

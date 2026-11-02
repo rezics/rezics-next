@@ -124,6 +124,32 @@ afterAll(async () => {
   await system?.close();
 });
 
+test('removal hides owned public navigation and restoration uses current visibility, including stale restoration replay', async () => {
+  await system.clock.setCommandTime(initial);
+  const listed = async (id: string) => {
+    const response = await system.kernel.handle(new Request('https://content.test/v1/sitemap/realms'));
+    const page = await body<{ items: { id: string }[] }>(response, 200);
+    return page.items.some((item) => item.id === id);
+  };
+  for (const visibility of ['public', 'protected'] as const) {
+    for (const kind of ['space', 'realm'] as const) {
+      const { space, realm } = await create();
+      if (visibility === 'protected')
+        expect((await call(owner(), 'PATCH', `/v1/realms/${realm.realmId}`, { visibility }, realm.headRevisionId)).status).toBe(200);
+      const id = kind === 'space' ? space.spaceId : realm.realmId;
+      expect(await listed(realm.realmId)).toBe(visibility === 'public');
+      expect((await change(owner(), await lifecycle(owner(), kind, id), 'removal')).status).toBe(200);
+      expect(await listed(realm.realmId)).toBe(false);
+      const removed = await lifecycle(owner(), kind, id), key = crypto.randomUUID();
+      expect((await change(owner(), removed, 'restoration', key)).status).toBe(200);
+      expect(await listed(realm.realmId)).toBe(visibility === 'public');
+      expect((await change(owner(), await lifecycle(owner(), kind, id), 'removal')).status).toBe(200);
+      expect((await change(owner(), removed, 'restoration', key)).status).toBe(200);
+      expect(await listed(realm.realmId)).toBe(false);
+    }
+  }
+});
+
 test('native moderator reason, current-role restoration and inclusive 30-day boundary', async () => {
   const { realm } = await create();
   expect((await grantModerator(realm.realmId, moderator())).status).toBe(201);

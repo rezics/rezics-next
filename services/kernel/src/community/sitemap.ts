@@ -157,6 +157,32 @@ function candidatePosition(candidate: Candidate): Position {
   return { route: candidate.route, id: candidate.id };
 }
 
+type RealmSource = Awaited<ReturnType<typeof readRealmHead.run>>;
+type SpaceSource = Awaited<ReturnType<typeof readSpace.run>>;
+
+// Authorization is independently rechecked, but the final source read must also
+// reject a remove/restore cycle committed after that check. Heads alone survive it.
+function sameRealmSource(current: RealmSource, initial: NonNullable<RealmSource>): current is NonNullable<RealmSource> {
+  return (
+    current !== null &&
+    current.head_revision_id === initial.head_revision_id &&
+    current.realm_version === initial.realm_version &&
+    current.space_id === initial.space_id &&
+    current.space_head_revision_id === initial.space_head_revision_id &&
+    current.space_version === initial.space_version &&
+    current.address === initial.address
+  );
+}
+
+function sameSpaceSource(current: SpaceSource, initial: NonNullable<SpaceSource>): current is NonNullable<SpaceSource> {
+  return (
+    current !== null &&
+    current.head_revision_id === initial.head_revision_id &&
+    current.space_version === initial.space_version &&
+    current.address === initial.address
+  );
+}
+
 async function candidates(
   dependencies: CommunitySitemapDependencies,
   feed: Feed,
@@ -201,13 +227,9 @@ async function listedRealm(
     const board = await newestRealmBoard.run(home, candidate);
     const current = await readRealmHead.run(home, params);
     if (
-      !current ||
+      !sameRealmSource(current, initial) ||
       current.revision_created_at === null ||
-      current.space_revision_created_at === null ||
-      current.head_revision_id !== initial.head_revision_id ||
-      current.space_id !== initial.space_id ||
-      current.space_head_revision_id !== initial.space_head_revision_id ||
-      current.address !== initial.address
+      current.space_revision_created_at === null
     )
       return null;
     return {
@@ -245,11 +267,9 @@ async function listedSpace(
     if (!(await check(home))) return null;
     const head = await readSpace.run(home, params);
     if (
-      !head ||
+      !sameSpaceSource(head, initial) ||
       head.address === null ||
-      head.revision_created_at === null ||
-      head.head_revision_id !== initial.head_revision_id ||
-      head.address !== initial.address
+      head.revision_created_at === null
     )
       return null;
     return { id: candidate.id, address: head.address, lastModified: sitemapTimestamp(head.revision_created_at) };

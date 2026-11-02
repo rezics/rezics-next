@@ -2,12 +2,12 @@
 WITH input AS NOT MATERIALIZED (
   SELECT :route::integer AS route, :id::uuid AS id, :at::timestamptz AS at
 ), identity AS MATERIALIZED (
-  SELECT h.route, h.space_id, h.head_revision_id, h.created_at, i.at
+  SELECT h.route, h.space_id, h.head_revision_id, h.lifecycle_version, h.created_at, i.at
   FROM community.space AS h CROSS JOIN input i
   WHERE h.route = i.route AND h.space_id = i.id
     AND h.state = 'active' AND h.created_at <= i.at
 )
-SELECT h.head_revision_id, r.address,
+SELECT h.head_revision_id, h.lifecycle_version::text AS space_version, r.address,
        to_char(r.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS revision_created_at
 FROM identity AS h CROSS JOIN input i
 JOIN community.space_revision AS r

@@ -261,8 +261,8 @@ test('pending, reserved, missing and foreign active address bindings never discl
   expect((await page('spaces')).body.items).toEqual([]);
 });
 
-test('final disclosure rejects host/Realm removal, native head changes, new carried slots and lost anonymous permission after address validation', async () => {
-  for (const change of ['host-removed', 'realm-removed', 'host-head', 'permission'] as const) {
+test('final disclosure rejects host/Realm removal and lifecycle cycles, native head changes, new carried slots and lost anonymous permission after address validation', async () => {
+  for (const change of ['host-removed', 'realm-removed', 'host-cycle', 'realm-cycle', 'host-head', 'permission'] as const) {
     const host = await space(`race-${change}`);
     const carried = await realm(host.id);
     afterAuthorize = async (id, action, count) => {
@@ -277,6 +277,11 @@ test('final disclosure rejects host/Realm removal, native head changes, new carr
           route,
           carried.id,
         ]);
+      if (change === 'host-cycle' || change === 'realm-cycle') {
+        const [table, key, target] = change === 'host-cycle'
+          ? ['space', 'space_id', host.id] : ['realm', 'realm_id', carried.id];
+        await admin.query(`UPDATE community.${table} SET lifecycle_version=lifecycle_version+2 WHERE route=$1 AND ${key}=$2`, [route, target]);
+      }
       if (change === 'host-head') await moveSpaceHead(host, 'unclaimed-private-new-home', '2026-10-02T00:00:00.000Z');
       if (change === 'permission') denied.add(host.id);
     };
@@ -288,6 +293,13 @@ test('final disclosure rejects host/Realm removal, native head changes, new carr
   afterAuthorize = async (id, _action, count) => {
     if (id === standalone.id && count === 2) await realm(standalone.id);
   };
+  expect((await page('spaces')).body.items).toEqual([]);
+  const emptyHost = await space('racing-lifecycle');
+  afterAuthorize = async (id, _action, count) => {
+    if (id === emptyHost.id && count === 2)
+      await admin.query('UPDATE community.space SET lifecycle_version=lifecycle_version+2 WHERE route=$1 AND space_id=$2', [route, id]);
+  };
+  observations.clear();
   expect((await page('spaces')).body.items).toEqual([]);
 });
 

@@ -3,17 +3,18 @@
 WITH input AS NOT MATERIALIZED (
   SELECT :route::integer AS route, :id::uuid AS id, :at::timestamptz AS at
 ), realm AS MATERIALIZED (
-  SELECT h.route, h.realm_id, h.space_id, h.head_revision_id, i.at
+  SELECT h.route, h.realm_id, h.space_id, h.head_revision_id, h.lifecycle_version, i.at
   FROM community.realm h CROSS JOIN input i
   WHERE h.route = i.route AND h.realm_id = i.id
     AND h.state = 'active' AND h.visibility = 'public' AND h.created_at <= i.at
 ), host AS MATERIALIZED (
-  SELECT s.route, s.space_id, s.head_revision_id
+  SELECT s.route, s.space_id, s.head_revision_id, s.lifecycle_version
   FROM realm h CROSS JOIN input i
   JOIN community.space s ON s.route = i.route AND s.space_id = h.space_id
   WHERE s.state = 'active' AND s.created_at <= i.at
 )
 SELECT h.head_revision_id, s.space_id, s.head_revision_id AS space_head_revision_id, sr.address,
+       h.lifecycle_version::text AS realm_version, s.lifecycle_version::text AS space_version,
        to_char(r.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS revision_created_at,
        to_char(sr.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS space_revision_created_at
 FROM realm h CROSS JOIN input i
