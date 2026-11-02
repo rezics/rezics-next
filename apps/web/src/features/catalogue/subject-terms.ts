@@ -70,6 +70,18 @@ export function hasTermsPatch(patch: TermsPatch): boolean {
   return termFields.some((field) => Object.keys(patch[field] ?? {}).length > 0);
 }
 
+/** A draft is dirty only when its patch changes the stored term map. */
+export function hasEffectiveTermsPatch(terms: Terms, drafts: TermsDraft): boolean {
+  const { patch } = termsPatch(terms, drafts);
+  return termFields.some((field) =>
+    Object.entries(patch[field] ?? {}).some(([language, value]) => {
+      const exists = Object.hasOwn(terms[field], language);
+      if (value === null || (field === 'aliases' && Array.isArray(value) && value.length === 0)) return exists;
+      return !exists || JSON.stringify(terms[field][language]) !== JSON.stringify(value);
+    }),
+  );
+}
+
 /** Closed native wire shape; current eligibility and resulting-state validation remain native. */
 export function isTermsCommand(value: TermsCommand): boolean {
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

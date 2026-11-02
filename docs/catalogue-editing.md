@@ -23,6 +23,10 @@ even after discard. The unsaved-language review lists explicit field choices, in
 replacements, and lets the contributor return to each language. Both local reset actions lock during submission,
 uncertain delivery and stale comparison; they never delete stored terms or send a request.
 
+Navigation is dirty only when the effective patch changes stored terms; staying retains every language draft and the
+selected language, and the existing pending-send warning says an unresolved request may finish and is not cancelled by
+leaving.
+
 The session BFF preserves identity, CSRF, concurrency, idempotency and native session headers. Uncertain delivery
 freezes the payload, ETag and key for retry. Stale revisions or conflicting keys require reload, comparison and an
 explicit new confirmation. A successful write is followed by a native read of the same returned ID; only that read

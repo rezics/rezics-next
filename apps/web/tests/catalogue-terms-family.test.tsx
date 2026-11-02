@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { dirname } from 'node:path';
-import { act } from 'react';
+import { act, useEffect, useState } from 'react';
 
 // Authored UNRUN: mounted production interactions and native-shaped call witnesses,
 // not native execution, geometry, SSR privacy or whole-feature acceptance proof.
@@ -19,7 +19,12 @@ test('independent Terms forms retain stable associations, multilingual drafts an
     HTMLTextAreaElement: window.HTMLTextAreaElement,
     Element: window.Element,
     Node: window.Node,
+    MutationObserver: window.MutationObserver,
+    ResizeObserver: window.ResizeObserver,
     getComputedStyle: window.getComputedStyle.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    matchMedia: window.matchMedia.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -39,6 +44,7 @@ test('independent Terms forms retain stable associations, multilingual drafts an
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
   const first = catalogueTermsFixture('stale');
   const second = catalogueTermsFixture('uncertain');
+  const navigation = catalogueTermsFixture('uncertain');
   const longName = `A long supplied name ${'星'.repeat(220)}`;
   const longAlias = `An unbroken alias ${'a'.repeat(220)}`;
   first.subject.labels.en = longName;
@@ -81,6 +87,18 @@ test('independent Terms forms retain stable associations, multilingual drafts an
       if (value) await user.type(control(scope, name), value);
     });
   const ids = () => [...host.querySelectorAll('[id]')].map((element) => element.id).sort();
+  const settle = async (ready: () => boolean) => {
+    for (let attempt = 0; attempt < 50 && !ready(); attempt++)
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+    expect(ready()).toBe(true);
+  };
+  const unloadBlocked = () => {
+    const event = new window.Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  };
   const associations = (scope: HTMLElement) => {
     for (const element of scope.querySelectorAll('label')) {
       expect(element.htmlFor).not.toBe('');
@@ -316,6 +334,115 @@ test('independent Terms forms retain stable associations, multilingual drafts an
     expect(second.calls).toHaveLength(5);
     associations(a);
     associations(b);
+
+    const { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } =
+      await import('@tanstack/react-router');
+    let signOut: (() => void) | undefined;
+    let arrivals = 0;
+    function TermsRoute() {
+      const [session, setSession] = useState<'signed-in' | 'signed-out'>('signed-in');
+      signOut = () => setSession('signed-out');
+      return (
+        <SubjectTermsPage id={termsSubjectId} locale="en" session={session} transport={navigation.transport} />
+      );
+    }
+    function Destination() {
+      useEffect(() => {
+        arrivals++;
+      }, []);
+      return <p>Destination</p>;
+    }
+    const routeRoot = createRootRoute({ component: Outlet });
+    const router = createRouter({
+      routeTree: routeRoot.addChildren([
+        createRoute({ getParentRoute: () => routeRoot, path: '/terms', component: TermsRoute }),
+        createRoute({ getParentRoute: () => routeRoot, path: '/inbox', component: Destination }),
+      ]),
+      history: createMemoryHistory({ initialEntries: ['/inbox', '/terms'] }),
+    });
+    await router.load();
+    client.clear();
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={client}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>,
+      ),
+    );
+    await settle(() => !!host.querySelector('form'));
+    const page = () => host.querySelector<HTMLElement>('article')!;
+    const dialog = () => document.querySelector<HTMLElement>('[role="alertdialog"]');
+    const attempt = (path: string) => act(async () => void router.navigate({ to: path as never }));
+    const navigate = (path: string) => act(async () => router.navigate({ to: path as never }));
+    const language = () => control(page(), m.catalogue_create_language()) as HTMLSelectElement;
+    const name = () => fieldset(page(), m.catalogue_create_label());
+    await select(name(), m.catalogue_terms_action(), 'set');
+    await replace(name(), m.catalogue_create_label(), 'Stay title');
+    await select(page(), m.catalogue_create_language(), 'ja');
+    const japaneseDescription = fieldset(page(), m.catalogue_create_description());
+    await select(japaneseDescription, m.catalogue_terms_action(), 'remove');
+    expect(dialog()).toBeNull();
+    await select(page(), m.catalogue_create_language(), 'en');
+    await replace(name(), m.catalogue_create_label(), 'Original film');
+    expect(unloadBlocked()).toBe(true);
+    await replace(name(), m.catalogue_create_label(), 'Stay title');
+    await select(page(), m.catalogue_create_language(), 'ja');
+    await click(page(), m.catalogue_terms_save());
+    await settle(() => page().textContent?.includes(m.catalogue_terms_uncertain()) ?? false);
+    expect(unloadBlocked()).toBe(true);
+    const patchesBeforeStay = navigation.calls.filter((call) => call.method === 'PATCH').length;
+    await act(async () => router.history.back());
+    await settle(() => dialog() !== null);
+    expect(dialog()!.textContent).toContain(m.thread_authoring_leave_pending());
+    await click(dialog()!, m.zone_editor_stay());
+    await settle(() => dialog() === null);
+    expect(language().value).toBe('ja');
+    expect(control(fieldset(page(), m.catalogue_create_description()), m.catalogue_terms_action()).value).toBe(
+      'remove',
+    );
+    await select(page(), m.catalogue_create_language(), 'en');
+    expect(control(name(), m.catalogue_create_label()).value).toBe('Stay title');
+    await select(page(), m.catalogue_create_language(), 'ja');
+    expect(navigation.calls.filter((call) => call.method === 'PATCH')).toHaveLength(patchesBeforeStay);
+    await attempt('/inbox');
+    await settle(() => dialog() !== null);
+    const arrivalsBeforeLeave = arrivals;
+    await click(dialog()!, m.zone_editor_discard());
+    await settle(() => router.state.location.pathname === '/inbox' && arrivals === arrivalsBeforeLeave + 1);
+    expect(unloadBlocked()).toBe(false);
+
+    client.clear();
+    await navigate('/terms');
+    await settle(() => !!host.querySelector('form'));
+    await select(name(), m.catalogue_terms_action(), 'set');
+    await replace(name(), m.catalogue_create_label(), 'Temporary title');
+    await replace(name(), m.catalogue_create_label(), 'Stay title');
+    expect(unloadBlocked()).toBe(false);
+    await navigate('/inbox');
+    expect(dialog()).toBeNull();
+
+    client.clear();
+    await navigate('/terms');
+    await settle(() => !!host.querySelector('form'));
+    await select(name(), m.catalogue_terms_action(), 'set');
+    await replace(name(), m.catalogue_create_label(), 'Saved title');
+    await click(page(), m.catalogue_terms_save());
+    await settle(() => page().textContent?.includes(m.catalogue_terms_saved()) ?? false);
+    expect(unloadBlocked()).toBe(false);
+    await navigate('/inbox');
+    expect(dialog()).toBeNull();
+
+    client.clear();
+    await navigate('/terms');
+    await settle(() => !!host.querySelector('form'));
+    await select(name(), m.catalogue_terms_action(), 'set');
+    await replace(name(), m.catalogue_create_label(), 'Signed-out draft');
+    await act(async () => signOut?.());
+    expect(unloadBlocked()).toBe(false);
+    await navigate('/inbox');
+    await navigate('/terms');
+    await settle(() => !!host.querySelector('form'));
+    expect(unloadBlocked()).toBe(false);
   } finally {
     await act(async () => root.unmount());
     client.clear();

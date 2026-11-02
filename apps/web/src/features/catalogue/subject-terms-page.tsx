@@ -1,4 +1,5 @@
 import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
+import { SubjectTermsNavigationGuard } from './subject-terms-navigation';
 import { useQuery } from '@tanstack/react-query';
 import { useId, useRef, useState, type FormEvent } from 'react';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
@@ -21,6 +22,7 @@ import { PageHeading } from '../../shell/page-heading';
 import { termsFieldGuidance } from './subject-terms-guidance';
 import {
   hasTermsPatch,
+  hasEffectiveTermsPatch,
   languageDraft,
   termFields,
   termsPatch,
@@ -83,6 +85,7 @@ function SubjectTermsPageLive({
   const [comparison, setComparison] = useState<TermsRead>();
   const [saved, setSaved] = useState<Extract<TermsResult, { ok: true }>>();
   const [busy, setBusy] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const running = useRef(false);
   const pending = useRef<TermsCommand | null>(null);
   const base =
@@ -162,6 +165,7 @@ function SubjectTermsPageLive({
       };
     }
     running.current = true;
+    setSubmitting(true);
     setBusy(true);
     setComparison(undefined);
     setFailure(undefined);
@@ -181,6 +185,7 @@ function SubjectTermsPageLive({
     } finally {
       if (!lifetime.active()) return;
       running.current = false;
+      setSubmitting(false);
       setBusy(false);
     }
   }
@@ -247,6 +252,7 @@ function SubjectTermsPageLive({
     row &&
     original &&
     termFields.some((field) => row[field].mode !== 'keep' || row[field].value !== original[field].value);
+  const dirty = !!base && !saved && hasEffectiveTermsPatch(base.subject, drafts);
   const storedLanguage = !!base && termFields.some((field) => Object.hasOwn(base.subject[field], language));
   const canRemoveLanguage = !storedLanguage && addedLanguages.includes(language);
   const typeLabel = base ? typeLabels?.[base.subject.type] : undefined;
@@ -255,6 +261,12 @@ function SubjectTermsPageLive({
 
   return (
     <article className="mx-auto flex min-w-0 w-full max-w-3xl flex-col gap-6 text-foreground [overflow-wrap:anywhere]">
+      <SubjectTermsNavigationGuard
+        active={lifetime.active() && session === 'signed-in'}
+        dirty={dirty}
+        pending={!!base && !saved && (submitting || uncertain)}
+        locale={locale}
+      />
       <header className="flex min-w-0 flex-col gap-3">
         <PageHeading id={domId('title')}>{m.catalogue_terms_title({}, options)}</PageHeading>
         {base && (
