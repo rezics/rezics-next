@@ -4360,5 +4360,7 @@
   "library_dynamic_page_reader_first_page": "成員首頁",
   "space_setup_details_heading": "進一步瞭解設定",
   "space_setup_details_name_unavailable": "名稱暫不可用",
-  "moderation_controls_details_summary": "目前篩選：{status}；{kind}；{order}。"
+  "moderation_controls_details_summary": "目前篩選：{status}；{kind}；{order}。",
+  "library_progress_index_reader_history_unavailable": "無法取得此單位的歷史含義。儲存的數值未作更改。",
+  "library_progress_index_reader_pagination": "進度分頁"
 }

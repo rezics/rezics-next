@@ -4361,5 +4361,7 @@
   "library_dynamic_page_reader_first_page": "First members page",
   "space_setup_details_heading": "More about setup",
   "space_setup_details_name_unavailable": "Name unavailable",
-  "moderation_controls_details_summary": "Selected filters: {status}; {kind}; {order}."
+  "moderation_controls_details_summary": "Selected filters: {status}; {kind}; {order}.",
+  "library_progress_index_reader_history_unavailable": "The historical meaning of this unit is unavailable. Stored values are unchanged.",
+  "library_progress_index_reader_pagination": "Progress pages"
 }

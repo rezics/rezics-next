@@ -4361,5 +4361,7 @@
   "library_dynamic_page_reader_first_page": "成员首页",
   "space_setup_details_heading": "了解更多设置说明",
   "space_setup_details_name_unavailable": "名称暂不可用",
-  "moderation_controls_details_summary": "当前筛选：{status}；{kind}；{order}。"
+  "moderation_controls_details_summary": "当前筛选：{status}；{kind}；{order}。",
+  "library_progress_index_reader_history_unavailable": "无法获取此单位的历史含义。保存的数值未作更改。",
+  "library_progress_index_reader_pagination": "进度分页"
 }

@@ -4360,5 +4360,7 @@
   "library_dynamic_page_reader_first_page": "Erste Seite der Einträge",
   "space_setup_details_heading": "Mehr zur Einrichtung",
   "space_setup_details_name_unavailable": "Name nicht verfügbar",
-  "moderation_controls_details_summary": "Ausgewählte Filter: {status}; {kind}; {order}."
+  "moderation_controls_details_summary": "Ausgewählte Filter: {status}; {kind}; {order}.",
+  "library_progress_index_reader_history_unavailable": "Die historische Bedeutung dieser Einheit ist nicht verfügbar. Gespeicherte Werte bleiben unverändert.",
+  "library_progress_index_reader_pagination": "Fortschrittsseiten"
 }

@@ -58,7 +58,7 @@ function stateLabel(state: ProgressIndex['sessions'][number]['state']): string {
 }
 
 const buttonClass =
-  'inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted';
+  'inline-flex min-h-[44px] min-w-0 max-w-full items-center justify-center rounded-lg border border-border px-4 py-2 text-center whitespace-normal wrap-anywhere text-primary underline-offset-4 hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 const subscribe = () => () => {};
 const progressOperations = [
@@ -396,7 +396,7 @@ export function ProgressIndexPage({
         )}
         {cursor || page.next ? (
           <Exposure operation="progress_session.list">
-            <nav className="flex flex-wrap gap-2">
+            <nav aria-label={m.library_progress_index_reader_pagination()} className="flex flex-wrap gap-2">
               {cursor ? (
                 <Link
                   to="/library/progress"
@@ -825,12 +825,13 @@ function SessionRow({
           </ListRowControl>
           {!session.unitLabel ? (
             <>
-              <p className="text-sm text-muted-foreground">{m.library_progress_unit_unspecified()}</p>
+              <p className="text-sm text-muted-foreground">{m.library_progress_index_reader_history_unavailable()}</p>
               <details className="text-sm text-muted-foreground">
                 <summary className="cursor-pointer rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                   {m.library_progress_details()}
                 </summary>
                 <div className="mt-2 flex flex-col gap-2">
+                  <p>{m.library_progress_unit_unspecified()}</p>
                   <p>{m.library_history_unavailable()}</p>
                   <dl>
                     <dt>
