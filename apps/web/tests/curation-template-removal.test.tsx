@@ -84,8 +84,12 @@ test('A refreshed keyed template cannot be removed using confirmation of its sup
   );
   expect(confirmKeyedTemplateRemoval(equivalent, intention).profile.types).toEqual([original.types[1]]);
 
-  const sibling = presentationDraft(saved({ ...original, routes: [...original.routes, { route: '/other', document: empty }] }));
-  expect(confirmKeyedTemplateRemoval(sibling, intention).profile.types.map((entry) => entry.type)).toEqual(['schema:Movie']);
+  const sibling = presentationDraft(
+    saved({ ...original, routes: [...original.routes, { route: '/other', document: empty }] }),
+  );
+  expect(confirmKeyedTemplateRemoval(sibling, intention).profile.types.map((entry) => entry.type)).toEqual([
+    'schema:Movie',
+  ]);
   expect(confirmKeyedTemplateRemoval(sibling, intention).profile.routes).toEqual([
     ...original.routes,
     { route: '/other', document: empty },
@@ -97,13 +101,15 @@ test('A refreshed keyed template cannot be removed using confirmation of its sup
   expect(confirmKeyedTemplateRemoval(draft, intention)).toBe(draft);
   expect(reviewKeyedTemplateRemoval(draft, typeTemplate, live(false))).toBeNull();
 
-  const editors = { [selectionKey({ template: typeTemplate, view: 'overview' })]: { root: { props: {} }, content: [] } };
+  const editors = {
+    [selectionKey({ template: typeTemplate, view: 'overview' })]: { root: { props: {} }, content: [] },
+  };
   const withEditors = { ...draft, editors };
   const editedIntention = reviewKeyedTemplateRemoval(withEditors, typeTemplate, live())!;
   expect(confirmKeyedTemplateRemoval(draft, editedIntention)).toBe(draft);
-  expect(confirmKeyedTemplateRemoval({ ...equivalent, editors: { ...editors } }, editedIntention).profile.types).toEqual([
-    original.types[1],
-  ]);
+  expect(
+    confirmKeyedTemplateRemoval({ ...equivalent, editors: { ...editors } }, editedIntention).profile.types,
+  ).toEqual([original.types[1]]);
 
   const scopes: KeyedTemplate[] = [
     { scope: 'base', key: 'schema:CreativeWork' },
@@ -116,7 +122,7 @@ test('A refreshed keyed template cannot be removed using confirmation of its sup
       return entry && ('base' in entry ? entry.base : 'type' in entry ? entry.type : entry.route);
     }),
   ).toEqual(['schema:CreativeWork', 'schema:Book', '/help']);
-  expect(scopes.map((template) => keyedTemplateEntry({ ...original, bases: [], types: [], routes: [] }, template))).toEqual(
-    [undefined, undefined, undefined],
-  );
+  expect(
+    scopes.map((template) => keyedTemplateEntry({ ...original, bases: [], types: [], routes: [] }, template)),
+  ).toEqual([undefined, undefined, undefined]);
 });

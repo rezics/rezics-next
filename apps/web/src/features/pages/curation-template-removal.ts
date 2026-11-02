@@ -85,7 +85,11 @@ export function reviewKeyedTemplateRemoval(
 export function keyedTemplateRemovalApplies(draft: PresentationDraft, intention: KeyedTemplateRemoval): boolean {
   if (!intention.lifetime.isCurrent()) return false;
   const current = keyedTemplateEntry(draft.profile, intention.template);
-  return !!current && sameKeyedEntry(intention.entry, current) && sameEditors(intention.editors, relevantEditors(draft, intention.template));
+  return (
+    !!current &&
+    sameKeyedEntry(intention.entry, current) &&
+    sameEditors(intention.editors, relevantEditors(draft, intention.template))
+  );
 }
 
 export function confirmKeyedTemplateRemoval(
