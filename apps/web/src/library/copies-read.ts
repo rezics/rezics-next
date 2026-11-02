@@ -53,6 +53,8 @@ export type CopyItem = {
 export type CopiesPageData = {
   signedIn: boolean;
   subjectId: string | null;
+  /** Original requested cursor, including when the existing invalid-cursor fallback reads page one. */
+  requestedCursor?: string | null;
   copies: CopyItem[];
   next: string | null;
   addKey: string;
@@ -325,13 +327,15 @@ export async function loadCopiesPage(
   const refused = await prepareSession(request, sessionEnv);
   const authorization = refused ? null : viewerCredential(request);
   const subjectId = copiesSubjectId(input.subjectId) ?? null;
-  if (!authorization) return { signedIn: false, subjectId, copies: [], next: null, addKey: crypto.randomUUID() };
+  const provenance = input.cursor ? { requestedCursor: input.cursor } : {};
+  if (!authorization)
+    return { signedIn: false, subjectId, ...provenance, copies: [], next: null, addKey: crypto.randomUUID() };
   const page = await readCopyPage(client, authorization, subjectId ?? undefined, input.cursor);
   // The activated profile choice is part of every current copy create request,
   // including an empty filtered page. Do not infer producer support from rows.
   const sendKind = true;
   const copies = page.copies.map(present);
-  return { signedIn: true, subjectId, copies, next: page.next, addKey: crypto.randomUUID(), sendKind };
+  return { signedIn: true, subjectId, ...provenance, copies, next: page.next, addKey: crypto.randomUUID(), sendKind };
 }
 
 export type CopyDetailResult = { ok: true; copy: CopyItem } | { ok: false; reason: 'forbidden' | 'unavailable' };

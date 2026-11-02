@@ -124,6 +124,7 @@ async function copiesPageBody(input: unknown, current: boolean): Promise<CopiesC
       page: {
         signedIn: false,
         subjectId: requested.subjectId,
+        requestedCursor: requested.cursor,
         copies: [],
         next: null,
         addKey: page.addKey,

@@ -512,6 +512,7 @@
   "library_copy_edit": "Exemplar bearbeiten",
   "library_copy_edition": "Ausgabe",
   "library_copy_empty": "Hier sind noch keine Exemplare.",
+  "library_copy_page_empty": "Auf dieser Seite werden keine Exemplare angezeigt.",
   "library_copy_failure": "Dieses Exemplar konnte nicht gespeichert werden. Bitte versuchen Sie es erneut.",
   "library_copy_filtered_empty": "Sie haben keine Exemplare dieser Ausgabe.",
   "library_copy_filtered_heading": "Ihre Exemplare von {title}",

@@ -7,10 +7,24 @@ import type { CopyItem } from '../library/copies-read';
 import { setCopyKindsStory } from '../kernel/fake/copies-kinds';
 import recording from '../kernel/recorded/library-copies.json';
 import { unprofiledSubjectId } from '../kernel/fake/library-unprofiled-subject';
+import { subjectOf } from '../library/reads';
+import { displayLibraryTitle } from '../library/title';
+import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { PageStory, PatternStory, pagePaths, pageReady } from './page';
 
-const meta = { title: 'Pages/Library/Copies', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = {
+  title: 'Pages/Library/Copies',
+  parameters: {
+    layout: 'fullscreen',
+    viewport: {
+      options: {
+        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' }, type: 'mobile' },
+        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' }, type: 'desktop' },
+      },
+    },
+  },
+} satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
@@ -295,5 +309,107 @@ export const HeadRenamedPairRetired: Story = {
     await view.findByText(m.library_copy_status_unsupported());
     expect(await view.findByText('Print at acceptance')).toBeVisible();
     expect(await view.findByRole('button', { name: m.library_copy_delete() })).toBeVisible();
+  },
+};
+
+// UNRUN bounded presentation cases; these add no native or screenshot acceptance claim.
+function RecoveryView({
+  filtered = false,
+  long = false,
+  unavailable = false,
+}: {
+  filtered?: boolean;
+  long?: boolean;
+  unavailable?: boolean;
+}) {
+  const original = recording.copies[0]!;
+  const subject = subjectOf(original.subject);
+  const title = subject ? displayLibraryTitle(subject.label, getLocale()) : null;
+  const copy: CopyItem = {
+    ...original,
+    kind: null,
+    subject: unavailable ? null : subject,
+    idempotencyKey: '10203040-5060-4070-8090-102030405060',
+    meaning: unavailable ? 'unavailable' : 'unknown',
+    statusEditing: { state: 'unavailable' },
+    ...(long && subject && title
+      ? {
+          subject: {
+            ...subject,
+            label: { value: `${title.text} — ${title.text} — ${title.text}`, language: title.lang ?? getLocale() },
+          },
+          note: `${original.note ?? ''} ${original.note ?? ''} ${original.note ?? ''}`,
+        }
+      : {}),
+  };
+  return (
+    <PatternStory visitor="Signed In" path={pagePaths['library-copies']}>
+      <div className="w-full max-w-4xl p-4">
+        <CopiesPage
+          page={{
+            signedIn: true,
+            subjectId: filtered ? original.subjectId : null,
+            requestedCursor: 'later/keyset+page',
+            copies: long || unavailable ? [copy] : [],
+            next: long ? 'next/keyset+page' : null,
+            addKey: copy.idempotencyKey,
+          }}
+        />
+      </div>
+    </PatternStory>
+  );
+}
+
+export const EmptyLaterPage: Story = {
+  name: 'Empty later page, explicit first-page recovery',
+  render: () => <RecoveryView />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    expect(await canvas.findByRole('status')).toHaveTextContent(m.library_copy_page_empty());
+    expect(canvas.queryByText(m.library_copy_empty())).not.toBeInTheDocument();
+    const first = canvas.getByRole('link', { name: m.library_collections_first_page() });
+    expect(new URL(first.href).searchParams.has('cursor')).toBe(false);
+    expect(canvas.queryByRole('link', { name: m.library_copy_more() })).not.toBeInTheDocument();
+    expect(canvas.getByRole('button', { name: m.library_copy_add() })).toBeVisible();
+  },
+};
+
+export const FilteredEmptyLaterPage: Story = {
+  name: 'Empty later edition page retains its filter',
+  render: () => <RecoveryView filtered />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await canvas.findByText(m.library_copy_page_empty());
+    expect(canvas.queryByText(m.library_copy_filtered_empty())).not.toBeInTheDocument();
+    const target = new URL(canvas.getByRole('link', { name: m.library_collections_first_page() }).href);
+    expect(target.searchParams.get('subjectId')).toBe(recording.copies[0]!.subjectId);
+    expect(target.searchParams.has('cursor')).toBe(false);
+    expect(canvas.getByRole('link', { name: m.library_copy_all() })).toBeVisible();
+  },
+};
+
+export const LongLaterPage: Story = {
+  name: 'Later page, long text and independent recovery controls',
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  render: () => <RecoveryView filtered long />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await canvas.findByRole('heading', { level: 2 });
+    expect(canvas.getByRole('link', { name: m.library_collections_first_page() })).toBeVisible();
+    expect(canvas.getByRole('link', { name: m.library_copy_more() })).toBeVisible();
+    expect(canvas.getByText(m.library_copy_history_notice())).toBeVisible();
+    expect(canvas.queryByText(m.library_copy_page_empty())).not.toBeInTheDocument();
+  },
+};
+
+export const UnavailableLaterPage: Story = {
+  name: 'Later page with unavailable subject and meaning',
+  render: () => <RecoveryView unavailable />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await canvas.findByRole('heading', { level: 2, name: m.library_subject_unavailable() });
+    expect(canvas.getByRole('link', { name: m.library_collections_first_page() })).toBeVisible();
+    await userEvent.click(canvas.getByText(m.library_copy_history_details()));
+    expect(canvas.getByText(m.library_history_unavailable())).toBeVisible();
   },
 };

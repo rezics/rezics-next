@@ -512,6 +512,7 @@
   "library_copy_edit": "蔵書を編集",
   "library_copy_edition": "版",
   "library_copy_empty": "ここにはまだコピーがありません。",
+  "library_copy_page_empty": "このページには所蔵品が表示されていません。",
   "library_copy_failure": "このコピーを保存できませんでした。もう一度お試しください。",
   "library_copy_filtered_empty": "この版のコピーは持っていません。",
   "library_copy_filtered_heading": "{title}の所有コピー",

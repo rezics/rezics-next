@@ -512,6 +512,7 @@
   "library_copy_edit": "Modifier l’exemplaire",
   "library_copy_edition": "Édition",
   "library_copy_empty": "Vous n’avez pas encore d’exemplaire ici.",
+  "library_copy_page_empty": "Aucun exemplaire n’est affiché sur cette page.",
   "library_copy_failure": "Cet exemplaire n’a pas pu être enregistré. Veuillez réessayer.",
   "library_copy_filtered_empty": "Vous n’avez aucun exemplaire de cette édition.",
   "library_copy_filtered_heading": "Vos exemplaires de {title}",

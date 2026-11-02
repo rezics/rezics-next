@@ -512,6 +512,7 @@
   "library_copy_edit": "編輯複本",
   "library_copy_edition": "版本",
   "library_copy_empty": "這裡還沒有您的複本。",
+  "library_copy_page_empty": "此頁沒有顯示複本。",
   "library_copy_failure": "這份複本無法儲存。請再試一次。",
   "library_copy_filtered_empty": "您沒有這個版本的複本。",
   "library_copy_filtered_heading": "您持有的《{title}》複本",

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { CancelledError, useQuery } from '@tanstack/react-query';
 import { useSession } from '../session/query';
 import { useLibraryWorkspaceAdmission } from './library-workspace-admission';
@@ -151,6 +151,11 @@ function CurrentCopiesRead({
     if (origin.isCurrent()) void query.refetch();
   }, [initial, origin, query.refetch]);
   const accepted = !query.isError && matches(query.data, subject, address) ? query.data : undefined;
+  // Page provenance comes from the admitted envelope, never from rows or the next cursor.
+  const page = useMemo(
+    () => (accepted ? { ...accepted.page, requestedCursor: accepted.requested.cursor } : undefined),
+    [accepted],
+  );
   const guard = accepted
     ? origin.accept(queryKey, (value) => matches(value as CopiesCurrentRead, subject, address), operations)
     : null;
@@ -193,7 +198,7 @@ function CurrentCopiesRead({
       }
     : undefined;
   // Server HTML keeps the existing no-JS form; browser authority comes only from the cache guard.
-  if (!accepted || (hydrated && !guard))
+  if (!page || (hydrated && !guard))
     return (
       <div>
         <p role="status">{query.isError || query.data ? m.error_message() : m.library_sort_preparing()}</p>
@@ -209,5 +214,5 @@ function CurrentCopiesRead({
         ) : null}
       </div>
     );
-  return <CopiesPage key={origin.id} page={accepted.page} failure={failure} originating={operand ?? closed} />;
+  return <CopiesPage key={origin.id} page={page} failure={failure} originating={operand ?? closed} />;
 }

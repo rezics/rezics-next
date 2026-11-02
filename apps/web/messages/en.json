@@ -524,6 +524,7 @@
   "library_copy_edit": "Edit copy",
   "library_copy_edition": "Edition",
   "library_copy_empty": "You have no copies here yet.",
+  "library_copy_page_empty": "No copies are shown on this page.",
   "library_copy_failure": "This copy could not be saved. Please try again.",
   "library_copy_filtered_empty": "You have no copies of this edition.",
   "library_copy_filtered_heading": "Your copies of {title}",

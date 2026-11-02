@@ -800,14 +800,18 @@ function LoadedCopiesPage({
   originating?: CopiesOrigin | undefined;
 }) {
   const [copies, setCopies] = useState(page.copies);
+  const [changed, setChanged] = useState(false);
   const previousPage = useRef(page);
   if (originating && previousPage.current !== page) {
     previousPage.current = page;
     setCopies(page.copies);
+    setChanged(false);
   }
   const [addKey, setAddKey] = useState(page.addKey);
   const [removed, setRemoved] = useState<{ copy: CopyItem; result: CopyRemoved; deadline: number } | null>(null);
   const [editing, setEditing] = useState<CopyItem | null | undefined>(undefined);
+  const editorOpen = useRef(false);
+  editorOpen.current = editing !== undefined;
   const [detailState, setDetailState] = useState<'loading' | 'ready' | 'unavailable' | 'forbidden'>('ready');
   const inspection = useRef(0);
   const active = useRef(true);
@@ -880,6 +884,8 @@ function LoadedCopiesPage({
   }
   const filteredLabel = page.copies.find((copy) => copy.subject?.id === page.subjectId)?.subject?.label;
   const filteredTitle = filteredLabel ? displayLibraryTitle(filteredLabel, locale()).text : undefined;
+  const firstPageEmpty = !page.requestedCursor && !page.next && !page.copies.length && !changed;
+  const recoverable = Boolean(page.requestedCursor) || (!copies.length && !firstPageEmpty);
   return (
     <div className="max-w-4xl space-y-6 text-foreground">
       <header className="flex flex-wrap items-center justify-between gap-4">
@@ -944,23 +950,43 @@ function LoadedCopiesPage({
           </ul>
         </>
       ) : (
-        <p className="text-muted-foreground">
-          {page.subjectId ? m.library_copy_filtered_empty() : m.library_copy_empty()}
+        <p role="status" className="text-muted-foreground">
+          {firstPageEmpty
+            ? page.subjectId
+              ? m.library_copy_filtered_empty()
+              : m.library_copy_empty()
+            : m.library_copy_page_empty()}
         </p>
       )}
-      {page.next ? (
+      {page.next || recoverable ? (
         <Exposure operation="copy.list">
-          <nav aria-label={m.library_copy_heading()}>
-            <Link
-              to="/library/copies"
-              onClick={(event) => {
-                if (!currentPage()) event.preventDefault();
-              }}
-              search={{ ...(page.subjectId ? { subjectId: page.subjectId } : {}), cursor: page.next }}
-              className={`${quiet} text-primary`}
-            >
-              {m.library_copy_more()}
-            </Link>
+          <nav aria-label={m.library_copy_heading()} className="flex flex-wrap gap-3">
+            {recoverable ? (
+              <Link
+                to="/library/copies"
+                search={{ ...(page.subjectId ? { subjectId: page.subjectId } : {}) }}
+                aria-disabled={editing !== undefined || undefined}
+                onClick={(event) => {
+                  // Recovery is navigation. It cannot discard an open draft or uncertain command.
+                  if (!currentPage('copy.list') || editorOpen.current) event.preventDefault();
+                }}
+                className={`${quiet} text-primary`}
+              >
+                {m.library_collections_first_page()}
+              </Link>
+            ) : null}
+            {page.next ? (
+              <Link
+                to="/library/copies"
+                onClick={(event) => {
+                  if (!currentPage()) event.preventDefault();
+                }}
+                search={{ ...(page.subjectId ? { subjectId: page.subjectId } : {}), cursor: page.next }}
+                className={`${quiet} text-primary`}
+              >
+                {m.library_copy_more()}
+              </Link>
+            ) : null}
           </nav>
         </Exposure>
       ) : null}
@@ -988,6 +1014,7 @@ function LoadedCopiesPage({
                 headers,
               });
               if (!currentPage('copy.update') || !result.ok || result.copy.id !== removed.copy.id) return false;
+              setChanged(true);
               setCopies((current) => [
                 { ...removed.copy, ...result.copy, idempotencyKey: crypto.randomUUID() },
                 ...current,
@@ -1027,6 +1054,7 @@ function LoadedCopiesPage({
           }}
           onCreated={(copy) => {
             if (!currentEditor()) return;
+            setChanged(true);
             setCopies((current) => [
               ...current,
               {
@@ -1041,6 +1069,7 @@ function LoadedCopiesPage({
           }}
           onRemoved={(id, result, deadline) => {
             if (!currentEditor()) return;
+            setChanged(true);
             const copy = copies.find((item) => item.id === id);
             if (copy) {
               latestRemoval.current = { copy, result, deadline };
