@@ -885,7 +885,7 @@ test('Entitlement list stays within its bound as d grows', async () => {
   expect(anchor.value.id).toBeTruthy();
 }, 90_000);
 
-test('Webhook and commerce jobs stays within its bound as N grows', async () => {
+test('Order account lookup stays within its bound as N grows', async () => {
   const database = db!;
   await resetGrowthData(database);
   const offer = await createOfferAnchor();
@@ -905,7 +905,7 @@ test('Webhook and commerce jobs stays within its bound as N grows', async () => 
   });
   await check(
     database,
-    'Webhook and commerce jobs stays within its bound as N grows',
+    'Order account lookup stays within its bound as N grows',
     population,
     async (_, __, repetition) =>
       commands.readOrderForAccount(growthActorId, anchor.id).then((order) => {

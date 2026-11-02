@@ -972,6 +972,36 @@ aggregates. Charge account/order/receipt/outbox probes, partition counter conten
 persistence separately. No constant-row/cross-machine claim follows from key predicates or timeouts. Existing locator
 and combined-refresh growth evidence contains unresolved native/DBOS examined-row failures; queue/backlog/partition
 fanout and full erasure bounds remain unproved. Do not raise allowances or subtract workflow work to disguise them.
+Serializable command retries are deadline-bounded; the cost bound is the per-attempt work, not a fixed contention-attempt count.
+
+### Payment path growth cost
+
+Each operation has independent 1×/8×/64× series for unrelated orders, provider events, receipts and DBOS workflow
+history. The anchor order, provider snapshot, payload and retry configuration stay fixed.
+
+#### Signed webhook ingest
+
+- Touches: one bounded raw body, signature verification, event classification and one durable DBOS event enqueue.
+- Bound: The 256-KiB body cap bounds input parsing; native statements and rows stay constant and blocks grow logarithmically with unrelated history.
+- Growth check: [payment-path-growth.test.ts](../../test/commerce/payment-path-growth.test.ts), `Commerce signed webhook ingest / unrelated …`.
+
+#### Order reconciliation
+
+- Touches: one order/session anchor, the fixed fake Stripe Checkout snapshot and the production reconcile/refresh workflow steps.
+- Bound: Native statements and rows stay constant and blocks grow logarithmically with unrelated history; DBOS persistence is inside the measured workflow.
+- Growth check: [payment-path-growth.test.ts](../../test/commerce/payment-path-growth.test.ts), `Commerce order reconciliation / unrelated …`.
+
+#### Payment settlement
+
+- Touches: one buyer/order, the fixed provider snapshot, its named transaction IDs and the resulting entitlement/payment evidence.
+- Bound: Native statements and rows stay constant and blocks grow logarithmically with unrelated history.
+- Growth check: [payment-path-growth.test.ts](../../test/commerce/payment-path-growth.test.ts), `Commerce payment settlement / unrelated …`.
+
+#### Offer price revision
+
+- Touches: one creator offer revision and its command receipt/outbox effect.
+- Bound: Native statements and rows stay constant and blocks grow logarithmically with unrelated history.
+- Growth check: [payment-path-growth.test.ts](../../test/commerce/payment-path-growth.test.ts), `Commerce offer price revision / unrelated …`.
 
 ## Cost
 
