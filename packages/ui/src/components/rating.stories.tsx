@@ -480,12 +480,14 @@ function ConnectedRatingInputJourney() {
           reject: () => reject(new Error('offline')),
         };
         pending.current.push(entry);
-        setRows(pending.current.map(({ id, callback, units: savedUnits, status }) => ({
-          id,
-          callback,
-          units: savedUnits,
-          status,
-        })));
+        setRows(
+          pending.current.map(({ id, callback, units: savedUnits, status }) => ({
+            id,
+            callback,
+            units: savedUnits,
+            status,
+          })),
+        );
       }),
     [callbackVersion],
   );
@@ -494,7 +496,9 @@ function ConnectedRatingInputJourney() {
     const entry = pending.current.find((call) => call.id === id);
     if (entry === undefined || entry.status !== 'pending') return;
     entry.status = outcome;
-    setRows(pending.current.map(({ id: saveId, callback, units, status }) => ({ id: saveId, callback, units, status })));
+    setRows(
+      pending.current.map(({ id: saveId, callback, units, status }) => ({ id: saveId, callback, units, status })),
+    );
     if (outcome === 'resolved') entry.resolve();
     else entry.reject();
   };
@@ -566,7 +570,14 @@ function ConnectedRatingInputJourney() {
       </div>
       <div data-slot="primary-rating">
         {mounted ? (
-          <RatingInput disabled={disabled} labels={labels} locale={locale} onChange={save} scale={scale} value={value} />
+          <RatingInput
+            disabled={disabled}
+            labels={labels}
+            locale={locale}
+            onChange={save}
+            scale={scale}
+            value={value}
+          />
         ) : null}
       </div>
       <IndependentRatingInput />
@@ -636,11 +647,7 @@ export const ConnectedSaveLifetime: Story = {
     await expectCalls('1|callback-0|20|resolved', '2|callback-0|19|resolved', '3|callback-1|17|pending');
     await userEvent.click(canvas.getByRole('button', { name: 'Echo 8.5' }));
     await finish(3);
-    await expectCalls(
-      '1|callback-0|20|resolved',
-      '2|callback-0|19|resolved',
-      '3|callback-1|17|resolved',
-    );
+    await expectCalls('1|callback-0|20|resolved', '2|callback-0|19|resolved', '3|callback-1|17|resolved');
     await expect(primary).toHaveAttribute('aria-busy', 'false');
     await expect(output(primary)).toHaveTextContent('8,5 sur 10');
 
@@ -676,9 +683,7 @@ export const ConnectedSaveLifetime: Story = {
       '4|callback-1|null|resolved',
       '5|callback-1|15|rejected',
     );
-    await waitFor(() =>
-      expect(within(primary).getByRole('status')).toHaveTextContent('Échec de l’enregistrement.'),
-    );
+    await waitFor(() => expect(within(primary).getByRole('status')).toHaveTextContent('Échec de l’enregistrement.'));
     await waitFor(() => expect(output(primary)).toHaveTextContent('7 sur 10'));
     slider(primary).focus();
     await userEvent.keyboard('{ArrowRight}');

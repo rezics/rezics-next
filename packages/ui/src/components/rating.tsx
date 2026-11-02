@@ -490,11 +490,7 @@ function copyScale(scale: RatingScale): RatingScale {
 }
 
 function sameScale(left: RatingScale, right: RatingScale): boolean {
-  return (
-    left.minimum === right.minimum &&
-    left.maximum === right.maximum &&
-    left.unitsPerPoint === right.unitsPerPoint
-  );
+  return left.minimum === right.minimum && left.maximum === right.maximum && left.unitsPerPoint === right.unitsPerPoint;
 }
 
 /**
@@ -600,7 +596,8 @@ export function RatingInput(props: RatingInputProps) {
 
   const clear = (candidate: RatingInputVisit) => {
     if (!isCurrentVisit(candidate)) return;
-    const currentUnits = candidate.draft ?? (candidate.choice === null ? propsRef.current.value : candidate.choice.units);
+    const currentUnits =
+      candidate.draft ?? (candidate.choice === null ? propsRef.current.value : candidate.choice.units);
     if (currentUnits !== null) save(candidate, null);
   };
 
@@ -628,10 +625,7 @@ export function RatingInput(props: RatingInputProps) {
 
   // Echoed values display from the controlled prop immediately; the layout effect below only retires their internal choice.
   const echoedChoice =
-    visit.runner === null &&
-    visit.queued === null &&
-    visit.choice !== null &&
-    visit.choice.units === props.value;
+    visit.runner === null && visit.queued === null && visit.choice !== null && visit.choice.units === props.value;
   useSafeLayoutEffect(() => {
     if (echoedChoice) visit.choice = null;
   }, [echoedChoice, props.value, visit]);
@@ -659,7 +653,10 @@ export function RatingInput(props: RatingInputProps) {
           <div className="flex items-center gap-2">
             <output
               aria-live="polite"
-              className={cn('font-semibold tabular-nums', units === null && 'font-normal text-muted-foreground text-sm')}
+              className={cn(
+                'font-semibold tabular-nums',
+                units === null && 'font-normal text-muted-foreground text-sm',
+              )}
               data-slot="rating-value"
               id={`${id}-value`}
             >
