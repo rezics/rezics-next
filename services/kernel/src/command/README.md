@@ -371,3 +371,119 @@ native growth evidence remain owed through the controller; typing is not that pr
 not physical/private Accounts History authority. Accounts must adapt its genuine original validator/reservation;
 Source scheduling/maxima, whole-original Source/Library prices, receiving and physical writer closure remain their
 owners' operands, unavailable rather than zero when absent. No History consumer is converted by this producer.
+
+## Selected Source native consumer fence dispatch
+
+The separate trusted server entrypoint is exported from `dispatch-lifetime.ts`:
+
+```ts
+withSourceFenceCommandDispatchLifetime<T>(
+  pool: Pool,
+  deadline: number,
+  owner: SourceFenceCommandDispatchOwner,
+  accountId: string,
+  body: () => Promise<T>,
+): Promise<T>
+
+type SourceFenceCommandDispatchOwner = Readonly<{
+  original: object;
+  validate(): void;
+  reserve(allowance: SourceFenceCommandDispatchAllowance): void | Promise<void>;
+}>;
+```
+
+The callback returns its ordinary result unchanged, normally the genuine `CommandOutcome<T>` from one
+`runCommand(pool, { partition, deadline }, body)`. The selected account is an immutable primitive with the
+**existing catalogue's full lowercase UUID domain**, including nil and every version. The only admitted command
+options are own data properties `partition` and the exact absolute `deadline`. The same original/Pool/deadline,
+synchronous validation and atomic pre-checkout reservation obligations above apply to this distinct owner type.
+The old `CommandDispatchOwner.reserve`, entrypoint and single-no-effect allowance retain their types and values;
+they never receive the Source allowance. Price declarations, casts and request data confer no original authority.
+
+The Source profile admits authentic `noEffect(null)` and `noEffect({ fence: null })` (and preserves ordinary value
+semantics), or exactly one `com.rezics.semantic.erasure.progress.v1` event. Its subject and sole data property
+`accountId` must equal the selected account. Descriptor inspection rejects extra fields, getters, proxies,
+custom prototypes/serializers, forged empty-event results and non-singleton arrays **before** serialization.
+Core snapshots only those bounded event strings, then retains the actual catalogue JSON round trip/schema check
+and the real `fence.sql`/outbox path. The foreign result value is never serialized by this receipt-free profile.
+Callbacks refuse at registration, including late descendants; History source/source-set and agent associations
+remain unsupported and their ordinary validation guards remain installed. Absent receipt, identity, authorization
+and basis options cannot reach receipt reads, basis writes, History receipt recording or authorization hooks.
+
+Actual prepared `retainIdentityScopeConsumerFence` in `semantic/identity-scoped-observations.ts` and
+`writeIdentityScopeConsumerNativeCommit` in `semantic/identity-epoch-native-commit.ts` use `currentCommand` and body
+SQL. They register no callbacks or History associations. Source owns both SAME Library seal verifications,
+summary/prior receipt/conflict reads, native component read/insert/read and immutable consumer obligation insert,
+as well as its grant, original scheduling and invocation multiplicities. This Core producer changes none of them.
+
+### Cost: selected Source fence controls
+
+`SOURCE_FENCE_COMMAND_DISPATCH_CONTROLS` contains literal complete eight-axis components, each with
+`engineRequests: 0`. `SOURCE_FENCE_COMMAND_DISPATCH_ALLOWANCE` exports `profile: 'single-source-fence'`, those
+`components`, `branches.noEffect`, `branches.event`, `effect`, `cleanup`, `total` and one-attempt `maxima`.
+`SourceFenceCommandDispatchAllowance` is the exact exported type.
+
+| Core component              | Anchors / payload                                                                           | Rows / points / statements / bytes / empty seeks |
+| --------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| accountSelection            | Existing lowercase UUID validation of the selected immutable account                        | 0 / 0 / 0 / 36 / 0                               |
+| checkout                    | One original Pool acquisition, guarded before and immediately after, within release custody | 0 / 0 / 0 / 0 / 0                                |
+| begin                       | SERIALIZABLE BEGIN, including failure                                                       | 0 / 0 / 1 / 0 / 0                                |
+| lockTimeout                 | Fixed 200ms setting                                                                         | 0 / 0 / 1 / 0 / 0                                |
+| statementTimeout            | Original deadline, at most ten digits plus `ms`                                             | 0 / 0 / 1 / 12 / 0                               |
+| time                        | SQL-bounded authoritative UTC scalar projection                                             | 1 / 0 / 1 / 40 / 0                               |
+| eventShape                  | Fixed type (39), subject (36), account (36) string validation                               | 0 / 0 / 0 / 111 / 0                              |
+| eventSerialization          | Catalogue JSON round trip of `{ "accountId": UUID }`                                        | 0 / 0 / 0 / 52 / 0                               |
+| eventValidation             | Existing compiled catalogue validator's fixed JSON payload                                  | 0 / 0 / 0 / 52 / 0                               |
+| finalStatementTimeout       | Same immutable deadline                                                                     | 0 / 0 / 1 / 12 / 0                               |
+| noEffectFence (alternative) | Partition PK SHARE probe, null receipt                                                      | 1 / 1 / 1 / 105 / 1                              |
+| eventFence (alternative)    | Partition point UPDATE and one outbox INSERT; 281 binding + 55 projection bytes             | 2 / 2 / 1 / 336 / 1                              |
+| finalize                    | Actual History finalizer with absent source and source-set associations                     | 0 / 0 / 0 / 0 / 0                                |
+| commit                      | Native COMMIT including failed/lost response                                                | 0 / 0 / 1 / 0 / 0                                |
+| cleanupRollback             | Separately held, one-shot ROLLBACK on the exact client                                      | 0 / 0 / 1 / 0 / 0                                |
+
+Safe assembly: sum the common controls, then add **one** supported branch. The no-effect branch has 2 rows,
+1 point, 7 statements, 205 bytes and 1 empty seek. The event branch has 3 rows, 2 points, 7 statements,
+651 bytes and 1 empty seek. `effect` is their coordinate-wise maximum, **not their sum**; `total = effect + cleanup`
+has 8 statements and otherwise the event branch dimensions. Owners atomically reserve this complete `total`
+from the same genuine original before checkout, keeping cleanup disjoint from effect authority. Body SQL and
+Source/Library whole-original multiplicities must be composed separately using their delivered declarations;
+unavailable declarations are never zero and this export supplies no invented body ceiling.
+
+Bytes use the existing compact payload boundary (fixed SQL, framing and empty control results excluded).
+There are four 36-byte UUID strings in the event plus transaction binding: subject, data.accountId, generated
+native event ID and transaction ID. The JSON event array is exactly **205 bytes**, including the 39-byte type,
+fixed property names/punctuation and generated 36-character UUID. The binding tuple
+`[partition, JSON.stringify(events), transactionId, null, null]` is at most **281 bytes**, using the validated 0–4095 partition;
+`SOURCE_FENCE_BINDING_BYTES` exports this derivation. Reylo's PostgreSQL adapter serializes the JSONB event input to a string before
+calling pg; this tuple bound includes its 18 escaped quotes plus two string delimiters (20 bytes beyond
+the 261-byte logical tuple). SQL null basis and receipt remain null parameters. `fence.sql` returns only epoch/int64 decimal position, at most **55 bytes**
+for the one-row array. It cannot return `node` or `moved_to`. The actual native fence still inserts one outbox
+position with `event_seq=0,event_count=1`; null basis and receipt make their INSERT branches unreachable.
+The catalogue data serialization is exactly **52 bytes** and its schema-validation component also consumes
+that payload. Account selection validates 36 bytes once; event shape validation compares the 111 fixed string bytes; result values remain foreign. No caller
+string cap or guessed whole allowance supplies these bounds.
+
+The event fence's two rows/points cover the partition update and exact new outbox key. A failed/empty fence
+still consumes its prepaid bound, including one empty seek; it throws before partition projection, writable
+wait or contention retry. One command claim, one ordered control sequence and one selected result enforce
+one checkout/attempt/fence and at most one event. Candidate keys, identity metadata rows and witness keys are
+zero: these controls enumerate none of those families. External engine requests are zero; PostgreSQL statements
+are charged on their own axis. Engine MVCC visibility work remains under the architecture's accepted engine
+boundary. Finalization is genuinely zero SQL: `finalizeCommandRecordSources` awaits
+`finalizeCommandRecordSourceSet`, whose absent declaration returns, then sees no small sources and returns.
+The profile refuses associations, and Promise body-query guarding forbids late finalizer SQL from descendants.
+Normal History/catalogue guards still run; no empty registration is interpreted as global coverage.
+
+Every reached await has original lifetime validation on entry and settlement, including the genuine event fence
+and COMMIT. Closure/revocation/expiry never refunds attempted work. Effect authority closes before cleanup;
+only the already held same-client ROLLBACK survives it. A failed/lost COMMIT rejects publication certainty even
+when the database committed. Cleanup failure discards that client and preserves both failures. No refill,
+new payer, second checkout or deadline extension is available. Ordinary command retry/moved routing, principal
+and denied-replay ordering retain their existing paths.
+
+The authored [focused outcomes](../../test/command/dispatch-lifetime-source-fence.test.ts) use the genuine executor,
+private native context and actual native component writer, plus independent literal prices. Existing stronger
+no-effect and ordinary fixtures remain unchanged; no obsolete assertion required removal. These native tests,
+full Kernel acceptance and growth/physical closure are **UNRUN** at source handoff. Owner-port fixture ledgers
+prove no production private funding. Source activation, genuine grant composition, receiving custody and complete
+Source/Library original quotes remain independent owner obligations; this producer alone establishes none of them.

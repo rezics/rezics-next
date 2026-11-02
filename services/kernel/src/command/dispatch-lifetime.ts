@@ -1,7 +1,23 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Pool, PoolClient } from 'pg';
 import type { WorkDimensions } from '../library/collection-source.ts';
-import type { CommandTransaction } from './command.ts';
+import {
+  SOURCE_FENCE_COMMAND_DISPATCH_ALLOWANCE,
+  assertSourceFenceAccount,
+  assertSourceFenceOptions,
+  sourceFenceResponse,
+  type SourceFenceCommandDispatchOwner,
+} from './dispatch-lifetime-source-fence.ts';
+export {
+  SOURCE_FENCE_COMMAND_DISPATCH_ALLOWANCE,
+  SOURCE_FENCE_COMMAND_DISPATCH_CONTROLS,
+  SOURCE_FENCE_BINDING_BYTES,
+} from './dispatch-lifetime-source-fence.ts';
+export type {
+  SourceFenceCommandDispatchOwner,
+  SourceFenceCommandDispatchAllowance,
+} from './dispatch-lifetime-source-fence.ts';
+import type { CommandResult, CommandTransaction } from './command.ts';
 
 export type CommandDispatchPrice = Readonly<{ work: WorkDimensions; engineRequests: 0 }>;
 const price = (
@@ -103,7 +119,8 @@ type Scope = {
   running: boolean;
   succeeded: boolean;
   validate: CommandDispatchOwner['validate'];
-  reserve: CommandDispatchOwner['reserve'];
+  reserve(): void | Promise<void>;
+  accountId: string | undefined;
   done: Promise<void>;
   finish(): void;
   unchanged(): boolean;
@@ -134,6 +151,36 @@ export async function withCommandDispatchLifetime<T>(
   owner: CommandDispatchOwner,
   body: () => Promise<T>,
 ): Promise<T> {
+  return withDispatchScope(pool, deadline, owner, () => owner.reserve(COMMAND_DISPATCH_ALLOWANCE), undefined, body);
+}
+
+/** Additive exact Source exhausted native-fence profile; preserves the callback's normal result ABI. */
+export async function withSourceFenceCommandDispatchLifetime<T>(
+  pool: Pool,
+  deadline: number,
+  owner: SourceFenceCommandDispatchOwner,
+  accountId: string,
+  body: () => Promise<T>,
+): Promise<T> {
+  assertSourceFenceAccount(accountId);
+  return withDispatchScope(
+    pool,
+    deadline,
+    owner,
+    () => owner.reserve(SOURCE_FENCE_COMMAND_DISPATCH_ALLOWANCE),
+    accountId,
+    body,
+  );
+}
+
+async function withDispatchScope<T>(
+  pool: Pool,
+  deadline: number,
+  owner: CommandDispatchOwner | SourceFenceCommandDispatchOwner,
+  reserve: () => void | Promise<void>,
+  accountId: string | undefined,
+  body: () => Promise<T>,
+): Promise<T> {
   if (scopes.getStore() || !owner.original || typeof owner.original !== 'object' || activeOriginals.has(owner.original))
     fail('nested or overlapping original');
   if (!Number.isSafeInteger(deadline) || deadline <= Date.now() || deadline - Date.now() > 2_147_483_647)
@@ -142,7 +189,6 @@ export async function withCommandDispatchLifetime<T>(
   const originalValidate = owner.validate;
   const originalReserve = owner.reserve;
   const validate = originalValidate.bind(owner);
-  const reserve = originalReserve.bind(owner);
   let finish!: () => void;
   const scope: Scope = {
     pool,
@@ -153,6 +199,7 @@ export async function withCommandDispatchLifetime<T>(
     succeeded: false,
     validate,
     reserve,
+    accountId,
     done: new Promise<void>((resolve) => {
       finish = resolve;
     }),
@@ -196,6 +243,7 @@ export function claimCommandDispatchLifetime(
 ): CommandDispatchLifetime | undefined {
   const scope = scopes.getStore();
   if (!scope) return undefined;
+  if (scope.accountId !== undefined) assertSourceFenceOptions(options);
   if (!scope.open || !scope.unchanged() || scope.claimed || scope.pool !== pool || options.deadline !== scope.deadline)
     fail('foreign, changed, closed or reused invocation');
   if (
@@ -221,6 +269,8 @@ class CommandDispatchLifetime {
   #cleanup = false;
   #body = false;
   #query = false;
+  #response = false;
+  #event = false;
   #client: PoolClient | undefined;
   #tx: CommandTransaction | undefined;
   constructor(scope: Scope) {
@@ -238,6 +288,7 @@ class CommandDispatchLifetime {
 
   assertOptions(pool: Pool, options: Parameters<typeof claimCommandDispatchLifetime>[1]): void {
     this.checkpoint();
+    if (this.#scope.accountId !== undefined) assertSourceFenceOptions(options);
     if (
       pool !== this.#scope.pool ||
       options.deadline !== this.#scope.deadline ||
@@ -251,20 +302,38 @@ class CommandDispatchLifetime {
   }
   async prepare(): Promise<void> {
     this.checkpoint();
-    await this.#scope.reserve(COMMAND_DISPATCH_ALLOWANCE);
+    await this.#scope.reserve();
     this.checkpoint();
     this.#reserved = true;
   }
-  async control<T>(name: CommandDispatchControl, dispatch: () => Promise<T>): Promise<T> {
+  checkout(): void {
+    this.checkpoint();
+    if (!this.#reserved || this.#next !== 0 || this.#client) fail('repeated or unreserved checkout');
+    this.#next++;
+  }
+  async control<T>(name: CommandDispatchControl | 'eventFence', dispatch: () => Promise<T>): Promise<T> {
     this.checkpoint();
     // Closed identity and exact reached repetition, never SQL/prefix recognition.
-    if (!this.#reserved || name !== effectOrder[this.#next] || (name !== 'checkout' && !this.#client))
+    const expected = this.#event && this.#next === 6 ? 'eventFence' : effectOrder[this.#next];
+    if (!this.#reserved || name !== expected || (name !== 'checkout' && !this.#client))
       fail('unknown, unbound or repeated control');
     this.#next++;
     if (name === 'begin') this.#begun = true;
     const result = await dispatch();
     this.checkpoint();
     return result;
+  }
+  response<T>(response: CommandResult<T>, authenticNoEffect: boolean): CommandResult<T> {
+    this.checkpoint();
+    if (this.#response || this.#next !== 5) fail('repeated or out-of-order response');
+    this.#response = true;
+    if (this.#scope.accountId === undefined) return response;
+    const selected = sourceFenceResponse(response, authenticNoEffect, this.#scope.accountId);
+    this.#event = !authenticNoEffect;
+    return selected;
+  }
+  admitsEvents(): boolean {
+    return this.#scope.accountId !== undefined;
   }
   async body<T>(run: () => Promise<T>): Promise<T> {
     this.checkpoint();

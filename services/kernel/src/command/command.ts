@@ -354,6 +354,9 @@ export function registerCommandCallback(tx: CommandTransaction, callback: Comman
   const state = (tx as CallbackTransaction)[transactionCallbacks];
   if (!state?.active) throw new TypeError('No live command transaction');
   assertSelectedCallback(tx);
+  // This optional profile never admits callbacks, including descendants that try
+  // to register while final controls await after the body's association check.
+  if (selectedCallbacks.has(state)) throw new TypeError('Unsupported dispatch lifetime callback profile');
   if (typeof callback !== 'function') throw new TypeError('Command callback must be a function');
   state.callbacks.push(callback);
 }
@@ -627,8 +630,16 @@ async function executeCommand<T>(
       const gate = await measureCommandPhase('gate_wait', () => enterCommandGate(pool, partition, deadline));
       if (gate.status !== 'acquired') throw new CommandUnavailableError(gate.status, partition);
       commandPhase('transaction_pool_wait');
-      const checkout = <R>(work: (client: PoolClient) => Promise<R>): Promise<R> =>
-        dispatch ? dispatch.control('checkout', () => withConnection(pool, work)) : withConnection(pool, work);
+      const checkout = async <R>(work: (client: PoolClient) => Promise<R>): Promise<R> => {
+        dispatch?.checkout();
+        return withConnection(pool, (client) => {
+          // Actual acquisition boundary, inside withConnection's release custody.
+          // Do not wrap the whole transaction as a checkout await: its client has
+          // already been released when that outer await settles.
+          dispatch?.checkpoint();
+          return work(client);
+        });
+      };
       const result = await checkout(async (client) => {
         commandPhase('transaction_body');
         if (!dispatch) await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
@@ -706,9 +717,10 @@ async function executeCommand<T>(
                 storageKey: receiptCandidates.find((key) => key.startsWith(`rk1.${receiptKeys!.current}.`))!,
               }),
             );
-          const response = dispatch
+          const rawResponse = dispatch
             ? await dispatch.body(() => body(tx, { transactionId, time: time! }))
             : await body(tx, { transactionId, time });
+          const response = dispatch ? dispatch.response(rawResponse, noEffectResults.has(rawResponse)) : rawResponse;
           const noEffect = response.events.length === 0 && noEffectResults.has(response);
           if (response.events.length === 0 && !noEffect) throw new TypeError('A command must emit at least one event');
           if (response.events.length > MAX_COMMAND_EVENTS)
@@ -716,7 +728,7 @@ async function executeCommand<T>(
           if (dispatch) {
             dispatch.checkpoint();
             if (
-              !noEffect ||
+              (!noEffect && !dispatch.admitsEvents()) ||
               callbackState.callbacks.length ||
               commandRecordSources(tx).length ||
               hasCommandRecordSourceSet(tx) ||
@@ -778,17 +790,19 @@ async function executeCommand<T>(
               transaction_id: transactionId,
               receipt,
             });
+          const eventFence = () =>
+            fenceStatement.run(client, {
+              partition_no: partition,
+              events,
+              transaction_id: transactionId,
+              basis: basis
+                ? { principal: options.principal, clientId: basis.clientId, requestedBy: basis.requestedBy }
+                : null,
+              receipt,
+            });
           const row = noEffect
             ? await (dispatch ? dispatch.control('noEffectFence', noEffectFence) : noEffectFence())
-            : await fenceStatement.run(client, {
-                partition_no: partition,
-                events,
-                transaction_id: transactionId,
-                basis: basis
-                  ? { principal: options.principal, clientId: basis.clientId, requestedBy: basis.requestedBy }
-                  : null,
-                receipt,
-              });
+            : await (dispatch ? dispatch.control('eventFence', eventFence) : eventFence());
           if (row.length === 0) {
             if (dispatch || singleAttempt.getStore()) throw new CommandUnavailableError('contention', partition);
             receiptOwners.delete(tx);
