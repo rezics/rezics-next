@@ -16,9 +16,13 @@ const visible = (population: string) => ({ ...fixtures['subject-ratings-global']
 
 function clientFor(globalFigures: unknown[], selectedFigures: unknown[]): KernelClient {
   return {
-    'rating-questions': () => ({ get: async () => ({ status: 200, data: fixtures['subject-ratings-global'].preview.question }) }),
+    'rating-questions': () => ({
+      get: async () => ({ status: 200, data: fixtures['subject-ratings-global'].preview.question }),
+    }),
     subjects: () => ({
-      figure: { get: async () => ({ status: 200, data: { figure: fixtures['subject-ratings-global'].preview.figure } }) },
+      figure: {
+        get: async () => ({ status: 200, data: { figure: fixtures['subject-ratings-global'].preview.figure } }),
+      },
       ratings: {
         get: async ({ query }: { query: { population: string[] } }) => ({
           status: 200,
@@ -36,24 +40,38 @@ function clientFor(globalFigures: unknown[], selectedFigures: unknown[]): Kernel
 }
 
 const readSelected = (client: KernelClient) =>
-  readRatingPopulations(client, new Request('https://web.test'), {}, {
-    id: subject,
-    question: QUESTION,
-    expectedReader: null,
-    locale: 'en',
-    selected: [population],
-  });
+  readRatingPopulations(
+    client,
+    new Request('https://web.test'),
+    {},
+    {
+      id: subject,
+      question: QUESTION,
+      expectedReader: null,
+      locale: 'en',
+      selected: [population],
+    },
+  );
 
 test('Global and selected reads share aggregate admission and preserve siblings and meanless updating figures', async () => {
   const lawful = clientFor([hidden(GLOBAL)], [hidden(population)]);
   expect((await readRatings(lawful, subject)).global).toEqual({ kind: 'ready', value: hidden(GLOBAL) });
   expect(await readSelected(lawful)).toMatchObject({
-    result: { kind: 'ready', value: { items: [{ id: population, figure: { kind: 'ready', value: hidden(population) } }] } },
+    result: {
+      kind: 'ready',
+      value: { items: [{ id: population, figure: { kind: 'ready', value: hidden(population) } }] },
+    },
   });
 
   for (const [globalFigures, selectedFigures] of [
-    [[visible(GLOBAL), visible(GLOBAL)], [visible(population), visible(population)]],
-    [[visible(GLOBAL), visible(population)], [visible(population), visible(GLOBAL)]],
+    [
+      [visible(GLOBAL), visible(GLOBAL)],
+      [visible(population), visible(population)],
+    ],
+    [
+      [visible(GLOBAL), visible(population)],
+      [visible(population), visible(GLOBAL)],
+    ],
   ]) {
     const client = clientFor(globalFigures, selectedFigures);
     expect(await readRatings(client, subject)).toMatchObject({
