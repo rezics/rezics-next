@@ -19,7 +19,7 @@ const profile = (source: CompositionDocument): PresentationProfile => ({
 });
 
 test('unchanged Puck values preserve localized representation, digest and the clean draft', async () => {
-  for (const text of ['', 'Title', { en: 'Title', fr: '', de: 'Titel' }, { ja: '' }]) {
+  for (const text of ['', 'Title', { en: 'Title', fr: '', it: 'Titolo', nl: '' }, { ja: '' }]) {
     const source = document(text);
     const saved = { ok: true as const, reader: 'editor', profile: profile(source), head: 1, digest: profileDigest(profile(source)) };
     const draft = presentationDraft(saved);
@@ -36,8 +36,8 @@ test('localized edits, translations and clears survive Puck resolution without l
     ['', { en: 'Changed', fr: '' }, 'Changed'],
     ['Title', { en: '', fr: '' }, ''],
     ['Title', { en: 'Title', ja: '題' }, { en: 'Title', ja: '題' }],
-    [{ en: 'Title', fr: '', de: 'Titel' }, { en: '', fr: '', de: 'Titel' }, { en: '', fr: '', de: 'Titel' }],
-    [{ en: 'Title', de: 'Titel' }, { en: 'Changed' }, { en: 'Changed', de: 'Titel' }],
+    [{ en: 'Title', fr: '', it: 'Titolo' }, { en: '', fr: '', it: 'Titolo' }, { en: '', fr: '', it: 'Titolo' }],
+    [{ en: 'Title', it: 'Titolo' }, { en: 'Changed' }, { en: 'Changed', it: 'Titolo' }],
   ] as const) {
     const data = structuredClone(fromComposition(document(text)));
     label(data).label = edit;
