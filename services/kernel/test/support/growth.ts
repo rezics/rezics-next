@@ -651,10 +651,7 @@ function ineligibilityReason(error: Error): string {
 }
 
 /** Terminal eligibility after background-growth, attempt-ledger and counted-unit guards. Inclusive bound failures stay eligible. */
-export function growthRunEligibility(
-  check: GrowthCheck,
-  samples: readonly ReportSample[],
-): GrowthProfileEligibility {
+export function growthRunEligibility(check: GrowthCheck, samples: readonly ReportSample[]): GrowthProfileEligibility {
   const background = backgroundBoundFailure(check.name, samples);
   if (background) return { status: 'ineligible', reason: background };
   const attempts = attemptLedgerFailure(check, samples);

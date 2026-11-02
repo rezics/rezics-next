@@ -298,14 +298,11 @@ test('harness eligibility follows background, attempt-ledger and counted-unit gu
 
   const background = 'SELECT id FROM records';
   expect(
-    growthRunEligibility(
-      eligibilityCheck({ name: 'poller' }),
-      [
-        { scale: 1, cost: { backgroundCosts: { [background]: { rows: 10, blocks: 0, bounded: true } } } },
-        { scale: 8, cost: { backgroundCosts: { [background]: { rows: 100, blocks: 0, bounded: true } } } },
-        { scale: 64, cost: { backgroundCosts: { [background]: { rows: 10, blocks: 0, bounded: true } } } },
-      ] as unknown as ReportSample[],
-    ),
+    growthRunEligibility(eligibilityCheck({ name: 'poller' }), [
+      { scale: 1, cost: { backgroundCosts: { [background]: { rows: 10, blocks: 0, bounded: true } } } },
+      { scale: 8, cost: { backgroundCosts: { [background]: { rows: 100, blocks: 0, bounded: true } } } },
+      { scale: 64, cost: { backgroundCosts: { [background]: { rows: 10, blocks: 0, bounded: true } } } },
+    ] as unknown as ReportSample[]),
   ).toEqual({
     status: 'ineligible',
     reason: `poller: background statement with largest rows ${JSON.stringify(background)}; rows per statement grows from 10 to 100 at scale 8, beyond default slack 2`,
