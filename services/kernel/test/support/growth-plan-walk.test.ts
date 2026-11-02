@@ -110,7 +110,9 @@ function modify(schema?: string, children?: unknown[], name = 'items') {
 function writeTargets(...documents: unknown[]) {
   const output = new Map<string, RelationIdentity>();
   for (const document of documents) collectModifyTargets(document, output);
-  return [...output.values()].sort((left, right) => relationIdentityKey(left).localeCompare(relationIdentityKey(right)));
+  return [...output.values()].sort((left, right) =>
+    relationIdentityKey(left).localeCompare(relationIdentityKey(right)),
+  );
 }
 
 function document(plan: unknown, queryText = 'insert') {
@@ -120,12 +122,10 @@ function document(plan: unknown, queryText = 'insert') {
 test('write-target discovery keeps schema-qualified ModifyTable targets from admitted envelopes', () => {
   const decoy = modify('decoy');
   expect(
-    writeTargets(
-      document(modify('sales')),
-      [{ Plan: node({}, [modify('app')]) }],
-      document(modify()),
-      { ...document(node({ Extra: decoy })), Extra: decoy },
-    ),
+    writeTargets(document(modify('sales')), [{ Plan: node({}, [modify('app')]) }], document(modify()), {
+      ...document(node({ Extra: decoy })),
+      Extra: decoy,
+    }),
   ).toEqual([
     { kind: 'relation', schema: 'app', name: 'items' },
     { kind: 'relation', schema: 'public', name: 'items' },

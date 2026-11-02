@@ -51,10 +51,7 @@ test('qualified-string compatibility keeps ordinary names and refuses ambiguous 
     quotedRelationIdentity({ kind: 'relation', schema: 'sales.region', name: 'items.v1' }),
     '"sales.region"."items.v1"',
   );
-  assert.equal(
-    quotedRelationIdentity({ kind: 'relation', schema: 'quote"d', name: 'name"d' }),
-    '"quote""d"."name""d"',
-  );
+  assert.equal(quotedRelationIdentity({ kind: 'relation', schema: 'quote"d', name: 'name"d' }), '"quote""d"."name""d"');
   assert.notEqual(
     relationIdentityKey({ database: 'kernel', schema: 'app', kind: 'relation', name: 'items' }),
     relationIdentityKey({ database: 'auth', schema: 'app', kind: 'relation', name: 'items' }),

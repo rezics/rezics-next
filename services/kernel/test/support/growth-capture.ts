@@ -1550,8 +1550,7 @@ export async function settle(
     if (backend !== undefined) await assertMeasuredTransactionOnClient(backend, lease, deadline);
     const metadata = needsMaintenance ? await relationMaintenance(requested, lease, deadline) : [];
     await disableAutovacuumOn(metadata, lease, deadline);
-    const targets =
-      requested ?? metadata.map(({ schema, name }) => ({ kind: 'relation' as const, schema, name }));
+    const targets = requested ?? metadata.map(({ schema, name }) => ({ kind: 'relation' as const, schema, name }));
     for (const relation of targets) {
       const sql = [
         'VACUUM (INDEX_CLEANUP ON',
