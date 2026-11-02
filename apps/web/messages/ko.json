@@ -3883,6 +3883,8 @@
   "search_subject_types_help": "선택한 유형 중 하나 또는 그 하위 유형에 해당하는 결과를 표시합니다. 항목 유형도 지정하면 두 조건을 모두 적용합니다.",
   "search_existing_filter": "기타 조건",
   "search_close_filters": "필터 닫기",
+  "search_filter_revert_action": "적용하지 않은 변경사항 되돌리기",
+  "search_filter_revert_status": "필터 변경사항을 현재 검색 조건으로 되돌렸습니다.",
   "subject_spoiler_hide": "스포일러 숨기기",
   "subject_summary_expand": "소개 더 보기",
   "subject_summary_collapse": "소개 접기",

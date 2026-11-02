@@ -3883,6 +3883,8 @@
   "search_subject_types_help": "結果須符合任一所選類型或其子類型。如果另有限定條目類型，則兩項條件都須符合。",
   "search_existing_filter": "其他條件",
   "search_close_filters": "關閉篩選",
+  "search_filter_revert_action": "還原未套用的變更",
+  "search_filter_revert_status": "篩選變更已還原為目前搜尋條件。",
   "subject_spoiler_hide": "隱藏劇透",
   "subject_summary_expand": "展開簡介",
   "subject_summary_collapse": "收起簡介",

@@ -4034,6 +4034,8 @@
   "search_subject_types_help": "Match any selected type or its subtypes. If a subject type is also set, both conditions apply.",
   "search_existing_filter": "Other conditions",
   "search_close_filters": "Close filters",
+  "search_filter_revert_action": "Revert edits",
+  "search_filter_revert_status": "Filter edits reverted to the current search.",
   "subject_spoiler_hide": "Hide spoilers",
   "subject_summary_expand": "Read more",
   "subject_summary_collapse": "Show less",

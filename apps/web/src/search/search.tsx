@@ -50,6 +50,7 @@ import {
   type ConditionMetadata,
   type SearchProblem,
 } from './condition-editor-model';
+import { createFilterDraft, resetFilterDraft } from './filter-draft-reset';
 type SearchResult = LegacySearchPage;
 type SearchParams = {
   query: string;
@@ -431,15 +432,13 @@ export function SearchPage({
     sort: data?.sort === 'rating' ? 'rating' : undefined,
   };
   const stateKey = JSON.stringify(committedState);
-  const [draft, setDraft] = useState({
-    key: stateKey,
-    condition: data?.condition,
-    languages: committedState.languages,
-  });
-  const [attempted, setAttempted] = useState(false);
+  const latestStateKey = useRef(stateKey);
+  latestStateKey.current = stateKey;
+  const baseline = { condition: data?.condition, languages: committedState.languages };
+  const [draft, setDraft] = useState(() => createFilterDraft(stateKey, baseline));
+  const [revertedKey, setRevertedKey] = useState<string>();
   if (draft.key !== stateKey) {
-    setDraft({ key: stateKey, condition: data?.condition, languages: committedState.languages });
-    setAttempted(false);
+    setDraft(createFilterDraft(stateKey, baseline));
   }
   const admit = useMemo(
     () => (data?.conditionMetadata ? conditionAdmission(data.conditionMetadata) : undefined),
@@ -448,7 +447,7 @@ export function SearchPage({
   const localIssues = admit?.(draft.condition, committedState) ?? [];
   const issues = [
     ...(data?.problem?.errors ?? []),
-    ...(attempted || draft.condition !== data?.condition ? localIssues : []),
+    ...(draft.attempted || draft.condition !== data?.condition ? localIssues : []),
   ];
   const editedState = conditionSearchState(committedState, draft.condition, draft.languages);
   // Pending fields can be incomplete. Result navigation consumes only an admitted tree.
@@ -558,6 +557,7 @@ export function SearchPage({
     [activeFilterCount, openFilters],
   );
   useRegisterHeaderSearchFilters(hasFilterPanel, filterRegion);
+  const revertStatus = useRef<HTMLParagraphElement>(null);
   const results = renderResults(
     query,
     result,
@@ -571,7 +571,7 @@ export function SearchPage({
     committedState,
   );
   const navigate = (href: string, removingCondition = false) => {
-    setAttempted(true);
+    setDraft((previous) => ({ ...previous, attempted: true }));
     if (!removingCondition && localIssues.length) {
       requestAnimationFrame(() => document.querySelector<HTMLElement>('[data-condition-errors]')?.focus());
       return;
@@ -579,7 +579,7 @@ export function SearchPage({
     void router?.navigate({ href });
   };
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
-    setAttempted(true);
+    setDraft((previous) => ({ ...previous, attempted: true }));
     if (localIssues.length || router) event.preventDefault();
     if (localIssues.length) {
       const form = event.currentTarget;
@@ -592,6 +592,15 @@ export function SearchPage({
         if (typeof value === 'string' && value !== '') params.append(key, value);
       navigate(`/${locale}/search?${params}`);
     }
+  };
+  const revertDraft = () => {
+    const expectedKey = stateKey;
+    if (latestStateKey.current !== expectedKey) return;
+    setDraft((previous) => resetFilterDraft(previous, expectedKey, latestStateKey.current, baseline));
+    setRevertedKey(expectedKey);
+    requestAnimationFrame(() => {
+      if (latestStateKey.current === expectedKey) revertStatus.current?.focus();
+    });
   };
   const follow = (event: React.MouseEvent<HTMLElement>) => {
     const anchor = (event.target as HTMLElement).closest<HTMLAnchorElement>('a[href]');
@@ -810,6 +819,22 @@ export function SearchPage({
       {Object.entries(data?.ranges ?? {}).map(([property, range]) => (
         <input key={property} type="hidden" name={`r.${property}`} value={JSON.stringify(range)} />
       ))}
+      {editing && (
+        <div className="flex items-center gap-2">
+          <Button type="button" variant="outline" onClick={revertDraft}>
+            {m.search_filter_revert_action()}
+          </Button>
+        </div>
+      )}
+      <p
+        ref={revertStatus}
+        role="status"
+        aria-live="polite"
+        tabIndex={-1}
+        className="rounded-sm text-sm text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      >
+        {revertedKey === stateKey ? m.search_filter_revert_status() : ''}
+      </p>
     </div>
   );
 

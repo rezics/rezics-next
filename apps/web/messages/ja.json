@@ -3883,6 +3883,8 @@
   "search_subject_types_help": "選んだいずれかの型またはその下位の型に一致する結果を表示します。項目の型も指定した場合は、両方の条件が適用されます。",
   "search_existing_filter": "その他の条件",
   "search_close_filters": "絞り込みを閉じる",
+  "search_filter_revert_action": "未適用の編集を元に戻す",
+  "search_filter_revert_status": "フィルターの編集を現在の検索条件に戻しました。",
   "subject_spoiler_hide": "ネタバレを隠す",
   "subject_summary_expand": "紹介をもっと読む",
   "subject_summary_collapse": "紹介を折りたたむ",

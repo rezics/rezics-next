@@ -3883,6 +3883,8 @@
   "search_subject_types_help": "Ergebnisse müssen einem der gewählten Typen oder dessen Untertypen entsprechen. Ist auch ein Eintragstyp festgelegt, gelten beide Bedingungen.",
   "search_existing_filter": "Weitere Bedingungen",
   "search_close_filters": "Filter schließen",
+  "search_filter_revert_action": "Nicht übernommene Änderungen zurücksetzen",
+  "search_filter_revert_status": "Filteränderungen wurden auf die aktuelle Suche zurückgesetzt.",
   "subject_spoiler_hide": "Spoiler ausblenden",
   "subject_summary_expand": "Mehr lesen",
   "subject_summary_collapse": "Weniger anzeigen",

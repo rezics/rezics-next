@@ -3883,6 +3883,8 @@
   "search_subject_types_help": "Los resultados deben coincidir con alguno de los tipos elegidos o sus subtipos. Si también se especifica un tipo de ficha, se aplican ambas condiciones.",
   "search_existing_filter": "Otras condiciones",
   "search_close_filters": "Cerrar filtros",
+  "search_filter_revert_action": "Deshacer cambios sin aplicar",
+  "search_filter_revert_status": "Se revirtieron los cambios de filtros a la búsqueda actual.",
   "subject_spoiler_hide": "Ocultar spoilers",
   "subject_summary_expand": "Leer más",
   "subject_summary_collapse": "Mostrar menos",

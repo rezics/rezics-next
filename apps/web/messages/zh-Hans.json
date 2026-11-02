@@ -3883,6 +3883,8 @@
   "search_subject_types_help": "结果须符合任一所选类型或其子类型。如果另有限定条目类型，则两项条件都须符合。",
   "search_existing_filter": "其他条件",
   "search_close_filters": "关闭筛选",
+  "search_filter_revert_action": "撤销未应用的修改",
+  "search_filter_revert_status": "筛选修改已恢复为当前搜索条件。",
   "subject_spoiler_hide": "隐藏剧透",
   "subject_summary_expand": "展开简介",
   "subject_summary_collapse": "收起简介",

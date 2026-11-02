@@ -3883,6 +3883,8 @@
   "search_subject_types_help": "Les résultats doivent correspondre à l’un des types choisis ou à ses sous-types. Si un type de fiche est aussi défini, les deux conditions s’appliquent.",
   "search_existing_filter": "Autres conditions",
   "search_close_filters": "Fermer les filtres",
+  "search_filter_revert_action": "Annuler les modifications non appliquées",
+  "search_filter_revert_status": "Les modifications des filtres ont été annulées et les critères actuels restaurés.",
   "subject_spoiler_hide": "Masquer les révélations",
   "subject_summary_expand": "Lire la suite",
   "subject_summary_collapse": "Réduire",
