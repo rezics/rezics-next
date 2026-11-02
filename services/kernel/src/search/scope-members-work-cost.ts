@@ -78,7 +78,9 @@ export function meterMembersDefinition<T>(tx: OperationalTransaction, body: () =
       const sql = typeof config === 'string' ? config : config.text;
       const parameters = (typeof config === 'string' ? values : config.values) ?? [];
       const bytes = Buffer.byteLength(sql) + Buffer.byteLength(JSON.stringify(parameters));
-      if (!/^\s*(SELECT|WITH)\b/i.test(sql)) throw new ProblemError('dependency_unavailable');
+      // Native SQL files can retain their leading documentation comments in the generated statement.
+      const statement = sql.replace(/^\s*(?:(?:--[^\n]*(?:\n|$)|\/\*[\s\S]*?\*\/)\s*)*/, '');
+      if (!/^(SELECT|WITH)\b/i.test(statement)) throw new ProblemError('dependency_unavailable');
       let bound: Partial<WorkDimensions>;
       if (/semantic\.definition_release\b/.test(sql)) {
         if (/\bbody\b/.test(sql)) {
