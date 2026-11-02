@@ -644,7 +644,9 @@ export function StatementFields({
     if (decision.kind === 'qualifier')
       return (draft.qualifiers ?? []).some((part) => identity(part).key === decision.key && identity(part).added);
     if (decision.kind === 'reference')
-      return draft.references.some((reference) => identity(reference).key === decision.key && identity(reference).added);
+      return draft.references.some(
+        (reference) => identity(reference).key === decision.key && identity(reference).added,
+      );
     return draft.references.some((reference) =>
       reference.parts.some((part) => identity(part).key === decision.key && identity(part).added),
     );
