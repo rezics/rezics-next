@@ -13,9 +13,13 @@ test('required Character metadata recovery gates new commands and preserves priv
   const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
   const window = new Window({ url: 'https://site.test/en/catalogue/character' });
   const globals = {
-    ...Object.fromEntries(['document', 'navigator', 'HTMLElement', 'Element', 'Node', 'Document',
-      'DocumentFragment', 'MutationObserver'].map((key) => [key, Reflect.get(window, key)])),
-    window, getComputedStyle: window.getComputedStyle.bind(window), IS_REACT_ACT_ENVIRONMENT: true,
+    ...Object.fromEntries(
+      ['document', 'navigator', 'HTMLElement', 'Element', 'Node', 'Document', 'DocumentFragment', 'MutationObserver']
+        .map((key) => [key, Reflect.get(window, key)]),
+    ),
+    window,
+    getComputedStyle: window.getComputedStyle.bind(window),
+    IS_REACT_ACT_ENVIRONMENT: true,
   };
   const saved = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals))
@@ -44,12 +48,15 @@ test('required Character metadata recovery gates new commands and preserves priv
   let refreshes = 0;
   let created = 0;
   const commands: CharacterCommand[] = [];
-  const transport = { ...fixture.transport, create: async (command: CharacterCommand) => {
-    commands.push(command);
-    if (commands.length === 1) return { ok: false as const, reason: 'invalid' as const, refreshDefinitions: true };
-    if (commands.length === 2) return { ok: false as const, reason: 'unavailable' as const, refreshDefinitions: true };
-    return fixture.transport.create(command);
-  } };
+  const transport = {
+    ...fixture.transport,
+    create: async (command: CharacterCommand) => {
+      commands.push(command);
+      if (commands.length === 1) return { ok: false as const, reason: 'invalid' as const, refreshDefinitions: true };
+      if (commands.length === 2) return { ok: false as const, reason: 'unavailable' as const, refreshDefinitions: true };
+      return fixture.transport.create(command);
+    },
+  };
   const click = (name: string) => act(async () => user.click(canvas.getByRole('button', { name })));
   const input = (name: string, index = 0) => canvas.getAllByRole('textbox', { name })[index] as HTMLInputElement;
   const replace = (control: HTMLElement, value: string) => act(async () => {
@@ -111,9 +118,11 @@ test('required Character metadata recovery gates new commands and preserves priv
     expect(commands[1]!.item).toMatchObject({ labels: { en: 'Traveler', ja: '新しい旅人' },
       descriptions: { ja: 'Private description' }, aliases: { ja: ['旅行者'] }, statements: {} });
     expect(input(m.catalogue_create_label()).closest('fieldset[disabled]')).not.toBeNull();
+    const sealed = structuredClone(commands[1]);
     await click(m.correction_retry());
     expect(commands).toHaveLength(3);
     expect(commands[2]).toBe(commands[1]);
+    expect(commands[2]).toEqual(sealed);
     expect(refreshes).toBe(3);
     expect(created).toBe(1);
   } finally {

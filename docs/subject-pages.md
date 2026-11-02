@@ -44,9 +44,9 @@ messages remain visible beside the read retry.
 
 Character creation refreshes rejected metadata independently of the public current reading, retaining editable terms,
 facts and correction links on refresh failure with a metadata retry.
-An explicit successful required refresh revalidates retained input before new commands; retired facts stay private until corrected or removed, while unresolved commands keep exact replay.
-Populated language rows and staged facts require
-row-local removal confirmation with Cancel; surviving inputs retain their stable correction targets. Uncertain
+An explicit successful required refresh revalidates retained input before new commands; retired facts stay private
+until corrected or removed, while unresolved commands keep exact replay. Populated language rows and staged facts
+require row-local removal confirmation with Cancel; surviving inputs retain their stable correction targets. Uncertain
 submissions keep removal and editing locked to the original request.
 
 Album creation resolves rejected submitted indices to stable assertion rows and authored language controls; following an invalid correction explicitly reviews a new command, while conflicts still require Review and uncertain commands remain sealed. Unknown addresses remain inspectable without a correction link.
