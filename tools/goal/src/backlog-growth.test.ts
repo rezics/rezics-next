@@ -67,7 +67,13 @@ function task(db: Database, id: string, state: string, sequence: number, brief: 
   db.query('INSERT INTO worker_tasks(id, sequence, current_attempt, body) VALUES (?, ?, 1, ?)').run(
     id,
     sequence,
-    JSON.stringify({ id, state, branch: `worker/${id}`, createdAt: new Date(NOW - 5 * 3_600_000).toISOString(), brief }),
+    JSON.stringify({
+      id,
+      state,
+      branch: `worker/${id}`,
+      createdAt: new Date(NOW - 5 * 3_600_000).toISOString(),
+      brief,
+    }),
   );
 }
 
@@ -191,12 +197,16 @@ async function run(input: Input) {
   }
 
   const taskPlan = db
-    .query("EXPLAIN QUERY PLAN SELECT id, current_attempt, body FROM worker_tasks WHERE json_extract(body, '$.state')='stopped' ORDER BY sequence")
+    .query(
+      "EXPLAIN QUERY PLAN SELECT id, current_attempt, body FROM worker_tasks WHERE json_extract(body, '$.state')='stopped' ORDER BY sequence",
+    )
     .all()
     .map((step) => (step as { detail: string }).detail)
     .join(' ');
   const eventPlan = db
-    .query('EXPLAIN QUERY PLAN SELECT at FROM worker_events WHERE task_id=? AND attempt=? ORDER BY sequence DESC LIMIT 1')
+    .query(
+      'EXPLAIN QUERY PLAN SELECT at FROM worker_events WHERE task_id=? AND attempt=? ORDER BY sequence DESC LIMIT 1',
+    )
     .all('stopped-00', 1)
     .map((step) => (step as { detail: string }).detail)
     .join(' ');
@@ -246,8 +256,7 @@ test(GROWTH_SCENARIO, async () => {
   expect(empty.sweeps[0]).toEqual({ dispatched: [], continued: [], refused: [], expired: [], woken: [] });
 
   const history: Awaited<ReturnType<typeof run>>[] = [];
-  for (const settled of [100, 1_000, 5_000])
-    history.push(await run({ settled, stopped: 1, ready: 1, manager: true }));
+  for (const settled of [100, 1_000, 5_000]) history.push(await run({ settled, stopped: 1, ready: 1, manager: true }));
   expect(history.map((sample) => sample.metrics.sqliteExecutions)).toEqual([
     history[0]!.metrics.sqliteExecutions,
     history[0]!.metrics.sqliteExecutions,
