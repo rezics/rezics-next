@@ -7,6 +7,10 @@ export type ShelfStateIntent = LibraryChangeInput & { revision: number };
 export type ShelfSelectionCandidate = Pick<PersonalLibraryEntry, 'subjectId' | 'stateOptions'> & {
   subject: { id: string } | null;
 };
+export type ShelfRemovalIdentity = Pick<
+  PersonalLibraryEntry,
+  'subjectId' | 'revision' | 'incarnationId' | 'removeKey'
+>;
 export type ShelfOutcome = {
   subjectId: string;
   title: string;
@@ -40,6 +44,18 @@ export function matchesShelfLabelIntent(
     entry.incarnationId === intent.entry.incarnationId &&
     entry.changeKey === intent.entry.changeKey &&
     entry.removeKey === intent.entry.removeKey
+  );
+}
+
+/** A removal review is bound to the exact loaded entry, including a recreated incarnation. */
+export function shelfRemovalSelectionSignature(entries: readonly ShelfRemovalIdentity[]): string {
+  return JSON.stringify(
+    entries.map(({ subjectId, revision, incarnationId, removeKey }) => [
+      subjectId,
+      revision,
+      incarnationId ?? null,
+      removeKey,
+    ]),
   );
 }
 

@@ -48,8 +48,10 @@ import {
 } from './shelf-rows';
 import { ShelfLabelAction, ShelfLabelOutcomes } from './shelf-labels';
 import { groupBulkStatusOutcomes } from './bulk-status';
+import { useBulkLibraryRemoval } from './bulk-library-removal-controller';
+import { BulkLibraryRemovalAction, BulkLibraryRemovalReviewView } from './bulk-library-removal-view';
 import { useSession } from '../session/query';
-import { selectableEntry } from './shelf-selection';
+import { selectableEntry, type ShelfRemovalIdentity } from './shelf-selection';
 import type { LibrarySubject } from './reads';
 import type { LabelShelfEntry } from './label-shelf-read';
 
@@ -244,21 +246,41 @@ function selectionProps(entry: PersonalLibraryEntry, controls: Controls) {
   };
 }
 
-function SelectionBar({ controls }: { controls: Controls }) {
+function matchesRemovedShelfEntry(entry: PersonalLibraryEntry, landed: ShelfRemovalIdentity): boolean {
+  return (
+    entry.subjectId === landed.subjectId &&
+    entry.revision === landed.revision &&
+    entry.incarnationId === landed.incarnationId &&
+    entry.removeKey === landed.removeKey
+  );
+}
+
+function SelectionBar({
+  controls,
+  bulkRemoval,
+}: {
+  controls: Controls;
+  bulkRemoval: ReturnType<typeof useBulkLibraryRemoval>;
+}) {
   const [chosen, setChosen] = useState('');
   const selectedState = controls.commonStates.some((option) => option.id === chosen) ? chosen : '';
   if (!controls.bulkStatusWriteAdmitted && !controls.labelWriteAdmitted && !controls.labelRemoveAdmitted) return null;
   const eligible = controls.rows.some((row) => controls.selectable(row.entry));
   if (!controls.selected.length)
-    return eligible ? (
-      <Button
-        variant="outline"
-        disabled={!controls.hydrated || controls.selectionPending}
-        onClick={controls.selectPage}
-      >
-        {m.library_selection_page()}
-      </Button>
-    ) : null;
+    return (
+      <>
+        {eligible ? (
+          <Button
+            variant="outline"
+            disabled={!controls.hydrated || controls.selectionPending}
+            onClick={controls.selectPage}
+          >
+            {m.library_selection_page()}
+          </Button>
+        ) : null}
+        <BulkLibraryRemovalAction controller={bulkRemoval} pending={controls.pending} />
+      </>
+    );
   return (
     <div
       role="region"
@@ -308,6 +330,7 @@ function SelectionBar({ controls }: { controls: Controls }) {
       ) : controls.bulkStatusWriteAdmitted ? (
         <p className="text-sm">{m.library_selection_no_common()}</p>
       ) : null}
+      <BulkLibraryRemovalAction controller={bulkRemoval} pending={controls.pending} />
       <ShelfLabelAction controls={controls} />
       <ShelfLabelAction controls={controls} kind="unassign" />
       {controls.selectionBlocked ? <p className="text-sm">{m.library_selection_unknown()}</p> : null}
@@ -626,21 +649,54 @@ export function ShelfEntries(props: ShelfEntriesProps) {
     ? JSON.stringify([props.type, props.state, props.sort, props.cursor])
     : sourceUrl.href;
   const context = `${session.subject ?? session.state}:${props.locale}:${population}`;
-  const [source, setSource] = useState({ entries: props.entries, context, generation: 0, active: true });
+  const [source, setSource] = useState({
+    entries: props.entries,
+    context,
+    generation: 0,
+    active: true,
+    landedEntries: [] as ShelfRemovalIdentity[],
+  });
   const latest = useRef(props.isCurrent);
   latest.current = props.isCurrent;
   const [fallbackLease] = useState(shelfMutationLease);
   const mutationLease = props.mutationLease ?? fallbackLease;
   if ((!props.isCurrent && source.entries !== props.entries) || source.context !== context) {
     source.active = false;
-    setSource({ entries: props.entries, context, generation: source.generation + 1, active: true });
+    setSource({
+      entries: props.entries,
+      context,
+      generation: source.generation + 1,
+      active: true,
+      landedEntries: [],
+    });
   }
+  const sourceGeneration = source.generation;
+  const onBulkRemovalLanded = (targets: readonly ShelfRemovalIdentity[]) => {
+    if (source.generation !== sourceGeneration || !source.active || !(latest.current?.() ?? true)) return;
+    setSource((current) => {
+      if (current.generation !== sourceGeneration || !current.active) return current;
+      const known = new Set(
+        current.landedEntries.map(({ subjectId, revision, incarnationId, removeKey }) =>
+          JSON.stringify([subjectId, revision, incarnationId ?? null, removeKey]),
+        ),
+      );
+      const added = targets.filter(
+        ({ subjectId, revision, incarnationId, removeKey }) =>
+          !known.has(JSON.stringify([subjectId, revision, incarnationId ?? null, removeKey])),
+      );
+      return added.length ? { ...current, landedEntries: [...current.landedEntries, ...added] } : current;
+    });
+  };
   return (
     <ShelfEntriesPage
       key={source.generation}
       {...props}
+      entries={props.entries.filter(
+        (entry) => !source.landedEntries.some((landed) => matchesRemovedShelfEntry(entry, landed)),
+      )}
       isCurrent={() => source.active && (latest.current?.() ?? true)}
       mutationLease={mutationLease}
+      onBulkRemovalLanded={onBulkRemovalLanded}
     />
   );
 }
@@ -657,9 +713,13 @@ function ShelfEntriesPage({
   cursor,
   state,
   mutationLease,
+  onBulkRemovalLanded,
   isCurrent,
   empty,
-}: ShelfEntriesProps & { mutationLease: ShelfMutationLease }) {
+}: ShelfEntriesProps & {
+  mutationLease: ShelfMutationLease;
+  onBulkRemovalLanded: (subjectIds: readonly string[]) => void;
+}) {
   const hydrated = useHydrated();
   const shelfRows = useShelfRows(entries, locale, mutationLease, isCurrent);
   const controls: Controls = {
@@ -673,6 +733,18 @@ function ShelfEntriesPage({
     ...(sort ? { sort } : {}),
     ...(filterSort ? { filterSort } : {}),
   };
+  const bulkRemoval = useBulkLibraryRemoval({
+    rows: shelfRows.rows,
+    selected: shelfRows.selected,
+    locale,
+    isCurrent: shelfRows.isCurrent,
+    selectionBlocked: shelfRows.selectionBlocked,
+    writeAdmitted: shelfRows.bulkStatusWriteAdmitted,
+    readAdmitted: shelfRows.bulkStatusReadAdmitted,
+    pending: shelfRows.pending,
+    mutationLease,
+    onLanded: onBulkRemovalLanded,
+  });
   const leaving = shelfRows.rows.find((row) => row.entry.subjectId === shelfRows.removing)?.entry;
   const notices = layout === 'grid' ? [] : shelfRows.rows.filter((row) => row.conflict || row.failure);
   if (
@@ -680,7 +752,8 @@ function ShelfEntriesPage({
     !shelfRows.restoreMessage &&
     !shelfRows.outcomes.length &&
     !shelfRows.labelOutcomes.length &&
-    !shelfRows.bulkStatusReview
+    !shelfRows.bulkStatusReview &&
+    !bulkRemoval.review
   )
     return empty ?? null;
   return (
@@ -695,8 +768,9 @@ function ShelfEntriesPage({
           {m.library_bulk_status_preview_error()}
         </p>
       ) : null}
-      <SelectionBar controls={controls} />
+      <SelectionBar controls={controls} bulkRemoval={bulkRemoval} />
       <BulkStatusReview controls={controls} />
+      <BulkLibraryRemovalReviewView controller={bulkRemoval} pending={shelfRows.pending} />
       <ShelfLabelOutcomes controls={controls} />
       {shelfRows.restoreMessage ? (
         <p role="status" className="text-sm">
