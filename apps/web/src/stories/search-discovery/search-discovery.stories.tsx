@@ -85,8 +85,8 @@ export const CompleteSubject: Story = {
   args: { state: { status: 'ready', page: completeSubject }, yearProperties: ['schema:datePublished'] },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const primary = canvas.getByRole('link', { name: 'Mira Star Atlas', exact: true });
-    const author = canvas.getByRole('link', { name: 'Mira', exact: true });
+    const primary = canvas.getByRole('link', { name: /^Mira Star Atlas$/ });
+    const author = canvas.getByRole('link', { name: /^Mira$/ });
     const metadata = canvasElement.querySelector<HTMLElement>('[data-content-item-slot="metadata"]')!;
     const preview = canvasElement.querySelector<HTMLElement>('[data-content-item-slot="preview"]')!;
     await expect(primary.closest('h2')).toHaveAttribute('data-content-item-slot', 'title');
