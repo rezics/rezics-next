@@ -268,8 +268,7 @@ function repositoryBun(tree: string, fallbackRoot = tree, bootstrap = false): st
     const executable = join(root, 'node_modules/.bin/bun');
     if (existsSync(executable)) return executable;
   }
-  if (pinnedVersion && !bootstrap)
-    throw new Error(`Pinned Bun ${pinnedVersion} is not installed for verifier checks.`);
+  if (pinnedVersion && !bootstrap) throw new Error(`Pinned Bun ${pinnedVersion} is not installed for verifier checks.`);
   return bootstrap ? process.execPath : 'bun';
 }
 function toolchainIdentity(settings: Settings, commit?: string): unknown {

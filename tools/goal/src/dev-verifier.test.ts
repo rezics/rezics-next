@@ -138,14 +138,18 @@ test.each([false, true])('bootstraps a fresh pinned tree (install fails: %s)', a
   const root = repo(),
     base = git(root, 'rev-parse', 'dev-verified');
   mkdirSync(join(root, 'toolchain'));
-  writeFileSync(join(root, 'toolchain/package.json'), JSON.stringify({ name: 'bun', version: Bun.version, bin: './bun' }));
+  writeFileSync(
+    join(root, 'toolchain/package.json'),
+    JSON.stringify({ name: 'bun', version: Bun.version, bin: './bun' }),
+  );
   writeFileSync(join(root, 'toolchain/bun'), `#!/bin/sh\nexec '${process.execPath}' "$@"\n`, { mode: 0o755 });
   writeFileSync(
     join(root, 'package.json'),
     JSON.stringify({ packageManager: `bun@${Bun.version}`, dependencies: { bun: 'file:./toolchain' } }),
   );
   const lock = spawnSync(process.execPath, ['install', '--lockfile-only', '--ignore-scripts'], {
-    cwd: root, encoding: 'utf8',
+    cwd: root,
+    encoding: 'utf8',
   });
   expect(lock.status, lock.stderr).toBe(0);
   if (fails) writeFileSync(join(root, 'bun.lock'), 'invalid lockfile');
