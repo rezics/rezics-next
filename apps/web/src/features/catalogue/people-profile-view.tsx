@@ -346,6 +346,74 @@ function PeopleCreate({
   const [created, setCreated] = useState<string>();
   const scope = useId();
   const rowIds = useRef(new Map<string, string>());
+  const fieldsets = useRef(new Map<string, HTMLFieldSetElement>());
+  const addition = useRef<
+    | {
+        id: string;
+        type: string;
+        property: string;
+        opener: HTMLButtonElement;
+        canEdit: () => boolean;
+        stop: () => void;
+      }
+    | undefined
+  >(undefined);
+  function cancelAddition() {
+    addition.current?.stop();
+    addition.current = undefined;
+  }
+  useLayoutEffect(() => () => cancelAddition(), []);
+  useLayoutEffect(() => {
+    const intent = addition.current;
+    if (!intent) return;
+    cancelAddition();
+    const row = fieldsets.current.get(intent.id);
+    const document = intent.opener.ownerDocument;
+    if (
+      !lifetime.active() ||
+      !current ||
+      recovering ||
+      !intent.canEdit() ||
+      !read.profiles.find((profile) => profile.id === intent.type)?.fields.includes(intent.property) ||
+      rowIds.current.get(JSON.stringify([intent.type, intent.property])) !== intent.id ||
+      !row?.isConnected ||
+      row.matches(':disabled') ||
+      row.closest('[hidden], [inert]') ||
+      (document.activeElement !== document.body && document.activeElement !== intent.opener)
+    )
+      return;
+    row
+      .querySelector<HTMLElement>(
+        'select:not(:disabled), input:not(:disabled):not([type="hidden"]), textarea:not(:disabled)',
+      )
+      ?.focus();
+  });
+  function requestAddition(
+    id: string,
+    type: string,
+    property: string,
+    opener: HTMLButtonElement,
+    canEdit: () => boolean,
+  ) {
+    cancelAddition();
+    const document = opener.ownerDocument;
+    const moved = (event: Event) => {
+      if (event.type === 'pointerdown' || event.target !== opener) cancelAddition();
+    };
+    document.addEventListener('focusin', moved, true);
+    document.addEventListener('pointerdown', moved, true);
+    addition.current = {
+      id,
+      type,
+      property,
+      opener,
+      canEdit,
+      stop: () => {
+        document.removeEventListener('focusin', moved, true);
+        document.removeEventListener('pointerdown', moved, true);
+      },
+    };
+  }
   const metadata = useRef(read);
   metadata.current = read;
   const sequence = useRef(0);
@@ -402,8 +470,8 @@ function PeopleCreate({
     const key = JSON.stringify([type, property]);
     if (!lifetime.active() || !canEdit() || rowIds.current.get(key) !== id) return;
     if (change && !metadata.current.profiles.find((entry) => entry.id === type)?.fields.includes(property)) return;
-    if (change) rowId(type, property);
-    else rowIds.current.delete(key);
+    const updatedId = change ? rowId(type, property) : undefined;
+    if (!change) rowIds.current.delete(key);
     setDrafts((previous) => {
       const fields = { ...previous[type] };
       if (change) fields[property] = change(fields[property]!);
@@ -418,6 +486,7 @@ function PeopleCreate({
       );
       return errors.length === previous.errors.length ? previous : errors.length ? { ...previous, errors } : undefined;
     });
+    return updatedId;
   }
   return (
     <section className="mx-auto min-w-0 w-full max-w-3xl space-y-6 [overflow-wrap:anywhere]">
@@ -499,15 +568,18 @@ function PeopleCreate({
                             variant="outline"
                             className={peopleActionTarget}
                             disabled={disabled}
-                            onClick={() =>
-                              update(type, id, undefined, canEdit, () => ({
+                            onClick={(event?: MouseEvent<HTMLButtonElement>) => {
+                              const opener = event?.currentTarget;
+                              const keyboard = event?.detail === 0 && opener?.ownerDocument.activeElement === opener;
+                              const added = update(type, id, undefined, canEdit, () => ({
                                 property: { id },
                                 value: { type: 'value', content: '' },
                                 qualifiers: [],
                                 references: [],
                                 rank: 'normal',
-                              }))
-                            }
+                              }));
+                              if (added && keyboard && opener) requestAddition(added, type, id, opener, canEdit);
+                            }}
                           >
                             <span lang={name.lang ?? undefined} className="min-w-0 [overflow-wrap:anywhere]">
                               {m.people_profile_add_fact({ field: name.text }, o)}
@@ -527,6 +599,10 @@ function PeopleCreate({
                     return (
                       <fieldset
                         key={id}
+                        ref={(node) => {
+                          if (node) fieldsets.current.set(id, node);
+                          else fieldsets.current.delete(id);
+                        }}
                         id={`people-fact-${property}`}
                         disabled={disabled}
                         className="min-w-0 max-w-full"

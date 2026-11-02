@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
-import { act, type ChangeEvent } from 'react';
+import { act, type ChangeEvent, type MouseEvent } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { CreateResult } from '../src/features/catalogue/create-subject';
 import type { PeopleCommand } from '../src/features/catalogue/people-profile';
@@ -10,7 +10,7 @@ mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
-test('People removal retains scalar, citation and sibling correction identities until confirmation and obeys current locks', async () => {
+test('People keyboard addition and removal retain sibling identities and obey current locks', async () => {
   const require = createRequire(import.meta.url);
   const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
   const window = new Window({ url: 'https://site.test/en/catalogue/people' });
@@ -121,8 +121,39 @@ test('People removal retains scalar, citation and sibling correction identities 
       user.selectOptions(canvas().getByRole('combobox', { name: m.catalogue_create_type() }), 'schema:Person'),
     );
     await act(async () => user.type(canvas().getByRole('textbox', { name: m.catalogue_create_label() }), 'Person'));
+    const addButton = (property: string) =>
+      canvas().getByRole('button', {
+        name: m.people_profile_add_fact({ field: fixture.release.properties[property]!.labels.en! }),
+      });
+    const retiredOpener = addButton('schema:url');
+    const retiredAdd = props(retiredOpener).onClick;
+    await act(async () =>
+      user.selectOptions(canvas().getByRole('combobox', { name: m.catalogue_create_type() }), 'schema:Organization'),
+    );
+    const label = canvas().getByRole('textbox', { name: m.catalogue_create_label() }) as HTMLInputElement;
+    label.focus();
+    await act(async () => retiredAdd({ detail: 0, currentTarget: retiredOpener }));
+    expect(row('schema:url')).toBeNull();
+    expect(window.document.activeElement).toBe(label);
+    await act(async () =>
+      user.selectOptions(canvas().getByRole('combobox', { name: m.catalogue_create_type() }), 'schema:Person'),
+    );
     for (const property of ['schema:sameAs', 'schema:url']) {
-      await add(property);
+      if (property === 'schema:url') {
+        addButton(property).focus();
+        await act(async () => user.keyboard('{Enter}'));
+        expect(window.document.activeElement).toBe(
+          within(row(property)).getByRole('combobox', { name: m.correction_value_state() }),
+        );
+        expect(
+          (within(row('schema:sameAs')).getByRole('textbox', { name: m.relation_citation() }) as HTMLInputElement)
+            .value,
+        ).toBe('https://example.org/source');
+        expect(label.value).toBe('Person');
+      } else {
+        await add(property);
+        expect(row(property).contains(window.document.activeElement as Node)).toBe(false);
+      }
       await act(async () => {
         await user.type(
           within(row(property)).getByRole('textbox', { name: m.correction_url() }),
@@ -134,6 +165,16 @@ test('People removal retains scalar, citation and sibling correction identities 
         );
       });
     }
+    // Movement after an admitted event but before React commits cancels its handoff.
+    const opener = addButton('wdt:P3180');
+    opener.focus();
+    await act(async () => {
+      props(opener).onClick({ detail: 0, currentTarget: opener } as MouseEvent<HTMLButtonElement>);
+      label.focus();
+    });
+    expect(row('wdt:P3180')).not.toBeNull();
+    expect(window.document.activeElement).toBe(label);
+    await click(remove('wdt:P3180'));
     await submit();
     const sibling = row('schema:url');
     const inputs = [...sibling.querySelectorAll<HTMLInputElement>('input')];
