@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import {
+  applyRecentSearch,
   readRecentDocument,
   readRecentHistory,
   writeRecentDocument,
@@ -98,6 +99,96 @@ test('one existing local store serves PhoneShell Recent and History, hydrates na
   expect(writes).toEqual([]);
   expect(recentBucket('unknown', accountId)).toBeNull();
   expect(recentBucket('signed-in')).toBeNull();
+  adapter.dispose();
+});
+
+test('ordered language selections stay distinct through local sync and resume with the same scoped search; old entries keep locale fallback', async () => {
+  const storage = memory(),
+    now = Date.now(),
+    scope = { kind: 'Collection' as const, id: collectionId, name: 'Reading', searchAction: `/collections/${collectionId}` };
+  const first = rememberRecent([], 'same query', scope, now, ['fr', 'en']);
+  const second = rememberRecent(first, 'same query', scope, now + 1, ['ja']);
+  const legacy = rememberRecent(second, 'old query', undefined, now + 2);
+  expect(first[0]?.id).not.toBe(second[0]?.id);
+  expect(legacy[0]?.id).toBe(JSON.stringify([null, null, 'old query']));
+
+  const entries = legacy;
+  let revision = 0,
+    rows: RecentItem[] = [],
+    visible: readonly RecentEntry[] = [];
+  const writes: Pending[] = [];
+  const adapter = createRecentSearchSyncAdapter({
+    accountId,
+    bucket,
+    currentBucket: () => bucket,
+    storage,
+    onRemote: (next) => {
+      visible = next;
+    },
+    transport: {
+      read: async () => ({ accountId, page: { revision, next: null, recentSearches: [...rows] } }),
+      write: async ({ pending }) => {
+        writes.push(structuredClone(pending));
+        if (pending.change.kind !== 'use') throw new Error('Expected a recent query visit');
+        const entry = pending.change.entry;
+        expect(entry.kind).toBe('query');
+        const lastUsed = new Date(now + revision).toISOString();
+        const id = crypto.randomUUID();
+        const params = new URLSearchParams();
+        if (entry.kind === 'query') applyRecentSearch(params, entry.text, entry.languages);
+        const row: RecentItem = {
+          id,
+          revision: ++revision,
+          lastUsed,
+          entry,
+          display: {
+            name: entry.scope ? 'Current title' : entry.kind === 'query' ? entry.text : '',
+            href: `${entry.scope ? `/collections/${collectionId}` : '/search'}?${params}`,
+            avatar: null,
+          },
+        };
+        rows = [row, ...rows];
+        return { ok: true, value: { id, revision, lastUsed } };
+      },
+    },
+  });
+  local(storage, entries);
+  await adapter.sync(entries, signal());
+
+  const stored = readRecentHistory(storage, bucket).filter((entry) => entry.query === 'same query');
+  expect(stored.map((entry) => entry.languages).sort()).toEqual([['fr', 'en'], ['ja']]);
+  expect(new Set(stored.map((entry) => entry.id)).size).toBe(2);
+  const synced = visible.filter((entry) => entry.query === 'same query');
+  expect(writes.map((write) => (write.change.kind === 'use' ? write.change.entry.languages : undefined))).toEqual([
+    undefined,
+    ['ja'],
+    ['fr', 'en'],
+  ]);
+  expect(synced.map((entry) => entry.languages).sort()).toEqual([['fr', 'en'], ['ja']]);
+  expect(synced.every((entry) => entry.scope?.id === collectionId)).toBe(true);
+
+  const history: RecentHistory = {
+    entries: visible,
+    persistence: 'local',
+    sync: 'synced',
+    remember() {},
+    remove() {},
+  };
+  const markup = renderToStaticMarkup(createElement(RecentHistoryView, { ...history, history: true }));
+  expect(markup).toContain(`/en/collections/${collectionId}?q=same%20query&amp;language=fr&amp;language=en`);
+  expect(markup).toContain(`/en/collections/${collectionId}?q=same%20query&amp;language=ja`);
+  expect(markup).toContain('/en/search?q=old%20query');
+  expect(markup).not.toContain('old%20query&amp;language=');
+
+  const resumed = new URL('/collections/current?collection=reading&language=de&q=stale&cursor=old', 'https://test.invalid');
+  applyRecentSearch(resumed.searchParams, 'same query', ['fr', 'en']);
+  expect(resumed.searchParams.get('collection')).toBe('reading');
+  expect(resumed.searchParams.getAll('language')).toEqual(['fr', 'en']);
+  expect(resumed.searchParams.get('q')).toBe('same query');
+  expect(resumed.searchParams.has('cursor')).toBe(false);
+  const old = new URL('/search?language=de&q=stale', 'https://test.invalid');
+  applyRecentSearch(old.searchParams, 'old query');
+  expect(old.searchParams.getAll('language')).toEqual([]);
   adapter.dispose();
 });
 

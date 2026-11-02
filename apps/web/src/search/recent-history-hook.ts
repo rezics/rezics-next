@@ -151,7 +151,8 @@ export function useRecentHistory(bucket: string | null, supplied?: RecentSyncAda
     persistence: !bucket ? 'unavailable' : persistent.current ? 'local' : 'memory',
     sync: adapter ? sync : 'local-only',
     ...(failure ? { failure } : {}),
-    remember: (query, scope) => update((entries) => rememberRecent(entries, query, scope)),
+    remember: (query, scope, languages) =>
+      update((entries) => rememberRecent(entries, query, scope, Date.now(), languages)),
     remove: (id) => update(id),
     clear: () => update('clear'),
     retry: () => setAttempt((a) => ({ id: a.id + 1, reload: true })),

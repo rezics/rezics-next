@@ -101,6 +101,28 @@ test('the typed self-resource isolates accounts, rejects caller account selectio
   expect(receipts.rows).toEqual([]);
 });
 
+test('language-qualified queries remain distinct and use the repeated search language parameter', async () => {
+  const { client: c } = await viewer();
+  const text = `same query ${randomUUID()}`;
+  expect((await use(c, { kind: 'query', text, languages: ['fr', 'en'] }, 0)).status).toBe(200);
+  expect((await use(c, { kind: 'query', text, languages: ['ja'] }, 1)).status).toBe(200);
+  expect((await use(c, { kind: 'query', text: 'legacy query' }, 2)).status).toBe(200);
+
+  const rows = (await c.recentSearches.get()).data!.recentSearches;
+  const selected = rows.filter((row) => row.entry.kind === 'query' && row.entry.text === text);
+  expect(selected).toHaveLength(2);
+  expect(new Set(selected.map((row) => row.id)).size).toBe(2);
+  for (const row of selected) {
+    expect(row.entry.kind).toBe('query');
+    if (row.entry.kind !== 'query') continue;
+    const url = new URL(row.display!.href, 'https://kernel.test');
+    expect(url.searchParams.get('q')).toBe(text);
+    expect(url.searchParams.getAll('language')).toEqual(row.entry.languages);
+  }
+  const legacy = rows.find((row) => row.entry.kind === 'query' && row.entry.text === 'legacy query')!;
+  expect(new URL(legacy.display!.href, 'https://kernel.test').searchParams.getAll('language')).toEqual([]);
+});
+
 test('observed revisions preserve updates, remove and clear across devices; receipt replay cannot resurrect history', async () => {
   const { client: c } = await viewer(),
     entry = { kind: 'query' as const, text: 'A shared device search' };

@@ -62,7 +62,13 @@ export function nativeRecentEntry(entry: RecentEntry): NativeEntry | undefined {
         ? { kind: ref.kind === 'Collection' ? ('collection' as const) : ('realm' as const), id: ref.id }
         : undefined;
   if (ref && !scope) return;
-  if (entry.query.trim()) return { kind: 'query', text: entry.query, ...(scope ? { scope } : {}) };
+  if (entry.query.trim())
+    return {
+      kind: 'query',
+      text: entry.query,
+      ...(entry.languages !== undefined ? { languages: [...entry.languages] } : {}),
+      ...(scope ? { scope } : {}),
+    };
   if (scope) return { kind: 'scope', scope };
 }
 export function localRecentEntry(item: RecentItem): RecentEntry {
@@ -81,7 +87,14 @@ export function localRecentEntry(item: RecentItem): RecentEntry {
       }
     : undefined;
   const query = item.entry.kind === 'query' ? item.entry.text : '';
-  return { id: recentId(query, scope), query, ...(scope ? { scope } : {}), visitedAt: Date.parse(item.lastUsed) };
+  const languages = item.entry.kind === 'query' ? item.entry.languages : undefined;
+  return {
+    id: recentId(query, scope, languages),
+    query,
+    ...(languages !== undefined ? { languages: [...languages] } : {}),
+    ...(scope ? { scope } : {}),
+    visitedAt: Date.parse(item.lastUsed),
+  };
 }
 function journalOf(document: RecentDocument): Journal {
   const j = document.native as Journal | undefined;
@@ -150,6 +163,7 @@ export function createRecentSearchSyncAdapter(options: RecentSearchSyncOptions):
       entry.kind === 'query' ? entry.text.trim() : '',
       scope?.kind ?? null,
       scope ? (scope.kind === 'route' ? scope.route : scope.id.toLowerCase()) : null,
+      entry.kind === 'query' ? (entry.languages ?? null) : null,
     ]);
   };
   const save = (document: RecentDocument, journal: Journal) =>
@@ -190,9 +204,6 @@ export function createRecentSearchSyncAdapter(options: RecentSearchSyncOptions):
     for (const entry of document.entries) {
       if (journal.observed[entry.id] === entry.visitedAt) continue;
       let native = nativeRecentEntry(entry);
-      const previous = journal.rows[entry.id]?.entry;
-      if (native?.kind === 'query' && previous?.kind === 'query' && previous.languages)
-        native = { ...native, languages: previous.languages };
       if (native) {
         // A visit not yet attempted can be coalesced; attempted receipt bodies are immutable.
         journal.pending = journal.pending.filter(

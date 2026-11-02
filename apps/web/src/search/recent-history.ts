@@ -1,7 +1,7 @@
 import type { SearchScope } from './header-search/types';
 
 export const RECENT_HISTORY_LIMIT = 32;
-export type RecentEntry = { id: string; query: string; scope?: SearchScope; visitedAt: number };
+export type RecentEntry = { id: string; query: string; languages?: string[]; scope?: SearchScope; visitedAt: number };
 export type RecentStorage = Pick<Storage, 'getItem' | 'setItem'>;
 /** Own-account transport; local history remains the sole producer and store. */
 export type RecentSyncAdapter = { sync(entries: readonly RecentEntry[], signal: AbortSignal): Promise<void> };
@@ -12,7 +12,7 @@ export type RecentHistory = {
   failure?: 'unavailable' | 'conflict';
   clear?(): void;
   retry?(): void;
-  remember(query: string, scope?: SearchScope): void;
+  remember(query: string, scope?: SearchScope, languages?: readonly string[]): void;
   remove(id: string): void;
 };
 export function recentBucket(state: string, subject?: string | null): string | null {
@@ -20,6 +20,35 @@ export function recentBucket(state: string, subject?: string | null): string | n
 }
 export const recentHistoryKey = (bucket: string) => `rezics.search-history.v1:${encodeURIComponent(bucket)}`;
 const kinds = new Set(['Library', 'Collection', 'Realm', 'Zone', 'Agent']);
+function cleanLanguages(value: unknown): string[] | undefined {
+  if (
+    !Array.isArray(value) ||
+    value.length > 8 ||
+    value.some(
+      (language) =>
+        typeof language !== 'string' ||
+        language.length < 1 ||
+        language.length > 35 ||
+        !/^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/.test(language),
+    )
+  )
+    return;
+  return [...new Set(value)];
+}
+/** Search repeats language in preference order; missing values leave the locale fallback in force. */
+export function applyRecentSearch(params: URLSearchParams, query: string, languages?: readonly string[]): void {
+  params.delete('q');
+  params.delete('cursor');
+  params.delete('language');
+  if (query) params.set('q', query);
+  for (const language of languages ?? []) params.append('language', language);
+}
+export function recentSearchQuery(query: string, languages?: readonly string[]): string {
+  return [
+    ...(query ? [`q=${encodeURIComponent(query)}`] : []),
+    ...(languages ?? []).map((language) => `language=${encodeURIComponent(language)}`),
+  ].join('&');
+}
 export function nativeHistoryScope(scope: SearchScope): boolean {
   return (
     scope.kind === 'Library' ||
@@ -59,6 +88,8 @@ export function readRecentHistory(storage: RecentStorage, bucket: string): Recen
         !Number.isFinite(item.visitedAt)
       )
         return [];
+      const languages = item.languages === undefined ? undefined : cleanLanguages(item.languages);
+      if (item.languages !== undefined && languages === undefined) return [];
       let scope = cleanScope(item.scope);
       if (scope && bucket.startsWith('account:') && nativeHistoryScope(scope))
         scope = { kind: scope.kind, id: scope.id, name: '' };
@@ -66,28 +97,46 @@ export function readRecentHistory(storage: RecentStorage, bucket: string): Recen
       if (item.scope && !scope) return [];
       const query = item.query.slice(0, 256);
       if (!query.trim() && !scope) return [];
-      return [{ id: recentId(query, scope), query, ...(scope ? { scope } : {}), visitedAt: item.visitedAt }];
+      return [
+        {
+          id: recentId(query, scope, languages),
+          query,
+          ...(languages !== undefined ? { languages } : {}),
+          ...(scope ? { scope } : {}),
+          visitedAt: item.visitedAt,
+        },
+      ];
     });
   } catch {
     return [];
   }
 }
-export function recentId(query: string, scope?: SearchScope) {
-  return JSON.stringify([scope?.kind ?? null, scope?.id ?? null, query]);
+export function recentId(query: string, scope?: SearchScope, languages?: readonly string[]) {
+  const identity = [scope?.kind ?? null, scope?.id ?? null, query];
+  return JSON.stringify(languages === undefined ? identity : [...identity, [...languages]]);
 }
 export function rememberRecent(
   entries: readonly RecentEntry[],
   query: string,
   scope?: SearchScope,
   now = Date.now(),
+  languages?: readonly string[],
 ): RecentEntry[] {
   query = query.slice(0, 256);
   if (!query.trim() && !scope) return [...entries];
   const safeScope = cleanScope(scope);
   if (scope && !safeScope) return [...entries];
-  const id = recentId(query, safeScope);
+  const safeLanguages = query.trim() && languages !== undefined ? cleanLanguages(languages) : undefined;
+  if (query.trim() && languages !== undefined && safeLanguages === undefined) return [...entries];
+  const id = recentId(query, safeScope, safeLanguages);
   return [
-    { id, query, ...(safeScope ? { scope: safeScope } : {}), visitedAt: now },
+    {
+      id,
+      query,
+      ...(safeLanguages !== undefined ? { languages: safeLanguages } : {}),
+      ...(safeScope ? { scope: safeScope } : {}),
+      visitedAt: now,
+    },
     ...entries.filter((entry) => entry.id !== id),
   ].slice(0, RECENT_HISTORY_LIMIT);
 }

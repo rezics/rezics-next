@@ -5,7 +5,12 @@ import { m } from '../paraglide/messages.js';
 import { getLocale, locales } from '../paraglide/runtime.js';
 import { coverSrc } from '../media/cover-src';
 import { useSession } from '../session/query';
-import { recentBucket, type RecentEntry as HistoryEntry, type RecentHistory } from './recent-history';
+import {
+  recentBucket,
+  recentSearchQuery,
+  type RecentEntry as HistoryEntry,
+  type RecentHistory,
+} from './recent-history';
 import { useRecentHistory } from './recent-history-hook';
 import type { KernelClient } from '@rezics/client';
 import { createServerFn } from '@tanstack/react-start';
@@ -21,7 +26,10 @@ export const RECENT_STORAGE = 'rezics.search-history.v1:';
 const lifetime = 90 * 86400000;
 export const emptyRecent = (): LocalRecent => ({ revision: 0, entries: [], pending: [] });
 export const entryKey = (entry: RecentEntry) => JSON.stringify(entry);
-const queryDisplay = (text: string) => ({ name: text, href: `/search?q=${encodeURIComponent(text)}`, avatar: null });
+const queryDisplay = (text: string, languages?: readonly string[]) => {
+  const params = recentSearchQuery(text, languages);
+  return { name: text, href: `/search${params ? `?${params}` : ''}`, avatar: null };
+};
 export function localChange(
   state: LocalRecent,
   change: Change,
@@ -40,7 +48,10 @@ export function localChange(
         entry: change.entry,
         revision: state.revision,
         lastUsed: now.toISOString(),
-        display: change.entry.kind === 'query' ? queryDisplay(change.entry.text) : (existing?.display ?? null),
+        display:
+          change.entry.kind === 'query'
+            ? queryDisplay(change.entry.text, change.entry.languages)
+            : (existing?.display ?? null),
       },
       ...entries.filter((item) => entryKey(item.entry) !== entryKey(entry)),
     ].slice(0, 100);
@@ -81,7 +92,16 @@ export function restoreRecent(value: string | null, now = Date.now()): LocalRece
       Array.isArray(items) && items.length <= max && items.every(valid);
     const validEntry = (entry: RecentEntry): boolean => {
       if (entry?.kind === 'query')
-        return text(entry.text, 256) && (!entry.languages || bounded(entry.languages, 8, (l) => text(l, 35)));
+        return (
+          text(entry.text, 256) &&
+          (entry.languages === undefined ||
+            bounded(
+              entry.languages,
+              8,
+              (language) =>
+                text(language, 35) && /^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/.test(language),
+            ))
+        );
       if (entry?.kind !== 'scope' || !entry.scope) return false;
       const scope = entry.scope;
       return scope.kind === 'route'
@@ -201,15 +221,35 @@ function historyItem(entry: HistoryEntry): RecentItem {
       : { kind: ref?.kind === 'Realm' ? ('realm' as const) : ('collection' as const), id: ref?.id ?? '' };
   const native: RecentEntry = ref
     ? entry.query
-      ? { kind: 'query', text: entry.query, scope }
+      ? {
+          kind: 'query',
+          text: entry.query,
+          ...(entry.languages !== undefined ? { languages: [...entry.languages] } : {}),
+          scope,
+        }
       : { kind: 'scope', scope }
-    : { kind: 'query', text: entry.query };
+    : {
+        kind: 'query',
+        text: entry.query,
+        ...(entry.languages !== undefined ? { languages: [...entry.languages] } : {}),
+      };
   const action = ref?.searchAction;
-  const href = ref
+  const base = ref
     ? action?.startsWith('/') && !action.startsWith('//') && !/[\\\r\n]/.test(action)
-      ? `${action.replace(new RegExp(`^/(${locales.join('|')})(?=/)`), '')}${entry.query ? `?q=${encodeURIComponent(entry.query)}` : ''}`
+      ? action
       : undefined
-    : `/search?q=${encodeURIComponent(entry.query)}`;
+    : '/search';
+  let href: string | undefined;
+  if (base) {
+    const destination = new URL(base, 'https://recent-history.invalid');
+    destination.pathname = destination.pathname.replace(new RegExp(`^/(${locales.join('|')})(?=/)`), '');
+    const retained = new URLSearchParams(destination.search);
+    retained.delete('q');
+    retained.delete('cursor');
+    retained.delete('language');
+    const params = [recentSearchQuery(entry.query, entry.languages), retained.toString()].filter(Boolean).join('&');
+    href = `${destination.pathname}${params ? `?${params}` : ''}`;
+  }
   return {
     id: entry.id,
     entry: native,

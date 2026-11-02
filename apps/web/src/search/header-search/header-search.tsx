@@ -28,7 +28,7 @@ import { loadGlobalHeaderSuggestions, type HeaderSuggestionLoader } from './sugg
 import { RezicsMark } from '../../shell/mobile-mark';
 import { RecentPanel, type SearchDiscovery } from '../recent-panel';
 import type { SearchRealmDiscoveryLoader } from '../realm-discovery-section';
-import type { RecentEntry, RecentHistory } from '../recent-history';
+import { applyRecentSearch, type RecentEntry, type RecentHistory } from '../recent-history';
 import { nextSuggestion, startTypeahead, validSuggestionText } from '../typeahead';
 import type { SearchScope } from './types';
 import { canEnterHeaderSearch } from './keyboard';
@@ -568,16 +568,23 @@ function HeaderSearchController({
     if (onNavigate) onNavigate(href);
     else window.location.assign(href);
   };
-  const submitQuery = (query: string, scope: SearchScope | undefined) => {
+  const searchLanguages = () => {
+    const selected = (fields ?? []).flatMap(([key, value]) => (key === 'language' ? [value] : []));
+    return selected.length ? selected : undefined;
+  };
+  const submitQuery = (query: string, scope: SearchScope | undefined, resumed?: RecentEntry) => {
     const action = headerSearchAction(locale, scope);
     if (!action || (!query.trim() && !scope)) return;
-    history?.remember(query, scope);
+    history?.remember(query, scope, resumed ? resumed.languages : searchLanguages());
     const url = new URL(action, window.location.origin);
     url.searchParams.delete('q');
     url.searchParams.delete('cursor');
     // Follow the same native GET context as the mounted form. Native routes revalidate remembered scopes.
-    if (!scope) for (const [key, value] of fields ?? []) url.searchParams.append(key, value);
-    if (query.trim()) url.searchParams.set('q', query);
+    if (!scope)
+      for (const [key, value] of fields ?? [])
+        if (!resumed || key !== 'language') url.searchParams.append(key, value);
+    if (resumed) applyRecentSearch(url.searchParams, query, resumed.languages);
+    else if (query.trim()) url.searchParams.set('q', query);
     visit(`${url.pathname}${url.search}`);
   };
   return (
@@ -591,7 +598,7 @@ function HeaderSearchController({
       onRecent={(entry) => {
         dispatch({ type: 'sync-scope', scope: entry.scope });
         dispatch({ type: 'query', query: entry.query });
-        if (headerSearchAction(locale, entry.scope)) submitQuery(entry.query, entry.scope);
+        if (headerSearchAction(locale, entry.scope)) submitQuery(entry.query, entry.scope, entry);
         else input.current?.focus();
       }}
       state={state}
@@ -610,7 +617,7 @@ function HeaderSearchController({
         input.current?.focus();
       }}
       onSuggestion={(href) => {
-        history?.remember(state.query, state.scope);
+        history?.remember(state.query, state.scope, searchLanguages());
         visit(href);
       }}
       onActive={(index) => dispatch({ type: 'active', index })}
@@ -663,7 +670,7 @@ function HeaderSearchController({
           if (event.key === 'Enter' && state.expanded && state.activeIndex >= 0 && subjects[state.activeIndex]) {
             event.preventDefault();
             const hit = subjects[state.activeIndex]!;
-            history?.remember(state.query, state.scope);
+            history?.remember(state.query, state.scope, searchLanguages());
             visit(subjectHref({ id: hit.id, label: localizedLabel(hit.labels, locale).text }, locale).href);
           }
         },
@@ -675,7 +682,7 @@ function HeaderSearchController({
             event.preventDefault();
             return;
           }
-          history?.remember(state.query, state.scope);
+          history?.remember(state.query, state.scope, searchLanguages());
           if (!onNavigate) return;
           event.preventDefault();
           const url = new URL(action, window.location.origin);

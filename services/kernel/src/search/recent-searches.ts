@@ -104,9 +104,9 @@ export async function recentDisplay(
   deadline: number,
 ): Promise<RecentSearch['display']> {
   if (entry.kind === 'query') {
-    if (!entry.scope) return { name: entry.text, href: `/search?q=${encodeURIComponent(entry.text)}`, avatar: null };
+    if (!entry.scope) return { name: entry.text, href: queryHref('/search', entry), avatar: null };
     const display = await recentDisplay(d, actor, { kind: 'scope', scope: entry.scope }, deadline);
-    return display ? { ...display, href: `${display.href}?q=${encodeURIComponent(entry.text)}` } : null;
+    return display ? { ...display, href: queryHref(display.href, entry) } : null;
   }
   if (entry.scope.kind === 'route') return { name: 'Library', href: '/library', avatar: null };
   if (entry.scope.kind === 'realm') {
@@ -125,6 +125,13 @@ export async function recentDisplay(
     if (error instanceof ProblemError && error.code === 'not_found') return null;
     throw error;
   }
+}
+function queryHref(href: string, entry: Extract<RecentEntry, { kind: 'query' }>) {
+  const params = [
+    `q=${encodeURIComponent(entry.text)}`,
+    ...(entry.languages ?? []).map((language) => `language=${encodeURIComponent(language)}`),
+  ];
+  return `${href}?${params.join('&')}`;
 }
 async function authorizeRead(d: RecentDependencies, actor: AccountActor, deadline: number) {
   const { accessCheck } = await import('../request/access.ts');
