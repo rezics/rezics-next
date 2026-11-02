@@ -523,6 +523,7 @@
   "library_collection_conflict": "你的變更仍保留在這裡。",
   "library_collection_add_items": "新增項目",
   "library_collection_find_subject": "搜尋主題",
+  "library_collection_add_retry_action": "重試原始新增",
   "library_collection_add_selected": "新增所選項目",
   "library_collection_details": "收藏集詳情",
   "library_collection_unsaved_members": "尚未儲存的成員變更",

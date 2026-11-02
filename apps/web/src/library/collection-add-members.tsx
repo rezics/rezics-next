@@ -38,6 +38,8 @@ export function CollectionAddMembers(props: CollectionAddMembersProps) {
 }
 
 type AddReceipt = {
+  sender: typeof addCollectionMember;
+  headers: { 'X-CSRF-Token': string };
   data: { collectionId: string; subjectId: string; note: string | null; idempotencyKey: string };
   accepted: boolean;
   uncertain: boolean;
@@ -71,7 +73,8 @@ function CollectionAddMembersForm({
 
   async function add(event: FormEvent) {
     event.preventDefault();
-    if (!currentCsrf() || locked.current || !selected[0]) return;
+    const csrfToken = currentCsrf();
+    if (!csrfToken || locked.current || !selected[0]) return;
     if (!receipt.current) {
       setTextSubmitted(true);
       if (collectionTextIssue('note', note)) return;
@@ -82,17 +85,18 @@ function CollectionAddMembersForm({
     setFailure('');
     try {
       const captured = (receipt.current ??= {
+        sender: addCollectionMember,
+        headers: { 'X-CSRF-Token': csrfToken },
         data: { collectionId, subjectId: selected[0].id, note: note || null, idempotencyKey: crypto.randomUUID() },
         accepted: false,
         uncertain: true,
       });
       if (!captured.accepted) {
-        const csrfToken = currentCsrf();
-        if (!csrfToken) return;
+        if (!currentCsrf()) return;
         captured.uncertain = true;
-        const result = await addCollectionMember({
+        const result = await captured.sender({
           data: captured.data,
-          headers: { 'X-CSRF-Token': csrfToken },
+          headers: captured.headers,
         });
         if (!retained()) return;
         // A dispatched native success remains acknowledged during a permission gap. Publishing,
@@ -192,7 +196,11 @@ function CollectionAddMembersForm({
           aria-busy={pending}
           aria-describedby={failure ? `${noteId}-error` : undefined}
         >
-          {accepted ? m.library_collection_reload() : m.library_collection_add_selected()}
+          {accepted
+            ? m.library_collection_reload()
+            : receipt.current?.uncertain
+              ? m.library_collection_add_retry_action()
+              : m.library_collection_add_selected()}
         </Button>
         <Button
           type="button"

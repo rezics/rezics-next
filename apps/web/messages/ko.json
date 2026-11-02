@@ -523,6 +523,7 @@
   "library_collection_conflict": "변경 내용이 여기에 남아 있습니다.",
   "library_collection_add_items": "항목 추가",
   "library_collection_find_subject": "대상 검색",
+  "library_collection_add_retry_action": "원래 추가 다시 시도",
   "library_collection_add_selected": "선택한 항목 추가",
   "library_collection_details": "컬렉션 세부 정보",
   "library_collection_unsaved_members": "저장하지 않은 멤버 변경 사항",

@@ -523,6 +523,7 @@
   "library_collection_conflict": "Ihre Änderungen sind noch hier.",
   "library_collection_add_items": "Einträge hinzufügen",
   "library_collection_find_subject": "Ein Thema suchen",
+  "library_collection_add_retry_action": "Ursprüngliches Hinzufügen wiederholen",
   "library_collection_add_selected": "Ausgewählten Eintrag hinzufügen",
   "library_collection_details": "Sammlungsdetails",
   "library_collection_unsaved_members": "Nicht gespeicherte Änderungen an Einträgen",

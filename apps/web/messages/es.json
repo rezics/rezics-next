@@ -523,6 +523,7 @@
   "library_collection_conflict": "Tus cambios siguen aquí.",
   "library_collection_add_items": "Añadir elementos",
   "library_collection_find_subject": "Buscar un tema",
+  "library_collection_add_retry_action": "Reintentar la adición original",
   "library_collection_add_selected": "Añadir el elemento seleccionado",
   "library_collection_details": "Detalles de la colección",
   "library_collection_unsaved_members": "Cambios en los elementos sin guardar",

@@ -74,6 +74,8 @@ const exactNote = `  Original occurrence 0\n\t${'😀'.repeat(973)}\n `;
 const csrfOne = 'A'.repeat(22);
 const csrfTwo = 'B'.repeat(22);
 const subject = members.members[0]!.subject;
+const replacementSubject = members.members[1]!.subject;
+const replacementTitle = 'Corrected subject';
 const success: CollectionWriteResult = { ok: true, id: 'new-occurrence' };
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -115,13 +117,15 @@ async function mounted() {
   const calls: {
     data: Parameters<typeof edits.addCollectionMember>[0]['data'];
     csrf: string | null;
+    sender: 'original' | 'renewed';
     request?: Request;
     result: ReturnType<typeof deferred<Response>>;
   }[] = [];
-  const add = spyOn(edits, 'addCollectionMember').mockImplementation((input) => {
+  const originalSender = edits.addCollectionMember;
+  const send = (input: Parameters<typeof edits.addCollectionMember>[0], sender: 'original' | 'renewed') => {
     const result = deferred<Response>();
     const csrf = new Headers(input.headers).get('X-CSRF-Token');
-    const call: (typeof calls)[number] = { data: structuredClone(input.data), csrf, result };
+    const call: (typeof calls)[number] = { data: structuredClone(input.data), csrf, sender, result };
     calls.push(call);
     const native = createKernelClient('https://kernel.test', {
       fetch: (async (target, init) => {
@@ -153,15 +157,26 @@ async function mounted() {
       env,
       input.data,
     );
-  });
+  };
+  const add = spyOn(edits, 'addCollectionMember').mockImplementation((input) => send(input, 'original'));
   const searches: string[] = [];
   const transport = spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
     const url = new URL(input instanceof Request ? input.url : String(input), window.location.href);
     searches.push(url.pathname + url.search);
     expect(url.pathname).toBe('/api/search/suggestions');
+    const corrected = url.searchParams.get('q') === 'Corrected';
+    const selected = corrected ? replacementSubject : subject;
     return Response.json({
-      subjects: [{ id: subject.id, type: subject.type, labels: { en: title }, facts: {}, summary: null }],
-      types: { 'schema:Book': { en: 'Book' } },
+      subjects: [
+        {
+          id: selected.id,
+          type: selected.type,
+          labels: { en: corrected ? replacementTitle : title },
+          facts: {},
+          summary: null,
+        },
+      ],
+      types: { [selected.type]: { en: 'Book' } },
     });
   });
   const render = () =>
@@ -204,12 +219,12 @@ async function mounted() {
   const cancel = () => host.querySelector<HTMLButtonElement>('button[type="button"]')!;
   const input = () => host.querySelector<HTMLInputElement>('[role="combobox"]')!;
   const note = () => host.querySelector<HTMLTextAreaElement>('textarea')!;
-  const choose = async () => {
+  const choose = async (query = 'Original') => {
     await settle(() => {
       input().focus();
-      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input(), 'Original');
+      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input(), query);
       input().dispatchEvent(
-        new window.InputEvent('input', { bubbles: true, inputType: 'insertText', data: 'Original' }),
+        new window.InputEvent('input', { bubbles: true, inputType: 'insertText', data: query }),
       );
     });
     await until(() => !!document.querySelector('[role="option"]'));
@@ -240,6 +255,23 @@ async function mounted() {
     choose,
     changeNote,
     admit,
+    withdraw: () =>
+      settle(() => {
+        const current = viewerExposureLifetime(client).getSnapshot();
+        expect(current.state).toBe('signed-in');
+        if (current.state === 'signed-in')
+          client.setQueryData(viewerExposureQuery(current.observation).queryKey, {
+            subject: current.observation.subject,
+            admitted: [],
+          });
+      }),
+    renewSender: () =>
+      Object.defineProperty(edits, 'addCollectionMember', {
+        configurable: true,
+        enumerable: true,
+        writable: true,
+        value: (input: Parameters<typeof edits.addCollectionMember>[0]) => send(input, 'renewed'),
+      }),
     get closes() {
       return closes;
     },
@@ -279,6 +311,12 @@ async function mounted() {
       await act(async () => root.unmount());
       client.clear();
       add.mockRestore();
+      Object.defineProperty(edits, 'addCollectionMember', {
+        configurable: true,
+        enumerable: true,
+        writable: true,
+        value: originalSender,
+      });
       transport.mockRestore();
       host.remove();
     },
@@ -334,6 +372,7 @@ test('actual selected subject, note, error and footer preserve full text and cor
     expect(native.method).toBe('POST');
     expect(native.headers.get('authorization')).toBe('Bearer native-test');
     expect(native.headers.get('idempotency-key')).toBe(ui.calls[0]!.data.idempotencyKey);
+    expect(native.headers.get('X-CSRF-Token')).toBe(csrfOne);
     expect(await native.json()).toEqual({ subjectId: subject.id, note: exactNote });
     expect(ui.submit().getAttribute('aria-busy')).toBe('true');
     expect(ui.input().disabled && note.disabled && ui.cancel().disabled).toBe(true);
@@ -349,7 +388,20 @@ test('actual selected subject, note, error and footer preserve full text and cor
     expect(ui.calls[1]!.data.idempotencyKey).not.toBe(ui.calls[0]!.data.idempotencyKey);
     await ui.outcome(1, { ok: false, reason: 'conflict' });
     expect(ui.host.querySelector('[role="alert"]')!.textContent).toBe(m.library_collection_conflict());
-    expect(ui.searches).toEqual(['/api/search/suggestions?q=Original&locale=en']);
+    await ui.choose('Corrected');
+    await ui.changeNote('Corrected note 1');
+    await ui.click();
+    expect(ui.calls[2]!.data).toMatchObject({
+      collectionId: 'alpha',
+      subjectId: replacementSubject.id,
+      note: 'Corrected note 1',
+    });
+    expect(ui.calls[2]!.data.idempotencyKey).not.toBe(ui.calls[1]!.data.idempotencyKey);
+    await ui.outcome(2, { ok: false, reason: 'conflict' });
+    expect(ui.searches).toEqual([
+      '/api/search/suggestions?q=Original&locale=en',
+      '/api/search/suggestions?q=Corrected&locale=en',
+    ]);
     expect(ui.reloads).toHaveLength(0);
     await settle(() => ui.cancel().click());
     expect(ui.closes).toBe(1);
@@ -367,16 +419,29 @@ test('unavailable or thrown uncertainty retains exact input/key; accepted recove
       const exact = structuredClone(ui.calls[0]!.data);
       await ui.outcome(0, outcome);
       expect(ui.note().disabled && ui.input().disabled).toBe(true);
+      expect(ui.submit().textContent).toBe(m.library_collection_add_retry_action());
       expect(ui.host.querySelector('[role="alert"]')!.textContent).toBe(m.error_message());
       await ui.changeNote('Attempted replacement');
+      await ui.withdraw();
+      await ui.click();
+      expect(ui.calls).toHaveLength(1);
+      expect(ui.form().hidden).toBe(true);
       await ui.renew();
+      ui.renewSender();
+      expect(ui.calls).toHaveLength(1);
       await ui.click();
       expect(ui.calls).toHaveLength(2);
       expect(ui.calls[1]!.data).toEqual(exact);
-      expect(ui.calls[1]!.csrf).toBe(csrfTwo);
+      expect(ui.calls[1]!.csrf).toBe(ui.calls[0]!.csrf);
+      expect(ui.calls[1]!.csrf).toBe(csrfOne);
+      expect(ui.calls[1]!.sender).toBe('original');
+      expect(ui.calls[1]!.request!.headers.get('X-CSRF-Token')).toBe(csrfOne);
+      expect(ui.calls[1]!.request!.headers.get('idempotency-key')).toBe(exact.idempotencyKey);
       await ui.outcome(1, success);
       expect(ui.reloads).toHaveLength(1);
+      await ui.withdraw();
       await ui.reload(0, new Error('Read unavailable'));
+      await ui.admit();
       expect(ui.submit().textContent).toBe(m.library_collection_reload());
       expect(ui.note().value).toBe(exactNote);
       footer(ui);
@@ -405,7 +470,7 @@ test('cancel, viewer/address ABA and unmount retire retained callbacks and late 
       await ui.changeNote('A original note');
       const old = propsOf<{ onSubmit: (event: { preventDefault(): void }) => void }>(ui.form()).onSubmit;
       await ui.click();
-      await ui.outcome(0, success);
+      await ui.outcome(0, boundary === 'viewer' ? { ok: false, reason: 'unavailable' } : success);
       if (boundary === 'cancel') {
         await ui.reload(0, new Error('Reload failed'));
         await settle(() => ui.cancel().click());
@@ -437,9 +502,9 @@ test('cancel, viewer/address ABA and unmount retire retained callbacks and late 
         await ui.show(true);
       }
       await settle(() => old({ preventDefault() {} }));
-      if (boundary !== 'cancel') await ui.reload(0);
+      if (boundary !== 'cancel' && boundary !== 'viewer') await ui.reload(0);
       expect(ui.calls).toHaveLength(1);
-      expect(ui.reloads).toHaveLength(1);
+      expect(ui.reloads).toHaveLength(boundary === 'viewer' ? 0 : 1);
       expect(ui.closes).toBe(boundary === 'cancel' ? 1 : 0);
       expect(ui.host.querySelector('[role="alert"]')?.textContent ?? null).toBe(
         boundary === 'cancel' ? m.error_message() : null,

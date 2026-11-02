@@ -537,6 +537,7 @@
   "library_collection_conflict": "Your changes are still here.",
   "library_collection_add_items": "Add items",
   "library_collection_find_subject": "Find a subject",
+  "library_collection_add_retry_action": "Retry original add",
   "library_collection_add_selected": "Add selected item",
   "library_collection_details": "Collection details",
   "library_collection_unsaved_members": "Unsaved member changes",

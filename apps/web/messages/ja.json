@@ -523,6 +523,7 @@
   "library_collection_conflict": "変更内容はここに残っています。",
   "library_collection_add_items": "アイテムを追加",
   "library_collection_find_subject": "対象を検索",
+  "library_collection_add_retry_action": "元の追加を再試行",
   "library_collection_add_selected": "選択したアイテムを追加",
   "library_collection_details": "コレクションの詳細",
   "library_collection_unsaved_members": "メンバーの変更は未保存です",

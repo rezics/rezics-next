@@ -523,6 +523,7 @@
   "library_collection_conflict": "你的更改仍保留在这里。",
   "library_collection_add_items": "添加项目",
   "library_collection_find_subject": "搜索主题",
+  "library_collection_add_retry_action": "重试原始添加",
   "library_collection_add_selected": "添加所选项目",
   "library_collection_details": "收藏集详情",
   "library_collection_unsaved_members": "尚未保存的成员更改",
