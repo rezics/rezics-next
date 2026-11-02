@@ -202,13 +202,17 @@ test('a growth check owns its database through hooks and releases ownership afte
 
   let independent: GrowthDatabase | undefined;
   try {
-    await expect(makeCheck(database, async () => { overlappingHookRan = true; })).rejects.toThrow(
-      'A growth check is already active for this database',
-    );
+    await expect(
+      makeCheck(database, async () => {
+        overlappingHookRan = true;
+      }),
+    ).rejects.toThrow('A growth check is already active for this database');
     independent = await openGrowthDatabase(databaseUrl);
-    await expect(makeCheck(independent, async () => { throw new Error('independent check ran'); })).rejects.toThrow(
-      'independent check ran',
-    );
+    await expect(
+      makeCheck(independent, async () => {
+        throw new Error('independent check ran');
+      }),
+    ).rejects.toThrow('independent check ran');
   } finally {
     releaseGrow();
     await independent?.close();
@@ -216,7 +220,9 @@ test('a growth check owns its database through hooks and releases ownership afte
 
   await firstFailure;
   expect(overlappingHookRan).toBe(false);
-  await expect(makeCheck(database, async () => { throw new Error('ownership released'); })).rejects.toThrow(
-    'ownership released',
-  );
+  await expect(
+    makeCheck(database, async () => {
+      throw new Error('ownership released');
+    }),
+  ).rejects.toThrow('ownership released');
 }, 60_000);
