@@ -32,19 +32,14 @@ export function parseLabelsAddress(value: unknown): LabelsAddressResult {
   const cursorPresent = input.cursor !== undefined;
   const rawQuery = typeof input.query === 'string' ? input.query : null;
   const rawCursor = typeof input.cursor === 'string' ? input.cursor : null;
-  const queryValid =
-    !queryPresent ||
-    (typeof input.query === 'string' && validPrefix(input.query));
+  const queryValid = !queryPresent || (typeof input.query === 'string' && validPrefix(input.query));
   const cursorValid =
-    !cursorPresent ||
-    (typeof input.cursor === 'string' && input.cursor.length <= LABELS_CURSOR_MAX_LENGTH);
+    !cursorPresent || (typeof input.cursor === 'string' && input.cursor.length <= LABELS_CURSOR_MAX_LENGTH);
 
-  if (!queryValid)
-    return { valid: false, issue: 'prefix', cursor: null, query: null, rawQuery, rawCursor };
+  if (!queryValid) return { valid: false, issue: 'prefix', cursor: null, query: null, rawQuery, rawCursor };
   const query = typeof input.query === 'string' ? input.query : null;
 
-  if (!cursorValid)
-    return { valid: false, issue: 'cursor', cursor: null, query, rawQuery, rawCursor };
+  if (!cursorValid) return { valid: false, issue: 'cursor', cursor: null, query, rawQuery, rawCursor };
 
   const cursor = typeof input.cursor === 'string' && input.cursor !== '' ? input.cursor : null;
   return { valid: true, cursor, query };

@@ -22,9 +22,7 @@ export function LabelsAddressRecovery({
           {prefixIssue ? m.library_labels_address_prefix_title() : m.library_labels_address_cursor_title()}
         </h2>
         <p role="alert">
-          {prefixIssue
-            ? m.library_labels_address_prefix_description()
-            : m.library_labels_address_cursor_description()}
+          {prefixIssue ? m.library_labels_address_prefix_description() : m.library_labels_address_cursor_description()}
         </p>
         <form method="get" className="space-y-3">
           {prefixIssue ? (
