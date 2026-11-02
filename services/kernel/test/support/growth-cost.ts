@@ -742,7 +742,6 @@ function costOfAt(capture: Capture, planCollection: string): Cost {
       limitations.push(...(planCost.limitations ?? []).map((limitation) => `${backgroundProvenance}: ${limitation}`));
       backgroundRows = checkedAdd(backgroundRows, planCost.rows, 'Total background examined rows');
       backgroundBlocks = checkedAdd(backgroundBlocks, planCost.blocks, 'Total background blocks');
-<<<<<<< HEAD
       const executionKey = backgroundExecutionKey(hasBackgroundOccurrenceCustody, owner, key, index, entryIndex);
       const prior = backgroundExecutions.get(executionKey) ?? {
         rows: 0,
