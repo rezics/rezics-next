@@ -70,8 +70,8 @@ test('Screen refresh keeps corrections and exact uncertain requests; refusal ret
       await new Promise((resolve) => setTimeout(resolve, 20));
     });
   const reading = () => host.querySelector('section[aria-label]')!;
-  const mount = () =>
-    act(async () => {
+  const mount = async () => {
+    await act(async () => {
       root.render(
         <QueryClientProvider client={client}>
           <CandidateReaderBoundary observed={reader} address={page}>
@@ -94,8 +94,11 @@ test('Screen refresh keeps corrections and exact uncertain requests; refusal ret
           </CandidateReaderBoundary>
         </QueryClientProvider>,
       );
+    });
+    await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 20));
     });
+  };
   const retired = () => {
     expect(host.querySelector('a, input, summary, section[aria-label]')).toBeNull();
     for (const text of [

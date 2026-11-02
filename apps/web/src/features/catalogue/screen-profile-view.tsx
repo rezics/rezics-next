@@ -436,7 +436,7 @@ function ScreenCorrection({
         ) : (
           <>
             {privateCurrent && transport.facts && transport.review && (
-              <details className="min-w-0 rounded-xl border border-border p-4" open>
+              <details hidden={!visible} className="min-w-0 rounded-xl border border-border p-4" open>
                 {visible && <summary className={screenSummaryClassName}>{m.facts_title({}, o)}</summary>}
                 <ScreenFacts
                   observe={observe}
@@ -449,7 +449,7 @@ function ScreenCorrection({
               </details>
             )}
             {privateCurrent && transport.relations && (
-              <details className="min-w-0 space-y-4 rounded-xl border border-border p-4">
+              <details hidden={!visible} className="min-w-0 space-y-4 rounded-xl border border-border p-4">
                 {visible && <summary className={screenSummaryClassName}>{m.screen_credits_parts({}, o)}</summary>}
                 <RelationEditor embedded id={id} locale={locale} search={search} transport={transport.relations} />
               </details>
