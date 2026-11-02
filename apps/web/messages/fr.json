@@ -1060,6 +1060,7 @@
   "subject_cover": "Couverture",
   "subject_cover_close": "Fermer la couverture",
   "subject_cover_credit": "Crédit de la couverture",
+  "subject_cover_group": "Couverture de {title}",
   "subject_cover_open": "Ouvrir la couverture de {title}",
   "subject_cover_reveal": "Afficher la couverture",
   "subject_cover_via": "via",

@@ -1060,6 +1060,7 @@
   "subject_cover": "表紙",
   "subject_cover_close": "表紙を閉じる",
   "subject_cover_credit": "表紙のクレジット",
+  "subject_cover_group": "{title}の表紙",
   "subject_cover_open": "{title}の表紙を開く",
   "subject_cover_reveal": "表紙を表示",
   "subject_cover_via": "提供元",

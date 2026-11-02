@@ -1082,6 +1082,7 @@
   "subject_cover": "Cover",
   "subject_cover_close": "Close cover",
   "subject_cover_credit": "Cover credit",
+  "subject_cover_group": "{title} cover",
   "subject_cover_open": "Open cover: {title}",
   "subject_cover_reveal": "Show cover",
   "subject_cover_via": "via",

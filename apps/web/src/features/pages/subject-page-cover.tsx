@@ -11,6 +11,7 @@ import {
 } from '@rezics/ui/cover';
 import { CoverViewer } from '@rezics/ui/cover-viewer';
 import { useEffect, useMemo, useRef } from 'react';
+import { m } from '../../paraglide/messages.js';
 import type { Reader } from '../../subject/reader';
 
 export function SubjectPageCover({
@@ -24,6 +25,7 @@ export function SubjectPageCover({
   via,
   openLabel,
   closeLabel,
+  locale,
   priority,
   decorative,
   ratio,
@@ -38,6 +40,8 @@ export function SubjectPageCover({
   via: string;
   openLabel: string;
   closeLabel: string;
+  /** The page's displayed locale. The focus-fallback name uses it instead of the ambient locale. */
+  locale?: string;
   priority?: boolean;
   decorative?: boolean;
   ratio?: CoverRatio;
@@ -57,7 +61,7 @@ export function SubjectPageCover({
     if (previous.open && previous.incarnation !== incarnation) focusFallback.current?.focus();
   }, [incarnation, viewer.value]);
   return (
-    <div ref={focusFallback} role="group" aria-label={`${subject.title} cover`} tabIndex={-1}>
+    <div ref={focusFallback} role="group" aria-label={coverGroupLabel(subject.title, locale)} tabIndex={-1}>
       <Cover
         subject={subject}
         cover={cover}
@@ -82,4 +86,11 @@ export function SubjectPageCover({
       ) : null}
     </div>
   );
+}
+
+/** The current subject's cover group, in the displayed locale when the page supplies one. */
+function coverGroupLabel(title: string, locale: string | undefined) {
+  return locale === undefined
+    ? m.subject_cover_group({ title })
+    : m.subject_cover_group({ title }, { locale: locale as never });
 }

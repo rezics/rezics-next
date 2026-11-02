@@ -48,7 +48,7 @@ Owns `services/kernel/{src,db,test}/search/**`, OpenSearch development setup,
 Coordinate `apps/web/src/features/pages/**` with web as a shared surface; sequence writers. Semantic owns source
 projections, definitions and Zone resources; content owns the safe public rating aggregate.
 When an open Subject cover changes incarnation, focus returns to its named cover group; ordinary dismissal returns to
-the opener.
+the opener. That group uses the displayed-locale catalogue label `subject_cover_group` for the current subject title.
 
 ## Dependencies
 

@@ -1060,6 +1060,7 @@
   "subject_cover": "표지",
   "subject_cover_close": "표지 닫기",
   "subject_cover_credit": "표지 저작권 정보",
+  "subject_cover_group": "{title} 표지",
   "subject_cover_open": "{title} 표지 열기",
   "subject_cover_reveal": "표지 보기",
   "subject_cover_via": "경유",

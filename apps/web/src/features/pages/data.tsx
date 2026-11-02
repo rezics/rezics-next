@@ -361,6 +361,7 @@ function subjectHeader(read: SubjectRead, creators: Creator[], date: string | nu
       via={options.messages.coverVia}
       openLabel={m.subject_cover_open({ title }, { locale: options.locale as never })}
       closeLabel={m.subject_cover_close({}, { locale: options.locale as never })}
+      locale={options.locale}
       ratio={options.frame.ratio ?? '5:7'}
       {...(size === 'lg' ? { priority: true } : { decorative: true })}
     />

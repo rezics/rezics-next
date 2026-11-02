@@ -1060,6 +1060,7 @@
   "subject_cover": "封面",
   "subject_cover_close": "關閉封面",
   "subject_cover_credit": "封面版權",
+  "subject_cover_group": "《{title}》封面",
   "subject_cover_open": "開啟《{title}》封面",
   "subject_cover_reveal": "顯示封面",
   "subject_cover_via": "經由",
