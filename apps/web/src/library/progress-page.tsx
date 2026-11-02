@@ -13,7 +13,7 @@ import { ProgressPicker, pickerSubject, type ProgressPickerSubject } from './pro
 import { ProgressRow } from '@rezics/ui/progress-row';
 import { ContentItem } from '@rezics/ui/content-item';
 import { ListRowControl } from '@rezics/ui/list-row';
-import { Menu } from '@rezics/ui/menu';
+import { Menu, type MenuEntry } from '@rezics/ui/menu';
 import { Link, useRouter } from '@tanstack/react-router';
 import {
   useId,
@@ -860,6 +860,41 @@ function SessionRow({
       }
     }
   }
+  const entries: MenuEntry[] = [
+    ...(session.subject
+      ? [
+          {
+            type: 'link' as const,
+            label: m.library_progress_open_subject(),
+            href: subjectHref(
+              {
+                id: session.subject.id,
+                label: displayLibraryTitle(session.subject.label, getLocale()).text,
+              },
+              getLocale(),
+            ).href,
+          },
+        ]
+      : []),
+    ...(session.state === 'active' && completable
+      ? [
+          {
+            type: 'item' as const,
+            label: m.library_progress_complete(),
+            onSelect: () => confirm('complete'),
+          },
+        ]
+      : []),
+    ...(session.state === 'active' && abandonable
+      ? [
+          {
+            type: 'item' as const,
+            label: m.library_progress_abandon(),
+            onSelect: () => confirm('abandon'),
+          },
+        ]
+      : []),
+  ];
   const title = session.subject
     ? displayLibraryTitle(session.subject.label, getLocale())
     : { text: m.library_subject_unavailable(), lang: undefined };
@@ -883,63 +918,24 @@ function SessionRow({
               value={progress?.percent == null ? null : progress.percent / 100}
               label={progress?.text ?? m.home_continue_in_progress()}
               menu={
-                <Exposure
-                  operation={authority && !completable ? 'progress_session.abandon' : 'progress_session.complete'}
-                >
+                entries.length ? (
                   <ListRowControl>
                     <Menu
                       title={m.library_collection_actions()}
                       trigger={
-                        <Button variant="ghost" size="icon-sm" aria-label={m.library_collection_actions()}>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          className="min-h-[44px] min-w-[44px]"
+                          aria-label={m.library_collection_actions()}
+                        >
                           <EllipsisIcon aria-hidden="true" />
                         </Button>
                       }
-                      entries={[
-                        ...(session.subject
-                          ? [
-                              {
-                                type: 'link' as const,
-                                label: m.library_progress_open_subject(),
-                                href: subjectHref(
-                                  {
-                                    id: session.subject.id,
-                                    label: displayLibraryTitle(session.subject.label, getLocale()).text,
-                                  },
-                                  getLocale(),
-                                ).href,
-                              },
-                            ]
-                          : []),
-                        ...(session.state === 'active'
-                          ? [
-                              ...(!authority || completable
-                                ? [
-                                    {
-                                      type: 'item' as const,
-                                      label: m.library_progress_complete(),
-                                      onSelect: () => {
-                                        confirm('complete');
-                                      },
-                                    },
-                                  ]
-                                : []),
-                              ...(!authority || abandonable
-                                ? [
-                                    {
-                                      type: 'item' as const,
-                                      label: m.library_progress_abandon(),
-                                      onSelect: () => {
-                                        confirm('abandon');
-                                      },
-                                    },
-                                  ]
-                                : []),
-                            ]
-                          : []),
-                      ]}
+                      entries={entries}
                     />
                   </ListRowControl>
-                </Exposure>
+                ) : null
               }
             />
           </ListRowControl>
@@ -970,7 +966,7 @@ function SessionRow({
           {confirming ? (
             <Exposure
               operation={
-                authority && confirming === 'abandon' ? 'progress_session.abandon' : 'progress_session.complete'
+                confirming === 'abandon' ? 'progress_session.abandon' : 'progress_session.complete'
               }
             >
               <ListRowControl className="flex flex-wrap gap-2">
