@@ -1,8 +1,8 @@
 import { afterAll, expect, test } from 'bun:test';
-import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
+import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
-import { SubjectViewError } from '../src/subject/view-error';
+import { createSubjectViewRecovery, SubjectViewError } from '../src/subject/view-error';
 import { getLocale, locales, setLocale } from '../src/paraglide/runtime.js';
 
 const originalLocale = getLocale();
@@ -78,4 +78,40 @@ test('all eight current locales report dependency failures as unavailable and co
     expect(dependency).toContain(messages.subject_view_unavailable);
     expect(dependency).not.toContain(messages.subject_view_changed);
   }
+});
+
+test('retry invalidates failed view data, coalesces clicks, and stays available after another failure', async () => {
+  let reads = 0;
+  const root = createRootRoute();
+  const view = createRoute({
+    getParentRoute: () => root,
+    path: '/subjects/$subjectId/$view',
+    loader: async () => (++reads < 3 ? Promise.reject(new Error('private cause')) : 'fresh page'),
+  });
+  const router = createRouter({
+    routeTree: root.addChildren([view]),
+    history: createMemoryHistory({ initialEntries: ['/subjects/book/relations?cursor=failed'] }),
+  });
+  await router.load().catch(() => {});
+  const recover = createSubjectViewRecovery();
+  const visit = router.state.location.key;
+  let resets = 0;
+  const first = recover(router, visit, () => resets++);
+  expect(recover(router, visit, () => resets++)).toBe(first);
+  await first.catch(() => {});
+  expect([reads, resets]).toEqual([2, 0]);
+  await recover(router, visit, () => resets++);
+  expect([reads, router.state.matches.at(-1)?.loaderData, resets]).toEqual([3, 'fresh page', 1]);
+});
+
+test('a completed recovery cannot reset a different subject visit', async () => {
+  const state = { location: { key: 'subject-a' }, matches: [{ status: 'success' }] };
+  let finish!: () => void;
+  let resets = 0;
+  const router = { state, invalidate: () => new Promise<void>((resolve) => (finish = resolve)) };
+  const pending = createSubjectViewRecovery()(router, 'subject-a', () => resets++);
+  state.location.key = 'subject-b';
+  finish();
+  await pending;
+  expect(resets).toBe(0);
 });
