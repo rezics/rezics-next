@@ -69,10 +69,7 @@ function parseRoute(value: unknown, label: string): Route {
 }
 function parseExperiment(value: unknown, label: string): RoutingTable['experiments'][number] {
   const experiment = object(value, label);
-  if (
-    typeof experiment.class !== 'string' ||
-    !(ROUTED_CLASSES as readonly string[]).includes(experiment.class)
-  )
+  if (typeof experiment.class !== 'string' || !(ROUTED_CLASSES as readonly string[]).includes(experiment.class))
     throw new Error(`invalid ${label}.class`);
   if (typeof experiment.open !== 'boolean') throw new Error(`invalid ${label}.open`);
   if (!Array.isArray(experiment.profiles)) throw new Error(`${label}.profiles must be an array`);
