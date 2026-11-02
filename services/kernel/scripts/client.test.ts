@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { expect, test } from 'bun:test';
-import { clientDeclarationCacheDirectory, clientDeclarations } from './client.ts';
+import { clientDeclarationCacheDirectory, clientDeclarations, withOrderReconcileAuthorization } from './client.ts';
 
 const repository = resolve(import.meta.dir, '../../..');
 
@@ -59,4 +59,32 @@ test('incremental client declarations match a clean emit after one source file c
   } finally {
     rmSync(fixture, { recursive: true, force: true });
   }
+});
+
+test('the generated order reconcile call includes bearer authorization, idempotency, and a queued response', () => {
+  const source = `                $reconcile: {
+                    post: {
+                        body: object;
+                        params: {
+                            orderId: string;
+                        };
+                        query: unknown;
+                        headers: {
+                            "idempotency-key": string;
+                        };
+                        response: {
+                            202: {
+                                orderId: string;
+                                reconciliation: "queued";
+                            };
+                        };
+                    };
+                };`;
+  const generated = withOrderReconcileAuthorization(source);
+  expect(generated).toContain('authorization: string;');
+  expect(generated).toContain('"idempotency-key": string;');
+  expect(generated).toContain('body: object;');
+  expect(generated).toContain('reconciliation: "queued"');
+  expect(generated.indexOf('authorization: string;')).toBeLessThan(generated.indexOf('"idempotency-key": string;'));
+  expect(withOrderReconcileAuthorization(generated)).toBe(generated);
 });

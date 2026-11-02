@@ -626,13 +626,13 @@ uses the current session, Origin/CSRF protection and private no-store responses.
 and retry. GET, hydration and polling never request repair. Queued repair uses only the existing status reads and
 does not reset the original sixteen-read budget; current access requires the ordinary page refresh.
 
-The generated client in this checkout does not yet contain `$reconcile`. The controller owns generation;
-`nativeOrderReconcile` in `apps/web/src/checkout/order-reconcile.ts` is the exact typed unavailable adapter until
-that binding lands. Replace it with `client.orders({orderId}).$reconcile.post({}, {headers: {authorization,
-'idempotency-key': JSON.stringify(idempotencyKey)}})`, admitting only the exact 202 queued response and preserving
-denied/conflict/unavailable/uncertain results. There is no cast client or guessed HTTP transport. The default caller
-is `requestOrderReconciliation`; the kernel default effect is already registered. Website registration and renewed
-consent must explicitly include the new scope before visibility is available; existing sessions are not upgraded.
+The generated client types `order.reconcile` as `client.orders({orderId}).$reconcile.post({}, {headers: {authorization,
+'idempotency-key': JSON.stringify(idempotencyKey)}})`, with body `{}` and the exact 202 queued response.
+`nativeOrderReconcile` in `apps/web/src/checkout/order-reconcile.ts` remains the typed unavailable adapter until Web
+replaces it with that call, preserving denied/conflict/unavailable/uncertain results. There is no cast client or guessed
+HTTP transport. The default caller is `requestOrderReconciliation`; the kernel default effect is already registered.
+Website registration and renewed consent must explicitly include the new scope before visibility is available; existing
+sessions are not upgraded.
 
 Commerce/Web handoff: operation `order.reconcile`; caller `requestOrderReconciliation`; Storybook IDs
 `pages-commerce-order--reconciliation-queued`, `pages-commerce-order--reconciliation-unavailable`,

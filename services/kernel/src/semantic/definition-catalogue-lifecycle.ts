@@ -490,9 +490,9 @@ async function consumeWithdrawal(
     id: row.consumer_id,
     sequence: row.sequence,
     closedGeneration: row.closed_generation,
-    consumer: Buffer.from(row.consumer),
-    provenance: Buffer.from(row.provenance),
-    dependency: Buffer.from(row.dependency),
+    consumer: Buffer.from(row.consumer.buffer, row.consumer.byteOffset, row.consumer.byteLength),
+    provenance: Buffer.from(row.provenance.buffer, row.provenance.byteOffset, row.provenance.byteLength),
+    dependency: Buffer.from(row.dependency.buffer, row.dependency.byteOffset, row.dependency.byteLength),
     enrollmentGeneration: row.enrollment_generation,
   };
   const ack = await source.readCurrentWithdrawal(tx, capture);
