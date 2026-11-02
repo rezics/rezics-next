@@ -29,6 +29,7 @@ import {
   type CreateResult,
   type CreateSubjectCommand,
   type CreateTransport,
+  type CreateType,
   type TermDraft,
 } from './create-subject';
 
@@ -135,6 +136,8 @@ function CreateSubjectFormLive({
     title: string;
     scope: string;
     hideHeading?: boolean;
+    // A family can retain private draft metadata while retiring its current reference reading.
+    metadata?: { ready: boolean; pending: boolean; failure: ReactNode; types: CreateType[] };
     readOnlyType?: boolean;
     control?: (pointer: string, type: string) => string | { id: string; label: string } | undefined;
     errorLabel?: (id: string) => string | undefined;
@@ -194,9 +197,9 @@ function CreateSubjectFormLive({
   const running = useRef(false);
   const unresolvedDelivery = useRef(false);
   const request = useRef<CreateSubjectCommand | null>(null);
-  const types = definitions.data?.ok
-    ? definitions.data.types.filter((entry) => !profile?.type || entry.id === profile.type)
-    : [];
+  const types = (profile?.metadata?.types ?? (definitions.data?.ok ? definitions.data.types : [])).filter(
+    (entry) => !profile?.type || entry.id === profile.type,
+  );
   const selectedType = types.find((entry) => entry.id === type);
   const selectedTypeName = selectedType?.label.trim();
   const hasTypeName = !!selectedTypeName && selectedTypeName !== type;
@@ -207,7 +210,8 @@ function CreateSubjectFormLive({
   const readOnlyType = !!profile?.type && profile.readOnlyType;
   const hasDraft = !!type || rows.some((row) => !!(row.label || row.description || row.aliases));
   // Retrying an uncertain command needs its original identity, even while definitions are unavailable.
-  const definitionsBlocked = !request.current && (definitions.isError || definitions.isFetching || types.length === 0);
+  const definitionsFailed = profile?.metadata ? !profile.metadata.ready : definitions.isError;
+  const definitionsBlocked = !request.current && (definitionsFailed || definitions.isFetching || types.length === 0);
 
   const termControl = createSubjectControls(rows);
   const control = (pointer: string) => targets.current.get(pointer)?.id || termControl(pointer);
@@ -373,12 +377,17 @@ function CreateSubjectFormLive({
               </a>
             </p>
           )}
-          {(session === 'unavailable' || definitions.isError) && (
+          {(session === 'unavailable' || definitionsFailed) && (
             <div role="alert" className="space-y-3">
-              <p>{m.catalogue_create_unavailable({}, options)}</p>
+              {profile?.metadata && !profile.metadata.ready ? (
+                profile.metadata.failure
+              ) : (
+                <p>{m.catalogue_create_unavailable({}, options)}</p>
+              )}
               <Button
                 type="button"
                 variant="outline"
+                disabled={definitions.isFetching || profile?.metadata?.pending}
                 onClick={() => {
                   void reloadDefinitions();
                   void client.invalidateQueries({ queryKey: ['session'] });

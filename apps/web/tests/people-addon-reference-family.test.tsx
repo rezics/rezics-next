@@ -233,7 +233,8 @@ test('People credit and Addon base references share installed parts without chan
       await waitFor(() => expect(within(host).queryByText(m.catalogue_create_loading())).toBeNull());
       expect(frame()).toBeNull();
       expect(host.innerHTML).not.toContain(peopleWorkId);
-      expect(host.querySelectorAll('form')).toHaveLength(1);
+      expect(host.textContent).toContain(m.correction_stale());
+      expect(host.querySelectorAll('form')).toHaveLength(0);
 
       const currentPerson = peopleProfileFixture('ready', 'en', 'person');
       const personTitle = `Mira 佐藤 미라 ${'langueSansEspaces'.repeat(18)}`;

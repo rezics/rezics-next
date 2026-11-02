@@ -185,13 +185,23 @@ function ProfileIntro({ read, locale }: { read: Current; locale: string }) {
 }
 
 function PeopleCreate({
-  initial,
+  read,
+  current,
+  recovering,
+  recovery,
+  refresh: reload,
+  work,
   locale,
   session,
   transport,
   onNavigate,
 }: {
-  initial: Current;
+  read: Current;
+  current: boolean;
+  recovering: boolean;
+  recovery: ReactNode;
+  refresh: () => Promise<PeopleRead>;
+  work?: string;
   locale: string;
   session: Session;
   transport: PeopleTransport;
@@ -199,7 +209,6 @@ function PeopleCreate({
 }) {
   const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
-  const [read, setRead] = useState(initial);
   const [drafts, setDrafts] = useState<Record<string, Record<string, StatementInput>>>({});
   const [failure, setFailure] = useState<CreateFailure>();
   const [created, setCreated] = useState<string>();
@@ -262,7 +271,7 @@ function PeopleCreate({
   return (
     <section className="mx-auto min-w-0 w-full max-w-3xl space-y-6 [overflow-wrap:anywhere]">
       <ViewHeadingActions label={m.people_profile_title({}, o)} headingClassName="font-sans" />
-      <ProfileIntro read={read} locale={locale} />
+      {current && <ProfileIntro read={read} locale={locale} />}
       {created && (
         <p role="status">
           {m.people_profile_created_id({}, o)} <code className="break-all">{created}</code>
@@ -272,13 +281,12 @@ function PeopleCreate({
         locale={locale}
         session={session}
         onCreated={(result) => setCreated(result.id)}
-        onNavigate={read.work ? () => {} : onNavigate}
+        onNavigate={work ? () => {} : onNavigate}
         transport={{
           definitions: async (refresh) => {
-            const next = refresh ? await transport.load() : read;
+            const next = refresh ? await reload() : current ? read : undefined;
             if (!lifetime.active()) return { ok: false as const, reason: 'denied' as const };
-            if (!next.ok) return { ok: false };
-            if (refresh) setRead(next);
+            if (!next?.ok) return { ok: false };
             return { ok: true, types: next.profiles.map(({ id, label, description }) => ({ id, label, description })) };
           },
           submit: async (command) => {
@@ -293,7 +301,13 @@ function PeopleCreate({
           title: m.people_profile_title({}, o),
           hideHeading: true,
           scope: 'people-profile',
-          href: `/${locale}/catalogue/people${read.work ? `?work=${encodeURIComponent(read.work.subject.id)}` : ''}`,
+          metadata: {
+            ready: current,
+            pending: recovering,
+            failure: recovery,
+            types: read.profiles,
+          },
+          href: `/${locale}/catalogue/people${work ? `?work=${encodeURIComponent(work)}` : ''}`,
           labelLanguage: (type) => read.profiles.find((profile) => profile.id === type)?.lang ?? undefined,
           descriptionLanguage: (type) =>
             read.profiles.find((profile) => profile.id === type)?.descriptionLang ?? undefined,
@@ -486,16 +500,55 @@ function PeopleProfileEditorLive({
   const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
   const client = useQueryClient();
+  // Metadata may outlive its public/work reading only as private draft validation context.
+  const retained = useRef<Current | undefined>(undefined);
+  function matching(next: PeopleRead): PeopleRead {
+    const expectedWork = work ?? retained.current?.work?.subject.id;
+    const anchored = work !== undefined || retained.current !== undefined;
+    if (!id && next.ok && (next.public || (anchored && next.work?.subject.id !== expectedWork)))
+      return { ok: false, reason: 'stale' };
+    return next;
+  }
   const query = useQuery({
     queryKey: [...['people-profile', id ?? 'new', work ?? '', locale], lifetime.generation],
-    queryFn: transport.load,
+    queryFn: async () => matching(await transport.load()),
     retry: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     staleTime: Infinity,
     gcTime: 0,
   });
-  const read = query.data;
+  const observed = query.data && matching(query.data);
+  const read = !id && query.isError ? undefined : observed;
+  const current = !!read?.ok && !query.isFetching;
+  if (!id && current && read?.ok) retained.current = read;
+  if (!id && retained.current)
+    return (
+      <PeopleCreate
+        read={retained.current}
+        current={current}
+        recovering={query.isFetching}
+        recovery={
+          query.isFetching ? (
+            <p role="status">{m.catalogue_create_loading({}, o)}</p>
+          ) : (
+            <EditorFailure reason={read && !read.ok ? read.reason : 'unavailable'} locale={locale} />
+          )
+        }
+        refresh={async () => {
+          const next = await query.refetch();
+          if (!lifetime.active()) return { ok: false, reason: 'denied' };
+          return next.isError || next.isFetching || !next.data
+            ? { ok: false, reason: 'unavailable' }
+            : matching(next.data);
+        }}
+        work={work ?? retained.current.work?.subject.id}
+        locale={locale}
+        session={session}
+        transport={transport}
+        onNavigate={onNavigate}
+      />
+    );
   if (!read?.ok)
     return (
       <article className="mx-auto w-full min-w-0 max-w-4xl space-y-4 p-4 sm:p-6 [overflow-wrap:anywhere]">
@@ -511,10 +564,6 @@ function PeopleProfileEditorLive({
           </>
         )}
       </article>
-    );
-  if (!id)
-    return (
-      <PeopleCreate initial={read} locale={locale} session={session} transport={transport} onNavigate={onNavigate} />
     );
   if (session !== 'signed-in')
     return (

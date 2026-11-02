@@ -2,7 +2,7 @@ import { expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { act, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import type { PeopleCommand, PeopleTransport } from '../src/features/catalogue/people-profile';
+import type { PeopleCommand, PeopleRead, PeopleTransport } from '../src/features/catalogue/people-profile';
 import type { StatementInput } from '../src/features/catalogue/statement-editor';
 import type { CreateResult } from '../src/features/catalogue/create-subject';
 import * as start from '../.storybook/react-start';
@@ -66,7 +66,12 @@ test('whole Person and Organization creation families retain exact facts, indepe
     if ((event.target as Element).closest('a')) event.preventDefault();
   });
   type Session = 'signed-in' | 'signed-out' | 'unknown' | 'unavailable';
-  async function render(node: ReactNode, session: Session = 'signed-in', fresh = true) {
+  async function render(
+    node: ReactNode,
+    session: Session = 'signed-in',
+    fresh = true,
+    authority: { subject?: string; csrfToken?: string } = {},
+  ) {
     if (fresh) {
       await act(async () => root.render(null));
       client.clear();
@@ -81,6 +86,7 @@ test('whole Person and Organization creation families retain exact facts, indepe
               state: session,
               subject: session === 'signed-in' ? '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10' : null,
               csrfToken: session === 'signed-in' ? 'illustrative-token' : null,
+              ...authority,
             }}
             address={`people-create-family:${generation}`}
           >
@@ -433,7 +439,7 @@ test('whole Person and Organization creation families retain exact facts, indepe
       const cite = within(group('schema:url')).getByRole('textbox', { name: m.relation_citation() });
       await act(async () => user.type(cite, 'https://example.org/rejected'));
       await submit();
-      await waitFor(() => expect(host.textContent).toContain(m.catalogue_create_unavailable()));
+      await waitFor(() => expect(host.textContent).toContain(m.correction_unavailable()));
       expect(canvas().getByRole('button', { name: m.catalogue_create_submit() }).hasAttribute('disabled')).toBe(true);
       const link = canvas().getByRole('link', { name: `${name(fixture, 'schema:url')} · ${m.relation_citation()}` });
       expect(link.getAttribute('href')).toBe(`#${encodeURIComponent(cite.id)}`);
@@ -468,6 +474,78 @@ test('whole Person and Organization creation families retain exact facts, indepe
       expect(canvas().getByRole('link', { name: m.catalogue_create_open() }).getAttribute('href')).toBe(
         ((await fixture.transport.read(peopleCreatedId)) as { state: 'ready'; href: string }).href,
       );
+    }
+
+    for (const type of ['schema:Person', 'schema:Organization']) {
+      const fixture = peopleProfileFixture('uncertain');
+      const supplied = await fixture.transport.load();
+      if (!supplied.ok || !supplied.work) throw new Error('Expected work reference');
+      let outcome: PeopleRead | Error = supplied;
+      const commands: PeopleCommand[] = [];
+      const transport: PeopleTransport = {
+        ...fixture.transport,
+        load: async () => {
+          if (outcome instanceof Error) throw outcome;
+          return outcome;
+        },
+        create: (command) => {
+          commands.push(command);
+          return fixture.transport.create(command);
+        },
+      };
+      await render(editor(fixture, transport));
+      await choose(type);
+      await terms('Private recovery draft');
+      await add(fixture, 'schema:url');
+      await value(fixture, 'schema:url', url);
+      const cite = within(group('schema:url')).getByRole('textbox', {
+        name: m.relation_citation(),
+      }) as HTMLInputElement;
+      await act(async () => user.type(cite, citation));
+      await submit();
+      await waitFor(() => expect(host.textContent).toContain(m.catalogue_create_uncertain()));
+      const original = structuredClone(fixture.calls.find((call) => call.method === 'POST'));
+      const retryMetadata = async () =>
+        act(async () =>
+          user.click(
+            canvas()
+              .getAllByRole('button', { name: m.catalogue_create_retry() })
+              .find((node) => node.getAttribute('type') !== 'submit')!,
+          ),
+        );
+      for (const failure of [
+        { ok: false, reason: 'unavailable' } as const,
+        { ok: false, reason: 'denied' } as const,
+        new Error('read failed'),
+      ]) {
+        outcome = failure;
+        await act(async () => {
+          await client.invalidateQueries({ queryKey: ['people-profile'] });
+        });
+        await waitFor(() => expect(host.querySelector('[data-slot="profile-work-reference"]')).toBeNull());
+        expect(host.innerHTML).not.toContain(supplied.work.subject.id);
+        expect(cite.isConnected).toBe(true);
+        expect(cite.value).toBe(citation);
+        expect(group('schema:url').disabled).toBe(true);
+        expect((host.querySelector('#create-label-0') as HTMLInputElement).value).toBe('Private recovery draft');
+        const wrong = structuredClone(supplied);
+        wrong.work!.subject.id = peopleCreatedId;
+        wrong.work!.subject.labels = { en: 'Wrong work must stay absent' };
+        outcome = wrong;
+        await retryMetadata();
+        await waitFor(() => expect(host.textContent).toContain(m.correction_stale()));
+        expect(host.textContent).not.toContain('Wrong work must stay absent');
+        outcome = structuredClone(supplied);
+        if (outcome.ok) outcome.work!.subject.labels = { en: 'Fresh matching work' };
+        await retryMetadata();
+        await waitFor(() => expect(host.textContent).toContain('Fresh matching work'));
+        expect(commands).toHaveLength(1);
+      }
+      await act(async () => user.click(host.querySelector<HTMLButtonElement>('button[type="submit"]')!));
+      await waitFor(() => expect(commands).toHaveLength(2));
+      expect(commands[1]).toBe(commands[0]);
+      expect(fixture.calls.filter((call) => call.method === 'POST')).toEqual([original, original]);
+      expect(original?.authorization).toBe('Bearer fixture');
     }
 
     // Refresh removes a definition without erasing its draft, citation, visible stale meaning or Remove.
@@ -575,42 +653,63 @@ test('whole Person and Organization creation families retain exact facts, indepe
       expect(fixture.calls.some((call) => call.method === 'POST')).toBe(false);
     }
 
-    // Retire a pending successful creation; the old result cannot navigate or revive its current reader.
-    const retiring = peopleProfileFixture();
-    let finish!: (result: CreateResult) => void;
-    let creates = 0;
-    let readers = 0;
-    const retirementTransport: PeopleTransport = {
-      ...retiring.transport,
-      create: async () => {
-        creates++;
-        return new Promise((resolve) => {
-          finish = resolve;
-        });
-      },
-      read: async () => {
-        readers++;
-        return { state: 'unavailable' };
-      },
-    };
-    await render(editor(retiring, retirementTransport));
-    await choose('schema:Person');
-    await terms('Retired draft sentinel');
-    await add(retiring, 'schema:url');
-    await value(retiring, 'schema:url', url);
-    await submit();
-    expect(creates).toBe(1);
-    const navigationCount = navigations.length;
-    await render(editor(retiring, retirementTransport, 'signed-out'), 'signed-out', false);
-    await act(async () =>
-      finish({ ok: true, id: peopleCreatedId, reader: { state: 'ready', href: '/en/retired-sentinel' } }),
-    );
-    await waitFor(() => expect(host.textContent).toContain(m.catalogue_create_signed_out()));
-    expect(host.innerHTML).not.toContain('Retired draft sentinel');
-    expect(host.innerHTML).not.toContain('/en/retired-sentinel');
-    expect(canvas().queryByRole('link', { name: m.catalogue_create_open() })).toBeNull();
-    expect(navigations).toHaveLength(navigationCount);
-    expect(readers).toBe(0);
+    // Every authority epoch retires the pending command and its private workspace.
+    for (const authority of [null, { subject: 'another-viewer' }, { csrfToken: 'another-csrf-session' }]) {
+      const retiring = peopleProfileFixture();
+      let finish!: (result: CreateResult) => void;
+      let creates = 0;
+      let readers = 0;
+      let suspendRead = false;
+      let finishRead!: (result: PeopleRead) => void;
+      const retirementTransport: PeopleTransport = {
+        ...retiring.transport,
+        load: async () => {
+          if (!suspendRead) return retiring.transport.load();
+          suspendRead = false;
+          return new Promise((resolve) => {
+            finishRead = resolve;
+          });
+        },
+        create: async () => {
+          creates++;
+          return new Promise((resolve) => {
+            finish = resolve;
+          });
+        },
+        read: async () => {
+          readers++;
+          return { state: 'unavailable' };
+        },
+      };
+      await render(editor(retiring, retirementTransport));
+      await choose('schema:Person');
+      await terms('Retired draft sentinel');
+      await add(retiring, 'schema:url');
+      await value(retiring, 'schema:url', url);
+      await submit();
+      expect(creates).toBe(1);
+      const navigationCount = navigations.length;
+      suspendRead = true;
+      await act(async () => {
+        void client.invalidateQueries({ queryKey: ['people-profile'] });
+      });
+      const session = authority ? 'signed-in' : 'signed-out';
+      await render(editor(retiring, retirementTransport, session), session, false, authority ?? {});
+      const late = await retiring.transport.load();
+      if (late.ok && late.work) late.work.subject.labels = { en: 'Late retired work sentinel' };
+      await act(async () => {
+        finishRead(late);
+        finish({ ok: true, id: peopleCreatedId, reader: { state: 'ready', href: '/en/retired-sentinel' } });
+      });
+      await waitFor(() => expect(host.querySelector('#create-label-0')).not.toBeNull());
+      if (!authority) expect(host.textContent).toContain(m.catalogue_create_signed_out());
+      expect(host.innerHTML).not.toContain('Late retired work sentinel');
+      expect(host.innerHTML).not.toContain('Retired draft sentinel');
+      expect(host.innerHTML).not.toContain('/en/retired-sentinel');
+      expect(canvas().queryByRole('link', { name: m.catalogue_create_open() })).toBeNull();
+      expect(navigations).toHaveLength(navigationCount);
+      expect(readers).toBe(0);
+    }
 
     // Supplied-data growth only: 1/8/64 unrelated metadata rows and text chunks, not native/backend proof.
     // The already-supplied current profiles are bounded to the same two released families. Rendering
