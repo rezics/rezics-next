@@ -20,7 +20,7 @@ const TARGET_BYTES = 4_096;
 type ManifestTarget<T> = T extends unknown ? Omit<T, 'operationId' | 'ordinal'> : never;
 export type CollectionBulkTarget =
   | Omit<SubjectTarget, 'operationId' | 'ordinal'>
-  | (ManifestTarget<OccurrenceTarget> & { revision: number });
+  | (ManifestTarget<OccurrenceTarget> & { revision?: number });
 export type CollectionBulkIntent = (
   | { action: 'set_status'; state: EntryState }
   | { action: 'add_to_collection' | 'remove_from_collection'; collectionId: string }
@@ -94,16 +94,15 @@ function targetKey(target: CollectionBulkTarget): string {
   }
   if (
     routeOf(target.collectionId) === null ||
-    routeOf(target.collectionId) !== routeOf(target.memberId) ||
-    !Number.isSafeInteger(target.revision) ||
-    target.revision < 1
+    routeOf(target.collectionId) !== routeOf(target.memberId)
   )
     throw new TypeError('Invalid occurrence expectation');
   if (target.expected) {
     if (!/^[1-9][0-9]*$/.test(target.expected.memberRevision) ||
       routeOf(target.expected.transactionId) === null || !Number.isFinite(Date.parse(target.expected.addedAt)))
       throw new TypeError('Invalid native occurrence expectation');
-  } else if (routeOf(target.incarnation!) === null || !/^(0|[1-9][0-9]*)$/.test(target.admissionSequence!)) {
+  } else if (routeOf(target.incarnation!) === null || !/^(0|[1-9][0-9]*)$/.test(target.admissionSequence!) ||
+    !Number.isSafeInteger(target.revision) || target.revision! < 1) {
     throw new TypeError('Invalid occurrence expectation');
   }
   return `${target.collectionId}:${target.memberId}`;

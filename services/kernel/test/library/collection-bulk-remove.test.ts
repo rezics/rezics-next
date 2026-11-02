@@ -41,7 +41,7 @@ async function capture(collectionId: string, memberIds: string[]) {
         digest: original.creation.requestDigest },
       targets: memberIds.map(id => {
         const row = rows.rows.find(row => row.id === id)!;
-        return { kind: 'occurrence', collectionId, memberId: id, subjectId: row.subject, revision: Number(row.revision),
+        return { kind: 'occurrence', collectionId, memberId: id, subjectId: row.subject,
           expected: { memberRevision: row.revision, transactionId: row.transaction, addedAt: row.added } };
       }),
     });
@@ -98,7 +98,7 @@ test('changed, replaced and missing captured occurrences are skipped individuall
   const collection = await f.make(), subject = await f.createSubject('game');
   const members = [await f.add(collection.id, subject), await f.add(collection.id, subject)];
   const c = await capture(collection.id, members.map(m => m.id));
-  await f.commands.updateMemberNote(f.owner.actor, collection.id, members[0]!.id, 'changed after preview', entryKey());
+  await f.commands.updateMemberNote(f.owner.actor, collection.id, members[0]!.id, { note: 'changed after preview' }, entryKey());
   const later = await f.add(collection.id, subject);
   const results = [];
   for (const command of c.commands) results.push(await executeCollectionRemoveTarget(c.deps, command));
