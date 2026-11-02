@@ -246,7 +246,7 @@ export const readThreadPersonal = createServerFn({ method: 'GET' })
   });
 
 type PostHistoryReadData =
-  | { available: false }
+  | { available: false; transportFailed?: true }
   | {
       available: true;
       revisions: PostRevision[];
@@ -316,42 +316,47 @@ export const readPostHistory = createServerFn({ method: 'GET' })
     const actualReader = preparedReaderProvenance(authorization, subject);
     const client = kernelClient();
     let page: PostHistoryReadData;
-    const options = {
-      query: { limit: 20, ...(data.cursor ? { cursor: data.cursor } : {}) },
-      ...(authorization ? { headers: { authorization } } : {}),
-    };
-    const result = await client.posts({ id: data.postId }).revisions.get(options);
-    if (result.error || !result.data) page = { available: false };
-    else {
-      const revisions = result.data.revisions;
-      const documentMedia = await loadRevisionDocumentMedia(
-        client,
-        revisionDocumentImageIds(revisions),
-        authorization,
-      );
-      const [authors, mentions, subjects, reviewVotes] = await Promise.all([
-        readPageAuthors(
-          client,
-          revisions.map(({ authorId }) => authorId),
-        ),
-        readDocumentMentions(
-          client,
-          revisions.map(({ body }) => body),
-        ),
-        readRevisionSubjects(client, revisions),
-        readAuthorRevisionVotes(client, revisions, subject && authorization ? { id: subject, authorization } : null),
-      ]);
-      page = {
-        available: true,
-        revisions,
-        next: result.data.next,
-        authors,
-        mentions,
-        subjects,
-        reviewVotes,
-        documentMedia,
-        now: new Date().toISOString(),
+    try {
+      const options = {
+        query: { limit: 20, ...(data.cursor ? { cursor: data.cursor } : {}) },
+        ...(authorization ? { headers: { authorization } } : {}),
       };
+      const result = await client.posts({ id: data.postId }).revisions.get(options);
+      if (result.error || !result.data) page = { available: false };
+      else {
+        const revisions = result.data.revisions;
+        const documentMedia = await loadRevisionDocumentMedia(
+          client,
+          revisionDocumentImageIds(revisions),
+          authorization,
+        );
+        const [authors, mentions, subjects, reviewVotes] = await Promise.all([
+          readPageAuthors(
+            client,
+            revisions.map(({ authorId }) => authorId),
+          ),
+          readDocumentMentions(
+            client,
+            revisions.map(({ body }) => body),
+          ),
+          readRevisionSubjects(client, revisions),
+          readAuthorRevisionVotes(client, revisions, subject && authorization ? { id: subject, authorization } : null),
+        ]);
+        page = {
+          available: true,
+          revisions,
+          next: result.data.next,
+          authors,
+          mentions,
+          subjects,
+          reviewVotes,
+          documentMedia,
+          now: new Date().toISOString(),
+        };
+      }
+    } catch {
+      // Preserve actual-reader provenance even when the native transport fails.
+      page = { available: false, transportFailed: true };
     }
     return historicalReadEnvelope(data.binding as HistoricalReadBinding, actualReader, page);
   });

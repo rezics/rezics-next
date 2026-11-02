@@ -632,6 +632,22 @@ test('healthy authenticated history without CSRF clears private history on nativ
   }
 });
 
+test('a transport failure with a changed actual reader clears private history instead of retaining it', async () => {
+  const page = await mounted();
+  try {
+    await authorHistory(page);
+    await page.evaluate(() => { (window as unknown as { historyViewer?: string }).historyViewer = undefined; });
+    await page.getByRole('button', { name: m.thread_history_more() }).click();
+    await pending(page);
+    expect((await calls(page)).at(-1)?.authorization).toBeNull();
+    await page.evaluate(() => (window as unknown as Driver).rejectHistory());
+    await unavailable(page);
+    await retiredDisclosure(page);
+  } finally {
+    await page.close();
+  }
+});
+
 test('queued and retained history callbacks cannot send across post, viewer, readAuthority, QueryClient replacement or unmount', async () => {
   const page = await mounted();
   try {

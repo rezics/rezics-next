@@ -166,7 +166,8 @@ function HistoryDisclosure({
         return;
       }
       if (!result.data.available) {
-        lifetime.resetDisclosure(connection);
+        if (result.data.transportFailed) lifetime.failPage(request);
+        else lifetime.resetDisclosure(connection);
         return;
       }
       const page = result.data;
