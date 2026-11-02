@@ -133,12 +133,19 @@ test('failed admission drains a started apply before the relay can fail or retry
         throw applyFailure;
       },
     };
-    const failedApply = await indexer(t, async (_partition, _envelopes, apply) => {
-      void apply();
-    }, f.search, failingSource).run(t.partition).then(
-      () => ({ ok: true as const }),
-      (error: unknown) => ({ ok: false as const, error }),
-    );
+    const failedApply = await indexer(
+      t,
+      async (_partition, _envelopes, apply) => {
+        void apply();
+      },
+      f.search,
+      failingSource,
+    )
+      .run(t.partition)
+      .then(
+        () => ({ ok: true as const }),
+        (error: unknown) => ({ ok: false as const, error }),
+      );
     expect(failedApply.ok).toBe(false);
     if (!failedApply.ok) expect(failedApply.error).toBe(applyFailure);
 
