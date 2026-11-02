@@ -15,7 +15,7 @@ const GROWTH_SCENARIO =
   'backlog growth tracks indexed history, input-proportional directory entries, and dispatch/cancellation caps';
 
 test('the approved backlog Cost derivation names the exact native growth scenario', () => {
-  const citation = `tools/goal/src/backlog-growth.test.ts`: \`${GROWTH_SCENARIO}\``;
+  const citation = `tools/goal/src/backlog-growth.test.ts: \`${GROWTH_SCENARIO}\``;
   const delivery = readFileSync(join(import.meta.dir, '../README.md'), 'utf8');
   const performance = readFileSync(join(import.meta.dir, '../../../docs/goals/performance.capabilities.md'), 'utf8');
   expect(delivery).toContain(citation);
