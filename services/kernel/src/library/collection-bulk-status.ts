@@ -1,6 +1,7 @@
 import type { CommandAuthorization, CommandEvent } from '../command/command.ts';
 import { authoritativeTimeValue, noEffect, principalCommandIdentity, runCommand } from '../command/command.ts';
 import { shareAccount } from '../access/account-share.ts';
+import { PlatformClosedError } from '../access/gates/admission.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { DurableInitiatorUnavailableError } from '../access/durable-initiator.ts';
 import { accessCommandAuthorization } from '../request/access.ts';
@@ -146,7 +147,7 @@ export async function executeCollectionBulkStatus(deps: BulkDependencies, comman
     // original private receipt can establish it; this path never authorizes a retry.
     const committed = await reconcileCollectionBulkStatus(deps, command);
     if (committed) return committed;
-    if (error instanceof GrantDeniedError || error instanceof DurableInitiatorUnavailableError)
+    if (error instanceof GrantDeniedError || error instanceof PlatformClosedError || error instanceof DurableInitiatorUnavailableError)
       return { kind: 'stop', reason: 'authority_lost' };
     throw error;
   }

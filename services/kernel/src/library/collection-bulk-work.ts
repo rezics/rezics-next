@@ -40,6 +40,10 @@ async function closePending(deps: Pick<Dependencies, 'pool' | 'clock'>, key: Col
         [key.route, key.operationId, key.accountId]);
       const operation = await readCollectionBulk(tx, key);
       if (!operation) return noEffect(0);
+      const stopped = (await tx.query<{ reason: BulkReason }>(`SELECT reason FROM library.bulk_target
+        WHERE route=$1 AND operation_id=$2 AND state IN ('denied','cancelled') ORDER BY ordinal LIMIT 1`,
+        [key.route, key.operationId])).rows[0];
+      if (operation.phase === 'completed') reason = stopped?.reason ?? 'cancel_requested';
       // A terminal root with pending targets is an irreversible stop, including cancellation before confirmation.
       await tx.query(`UPDATE library.bulk_operation SET phase='completed' WHERE route=$1 AND operation_id=$2 AND account_id=$3`,
         [key.route, key.operationId, key.accountId]);

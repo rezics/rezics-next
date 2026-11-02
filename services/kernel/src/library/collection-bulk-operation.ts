@@ -106,27 +106,28 @@ export async function collectionBulkView(tx: CommandTransaction, key: Collection
   const header = (await tx.query<{ admittedAt: string; confirmedAt: string | null }>(
     `SELECT admitted_at::text AS "admittedAt",confirmed_at::text AS "confirmedAt" FROM library.bulk_operation
       WHERE route=$1 AND operation_id=$2 AND account_id=$3`, [key.route, key.operationId, key.accountId])).rows[0]!;
-  const rows = await tx.query<{ state: string; n: number }>(
-    `SELECT state,count(*)::integer AS n FROM library.bulk_target WHERE route=$1 AND operation_id=$2
-      AND account_id=$3 GROUP BY state`, [key.route, key.operationId, key.accountId]);
+  const rows = await tx.query<{ state: string; reason: string | null; n: number }>(
+    `SELECT state,reason,count(*)::integer AS n FROM library.bulk_target WHERE route=$1 AND operation_id=$2
+      AND account_id=$3 GROUP BY state,reason`, [key.route, key.operationId, key.accountId]);
   const counts: BulkCounters = { scannedCandidates: operation.targetCount, selectedSubjects: operation.targetCount,
     scannedOccurrences: 0, capturedOccurrences: 0, targets: operation.targetCount, pending: 0, reconciling: 0,
     applied: 0, no_effect: 0, conflict: 0, denied: 0, failed: 0, cancelled: 0 };
-  for (const row of rows.rows) if (Object.hasOwn(counts, row.state)) (counts as unknown as Record<string, number>)[row.state] = row.n;
+  for (const row of rows.rows) if (Object.hasOwn(counts, row.state)) (counts as unknown as Record<string, number>)[row.state] += row.n;
+  const stopReason = rows.rows.find(row => row.reason === 'authority_lost' || row.reason === 'cancel_requested' || row.reason === 'execution_expired')?.reason;
   const cancelled = operation.phase === 'completed' && (counts.pending > 0 || counts.cancelled > 0);
   return { operation: { id: key.operationId, route: key.route, action: operation.request.action,
     selectionKind: operation.request.selection.kind,
     state: operation.request.action === 'set_status' ? operation.request.state : null,
     collectionId: 'collectionId' in operation.request ? operation.request.collectionId : null,
-    phase: cancelled ? 'cancelled' : operation.phase === 'completed' && counts.denied > 0 ? 'stopped' :
-      operation.phase === 'completed' && counts.conflict + counts.failed > 0 ? 'completed_with_errors' : operation.phase,
+    phase: cancelled && stopReason === 'execution_expired' ? 'expired' : stopReason === 'authority_lost' ? 'stopped' :
+      cancelled ? 'cancelled' : operation.phase === 'completed' && counts.conflict + counts.denied + counts.failed > 0 ? 'completed_with_errors' : operation.phase,
     selectionComplete: true, occurrencesComplete: true, cancelRequested: cancelled, counts,
     summary: counts.pending + counts.reconciling === 0 && operation.phase !== 'preview' ? {
       changed: counts.applied, unchanged: counts.no_effect,
       failed: counts.conflict + counts.denied + counts.failed + counts.cancelled } : null,
     admittedAt: header.admittedAt, targetBoundAt: header.admittedAt, expiresAt: operation.expiresAt,
     resultsExpireAt: operation.resultsExpireAt, finishedAt: null,
-    reason: counts.denied > 0 ? 'authority_lost' : cancelled ? 'cancel_requested' : null } };
+    reason: stopReason === 'authority_lost' || stopReason === 'execution_expired' || stopReason === 'cancel_requested' ? stopReason : cancelled ? 'cancel_requested' : null } };
 }
 
 export function createCollectionBulkOperations(deps: CollectionBulkDependencies) {
@@ -166,13 +167,15 @@ export function createCollectionBulkOperations(deps: CollectionBulkDependencies)
           const capture = await captureDurableInitiator(context, owner);
           const resolved: { subjectId: string; requestedSubjectId: string | null }[] = [];
           const seen = new Set<string>();
-          for (const target of parsed.selection.targets) {
+          try { for (const target of parsed.selection.targets) {
             const subject = await resolveSubject(deps, owner, target.subjectId, attempt.time, context);
             if (!subject) throw new LibraryNotFoundError();
             if (!seen.has(subject.subjectId)) { seen.add(subject.subjectId); resolved.push(subject); }
           }
+          } catch (error) { return { capture, resolved, error }; }
           return { capture, resolved };
         } }, async (tx, command, prepared) => {
+          if ('error' in prepared) throw prepared.error;
           const rows = await tx.query<{ subjectId: string; incarnation: string | null; revision: number }>(
             `SELECT subject_id AS "subjectId",incarnation_id AS incarnation,revision FROM library.entry
               WHERE route=$1 AND account_id=$2 AND subject_id=ANY($3::uuid[]) ORDER BY subject_id`,
@@ -203,8 +206,8 @@ export function createCollectionBulkOperations(deps: CollectionBulkDependencies)
         });
     },
     get(actor: Actor, operationId: string) { return read(actor, operationId, collectionBulkView); },
-    outcomes(actor: Actor, operationId: string, query: OutcomeQuery) {
-      return read(actor, operationId, async (tx, key) => {
+    async outcomes(actor: Actor, operationId: string, query: OutcomeQuery) {
+      const result = await read(actor, operationId, async (tx, key) => {
         const binding = { operation: 'library.bulk.outcomes', parameters: { ...key, state: query.state ?? null } };
         let after: string | null = null;
         if (query.cursor !== undefined) {
@@ -218,6 +221,13 @@ export function createCollectionBulkOperations(deps: CollectionBulkDependencies)
         return { outcomes: page.outcomes, next: page.nextAfter === null ? null : encodeCursor(tokens, binding,
           { epoch: 1, after: [page.nextAfter] }) };
       });
+      // Release the source snapshot before checking foreign subject homes. A page is
+      // disclosed only while every returned target and the operation remain readable.
+      for (const outcome of result.outcomes) {
+        const subject = await resolveSubject(deps, actor, outcome.subjectId);
+        if (!subject || subject.subjectId !== outcome.subjectId) throw new GrantDeniedError();
+      }
+      return read(actor, operationId, async () => result);
     },
     async confirm(actor: Actor, operationId: string, requestKey: string) {
       const owner = bulkOwner(actor, 'library_entry:update'), key = bulkKey(owner, operationId);

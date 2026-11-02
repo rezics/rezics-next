@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { createCollectionBulkOperations } from '../../src/library/collection-bulk-operation.ts';
-import { runCollectionBulkPage } from '../../src/library/collection-bulk-work.ts';
+import { expireCollectionBulkPage, runCollectionBulkPage } from '../../src/library/collection-bulk-work.ts';
 import { createProfileEntryFixture, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 
 let f: NativeProfileFixture;
@@ -69,11 +69,25 @@ test('cancellation and expiry close pending targets without changing entries; qu
   expect((await bulk.outcomes(f.owner.actor, expired.value.operation.id, {})).outcomes[0]?.reason).toBe('execution_expired');
   expect((await f.commands.readEntry(f.owner.actor, a.subjectId)).revision).toBe(a.revision);
   await expect(bulk.preview(f.owner.actor, { action: 'set_status', state: 'completed',
-    selection: { kind: 'query', filter: {} } }, key())).rejects.toThrow('unavailable');
+    selection: { kind: 'query', filter: {} } }, key())).rejects.toMatchObject({ code: 'dependency_unavailable' });
   await expect(preview([])).rejects.toThrow();
+  const response = await f.send('owner', 'POST', '/v1/libraryOperations', { action: 'set_status', state: 'completed',
+    selection: { kind: 'explicit', targets: [{ subjectId: a.subjectId }] } });
+  expect(response.status).toBe(201);
+  const httpOperation = (await response.json()).operation;
+  expect((await f.send('owner', 'GET', `/v1/libraryOperations/${httpOperation.id}`)).status).toBe(200);
+  expect((await f.commands.readEntry(f.owner.actor, a.subjectId)).revision).toBe(a.revision);
+  expect((await f.send('owner', 'POST', `/v1/libraryOperations/${httpOperation.id}:confirm`, {})).status).toBe(200);
+  const late = () => new Date(Date.now() + 49 * 3600000);
+  await expect(createCollectionBulkOperations({ ...dependencies(), clock: late }).get(f.owner.actor, expired.value.operation.id)).rejects.toThrow();
+  // Indexed cleanup drains private manifest rows and finally removes their root.
+  for (let n = 0; n < 10; n++) await expireCollectionBulkPage({ pool: f.pool, clock: late }, expired.value.operation.route);
+  await expect(bulk.get(f.owner.actor, expired.value.operation.id)).rejects.toThrow();
 });
 
 test('current authority loss prevents another effect and result disclosure', async () => {
+  await f.setLibraryOpen(false);
+  await f.grantLibraryGate(f.owner.actor.accountId);
   const a = await entry(), created = await preview([a.subjectId]), id = created.value.operation.id;
   await bulk.confirm(f.owner.actor, id, key());
   await f.revokeLibraryGate(f.owner.actor.accountId);
