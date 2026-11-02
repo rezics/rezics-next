@@ -2,13 +2,14 @@ import { expect, test } from 'bun:test';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { workerTestCommands } from './affected-tests.ts';
-import { continuesItself } from './continuation.ts';
+import { completeContinuation, continuesItself } from './continuation.ts';
+import { parseBrief, readRiskOwnership } from './briefs.ts';
 import { WorkerJob } from './job.ts';
 import { renderLaunchContext, type LaunchContext } from './launch-context.ts';
 import { workerPrompt } from './launch.ts';
 import { git } from './tasks.ts';
 import type { Task } from './types.ts';
-import { harness, markdown, temporaryDirectory } from './test-support.ts';
+import { brief, harness, markdown, temporaryDirectory } from './test-support.ts';
 
 function promptTask(goal: string, extra: Partial<Task> = {}): Task {
   return {
@@ -206,6 +207,25 @@ test("a dev product attempt's continuation briefs move to its Goal backlog when 
   } finally {
     h.dispose();
   }
+});
+
+test('a continuation missing front matter inherits it from the brief it continues', () => {
+  const ownership = readRiskOwnership(join(import.meta.dir, '../risk-areas.json'));
+  const parent = { brief: brief() };
+  const partial =
+    '---\ngoal: fixture\nkind: feature\npaths: apps/web/src/rights/notice.tsx\nacceptance:\n  command: [bun, test]\n  tests: [notice]\ncriticalPath: "true"\n---\nShow the notice.\n';
+  const completed = completeContinuation(partial, parent, ownership);
+  expect(parseBrief(completed, ownership)).toMatchObject({
+    goal: 'fixture',
+    kind: 'implementation',
+    paths: ['apps/web/src/rights/notice.tsx'],
+    riskAreas: ['rights'],
+    criticalPath: true,
+    waiting: [],
+    estimate: { lines: 100, files: 4 },
+  });
+  expect(completed.endsWith('\n---\nShow the notice.\n')).toBe(true);
+  expect(completeContinuation(markdown, parent, ownership)).toBe(markdown);
 });
 
 const toolBlockedWorker = `#!/usr/bin/env bun
