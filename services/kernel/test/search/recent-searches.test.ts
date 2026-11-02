@@ -117,7 +117,7 @@ test('language-qualified queries remain distinct and use the repeated search lan
     if (row.entry.kind !== 'query') continue;
     const url = new URL(row.display!.href, 'https://kernel.test');
     expect(url.searchParams.get('q')).toBe(text);
-    expect(url.searchParams.getAll('language')).toEqual(row.entry.languages);
+    expect(url.searchParams.getAll('language')).toEqual(row.entry.languages ?? []);
   }
   const legacy = rows.find((row) => row.entry.kind === 'query' && row.entry.text === 'legacy query')!;
   expect(new URL(legacy.display!.href, 'https://kernel.test').searchParams.getAll('language')).toEqual([]);
