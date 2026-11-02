@@ -2365,6 +2365,14 @@ replace those adapters through integration. `MembersPreparation` declares no ret
 on this base; prepared result consumption and finite native sparse-source completion remain deferred with the
 actual ordered/scoped source binding. Successful direct previews never establish those wider capabilities.
 
+`members-preparation-budget.ts` supplies the finite parent accounting seam: Members, History registration,
+receiving/readback, Core, Access, Source resolve/verify, executor, retry, rollback and cleanup must all have
+disjoint declarations before any child receives its allocation. The same parent refuses a second allocation
+for an exact preparation key. Each child retains its own finite balance; group completion records actual
+charges and closes every child, including cleanup. Missing declarations and insufficient funding return
+typed unavailable. Durable cross-request registration, the released Source declaration and final current
+physical Source authority remain required producer dependencies; this seam does not enable the adapters.
+
 The existing Collection POST/PATCH accept optional `presentationKind` and `coverMediaId`; PATCH keeps its numeric
 revision CAS. Omission preserves a choice, null clears it. `collection-presentation.ts` validates a new exact TypeId
 against the active definitions release, without changing members or accepted personal profile pins. Stored choices

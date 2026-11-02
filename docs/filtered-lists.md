@@ -405,6 +405,10 @@ Let `s` be the output slots of one read (`1 ≤ s ≤ 100`), `R` the distinct re
    recently read first. An idle prepared result expires after 24 hours. A public prepared result keeps one
    current and one building generation per admitted read definition.
 
+   Members preparation transfers all disjoint child reservations from one finite parent before checkout;
+   each child's unused capacity stays held until the whole group finishes. Missing declarations remain
+   unavailable; accounting completion alone establishes neither current Source authority nor a prepared result.
+
 5. **Authority.** These numbers are ceilings for admission and checks. Performance changes a number only from
    capture evidence; an owner needing more sends Performance the capture.
 

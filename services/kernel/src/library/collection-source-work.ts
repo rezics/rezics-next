@@ -24,6 +24,8 @@ export class NativeCollectionWork {
   private readonly used = zero();
   private readonly held = zero();
   private readonly remaining: WorkDimensions;
+  private closed = false;
+  private pending = 0;
   failure: Error | undefined;
   private readonly resultBytes = new Map<string, number>();
 
@@ -61,6 +63,64 @@ export class NativeCollectionWork {
     return this.remaining[axis] - this.used[axis] - this.held[axis];
   }
 
+  /** Transfer every declared child before any child can dispatch. Unused child capacity stays
+   * held until the entire group finishes; siblings cannot borrow it, retry with it or add a payer.
+   * This transfers accounting only. It establishes no Source, Access or physical-work authority.
+   */
+  transferChildren<K extends string>(declarations: Readonly<Record<K, WorkDimensions>>): Readonly<{
+    children: Readonly<Record<K, NativeCollectionWork>>;
+    finish(): WorkReceipt;
+  }> {
+    this.assertReady();
+    if (Date.now() >= this.deadline) throw this.unavailable();
+    const entries = Object.entries(declarations) as [K, WorkDimensions][];
+    if (!entries.length) throw new TypeError('Missing native child declarations');
+    const total = zero();
+    const children = Object.create(null) as Record<K, NativeCollectionWork>;
+    for (const [name, declaration] of entries) {
+      const snapshot = { ...declaration };
+      for (const axis of axes) {
+        const amount = snapshot[axis];
+        if (!Number.isSafeInteger(amount) || amount < 0) throw new TypeError('Invalid native child declaration');
+        total[axis] += amount;
+        if (!Number.isSafeInteger(total[axis])) throw new TypeError('Native child declaration overflow');
+      }
+      children[name] = new NativeCollectionWork(
+        { reservationId: this.allowance.reservationId, remaining: snapshot },
+        this.deadline,
+      );
+    }
+    // Validate the complete sum before changing any balance. No partial allocation on refusal.
+    for (const axis of axes) if (total[axis] > this.available(axis)) throw this.unavailable();
+    for (const axis of axes) this.held[axis] += total[axis];
+    this.pending++;
+    let finished = false;
+    return Object.freeze({
+      children: Object.freeze(children),
+      finish: () => {
+        if (finished) throw new TypeError('Native children already finished');
+        const used = zero();
+        const values = Object.values(children) as NativeCollectionWork[];
+        for (const child of values) {
+          if (child.pending !== 0)
+            throw new TypeError('Native child work is still in flight');
+          for (const axis of axes) used[axis] += child.used[axis];
+        }
+        finished = true;
+        this.pending--;
+        for (const child of values) {
+          child.closed = true;
+          this.failure ??= child.failure;
+        }
+        for (const axis of axes) {
+          this.held[axis] -= total[axis];
+          this.used[axis] += used[axis];
+        }
+        return this.receipt();
+      },
+    });
+  }
+
   /** Transfer the remaining reservation to ONE existing producer ledger, never a second allowance.
    * The parent cannot dispatch while it is held. Unlike an SQL footprint this is not itself native work:
    * the child reserves its actual operation bounds before dispatch and returns those charges unchanged.
@@ -85,6 +145,7 @@ export class NativeCollectionWork {
     for (const axis of axes) {
       this.held[axis] += remaining[axis];
     }
+    this.pending++;
     const settle = (receipt: WorkReceipt) => {
       if (receipt.reservationId !== this.allowance.reservationId) throw new TypeError('Foreign source work receipt');
       for (const axis of axes)
@@ -94,6 +155,7 @@ export class NativeCollectionWork {
         this.held[axis] -= remaining[axis];
         this.used[axis] += receipt.used[axis];
       }
+      this.pending--;
     };
     try {
       const result = await operation({ reservationId: this.allowance.reservationId, remaining });
@@ -112,11 +174,13 @@ export class NativeCollectionWork {
           /* unknown work stays fully charged */
         }
       }
-      if (!accounted)
+      if (!accounted) {
         for (const axis of axes) {
           this.held[axis] -= remaining[axis];
           this.used[axis] += remaining[axis];
         }
+        this.pending--;
+      }
       this.failure = error instanceof Error ? error : new Error('Composed source failed');
       if (error instanceof Error)
         Object.defineProperty(error, 'work', { get: () => this.receipt(), configurable: true });
@@ -125,6 +189,7 @@ export class NativeCollectionWork {
   }
 
   assertReady(): void {
+    if (this.closed) throw new TypeError('Native work allocation is closed');
     if (this.failure) throw this.failure;
   }
 
@@ -138,6 +203,7 @@ export class NativeCollectionWork {
     settle(actual?: Partial<WorkDimensions>): void;
     cancel(): void;
   } {
+    if (this.closed) throw new TypeError('Native work allocation is closed');
     if (!cleanup) this.assertReady();
     if (Date.now() >= this.deadline || footprint === undefined) throw this.unavailable();
     const bound = Object.freeze({ ...footprint });
@@ -146,6 +212,7 @@ export class NativeCollectionWork {
       if (bound[axis] > this.remaining[axis] - this.used[axis] - this.held[axis]) throw this.unavailable();
     }
     for (const axis of axes) this.held[axis] += bound[axis];
+    this.pending++;
     let state: 'reserved' | 'dispatched' | 'settled' = 'reserved';
     let queried = false;
     const release = (charged: WorkDimensions) => {
@@ -154,6 +221,7 @@ export class NativeCollectionWork {
         this.used[axis] += charged[axis];
       }
       state = 'settled';
+      this.pending--;
     };
     return {
       dispatch: () => {
