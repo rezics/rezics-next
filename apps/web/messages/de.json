@@ -4623,5 +4623,9 @@
   "relation_window_completed_end": "Sichtbare Einträge in {label}: {count}. Ende dieser Liste.",
   "relation_window_completed_stop": "Sichtbare Einträge in {label}: {count}. Starte erneut, um fortzufahren.",
   "relation_window_cycle": "Diese Liste hat einen Seitencursor wiederholt. Starte erneut, um die aktuellen Einträge zu lesen.",
-  "relation_window_limit": "Du hast das Leselimit erreicht. Starte erneut, um ab der ersten Seite zu lesen."
+  "relation_window_limit": "Du hast das Leselimit erreicht. Starte erneut, um ab der ersten Seite zu lesen.",
+  "library_rule_draft_navigation_title": "Ungespeicherte Regel verlassen?",
+  "library_rule_draft_navigation_description": "Deine ungespeicherte Sammlungsregel geht verloren. Bleibe zum Weiterbearbeiten oder verlasse die Seite. Ein laufender Speichervorgang kann noch abgeschlossen werden.",
+  "library_rule_draft_navigation_stay": "Bleiben",
+  "library_rule_draft_navigation_leave": "Verlassen"
 }

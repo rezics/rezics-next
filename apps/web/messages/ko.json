@@ -4623,5 +4623,9 @@
   "relation_window_completed_end": "{label}의 표시 항목: {count}개. 목록의 끝입니다.",
   "relation_window_completed_stop": "{label}의 표시 항목: {count}개. 계속하려면 처음부터 다시 시작하세요.",
   "relation_window_cycle": "이 목록에서 페이지 커서가 반복되었습니다. 현재 항목을 읽으려면 처음부터 다시 시작하세요.",
-  "relation_window_limit": "읽기 한도에 도달했습니다. 첫 페이지부터 다시 시작하세요."
+  "relation_window_limit": "읽기 한도에 도달했습니다. 첫 페이지부터 다시 시작하세요.",
+  "library_rule_draft_navigation_title": "저장하지 않은 규칙을 두고 나갈까요?",
+  "library_rule_draft_navigation_description": "저장하지 않은 컬렉션 규칙이 사라집니다. 계속 편집하려면 머무르세요. 진행 중인 저장은 나간 후에도 완료될 수 있습니다.",
+  "library_rule_draft_navigation_stay": "머무르기",
+  "library_rule_draft_navigation_leave": "나가기"
 }

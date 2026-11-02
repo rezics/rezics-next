@@ -14,6 +14,7 @@ import type { RuleChoicePage, RuleChoices, RulePage } from './collection-rule-re
 import type { RuleWrite } from './collection-rule-actions';
 import type { CollectionWriteResult } from './collection-records';
 import { CollectionRuleControls } from './collection-rule-controls';
+import { ruleDraftSnapshot, useCollectionRuleDraftNavigation } from './collection-rule-draft-navigation';
 
 type AvailablePage = Extract<RulePage, { state: 'new' | 'ready' }>;
 const presence: FilterDocument = { owner: { presence: true } };
@@ -482,11 +483,20 @@ function RuleForm({
   const [conflict, setConflict] = useState(false);
   const [intent, setIntent] = useState<RuleWrite | null>(null);
   const captured = useRef<RuleWrite | null>(null);
+  const request = useRef<{ csrf: string; send: typeof save } | null>(null);
   const attempted = useRef(false);
   const choiceAddress = useRef({ q: '', cursor: undefined as string | undefined, generation: 0 });
   const choiceContext = useRef({ q: '', next: page.choices.labels.next });
   const [choiceQuery, setChoiceQuery] = useState('');
   const [savedId, setSavedId] = useState<string | null>(null);
+  const confirmed = useRef(false);
+  const snapshot = ruleDraftSnapshot({ filter, title, description });
+  const baseline = useRef(snapshot);
+  const navigation = useCollectionRuleDraftNavigation({
+    dirty: !savedId && (snapshot !== baseline.current || !!intent),
+    isCurrent: () => isCurrent() && !confirmed.current,
+    focus: () => (document.activeElement instanceof HTMLElement ? document.activeElement : null),
+  });
   const extension: ConditionExtension = {
     choices: [
       { label: m.library_rule_presence(), value: presence },
@@ -535,17 +545,22 @@ function RuleForm({
     };
     attempted.current = true;
     captured.current = input;
+    request.current ??= { csrf, send: save };
+    const original = request.current;
     setIntent(input);
     setFeedback('');
     try {
       if (!isCurrent() || !operation.current()) return;
-      const result = await save(input, csrf);
+      const result = await original.send(input, original.csrf);
       if (!operation.current()) return;
       if (result.ok || result.reason !== 'unavailable') {
         captured.current = null;
+        request.current = null;
         setIntent(null);
       }
       if (result.ok) {
+        confirmed.current = true;
+        baseline.current = snapshot;
         setSavedId(result.id);
         if (operation.current()) navigate?.(result.id);
       } else {
@@ -592,6 +607,7 @@ function RuleForm({
           setChoices(current.choices);
         }
         setConflict(false);
+        confirmed.current = false;
         setSavedId(null);
         setFeedback(m.library_rule_reloaded());
         // The draft remains intact. Only an explicit subsequent save uses this captured current rule revision.
@@ -657,6 +673,7 @@ function RuleForm({
       : { ...choices, labels: { state: 'unavailable' as const, values: [], next: null } };
   return (
     <article className="flex min-w-0 max-w-4xl flex-col gap-4 text-foreground">
+      {navigation.boundary}
       <PageHeading>{base.state === 'new' ? m.library_rule_new() : m.library_rule_edit()}</PageHeading>
       <form onSubmit={(event) => void submit(event)} className="flex min-w-0 flex-col gap-6">
         <fieldset disabled={pending || !!intent || !!savedId} className="min-w-0">

@@ -4623,5 +4623,9 @@
   "relation_window_completed_end": "Éléments visibles dans {label} : {count}. Fin de cette liste.",
   "relation_window_completed_stop": "Éléments visibles dans {label} : {count}. Recommencez pour continuer.",
   "relation_window_cycle": "Cette liste a répété un curseur de page. Recommencez pour lire les entrées actuelles.",
-  "relation_window_limit": "Vous avez atteint la limite de lecture. Recommencez depuis la première page."
+  "relation_window_limit": "Vous avez atteint la limite de lecture. Recommencez depuis la première page.",
+  "library_rule_draft_navigation_title": "Quitter cette règle non enregistrée ?",
+  "library_rule_draft_navigation_description": "La règle de collection non enregistrée sera perdue. Restez pour la modifier ou quittez pour continuer. Un enregistrement en cours peut encore aboutir.",
+  "library_rule_draft_navigation_stay": "Rester",
+  "library_rule_draft_navigation_leave": "Quitter"
 }

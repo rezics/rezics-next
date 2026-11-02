@@ -4672,5 +4672,9 @@
   "relation_window_limit": "You have reached the reading limit. Start again to read from the first page.",
   "configured_list_recovery_pending": "Checking the current reader and loading this list…",
   "configured_list_recovery_retry": "Retry list",
-  "configured_list_recovery_unavailable": "This list is temporarily unavailable. Try again."
+  "configured_list_recovery_unavailable": "This list is temporarily unavailable. Try again.",
+  "library_rule_draft_navigation_title": "Leave this unsaved rule?",
+  "library_rule_draft_navigation_description": "Your unsaved Collection rule will be lost. Stay to keep editing, or leave to continue. A pending save may still complete.",
+  "library_rule_draft_navigation_stay": "Stay",
+  "library_rule_draft_navigation_leave": "Leave"
 }

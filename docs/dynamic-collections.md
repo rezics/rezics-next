@@ -246,6 +246,12 @@ absent here. Public/unlisted requests, including an editor's public request, can
 curator facts. A successful public saved membership delivery is not claimed. Generated OpenAPI/client/schema
 artifacts and native outcome checks are owned by the controller after integration.
 
+Saved-rule drafts compare exact title, description and filter structure (including operand order) with their initial
+or confirmed-save baseline. Stay preserves the draft; Leave discards local edits without cancelling an original
+pending command. Navigation and supported unload warn even for an unresolved save; label-choice search and editor
+focus do not count as edits. Reload preserves that baseline and draft, and uncertain retries retain their exact
+sender, credential, request and key. Confirmed saves and authority retirement clear navigation protection.
+
 ### Selected whole-query publication contract; native bodies pending
 
 [`collection-publication-work-admission.ts`](../services/kernel/src/library/collection-publication-work-admission.ts)

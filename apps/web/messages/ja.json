@@ -4623,5 +4623,9 @@
   "relation_window_completed_end": "{label}の表示項目：{count}件。リストの末尾です。",
   "relation_window_completed_stop": "{label}の表示項目：{count}件。続けるには最初から読み込んでください。",
   "relation_window_cycle": "このリストでページカーソルが繰り返されました。現在の項目を読むには最初から読み込んでください。",
-  "relation_window_limit": "読み込み上限に達しました。最初のページから読み直してください。"
+  "relation_window_limit": "読み込み上限に達しました。最初のページから読み直してください。",
+  "library_rule_draft_navigation_title": "未保存のルールを離れますか？",
+  "library_rule_draft_navigation_description": "未保存のコレクションルールは失われます。編集を続ける場合はこのページに留まってください。保存処理中の場合は、離れた後に完了することがあります。",
+  "library_rule_draft_navigation_stay": "留まる",
+  "library_rule_draft_navigation_leave": "離れる"
 }

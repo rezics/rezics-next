@@ -4623,5 +4623,9 @@
   "relation_window_completed_end": "{label}目前顯示 {count} 項。已到清單末尾。",
   "relation_window_completed_stop": "{label}目前顯示 {count} 項。請重新開始以繼續閱讀。",
   "relation_window_cycle": "此清單傳回了重複的分頁游標。請重新開始以閱讀目前的項目。",
-  "relation_window_limit": "已達閱讀上限。請從第一頁重新開始。"
+  "relation_window_limit": "已達閱讀上限。請從第一頁重新開始。",
+  "library_rule_draft_navigation_title": "離開尚未儲存的規則？",
+  "library_rule_draft_navigation_description": "尚未儲存的收藏集規則將遺失。留在此處繼續編輯，或離開以繼續。進行中的儲存仍可能完成。",
+  "library_rule_draft_navigation_stay": "留下",
+  "library_rule_draft_navigation_leave": "離開"
 }
