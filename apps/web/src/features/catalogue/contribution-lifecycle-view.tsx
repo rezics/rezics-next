@@ -99,6 +99,7 @@ function ContributionLifecycleLive({
         if (result.reason === 'conflict') {
           controls.current.needsRead = true;
           setNeedsRead(true);
+          setCurrent({ subject: 'unavailable', candidate: 'unconfirmed', selected: null });
         }
         if (result.reason === 'denied') {
           setCurrent(undefined);

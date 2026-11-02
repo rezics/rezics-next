@@ -22,7 +22,9 @@ export type ContributionTransport = {
 };
 
 /** Only a current, visible candidate observation can choose a new operation. */
-export function confirmedContributionOperation(current: ContributionAvailability) {
+export function confirmedContributionOperation(
+  current: ContributionAvailability,
+): ContributionCommand['operation'] | null {
   if (current.subject !== 'available' || current.candidate === 'unconfirmed') return null;
   return current.candidate === 'deleted' ? 'restore' : 'delete';
 }
