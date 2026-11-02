@@ -1,9 +1,12 @@
 # Commerce financial lifecycle and physical cost review
 
-Reviewed 2026-11-03 against clean dev **`8f63aa396c789f5d6b10b5f65c2edaf24a3d5987`**.
-The checkout HEAD, supplied base and observed local `dev` ref all identified that commit before this report.
-The initial `git status --short` output was empty. This is a source and earlier-evidence review, with **no new
-native execution or physical measurements**. Commerce Goal clauses 3, 4 and 6 remain unverified on that source.
+Reviewed 2026-11-03; refreshed against dev **`1237cd46c4bea1ba795e153a57ff8031dc9b3558`** on retry.
+The clean retained report commit was `324025daa073950dcce59d57edbf023c5847f918`, based on that dev commit.
+The original source review used `8f63aa396c789f5d6b10b5f65c2edaf24a3d5987`. Comparing it with current dev found
+no changes in Commerce source/tests, the cited Commerce and shared lifecycle contracts, the reviewed growth
+harness entry points, kernel package/runner, or the three earlier Commerce reports. This comparison does not
+certify other shared dependencies. This remains a source and earlier-evidence review, with **no new native
+execution or physical measurements**. Commerce Goal clauses 3, 4 and 6 remain unverified on current dev.
 Main promotion remains parked; this report registers no promotion proof.
 
 Decision: apply the launch prompt's final minimal-verification override; defer original native acceptance to
@@ -14,12 +17,12 @@ manager with the required inbox command, which exited `0`. No implementation or 
 
 The [Commerce Goal](../goals/commerce.md#done-when) requires:
 
-3. “Fulfilment has one durable effect: buyer-home order, entitlement and named payment evidence change atomically.
+- **Clause 3:** “Fulfilment has one durable effect: buyer-home order, entitlement and named payment evidence change atomically.
    Signed events schedule fresh bound reads; redirects, history and Library presence never authorize use.”
-4. “Creation uncertainty, evidence completeness, immutable movement economics and bounded signature/secret inputs
+- **Clause 4:** “Creation uncertainty, evidence completeness, immutable movement economics and bounded signature/secret inputs
    satisfy the owner contract. Exact replays have one effect, conflicts reconcile, incomplete evidence never grants
    or restores, and terminal account fences prevent personal-benefit resurrection.”
-6. “Financial erasure/custody and actual physical cost meet their shared owner contracts. Provider eligibility and
+- **Clause 6:** “Financial erasure/custody and actual physical cost meet their shared owner contracts. Provider eligibility and
    private setup remain external; fixtures do not claim production qualification.”
 
 The sole purchase authority is [Commerce's README](../../services/kernel/src/commerce/README.md), particularly
@@ -33,6 +36,11 @@ Consequently there are no current case results, runner UUIDs, assertion exits, t
 or newly generated evidence paths to report. This is a policy deferral, not an infrastructure incident or a pass.
 Documentation alone changes no typed workspace; no test file was created or changed, so neither workspace typing
 nor a changed-test landing command applies. A typecheck would establish none of the missing outcomes.
+
+The previous landing stopped after successful formatting with “The following paths are ignored by one of your
+.gitignore files:” naming `.temp`. On retry, `git add --dry-run -- .temp` reproduced that staging rejection
+(exit `1`). This is a controller staging failure, not a Commerce assertion or acceptance result. The commerce
+manager received the handoff for the existing controller owner; temporary artifacts remain ignored and excluded.
 
 ### Earlier evidence
 
