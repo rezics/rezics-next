@@ -5,7 +5,8 @@ import { m } from '../paraglide/messages.js';
 import type { BoardRealm } from './board-context';
 import { initials } from './initials';
 
-const linkClass = 'rounded-sm hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-ring';
+const linkClass =
+  'inline-flex h-auto min-h-11 min-w-11 max-w-full items-center rounded-sm px-2 py-2.5 whitespace-normal [overflow-wrap:anywhere] hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 /** The quiet line above a page title: the Realm, then the board, each linked to its page. */
 export function BoardContext({
@@ -21,7 +22,7 @@ export function BoardContext({
   return (
     <nav
       aria-label={m.board_context_label()}
-      className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm text-muted-foreground"
+      className="flex min-w-0 max-w-full flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm text-muted-foreground"
     >
       {prominent ? (
         <Avatar aria-hidden="true" size="sm">
@@ -30,13 +31,13 @@ export function BoardContext({
       ) : null}
       {realm ? (
         <Link to="/realms/$id" params={{ id: realm.id }} className={linkClass}>
-          {realm.title}
+          <span className="min-w-0">{realm.title}</span>
         </Link>
       ) : null}
       {realm && board ? <ChevronRightIcon aria-hidden="true" className="size-3.5 shrink-0" /> : null}
       {board ? (
         <Link to="/boards/$id" params={{ id: board.id }} className={linkClass}>
-          {board.title ?? m.threads_untitled()}
+          <span className="min-w-0">{board.title ?? m.threads_untitled()}</span>
         </Link>
       ) : null}
     </nav>
