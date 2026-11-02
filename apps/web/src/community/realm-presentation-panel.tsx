@@ -35,11 +35,26 @@ export function RealmAppearancePanel({ realmId }: { realmId: string }) {
   const caller = useRealmAppearanceCaller(realmId, adapter, { state, csrfToken, subject: subject ?? null });
   // Base subject namespace retained for compatibility: queryKey: ['realm-appearance', realmId, viewer]
   const queryKey = useMemo(
-    () => [
-      'realm-appearance', realmId, viewer, caller.source?.id ?? null,
-      caller.cacheRevision, caller.lifetime.id, caller.ready, caller.lifetime.locale,
-    ] as const,
-    [realmId, viewer, caller.source?.id, caller.cacheRevision, caller.lifetime.id, caller.ready, caller.lifetime.locale],
+    () =>
+      [
+        'realm-appearance',
+        realmId,
+        viewer,
+        caller.source?.id ?? null,
+        caller.cacheRevision,
+        caller.lifetime.id,
+        caller.ready,
+        caller.lifetime.locale,
+      ] as const,
+    [
+      realmId,
+      viewer,
+      caller.source?.id,
+      caller.cacheRevision,
+      caller.lifetime.id,
+      caller.ready,
+      caller.lifetime.locale,
+    ],
   );
   useEffect(
     () => () => queries.removeQueries({ queryKey, exact: true }),

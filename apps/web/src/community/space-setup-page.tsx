@@ -350,13 +350,28 @@ export function useSpaceSetupRead(spaceId: string) {
     );
   };
   const queryKey = useMemo(
-    () => [
-      'space-setup-entry', spaceId, sessionSource?.id ?? null, sessionRevision,
-      dataUpdateCount, dataUpdatedAt, observation?.errorUpdateCount ?? 0,
-      observation?.errorUpdatedAt ?? 0, session.subject ?? null,
-    ] as const,
-    [spaceId, sessionSource?.id, sessionRevision, dataUpdateCount, dataUpdatedAt,
-      observation?.errorUpdateCount, observation?.errorUpdatedAt, session.subject],
+    () =>
+      [
+        'space-setup-entry',
+        spaceId,
+        sessionSource?.id ?? null,
+        sessionRevision,
+        dataUpdateCount,
+        dataUpdatedAt,
+        observation?.errorUpdateCount ?? 0,
+        observation?.errorUpdatedAt ?? 0,
+        session.subject ?? null,
+      ] as const,
+    [
+      spaceId,
+      sessionSource?.id,
+      sessionRevision,
+      dataUpdateCount,
+      dataUpdatedAt,
+      observation?.errorUpdateCount,
+      observation?.errorUpdatedAt,
+      session.subject,
+    ],
   );
   useEffect(
     () => () => queryClient?.removeQueries({ queryKey, exact: true }),
@@ -378,7 +393,7 @@ export function useSpaceSetupRead(spaceId: string) {
   return current() && !isError ? data : undefined;
 }
 
-export function SpaceSetupEntry({
+function SpaceSetupEntryLink({
   spaceId,
   read,
 }: {
@@ -394,5 +409,22 @@ export function SpaceSetupEntry({
     >
       {m.space_setup_entry()}
     </Link>
+  );
+}
+
+function NativeSpaceSetupEntry({ spaceId }: { spaceId: string }) {
+  const read = useSpaceSetupRead(spaceId);
+  return <SpaceSetupEntryLink spaceId={spaceId} read={read} />;
+}
+
+/** Home shares its read; standalone entries retain their original guarded native reader. */
+export function SpaceSetupEntry(props: {
+  spaceId: string;
+  read?: SetupSnapshot | SetupFailure | undefined;
+}) {
+  return 'read' in props ? (
+    <SpaceSetupEntryLink spaceId={props.spaceId} read={props.read} />
+  ) : (
+    <NativeSpaceSetupEntry spaceId={props.spaceId} />
   );
 }
