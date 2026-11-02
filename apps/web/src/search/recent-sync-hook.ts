@@ -57,6 +57,7 @@ export function useRecentSearchSyncAdapter(
       !storage ||
       session.state !== 'signed-in' ||
       !session.subject ||
+      expected === null ||
       sessionKey === null ||
       bucket !== expected
     ) {
