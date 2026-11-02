@@ -252,7 +252,13 @@ export function assertAgentIdentityHistoryUnit(
   currentAgentIdentityHistoryUnit();
   const unit = identityUnits.getStore();
   const bound = context && prepaidContexts.get(context);
-  if (bound && bound !== unit) throw originalUnavailable('identity-history-prepaid-callback-ended');
+  if (bound && bound !== unit) {
+    const error = originalUnavailable('identity-history-prepaid-callback-ended');
+    // A genuine token from another callback is still foreign to this unit. As
+    // with a copied token, catching its refusal must not revive the live unit.
+    if (unit?.prepaid) unit.failure ??= error;
+    throw error;
+  }
   if (!unit?.prepaid) return;
   if (
     pool !== unit.prepaid.deps.pool ||

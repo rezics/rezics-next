@@ -276,7 +276,9 @@ The Source callback must deliver its real live maintenance context with the orig
 deadline and exact `identityOriginalLibraryWork` ledger. Accounts binds that object to
 its private identity unit and maintenance callback machinery. Reentry poisons the
 outer unit; copied explicit contexts, foreign Pools/clients, callback escape, expiration
-and repeated entry refuse. Callback success and failure invalidate the unit and saved
+and repeated entry refuse. Passing a genuine context from an earlier callback also
+poisons the current prepaid unit, even if the caller catches the refusal and restores
+the correct context. Callback success and failure invalidate the unit and saved
 query closures. Released read facades carry no native command resources. They release
 their checkout before another home is entered. Query wrappers validate authority
 before and after each await; a separately prepaid ROLLBACK remains usable for cleanup.
