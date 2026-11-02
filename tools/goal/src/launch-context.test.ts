@@ -675,6 +675,37 @@ function underLease<T>(h: ReturnType<typeof harness>, taskId: string, run: () =>
   }
 }
 
+function fixtureAttempt(taskId: string, attempt: number, stateDirectory: string): Attempt {
+  return {
+    taskId,
+    attempt,
+    state: 'pending',
+    profile: { cli: 'codex', model: 'fixture', effort: 'medium', poolClass: 'codex' },
+    pool: 'fixture',
+    tableVersion: 'fixture',
+    experiment: null,
+    startedAt: new Date().toISOString(),
+    endedAt: null,
+    process: null,
+    driver: null,
+    logPath: join(stateDirectory, 'runs', taskId, `${attempt}.jsonl`),
+    evidencePath: join(stateDirectory, 'evidence', taskId, String(attempt)),
+    auxiliaryProcesses: [],
+    session: null,
+    fixRound: 0,
+    consulted: false,
+    previousFailure: null,
+    failure: null,
+    escalation: null,
+    before: null,
+    after: null,
+    exitCode: null,
+    result: '',
+    blocker: null,
+    approaches: [],
+  };
+}
+
 test('fresh and normal retry argv carry current contract identity and supersede historical retry prose', async () => {
   const h = harness(provider);
   try {
@@ -1075,13 +1106,11 @@ test('a wake without a resumable session uses a full prompt with the current dep
   }
 });
 
-test('a later dependency merge is described truthfully and an unavailable source observation is not described as proven absence', async () => {
-  const h = harness(provider);
+test('a later dependency merge is described truthfully and an unavailable source observation is not described as proven absence', () => {
+  const h = harness();
   try {
     const task = h.tasks.dispatch(h.briefFile);
-    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
-    await job.start(task.id);
-    const prepared = h.store.task(task.id).base;
+    const prepared = task.base;
     const dependency = h.tasks.dispatch(h.briefFile);
     writeFileSync(join(dependency.worktree, 'later.ts'), 'export const later = true;\n');
     git(dependency.worktree, ['add', 'later.ts']);
@@ -1095,12 +1124,13 @@ test('a later dependency merge is described truthfully and an unavailable source
     replaceTaskContract(
       h,
       task.id,
-      1,
+      0,
       readFileSync(amendedBrief(h.root, 'later-merge', dependency.id, 'Use later merge.'), 'utf8'),
     );
-    const later = underLease(h, task.id, () =>
-      captureLaunchContext(h.store, { taskId: task.id, attempt: 1 }, 'retry'),
+    const ref = h.store.nextAttempt({ taskId: task.id, attempt: 0 }, (attempt) =>
+      fixtureAttempt(task.id, attempt, h.settings.stateDirectory),
     );
+    const later = underLease(h, task.id, () => captureLaunchContext(h.store, ref, 'retry'));
     expect(later.task.base).toBe(prepared);
     expect(later.dependencies.receipts[0]).toMatchObject({
       commit,
@@ -1113,6 +1143,30 @@ test('a later dependency merge is described truthfully and an unavailable source
       `- \`${dependency.id}\`: present in current source at \`${commit}\`; not in your prepared base.`,
     );
     expect(laterPrompt).not.toContain(`integrated in your base at \`${commit}\``);
+
+    const foreign = join(h.root, '.temp/goal/unavailable-dependency');
+    mkdirSync(foreign, { recursive: true });
+    git(foreign, ['init', '-b', 'main']);
+    git(foreign, ['config', 'user.email', 'fixture@example.invalid']);
+    git(foreign, ['config', 'user.name', 'Fixture']);
+    writeFileSync(join(foreign, 'foreign.ts'), 'export const foreign = true;\n');
+    git(foreign, ['add', 'foreign.ts']);
+    git(foreign, ['commit', '-m', 'Unavailable dependency commit']);
+    const unavailable = git(foreign, ['rev-parse', 'HEAD']);
+    h.store.updateTask({ taskId: dependency.id, attempt: 0 }, (current) => {
+      current.integratedCommit = unavailable;
+    });
+    const unknown = underLease(h, task.id, () => captureLaunchContext(h.store, ref, 'retry'));
+    expect(unknown.dependencies.receipts[0]).toMatchObject({
+      sourcePresence: 'unknown',
+      basePresence: 'unknown',
+      precondition: 'unknown',
+    });
+    const unknownPrompt = renderLaunchContext(unknown);
+    expect(unknownPrompt).toContain(
+      `- \`${dependency.id}\`: source observation is unavailable; build against its contract.`,
+    );
+    expect(unknownPrompt).not.toContain('not in your base');
   } finally {
     h.dispose();
   }
@@ -1183,14 +1237,8 @@ test('unknown, cancelled, missing and absent dependency source proofs are never 
       completion: 'integrated',
       commit: unavailableCommit,
       sourcePresence: 'unknown',
-      basePresence: 'unknown',
       precondition: 'unknown',
     });
-    const unknownPrompt = renderLaunchContext(unknownCommit);
-    expect(unknownPrompt).toContain(
-      `- \`${dependency.id}\`: source observation is unavailable; build against its contract.`,
-    );
-    expect(unknownPrompt).not.toContain('not in your base');
 
     const missingContract = amendedBrief(h.root, 'missing-source-proof', 'missing-task', 'Unknown dependency.');
     replaceTaskContract(h, task.id, 1, readFileSync(missingContract, 'utf8'));
