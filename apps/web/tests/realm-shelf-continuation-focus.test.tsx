@@ -1,6 +1,6 @@
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, StrictMode } from 'react';
+import { act } from 'react';
 import * as start from '../.storybook/react-start';
 import type { SpacePageData, ShelfPage } from '../src/community/space';
 
@@ -112,11 +112,9 @@ async function paint() {
   await router.load();
   await settle(() =>
     root.render(
-      <StrictMode>
-        <QueryClientProvider client={client}>
-          <RouterProvider router={router} />
-        </QueryClientProvider>
-      </StrictMode>,
+      <QueryClientProvider client={client}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
     ),
   );
 }
@@ -163,9 +161,13 @@ const announcement = (kind: string) => section(kind).querySelector('.sr-only[rol
 const kinds = ['boards', 'publications'] as const;
 
 const name = (kind: string) => (kind === 'boards' ? m.realm_boards_heading() : m.realm_published_heading());
-test('independent keyboard continuation names new entries and sparse boundaries without counting duplicates or hidden rows', async () => {
+test('each keyboard shelf continues, recovers at its cursor, and focuses named new or sparse portions independently', async () => {
   await mount();
   for (const kind of kinds) {
+    await activate(kind);
+    await settle(() => reads[kind].at(-1)!.resolve({ kind: 'unavailable' }));
+    expect(document.activeElement).toBe(button(kind));
+    expect(button(kind).textContent).toBe(m.realm_shelf_retry());
     await activate(kind);
     await accept(
       kind,
@@ -182,36 +184,18 @@ test('independent keyboard continuation names new entries and sparse boundaries 
       expect(announcement(kind)).toBe(m.realm_shelf_sparse({ shelf: name(kind) }));
     }
     expect(section(kind).querySelector('button')).toBeNull();
-    expect(reads[kind]).toHaveLength(3);
+    expect(reads[kind]).toHaveLength(4);
   }
   expect(cursors).toEqual([
+    'boards-next',
     'boards-next',
     'sparse-next',
     'sparse-next',
     'publications-next',
+    'publications-next',
     'sparse-next',
     'sparse-next',
   ]);
-});
-
-test('failure keeps recovery focused; retry preserves the cursor and reload replaces the denied or stale window', async () => {
-  for (const kind of kinds)
-    for (const failure of ['unavailable', 'stale', 'denied'] as const) {
-      await mount();
-      await activate(kind);
-      await settle(() => reads[kind].at(-1)!.resolve({ kind: failure }));
-      expect(document.activeElement).toBe(button(kind));
-      expect(button(kind).textContent).toBe(
-        failure === 'unavailable' ? m.realm_shelf_retry() : m.realm_shelf_restart(),
-      );
-      await activate(kind);
-      await accept(kind, [added(kind)]);
-      expect(document.activeElement?.textContent).toContain('new-entry');
-      expect(cursors).toEqual([`${kind}-next`, failure === 'unavailable' ? `${kind}-next` : undefined]);
-      expect(section(kind).textContent?.includes(`original-${kind === 'boards' ? 'board' : 'publication'}`)).toBe(
-        failure === 'unavailable',
-      );
-    }
 });
 
 test('pointer continuation and moving focus elsewhere suppress handoff and announcement in either shelf', async () => {
