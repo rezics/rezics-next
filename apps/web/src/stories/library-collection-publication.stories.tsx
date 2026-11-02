@@ -62,6 +62,12 @@ export const SelectedEmpty: Story = {
         ? m.library_publication_count_one({ count: '0' })
         : m.library_publication_count({ count: '0' });
     await expect(canvas.getByText(zero)).toBeVisible();
+    const confirmation = canvas.getByRole('checkbox', { name: m.library_publication_confirm_empty() });
+    const decision = within(confirmation.closest('[role="group"]') as HTMLElement);
+    await expect(decision.getByText(m.library_publication_page_only())).toBeVisible();
+    await expect(decision.getByText(m.library_publication_previous())).toBeVisible();
+    await expect(decision.getByText(m.library_publication_privacy())).toBeVisible();
+    await expect(canvas.queryByRole('region', { name: m.library_publication_output() })).toBeNull();
     await expect(publish).toBeDisabled();
     await userEvent.click(canvas.getByRole('checkbox', { name: m.library_publication_confirm_empty() }));
     await expect(publish).toBeEnabled();
@@ -78,6 +84,12 @@ export const SelectedNonempty: Story = {
       canvas.getByRole('checkbox', { name: m.library_publication_confirm_one({ count: '1' }) }),
     ).toBeChecked();
     await expect(canvas.getByRole('button', { name: m.library_publication_publish() })).toBeEnabled();
+    const details = canvas.getByText(m.library_publication_details()).closest('details')!;
+    await expect(details).not.toHaveAttribute('open');
+    await expect(canvas.getByText(m.library_publication_canonical())).not.toBeVisible();
+    await userEvent.click(within(details).getByText(m.library_publication_details()));
+    await expect(canvas.getByText(m.library_publication_canonical())).toBeVisible();
+    await expect(canvas.getByText(m.library_publication_description())).toBeVisible();
     await userEvent.click(canvas.getAllByRole('checkbox')[1]!);
     await expect(canvas.getByText(m.library_publication_count({ count: '2' }))).toBeVisible();
     const confirmation = canvas.getByRole('checkbox', { name: m.library_publication_confirm({ count: '2' }) });
@@ -142,6 +154,12 @@ export const Retry: Story = {
     const canvas = await chooseAndConfirm(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.library_publication_publish() }));
     await canvas.findByText(m.library_publication_unknown());
+    const retry = canvas.getByRole('button', { name: m.library_publication_retry() });
+    const decision = within(retry.closest('[role="group"]') as HTMLElement);
+    await expect(decision.getByRole('alert')).toHaveTextContent(m.library_publication_unknown());
+    await expect(decision.getByText(m.library_publication_previous())).toBeVisible();
+    await expect(decision.getByText(m.library_publication_privacy())).toBeVisible();
+    await expect(canvas.queryByRole('region', { name: m.library_publication_output() })).toBeNull();
     await userEvent.click(canvas.getByRole('button', { name: m.library_publication_retry() }));
     await expect(canvas.getAllByRole('checkbox')[0]!).toBeDisabled();
     await expect(canvas.queryByRole('link', { name: m.library_publication_next() })).toBeNull();

@@ -190,6 +190,13 @@ function PublicationIntentView({
     onReload?.();
   }
 
+  const feedback = (
+    <>
+      {result?.ok === false ? <p role="alert">{resultText(result.reason)}</p> : null}
+      {busy ? <p role="status">{m.library_publication_pending()}</p> : null}
+    </>
+  );
+
   return (
     <article className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6 text-foreground sm:py-8" aria-busy={busy}>
       <header className="space-y-3">
@@ -198,31 +205,10 @@ function PublicationIntentView({
         </a>
         <PageHeading>{m.library_publication_heading()}</PageHeading>
         {ready ? <p className="text-lg font-medium break-words">{source.page.title}</p> : null}
-        <p className="max-w-prose text-muted-foreground">{m.library_publication_description()}</p>
       </header>
-      <section
-        className="space-y-3 rounded-xl border border-border bg-card p-4"
-        aria-label={m.library_publication_output()}
-      >
-        <h2 className="text-lg font-semibold">{m.library_publication_output()}</h2>
-        {complete ? (
-          <p role="status">
-            {quantityText(
-              complete.publication.itemCount,
-              m.library_publication_complete_one,
-              m.library_publication_complete,
-            )}
-          </p>
-        ) : null}
-        <p className="text-sm text-muted-foreground">{m.library_publication_previous()}</p>
-        <a className="inline-flex min-h-10 items-center text-primary underline" href={base}>
-          {m.library_publication_view()}
-        </a>
-      </section>
-      {result?.ok === false ? <p role="alert">{resultText(result.reason)}</p> : null}
       {!ready ? (
-        <div role="alert" className="space-y-3">
-          <p>
+        <div className="space-y-3">
+          <p role="alert">
             {source.state === 'denied'
               ? m.library_publication_denied()
               : source.state === 'unsupported'
@@ -231,6 +217,8 @@ function PublicationIntentView({
                   ? m.library_dynamic_preparing()
                   : m.library_publication_unavailable()}
           </p>
+          <p className="max-w-prose text-sm text-muted-foreground">{m.library_publication_previous()}</p>
+          {feedback}
           <Button type="button" disabled>
             {m.library_publication_publish()}
           </Button>
@@ -246,7 +234,6 @@ function PublicationIntentView({
             <h2 id="publication-selection" className="text-xl font-semibold">
               {m.library_publication_choose()}
             </h2>
-            <p className="text-sm text-muted-foreground">{m.library_publication_page_only()}</p>
             {candidates.length ? (
               <ul className="space-y-4">
                 {candidates.map((member) => {
@@ -297,55 +284,101 @@ function PublicationIntentView({
             ) : (
               <p role="status">{m.library_publication_no_disclosed()}</p>
             )}
-            {source.page.next ? <p className="text-sm">{m.library_publication_more_pages()}</p> : null}
-            <p className="font-medium" role="status">
-              {quantityText(selected.length, m.library_publication_count_one, m.library_publication_count)}
-            </p>
-            <p className="text-sm text-muted-foreground">{m.library_publication_canonical()}</p>
-            <label className="flex min-h-11 items-start gap-3 rounded-xl bg-muted p-4">
-              <input
-                type="checkbox"
-                className="mt-1 size-5 shrink-0 accent-primary"
-                checked={confirmed}
-                disabled={locked}
-                onChange={(event) => {
-                  if (!canPublish()) return;
-                  const confirmed = event.target.checked;
-                  update((previous) => (previous.busy || previous.attempt ? previous : { ...previous, confirmed }));
-                }}
-              />
-              <span>
-                {selected.length
-                  ? quantityText(selected.length, m.library_publication_confirm_one, m.library_publication_confirm)
-                  : m.library_publication_confirm_empty()}
-              </span>
-            </label>
-            <p className="max-w-prose text-sm text-muted-foreground">{m.library_publication_privacy()}</p>
-            <div className="flex flex-wrap gap-3">
-              <Button
-                type="button"
-                disabled={!confirmed || busy || refused || !canPublish()}
-                onClick={() => void publish()}
-              >
-                {unknown ? m.library_publication_retry() : m.library_publication_publish()}
-              </Button>
-              {onReload && !busy && !unknown ? (
-                <Button type="button" variant="outline" onClick={reload}>
-                  {m.library_collection_reload()}
+            <div
+              role="group"
+              aria-labelledby="publication-count"
+              className="min-w-0 space-y-3 rounded-xl bg-muted/50 p-4 sm:p-5"
+              data-publication-confirmation
+            >
+              <p id="publication-count" className="font-medium" role="status">
+                {quantityText(selected.length, m.library_publication_count_one, m.library_publication_count)}
+              </p>
+              <p id="publication-bounds" className="max-w-prose text-sm text-muted-foreground">
+                {m.library_publication_page_only()}
+              </p>
+              <p id="publication-replacement" className="max-w-prose text-sm">
+                {m.library_publication_previous()}
+              </p>
+              <label className="flex min-h-11 items-start gap-3 py-2">
+                <input
+                  type="checkbox"
+                  className="mt-1 size-5 shrink-0 accent-primary"
+                  checked={confirmed}
+                  disabled={locked}
+                  aria-describedby="publication-bounds publication-replacement publication-privacy"
+                  onChange={(event) => {
+                    if (!canPublish()) return;
+                    const confirmed = event.target.checked;
+                    update((previous) => (previous.busy || previous.attempt ? previous : { ...previous, confirmed }));
+                  }}
+                />
+                <span className="min-w-0 break-words">
+                  {selected.length
+                    ? quantityText(selected.length, m.library_publication_confirm_one, m.library_publication_confirm)
+                    : m.library_publication_confirm_empty()}
+                </span>
+              </label>
+              <p id="publication-privacy" className="max-w-prose text-sm text-muted-foreground">
+                {m.library_publication_privacy()}
+              </p>
+              {feedback}
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  type="button"
+                  className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+                  aria-describedby="publication-bounds publication-replacement publication-privacy"
+                  disabled={!confirmed || busy || refused || !canPublish()}
+                  onClick={() => void publish()}
+                >
+                  {unknown ? m.library_publication_retry() : m.library_publication_publish()}
                 </Button>
-              ) : null}
+                {onReload && !busy && !unknown ? (
+                  <Button type="button" variant="outline" onClick={reload}>
+                    {m.library_collection_reload()}
+                  </Button>
+                ) : null}
+              </div>
             </div>
           </section>
           {source.page.next && !locked ? (
-            <a
-              className="inline-flex min-h-11 items-center text-primary underline"
-              href={`${base}/publish?${new URLSearchParams({ cursor: source.page.next })}`}
-            >
-              {m.library_publication_next()}
-            </a>
+            <div className="space-y-1">
+              <p className="text-sm text-muted-foreground">{m.library_publication_more_pages()}</p>
+              <a
+                className="inline-flex min-h-11 items-center text-primary underline"
+                href={`${base}/publish?${new URLSearchParams({ cursor: source.page.next })}`}
+              >
+                {m.library_publication_next()}
+              </a>
+            </div>
           ) : null}
         </>
       )}
+      {complete ? (
+        <section className="space-y-2 border-t border-border pt-4" aria-label={m.library_publication_output()}>
+          <h2 className="text-lg font-semibold">{m.library_publication_output()}</h2>
+          <p role="status">
+            {quantityText(
+              complete.publication.itemCount,
+              m.library_publication_complete_one,
+              m.library_publication_complete,
+            )}
+          </p>
+          <a className="inline-flex min-h-11 items-center text-primary underline" href={base}>
+            {m.library_publication_view()}
+          </a>
+        </section>
+      ) : null}
+      {ready ? (
+        <details className="max-w-prose text-sm text-muted-foreground" data-publication-details>
+          <summary className="min-h-11 cursor-pointer py-2 font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+            {m.library_publication_details()}
+          </summary>
+          <div className="space-y-2 pt-2">
+            <p>{m.library_publication_description()}</p>
+            <p>{m.library_publication_canonical()}</p>
+          </div>
+        </details>
+      ) : null}
     </article>
   );
 }
