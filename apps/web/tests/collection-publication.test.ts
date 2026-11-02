@@ -108,12 +108,9 @@ test('the current dynamic reader preserves header revision and original IDs; sel
     } as unknown as DurableObjectNamespace<SessionStore>,
   };
   const request = new Request('https://site.test', {
-      headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` },
-    });
-  const page = await loadEditableCollectionPage(client, request,
-    sessionEnv,
-    { id: input.collectionId, editor: true,
+    headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` },
   });
+  const page = await loadEditableCollectionPage(client, request, sessionEnv, { id: input.collectionId, editor: true });
   const preview = await loadCollectionPublication(request, { id: input.collectionId }, async () => page);
   expect(preview.viewer).toEqual({ subject: 'owner', csrfToken: null });
   expect(preview.source.state).toBe('ready');

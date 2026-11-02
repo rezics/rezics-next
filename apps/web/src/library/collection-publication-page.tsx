@@ -148,7 +148,7 @@ function PublicationIntentView({
   const locked = busy || unknown || refused;
   const base = `/${getLocale()}/collections/${encodeURIComponent(page.address.id)}`;
   const review = isCurrent()
-    ? state.attempt?.review ?? (ready ? publicationReview(source.page, source.revision, selected) : null)
+    ? (state.attempt?.review ?? (ready ? publicationReview(source.page, source.revision, selected) : null))
     : null;
 
   async function publish() {

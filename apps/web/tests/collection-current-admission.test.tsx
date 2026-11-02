@@ -281,8 +281,9 @@ describe('Actual scoped Collection authority enables owning editor and occurrenc
       expect(memberList!.members.map((member) => member.id)).toEqual(['occurrence-one', 'occurrence-two']);
       await submit(ui);
       expect(update).toHaveBeenCalledTimes(0);
-      const reload = [...ui.host.querySelectorAll('button')].find((button) =>
-        button.textContent?.trim() === m.library_collection_reload())!;
+      const reload = [...ui.host.querySelectorAll('button')].find(
+        (button) => button.textContent?.trim() === m.library_collection_reload(),
+      )!;
       expect(reload.disabled).toBe(false);
       await settle(() => reload.click());
       expect(ui.refresh).toHaveBeenCalledTimes(1);

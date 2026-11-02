@@ -253,8 +253,13 @@ test('a null-token owner can select and refresh an exact publication review with
   await mounted(async (page) => {
     await page.show({ ...viewer(), csrfToken: null });
     expect(reads).toHaveLength(1);
-    await page.settle(reads[0]!.work,
-      page.ready(7, page.members.map((member) => ({ ...member, note: 'Private occurrence note' }))));
+    await page.settle(
+      reads[0]!.work,
+      page.ready(
+        7,
+        page.members.map((member) => ({ ...member, note: 'Private occurrence note' })),
+      ),
+    );
     await page.choose();
     expect(page.host.textContent).not.toContain('Private occurrence note');
     expect(page.host.querySelector('[data-source-revision="7"]')).not.toBeNull();
@@ -445,13 +450,13 @@ test('Missing current authority and mismatched current source refuse starts; a f
       const invalid: PublicationPage =
         mismatch === 'subject'
           ? { ...valid, viewer: { ...valid.viewer!, subject: 'foreign-viewer' } }
-            : mismatch === 'collection'
-              ? { ...valid, address: { id: 'foreign-collection' } }
-              : mismatch === 'cursor'
-                ? { ...valid, address: { ...address, cursor: 'foreign-page' } }
-                : mismatch === 'source' && valid.source.state === 'ready'
-                  ? { ...valid, source: { ...valid.source, page: { ...valid.source.page, id: 'foreign-source' } } }
-                  : { ...valid, source: { state: 'unavailable' } };
+          : mismatch === 'collection'
+            ? { ...valid, address: { id: 'foreign-collection' } }
+            : mismatch === 'cursor'
+              ? { ...valid, address: { ...address, cursor: 'foreign-page' } }
+              : mismatch === 'source' && valid.source.state === 'ready'
+                ? { ...valid, source: { ...valid.source, page: { ...valid.source.page, id: 'foreign-source' } } }
+                : { ...valid, source: { state: 'unavailable' } };
       await page.settle(reads.at(-1)!.work, invalid);
       expect(page.checkboxes()).toHaveLength(0);
       expect(page.button(page.m.library_publication_publish()).disabled).toBe(true);
