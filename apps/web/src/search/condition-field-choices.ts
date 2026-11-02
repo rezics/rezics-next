@@ -9,9 +9,7 @@ export function conditionFieldChoices(
   selectedLabel: string,
 ) {
   const retained = !!selected && !choices.some(({ value }) => value === selected);
-  const labelled = conditionChoiceLabels(
-    retained ? [{ value: selected, label: selectedLabel }, ...choices] : choices,
-  );
+  const labelled = conditionChoiceLabels(retained ? [{ value: selected, label: selectedLabel }, ...choices] : choices);
   if (!retained) return labelled;
 
   const suffix = ` (${selected})`;

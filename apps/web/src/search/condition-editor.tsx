@@ -256,11 +256,7 @@ function NodeEditor({
       value: id,
       label: name(context.metadata.properties[id]?.labels, id),
     }));
-    return buildConditionFieldChoices(
-      choices,
-      selected,
-      name(context.metadata.properties[selected]?.labels, selected),
-    );
+    return buildConditionFieldChoices(choices, selected, name(context.metadata.properties[selected]?.labels, selected));
   };
   const replaceStatement = (
     next: Partial<{
