@@ -28,7 +28,7 @@ export const loadCharacterProfile = createServerFn({ method: 'GET', strict: fals
   .validator(characterAddress)
   .handler(async ({ data }): Promise<CharacterRead> => {
     setResponseHeader('cache-control', 'private, no-store');
-    return readCharacterProfile(kernelClient(), data);
+    return readCharacterProfile(kernelClient(), data, requestLocale() ?? 'en');
   });
 export const createCatalogueCharacter = createServerFn({ method: 'POST', strict: false })
   .validator(

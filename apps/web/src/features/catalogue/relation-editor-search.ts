@@ -21,7 +21,10 @@ export async function relationTargetSearch(
     return {
       id: subject.id,
       title,
-      types: coverSubject(subject.id, title, subject.summary, subject.type).types,
+      types: [
+        subject.type,
+        ...coverSubject(subject.id, title, subject.summary, subject.type).types.filter((type) => type !== subject.type),
+      ],
       typeLabel: pickText(result.types[subject.type] ?? {}, locale).text,
       year: hitYear(subject.facts) ?? null,
       cover: coverOf(subject.summary),

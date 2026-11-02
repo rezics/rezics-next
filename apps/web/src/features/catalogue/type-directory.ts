@@ -3,38 +3,16 @@ import { setResponseHeader } from '@tanstack/react-start/server';
 import { kernelClient, requestLocale } from '../../kernel/client';
 import type { CreateType, TypeDescriptorRead, TypeDirectoryPage, TypeDirectoryQuery } from './create-subject';
 
-type TypeDirectorySummary = {
-  typeId: string;
-  label: string;
-  language: string | null;
-  description: string | null;
-  descriptionLanguage: string | null;
-};
-/** The native descriptor contains effective released hints; ancestors need no separate reads. */
-export type TypeDirectoryDescriptor = TypeDirectorySummary & { definition: Record<string, unknown> };
-type DescriptorRead =
-  | { ok: true; descriptor: TypeDirectoryDescriptor }
-  | { ok: false; reason: 'missing' | 'unavailable' };
-type ApiResult<T> = { data?: T; error?: unknown };
-type DefinitionTypesApi = {
-  get(input: {
-    query: { locale: string; query?: string; typeId?: string; cursor?: string; limit: number };
-  }): Promise<ApiResult<{ types: TypeDirectorySummary[]; next: string | null }>>;
-  (input: { typeId: string }): {
-    get(input: { query: { locale: string } }): Promise<ApiResult<TypeDirectoryDescriptor>>;
-  };
-};
-
-function httpStatus(error: unknown): number | undefined {
-  if (typeof error !== 'object' || error === null || !('status' in error)) return undefined;
-  const status = error.status;
-  return typeof status === 'number' ? status : undefined;
-}
-
-/** KernelClient's generated surface has not added the delivered Type-directory route yet. */
-function definitionTypes(locale: string) {
-  return (kernelClient(locale) as unknown as { definitionTypes: DefinitionTypesApi }).definitionTypes;
-}
+import {
+  definitionTypes,
+  httpStatus,
+  readDirectoryDescriptor,
+  readTypeDescriptor as readCurrentDescriptor,
+  type TypeDirectoryDescriptor,
+  type DescriptorRead,
+  type CurrentTypeRead,
+} from './type-directory-client';
+export type { TypeDirectoryDescriptor } from './type-directory-client';
 
 function createType(summary: {
   typeId: string;
@@ -54,26 +32,7 @@ function createType(summary: {
 
 /** A fresh caller-aware read every time: no descriptor survives authority or catalogue changes. */
 export async function readTypeDescriptor(typeId: string, locale: string): Promise<DescriptorRead> {
-  if (typeof typeId !== 'string' || typeId.length === 0 || typeId.length > 4_194_304)
-    return { ok: false, reason: 'missing' };
-  try {
-    const response = await definitionTypes(locale)({ typeId }).get({ query: { locale } });
-    if (response.error) return { ok: false, reason: httpStatus(response.error) === 404 ? 'missing' : 'unavailable' };
-    const descriptor = response.data;
-    if (
-      !descriptor ||
-      descriptor.typeId !== typeId ||
-      typeof descriptor.label !== 'string' ||
-      (descriptor.language !== null && typeof descriptor.language !== 'string') ||
-      !descriptor.definition ||
-      typeof descriptor.definition !== 'object' ||
-      Array.isArray(descriptor.definition)
-    )
-      return { ok: false, reason: 'unavailable' };
-    return { ok: true, descriptor };
-  } catch {
-    return { ok: false, reason: 'unavailable' };
-  }
+  return readDirectoryDescriptor(kernelClient(locale), typeId, locale);
 }
 
 /** U exact reads for U distinct Types in the caller's finite page, with at most four in flight. */
@@ -114,7 +73,7 @@ export const readCreateTypePage = createServerFn({ method: 'GET' })
     setResponseHeader('cache-control', 'private, no-store');
     const locale = requestLocale() ?? 'en';
     try {
-      const response = await definitionTypes(locale).get({
+      const response = await definitionTypes(kernelClient(locale)).get({
         query: {
           locale,
           ...(data.query === undefined ? {} : { query: data.query }),
@@ -142,4 +101,16 @@ export const readCreateTypeDescriptor = createServerFn({ method: 'GET' })
     const locale = requestLocale() ?? 'en';
     const result = await readTypeDescriptor(data, locale);
     return result.ok ? { ok: true, type: createType(result.descriptor) } : result;
+  });
+
+export const readCurrentTypeDescriptor = createServerFn({ method: 'GET' })
+  .validator((typeId: string) => {
+    if (typeof typeId !== 'string' || typeId.length === 0 || typeId.length > 4_194_304)
+      throw new Error('Invalid Type ID');
+    return typeId;
+  })
+  .handler(async ({ data }): Promise<CurrentTypeRead> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const locale = requestLocale() ?? 'en';
+    return readCurrentDescriptor(kernelClient(locale), data, locale);
   });

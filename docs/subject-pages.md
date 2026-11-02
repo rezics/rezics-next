@@ -80,6 +80,16 @@ require row-local removal confirmation with Cancel; surviving inputs retain thei
 submissions keep removal and editing locked to the original request.
 When refreshed Character definitions withdraw an additional field choice, return the chooser to its prompt with an explanation and disable Add until deliberate valid re-selection; preserve authored input and never restore the choice automatically.
 
+Character selected-work admission uses the current exact descriptor for that work's actual Type, independently
+of the Character's Release. A failed or mismatched descriptor is unavailable; a missing or unsupported Type is
+ineligible. Failed reads retain the selected address and private drafts behind the current-reading boundary.
+Decision: picker admission reads each result's actual Type, whose properties already include inheritance, rather
+than probing its presentation bases. The existing eight-result picker deduplicates actual Types, requiring at most
+eight exact requests, or eight Type and 512 property points under the 64-property descriptor limit; it never pages
+the Type directory. Actor-support guidance describes only the selected work. Character fields and native credit
+validation still require complete effective property, qualifier and reference definitions; a partial descriptor is
+not a replacement Release and cannot supply missing support definitions or reinterpret stored pins.
+
 Album creation resolves rejected submitted indices to stable assertion rows and authored language controls; following an invalid correction explicitly reviews a new command, while conflicts still require Review and uncertain commands remain sealed. Unknown addresses remain inspectable without a correction link.
 Album creation freezes retained private controls and shows complete assertion snapshots while metadata is retired; explicit refresh restores only admitted definitions, keeps retired facts for deliberate removal, and leaves exact uncertain retries and created-reader recovery independent.
 Album creation confirms populated initial-field removal locally, including meaningful qualifiers or citations with a blank main value; Cancel or Escape restores the trigger, confirmation focuses a surviving control, and blank scaffolding may be removed immediately while sealed rows remain locked.

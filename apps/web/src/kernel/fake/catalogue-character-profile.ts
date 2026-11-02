@@ -14,6 +14,7 @@ import { readCreatedSubject } from '../../features/catalogue/create-subject-requ
 import { proposeFact } from '../../features/catalogue/subject-facts';
 import { candidateContext, readCandidates, selectCandidate, type Candidate } from '../../subject/candidates';
 import { relationFixture, relationRole } from './catalogue-relations';
+import { readTypeDescriptor } from '../../features/catalogue/type-directory-client';
 
 export type CharacterScenario =
   | 'ready'
@@ -69,6 +70,7 @@ export function characterProfileFixture(scenario: CharacterScenario = 'ready', l
   };
   const calls: { path: string; method: string; body: unknown; key: string | null }[] = [];
   const receipts = new Map<string, unknown>();
+  const descriptorResponses = new Map<string, { body: unknown; status: number }>();
   const candidates: Candidate[] = [];
   let created: CharacterItem | undefined;
   let lost = false;
@@ -109,6 +111,24 @@ export function characterProfileFixture(scenario: CharacterScenario = 'ready', l
       const key = request.headers.get('idempotency-key');
       const body = request.method === 'POST' ? await request.json() : null;
       calls.push({ path, method: request.method, body, key });
+      if (path.startsWith('/v1/definitionTypes/')) {
+        const typeId = decodeURIComponent(path.slice('/v1/definitionTypes/'.length));
+        const override = descriptorResponses.get(typeId);
+        if (override) return json(override.body, override.status);
+        const definition = release.types[typeId];
+        if (!definition) return json({}, 404);
+        const label = pickText(definition.labels, locale);
+        return json({
+          typeId,
+          releaseDigest: digest,
+          label: label.text,
+          language: label.lang,
+          description: null,
+          descriptionLanguage: null,
+          definition,
+          properties: Object.fromEntries(definition.properties.map((id) => [id, release.properties[id]])),
+        });
+      }
       if (path === '/v1/definitions/active') {
         if (scenario === 'loading') return new Promise<Response>(() => {});
         if (scenario === 'unavailable') return json({}, 503);
@@ -189,6 +209,7 @@ export function characterProfileFixture(scenario: CharacterScenario = 'ready', l
     load: (address) => readCharacterProfile(client, address),
     create: (command) => createCharacter(client, request(), {}, command, locale),
     read: (id) => readCreatedSubject(client, id, locale),
+    workType: (typeId) => readTypeDescriptor(client, typeId, locale),
   };
   const props: Omit<CharacterProfileProps, 'locale' | 'id' | 'work'> = {
     session: scenario === 'signed-out' ? 'signed-out' : 'signed-in',
@@ -254,5 +275,5 @@ export function characterProfileFixture(scenario: CharacterScenario = 'ready', l
     }),
     relations: () => work.transport,
   };
-  return { client, release, character, work, transport, props, calls, candidates };
+  return { client, release, character, work, transport, props, calls, candidates, descriptorResponses };
 }

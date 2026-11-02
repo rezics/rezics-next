@@ -9,6 +9,9 @@ import {
   characterGroups,
   characterRelations,
   characterType,
+  characterWorkDefinitions,
+  characterWorkFields,
+  filterCharacterWorks,
   isCurrentCharacterRead,
   validateCharacter,
 } from '../src/features/catalogue/character-profile';
@@ -32,6 +35,72 @@ test('retained Character reads are disclosed only for a settled successful exact
       { id: characterProfileId, work: characterCreatedId },
     ),
   ).toBe(false);
+});
+
+test('selected-work eligibility uses the exact current Type from another release and bounds picker reads', async () => {
+  const fixture = characterProfileFixture();
+  const type = 'example:AnotherWork';
+  const original = fixture.work.publicRead.subject.type;
+  const definition = fixture.release.types[original]!;
+  fixture.work.publicRead.subject.type = type;
+  const descriptor = {
+    typeId: type,
+    releaseDigest: `sha256:${'b'.repeat(64)}`,
+    label: 'Another work',
+    language: 'en',
+    description: null,
+    descriptionLanguage: null,
+    definition,
+    properties: Object.fromEntries(definition.properties.map((id) => [id, fixture.release.properties[id]!])),
+  };
+  fixture.descriptorResponses.set(type, { status: 200, body: descriptor });
+  const read = await fixture.transport.load({ id: characterProfileId, work: fixture.work.id });
+  if (!read.ok) throw new Error('Expected a work from another active release');
+  expect(read.workDescriptor).toEqual(descriptor);
+  expect(read.work?.subject.release).toBe(fixture.work.publicRead.subject.release);
+  expect(characterWorkFields(characterWorkDefinitions(descriptor), type)).toContain('wdt:P725');
+  expect(read.release.types[type]).toBeUndefined();
+  const entries = Array.from({ length: 12 }, (_, id) => ({ id, types: [type] }));
+  const start = fixture.calls.length;
+  expect(await filterCharacterWorks(entries, fixture.transport.workType!, new AbortController().signal)).toEqual(
+    entries.slice(0, 8),
+  );
+  expect(fixture.calls.slice(start).map((call) => call.path)).toEqual([
+    `/v1/definitionTypes/${encodeURIComponent(type)}`,
+  ]);
+});
+
+test('failed and mismatched descriptors conceal retained reads and recover at the same selected address', async () => {
+  const fixture = characterProfileFixture();
+  const address = { id: characterProfileId, work: fixture.work.id };
+  const retained = await fixture.transport.load(address);
+  if (!retained.ok || !retained.workDescriptor) throw new Error('Expected selected work');
+  const draft = characterDraft(
+    retained.release,
+    [{ language: 'en', label: 'Retained traveler', description: '', aliases: '' }],
+    [],
+  );
+  const command = { item: draft.item, key: crypto.randomUUID() };
+  const exact = structuredClone(command);
+  const type = retained.workDescriptor.typeId;
+  for (const response of [
+    { status: 503, body: {} },
+    { status: 200, body: { ...retained.workDescriptor, typeId: characterType } },
+  ]) {
+    fixture.descriptorResponses.set(type, response);
+    expect(await fixture.transport.load(address)).toEqual({ ok: false, reason: 'unavailable' });
+    expect(isCurrentCharacterRead(retained, { isSuccess: false, isFetching: false }, address)).toBe(false);
+    await expect(
+      filterCharacterWorks([{ types: [type] }], fixture.transport.workType!, new AbortController().signal),
+    ).rejects.toThrow();
+    expect(command).toEqual(exact);
+  }
+  fixture.descriptorResponses.set(type, { status: 404, body: {} });
+  expect(await fixture.transport.load(address)).toEqual({ ok: false, reason: 'invalid' });
+  fixture.descriptorResponses.delete(type);
+  const recovered = await fixture.transport.load(address);
+  expect(isCurrentCharacterRead(recovered, { isSuccess: true, isFetching: false }, address)).toBe(true);
+  expect(command).toEqual(exact);
 });
 
 test('Character identity and credit editor uses actual released metadata native writes and current reader without fabricated grain or authority', async () => {

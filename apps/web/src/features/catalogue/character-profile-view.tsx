@@ -29,7 +29,8 @@ import {
   characterGroups,
   characterRelations,
   characterType,
-  characterWork,
+  characterWorkDefinitions,
+  filterCharacterWorks,
   characterWorkFields,
   isCurrentCharacterRead,
   type CharacterAddress,
@@ -457,15 +458,15 @@ function CharacterProfileLive({
                 <section className="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6">
                   <h2 className="text-xl font-semibold">{m.character_credits({}, o)}</h2>
                   <p>{m.character_work_help({}, o)}</p>
-                  {!(
-                    current.work
-                      ? characterWorkFields(current.release, current.work.subject.type)
-                      : Object.keys(current.release.types).flatMap((type) => characterWorkFields(current.release, type))
-                  ).some((id) => id !== 'schema:character' && id !== 'wdt:P725') && (
-                    <p role="status" className="text-sm text-muted-foreground">
-                      {m.character_actor_gap({}, o)}
-                    </p>
-                  )}
+                  {current.workDescriptor &&
+                    !characterWorkFields(
+                      characterWorkDefinitions(current.workDescriptor),
+                      current.workDescriptor.typeId,
+                    ).some((id) => id !== 'schema:character' && id !== 'wdt:P725') && (
+                      <p role="status" className="text-sm text-muted-foreground">
+                        {m.character_actor_gap({}, o)}
+                      </p>
+                    )}
                   {current.work ? (
                     <>
                       {currentRead && (
@@ -486,7 +487,7 @@ function CharacterProfileLive({
                             read: async (...args) =>
                               characterRelations(
                                 await relations(current.work!.subject.id).read(...args),
-                                current.release,
+                                characterWorkDefinitions(current.workDescriptor!),
                               ),
                           }}
                         />
@@ -498,8 +499,10 @@ function CharacterProfileLive({
                       value={[]}
                       src={coverSrc}
                       search={async (text, signal) =>
-                        (await search(text, signal)).filter((entry) =>
-                          entry.types.some((type) => characterWork(current.release, type)),
+                        filterCharacterWorks(
+                          await search(text, signal),
+                          transport.workType ?? (async () => ({ ok: false, reason: 'unavailable' })),
+                          signal,
                         )
                       }
                       onValueChange={(items) => {
