@@ -110,10 +110,7 @@ async function activate(label: string, from: ParentNode = host) {
   await act(async () => button.click());
 }
 
-async function open(
-  replies: Array<PublishResult | Promise<PublishResult>>,
-  read?: PublicationTransport['read'],
-) {
+async function open(replies: Array<PublishResult | Promise<PublishResult>>, read?: PublicationTransport['read']) {
   const channel = transport(replies, read);
   const publication = new CurationPublication(reader, channel);
   const visit = publication.activate(channel);
@@ -145,11 +142,7 @@ test('focused Retry and revised-intent recover to the named region; a refusal ke
         { key: 'one', 'data-pane': 'one' },
         recovery(confirmed.publication, confirmed.visit, original),
       ),
-      createElement(
-        'div',
-        { key: 'two', 'data-pane': 'two' },
-        recovery(sibling.publication, sibling.visit, original),
-      ),
+      createElement('div', { key: 'two', 'data-pane': 'two' }, recovery(sibling.publication, sibling.visit, original)),
     ]),
   );
   await activate(m.curation_retry_original(), pane('one'));

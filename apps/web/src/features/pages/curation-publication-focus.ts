@@ -1,9 +1,5 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
-import type {
-  CurationPublication,
-  CurationPublicationVisit,
-  PublicationState,
-} from './curation-publish';
+import type { CurationPublication, CurationPublicationVisit, PublicationState } from './curation-publish';
 
 /** Originating publication instance and the actual current visit incarnation. */
 export type CurationPublicationFocusOwner = {

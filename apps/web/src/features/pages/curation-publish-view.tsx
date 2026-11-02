@@ -411,12 +411,7 @@ export function CurationPublicationRecovery({
     publication.getSnapshot,
     publication.getSnapshot,
   );
-  const focus = useCurationPublicationFocus(
-    visit ? { publication, visit } : { publication },
-    busy,
-    intent,
-    result,
-  );
+  const focus = useCurationPublicationFocus(visit ? { publication, visit } : { publication }, busy, intent, result);
   const waiting = useSearchRetryWait(result?.ok === false && result.reason === 'rate-limited' ? retryAt : undefined);
   const inspectionWaiting = useSearchRetryWait(readRetryAt);
   const options = presentationMessageOptions(locale);
