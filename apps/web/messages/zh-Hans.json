@@ -1655,6 +1655,8 @@
   "library_collection_remove_selected": "移除所选成员",
   "library_collection_select_member": "选择{title}",
   "library_collection_kind": "展示类型",
+  "library_collection_mixed_label": "混合",
+  "library_collection_mixed_help": "每个成员保留自身的类型和展示提示。",
   "library_collection_auto": "自动",
   "library_collection_types_unavailable": "类型选项暂不可用。已保存的选择会保留。",
   "library_collection_current_cover": "当前封面",

@@ -218,7 +218,7 @@ function viewOf(collection: Collection): CollectionView {
     curatorAccountId: collection.curatorAccountId,
     title: collection.title,
     presentationKind: null,
-    presentationKindSource: collection.memberCount === 0 ? 'empty' : 'pending',
+    presentationKindSource: 'mixed',
     cover: null,
     coverSource: collection.memberCount === 0 ? 'none' : 'pending',
     description: collection.description,

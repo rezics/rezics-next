@@ -1693,6 +1693,8 @@
   "library_collection_remove_selected": "Remove selected",
   "library_collection_select_member": "Select {title}",
   "library_collection_kind": "Presentation type",
+  "library_collection_mixed_label": "Mixed",
+  "library_collection_mixed_help": "Each member keeps its own Type and presentation hints.",
   "library_collection_auto": "Automatic",
   "library_collection_types_unavailable": "Type choices are unavailable. The stored choice is preserved.",
   "library_collection_current_cover": "Current cover",

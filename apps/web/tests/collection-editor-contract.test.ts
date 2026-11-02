@@ -124,7 +124,7 @@ test('current list/detail presentation stays bounded and public projection conce
   const native = {
     ...collection.collection,
     presentationKind: null,
-    presentationKindSource: 'pending',
+    presentationKindSource: 'mixed',
     coverSource: 'owner',
     cover: subject.summary.cover,
     coverMediaId: subject.summary.cover.media,
@@ -161,7 +161,7 @@ test('current list/detail presentation stays bounded and public projection conce
   );
   if ('preparing' in page) throw new Error('Expected curated Collection');
   expect(page.presentationKind).toBeNull();
-  expect(page.presentationKindSource).toBe('pending');
+  expect(page.presentationKindSource).toBe('mixed');
   expect(page.cover).toEqual(subject.summary.cover);
   expect(page.memberCount).toBeNull();
   expect(page.members).toHaveLength(3);
@@ -170,7 +170,7 @@ test('current list/detail presentation stays bounded and public projection conce
   expect(page.members.every((member) => !('facts' in member))).toBe(true);
   expect(JSON.stringify(page)).not.toContain('hidden');
   const mine = await loadMineCollectionsForOwner(client, native.curatorAccountId, 'Bearer owner-token');
-  expect(mine.collections[0]?.presentationKindSource).toBe('pending');
+  expect(mine.collections[0]?.presentationKindSource).toBe('mixed');
   expect(mine.collections[0]?.memberCount).toBe(4);
   expect(mine.collections[0]).not.toHaveProperty('coverMediaId');
   expect(mine.collections[0]).not.toHaveProperty('preview');

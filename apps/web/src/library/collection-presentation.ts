@@ -45,8 +45,12 @@ type NativeCollection = NonNullable<
   Awaited<ReturnType<ReturnType<KernelClient['collections']>['get']>>['data']
 >['collection'];
 export type CollectionPresentationData = Partial<
-  Pick<NativeCollection, 'presentationKind' | 'presentationKindSource' | 'cover' | 'coverSource'>
->;
+  Pick<NativeCollection, 'presentationKind' | 'cover' | 'coverSource'>
+> & { presentationKindSource?: 'owner' | 'mixed' };
+// The controller owns generated-client refresh; accept its older source union at this read boundary.
+type CollectionPresentationInput = Omit<CollectionPresentationData, 'presentationKindSource'> & {
+  presentationKindSource?: NativeCollection['presentationKindSource'] | 'mixed';
+};
 export type CollectionTypeOption = { id: string; label: string };
 export type CollectionListPresentations = Readonly<Record<string, ListPresentation>>;
 
@@ -67,14 +71,11 @@ export function collectionPageAddress(
 }
 
 /** Copy only public presentation, never configured media identity or private editor data. */
-export function collectionPresentationOf(collection: CollectionPresentationData): CollectionPresentationData {
+export function collectionPresentationOf(collection: CollectionPresentationInput): CollectionPresentationData {
+  const explicit = collection.presentationKindSource === 'owner';
   return {
-    ...(collection.presentationKindSource === undefined
-      ? {}
-      : {
-          presentationKind: collection.presentationKind ?? null,
-          presentationKindSource: collection.presentationKindSource,
-        }),
+    presentationKind: explicit ? (collection.presentationKind ?? null) : null,
+    presentationKindSource: explicit ? 'owner' : 'mixed',
     ...(collection.coverSource === undefined ? {} : { coverSource: collection.coverSource }),
     ...(collection.cover ? { cover: collection.cover } : {}),
   };

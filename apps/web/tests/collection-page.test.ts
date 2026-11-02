@@ -15,6 +15,7 @@ import subjectRecording from '../src/kernel/recorded/subject.json';
 import { defaultCoverRatio, parseListPresentation, placeholderColors } from '@rezics/ui/cover';
 import { pickText } from '@rezics/composition';
 import { coverSrc } from '../src/media/cover-src';
+import { CollectionPresentationFields } from '../src/library/collection-editor';
 
 mock.module('cloudflare:workers', () => ({ env: { PUBLIC_ORIGIN: 'https://rezics.test' } }));
 const { CollectionPage } = await import('../src/library/collection-page');
@@ -31,7 +32,7 @@ const page: EditableCollectionPage = {
   publicExport: true,
   memberState: 'ready',
   presentationKind: null,
-  presentationKindSource: 'pending',
+  presentationKindSource: 'mixed',
   cover: null,
   coverSource: 'pending',
   filterProperties: [{ id: 'schema:genre', label: 'Genre', datatype: 'wikibase-item' }],
@@ -63,6 +64,35 @@ async function render(data = page, cursor?: string) {
     client.clear();
   }
 }
+
+test('the editor offers mixed separately from automatic cover selection and retains retired explicit Types', () => {
+  const previousLocale = getLocale();
+  try {
+    for (const locale of locales) {
+      setLocale(locale, { reload: false });
+      for (const kind of [null, 'example:Retired']) {
+        const html = renderToStaticMarkup(
+          createElement(CollectionPresentationFields, {
+            types: [{ id: 'schema:Book', label: 'Book' }],
+            kind,
+            onKindChange() {},
+            coverMediaId: null,
+            onCoverChange() {},
+          }),
+        );
+        expect(html).toContain(m.library_collection_mixed_label());
+        expect(html).toContain(m.library_collection_mixed_help());
+        expect(html).toContain(m.library_collection_auto());
+        expect(html).toContain(
+          `<option value="${kind ?? ''}" selected="">${kind ?? m.library_collection_mixed_label()}</option>`,
+        );
+        expect(html).toContain('<option value="schema:Book">Book</option>');
+      }
+    }
+  } finally {
+    setLocale(previousLocale, { reload: false });
+  }
+});
 
 test('The Collection identity keeps its own cover frame and shared placeholder when its own art is absent', async () => {
   // The SignedIn story measures the first real row and the single toolbar at phone390.

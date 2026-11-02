@@ -6,6 +6,8 @@
     "description": "Short novels I reread every few years, in the order I would hand them to a friend.",
     "visibility": "public",
     "revision": 1,
+    "presentationKind": null,
+    "presentationKindSource": "mixed",
     "memberCount": 4,
     "createdAt": "2026-10-29T08:50:27.281Z",
     "updatedAt": "2026-10-29T08:50:27.453Z",

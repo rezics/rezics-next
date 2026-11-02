@@ -1655,6 +1655,8 @@
   "library_collection_remove_selected": "選択した項目を削除",
   "library_collection_select_member": "{title}を選択",
   "library_collection_kind": "表示タイプ",
+  "library_collection_mixed_label": "混合",
+  "library_collection_mixed_help": "各メンバーは自身のタイプと表示設定を維持します。",
   "library_collection_auto": "自動",
   "library_collection_types_unavailable": "タイプを取得できません。保存済みの選択は保持されます。",
   "library_collection_current_cover": "現在の表紙",

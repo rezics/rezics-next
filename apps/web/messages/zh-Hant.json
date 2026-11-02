@@ -1655,6 +1655,8 @@
   "library_collection_remove_selected": "移除所選成員",
   "library_collection_select_member": "選取{title}",
   "library_collection_kind": "顯示類型",
+  "library_collection_mixed_label": "混合",
+  "library_collection_mixed_help": "每個成員保留自身的類型和呈現提示。",
   "library_collection_auto": "自動",
   "library_collection_types_unavailable": "類型選項暫時無法使用。已儲存的選擇會保留。",
   "library_collection_current_cover": "目前封面",

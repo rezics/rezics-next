@@ -520,7 +520,7 @@ export function CollectionPresentationFields({
           disabled={disabled}
           onChange={(event) => onKindChange(event.target.value || null)}
         >
-          <option value="">{m.library_collection_auto()}</option>
+          <option value="">{m.library_collection_mixed_label()}</option>
           {kind && !types?.some((type) => type.id === kind) ? <option value={kind}>{kind}</option> : null}
           {types?.map((type) => (
             <option key={type.id} value={type.id}>
@@ -528,6 +528,7 @@ export function CollectionPresentationFields({
             </option>
           ))}
         </select>
+        <span className="block text-sm text-muted-foreground">{m.library_collection_mixed_help()}</span>
         {types == null ? (
           <span role="status" className="block text-sm text-muted-foreground">
             {m.library_collection_types_unavailable()}

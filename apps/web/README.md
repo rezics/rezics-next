@@ -2424,6 +2424,11 @@ current per-member commands.
 Decision: keep notes as occurrence-keyed local drafts, mark a note saved only after its PATCH is accepted, replay
 unavailable retries with the captured command, and resolve conflicts through explicit reload.
 
+The presentation selector offers Mixed immediately when no explicit released Type is selected; clearing an
+explicit Type returns to Mixed. Each member retains its own Type and hints, including while cover readiness is
+pending. A consumer-local source bridge accepts mixed until the controller refreshes the generated client; the
+shared automatic cover label and native metadata revision/idempotency commands remain independent.
+
 Member images use their own actual Type and the exact fallback in
 [Collection presentation](../../docs/collection-presentation.md), then existing valid release `coverRatio` hints.
 No new release fields are cast into existence. Current FULL summaries lack creator and other key facts, so rows show

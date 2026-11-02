@@ -1655,6 +1655,8 @@
   "library_collection_remove_selected": "Quitar seleccionados",
   "library_collection_select_member": "Seleccionar {title}",
   "library_collection_kind": "Tipo de presentación",
+  "library_collection_mixed_label": "Mixta",
+  "library_collection_mixed_help": "Cada miembro conserva su propio tipo y sus indicaciones de presentación.",
   "library_collection_auto": "Automático",
   "library_collection_types_unavailable": "Los tipos no están disponibles. Se conserva la elección guardada.",
   "library_collection_current_cover": "Portada actual",
