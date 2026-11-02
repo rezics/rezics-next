@@ -337,6 +337,45 @@ test('independent Terms forms retain stable associations, multilingual drafts an
 
     const { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } =
       await import('@tanstack/react-router');
+    const { CreateSubjectForm } = await import('../src/features/catalogue/create-subject-form');
+    const commands: import('../src/features/catalogue/create-subject').CreateSubjectCommand[] = [];
+    let deliver: (result: import('../src/features/catalogue/create-subject').CreateResult) => void = () => {};
+    let prepared = 0;
+    function Creation() {
+      const [value, setValue] = useState('');
+      return (
+        <CreateSubjectForm
+          locale="en"
+          session="signed-in"
+          onNavigate={(href) => void router.navigate({ to: href as never })}
+          transport={{
+            definitions: async () => ({ ok: true, types: [{ id: 'schema:Movie', label: 'Film', description: '' }] }),
+            submit: (command) => {
+              commands.push(structuredClone(command));
+              return new Promise((resolve) => {
+                deliver = resolve;
+              });
+            },
+            read: async () => ({ state: 'ready', href: '/inbox' }),
+          }}
+          profile={{
+            title: 'Film',
+            scope: 'test',
+            type: 'schema:Movie',
+            fields: () => (
+              <>
+                <label htmlFor="profile-value">Profile</label>
+                <input id="profile-value" value={value} onChange={(event) => setValue(event.target.value)} />
+              </>
+            ),
+            prepare: (item) => {
+              prepared++;
+              return { item, errors: [] };
+            },
+          }}
+        />
+      );
+    }
     let signOut: (() => void) | undefined;
     let arrivals = 0;
     function TermsRoute() {
@@ -355,6 +394,13 @@ test('independent Terms forms retain stable associations, multilingual drafts an
       routeTree: routeRoot.addChildren([
         createRoute({ getParentRoute: () => routeRoot, path: '/terms', component: TermsRoute }),
         createRoute({ getParentRoute: () => routeRoot, path: '/inbox', component: Destination }),
+        createRoute({
+          getParentRoute: () => routeRoot,
+          path: '/create',
+          component: Creation,
+          validateSearch: (search) => ({ draft: String(search.draft ?? '') }),
+          remountDeps: ({ search }) => search,
+        }),
       ]),
       history: createMemoryHistory({ initialEntries: ['/inbox', '/terms'] }),
     });
@@ -440,6 +486,67 @@ test('independent Terms forms retain stable associations, multilingual drafts an
     await navigate('/inbox');
     await navigate('/terms');
     await settle(() => !!host.querySelector('form'));
+    expect(unloadBlocked()).toBe(false);
+
+    await navigate('/create');
+    await settle(() => !!host.querySelector('#create-label-0'));
+    const initial = (id: string) => host.querySelector<HTMLInputElement>(id)!;
+    const attemptCreate = () =>
+      act(async () => {
+        void router.navigate({ to: '/create' as never, search: { draft: 'other' } as never });
+      });
+    expect(unloadBlocked()).toBe(false);
+    await replace(page(), 'Profile', 'Profile value');
+    expect(unloadBlocked()).toBe(true);
+    await replace(page(), 'Profile', '');
+    expect(unloadBlocked()).toBe(false);
+    await click(page(), m.catalogue_create_add_language());
+    expect(unloadBlocked()).toBe(false);
+    await replace(page(), m.catalogue_create_label(), 'Original title');
+    await replace(page(), m.catalogue_create_aliases(), 'Alias one\nAlias two');
+    await act(async () => {
+      await user.type(initial('#create-language-1'), 'ja');
+      await user.type(initial('#create-label-1'), '映画');
+    });
+    await replace(page(), 'Profile', 'Profile value');
+    expect(prepared).toBe(0);
+    await attemptCreate();
+    await settle(() => !!dialog());
+    await click(dialog()!, m.zone_editor_stay());
+    await settle(() => !dialog());
+    expect(initial('#create-label-0').value).toBe('Original title');
+    expect(initial('#create-aliases-0').value).toBe('Alias one\nAlias two');
+    expect(initial('#create-label-1').value).toBe('映画');
+    expect(initial('#create-type').value).toBe('schema:Movie');
+    expect(initial('#profile-value').value).toBe('Profile value');
+    await click(page(), m.catalogue_create_submit());
+    await settle(() => commands.length === 1);
+    await attemptCreate();
+    await settle(() => !!dialog());
+    expect(dialog()!.textContent).toContain(m.thread_authoring_leave_pending());
+    await click(dialog()!, m.zone_editor_stay());
+    await settle(() => !dialog());
+    await act(async () => deliver({ ok: false, reason: 'unavailable' }));
+    await click(page(), m.catalogue_create_retry());
+    await settle(() => commands.length === 2);
+    await act(async () => deliver({ ok: false, reason: 'denied' }));
+    expect(initial('#create-label-0').disabled).toBe(true);
+    await click(page(), m.catalogue_create_retry());
+    await settle(() => commands.length === 3);
+    expect(commands[1]).toEqual(commands[0]);
+    expect(commands[2]).toEqual(commands[0]);
+    expect(prepared).toBe(1);
+    await act(async () => deliver({ ok: true, id: 'created', reader: { state: 'ready', href: '/inbox' } }));
+    await settle(() => router.state.location.pathname === '/inbox');
+    expect(dialog()).toBeNull();
+    expect(unloadBlocked()).toBe(false);
+    await navigate('/create');
+    await settle(() => !!host.querySelector('#create-label-0'));
+    await replace(page(), m.catalogue_create_label(), 'Discard this');
+    await attemptCreate();
+    await settle(() => !!dialog());
+    await click(dialog()!, m.thread_authoring_leave());
+    await settle(() => !dialog() && initial('#create-label-0')?.value === '');
     expect(unloadBlocked()).toBe(false);
   } finally {
     await act(async () => root.unmount());
