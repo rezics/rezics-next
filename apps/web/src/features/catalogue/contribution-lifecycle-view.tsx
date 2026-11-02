@@ -1,6 +1,7 @@
 import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -124,101 +125,130 @@ function ContributionLifecycleLive({
   }
 
   return (
-    <section
-      aria-label={m.contribution_title({}, o)}
-      aria-busy={busy}
-      className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6"
-    >
-      <h2 className="text-xl font-semibold">{m.contribution_title({}, o)}</h2>
-      <p className="text-sm text-muted-foreground">{m.contribution_intro({}, o)}</p>
-      {busy && <p role="status">{m.contribution_loading({}, o)}</p>}
-      {state !== 'active' && (
-        <p role="status">
-          {state === 'deleted'
-            ? m.contribution_deleted({}, o)
-            : state === 'expired'
-              ? m.contribution_expired({}, o)
-              : m.contribution_restored({}, o)}
-        </p>
-      )}
-      {state === 'deleted' && <p className="text-sm text-muted-foreground">{m.contribution_window({}, o)}</p>}
-      {current && (
-        <div className="space-y-1 text-sm text-muted-foreground">
-          <p>
-            {current.subject === 'available'
-              ? m.contribution_subject_available({}, o)
-              : m.contribution_read_unavailable({}, o)}
-          </p>
-          <p>
-            {current.candidate === 'deleted'
-              ? m.contribution_tombstone({}, o)
-              : current.candidate === 'available'
-                ? m.contribution_candidate_available({}, o)
-                : m.contribution_candidate_unconfirmed({}, o)}
-          </p>
-          {state === 'restored' && current.selected === false && <p>{m.contribution_unselected({}, o)}</p>}
-        </div>
-      )}
-      {failure && (
-        <p role="alert">
-          {failure === 'denied'
-            ? m.contribution_denied({}, o)
-            : failure === 'expired'
-              ? m.contribution_expired({}, o)
-              : failure === 'invalid'
-                ? m.contribution_invalid({}, o)
-                : failure === 'conflict'
-                  ? m.contribution_conflict({}, o)
-                  : m.contribution_unavailable({}, o)}
-        </p>
-      )}
-      <div className="flex flex-wrap gap-3">
-        {state !== 'expired' && failure !== 'denied' && (
-          <Button
-            type="button"
-            variant={operation === 'delete' ? 'destructive' : 'default'}
-            disabled={busy || needsRead}
-            onClick={() => {
-              if (!lifetime.active() || running.current || needsRead) return;
-              if (pending.current) void change();
-              else {
-                setFailure(undefined);
-                setConfirmation(operation);
-              }
-            }}
-          >
-            {pending.current ? m.contribution_retry({}, o) : action}
-          </Button>
-        )}
-        {(current || needsRead) && !pending.current && (
-          <Button type="button" variant="outline" disabled={busy} onClick={() => void refresh()}>
-            {m.contribution_refresh({}, o)}
-          </Button>
-        )}
-      </div>
-      <AlertDialog
-        open={confirmation !== null}
-        onOpenChange={(open) => lifetime.active() && !open && setConfirmation(null)}
+    <section aria-label={m.contribution_title({}, o)} aria-busy={busy} className="min-w-0">
+      <ContentItemFrame
+        as="div"
+        className="flex min-w-0 flex-col gap-5 rounded-xl bg-card p-4 [overflow-wrap:anywhere] sm:p-6"
       >
-        <AlertDialogContent initialFocus={() => lifetime.active()} finalFocus={() => lifetime.active()}>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{action}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {confirmation === 'delete' ? m.contribution_confirm_delete({}, o) : m.contribution_confirm_restore({}, o)}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{m.candidate_cancel({}, o)}</AlertDialogCancel>
-            <AlertDialogAction
-              variant={confirmation === 'delete' ? 'destructive' : 'default'}
-              disabled={busy}
-              onClick={() => void change()}
-            >
-              {m.contribution_confirm({}, o)}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        <header className="flex min-w-0 flex-col gap-2">
+          <ContentItemHeading level={2} className="text-xl font-semibold leading-snug">
+            {m.contribution_title({}, o)}
+          </ContentItemHeading>
+          <p className="text-sm leading-relaxed text-muted-foreground">{m.contribution_intro({}, o)}</p>
+        </header>
+        {busy && (
+          <p role="status" className="text-sm leading-relaxed">
+            {m.contribution_loading({}, o)}
+          </p>
+        )}
+        {state !== 'active' && (
+          <p role="status" className="font-medium leading-relaxed">
+            {state === 'deleted'
+              ? m.contribution_deleted({}, o)
+              : state === 'expired'
+                ? m.contribution_expired({}, o)
+                : m.contribution_restored({}, o)}
+          </p>
+        )}
+        {current && (
+          <div data-content-item-slot="state" className="grid min-w-0 gap-4 sm:grid-cols-2">
+            <ContentItemHeading level={3} className="min-w-0 text-sm font-medium leading-relaxed">
+              {current.subject === 'available'
+                ? m.contribution_subject_available({}, o)
+                : m.contribution_read_unavailable({}, o)}
+            </ContentItemHeading>
+            <ContentItemHeading level={3} className="min-w-0 text-sm font-medium leading-relaxed">
+              {current.candidate === 'deleted'
+                ? m.contribution_tombstone({}, o)
+                : current.candidate === 'available'
+                  ? m.contribution_candidate_available({}, o)
+                  : m.contribution_candidate_unconfirmed({}, o)}
+            </ContentItemHeading>
+            {state === 'restored' && current.selected === false && (
+              <ContentItemHeading level={3} className="min-w-0 text-sm font-medium leading-relaxed sm:col-span-2">
+                {m.contribution_unselected({}, o)}
+              </ContentItemHeading>
+            )}
+          </div>
+        )}
+        <div data-content-item-slot="actions" className="flex min-w-0 flex-col gap-3">
+          {state === 'deleted' && (
+            <p className="text-sm leading-relaxed text-muted-foreground">{m.contribution_window({}, o)}</p>
+          )}
+          {failure && (
+            <p role="alert" className="text-sm font-medium leading-relaxed">
+              {failure === 'denied'
+                ? m.contribution_denied({}, o)
+                : failure === 'expired'
+                  ? m.contribution_expired({}, o)
+                  : failure === 'invalid'
+                    ? m.contribution_invalid({}, o)
+                    : failure === 'conflict'
+                      ? m.contribution_conflict({}, o)
+                      : m.contribution_unavailable({}, o)}
+            </p>
+          )}
+          <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap">
+            {state !== 'expired' && failure !== 'denied' && (
+              <Button
+                type="button"
+                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2.5 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                variant={operation === 'delete' ? 'destructive' : 'default'}
+                disabled={busy || needsRead}
+                onClick={() => {
+                  if (!lifetime.active() || running.current || needsRead) return;
+                  if (pending.current) void change();
+                  else {
+                    setFailure(undefined);
+                    setConfirmation(operation);
+                  }
+                }}
+              >
+                {pending.current ? m.contribution_retry({}, o) : action}
+              </Button>
+            )}
+            {(current || needsRead) && !pending.current && (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2.5 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                disabled={busy}
+                onClick={() => void refresh()}
+              >
+                {m.contribution_refresh({}, o)}
+              </Button>
+            )}
+          </div>
+        </div>
+        <AlertDialog
+          open={confirmation !== null}
+          onOpenChange={(open) => lifetime.active() && !open && setConfirmation(null)}
+        >
+          <AlertDialogContent initialFocus={() => lifetime.active()} finalFocus={() => lifetime.active()}>
+            <AlertDialogHeader className="min-w-0 justify-items-stretch text-start sm:text-start">
+              <AlertDialogTitle className="min-w-0 [overflow-wrap:anywhere]">{action}</AlertDialogTitle>
+              <AlertDialogDescription className="min-w-0 [overflow-wrap:anywhere]">
+                {confirmation === 'delete'
+                  ? m.contribution_confirm_delete({}, o)
+                  : m.contribution_confirm_restore({}, o)}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="min-w-0 sm:flex-wrap">
+              <AlertDialogCancel className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2.5 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                {m.candidate_cancel({}, o)}
+              </AlertDialogCancel>
+              <AlertDialogAction
+                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2.5 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                variant={confirmation === 'delete' ? 'destructive' : 'default'}
+                disabled={busy}
+                onClick={() => void change()}
+              >
+                {m.contribution_confirm({}, o)}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </ContentItemFrame>
     </section>
   );
 }
