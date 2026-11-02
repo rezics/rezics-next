@@ -131,8 +131,7 @@ test('Lease acquisition distinguishes a dead owner from an unreadable process id
     writeFileSync(file, JSON.stringify({ ...processIdentity()!, pid: 1, token }));
     const read = fs.readFileSync;
     const blocked = spyOn(fs, 'readFileSync').mockImplementation(((target: unknown, encoding?: unknown) => {
-      if (String(target) === '/proc/1/stat')
-        throw Object.assign(new Error('inspection denied'), { code: 'EACCES' });
+      if (String(target) === '/proc/1/stat') throw Object.assign(new Error('inspection denied'), { code: 'EACCES' });
       return read(target as never, encoding as never);
     }) as typeof fs.readFileSync);
     try {
