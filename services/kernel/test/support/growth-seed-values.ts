@@ -111,7 +111,8 @@ export function createSeedValueEncoder(): SeedValueEncoder {
         if (typeof key !== 'string') return fail(location, path, 'symbol-keyed object properties are not supported');
         const descriptor = Object.getOwnPropertyDescriptor(value, key);
         if (!descriptor || !descriptor.enumerable) continue;
-        if (!('value' in descriptor)) return fail(location, propertyPath(path, key), 'accessor properties are not supported');
+        if (!('value' in descriptor))
+          return fail(location, propertyPath(path, key), 'accessor properties are not supported');
         result[key] = encode(descriptor.value, location, depth + 1, propertyPath(path, key), ancestors, byteBudget);
       }
       return result;

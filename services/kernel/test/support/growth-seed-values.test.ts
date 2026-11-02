@@ -99,5 +99,7 @@ test('bounds nesting depth and total traversal work per batch', () => {
   expect(() => encodeSeedRow(tooDeep, table, 1, ['value'], createSeedValueEncoder())).toThrow(/depth 64/);
 
   const tooMuchWork = Array.from({ length: MAX_SEED_VALUE_NODES_PER_BATCH }, () => 0);
-  expect(() => createSeedValueEncoder()(tooMuchWork, { table, row: 1, column: 'value' })).toThrow(/100,000 visited values/);
+  expect(() => createSeedValueEncoder()(tooMuchWork, { table, row: 1, column: 'value' })).toThrow(
+    /100,000 visited values/,
+  );
 });
