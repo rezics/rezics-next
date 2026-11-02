@@ -257,6 +257,10 @@ export const TermsCreditsAndFactsRTL: Story = {
   ...TermsCreditsAndFactsDesktop,
   args: { longMetadata: true, rtl: true },
 };
+export const TermsCreditsAndFactsPhoneRTL: Story = {
+  ...TermsCreditsAndFacts,
+  args: { longMetadata: true, rtl: true },
+};
 export const IndependentLanguageRows: Story = {
   args: { pair: true },
   play: async ({ canvasElement }) => {
@@ -376,6 +380,14 @@ export const CreatedExactReferenceRTL: Story = {
   ...UncertainExactReplay,
   args: { scenario: 'uncertain', rtl: true },
   globals: { viewport: { value: 'desktop1280', isRotated: false } },
+};
+export const CreatedExactReferenceDesktop: Story = {
+  ...UncertainExactReplay,
+  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+};
+export const CreatedExactReferencePhoneRTL: Story = {
+  ...UncertainExactReplay,
+  args: { scenario: 'uncertain', rtl: true },
 };
 export const InitialFieldRemovalAndMultiplicity: Story = {
   play: async ({ canvasElement }) => {

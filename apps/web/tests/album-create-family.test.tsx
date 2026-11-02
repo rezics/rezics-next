@@ -496,6 +496,8 @@ test('Album creation composes complete terms and initial facts while preserving 
         const value = index % 2 ? `https://artist.example/identity/${index}` : `en-${String(index).padStart(3, '0')}`;
         const row = await add(growing, property);
         await replace(textbox(row, index % 2 ? m.correction_url() : m.correction_value()), value);
+        expect(textbox(row, index % 2 ? m.correction_url() : m.correction_value()).value).toBe(value);
+        if (index % 2) expect(within(row).getByText(value, { selector: 'p' }).textContent).toBe(value);
         statements.push({
           property: { id: property },
           value: { type: 'value' as const, content: value },
