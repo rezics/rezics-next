@@ -45,7 +45,7 @@ test('Generic, Manga, Game and People discard retains siblings, withdrawn holder
     });
   const enter = (row: HTMLElement, value: string) =>
     act(async () => {
-      const input = row.querySelector<HTMLInputElement>('input')!;
+      const input = row.matches('input') ? (row as HTMLInputElement) : row.querySelector<HTMLInputElement>('input')!;
       Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, value);
       input.dispatchEvent(new window.Event('input', { bubbles: true }));
     });
@@ -55,6 +55,11 @@ test('Generic, Manga, Game and People discard retains siblings, withdrawn holder
     )!;
   const values = (scope: HTMLElement) =>
     [...scope.querySelectorAll<HTMLInputElement>('input')].map((input) => input.value);
+  const scalarDelivery = (row: HTMLElement) => {
+    const input = row.querySelector('input')!;
+    const props = Reflect.get(input, Object.keys(input).find((key) => key.startsWith('__reactProps$'))!);
+    return () => props.onChange({ target: { value: '+999' } });
+  };
   try {
     for (const manga of [false, true]) {
       const ready = await readMangaProfile(mangaFixture().client, mangaVolumeId);
@@ -74,10 +79,12 @@ test('Generic, Manga, Game and People discard retains siblings, withdrawn holder
       }
       if (!manga) read.release.types[read.public.subject.type]!.properties = properties;
       let requests = 0;
+      const commands: FactCommand[] = [];
       let resolve!: (result: FactResult) => void;
       const facts = {
         read: async () => read,
-        propose: () => {
+        propose: (command: FactCommand) => {
+          commands.push(command);
           requests++;
           return new Promise<FactResult>((yes) => {
             resolve = yes;
@@ -101,7 +108,10 @@ test('Generic, Manga, Game and People discard retains siblings, withdrawn holder
       await choose(row.querySelector('select')!, source.id);
       await click(button(row, 'Edit this field'));
       await enter(row, '+240');
+      const discardedScalar = scalarDelivery(row);
       for (const id of properties.slice(1, manga ? 2 : 12)) await click(button(field(id), 'Edit this field'));
+      await enter(field(properties[1]!), 'private-sibling');
+      await click(field(properties[1]!).querySelector<HTMLElement>('[data-slot="checkbox"]')!);
       const sibling = values(field(properties[1]!));
       const entered = values(row);
       const action = `Remove draft for ${property}`;
@@ -128,13 +138,52 @@ test('Generic, Manga, Game and People discard retains siblings, withdrawn holder
       await click(button(row, 'Edit this field'));
       expect(row.textContent).toContain('Selected value 2');
       await enter(row, '+241');
+      const restaged = values(row);
+      await act(async () => discardedScalar());
+      expect(values(row)).toEqual(restaged);
+      expect(row.textContent).toContain('Selected value 2');
+      const beforeCitation = scalarDelivery(row);
+      const citation = row.querySelector<HTMLInputElement>('input[aria-label="Value"]')!;
+      await enter(citation, 'https://example.org/private-citation');
+      await act(async () => beforeCitation());
+      expect(citation.value).toBe('https://example.org/private-citation');
+      expect(row.querySelector<HTMLInputElement>('input')!.value).toBe('+241');
+      await enter(row, '+242');
+      expect(citation.value).toBe('https://example.org/private-citation');
+      const beforeSeal = scalarDelivery(row);
+      const privateValues = values(row);
       await click(button(row, action));
       await act(async () =>
         host.querySelector('form')!.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })),
       );
       expect(button(row, action).disabled).toBe(true);
+      const original = commands[0]!;
+      const exact = structuredClone(original);
+      const expected = stageFact(read, property, second.id)!.statement;
+      expected.value = { type: 'value', content: { amount: '+242', unit: '1' } };
+      expected.references[0]!.parts[0]!.value = { type: 'value', content: 'https://example.org/private-citation' };
+      expect(original.statement).toEqual(expected);
+      await act(async () => {
+        beforeSeal();
+        scalarDelivery(row)();
+      });
+      expect(values(row)).toEqual(privateValues);
       await act(async () => resolve({ ok: false, reason: 'uncertain' }));
+      await act(async () => {
+        beforeSeal();
+        scalarDelivery(row)();
+      });
+      expect(values(row)).toEqual(privateValues);
       expect(button(row, action).disabled).toBe(true);
+      expect(values(field(properties[1]!))).toEqual(sibling);
+      expect(field(properties[1]!).querySelector('[data-slot="checkbox"]')!.getAttribute('aria-checked')).toBe('false');
+      await act(async () =>
+        host.querySelector('form')!.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })),
+      );
+      expect(commands).toHaveLength(2);
+      expect(commands[1]).toBe(original);
+      expect(commands[1]).toEqual(exact);
+      await act(async () => resolve({ ok: false, reason: 'uncertain' }));
     }
     const { gameProfileFixture } = await import('../src/kernel/fake/catalogue-game-profile');
     const { peopleProfileFixture } = await import('../src/kernel/fake/catalogue-people-profile');
