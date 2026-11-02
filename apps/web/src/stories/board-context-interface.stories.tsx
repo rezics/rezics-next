@@ -148,14 +148,18 @@ const meta = {
       link.focus();
       await userEvent.keyboard('{Enter}');
       await waitFor(() =>
-        expect(new URL(location.textContent!, 'https://story.test').pathname).toBe(`/${getLocale()}${expected[index]!.path}`),
+        expect(new URL(location.textContent!, 'https://story.test').pathname).toBe(
+          `/${getLocale()}${expected[index]!.path}`,
+        ),
       );
       await expect(within(context).getAllByRole('link')[index]).toBe(link);
     }
     for (const [index, link] of links.entries()) {
       await userEvent.click(link);
       await waitFor(() =>
-        expect(new URL(location.textContent!, 'https://story.test').pathname).toBe(`/${getLocale()}${expected[index]!.path}`),
+        expect(new URL(location.textContent!, 'https://story.test').pathname).toBe(
+          `/${getLocale()}${expected[index]!.path}`,
+        ),
       );
     }
   },

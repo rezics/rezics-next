@@ -2,7 +2,13 @@ import { expect, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { createElement, type ComponentProps } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from '@tanstack/react-router';
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  RouterProvider,
+} from '@tanstack/react-router';
 import { createKernelClient } from '@rezics/client';
 import realmRecording from '../src/kernel/recorded/board-realm-realm.json';
 import boardRecording from '../src/kernel/recorded/board-realm.json';
@@ -53,7 +59,9 @@ test('actual router context has no empty navigation, then Realm-only, Board-only
             ...('realm' in props && props.realm ? [{ path: `/realms/${realm.id}`, title: realm.title }] : []),
             ...('board' in props && props.board ? [{ path: `/boards/${board.id}`, title: board.title }] : []),
           ];
-          expect(links.map((link) => link.getAttribute('href'))).toEqual(expected.map(({ path }) => `/${locale}${path}`));
+          expect(links.map((link) => link.getAttribute('href'))).toEqual(
+            expected.map(({ path }) => `/${locale}${path}`),
+          );
           expect(links.map((link) => link.textContent)).toEqual(expected.map(({ title }) => title));
           if (!expected.length) {
             expect(nav).toBeNull();
@@ -72,10 +80,14 @@ test('actual router context has no empty navigation, then Realm-only, Board-only
               expect(link.classList.contains('focus-visible:outline-ring')).toBe(true);
             }
           }
-        } finally { await view.close(); }
+        } finally {
+          await view.close();
+        }
       }
     }
-  } finally { setLocale(previous, { reload: false }); }
+  } finally {
+    setLocale(previous, { reload: false });
+  }
 });
 
 test('prominent initials retain Realm priority, Board-only initials and the localized null-title fallback', async () => {
@@ -96,9 +108,13 @@ test('prominent initials retain Realm priority, Board-only initials and the loca
         expect(avatar?.getAttribute('aria-hidden')).toBe('true');
         expect(avatar?.nextElementSibling?.tagName).toBe('A');
         expect([...view.document.querySelectorAll('a')].map((link) => link.textContent)).toEqual(titles);
-      } finally { await view.close(); }
+      } finally {
+        await view.close();
+      }
     }
-  } finally { setLocale(previous, { reload: false }); }
+  } finally {
+    setLocale(previous, { reload: false });
+  }
 });
 
 test('full supplied long and unbroken titles remain escaped in ordinary flow in LTR and RTL without a disclosure or inferred context', async () => {
@@ -108,7 +124,10 @@ test('full supplied long and unbroken titles remain escaped in ordinary flow in 
     const realmTitle = `${'Long supplied Realm 共讀 '.repeat(15)}${'UnbrokenRealm'.repeat(50)} <script>private()</script> final Realm`;
     const boardTitle = `${'غرفة القراءة '.repeat(15)}${'無間斷標題'.repeat(60)} final Board`;
     for (const direction of ['ltr', 'rtl'] as const) {
-      const view = await render({ realm: { ...realm, title: realmTitle }, board: { ...board, title: boardTitle }, prominent: true }, direction);
+      const view = await render(
+        { realm: { ...realm, title: realmTitle }, board: { ...board, title: boardTitle }, prominent: true },
+        direction,
+      );
       try {
         expect(view.document.querySelector('main')?.getAttribute('dir')).toBe(direction);
         const links = [...view.document.querySelectorAll('nav a')];
@@ -123,7 +142,9 @@ test('full supplied long and unbroken titles remain escaped in ordinary flow in 
         }
         expect(view.document.querySelector('script, details, button')).toBeNull();
         expect(view.document.querySelector('nav')?.textContent).not.toContain(realmRecording.realm.summary);
-      } finally { await view.close(); }
+      } finally {
+        await view.close();
+      }
     }
     const absent = await render({ board });
     try {
@@ -131,8 +152,12 @@ test('full supplied long and unbroken titles remain escaped in ordinary flow in 
       expect(absent.document.body.textContent).not.toContain(realm.title);
       expect(absent.document.body.textContent).not.toMatch(/Global|Source|Join/u);
       expect(absent.document.querySelector('a')?.getAttribute('href')).toBe(`/en/boards/${board.id}`);
-    } finally { await absent.close(); }
-  } finally { setLocale(previous, { reload: false }); }
+    } finally {
+      await absent.close();
+    }
+  } finally {
+    setLocale(previous, { reload: false });
+  }
 });
 
 test('the optional producer keeps zero reads without an identity and one matching active Realm read with the existing credential', async () => {
@@ -168,11 +193,16 @@ test('mismatching, inactive, untitled, denied or failed optional Realm reads nev
     () => Response.json({ code: 'not_found' }, { status: 404 }),
     () => Response.json({ code: 'forbidden' }, { status: 403 }),
     () => Response.json({ code: 'dependency_unavailable' }, { status: 503 }),
-    () => { throw new Error('Supplied optional read failure'); },
+    () => {
+      throw new Error('Supplied optional read failure');
+    },
   ]) {
     let calls = 0;
     const client = createKernelClient('https://kernel.test', {
-      fetch: () => { calls++; return Promise.resolve(response()); },
+      fetch: () => {
+        calls++;
+        return Promise.resolve(response());
+      },
     });
     expect(await readBoardRealm(client, realm.id)).toBeUndefined();
     expect(calls).toBe(1);
