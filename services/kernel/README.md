@@ -575,6 +575,9 @@ boundary. Each report sample carries `seeding`, the statements and rows written 
 `grow` (every pool, `admin` included), the time of `grow`, the ANALYZE settle after it (`vacuumMs`), and total settling
 time for that scale (`settleMs`); when `GROWTH_PROFILE` names a file, `checkGrowth` appends one JSON line per check
 with the test file, check name, scales and each scale's `seeding`.
+`trackGrow` drains statements already submitted on instrumented pools, including connection setup, before it copies
+those counts and ends seeding, on success and on failure, and keeps the grow error as the primary failure. Seed
+production-write concurrency inside `grow` is unchanged.
 Native plan trees are bounded to 10,000 nodes and depth 256 (root depth 0); cycles, sparse children and invalid child
 collections fail with their plan location. These are evidence input limits, not growth verdicts.
 Measured-run write discovery uses those same admitted EXPLAIN document envelopes and the native plan walk; a

@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import type { PoolClient, QueryConfig } from 'pg';
 import { withConnection } from '../../src/database/pool.ts';
-import { capture, captureMeasuredRun, openGrowthDatabase, type GrowthDatabase } from './growth-capture.ts';
+import { capture, captureMeasuredRun, openGrowthDatabase, trackGrow, type GrowthDatabase } from './growth-capture.ts';
 import type { Capture } from './growth-cost.ts';
 import { statementOccurrences } from './growth-report.ts';
 import { checkGrowth } from './growth.ts';
@@ -901,6 +901,41 @@ test('measured-run write discovery records schema-qualified ModifyTable targets'
     ),
   );
   expect(measured.writes.get(database)).toEqual(new Set(['growth_capture_test.trigger_input']));
+});
+
+test('trackGrow drains queued seeding queries before closing accounting', async () => {
+  const database = db!;
+  const id = 9001;
+  const insert = `INSERT INTO growth_capture_test.lookup (id) VALUES (${id})`;
+  const grown = await withConnection(database.pool, (client) =>
+    trackGrow(database, async () => {
+      void client.query('SELECT pg_sleep(0.05)');
+      void client.query(insert);
+    }),
+  );
+  expect(grown.seeding).toEqual({ statements: 2, rowsWritten: 1 });
+  expect((await database.admin.query(`SELECT id FROM growth_capture_test.lookup WHERE id = ${id}`)).rows).toEqual([
+    { id },
+  ]);
+});
+
+test('trackGrow keeps the grow error after draining queued seeding work', async () => {
+  const database = db!;
+  const id = 9002;
+  const insert = `INSERT INTO growth_capture_test.lookup (id) VALUES (${id})`;
+  const primary = new Error('grow failed');
+  await expect(
+    withConnection(database.pool, (client) =>
+      trackGrow(database, async () => {
+        void client.query('SELECT pg_sleep(0.05)');
+        void client.query(insert);
+        throw primary;
+      }),
+    ),
+  ).rejects.toBe(primary);
+  expect((await database.admin.query(`SELECT id FROM growth_capture_test.lookup WHERE id = ${id}`)).rows).toEqual([
+    { id },
+  ]);
 });
 
 test('captures and closes an extra library pool with the production pool', async () => {

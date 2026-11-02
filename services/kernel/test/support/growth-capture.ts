@@ -137,6 +137,7 @@ type CaptureState = {
   active: ActiveCapture | undefined;
   growthCheckActive: boolean;
   seeding: SeedingCount | undefined;
+  seedingPending: Set<Promise<void>>;
   setupError?: Error;
   setupTasks: Set<Promise<void>>;
   relatedDatabases: Map<string, GrowthDatabase>;
@@ -736,15 +737,19 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
       if (applicationQuery) pendingQueries--;
     };
     const callback = args.at(-1);
+    const register = (work: Set<Promise<void>>, task: Promise<void>): void => {
+      work.add(task);
+      // Keep rejected work registered until the boundary drain can report it alongside the initiating failure.
+      void task.then(
+        () => {
+          work.delete(task);
+        },
+        () => {},
+      );
+    };
     const track = (task: Promise<void>): void => {
-      if (!attribution) return;
-      const capture = attribution.capture;
-      capture.pending.add(task);
-      const removeOnSuccess = () => {
-        capture.pending.delete(task);
-      };
-      // Keep rejected work registered until capture draining can report it alongside the initiating failure.
-      void task.then(removeOnSuccess, () => {});
+      if (attribution) register(attribution.capture.pending, task);
+      if (state.seeding) register(state.seedingPending, task);
     };
 
     if (typeof callback === 'function') {
@@ -914,6 +919,7 @@ export async function openGrowthDatabase(url = process.env.DATABASE_URL): Promis
       active: undefined,
       growthCheckActive: false,
       seeding: undefined,
+      seedingPending: new Set(),
       setupTasks: new Set(),
       relatedDatabases: new Map(),
       activeTransactions: new Map(),
@@ -1307,8 +1313,9 @@ function poolDatabaseName(pool: pg.Pool): string | undefined {
 }
 
 /**
- * Runs `grow` for checkGrowth: counts the statements and written rows of every pool the database hands out, and lets
- * `seed` see that its caller settles afterwards.
+ * Runs `grow` for checkGrowth: counts the statements and written rows of every pool the database hands out, waits for
+ * work already submitted on those pools (and connection setup) before closing the counts, and lets `seed` see that its
+ * caller settles afterwards.
  */
 export async function trackGrow<T>(
   database: GrowthDatabase,
@@ -1321,8 +1328,30 @@ export async function trackGrow<T>(
   const seeding: SeedingCount = { statements: 0, rowsWritten: 0 };
   state.seeding = seeding;
   try {
-    const value = await growing.run(database.admin, grow);
-    return { value, seeding: { ...seeding } };
+    let value!: T;
+    let growError: unknown;
+    let growFailed = false;
+    try {
+      value = await growing.run(database.admin, grow);
+    } catch (error) {
+      growError = error;
+      growFailed = true;
+    }
+    const cleanupErrors = await drainCaptureWork(state.seedingPending, state.setupTasks);
+    const failures: unknown[] = [];
+    const addFailure = (error: unknown): void => {
+      if (!failures.includes(error)) failures.push(error);
+    };
+    if (growFailed) addFailure(growError);
+    if (state.setupError) addFailure(state.setupError);
+    for (const error of cleanupErrors) addFailure(error);
+    const counted = { statements: seeding.statements, rowsWritten: seeding.rowsWritten };
+    if (failures.length === 1) throw failures[0];
+    if (failures.length > 1)
+      throw new AggregateError(failures, 'Growth seeding failed while pending work was settling', {
+        cause: failures[0],
+      });
+    return { value, seeding: counted };
   } finally {
     state.seeding = undefined;
   }
