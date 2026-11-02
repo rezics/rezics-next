@@ -84,6 +84,9 @@ test('Character creation keeps multilingual identity, initial facts, correction 
         </QueryClientProvider>,
       ),
     );
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
   };
   const canvas = () => within(host);
   const control = (name: string) => canvas().getByRole('textbox', { name }) as HTMLInputElement;
@@ -239,7 +242,7 @@ test('Character creation keeps multilingual identity, initial facts, correction 
       await submit();
       if (scenario === 'uncertain') {
         await waitFor(() => expect(host.textContent).toContain(m.catalogue_create_uncertain()));
-        expect(control(m.catalogue_create_label()).matches(':disabled')).toBe(true);
+        expect(control(m.catalogue_create_label()).closest('fieldset[disabled]')).not.toBeNull();
         const original = structuredClone(writes(fixture)[0]);
         await click(m.correction_retry());
         await waitFor(() => expect(canvas().getByRole('link', { name: m.candidate_view_public() })).toBeDefined());
@@ -247,7 +250,7 @@ test('Character creation keeps multilingual identity, initial facts, correction 
       } else if (scenario === 'denied') {
         await waitFor(() => expect(host.textContent).toContain(m.correction_denied()));
         expect(control(m.catalogue_create_label()).value).toBe('Recovery draft');
-        expect(control(m.catalogue_create_label()).matches(':disabled')).toBe(false);
+        expect(control(m.catalogue_create_label()).closest('fieldset[disabled]')).toBeNull();
         expect(canvas().queryByRole('link', { name: m.candidate_view_public() })).toBeNull();
       } else {
         await waitFor(() =>
