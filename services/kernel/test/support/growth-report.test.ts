@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { withConnection } from '../../src/database/pool.ts';
 import { checkGrowth, GrowthBoundError, openGrowthDatabase, type GrowthDatabase } from './growth.ts';
+import { statementAttributions } from './growth-report.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -98,3 +99,52 @@ test('a growth report preserves ordered statement occurrences for every measured
     }
   }
 }, 60_000);
+
+function scan(relation: string, rows: number, blocks: number) {
+  return {
+    'Node Type': 'Seq Scan',
+    Schema: 'app',
+    'Relation Name': relation,
+    'Actual Rows': rows,
+    'Actual Loops': 1,
+    'Shared Hit Blocks': blocks,
+    'Shared Read Blocks': 0,
+  };
+}
+
+function document(queryText: string, relation: string, rows: number, blocks: number) {
+  return { 'Query Text': queryText, Plan: scan(relation, rows, blocks) };
+}
+
+test('grouped statement diagnostics use supplied native occurrence ownership even when nested plan SQL equals another client statement; legacy absent ownership remains explicit', () => {
+  const insert = 'INSERT INTO app.outer (id) VALUES ($1)';
+  const lookup = 'SELECT id FROM app.lookup WHERE id = NEW.id';
+  const inner = 'SELECT count(*) FROM app.inner';
+  const insertPlan = document(insert, 'outer', 1, 1);
+  const nestedLookup = document(lookup, 'lookup', 10, 4);
+  const nestedInner = document(inner, 'inner', 7, 3);
+  const queuedLookup = document(lookup, 'lookup', 2, 2);
+  const groupedInsert = 'INSERT INTO app.outer (id) VALUES (?)';
+
+  expect(
+    statementAttributions({
+      statements: [insert, lookup],
+      plans: [insertPlan, nestedLookup, nestedInner, queuedLookup],
+      planStatements: [0, 0, 0, 1],
+    }),
+  ).toEqual([
+    { statement: groupedInsert, count: 1, rows: 18, blocks: 8, node: 'Seq Scan app.inner' },
+    { statement: lookup, count: 1, rows: 2, blocks: 2, node: 'Seq Scan app.lookup' },
+  ]);
+
+  const legacy = { statements: [insert, lookup], plans: [insertPlan, nestedLookup, queuedLookup] };
+  expect(statementAttributions(legacy)).toEqual([
+    { statement: groupedInsert, count: 1, rows: 1, blocks: 1, node: 'Seq Scan app.outer' },
+    { statement: lookup, count: 1, rows: 12, blocks: 6, node: 'Seq Scan app.lookup' },
+  ]);
+
+  expect(statementAttributions({ ...legacy, planStatements: [0, undefined, 1] })).toEqual([
+    { statement: groupedInsert, count: 1, rows: 1, blocks: 1, node: 'Seq Scan app.outer' },
+    { statement: lookup, count: 1, rows: 2, blocks: 2, node: 'Seq Scan app.lookup' },
+  ]);
+});

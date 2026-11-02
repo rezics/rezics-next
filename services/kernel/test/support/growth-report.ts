@@ -253,6 +253,21 @@ function planCost(root: PlanNode, location: string): { rows: number; blocks: num
   };
 }
 
+function addPlanCost(
+  statements: Map<string, { rows: number; blocks: number; count: number; node?: string }>,
+  key: string | undefined,
+  plan: PlanNode,
+  location: string,
+) {
+  if (key === undefined) return;
+  const current = statements.get(key);
+  if (!current) return;
+  const cost = planCost(plan, location);
+  current.rows += cost.rows;
+  current.blocks += cost.blocks;
+  if (cost.node) current.node = cost.node;
+}
+
 export function statementAttributions(capture: Capture): StatementAttribution[] {
   validateCaptureEvidence(capture);
   const statements = new Map<string, { rows: number; blocks: number; count: number; node?: string }>();
@@ -262,17 +277,26 @@ export function statementAttributions(capture: Capture): StatementAttribution[] 
     current.count++;
     statements.set(key, current);
   }
-  for (let index = 0; index < capture.plans.length; index++)
-    for (const { queryText, plan, location } of planEntries(capture.plans[index], `plans[${index}]`)) {
-      if (queryText === undefined) continue;
-      const key = normalizeStatement(queryText);
-      const current = statements.get(key);
-      if (!current) continue;
-      const cost = planCost(plan, location);
-      current.rows += cost.rows;
-      current.blocks += cost.blocks;
-      if (cost.node) current.node = cost.node;
-    }
+  const nativeOwners = capture.planStatements !== undefined;
+  for (let index = 0; index < capture.plans.length; index++) {
+    const owner = capture.planStatements?.[index];
+    const ownedKey =
+      nativeOwners &&
+      owner !== undefined &&
+      Number.isInteger(owner) &&
+      owner >= 0 &&
+      owner < capture.statements.length
+        ? normalizeStatement(capture.statements[owner]!)
+        : undefined;
+    if (nativeOwners && ownedKey === undefined) continue;
+    for (const { queryText, plan, location } of planEntries(capture.plans[index], `plans[${index}]`))
+      addPlanCost(
+        statements,
+        ownedKey ?? (queryText === undefined ? undefined : normalizeStatement(queryText)),
+        plan,
+        location,
+      );
+  }
   return [...statements].map(([statement, cost]) => ({ statement, ...cost }));
 }
 

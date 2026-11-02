@@ -518,7 +518,11 @@ association process statements and notices in linear time; pending wire state is
 queries. Growth reports keep these ordered per-run records in `occurrenceRepetitions`, with foreground and background
 statement lists kept separate. Use these records for checks that must prove the cost of each attempt, such as an
 aborted transaction and its successful retry. `statementRepetitions` and grouped statement attributions remain useful
-for overall profiles; they combine matching SQL across runs and must not be split by attempt.
+for overall profiles; they combine matching SQL across runs and must not be split by attempt. When a capture supplies
+`planStatements`, grouped attributions charge each included native plan to that owner occurrence's client statement,
+including nested trigger and function plans whose Query Text matches another client query or no top-level statement.
+An explicit undefined owner stays ungrouped. Grouped attributions remain foreground-only. When `planStatements` is
+absent, grouping still matches each document's Query Text.
 Checks may declare `attempts: { commands }` to count top-level transaction attempts per backend. Reports retain
 inclusive statement, row and block totals and the failed-statement SQLSTATE ledger, while also listing committed and
 aborted attempts by SQLSTATE for each scale and repetition. Attempts add evidence and never replace the universal
