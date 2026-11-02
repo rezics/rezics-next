@@ -109,9 +109,12 @@ export function ReporterStatusResultPage({
 }) {
   const boundary = useRef<HTMLDivElement>(null);
   const retryFocusGeneration = useRef(0);
-  const [retryFocus, setRetryFocus] = useState<
-    { id: number; scope: object; source: HTMLButtonElement; settled: boolean } | null
-  >(null);
+  const [retryFocus, setRetryFocus] = useState<{
+    id: number;
+    scope: object;
+    source: HTMLButtonElement;
+    settled: boolean;
+  } | null>(null);
   async function retry(activation?: RetryActivation) {
     const request =
       activation?.keyboard && retryFocusScope && isRetryFocusScopeCurrent?.()
@@ -126,8 +129,7 @@ export function ReporterStatusResultPage({
     try {
       await onRetry();
     } finally {
-      if (request)
-        setRetryFocus((current) => (current?.id === request.id ? { ...request, settled: true } : current));
+      if (request) setRetryFocus((current) => (current?.id === request.id ? { ...request, settled: true } : current));
     }
   }
   useEffect(() => {

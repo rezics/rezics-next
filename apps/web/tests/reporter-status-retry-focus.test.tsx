@@ -9,7 +9,9 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+);
 const window = new Window({ url: 'https://site.test/en/moderation/reports/0192f3a0-6c1e-7b2a-9d4e-000000000020' });
 for (const [key, value] of Object.entries({
   window,
@@ -33,7 +35,11 @@ const { prepareReporterStatusRead } = await import('../src/moderation/reporter-s
 const reader = await import('../src/moderation/reporter-status-read');
 let origin: { subject: string; csrfFingerprint: string };
 let calls = 0;
-const retries = [deferred<ReporterStatusRead['result']>(), deferred<ReporterStatusRead['result']>(), deferred<ReporterStatusRead['result']>()];
+const retries = [
+  deferred<ReporterStatusRead['result']>(),
+  deferred<ReporterStatusRead['result']>(),
+  deferred<ReporterStatusRead['result']>(),
+];
 mock.module('../src/moderation/reporter-status-read', () => ({
   ...reader,
   readReporterStatus: ({ data }: { data: { id: string; generation: string } }) =>
@@ -83,7 +89,8 @@ test('a keyboard retry keeps the current result boundary and leaves moved focus 
       </QueryClientProvider>,
     ),
   );
-  const retry = () => [...host.querySelectorAll('button')].find((button) => button.textContent?.includes(m.sources_retry()))!;
+  const retry = () =>
+    [...host.querySelectorAll('button')].find((button) => button.textContent?.includes(m.sources_retry()))!;
   const startRetry = async () =>
     act(async () => {
       retry().focus();
