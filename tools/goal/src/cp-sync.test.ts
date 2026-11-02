@@ -7,6 +7,7 @@ import { dirname, join } from 'node:path';
 import {
   childEnvironment,
   cliSmoke,
+  configSmoke,
   parseArguments,
   PROOF_CHECKS,
   readHistory,
@@ -102,15 +103,29 @@ const history = (repo: string) => readHistory(join(repo, '.temp/goal/cp-sync-his
 test('cp-sync runs the main-release proof steps', () => {
   expect(PROOF_CHECKS.map((check) => [...check.argv])).toEqual(CONTROL_PLANE_CHECKS.map((command) => [...command]));
   expect(PROOF_CHECKS.find((check) => check.kind === 'suite')?.timeoutMs).toBe(30 * 60_000);
-  // The default gate is the installs, the type check and the CLI smoke; --full adds the suite.
-  expect(syncChecks('/live').map((check) => check.kind)).toEqual(['prepare', 'prepare', 'typecheck', 'smoke']);
+  // The default gate is the installs, the type check, live config/routing parse and the CLI smoke; --full adds the suite.
+  expect(syncChecks('/live').map((check) => check.kind)).toEqual(['prepare', 'prepare', 'typecheck', 'smoke', 'smoke']);
   expect(syncChecks('/live', true).map((check) => check.kind)).toEqual([
     'prepare',
     'prepare',
     'typecheck',
     'smoke',
+    'smoke',
     'suite',
   ]);
+  expect(syncChecks('/live').map((check) => check.name)).toEqual([
+    'root install',
+    'tools/goal install',
+    'type check',
+    'config smoke',
+    'cli smoke',
+  ]);
+  const config = configSmoke('/live');
+  expect(config.argv).toEqual(['bun', 'tools/goal/scripts/cp-config-smoke.ts']);
+  expect(config.env?.('/sync')).toEqual({
+    GOAL_MAIN_CHECKOUT: '/live',
+    GOAL_LOCAL_CONFIG: '/live/.temp/goal/local.json',
+  });
   const smoke = cliSmoke('/live');
   expect(smoke.argv).toEqual(['bun', 'tools/goal/src/cli.ts', 'status']);
   expect(smoke.env?.('/sync')).toEqual({
@@ -119,6 +134,89 @@ test('cp-sync runs the main-release proof steps', () => {
     GOAL_STATE_DIRECTORY: `/sync/${SMOKE_STATE}`,
     GOAL_MANAGER: 'cp-sync-smoke',
   });
+});
+
+test('config smoke parses live numbered routing; status smoke misses a routing-shape mismatch and a refusal leaves live state', async () => {
+  const f = fixture();
+  const secret = 'sk-live-secret-value-1234';
+  const localFile = join(f.repo, '.temp/goal/local.json');
+  const routingFile = join(f.repo, '.temp/goal/routing.json');
+  const routing = JSON.parse(readFileSync(join(import.meta.dir, '../routing.json'), 'utf8')) as Record<string, unknown>;
+  const local = {
+    version: 1,
+    routingFile: '.temp/goal/routing.json',
+    pools: [
+      {
+        name: 'fixture',
+        cli: 'codex',
+        classes: ['codex'],
+        configDirectory: '.temp/goal/account',
+        command: 'codex',
+        allowanceKey: secret,
+        policy: { weight: 1, reservePercent: 0, allowUnknown: true, maxAgeMs: 60_000 },
+      },
+    ],
+  };
+  const writeRouting = (version: unknown) => {
+    mkdirSync(dirname(routingFile), { recursive: true });
+    writeFileSync(routingFile, JSON.stringify({ ...routing, version }));
+  };
+  const writeLocal = (body: typeof local) => {
+    mkdirSync(dirname(localFile), { recursive: true });
+    writeFileSync(localFile, JSON.stringify(body));
+  };
+  writeLocal(local);
+  writeRouting(24);
+  const env = {
+    ...childEnvironment(),
+    GOAL_MAIN_CHECKOUT: f.repo,
+    GOAL_LOCAL_CONFIG: localFile,
+  };
+  const smokeScript = join(import.meta.dir, '../scripts/cp-config-smoke.ts');
+  const runSmoke = () => spawnSync(process.execPath, [smokeScript], { encoding: 'utf8', env, cwd: f.repo });
+  const gate: Check = { ...configSmoke(f.repo), argv: [process.execPath, smokeScript] };
+
+  const compatible = runSmoke();
+  expect(compatible.status).toBe(0);
+  expect(compatible.stdout).toContain(localFile);
+  expect(compatible.stdout).toContain(routingFile);
+  expect(existsSync(join(f.repo, '.temp/goal/configuration'))).toBe(false);
+  expect(existsSync(join(f.repo, '.temp/goal/goal.sqlite'))).toBe(false);
+
+  writeRouting(0);
+  const statusOnly = spawnSync(
+    process.execPath,
+    ['-e', `import { loadSettings } from ${JSON.stringify(join(import.meta.dir, 'config.ts'))}; loadSettings();`],
+    { encoding: 'utf8', env, cwd: f.repo },
+  );
+  expect(statusOnly.status).toBe(0);
+
+  const refs = () => git(f.repo, 'rev-parse', 'main', 'stabilize', 'dev');
+  const before = refs();
+  const routingBefore = readFileSync(routingFile);
+  const localBefore = readFileSync(localFile);
+  const refused = runSmoke();
+  expect(refused.status).toBe(1);
+  expect(refused.stderr).toContain(routingFile);
+  expect(refused.stderr).toContain('version');
+  expect(refused.stderr).not.toContain(secret);
+  expect(readFileSync(routingFile)).toEqual(routingBefore);
+  expect(readFileSync(localFile)).toEqual(localBefore);
+  expect(await sync({ ...f.options, checks: [gate] })).toBe(1);
+  expect(refs()).toBe(before);
+  expect(readFileSync(routingFile)).toEqual(routingBefore);
+
+  writeRouting(24);
+  writeLocal({ ...local, version: 2 });
+  const badLocal = runSmoke();
+  expect(badLocal.status).toBe(1);
+  expect(badLocal.stderr).toContain(localFile);
+  expect(badLocal.stderr).toMatch(/version/);
+  expect(badLocal.stderr).not.toContain(secret);
+
+  writeLocal(local);
+  expect(await sync({ ...f.options, checks: [gate] })).toBe(0);
+  expect(git(f.repo, 'rev-parse', 'main')).not.toBe(f.main);
 });
 
 test('the smoke reads a copy of the live Goal database and never writes the original', async () => {

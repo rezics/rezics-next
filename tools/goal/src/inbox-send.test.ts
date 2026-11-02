@@ -320,6 +320,8 @@ test('a Goal manager may send six messages an hour of at most 600 characters; th
     for (let index = 1; index <= 6; index++)
       expect(await goal(kernel, 'inbox', 'send', 'accounts', 'decision', `Decision ${index}`)).toBe(0);
     expect(await goal(kernel, 'inbox', 'send', 'accounts', 'decision', 'Decision 7')).not.toBe(0);
+    expect(await goal(kernel, 'inbox', 'send', 'accounts', 'decision', 'continuation written')).not.toBe(0);
+    expect(await goal(kernel, 'inbox', 'send', 'supermanager', 'question', 'CONTINUATION WRITTEN')).not.toBe(0);
     expect(inbox.read('accounts').map((entry) => entry.event.summary)).toEqual(
       [1, 2, 3, 4, 5, 6].map((index) => `Decision ${index}`),
     );

@@ -204,7 +204,12 @@ test("a dev product attempt's continuation briefs move to its Goal backlog when 
     const backlog = join(h.settings.stateDirectory, 'backlog', 'fixture');
     const queued = readdirSync(backlog);
     expect(queued).toEqual([`continuation-${task.id.slice(0, 8)}-1-rest-of-shelf.md`]);
-    expect(readFileSync(join(backlog, queued[0]!), 'utf8')).toBe(rest);
+    expect(readFileSync(join(backlog, queued[0]!), 'utf8')).toBe(
+      completeContinuation(rest, task, readRiskOwnership(h.settings.riskAreasFile)),
+    );
+    expect(
+      parseBrief(readFileSync(join(backlog, queued[0]!), 'utf8'), readRiskOwnership(h.settings.riskAreasFile)).after,
+    ).toEqual([task.id]);
     expect(existsSync(join(h.settings.stateDirectory, 'backlog', 'web'))).toBe(false);
     expect(readdirSync(join(task.worktree, '.temp/continuation'))).toEqual([]);
     const dropped = h.store
@@ -222,7 +227,7 @@ test("a dev product attempt's continuation briefs move to its Goal backlog when 
 
 test('a continuation missing front matter inherits it from the brief it continues', () => {
   const ownership = readRiskOwnership(join(import.meta.dir, '../risk-areas.json'));
-  const parent = { brief: brief() };
+  const parent = { id: 'parent-task', brief: brief() };
   const partial =
     '---\ngoal: fixture\nkind: feature\npaths: apps/web/src/rights/notice.tsx\nacceptance:\n  command: [bun, test]\n  tests: [notice]\ncriticalPath: "true"\n---\nShow the notice.\n';
   const completed = completeContinuation(partial, parent, ownership);
@@ -233,10 +238,12 @@ test('a continuation missing front matter inherits it from the brief it continue
     riskAreas: ['rights'],
     criticalPath: true,
     waiting: [],
+    after: ['parent-task'],
     estimate: { lines: 100, files: 4 },
   });
   expect(completed.endsWith('\n---\nShow the notice.\n')).toBe(true);
-  expect(completeContinuation(markdown, parent, ownership)).toBe(markdown);
+  const complete = completeContinuation(markdown, parent, ownership);
+  expect(completeContinuation(complete, parent, ownership)).toBe(complete);
 });
 
 const toolBlockedWorker = `#!/usr/bin/env bun

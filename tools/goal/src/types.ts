@@ -31,6 +31,7 @@ export type ProofMetadata = {
   sourceTasks: string[];
   sourceCommit: string;
 };
+export type BriefContinuation = { taskId: string; expectedAttempt: number };
 /** serviceTier is ignored at launch (the Codex tier is the codex.serviceTier setting); kept so older attempts still parse. */
 export type Profile = { cli: Cli; model: string; effort: Effort; poolClass: string; serviceTier?: 'default' | 'fast' };
 export type Pool = {
@@ -152,18 +153,23 @@ export type Settings = {
 };
 export type Brief = {
   proof?: ProofMetadata;
+  continuation?: BriefContinuation;
   goal: string;
   manager: string;
   kind: TaskKind;
   paths: string[];
   riskAreas: string[];
   acceptance: {
+    /** For ordinary dev outcome briefs, an empty command is paired with workerOwned. */
     command: string[];
     tests: string[];
     failing: boolean;
+    /** Set by the parser when an ordinary dev product brief omits its acceptance command. */
+    workerOwned?: true;
     /** Omitted briefs keep the existing placement policy; local opts into the audited local command boundary. */
     placement?: AcceptancePlacement;
   };
+  /** Ordinary dev product briefs default to the routing slice ceiling when no estimate is supplied. */
   estimate: { lines: number; files: number };
   criticalPath: boolean;
   waiting: string[];
@@ -288,7 +294,8 @@ export type RetryIntent = AttemptRef & {
     awaitCheckHosts?: boolean;
     profile?: Profile;
   };
-  status: 'pending' | 'started';
+  status: 'pending' | 'started' | 'abandoned';
+  abandonedBy?: 'stop' | 'cancel';
   nextAttempt?: number;
 };
 export type WorktreeCleanupDisposition = {
@@ -357,10 +364,23 @@ export type PromotionRun = {
   }[];
 };
 export type AttemptFailure = 'spec-conflict' | 'scope-growth' | 'pool-exhausted' | 'tool';
+export type TerminationIntent = {
+  operation: 'stop' | 'cancel';
+  requestedAt: string;
+  state: 'requested' | 'unknown' | 'complete';
+  processIdentity: 'known' | 'not-started' | 'unknown';
+  process: ProcessIdentity | null;
+  auxiliaryProcesses: ProcessIdentity[];
+  error?: string;
+  /** The requested disposition was committed after physical termination was confirmed. */
+  settledAt?: string;
+};
 export type Attempt = AttemptRef & {
   state: 'pending' | 'running' | 'waiting' | 'exited' | 'superseded' | 'stopped' | 'cancelled';
   /** Detached check runs whose completion will resume this attempt's session. */
   checks?: string[];
+  /** Durable operator disposition, distinct from confirmed process-group termination. */
+  terminationIntent?: TerminationIntent;
   previousBriefHash?: string;
   newBriefHash?: string;
   supersededFinalized?: boolean;

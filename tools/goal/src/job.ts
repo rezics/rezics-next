@@ -83,6 +83,7 @@ import { captureLaunchContext } from './launch-context.ts';
 import {
   holdRetryForToolIncident,
   recordToolBlockerFailure,
+  recoverUndeliveredToolIncidentNotices,
   resolveToolIncidentsAfterAttempt,
   toolIncidentForRetry,
   toolIncidentRetryAllowed,
@@ -884,12 +885,7 @@ export class WorkerJob implements GateOutcomeSink {
         !settledAttempt.failureKind &&
         reportsSuccess(settledAttempt.result, agentAdapter(settledAttempt.profile.cli))
       ) {
-        const resolved = resolveToolIncidentsAfterAttempt(
-          store,
-          ref,
-          store.task(ref.taskId),
-          settledAttempt,
-        );
+        const resolved = resolveToolIncidentsAfterAttempt(store, ref, store.task(ref.taskId), settledAttempt);
         if (resolved.length) this.resumePendingRetries();
       }
       if (silenceFailure && store.attempt(ref).state === 'exited') {
@@ -1155,6 +1151,25 @@ export class WorkerJob implements GateOutcomeSink {
   async recoverOrphans(options: { adoptRunning?: boolean } = {}): Promise<void> {
     const adoptRunning = options.adoptRunning ?? true;
     const store = this.tasks.store;
+    recoverUndeliveredToolIncidentNotices(store, this.inbox, this.tasks.settings);
+    for (const task of store.activeTasks()) {
+      if (!task.currentAttempt) continue;
+      const ref = { taskId: task.id, attempt: task.currentAttempt };
+      const intent = store.attempt(ref).terminationIntent;
+      if (!intent || intent.processIdentity === 'unknown') continue;
+      if (intent.settledAt) continue;
+      try {
+        await this.tasks.resumeTermination(task.id);
+      } catch (error) {
+        if (
+          error instanceof LeaseHeldError ||
+          error instanceof StaleAttemptError ||
+          store.attempt(ref).terminationIntent?.state === 'unknown'
+        )
+          continue;
+        throw error;
+      }
+    }
     this.reportCancelledDependencies();
     // The same recovery sweep also observes detached custody after a model exit or cancellation.
     if (adoptRunning) {
@@ -1552,8 +1567,7 @@ export class WorkerJob implements GateOutcomeSink {
         attempt = store.attempt(ref),
         kind = attempt.failureKind;
       if (kind) {
-        releasedIncidents =
-          resolveToolIncidentsAfterAttempt(store, ref, task, attempt).length > 0 || releasedIncidents;
+        releasedIncidents = resolveToolIncidentsAfterAttempt(store, ref, task, attempt).length > 0 || releasedIncidents;
         const detail = `${attempt.result ?? ''}\n${attempt.blocker ?? ''}`;
         capacity = kind === 'tool' && Boolean(agentAdapter(attempt.profile.cli).signals?.(detail).capacity);
         if (kind === 'tool' && !capacity)

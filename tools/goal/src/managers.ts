@@ -9,6 +9,7 @@ import { connectPool, textInput } from './app-server.ts';
 import { agentEnvironmentKeys } from './agents.ts';
 import { migrate } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
+import { isPendingContinuationHandshake } from './manager-continuation.ts';
 import type { ProcessIdentity } from './process.ts';
 import type { ManagerWindows } from './windows.ts';
 
@@ -22,6 +23,17 @@ function codexThreadConfig(spec: Pick<ManagerSpec, 'effort' | 'compactTokens'>) 
 
 function codexTurnSettings(spec: Pick<ManagerSpec, 'effort'>) {
   return { model: CODEX_MANAGER_MODEL, effort: spec.effort };
+}
+
+/** `ThreadGoalSetParams` from installed `codex-cli 0.164.0`; no idle-continuation field is acknowledged. */
+function activeGoalSet(threadId: string, spec: Pick<ManagerSpec, 'objective' | 'budget'>) {
+  return {
+    threadId,
+    origin: 'user' as const,
+    objective: spec.objective,
+    status: 'active' as const,
+    tokenBudget: spec.budget,
+  };
 }
 
 export type ManagerLimits = { turns: number; turnsWithoutDecision: number; wallMs: number };
@@ -630,15 +642,10 @@ export class ManagerSessions {
           model: CODEX_MANAGER_MODEL,
           config: codexThreadConfig(spec),
         });
-        state.threadId = started.thread.id;
+        const threadId = started.thread.id as string;
+        state.threadId = threadId;
         this.save(state);
-        const goal = await client.request('thread/goal/set', {
-          threadId: state.threadId,
-          objective: spec.objective,
-          status: 'active',
-          tokenBudget: spec.budget,
-          origin: 'user',
-        });
+        const goal = await client.request('thread/goal/set', activeGoalSet(threadId, spec));
         state.goalState = goal.goal;
         state.status = 'running';
         this.save(state);
@@ -819,15 +826,7 @@ export class ManagerSessions {
   async outgoingMessage(id: string, recipient: string, summary: string): Promise<void> {
     return this.serial(id, async () => {
       const state = this.get(id);
-      if (
-        state.engine !== 'codex' ||
-        !state.continuationAsked ||
-        state.continuationRenewed ||
-        state.pendingRenewal ||
-        recipient !== state.supermanager ||
-        !/continuation written/i.test(summary)
-      )
-        return;
+      if (!isPendingContinuationHandshake(summary, recipient, state)) return;
       await this.renewForContinuation(id, state.goalState?.tokensUsed ?? 0);
     });
   }

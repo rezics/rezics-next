@@ -4,7 +4,14 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { watchOrPoll } from './watch-or-poll.ts';
 import { join } from 'node:path';
 import type { ManagerEvent, ManagerEventKind, ManagerInbox } from './contracts.ts';
-import { migrateSharedInbox, sharedInboxFields } from './inbox-shared.ts';
+import {
+  migrateSharedInbox,
+  sharedInboxFields,
+  SHARED_INBOX_DEFAULT_PAGE_SIZE,
+  SHARED_INBOX_MAX_PAGE_SIZE,
+  type InboxPage,
+} from './inbox-shared.ts';
+import { isPendingContinuationHandshake } from './manager-continuation.ts';
 
 const wakingKinds = new Set<ManagerEventKind>([
   'width',
@@ -32,6 +39,31 @@ export type InboxEntry = {
   /** Present when identical deliveries within an hour were folded into this row. */
   deliveries?: number;
 };
+export type InboxReadOptions = { limit?: number; cursor?: number; unread?: boolean };
+type InboxRow = {
+  id: number;
+  event: string;
+  read_at: number | null;
+  acknowledged_at: number | null;
+  delivery_count: number;
+};
+
+function inboxEntry(row: InboxRow): InboxEntry {
+  return {
+    id: row.id,
+    event: JSON.parse(row.event) as ManagerEvent,
+    readAt: row.read_at,
+    acknowledgedAt: row.acknowledged_at,
+    ...(row.delivery_count > 1 ? { deliveries: row.delivery_count } : {}),
+  };
+}
+
+function inboxReadLimit(limit: number | undefined): number {
+  const selected = limit ?? SHARED_INBOX_DEFAULT_PAGE_SIZE;
+  if (!Number.isSafeInteger(selected) || selected < 1 || selected > SHARED_INBOX_MAX_PAGE_SIZE)
+    throw new Error(`inbox page limit must be between 1 and ${SHARED_INBOX_MAX_PAGE_SIZE}`);
+  return selected;
+}
 /** Identical deliveries to one recipient within this window are stored once, with a count. */
 export const INBOX_DEDUPE_WINDOW_MS = 60 * 60_000;
 /** A completion result answers the manager's own request, so a repeated result still wakes it. */
@@ -106,24 +138,38 @@ export class SqliteManagerInbox implements ManagerInbox {
   }
   /**
    * Refuse a Goal manager's send above six an hour or 600 characters. Call it in the transaction that delivers the
-   * send. The continuation handshake is exempt from the hourly cap, since renewal waits for it.
+   * send. Only a pending Codex continuation-renewal handshake is exempt from the hourly cap.
    */
-  assertManagerSend(sender: string, summary: string): void {
+  assertManagerSend(sender: string, summary: string, recipient?: string): void {
     if (summary.length > MANAGER_SEND_MAX_CHARACTERS)
       throw new InboxSendRefusedError(
         `inbox send refused: the summary has ${summary.length} characters and a manager message may have at most ${MANAGER_SEND_MAX_CHARACTERS} (about 60 words). Send the decision, question or handoff; put details in the brief or owner document.`,
       );
-    if (/continuation written/i.test(summary)) return;
+    if (recipient !== undefined && this.continuationHandshake(sender, summary, recipient)) return;
     const since = this.now() - SEND_WINDOW_MS;
     const { count } = this.db
       .query(
-        "SELECT count(*) AS count FROM manager_inbox WHERE sender = ? AND created_at > ? AND summary NOT LIKE '%continuation written%'",
+        'SELECT count(*) AS count FROM manager_inbox WHERE sender = ? AND created_at > ? AND continuation_handshake = 0',
       )
       .get(sender, since) as { count: number };
     if (count >= MANAGER_SENDS_PER_HOUR)
       throw new InboxSendRefusedError(
         `inbox send refused: ${sender} has sent ${count} messages in the last hour and the limit is ${MANAGER_SENDS_PER_HOUR}. Send only decisions, blocking questions and handoffs; status, receipts and acknowledgements are not messages.`,
       );
+  }
+  private sessionState(id: string): unknown {
+    if (!id || !this.db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'manager_sessions'").get())
+      return null;
+    const row = this.db.query('SELECT state FROM manager_sessions WHERE id = ?').get(id) as { state: string } | null;
+    if (!row) return null;
+    try {
+      return JSON.parse(row.state);
+    } catch {
+      return null;
+    }
+  }
+  private continuationHandshake(sender: string, summary: string, recipient: string): boolean {
+    return isPendingContinuationHandshake(summary, recipient, this.sessionState(sender));
   }
   record(manager: string, event: unknown): void {
     this.insert(manager, event, false);
@@ -176,11 +222,13 @@ export class SqliteManagerInbox implements ManagerInbox {
         event && typeof event === 'object' && !Array.isArray(event)
           ? { ...event, ...(taskId ? { taskId } : {}), ...(goalId ? { goalId } : {}) }
           : event;
+      const handshake = this.continuationHandshake(fields.sender ?? '', fields.summary ?? '', manager);
       const inserted = this.db
         .query(`INSERT INTO manager_inbox(
         manager, event, wakeable, created_at, sender, goal_id, task_id, kind, summary,
-        reply_to_id, thread_root_id, document_refs, escalation, dedupe_key, quiet
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        reply_to_id, thread_root_id, document_refs, escalation, dedupe_key, quiet,
+        continuation_handshake
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(
           manager,
           JSON.stringify(storedEvent),
@@ -197,6 +245,7 @@ export class SqliteManagerInbox implements ManagerInbox {
           fields.escalation ? JSON.stringify(fields.escalation) : null,
           key,
           Number(quiet),
+          Number(handshake),
         );
       const id = Number(inserted.lastInsertRowid);
       if (rootId === null) {
@@ -263,33 +312,50 @@ export class SqliteManagerInbox implements ManagerInbox {
         .query(
           `SELECT id, event, read_at, acknowledged_at, delivery_count FROM manager_inbox WHERE manager = ? AND ${condition} ORDER BY id`,
         )
-        .all(manager) as {
-        id: number;
-        event: string;
-        read_at: number | null;
-        acknowledged_at: number | null;
-        delivery_count: number;
-      }[]
-    ).map((row) => ({
-      id: row.id,
-      event: JSON.parse(row.event),
-      readAt: row.read_at,
-      acknowledgedAt: row.acknowledged_at,
-      ...(row.delivery_count > 1 ? { deliveries: row.delivery_count } : {}),
-    }));
+        .all(manager) as InboxRow[]
+    ).map(inboxEntry);
   }
-  read(manager: string): InboxEntry[] {
+  /**
+   * One oldest-first page of unacknowledged wakeable events. Only the returned rows become read; later pages and
+   * concurrent deliveries stay unread until selected. Continue with `cursor` set to `nextCursor`.
+   */
+  readPage(manager: string, options: InboxReadOptions = {}): InboxPage<InboxEntry> {
+    const limit = inboxReadLimit(options.limit);
+    if (options.cursor !== undefined && (!Number.isSafeInteger(options.cursor) || options.cursor < 1))
+      throw new Error('inbox cursor must be a positive integer');
     return this.db
       .transaction(() => {
-        const entries = this.rows(manager, 'wakeable = 1 AND acknowledged_at IS NULL');
-        this.db
+        const cursorClause = options.cursor !== undefined ? 'AND id > ?' : '';
+        const stateClause = options.unread ? 'AND read_at IS NULL' : 'AND acknowledged_at IS NULL';
+        const params = options.cursor !== undefined ? [manager, options.cursor, limit + 1] : [manager, limit + 1];
+        const rows = this.db
           .query(
-            'UPDATE manager_inbox SET read_at = COALESCE(read_at, ?) WHERE manager = ? AND wakeable = 1 AND acknowledged_at IS NULL',
+            `SELECT id, event, read_at, acknowledged_at, delivery_count FROM manager_inbox
+             WHERE manager = ? AND wakeable = 1 ${stateClause} ${cursorClause}
+             ORDER BY id LIMIT ?`,
           )
-          .run(Date.now(), manager);
-        return entries;
+          .all(...params) as InboxRow[];
+        const hasMore = rows.length > limit;
+        const entries = (hasMore ? rows.slice(0, limit) : rows).map(inboxEntry);
+        if (entries.length) {
+          const placeholders = entries.map(() => '?').join(',');
+          this.db
+            .query(
+              `UPDATE manager_inbox SET read_at = COALESCE(read_at, ?) WHERE manager = ? AND id IN (${placeholders})`,
+            )
+            .run(Date.now(), manager, ...entries.map((entry) => entry.id));
+        }
+        return {
+          entries,
+          limit,
+          hasMore,
+          nextCursor: hasMore && entries.length ? entries[entries.length - 1]!.id : null,
+        };
       })
       .immediate();
+  }
+  read(manager: string, options?: InboxReadOptions): InboxEntry[] {
+    return this.readPage(manager, options).entries;
   }
   acknowledge(manager: string, ids?: readonly number[]): void {
     this.db
@@ -330,7 +396,7 @@ export class SqliteManagerInbox implements ManagerInbox {
       };
       const finish = () => {
         try {
-          const events = this.read(manager);
+          const events = this.read(manager, { unread: true });
           close();
           resolve(events);
         } catch (error) {

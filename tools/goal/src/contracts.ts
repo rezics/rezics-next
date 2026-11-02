@@ -141,6 +141,11 @@ export type LandingRequest = AttemptRef & {
   worktree: string;
   /** Source branch HEAD before controller-only retry rebases, frozen when the worker settles. */
   workerCommit?: string;
+  /** A clean completion with no source commit asks the train to verify this exact retained contract and head. */
+  unchangedClaim?: true;
+  contractHash?: string;
+  /** A worker worktree that was dirty at settlement cannot be certified as unchanged. */
+  sourceDirtyAtSettlement?: true;
   /** Path patterns the brief declared: where the work is expected. A worker may change files outside them. */
   declaredPaths: readonly string[];
   /** Risk-area patterns the brief did not declare; a change outside declaredPaths that matches one is refused. */
@@ -187,6 +192,12 @@ export type GateOutcome = AttemptRef & {
   passed: boolean;
   /** The stage that failed, or 'merge' when the task merged. */
   stage: GateStage;
+  /** Actual acceptance run for a clean unchanged claim, pinned to its retained source. */
+  retainedSourceAcceptance?: {
+    sourceCommit: string;
+    command: readonly string[];
+    status: 'passed' | 'failed' | 'unavailable';
+  };
   firstFailure?: FirstFailure;
   /** The same first failure also occurs on main. */
   failsOnMain?: boolean;

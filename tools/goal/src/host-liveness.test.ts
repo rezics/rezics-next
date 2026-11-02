@@ -1,6 +1,15 @@
 import { expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import {
+  closeSync,
+  existsSync,
+  ftruncateSync,
+  openSync,
+  readFileSync,
+  readdirSync,
+  writeFileSync,
+  writeSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import {
   ensureHostRunning,
@@ -94,10 +103,15 @@ test('an independent owned supervisor detects host exit, restarts once, and fenc
   }
 }, 15_000);
 
-test('restart failures preserve the exact cause and use durable bounded backoff across supervisor replacement', async () => {
+test('restart failures preserve the exact cause and durable backoff through damaged journal repair', async () => {
   const dir = temporaryDirectory();
   const failing = join(dir.path, 'failure.ts');
   const attempts = join(dir.path, 'attempts.jsonl');
+  const hostStatePath = join(dir.path, 'manager-host-liveness.json');
+  const retryStatePath = join(dir.path, 'manager-host-liveness-retry.json');
+  const previousError = console.error;
+  const diagnostics: string[] = [];
+  console.error = (...args: unknown[]) => diagnostics.push(args.map(String).join(' '));
   writeFileSync(
     failing,
     `import { appendFileSync } from 'node:fs'; appendFileSync(${JSON.stringify(attempts)}, JSON.stringify(Date.now())+'\\n'); console.error('fixture host startup cause'); process.exit(17);`,
@@ -105,7 +119,8 @@ test('restart failures preserve the exact cause and use durable bounded backoff 
   const dead = spawn(process.execPath, ['-e', 'setTimeout(() => process.exit(0), 50)'], { stdio: 'ignore' });
   const identity = processIdentity(dead.pid!)!;
   await new Promise((resolve) => dead.once('exit', resolve));
-  writeFileSync(join(dir.path, 'manager-host-liveness.json'), JSON.stringify({ identity, desired: true }));
+  const originalHostState = { identity, desired: true };
+  writeFileSync(hostStatePath, JSON.stringify(originalHostState));
   const config: HostLivenessConfig = {
     stateDirectory: dir.path,
     managerSocket: join(dir.path, 'manager.sock'),
@@ -123,7 +138,9 @@ test('restart failures preserve the exact cause and use durable bounded backoff 
     }
   };
   let controller = new AbortController();
-  let running = superviseHost(config, controller.signal);
+  let supervisorFailure: unknown;
+  const runSupervisor = () => superviseHost(config, controller.signal).catch((error) => (supervisorFailure = error));
+  let running = runSupervisor();
   try {
     await until(() => count().length >= 2);
     controller.abort();
@@ -133,16 +150,116 @@ test('restart failures preserve the exact cause and use durable bounded backoff 
     expect(saved.nextAt - count().at(-1)!).toBeLessThanOrEqual(240);
     const before = count().length;
     controller = new AbortController();
-    running = superviseHost(config, controller.signal);
+    running = runSupervisor();
     await pause(20);
     expect(count()).toHaveLength(before);
     await until(() => count().length > before);
     const times = count();
     expect(times[1]! - times[0]!).toBeGreaterThanOrEqual(140);
     expect(readFileSync(join(dir.path, 'manager-host.log'), 'utf8')).toContain('fixture host startup cause');
+
+    const malformedDiagnostics = () =>
+      diagnostics.filter((message) => message.includes('Malformed manager host retry journal'));
+    writeFileSync(retryStatePath, '{');
+    await until(() => supervisorFailure !== undefined || malformedDiagnostics().length >= 1);
+    expect(supervisorFailure).toBeUndefined();
+    writeFileSync(retryStatePath, JSON.stringify({ failures: 1, nextAt: 'later' }));
+    await until(() => supervisorFailure !== undefined || malformedDiagnostics().length >= 2);
+    expect(supervisorFailure).toBeUndefined();
+    const repaired = JSON.parse(readFileSync(retryStatePath, 'utf8')) as { failures: number; nextAt: number };
+    expect(repaired.failures).toBe(30);
+    expect(repaired.nextAt - Date.now()).toBeGreaterThan(0);
+    expect(repaired.nextAt - Date.now()).toBeLessThanOrEqual(config.maxBackoffMs!);
+    expect(malformedDiagnostics()).toHaveLength(2);
+    expect(
+      malformedDiagnostics().every(
+        (message) => message.includes(retryStatePath) && message.includes('maximum backoff') && message.length < 500,
+      ),
+    ).toBe(true);
+    expect(JSON.parse(readFileSync(hostStatePath, 'utf8'))).toEqual(originalHostState);
+
+    const beforeRepairRestart = count().length;
+    controller.abort();
+    await running;
+    supervisorFailure = undefined;
+    controller = new AbortController();
+    running = runSupervisor();
+    await pause(Math.max(0, repaired.nextAt - Date.now() - 20));
+    expect(supervisorFailure).toBeUndefined();
+    expect(count()).toHaveLength(beforeRepairRestart);
+    await until(() => supervisorFailure !== undefined || count().length > beforeRepairRestart);
+    expect(supervisorFailure).toBeUndefined();
   } finally {
     controller.abort();
     await running;
+    console.error = previousError;
+    dir.close();
+  }
+}, 10_000);
+
+test('startup failure diagnostics bound current launch evidence and report missing or truncated output honestly', async () => {
+  const dir = temporaryDirectory();
+  const logPath = join(dir.path, 'manager-host.log');
+  const oldFailure = 'previous launch failure';
+  const oldFailureBytes = Buffer.from(oldFailure);
+  const log = openSync(logPath, 'w');
+  ftruncateSync(log, 128 * 1024 * 1024);
+  writeSync(log, oldFailureBytes, 0, oldFailureBytes.length, 128 * 1024 * 1024 - oldFailureBytes.length);
+  closeSync(log);
+
+  const failing = join(dir.path, 'failure.js');
+  const config: HostLivenessConfig = {
+    stateDirectory: dir.path,
+    managerSocket: join(dir.path, 'manager.sock'),
+    mainCheckout: dir.path,
+    command: [process.execPath, failing],
+  };
+  const failAndRead = async () => {
+    const error = await ensureHostRunning(config).then(
+      () => undefined,
+      (reason) => reason as Error,
+    );
+    expect(error).toBeInstanceOf(Error);
+    return error!.message;
+  };
+
+  try {
+    const currentFailure = 'current launch failure';
+    writeFileSync(failing, `console.error(${JSON.stringify(currentFailure)}); process.exit(17);`);
+    const first = await failAndRead();
+    expect(first).toContain('exited with code 17');
+    expect(first).toContain(`log path: ${logPath}`);
+    expect(first).toContain('Current launch output complete');
+    expect(first).toContain(currentFailure);
+    expect(first).not.toContain(oldFailure);
+
+    const currentTail = 'current launch tail';
+    writeFileSync(failing, `console.error(${JSON.stringify(`${'x'.repeat(5000)}${currentTail}`)}); process.exit(18);`);
+    const second = await failAndRead();
+    expect(second).toContain('exited with code 18');
+    expect(second).toContain(`log path: ${logPath}`);
+    expect(second).toContain('Current launch output truncated');
+    expect(second).toContain(currentTail);
+    expect(second).not.toContain(oldFailure);
+    expect(second.length).toBeLessThan(4500);
+
+    for (const [source, outcome, evidence] of [
+      ['process.exit(19);', 'code 19', 'complete (0 bytes; no output recorded)'],
+      ['process.kill(process.pid, "SIGTERM");', 'signal SIGTERM', 'complete (0 bytes; no output recorded)'],
+      [
+        `import { truncateSync } from 'node:fs'; truncateSync(${JSON.stringify(logPath)}, 0); console.error('replacement output'); process.exit(20);`,
+        'code 20',
+        'unavailable: the log shrank',
+      ],
+    ]) {
+      writeFileSync(failing, source!);
+      const diagnostic = await failAndRead();
+      expect(diagnostic).toContain(`exited with ${outcome}`);
+      expect(diagnostic).toContain(`log path: ${logPath}`);
+      expect(diagnostic).toContain(evidence!);
+      for (const previous of [oldFailure, currentFailure, currentTail]) expect(diagnostic).not.toContain(previous);
+    }
+  } finally {
     dir.close();
   }
 }, 10_000);

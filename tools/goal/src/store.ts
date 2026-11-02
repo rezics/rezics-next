@@ -18,6 +18,7 @@ import type {
   PromotionRun,
   RetryIntent,
   Task,
+  TerminationIntent,
   WorktreeCleanupDisposition,
 } from './types.ts';
 import { recordFlow, ensureFlow, closePendingFlow } from './flow.ts';
@@ -123,6 +124,28 @@ CREATE INDEX dev_verifier_findings_created ON dev_verifier_findings(created_at);
 ] as const;
 type Body = { body: string };
 const decode = <T>(row: unknown): T | undefined => (row ? (JSON.parse((row as Body).body) as T) : undefined);
+export type AttemptPage<T> = { items: T[]; hasMore: boolean; nextAfter?: number };
+export type AttemptPageOptions = { afterAttempt?: number; limit: number };
+export const MAX_ATTEMPT_PAGE_SIZE = 100;
+
+function attemptPageOptions(taskId: string, options: AttemptPageOptions): Required<AttemptPageOptions> {
+  const afterAttempt = options.afterAttempt ?? 0;
+  if (!taskId) throw new Error('task id is required');
+  if (!Number.isSafeInteger(afterAttempt) || afterAttempt < 0)
+    throw new Error('after attempt must be a non-negative integer');
+  if (!Number.isSafeInteger(options.limit) || options.limit < 1 || options.limit > MAX_ATTEMPT_PAGE_SIZE)
+    throw new Error(`limit must be between 1 and ${MAX_ATTEMPT_PAGE_SIZE}`);
+  return { afterAttempt, limit: options.limit };
+}
+
+export type WorkerEvent = {
+  sequence: number;
+  task_id: string;
+  attempt: number;
+  kind: string;
+  at: string;
+  body: string;
+};
 export class WorkerStore implements AttemptFence {
   readonly checkResults: CheckResults;
   private readVersion = -1;
@@ -328,6 +351,31 @@ export class WorkerStore implements AttemptFence {
       this.attemptSnapshot.set(key, attempt);
       return structuredClone(attempt);
     });
+  }
+  /** Read one task's attempts in ascending order without decoding any other task's history. */
+  attemptsPage(taskId: string, options: AttemptPageOptions): AttemptPage<Attempt> {
+    const { afterAttempt, limit } = attemptPageOptions(taskId, options);
+    this.refreshSnapshot();
+    const rows = this.db
+      .query(
+        'SELECT task_id, attempt, body FROM worker_attempts WHERE task_id=? AND attempt>? ORDER BY attempt LIMIT ?',
+      )
+      .all(taskId, afterAttempt, limit + 1) as { task_id: string; attempt: number; body: string }[];
+    const pageRows = rows.slice(0, limit);
+    const hasMore = rows.length > limit;
+    const items = pageRows.map((value) => {
+      const key = `${value.task_id}:${value.attempt}`;
+      const cached = this.attemptSnapshot.get(key);
+      if (cached) return structuredClone(cached);
+      const attempt = this.attemptBody(value)!;
+      this.attemptSnapshot.set(key, attempt);
+      return structuredClone(attempt);
+    });
+    return {
+      items,
+      hasMore,
+      ...(hasMore && pageRows.length ? { nextAfter: pageRows[pageRows.length - 1]!.attempt } : {}),
+    };
   }
   /** Pending, running, waiting and exited attempts are the only attempts needed for host recovery. */
   activeAttempts(): Attempt[] {
@@ -721,6 +769,20 @@ export class WorkerStore implements AttemptFence {
       .all()
       .map((row) => decode<AttemptRecord>(row)!);
   }
+  /** Read a bounded page of one task's records without decoding unrelated task histories. */
+  recordsPage(taskId: string, options: AttemptPageOptions): AttemptPage<AttemptRecord> {
+    const { afterAttempt, limit } = attemptPageOptions(taskId, options);
+    const rows = this.db
+      .query('SELECT attempt, body FROM worker_records WHERE task_id=? AND attempt>? ORDER BY attempt LIMIT ?')
+      .all(taskId, afterAttempt, limit + 1) as { attempt: number; body: string }[];
+    const pageRows = rows.slice(0, limit);
+    const hasMore = rows.length > limit;
+    return {
+      items: pageRows.map((row) => decode<AttemptRecord>(row)!),
+      hasMore,
+      ...(hasMore && pageRows.length ? { nextAfter: pageRows[pageRows.length - 1]!.attempt } : {}),
+    };
+  }
   record(ref: AttemptRef): AttemptRecord | undefined {
     return decode<AttemptRecord>(
       this.db.query('SELECT body FROM worker_records WHERE task_id=? AND attempt=?').get(ref.taskId, ref.attempt),
@@ -729,6 +791,11 @@ export class WorkerStore implements AttemptFence {
   assertCurrent(ref: AttemptRef): void {
     const task = this.task(ref.taskId);
     if (task.currentAttempt !== ref.attempt) throw new StaleAttemptError(ref, task.currentAttempt);
+    // An accepted stop owns settlement even if its controller died before closing the attempt.
+    if (ref.attempt > 0) {
+      const intent = this.attempt(ref).terminationIntent;
+      if (intent && !intent.settledAt) throw new StaleAttemptError(ref, task.currentAttempt);
+    }
     // A hold advances the task's delivery generation without manufacturing another worker attempt. A request or
     // outcome already in the train must be acknowledged as stale instead of integrating over that held generation.
     if (task.state === 'held' && ('branch' in ref || 'stage' in ref))
@@ -1130,6 +1197,7 @@ export class WorkerStore implements AttemptFence {
           (ref.attempt > 0 && ['superseded', 'cancelled'].includes(this.attempt(ref).state))
         )
           throw new StaleAttemptError(ref, task.currentAttempt);
+        this.assertRetryAllowed(ref, true);
         const before = structuredClone(task);
         update(task);
         this.retainProofPredecessor(before, task);
@@ -1172,6 +1240,7 @@ export class WorkerStore implements AttemptFence {
       .transaction(() => {
         const intent = this.retryIntent(ref);
         if (!intent) throw new Error('unknown retry intent');
+        if (intent.status === 'abandoned') return intent;
         const wasPending = intent.status === 'pending';
         const task = this.task(ref.taskId);
         update(intent);
@@ -1333,6 +1402,7 @@ export class WorkerStore implements AttemptFence {
       .transaction(() => {
         const task = this.task(ref.taskId);
         const attempt = ref.attempt > 0 ? this.attempt(ref) : undefined;
+        this.assertRetryAllowed(ref, options.reshapeHeld === true);
         const reshapingHeld = options.reshapeHeld === true && task.state === 'held';
         if (task.currentAttempt !== ref.attempt)
           throw new Error(
@@ -1391,6 +1461,7 @@ export class WorkerStore implements AttemptFence {
       .transaction(() => {
         const current = this.task(ref.taskId);
         const attempt = ref.attempt > 0 ? this.attempt(ref) : undefined;
+        this.assertRetryAllowed(ref);
         const abandonPending = attempt?.state === 'pending' || attempt?.state === 'waiting';
         if (
           current.currentAttempt !== ref.attempt ||
@@ -1452,9 +1523,22 @@ export class WorkerStore implements AttemptFence {
       return attempt;
     });
   }
+  /** Do not publish a replacement while an accepted operator stop still owns this generation. */
+  assertRetryAllowed(ref: AttemptRef, explicit = false): void {
+    const task = this.task(ref.taskId);
+    if (task.currentAttempt !== ref.attempt) throw new StaleAttemptError(ref, task.currentAttempt);
+    if (!ref.attempt) return;
+    const intent = this.attempt(ref).terminationIntent;
+    if (
+      (!explicit && this.retryIntent(ref)?.status === 'abandoned') ||
+      (intent && (intent.operation === 'cancel' || intent.state !== 'complete' || !intent.settledAt))
+    )
+      throw new StaleAttemptError(ref, task.currentAttempt);
+  }
   /** Superseding and publishing the next sequence are atomic, before stopping any external process. */
   nextAttempt(ref: AttemptRef, make: (n: number) => Attempt, configDirectory?: string, admitProof = false): Attempt {
     return this.write(ref, () => {
+      this.assertRetryAllowed(ref);
       const task = this.task(ref.taskId);
       if (
         task.state === 'integrated' ||
@@ -1534,6 +1618,28 @@ export class WorkerStore implements AttemptFence {
   putRecord(record: AttemptRecord): void {
     this.write(record, () => this.saveRecord(record));
   }
+  /** Notify from a committed cancellation without restoring a terminal worker's write authority. */
+  notifyCancelledDependency(ref: AttemptRef, event: ManagerEvent, deliver: (event: ManagerEvent) => void): void {
+    this.db
+      .transaction(() => {
+        const task = this.task(ref.taskId);
+        if (task.currentAttempt !== ref.attempt || task.state !== 'cancelled')
+          throw new StaleAttemptError(ref, task.currentAttempt);
+        if (event.taskId !== ref.taskId) throw new Error('cancellation notice must name its dependency');
+        const recorded = this.db
+          .query(
+            `SELECT 1 FROM worker_events WHERE task_id=? AND attempt=? AND kind='cancelled-dependency-notice'
+             AND json_extract(body,'$.managerId')=? LIMIT 1`,
+          )
+          .get(ref.taskId, ref.attempt, event.managerId);
+        if (recorded) return;
+        this.db
+          .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
+          .run(ref.taskId, ref.attempt, 'cancelled-dependency-notice', new Date().toISOString(), JSON.stringify(event));
+        deliver(event);
+      })
+      .immediate();
+  }
   event(ref: AttemptRef, kind: string, body: unknown): void {
     this.write(ref, () => {
       this.db
@@ -1557,10 +1663,19 @@ export class WorkerStore implements AttemptFence {
         });
     });
   }
-  events(
-    taskId?: string,
-    attempt?: number,
-  ): { sequence: number; task_id: string; attempt: number; kind: string; at: string; body: string }[] {
+  ownerDecisionEvents(ref: AttemptRef): WorkerEvent[] {
+    return this.db
+      .query(
+        `SELECT sequence, task_id, attempt, kind, at, body FROM worker_events
+         WHERE task_id=? AND attempt=? AND kind IN ('owner-contract-decision-accepted', 'owner-contract-decision-delivery')
+         ORDER BY sequence`,
+      )
+      .all(ref.taskId, ref.attempt) as WorkerEvent[];
+  }
+  recordOwnerDecisionDelivery(ref: AttemptRef, receipt: unknown): void {
+    this.event(ref, 'owner-contract-decision-delivery', receipt);
+  }
+  events(taskId?: string, attempt?: number): WorkerEvent[] {
     return (
       taskId && attempt !== undefined
         ? this.db
@@ -1589,6 +1704,105 @@ export class WorkerStore implements AttemptFence {
       });
       enqueue(request);
     });
+  }
+  private abandonRetry(ref: AttemptRef, operation: 'stop' | 'cancel'): void {
+    const retry = this.retryIntent(ref);
+    if (!retry || retry.status !== 'pending') return;
+    retry.status = 'abandoned';
+    retry.abandonedBy = operation;
+    delete retry.nextAttempt;
+    this.db
+      .query('UPDATE worker_retry_intents SET body=? WHERE task_id=? AND attempt=?')
+      .run(JSON.stringify(retry), ref.taskId, ref.attempt);
+  }
+  /** Persist the operator's disposition before terminating any process. */
+  beginTermination(ref: AttemptRef, operation: 'stop' | 'cancel'): TerminationIntent {
+    return this.db
+      .transaction(() => {
+        const task = this.task(ref.taskId);
+        if (task.currentAttempt !== ref.attempt) throw new StaleAttemptError(ref, task.currentAttempt);
+        if (['integrated', 'merged', 'cancelled'].includes(task.state))
+          throw new Error(`cannot terminate ${task.state} task`);
+        const attempt = this.attempt(ref);
+        const at = new Date().toISOString();
+        let intent = attempt.terminationIntent;
+        if (!intent) {
+          const auxiliaryProcesses = [...(attempt.auxiliaryProcesses ?? [])];
+          const started = this.events(ref.taskId, ref.attempt).some((event) => event.kind === 'worker-run-started');
+          const processIdentity = attempt.process
+            ? 'known'
+            : attempt.state === 'pending' && !started && !auxiliaryProcesses.length
+              ? 'not-started'
+              : 'unknown';
+          intent = {
+            operation,
+            requestedAt: at,
+            state: processIdentity === 'unknown' ? 'unknown' : 'requested',
+            processIdentity,
+            process: attempt.process,
+            auxiliaryProcesses,
+            ...(processIdentity === 'unknown' ? { error: 'process identity unavailable' } : {}),
+          };
+          attempt.terminationIntent = intent;
+          this.db
+            .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
+            .run(ref.taskId, ref.attempt, 'termination-requested', at, JSON.stringify({ operation, processIdentity }));
+        } else if (operation === 'cancel' && intent.operation !== 'cancel') {
+          intent.operation = 'cancel';
+          delete intent.settledAt;
+        }
+        this.abandonRetry(ref, intent.operation);
+        this.saveAttempt(attempt);
+        return intent;
+      })
+      .immediate();
+  }
+  /** Record physical confirmation separately from the durable operator request. */
+  finishTermination(ref: AttemptRef, error?: string): void {
+    this.db
+      .transaction(() => {
+        const task = this.task(ref.taskId);
+        if (task.currentAttempt !== ref.attempt) throw new StaleAttemptError(ref, task.currentAttempt);
+        const attempt = this.attempt(ref);
+        const intent = attempt.terminationIntent;
+        if (!intent) throw new Error('termination request is missing');
+        if (error) {
+          intent.state = 'unknown';
+          intent.error = error;
+        } else {
+          if (intent.processIdentity === 'unknown') throw new Error('process identity is unknown');
+          intent.state = 'complete';
+          delete intent.error;
+        }
+        this.saveAttempt(attempt);
+      })
+      .immediate();
+  }
+  /** Commit the requested terminal state once, only after known process groups are confirmed absent. */
+  closeTerminated(ref: AttemptRef, after: PoolReading | null, configDirectory?: string): void {
+    this.db
+      .transaction(() => {
+        const task = this.task(ref.taskId);
+        if (task.currentAttempt !== ref.attempt) throw new StaleAttemptError(ref, task.currentAttempt);
+        const attempt = this.attempt(ref);
+        const intent = attempt.terminationIntent;
+        if (intent?.state !== 'complete') throw new Error('physical termination is unconfirmed');
+        const state = intent.operation === 'cancel' ? 'cancelled' : 'stopped';
+        attempt.endedAt ??= new Date().toISOString();
+        attempt.after ??= after;
+        if (!this.record(ref))
+          this.saveRecord(makeRecord(task, attempt, readMeasurement(attempt, { configDirectory }), state));
+        if (!this.events(ref.taskId, ref.attempt).some((event) => event.kind === state))
+          this.db
+            .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
+            .run(ref.taskId, ref.attempt, state, new Date().toISOString(), '{}');
+        task.state = state;
+        attempt.state = state;
+        intent.settledAt ??= new Date().toISOString();
+        this.saveTask(task);
+        this.saveAttempt(attempt);
+      })
+      .immediate();
   }
   /** Stopping invalidates the current writer without inventing an attempt that never ran. */
   close(ref: AttemptRef, state: 'stopped' | 'cancelled'): void {

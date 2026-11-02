@@ -1,6 +1,16 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { closeSync, existsSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  closeSync,
+  existsSync,
+  fstatSync,
+  openSync,
+  readFileSync,
+  readSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { createConnection } from 'node:net';
 import { join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
@@ -21,10 +31,58 @@ export type HostLivenessConfig = {
 };
 type HostState = { identity: ProcessIdentity; desired: boolean };
 type RetryState = { failures: number; nextAt: number };
+const maxRetryFailures = 30;
 const statePath = (directory: string) => join(directory, 'manager-host-liveness.json');
 const retryPath = (directory: string) => join(directory, 'manager-host-liveness-retry.json');
 export const supervisorLeasePath = (directory: string) => join(directory, 'manager-host-supervisor.lease');
+const startupLogLimit = 4000;
 const pause = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+type StartupLogEvidence =
+  | { kind: 'available'; content: string; totalBytes: number; shownBytes: number; truncated: boolean }
+  | { kind: 'unavailable'; reason: string };
+
+function readStartupLog(fd: number, launchOffset: number): StartupLogEvidence {
+  try {
+    const size = fstatSync(fd).size;
+    if (size < launchOffset) return { kind: 'unavailable', reason: 'the log shrank before diagnostics were read' };
+    const totalBytes = size - launchOffset;
+    const buffer = Buffer.allocUnsafe(Math.min(totalBytes, startupLogLimit));
+    if (buffer.length === 0) return { kind: 'available', content: '', totalBytes, shownBytes: 0, truncated: false };
+    const shownBytes = readSync(fd, buffer, 0, buffer.length, size - buffer.length);
+    return {
+      kind: 'available',
+      content: buffer.subarray(0, shownBytes).toString('utf8'),
+      totalBytes,
+      shownBytes,
+      truncated: shownBytes < totalBytes,
+    };
+  } catch (error) {
+    return { kind: 'unavailable', reason: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+function startupExitError(
+  code: number | null,
+  signal: NodeJS.Signals | null,
+  logPath: string,
+  logFd: number,
+  launchOffset: number,
+): Error {
+  const outcome = code === null ? `signal ${signal ?? 'unknown'}` : `code ${code}`;
+  const evidence = readStartupLog(logFd, launchOffset);
+  const output =
+    evidence.kind === 'unavailable'
+      ? `Current launch output unavailable: ${evidence.reason}`
+      : evidence.totalBytes === 0
+        ? 'Current launch output complete (0 bytes; no output recorded).'
+        : `Current launch output ${
+            evidence.truncated
+              ? `truncated; showing ${evidence.shownBytes} of ${evidence.totalBytes} bytes`
+              : `complete; showing ${evidence.shownBytes} of ${evidence.totalBytes} bytes`
+          }:\n${evidence.content.trimEnd() || '(no readable text)'}`;
+  return new Error(`Manager host exited with ${outcome} during startup; log path: ${logPath}\n${output}`);
+}
 
 function writeJson(path: string, value: unknown): void {
   const temporary = `${path}.${randomUUID()}.tmp`;
@@ -42,6 +100,57 @@ function readJson<T>(path: string): T | null {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
     throw error;
   }
+}
+
+function isRetryState(value: unknown): value is RetryState {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const retry = value as Record<string, unknown>;
+  return (
+    typeof retry.failures === 'number' &&
+    Number.isSafeInteger(retry.failures) &&
+    retry.failures >= 0 &&
+    retry.failures <= maxRetryFailures &&
+    typeof retry.nextAt === 'number' &&
+    Number.isSafeInteger(retry.nextAt) &&
+    retry.nextAt >= 0
+  );
+}
+
+function boundedDiagnostic(value: string, limit: number): string {
+  const text = value.replace(/[\r\n\t]+/g, ' ');
+  return text.length <= limit ? text : `${text.slice(0, limit - 3)}...`;
+}
+
+function repairRetryState(path: string, reason: string, maximum: number): RetryState {
+  const retry = {
+    failures: maxRetryFailures,
+    nextAt: Math.min(Number.MAX_SAFE_INTEGER, Date.now() + maximum),
+  };
+  writeJson(path, retry);
+  console.error(
+    `Malformed manager host retry journal ${boundedDiagnostic(path, 160)}: ${boundedDiagnostic(reason, 160)}; replaced with a persisted maximum backoff (${maximum}ms). Inspect the journal if this repeats.`,
+  );
+  return retry;
+}
+
+function readRetryState(path: string, maximum: number): RetryState {
+  let contents: string;
+  try {
+    contents = readFileSync(path, 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { failures: 0, nextAt: 0 };
+    throw error;
+  }
+
+  let value: unknown;
+  try {
+    value = JSON.parse(contents);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    return repairRetryState(path, reason, maximum);
+  }
+  if (isRetryState(value)) return value;
+  return repairRetryState(path, 'expected failures from 0 to 30 and a non-negative safe integer nextAt', maximum);
 }
 
 /** Called only under the host lease; identities include boot and start time, never just a PID. */
@@ -96,52 +205,52 @@ export async function ensureHostRunning(config: HostLivenessConfig): Promise<voi
       break;
     }
     const logPath = join(config.stateDirectory, 'manager-host.log');
-    const log = openSync(logPath, 'a', 0o600);
-    let child;
+    const log = openSync(logPath, 'a+', 0o600);
     try {
-      child = spawn(config.command[0]!, [...config.command.slice(1), '_manager-host'], {
+      const launchOffset = fstatSync(log).size;
+      const child = spawn(config.command[0]!, [...config.command.slice(1), '_manager-host'], {
         cwd: config.launchDirectory ?? process.cwd(),
         env: cleanManagedProviderEnvironment(process.env),
         detached: true,
         stdio: ['ignore', 'pipe', log],
       });
+      await new Promise<void>((resolve, reject) => {
+        const lines = createInterface({ input: child.stdout! });
+        const timeout = setTimeout(
+          () => {
+            child.kill();
+            finish(new Error('Manager host startup timed out'));
+          },
+          Math.max(1, deadline - Date.now()),
+        );
+        const onError = (error: Error) => finish(error);
+        const onExit = (code: number | null, signal: NodeJS.Signals | null) =>
+          finish(startupExitError(code, signal, logPath, log, launchOffset));
+        const finish = (error?: Error) => {
+          clearTimeout(timeout);
+          lines.close();
+          child.off('error', onError);
+          child.off('exit', onExit);
+          child.stdout!.destroy();
+          if (error) reject(error);
+          else {
+            child.unref();
+            resolve();
+          }
+        };
+        child.once('error', onError);
+        child.once('exit', onExit);
+        lines.once('line', (line) => {
+          if (line === 'ready') finish();
+          else {
+            child.kill();
+            finish(new Error(`Manager host startup: ${line}`));
+          }
+        });
+      });
     } finally {
       closeSync(log);
     }
-    await new Promise<void>((resolve, reject) => {
-      const lines = createInterface({ input: child.stdout! });
-      const timeout = setTimeout(
-        () => {
-          child.kill();
-          finish(new Error('Manager host startup timed out'));
-        },
-        Math.max(1, deadline - Date.now()),
-      );
-      const onError = (error: Error) => finish(error);
-      const onExit = (code: number | null, signal: NodeJS.Signals | null) =>
-        finish(new Error(`Manager host exited (${code ?? signal}): ${readFileSync(logPath, 'utf8').slice(-4000)}`));
-      const finish = (error?: Error) => {
-        clearTimeout(timeout);
-        lines.close();
-        child.off('error', onError);
-        child.off('exit', onExit);
-        child.stdout!.destroy();
-        if (error) reject(error);
-        else {
-          child.unref();
-          resolve();
-        }
-      };
-      child.once('error', onError);
-      child.once('exit', onExit);
-      lines.once('line', (line) => {
-        if (line === 'ready') finish();
-        else {
-          child.kill();
-          finish(new Error(`Manager host startup: ${line}`));
-        }
-      });
-    });
   } finally {
     lease.release();
   }
@@ -185,12 +294,12 @@ export async function superviseHost(
       } else {
         healthySince = Date.now();
         const now = Date.now();
-        const retry = readJson<RetryState>(retryPath(config.stateDirectory)) ?? { failures: 0, nextAt: 0 };
+        const retry = readRetryState(retryPath(config.stateDirectory), maximum);
         if (!retry.nextAt) {
           writeJson(retryPath(config.stateDirectory), { failures: retry.failures, nextAt: now + minimum });
         } else if (now >= retry.nextAt) {
           // Persist before launching, so supervisor replacement cannot reset a crash loop's backoff.
-          const failures = Math.min(30, retry.failures + 1);
+          const failures = Math.min(maxRetryFailures, retry.failures + 1);
           const delay = Math.min(maximum, minimum * 2 ** failures);
           writeJson(retryPath(config.stateDirectory), { failures, nextAt: now + delay });
           try {

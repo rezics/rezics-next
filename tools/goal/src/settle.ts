@@ -1,4 +1,5 @@
 import { readProofObservation, proofSourceUnchanged, nativeCheckId } from './verification.ts';
+import { createHash } from 'node:crypto';
 import { parseAgentExit } from './agents.ts';
 import type { LandingQueue } from './contracts.ts';
 import { readFileSync } from 'node:fs';
@@ -13,6 +14,14 @@ import type { WorkerTasks } from './tasks.ts';
 import { git } from './tasks.ts';
 import { completeWorkerSourceBaseline } from './conflict-progress.ts';
 import { harvestContinuations } from './continuation.ts';
+import type { Task } from './types.ts';
+
+function unchangedSource(task: Task, head: string): boolean {
+  const frozen = new Set((task as Task & { frozenFiles?: { path: string }[] }).frozenFiles?.map((file) => file.path));
+  return !git(task.worktree, ['diff', '--name-only', '-z', task.base, head])
+    .split('\0')
+    .some((path) => path && !frozen.has(path));
+}
 
 const SQLITE_CONTENTION = /SQLITE_(?:BUSY|LOCKED)|database (?:table )?is locked/i;
 /** Another process held the store's write lock longer than the busy timeout. */
@@ -336,7 +345,12 @@ export async function settle(
     if (bundle) evidenceBundle(store.task(ref.taskId), store.attempt(ref));
     if (finished) {
       store.assertCurrent(ref);
-      tasks.commitFinishedWork(store.task(ref.taskId), ref.attempt);
+      const task = store.task(ref.taskId);
+      const branchHead = git(task.worktree, ['rev-parse', `${task.branch}^{commit}`]);
+      const dirtyUnchangedSource =
+        unchangedSource(task, branchHead) &&
+        git(task.worktree, ['status', '--porcelain', '--untracked-files=all']) !== '';
+      if (!dirtyUnchangedSource) tasks.commitFinishedWork(task, ref.attempt);
     }
     // Continuation briefs move to the Goal backlog when the attempt ends, whatever its result.
     if (exited)
@@ -360,6 +374,9 @@ export async function settle(
           /* A malformed or legacy source baseline cannot establish historical worker progress. */
         }
       }
+      const unchangedClaim = !task.workspace && unchangedSource(task, workerCommit) && branchHead === workerCommit;
+      const sourceDirtyAtSettlement =
+        unchangedClaim && git(task.worktree, ['status', '--porcelain', '--untracked-files=all']) !== '';
       evidenceBundle(task, store.attempt(ref));
       await write(() => {
         store.updateTask(ref, (t) => {
@@ -372,6 +389,13 @@ export async function settle(
             branch: task.branch,
             worktree: task.worktree,
             workerCommit,
+            ...(unchangedClaim
+              ? {
+                  unchangedClaim: true as const,
+                  contractHash: createHash('sha256').update(task.brief.markdown).digest('hex'),
+                  ...(sourceDirtyAtSettlement ? { sourceDirtyAtSettlement: true as const } : {}),
+                }
+              : {}),
             declaredPaths: task.brief.paths,
             protectedPaths: tasks.protectedPaths(task.brief),
             gate: task.brief.acceptance.command,

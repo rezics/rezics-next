@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { run } from './cli.ts';
@@ -8,6 +8,8 @@ import { SqliteManagerInbox } from './inbox.ts';
 import { SqliteLandingQueue } from './land.ts';
 import { openDb } from './db.ts';
 import { temporaryDirectory } from './test-support.ts';
+import { WorkerStore } from './store.ts';
+import type { Runtime } from './config.ts';
 
 test('the train and inbox commands do not sweep orphans before they run', async () => {
   // Every settle spawns a train; each swept the whole store before finding the lease held (load 146, 2026-10-28).
@@ -68,5 +70,33 @@ test('the train and inbox commands do not sweep orphans before they run', async 
   } finally {
     if (previousTrain === undefined) delete process.env.GOAL_TRAIN_MODE;
     else process.env.GOAL_TRAIN_MODE = previousTrain;
+  }
+});
+
+test('task attempt inspection skips recovery and unrelated histories through the CLI', async () => {
+  const temporary = temporaryDirectory();
+  const db = openDb(':memory:');
+  const print = spyOn(console, 'log').mockImplementation(() => {});
+  try {
+    const store = new WorkerStore(db);
+    db.query('INSERT INTO worker_tasks VALUES (?, ?, ?, ?)').run('other', 1, 1, '{"id":"other","state":"running"}');
+    db.query('INSERT INTO worker_records VALUES (?, ?, ?)').run('other', 1, 'not json');
+    const runtime = {
+      db,
+      store,
+      settings: { stateDirectory: temporary.path },
+      tasks: {},
+      job: { drain: async () => {} },
+      recoverOrphans: async () => {
+        throw new Error('attempt inspection must not recover other tasks');
+      },
+    } as unknown as Runtime;
+    expect(await run(['attempts', '--task', 'missing', '--json', '--limit', '1'], () => runtime)).toBe(0);
+    expect(JSON.parse(print.mock.calls[0]![0] as string)).toEqual({ records: [], hasMore: false });
+    expect(store.decodedRows()).toEqual({ tasks: 0, attempts: 0 });
+  } finally {
+    print.mockRestore();
+    db.close();
+    temporary.close();
   }
 });

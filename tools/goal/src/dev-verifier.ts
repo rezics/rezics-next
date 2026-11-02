@@ -185,8 +185,11 @@ function createChecks(
       if (siblingCommand) checks.push({ command: siblingCommand, closure: siblingFiles });
     }
   }
-  for (const task of taskLandings(settings, store, base, target))
+  for (const task of taskLandings(settings, store, base, target)) {
+    // Worker-owned briefs have no declared command to execute or credit as passed.
+    if (task.brief.acceptance.workerOwned && !task.brief.acceptance.command.length) continue;
     checks.push({ command: [...task.brief.acceptance.command], closure: [...task.brief.paths], taskId: task.id });
+  }
   return checks.map((check) => placeInWorkspace(check, tracked));
 }
 function infraFailure(output: string, timedOut: boolean): boolean {
