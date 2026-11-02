@@ -436,7 +436,7 @@ test('The complete mounted Subject Library workflow accepts only its actual curr
   });
   await click(m.library_selection_retry());
   expect(entries[1]!.data).toEqual(original);
-  expect(entries[1]!.csrf).toBe('rotated');
+  expect(entries[1]!.csrf).toBe('csrf-A');
   await act(async () => {
     entries[1]!.resolve({ result: 'cleared', entry: null, undo: { deletionId: id(60), revision: 11 } });
   });
@@ -615,4 +615,51 @@ test('The mounted leaf partitions admission and return-address ABA reads and req
   });
   expect(host.textContent).not.toContain('Retired address');
   expect(host.textContent).toContain('A private label');
+});
+
+
+test('A tokenless reader sees current native slot facts and can retry reads; token arrival never submits commands', async () => {
+  const reads: ReturnType<typeof deferred<SubjectLibrarySlotData>>[] = [];
+  const source = queries.subjectLibraryQuery;
+  spyOn(queries, 'subjectLibraryQuery').mockImplementation((...args) => ({
+    ...source(...args),
+    queryFn: () => {
+      const read = deferred<SubjectLibrarySlotData>();
+      reads.push(read);
+      return read.promise;
+    },
+  }));
+  leaf = true;
+  await act(async () => client.setQueryData(['session'], { ...viewer(), csrfToken: null }));
+  await paint();
+  await act(async () => reads.at(-1)!.reject(new Error('read unavailable')));
+  await click(m.library_selection_retry());
+  const data = { ...baseline(), result: 'conflict' as const, collectionsLoaded: true, collections: [collection('A')] };
+  await act(async () => reads.at(-1)!.resolve(data));
+  expect(host.textContent).toContain('A private state');
+  expect(host.textContent).toContain('A private label');
+  expect(host.textContent).toContain(m.library_conflict());
+  expect(button(m.library_subject_remove()).disabled).toBe(true);
+  await submit('[data-subject-label-remove]');
+  await openCollections();
+  expect(button('A private Collection2').disabled).toBe(true);
+  expect(entries).toHaveLength(0);
+  expect(labels).toHaveLength(0);
+  await act(async () => client.setQueryData(['session'], viewer('A', 'arrived')));
+  await act(async () => reads.at(-1)!.resolve({ ...data, provenance: { ...data.provenance!, readId: crypto.randomUUID() } }));
+  expect(entries).toHaveLength(0);
+  expect(labels).toHaveLength(0);
+  await click(m.library_subject_remove());
+  expect(entries[0]!.csrf).toBe('arrived');
+  await act(async () => entries[0]!.reject(new Error('write unknown')));
+  await act(async () => client.setQueryData(['session'], { ...viewer(), csrfToken: null }));
+  await act(async () => reads.at(-1)!.resolve({ ...data, provenance: { ...data.provenance!, readId: crypto.randomUUID() } }));
+  await click(m.library_selection_retry());
+  expect(entries[1]!.csrf).toBe('arrived');
+  expect(entries[1]!.data).toEqual(entries[0]!.data);
+  const stale = button(m.library_selection_retry());
+  await act(async () => client.setQueryData(['session'], { state: 'signed-out', subject: null, csrfToken: null }));
+  await act(async () => stale.click());
+  expect(entries).toHaveLength(2);
+  noPrivate('A', false);
 });

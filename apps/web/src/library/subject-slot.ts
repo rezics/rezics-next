@@ -54,7 +54,7 @@ export type SubjectLibrarySlotResult =
   | 'label-removed';
 export type SubjectLabelUndo = { labelId: string; assignmentId: string; revision: number };
 /** Identity of the session actually used by this read, never an expected browser identity. */
-export type SubjectLibraryReadIdentity = { viewer: string; csrfToken: string };
+export type SubjectLibraryReadIdentity = { viewer: string; csrfToken: string | null };
 export type SubjectLibraryReadProvenance = SubjectLibraryReadIdentity & { subjectId: string; readId: string };
 export type SubjectLibrarySlotData = {
   provenance?: SubjectLibraryReadProvenance;
@@ -105,7 +105,7 @@ type EntryResult = { libraryEntry: SubjectSlotEntry & { subject?: { type?: strin
 type PublicCollectionsResult = { collections: SubjectPublicCollection[]; next: string | null };
 type CollectionsResult = { collections: SubjectSlotCollection[]; next: string | null };
 export type SubjectSlotSession =
-  | { state: 'signed-in'; subject: string; csrfToken: string; authorization: string }
+  | { state: 'signed-in'; subject: string; csrfToken: string | null; authorization: string }
   | { state: 'signed-out' | 'unavailable'; csrfToken: null };
 
 export async function readSubjectSlotSession(

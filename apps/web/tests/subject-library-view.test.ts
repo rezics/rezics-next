@@ -174,14 +174,17 @@ describe('An ordinary non-overview subject view can use the same Library leaf fo
     expect(query.select(personal)).toBe(personal);
     for (const session of [
       { ...viewer, subject: 'reader-b', csrfToken: 'session-b' },
-      { ...viewer, csrfToken: 'new-session-a' },
-      { ...viewer, csrfToken: null },
       { ...viewer, subject: null },
       signedOut,
     ]) {
       const other = subjectLibraryLeafQuery(frame, 'en', session);
       expect(other.queryKey).not.toEqual(query.queryKey);
       expect(other.select(personal).session).toBe('unavailable');
+    }
+    for (const csrfToken of [null, 'new-session-a']) {
+      const read = subjectLibraryLeafQuery(frame, 'en', { ...viewer, csrfToken });
+      expect(read.enabled).toBe(true);
+      expect(read.select(personal)).toBe(personal);
     }
     const otherSubject = { ...frame, id: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e99' };
     expect(subjectLibraryLeafQuery(otherSubject, 'en', viewer).select(personal).entry).toBeNull();

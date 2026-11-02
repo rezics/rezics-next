@@ -1,6 +1,7 @@
 import { queryOptions, useQuery } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import { useLocation } from '@tanstack/react-router';
+import { m } from '../../paraglide/messages.js';
 import { useOperation } from '../../kernel/exposure';
 import { subjectSlotReturnTo } from '../../library/subject-slot-return-context';
 import type { SubjectLibrarySlotData } from '../../library/subject-slot';
@@ -38,16 +39,14 @@ export function subjectLibraryLeafQuery(
 ) {
   const query = subjectLibraryQuery(frame.id, locale, false, undefined, undefined, frame.type);
   const ready =
-    session.state === 'signed-in' && !!session.subject && !!session.csrfToken && (!mounted || mounted.admitted);
+    session.state === 'signed-in' && !!session.subject && (!mounted || mounted.admitted);
   const currentData = (data: SubjectLibrarySlotData): SubjectLibrarySlotData =>
     ready &&
     data.session === 'signed-in' &&
-    data.csrfToken === session.csrfToken &&
     (!mounted || mounted.isCurrent()) &&
     ((!mounted && !data.provenance) ||
       (data.provenance?.viewer === session.subject &&
         data.provenance?.subjectId === frame.id &&
-        data.provenance?.csrfToken === session.csrfToken &&
         !!data.provenance?.readId)) &&
     (!data.entry || data.entry.subjectId === frame.id) &&
     (!data.undo || data.undo.subjectId === frame.id) &&
@@ -107,7 +106,6 @@ export function SubjectLibraryLeaf({
     returnTo,
     session.state,
     session.subject,
-    !!session.csrfToken,
     observation.owner,
     observation.value.scope,
   ]);
@@ -132,27 +130,28 @@ export function SubjectLibraryLeaf({
       lifetime.active = false;
     };
   }, [lifetime]);
+  const isCurrent = () => {
+    const current = observation.read();
+    return (
+      lifetime.active &&
+      observation.isMounted() &&
+      current.sessionReady &&
+      current.viewer === session.subject &&
+      current.credential === session.csrfToken &&
+      current.entryAdmitted &&
+      credential.current === session.csrfToken &&
+      current.scope === observation.value.scope &&
+      current.entry === observation.value.entry &&
+      current.labels === observation.value.labels &&
+      current.collections === observation.value.collections
+    );
+  };
   const query = subjectLibraryLeafQuery(frame, locale, session, {
     lifetime: lifetime.id,
     admitted,
-    isCurrent: () => {
-      const current = observation.read();
-      return (
-        lifetime.active &&
-        observation.isMounted() &&
-        current.sessionReady &&
-        current.viewer === session.subject &&
-        current.credential === session.csrfToken &&
-        current.entryAdmitted &&
-        credential.current === session.csrfToken &&
-        current.scope === observation.value.scope &&
-        current.entry === observation.value.entry &&
-        current.labels === observation.value.labels &&
-        current.collections === observation.value.collections
-      );
-    },
+    isCurrent,
   });
-  const { data, isError } = useQuery(query);
+  const { data, isError, isFetching, refetch } = useQuery(query);
   const accepted = useRef<{ lifetime: string; data: SubjectLibrarySlotData } | null>(null);
   if (data?.session === 'signed-in' && query.enabled && !isError) accepted.current = { lifetime: addressScope, data };
   const publicAddress = JSON.stringify([frame.id, locale]);
@@ -191,6 +190,18 @@ export function SubjectLibraryLeaf({
         locale={locale}
         data={current}
       />
+      {query.enabled && (isError || (data && (data.session !== 'signed-in' || !data.entryAvailable))) ? (
+        <button
+          type="button"
+          className="text-sm text-primary underline-offset-4 hover:underline disabled:opacity-50"
+          disabled={isFetching}
+          onClick={() => {
+            if (isCurrent()) void refetch();
+          }}
+        >
+          {m.library_selection_retry()}
+        </button>
+      ) : null}
     </div>
   );
 }

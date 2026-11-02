@@ -594,7 +594,7 @@ test('Healthy rotation and equivalent refresh preserve independent uncertain ent
   expect(entries[2]!.data).toEqual(entry);
   expect(entries[3]!.data).toEqual(member);
   expect(labels[1]!.data).toEqual(label);
-  expect([entries[2]!.csrf, entries[3]!.csrf, labels[1]!.csrf]).toEqual(['rotated', 'rotated', 'rotated']);
+  expect([entries[2]!.csrf, entries[3]!.csrf, labels[1]!.csrf]).toEqual(['csrf-A', 'csrf-A', 'csrf-A']);
   // Already-dispatched writes keep their real result when an equivalent refresh retires the UI callback.
   await act(async () => client.setQueryData(scopedKey(), { subject: 'A', admitted: [...admitted] }));
   await act(async () => {

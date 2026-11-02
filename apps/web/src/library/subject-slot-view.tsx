@@ -75,7 +75,6 @@ type SlotAdmission = {
   lifetime: SlotLifetime;
   seen: Set<string>;
   retired: Set<string>;
-  accepted?: { readId: string; csrfToken: string };
   episode?: string;
 };
 
@@ -103,7 +102,6 @@ export function SubjectLibrarySlot(props: SubjectSlotProps) {
     returnTo,
     browser ? session.state : 'presentation',
     browser ? session.subject : null,
-    browser ? !!session.csrfToken : false,
     observation.owner,
     browser ? observedScope : 0,
   ]);
@@ -118,7 +116,6 @@ export function SubjectLibrarySlot(props: SubjectSlotProps) {
       observation.value.viewer === session.subject &&
       observation.value.credential === session.csrfToken &&
       !!session.subject &&
-      !!session.csrfToken &&
       data.session === 'signed-in' &&
       provenance?.viewer === session.subject &&
       provenance.subjectId === props.subject.id &&
@@ -142,7 +139,7 @@ export function SubjectLibrarySlot(props: SubjectSlotProps) {
       seed: observation.value.labelsSeed,
     },
     collections: {
-      admitted: collectionList && memberCreate && (!browser || observation.value.collectionsAdmitted),
+      admitted: collectionList && (!browser || observation.value.collectionsAdmitted),
       revision: observation.value.collections,
       seed: observation.value.collectionsSeed,
     },
@@ -150,12 +147,6 @@ export function SubjectLibrarySlot(props: SubjectSlotProps) {
   const ready = { entry: false, labels: false, collections: false };
   for (const family of ['entry', 'labels', 'collections'] as const) {
     let observed = admissions.current[family];
-    const credentialMatches =
-      !browser ||
-      (!!provenance &&
-        data.csrfToken === provenance.csrfToken &&
-        (provenance.csrfToken === session.csrfToken ||
-          (observed?.accepted?.readId === provenance.readId && observed.accepted.csrfToken === provenance.csrfToken)));
     const revision = families[family].revision;
     const isCurrent = (...operations: Parameters<SlotLifetime['current']>) => {
       const current = observation.read();
@@ -183,7 +174,6 @@ export function SubjectLibrarySlot(props: SubjectSlotProps) {
     }
     const accepted =
       actualIdentity &&
-      credentialMatches &&
       families[family].admitted &&
       (!browser || (!!provenance && !observed.retired.has(provenance.readId)));
     // The dispatch episode changes on every actual observation. Private read retirement is independent
@@ -200,7 +190,6 @@ export function SubjectLibrarySlot(props: SubjectSlotProps) {
       observed.lifetime = lifetime;
     }
     if (provenance) observed.seen.add(provenance.readId);
-    if (accepted && provenance) observed.accepted = { readId: provenance.readId, csrfToken: provenance.csrfToken };
     ready[family] = accepted;
   }
   const memberResult = data.result === 'added' || data.result === 'collection-full';
@@ -210,7 +199,7 @@ export function SubjectLibrarySlot(props: SubjectSlotProps) {
         session:
           session.state === 'signed-out'
             ? 'signed-out'
-            : actualIdentity && credentialReady(session) && (ready.entry || ready.labels || ready.collections)
+            : actualIdentity && session.state === 'signed-in' && (ready.entry || ready.labels || ready.collections)
               ? 'signed-in'
               : 'unavailable',
         csrfToken: session.csrfToken,
@@ -248,10 +237,6 @@ export function SubjectLibrarySlot(props: SubjectSlotProps) {
       collectionLifetime={admissions.current.collections!.lifetime}
     />
   );
-}
-
-function credentialReady(session: ReturnType<typeof useSession>) {
-  return session.state === 'signed-in' && !!session.subject && !!session.csrfToken;
 }
 
 function LibraryStateSelect({
@@ -332,17 +317,23 @@ function SubjectLibrarySlotView({
   const labelFlight = useRef(false);
   const uncertainEntry = useRef<{
     input: SubjectLibraryMutation;
+    csrfToken: string;
+    send: typeof mutateSubjectLibrarySlot;
     previous: string;
     running: boolean;
     response?: SubjectLibraryMutationResponse | undefined;
   } | null>(null);
   const uncertainMember = useRef<{
     input: SubjectLibraryMutation;
+    csrfToken: string;
+    send: typeof mutateSubjectLibrarySlot;
     running: boolean;
     response?: SubjectLibraryMutationResponse | undefined;
   } | null>(null);
   const uncertainLabel = useRef<{
     input: SubjectLabelMutationInput;
+    csrfToken: string;
+    send: typeof mutateSubjectLabelAction;
     label?: LibraryLabelSummary | SubjectLabel;
     running: boolean;
     response?: SubjectLabelMutationResult | undefined;
@@ -359,6 +350,8 @@ function SubjectLibrarySlotView({
   const [entryUndo, setEntryUndo] = useState(data.undo);
   const uncertainRestore = useRef<{
     receipt: { deletionId: string; revision: number };
+    csrfToken: string;
+    send: typeof restoreSubjectLibrarySlot;
     running: boolean;
     response?: Awaited<ReturnType<typeof restoreSubjectLibrarySlot>> | undefined;
   } | null>(null);
@@ -491,14 +484,12 @@ function SubjectLibrarySlotView({
     setLabelReadReason(undefined);
     const timeout = setTimeout(() => {
       if (!currentSearch()) return;
-      const credential = data.csrfToken;
       void searchSubjectLabelsAction({ data: { query } })
         .then((response) => {
           if (!currentSearch() || latestLabelQuery.current !== query) return;
           if (
             response.provenance?.viewer !== data.provenance?.viewer ||
             !response.provenance ||
-            response.provenance.csrfToken !== credential ||
             response.provenance.query !== query ||
             response.provenance.cursor !== undefined
           ) {
@@ -545,8 +536,11 @@ function SubjectLibrarySlotView({
 
   async function restoreEntry(receipt: { deletionId: string; revision: number }) {
     if (!hydrated || !entryLifetime.current('library_entry.get', 'library_entry.restore') || !restoreAdmitted) return;
+    if (!uncertainRestore.current && !data.csrfToken) return;
     const operation: NonNullable<typeof uncertainRestore.current> = uncertainRestore.current ?? {
       receipt,
+      csrfToken: data.csrfToken!,
+      send: restoreSubjectLibrarySlot,
       running: false,
     };
     if (operation.running) return;
@@ -555,9 +549,9 @@ function SubjectLibrarySlotView({
     try {
       const restored =
         operation.response ??
-        (await restoreSubjectLibrarySlot({
+        (await operation.send({
           data: { subjectId: subject.id, ...operation.receipt },
-          headers: { 'X-CSRF-Token': data.csrfToken ?? '' },
+          headers: { 'X-CSRF-Token': operation.csrfToken },
         }));
       operation.response =
         restored.ok ||
@@ -638,9 +632,12 @@ function SubjectLibrarySlotView({
       (input.action === 'clear' ? !entryDeleteAdmitted : !entryPutAdmitted)
     )
       return;
+    if (!uncertainEntry.current && !data.csrfToken) return;
     entryFlight.current = true;
     const operation: NonNullable<typeof uncertainEntry.current> = uncertainEntry.current ?? {
       input,
+      csrfToken: data.csrfToken!,
+      send: mutateSubjectLibrarySlot,
       previous,
       running: false,
     };
@@ -650,9 +647,9 @@ function SubjectLibrarySlotView({
     try {
       const response =
         operation.response ??
-        (await mutateSubjectLibrarySlot({
+        (await operation.send({
           data: operation.input,
-          headers: { 'X-CSRF-Token': data.csrfToken ?? '' },
+          headers: { 'X-CSRF-Token': operation.csrfToken },
         }));
       operation.response = response.result === 'unavailable' || response.result === 'closed' ? undefined : response;
       if (!entryLifetime.current()) return;
@@ -694,6 +691,7 @@ function SubjectLibrarySlotView({
     if (
       !hydrated ||
       pending ||
+      (!uncertainEntry.current && !data.csrfToken) ||
       !value ||
       !entryLifetime.current('library_entry.get', value === 'remove' ? 'library_entry.delete' : 'library_entry.put')
     )
@@ -746,16 +744,22 @@ function SubjectLibrarySlotView({
       uncertainMember.current?.running
     )
       return;
+    if (!uncertainMember.current && !data.csrfToken) return;
     memberFlight.current = true;
-    const operation: NonNullable<typeof uncertainMember.current> = uncertainMember.current ?? { input, running: false };
+    const operation: NonNullable<typeof uncertainMember.current> = uncertainMember.current ?? {
+      input,
+      csrfToken: data.csrfToken!,
+      send: mutateSubjectLibrarySlot,
+      running: false,
+    };
     uncertainMember.current = operation;
     operation.running = true;
     try {
       const response =
         operation.response ??
-        (await mutateSubjectLibrarySlot({
+        (await operation.send({
           data: operation.input,
-          headers: { 'X-CSRF-Token': data.csrfToken ?? '' },
+          headers: { 'X-CSRF-Token': operation.csrfToken },
         }));
       operation.response = response.result === 'unavailable' || response.result === 'closed' ? undefined : response;
       if (!collectionLifetime.current()) return;
@@ -788,14 +792,12 @@ function SubjectLibrarySlotView({
     event?.preventDefault();
     if (!hydrated || !collectionLifetime.current('collection.list') || pickerFlight.current) return;
     pickerFlight.current = true;
-    const credential = data.csrfToken;
     try {
       const response = await readSubjectLibraryCollections({ data: { subjectId: subject.id } });
       if (!collectionLifetime.current()) return;
       if (
         !response.provenance ||
-        response.provenance.viewer !== data.provenance?.viewer ||
-        response.provenance.csrfToken !== credential
+        response.provenance.viewer !== data.provenance?.viewer
       ) {
         setCollections(null);
         setCollectionsLoaded(false);
@@ -827,8 +829,11 @@ function SubjectLibrarySlotView({
   }
 
   async function performLabel(command: SubjectLabelMutationInput, label?: LibraryLabelSummary | SubjectLabel) {
+    if (!uncertainLabel.current && !data.csrfToken) return;
     const operation: NonNullable<typeof uncertainLabel.current> = uncertainLabel.current ?? {
       input: command,
+      csrfToken: data.csrfToken!,
+      send: mutateSubjectLabelAction,
       ...(label ? { label } : {}),
       running: false,
     };
@@ -866,9 +871,9 @@ function SubjectLibrarySlotView({
     try {
       const response =
         operation.response ??
-        (await mutateSubjectLabelAction({
+        (await operation.send({
           data: input,
-          headers: { 'X-CSRF-Token': data.csrfToken ?? '' },
+          headers: { 'X-CSRF-Token': operation.csrfToken },
         }));
       // Keep a dispatched native outcome even if its originating UI episode has since retired.
       operation.response =
@@ -1027,7 +1032,9 @@ function SubjectLibrarySlotView({
             if (undoReceipt.subjectId === subject.id) void restoreEntry(undoReceipt);
           }}
         >
-          <EntryUndoForm undo={undoReceipt} locale={locale} csrfToken={data.csrfToken} returnTo={returnTo} />
+          <fieldset disabled={!data.csrfToken && !uncertainRestore.current}>
+            <EntryUndoForm undo={undoReceipt} locale={locale} csrfToken={data.csrfToken} returnTo={returnTo} />
+          </fieldset>
         </div>
       ) : null}
       {data.restore ? <EntryRestoreFeedback restore={data.restore} locale={locale} /> : null}
@@ -1060,7 +1067,7 @@ function SubjectLibrarySlotView({
             ) : null}
             <LibraryStateSelect
               busy={pending}
-              disabled={!hydrated || pending}
+              disabled={!hydrated || !data.csrfToken || pending}
               hasEntry={entry !== null}
               onChoose={choose}
               selectedState={selectedState}
@@ -1079,7 +1086,7 @@ function SubjectLibrarySlotView({
               <button
                 type="button"
                 className={buttonClass}
-                disabled={!hydrated || pending}
+                disabled={!hydrated || !data.csrfToken || pending}
                 onClick={() => choose('remove')}
               >
                 {m.library_subject_remove()}
@@ -1116,7 +1123,7 @@ function SubjectLibrarySlotView({
       ) : null}
 
       {data.session === 'signed-in' && (!hydrated || collectionLifetime.current()) ? (
-        <Exposure operation="collection_member.create">
+        <Exposure operation="collection.list">
           <Menu
             title={m.library_subject_add_collection()}
             closeOnNavigation
@@ -1139,7 +1146,7 @@ function SubjectLibrarySlotView({
                           <button
                             className={`${linkClass} inline-flex min-h-[44px] w-full min-w-0 items-center justify-between gap-2 rounded-md px-2 py-2 text-start whitespace-normal hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60 ${controlFocusClass}`}
                             type="button"
-                            disabled={!hydrated}
+                            disabled={!hydrated || !data.csrfToken || !memberCreate}
                             onClick={() => void addToCollection(collection.id)}
                           >
                             <span className="min-w-0 [overflow-wrap:anywhere]">{collection.title}</span>
@@ -1278,7 +1285,7 @@ function SubjectLibrarySlotView({
                         <input type="hidden" name="csrf_token" value={data.csrfToken ?? ''} />
                         <button
                           type="submit"
-                          disabled={hydrated && labelPending}
+                          disabled={!data.csrfToken || (hydrated && labelPending)}
                           aria-label={m.library_subject_label_remove({ name: label.name })}
                           className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full px-2 text-muted-foreground hover:text-foreground disabled:opacity-50 ${controlFocusClass}`}
                         >
@@ -1356,7 +1363,7 @@ function SubjectLibrarySlotView({
                     </label>
                     <div className="flex flex-wrap gap-2">
                       <Exposure operation="library_label.create">
-                        <button type="submit" disabled={hydrated && labelPending} className={labelButtonClass}>
+                        <button type="submit" disabled={!data.csrfToken || (hydrated && labelPending)} className={labelButtonClass}>
                           {m.library_subject_label_add()}
                         </button>
                       </Exposure>
@@ -1391,7 +1398,6 @@ function SubjectLibrarySlotView({
                       acceptPage={(page, request) =>
                         !!page.provenance &&
                         page.provenance.viewer === data.provenance?.viewer &&
-                        page.provenance.csrfToken === data.csrfToken &&
                         page.provenance.query === request.query &&
                         page.provenance.cursor === request.cursor
                       }
@@ -1410,7 +1416,7 @@ function SubjectLibrarySlotView({
                             <Exposure operation="library_label.assign">
                               <button
                                 type="button"
-                                disabled={hydrated && labelPending}
+                                disabled={!data.csrfToken || (hydrated && labelPending)}
                                 onClick={() => void writeLabel({ intent: 'assign', label: choice })}
                                 className={labelChoiceClass}
                               >
@@ -1427,7 +1433,7 @@ function SubjectLibrarySlotView({
                             <Exposure operation="library_label.create">
                               <button
                                 type="button"
-                                disabled={hydrated && labelPending}
+                                disabled={!data.csrfToken || (hydrated && labelPending)}
                                 onClick={() => void writeLabel({ intent: 'create-and-assign', name: labelQuery })}
                                 className={`${labelChoiceClass} font-medium text-primary`}
                               >
@@ -1506,6 +1512,7 @@ function SubjectLibrarySlotView({
                 <span>{m.library_subject_label_removed_status()}</span>
                 <button
                   type="submit"
+                  disabled={!data.csrfToken}
                   className={`${linkClass} min-h-[44px] min-w-[44px] rounded px-2 py-2 ${controlFocusClass}`}
                 >
                   {m.library_subject_label_undo()}

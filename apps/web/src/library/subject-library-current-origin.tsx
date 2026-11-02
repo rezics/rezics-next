@@ -61,9 +61,7 @@ export function useSubjectLibraryObservation(subject: SubjectReference, locale: 
         session?.status === 'success' &&
         viewer?.state === 'signed-in' &&
         typeof viewer.subject === 'string' &&
-        !!viewer.subject &&
-        typeof viewer.csrfToken === 'string' &&
-        !!viewer.csrfToken;
+        !!viewer.subject;
       const snapshot = exposureLifetime.getSnapshot();
       const enrolled = snapshot.state === 'signed-in' ? snapshot.observation : undefined;
       const exposure = enrolled
@@ -99,8 +97,7 @@ export function useSubjectLibraryObservation(subject: SubjectReference, locale: 
         admitted,
         entryAdmitted: operationIsAdmitted('library_entry.get', admitted),
         labelsAdmitted: operationIsAdmitted('library_label.assignment_list', admitted),
-        collectionsAdmitted:
-          operationIsAdmitted('collection.list', admitted) && operationIsAdmitted('collection_member.create', admitted),
+        collectionsAdmitted: operationIsAdmitted('collection.list', admitted),
       };
       if (identityChanged) {
         next.scope++;
