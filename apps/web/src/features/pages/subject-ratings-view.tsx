@@ -21,6 +21,7 @@ import {
 import { PublicRatingFigure } from './public-rating-figure';
 import { RatingDistribution } from './rating-distribution';
 import { OverviewContext, viewHref } from './overview';
+import { useRatingSourceRetryFocus, type RatingRetryOwner } from './subject-rating-retry-focus';
 
 const sectionClass = 'min-w-0 space-y-4 in-data-[density=compact]:space-y-3';
 const headingClass =
@@ -36,20 +37,25 @@ export const RatingsPreviewContext = createContext<Ratings | RatingSources | nul
 export const RatingsRecoveryContext = createContext<((source: RatingSource) => void) | null>(null);
 export const RatingPopulationsContext = createContext<ReactNode>(null);
 
+export type RatingSourceOwner = Omit<RatingRetryOwner, 'locale' | 'source'>;
+
 /** A source-local recovery never invalidates a sibling or submits the personal vote. */
 export function RatingSourceStatus({
   outcome,
   source,
   locale,
   retry,
+  owner,
+  children,
 }: {
   outcome: RatingOutcome<unknown>;
   source: string;
   locale: string;
   retry?: (() => void) | undefined;
+  owner?: RatingSourceOwner | undefined;
+  children?: ReactNode;
 }) {
   const options = { locale: locales.find((item) => item === locale) ?? 'en' };
-  if (outcome.kind === 'ready') return null;
   const labels: Record<string, string> = {
     question: m.rating_population_source_question({}, options),
     figure: m.rating_population_source_figure({}, options),
@@ -60,36 +66,60 @@ export function RatingSourceStatus({
     comparison: m.rating_population_source_comparison({}, options),
   };
   const label = labels[source] ?? m.rating_population_source_comparison({}, options);
+  const focus = useRatingSourceRetryFocus(
+    {
+      subject: owner?.subject ?? '',
+      locale,
+      source,
+      ...(owner?.population !== undefined ? { population: owner.population } : {}),
+      ...(owner?.incarnation !== undefined ? { incarnation: owner.incarnation } : {}),
+      ...(owner?.isCurrent !== undefined ? { isCurrent: owner.isCurrent } : {}),
+    },
+    outcome.kind,
+  );
+  if (outcome.kind === 'ready' && children == null) return null;
   return (
     <div
+      ref={focus.targetRef}
       role="group"
       aria-label={label}
+      tabIndex={-1}
       data-slot="rating-source-status"
       data-source={source}
       data-state={outcome.kind}
-      className="space-y-2 text-sm"
+      className="space-y-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
     >
-      <p className="font-medium">{label}</p>
-      <p role="status">
-        {outcome.kind === 'idle'
-          ? m.rating_population_loading({}, options)
-          : outcome.kind === 'absent'
-            ? m.rating_population_absent({}, options)
-            : outcome.kind === 'terminal'
-              ? m.rating_population_terminal({}, options)
-              : outcome.kind === 'unavailable'
-                ? m.rating_population_unavailable({}, options)
-                : m.rating_population_failed({}, options)}
-      </p>
-      {retry && outcome.kind !== 'terminal' && outcome.kind !== 'idle' && (
-        <Button
-          type="button"
-          variant="outline"
-          className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2 text-start focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-          onClick={retry}
-        >
-          {m.subject_section_retry({}, options)}
-        </Button>
+      {outcome.kind === 'ready' ? (
+        children
+      ) : (
+        <>
+          <p className="font-medium">{label}</p>
+          <p role="status">
+            {outcome.kind === 'idle'
+              ? m.rating_population_loading({}, options)
+              : outcome.kind === 'absent'
+                ? m.rating_population_absent({}, options)
+                : outcome.kind === 'terminal'
+                  ? m.rating_population_terminal({}, options)
+                  : outcome.kind === 'unavailable'
+                    ? m.rating_population_unavailable({}, options)
+                    : m.rating_population_failed({}, options)}
+          </p>
+          {retry && outcome.kind !== 'terminal' && outcome.kind !== 'idle' && (
+            <Button
+              ref={focus.retryRef}
+              type="button"
+              variant="outline"
+              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2 text-start focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              onClick={(event) => {
+                focus.noteActivation(event.currentTarget);
+                retry();
+              }}
+            >
+              {m.subject_section_retry({}, options)}
+            </Button>
+          )}
+        </>
       )}
     </div>
   );
@@ -178,13 +208,17 @@ export function RatingsView({
   const question = sources.question.kind === 'ready' ? sources.question.value : undefined;
   const headline = sources.figure.kind === 'ready' ? sources.figure.value : undefined;
   const statistics = sources.statistics.kind === 'ready' ? sources.statistics.value : [];
-  const status = (source: RatingSource) => (
+  const owner = { subject };
+  const status = (source: RatingSource, result?: ReactNode) => (
     <RatingSourceStatus
       outcome={sources[source]}
       source={source}
       locale={locale}
       retry={recovery ? () => recovery(source) : undefined}
-    />
+      owner={owner}
+    >
+      {result}
+    </RatingSourceStatus>
   );
 
   const number = (value: number, digits = 0) =>
@@ -207,26 +241,30 @@ export function RatingsView({
       <h2 id={`${id}-title`} className={headingClass}>
         {title}
       </h2>
-      {question ? (
-        <p className="text-sm font-medium wrap-anywhere" data-slot="rating-question" data-revision={question.revision}>
-          {question.label}
-        </p>
-      ) : (
-        status('question')
+      {status(
+        'question',
+        question ? (
+          <p className="text-sm font-medium wrap-anywhere" data-slot="rating-question" data-revision={question.revision}>
+            {question.label}
+          </p>
+        ) : undefined,
       )}
       <div data-slot="rating-figures" className="space-y-4">
         <div className="space-y-2 [&_strong]:text-3xl [&_strong]:font-semibold">
-          {headline ? (
-            <PublicRatingFigure
-              figure={headline}
-              locale={locale}
-              {...(question ? { remaining: threshold - headline.count } : {})}
-            />
-          ) : (
-            status('figure')
-          )}
-          {headline?.count === 0 && headline.state !== 'updating' && (
-            <p className="text-sm text-muted-foreground">{m.subject_ratings_empty({}, options)}</p>
+          {status(
+            'figure',
+            headline ? (
+              <>
+                <PublicRatingFigure
+                  figure={headline}
+                  locale={locale}
+                  {...(question ? { remaining: threshold - headline.count } : {})}
+                />
+                {headline.count === 0 && headline.state !== 'updating' && (
+                  <p className="text-sm text-muted-foreground">{m.subject_ratings_empty({}, options)}</p>
+                )}
+              </>
+            ) : undefined,
           )}
         </div>
         {!control && supplied && supplied.own !== null && question && (
@@ -250,48 +288,50 @@ export function RatingsView({
       <p data-slot="rating-global" className="text-sm font-medium">
         {m.rating_population_source_global({}, options)}
       </p>
-      {status('global')}
-      {!headline && globalFigure && question && (
-        <div data-slot="rating-global-aggregate" className="space-y-1 text-sm">
-          {globalFigure.freshness?.updating ? (
-            <p role="status">{m.rating_public_updating({}, options)}</p>
-          ) : globalFigure.count === 0 ? (
-            <p>{m.subject_ratings_empty({}, options)}</p>
-          ) : (
-            <>
-              <p>
-                {m.subject_ratings_realm_count(
-                  { count: number(globalFigure.count), population: m.rating_population_source_global({}, options) },
-                  options,
+      {status(
+        'global',
+        !headline && globalFigure && question ? (
+          <div data-slot="rating-global-aggregate" className="space-y-1 text-sm">
+            {globalFigure.freshness?.updating ? (
+              <p role="status">{m.rating_public_updating({}, options)}</p>
+            ) : globalFigure.count === 0 ? (
+              <p>{m.subject_ratings_empty({}, options)}</p>
+            ) : (
+              <>
+                <p>
+                  {m.subject_ratings_realm_count(
+                    { count: number(globalFigure.count), population: m.rating_population_source_global({}, options) },
+                    options,
+                  )}
+                </p>
+                {globalFigure.remaining !== undefined || globalFigure.count < threshold ? (
+                  <p>
+                    {m.subject_ratings_remaining(
+                      { count: number(globalFigure.remaining ?? threshold - globalFigure.count) },
+                      options,
+                    )}
+                  </p>
+                ) : globalFigure.mean !== undefined &&
+                  Number.isFinite(globalFigure.mean) &&
+                  globalFigure.mean >= question.scale.min &&
+                  globalFigure.mean <= question.scale.max &&
+                  question.scale.max > question.scale.min ? (
+                  <p>
+                    {m.rating_public_mean(
+                      {
+                        mean: number(displayRating(globalFigure.mean, question.scale), 2),
+                        maximum: number(PUBLIC_RATING_SCALE.max),
+                      },
+                      options,
+                    )}
+                  </p>
+                ) : (
+                  <p>{m.subject_ratings_figure_unavailable({}, options)}</p>
                 )}
-              </p>
-              {globalFigure.remaining !== undefined || globalFigure.count < threshold ? (
-                <p>
-                  {m.subject_ratings_remaining(
-                    { count: number(globalFigure.remaining ?? threshold - globalFigure.count) },
-                    options,
-                  )}
-                </p>
-              ) : globalFigure.mean !== undefined &&
-                Number.isFinite(globalFigure.mean) &&
-                globalFigure.mean >= question.scale.min &&
-                globalFigure.mean <= question.scale.max &&
-                question.scale.max > question.scale.min ? (
-                <p>
-                  {m.rating_public_mean(
-                    {
-                      mean: number(displayRating(globalFigure.mean, question.scale), 2),
-                      maximum: number(PUBLIC_RATING_SCALE.max),
-                    },
-                    options,
-                  )}
-                </p>
-              ) : (
-                <p>{m.subject_ratings_figure_unavailable({}, options)}</p>
-              )}
-            </>
-          )}
-        </div>
+              </>
+            )}
+          </div>
+        ) : undefined,
       )}
       {question && <RatingDistribution figure={globalFigure} headline={headline} question={question} locale={locale} />}
       {populations}
@@ -313,22 +353,28 @@ export function RatingsView({
           )}
           <p>{m.rating_public_delay({}, options)}</p>
           <p>{m.rating_public_ordering({}, options)}</p>
-          {status('statistics')}
-          {statistics.map((item) => (
-            <p key={item.source} data-slot="imported-score" className="min-w-0 break-words">
-              <MetaLine
-                items={[
-                  <span className="font-medium">{item.source === 'vndb' ? 'VNDB' : item.source}</span>,
-                  <strong className="tabular-nums">
-                    {number(item.mean, 2)} ({number(item.scale.min)}–{number(item.scale.max)})
-                  </strong>,
-                  m.subject_ratings_imported({ count: number(item.count), date: date(item.asOf) }, options),
-                  item.licence ? m.rating_import_licence({ licence: item.licence }, options) : null,
-                  item.attribution ? m.rating_import_attribution({ attribution: item.attribution }, options) : null,
-                ]}
-              />
-            </p>
-          ))}
+          {status(
+            'statistics',
+            statistics.length
+              ? statistics.map((item) => (
+                  <p key={item.source} data-slot="imported-score" className="min-w-0 break-words">
+                    <MetaLine
+                      items={[
+                        <span className="font-medium">{item.source === 'vndb' ? 'VNDB' : item.source}</span>,
+                        <strong className="tabular-nums">
+                          {number(item.mean, 2)} ({number(item.scale.min)}–{number(item.scale.max)})
+                        </strong>,
+                        m.subject_ratings_imported({ count: number(item.count), date: date(item.asOf) }, options),
+                        item.licence ? m.rating_import_licence({ licence: item.licence }, options) : null,
+                        item.attribution
+                          ? m.rating_import_attribution({ attribution: item.attribution }, options)
+                          : null,
+                      ]}
+                    />
+                  </p>
+                ))
+              : undefined,
+          )}
         </div>
       </details>
       <a data-slot="see-reviews" className={linkClass} href={reviewsHref}>

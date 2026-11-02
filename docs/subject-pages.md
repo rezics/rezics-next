@@ -924,7 +924,9 @@ The [first-scope audit](research/first-scope-remaining-backlog.md) is adopted fo
 all-siblings-or-null read and first-three-memberships comparison are superseded. Question, published public figure,
 Global aggregate/distribution and imported source statistics have independently settled serializable outcomes and
 separate public query keys. Each failed source has its own explicit retry, which reads that source once and keeps
-successful siblings and the personal vote draft intact. An absent, failed, unavailable or terminal source is never
+successful siblings and the personal vote draft intact. A focused Retry that is removed for idle or
+ready returns keyboard focus to that source's named group when the Subject, selected population,
+locale and source incarnation are still current and the reader has not moved focus. An absent, failed, unavailable or terminal source is never
 a successful zero. Genuine zero, privacy suppression and native updating/as-of observations remain distinct.
 Imported scales, dates, source names, licence and attribution come from their own source DTO; they are not Realm
 populations or community votes. Public head and JSON-LD consume only the eligible anonymous published figure.

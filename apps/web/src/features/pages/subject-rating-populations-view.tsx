@@ -484,6 +484,7 @@ function PopulationVisit({
           source="directory"
           locale={locale}
           retry={pageState.stopped ? undefined : () => retry('directory')}
+          owner={{ subject: subjectId, incarnation: lease.key, isCurrent: current }}
         />
         {pageState.stopped && (
           <p role="status">
@@ -559,6 +560,11 @@ function PopulationVisit({
             source="selected"
             locale={locale}
             retry={() => retry('selected')}
+            owner={{
+              subject: subjectId,
+              incarnation: `${lease.key}:${selectedKey}`,
+              isCurrent: current,
+            }}
           />
           {comparisons?.incomplete && <p role="status">{m.rating_population_concealed({}, options)}</p>}
           <ul className="grid gap-4 sm:grid-cols-2">
