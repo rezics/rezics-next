@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useId, useLayoutEffect, useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
@@ -36,6 +36,29 @@ export function updateLanguagePreferences(current: readonly string[], action: La
   return updated;
 }
 
+function preferencesUnchanged(current: readonly string[], next: readonly string[]) {
+  return next.length === current.length && next.every((tag, index) => tag === current[index]);
+}
+
+function alignOccurrenceKeys(keys: string[], count: number, allocate: () => string) {
+  if (keys.length === count) return keys;
+  return Array.from({ length: count }, (_, index) => keys[index] ?? allocate());
+}
+
+function shiftOccurrenceKeys(keys: string[], action: LanguagePreferenceAction, allocate: () => string) {
+  if (action.type === 'clear') return [];
+  if (action.type === 'add') return [...keys, allocate()];
+  if (action.type === 'remove') {
+    if (action.index < 0 || action.index >= keys.length) return keys;
+    return keys.filter((_key, index) => index !== action.index);
+  }
+  const target = action.index + action.offset;
+  if (action.index < 0 || action.index >= keys.length || target < 0 || target >= keys.length) return keys;
+  const next = [...keys];
+  [next[action.index], next[target]] = [next[target]!, next[action.index]!];
+  return next;
+}
+
 function displayLanguage(tag: string, displayNames: Intl.DisplayNames) {
   try {
     return displayNames.of(tag) ?? tag;
@@ -56,17 +79,56 @@ export function ConditionLanguages({
   onChange(languages: string[]): void;
 }) {
   const selectId = useId();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const occurrenceKeys = useRef<string[]>([]);
+  const nextOccurrenceKey = useRef(0);
+  const pendingFocus = useRef<
+    { kind: 'move'; index: number; offset: -1 | 1 } | { kind: 'remove'; index: number } | null
+  >(null);
   const [selected, setSelected] = useState('');
   const atLimit = languages.length >= MAX_LANGUAGE_PREFERENCES;
   const available = locales.filter(
     (tag) => !languages.some((language) => language.toLowerCase() === tag.toLowerCase()),
   );
   const displayNames = new Intl.DisplayNames([locale], { type: 'language' });
+  const allocateKey = () => `language-pref:${nextOccurrenceKey.current++}`;
+  occurrenceKeys.current = alignOccurrenceKeys(occurrenceKeys.current, languages.length, allocateKey);
 
-  const update = (action: LanguagePreferenceAction) => onChange(updateLanguagePreferences(languages, action));
+  const update = (action: LanguagePreferenceAction) => {
+    const next = updateLanguagePreferences(languages, action);
+    if (!preferencesUnchanged(languages, next)) {
+      occurrenceKeys.current = shiftOccurrenceKeys(occurrenceKeys.current, action, allocateKey);
+      if (action.type === 'move') pendingFocus.current = { kind: 'move', index: action.index, offset: action.offset };
+      if (action.type === 'remove') pendingFocus.current = { kind: 'remove', index: action.index };
+    }
+    onChange(next);
+  };
+
+  useLayoutEffect(() => {
+    const pending = pendingFocus.current;
+    if (!pending) return;
+    pendingFocus.current = null;
+    const root = rootRef.current;
+    if (!root) return;
+    const rows = [...root.querySelectorAll<HTMLLIElement>('ol > li')];
+    if (pending.kind === 'move') {
+      const buttons = [...(rows[pending.index + pending.offset]?.querySelectorAll<HTMLButtonElement>('button') ?? [])];
+      const intended = buttons[pending.offset === -1 ? 0 : 1];
+      const fallback = buttons.find((button, index) => index < 2 && !button.disabled) ?? buttons[2];
+      (intended && !intended.disabled ? intended : fallback)?.focus();
+      return;
+    }
+    const row = rows[pending.index] ?? rows[pending.index - 1];
+    if (row) {
+      const buttons = [...row.querySelectorAll<HTMLButtonElement>('button')];
+      (buttons[2] ?? buttons.find((button) => !button.disabled))?.focus();
+      return;
+    }
+    root.ownerDocument.getElementById(selectId)?.focus();
+  });
 
   return (
-    <Field>
+    <Field ref={rootRef}>
       <FieldLabel htmlFor={selectId}>{m.condition_languages_label()}</FieldLabel>
       <div className="flex flex-wrap items-end gap-2">
         <NativeSelect
@@ -99,7 +161,7 @@ export function ConditionLanguages({
         <ol aria-label={m.condition_languages_label()} className="mt-2 space-y-2">
           {languages.map((tag, index) => (
             <li
-              key={`${tag}:${index}`}
+              key={occurrenceKeys.current[index]}
               className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 p-2"
             >
               <div className="flex min-w-0 flex-col">

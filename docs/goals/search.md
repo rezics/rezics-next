@@ -31,6 +31,7 @@ owner's PostgreSQL partition; a public index is never an authorization authority
 Realm browsing advances one explicit page at a time: successful More replaces the visible window (up to 20 rows), pending and failed reads preserve it, and broken cursors offer a first-page restart.
 After profile persistence, any activation refusal remains retryable with its original head and idempotency keys; later edits stay in the separate draft.
 Recent queries repeat `language` values in preference order; missing selections use the current locale fallback.
+Ordered language preference reorder keeps focus on the moved occurrence's surviving move control; removal focuses the next remaining Remove control, otherwise the previous row's Remove, otherwise the language selector.
 History management feedback belongs to the mounted bucket and installed session observation; replacing either permanently retires pending feedback, even when the same account returns.
 Subject population switches clear `context`, `node` and `cursor`, preserve the localized subject/view and fragment, and add `realm` only for a Realm retry.
 Undecodable localized Subject paths stay as plain links to their original address; successfully decoded paths use canonical Subject routing.
