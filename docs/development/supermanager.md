@@ -11,6 +11,12 @@ When the same failure line ends three or more tasks within 20 minutes, it is one
 alerted with the line, the count, example tasks and the source location, and the Telegram group is told. Fix the cause
 or hand it to its owner within 15 minutes, then retry the affected tasks.
 
+## Hourly target
+
+After every full clock hour below the 20,000-line product target, the supermanager is woken with the hour's numbers.
+It analyses the causes from the task store and run logs, acts on the largest within the same hour, and reports the
+cause and action in the project's Telegram group, without waiting to be asked.
+
 ## Questions for the maintainer
 
 Never ask a blocking question: no dialog, prompt or tool call that waits for an answer while the Goal runs. The work
