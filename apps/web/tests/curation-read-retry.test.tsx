@@ -35,10 +35,16 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-function clickHandler(element: Element): (() => void) | undefined {
+function clickHandler(element: Element): ((event: { preventDefault(): void }) => void) | undefined {
   const key = Object.keys(element).find((name) => name.startsWith('__reactProps$'));
   if (!key) return;
-  return (element as unknown as Record<string, { onClick?: () => void }>)[key]?.onClick;
+  return (element as unknown as Record<string, { onClick?: (event: { preventDefault(): void }) => void }>)[key]?.onClick;
+}
+
+function invoke(element: Element) {
+  return act(async () => {
+    clickHandler(element)?.({ preventDefault() {} });
+  });
 }
 
 test('rate-limited wait binds the current owner and withholds until a manual action', () => {
@@ -138,8 +144,7 @@ test('fresh rate-limited admission and ordinary reload wait for a current manual
     expect(host.textContent).toContain(m.curation_retry_after({ seconds: 1 }));
     expect(host.textContent).not.toContain(m.curation_heading());
     expect(button(m.curation_reload())!.disabled).toBe(true);
-    const early = clickHandler(button(m.curation_reload())!);
-    await act(async () => early?.());
+    await invoke(button(m.curation_reload())!);
     expect(reads).toHaveLength(1);
 
     now += 1_001;
@@ -194,8 +199,7 @@ test('fresh rate-limited admission and ordinary reload wait for a current manual
     expect(host.textContent).toContain('/retry-draft');
     expect(host.textContent).toContain(m.presentation_editor_version_reference({ head: 7, digest: profileDigest(profile) }));
     expect(button(m.curation_reload())!.disabled).toBe(true);
-    const waitingReload = clickHandler(button(m.curation_reload())!);
-    await act(async () => waitingReload?.());
+    await invoke(button(m.curation_reload())!);
     expect(reads).toHaveLength(4);
 
     now += 1_001;
@@ -204,7 +208,7 @@ test('fresh rate-limited admission and ordinary reload wait for a current manual
     const readyReload = clickHandler(button(m.curation_reload())!);
     await act(async () => {
       client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', csrfToken: null });
-      readyReload?.();
+      readyReload?.({ preventDefault() {} });
     });
     now += 5_000;
     await act(async () => root.render(tree()));
