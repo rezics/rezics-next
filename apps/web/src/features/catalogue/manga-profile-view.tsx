@@ -1,6 +1,7 @@
 import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useQuery } from '@tanstack/react-query';
-import { useId, useRef, useState } from 'react';
+import { Link, useRouter } from '@tanstack/react-router';
+import { useId, useRef, useState, type ReactNode } from 'react';
 import { pickText } from '@rezics/composition';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
@@ -11,6 +12,7 @@ import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import type { EntityPickerSearch } from '@rezics/ui/entity-picker';
 import { m } from '../../paraglide/messages.js';
+import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../../threads/authoring-departure';
 import { ViewHeadingActions } from '../pages/view-heading';
 import { definitionText } from './definition-guide';
 import { DefinitionGuideLink } from './definition-guide-view';
@@ -123,14 +125,16 @@ function MangaProfileEditorLive({
           reload={() => query.refetch()}
         />
       ) : (
-        <MangaCreate
-          read={read}
-          locale={locale}
-          disabled={session !== 'signed-in'}
-          transport={transport}
-          search={search}
-          refresh={() => query.refetch()}
-        />
+        <AuthoringDepartureBoundary>
+          <MangaCreate
+            read={read}
+            locale={locale}
+            disabled={session !== 'signed-in'}
+            transport={transport}
+            search={search}
+            refresh={() => query.refetch()}
+          />
+        </AuthoringDepartureBoundary>
       )}
     </article>
   );
@@ -169,6 +173,36 @@ function MangaCreate({
   const [busy, setBusy] = useState(false);
   const request = useRef<MangaCommand | null>(null);
   const running = useRef(false);
+  const [retired, setRetired] = useState(false);
+  // Both native Type holders belong to this workspace, including hidden authored values.
+  // Inspect state only: preparing a command can validate or publish submission feedback.
+  const dirty =
+    type !== 'schema:ComicSeries' ||
+    independent ||
+    terms.some(
+      (term, index) =>
+        !!(term.label || term.description || term.aliases) || term.language !== (index === 0 ? locale : ''),
+    ) ||
+    Object.values(drafts).some((holder) => holder.length > 0);
+  const departure = useAuthoringDeparture(
+    () => lifetime.active() && !created && (dirty || running.current || !!request.current),
+    () => running.current || !!request.current,
+    String(lifetime.generation),
+    undefined,
+    () => {
+      // A sent native command may still finish. Retire only this local caller and recovery.
+      lifetime.retire();
+      request.current = null;
+      running.current = false;
+      setRetired(true);
+    },
+    undefined,
+    {
+      title: m.thread_authoring_leave_title({}, o),
+      unsaved: m.thread_authoring_leave_unsaved({}, o),
+      pending: m.thread_authoring_leave_pending({}, o),
+    },
+  );
   const locked = disabled || busy || !!request.current || !read;
   const rows = drafts[type];
   const groups = read ? mangaGroups(read.release, type, locale) : undefined;
@@ -212,6 +246,7 @@ function MangaCreate({
       const result = await transport.create(request.current);
       if (!lifetime.active()) return;
       if (result.ok) {
+        departure.release();
         setCreated(result);
         request.current = null;
       } else {
@@ -229,6 +264,7 @@ function MangaCreate({
       setBusy(false);
     }
   }
+  if (retired) return null;
   if (created)
     return (
       <section className="min-w-0 [overflow-wrap:anywhere]">
@@ -238,12 +274,12 @@ function MangaCreate({
           </ContentItemHeading>
           <p className="break-all font-mono text-sm">{created.id}</p>
           {created.reader.state === 'ready' ? (
-            <a
+            <MangaNavigationLink
               className={buttonVariants({ className: 'h-auto min-h-11 max-w-full whitespace-normal text-start' })}
               href={created.reader.href}
             >
               {m.candidate_view_public({}, o)}
-            </a>
+            </MangaNavigationLink>
           ) : (
             <>
               <p>
@@ -282,7 +318,7 @@ function MangaCreate({
     );
   return (
     <>
-      <a
+      <MangaNavigationLink
         className={buttonVariants({
           variant: 'outline',
           className:
@@ -291,7 +327,7 @@ function MangaCreate({
         href={`/${locale}/search${terms[0]?.label.trim() ? `?q=${encodeURIComponent(terms[0].label.trim())}` : ''}`}
       >
         {m.catalogue_create_search({}, o)}
-      </a>
+      </MangaNavigationLink>
       <form
         className="min-w-0 space-y-8 [overflow-wrap:anywhere] [&_label]:whitespace-normal [&_label]:text-start [&_input]:min-w-0 [&_textarea]:min-w-0"
         onSubmit={(event) => {
@@ -594,6 +630,20 @@ function MangaCreate({
         </Button>
       </form>
     </>
+  );
+}
+
+/** Use router navigation in the page and ordinary links in isolated editor compositions. */
+function MangaNavigationLink({ href, children, className }: { href: string; children: ReactNode; className: string }) {
+  const router = useRouter({ warn: false });
+  return router ? (
+    <Link to={href} className={className}>
+      {children}
+    </Link>
+  ) : (
+    <a href={href} className={className}>
+      {children}
+    </a>
   );
 }
 
