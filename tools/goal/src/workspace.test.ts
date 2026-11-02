@@ -412,7 +412,10 @@ test('workspace sync reports ancestry failures and preserves merge errors when a
   const bin = join(h.root, '.temp', 'bin');
   mkdirSync(bin, { recursive: true });
   const originalPath = process.env.PATH;
-  const realGit = (originalPath ?? '').split(delimiter).map((path) => join(path, 'git')).find(existsSync)!;
+  const realGit = (originalPath ?? '')
+    .split(delimiter)
+    .map((path) => join(path, 'git'))
+    .find(existsSync)!;
   const marker = join(bin, 'seen-ancestry');
   const merges = join(bin, 'merges');
   const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
