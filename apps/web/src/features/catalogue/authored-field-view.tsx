@@ -19,6 +19,7 @@ import { SpoilerGate } from '../pages/values';
 import { spoilerLevel } from '../pages/shared';
 import { EditorFailure } from './statement-editor-view';
 import { authoredState, initialAuthoredState, type AuthoredDraft } from './authored-field-state';
+import { AuthoredFieldNavigation } from './authored-field-navigation';
 import {
   authoredProperties,
   authoredStatement,
@@ -419,6 +420,7 @@ function AuthoredFieldLive({
 
   return (
     <article className="mx-auto min-w-0 w-full max-w-4xl space-y-6 p-4 [overflow-wrap:anywhere] sm:p-6">
+      <AuthoredFieldNavigation drafts={drafts} pending={!!command || (busy && !reading)} confirmed={!!proposed} />
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold">{m.authored_title({}, o)}</h1>
         {current && (
