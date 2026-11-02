@@ -257,6 +257,12 @@ test('The complete author erasure caller retires private admission command callb
     await ui.flush();
     expect(sent).toHaveLength(2);
     expect(ui.host.textContent).toContain(ui.m.author_erasure_uncertain());
+    await act(async () => ui.setSession({ state: 'unavailable', subject: null, csrfToken: null }));
+    await ui.flush();
+    expect(ui.host.textContent).toContain(ui.m.author_erasure_uncertain());
+    await act(async () => ui.setSession({ state: 'signed-in', subject: authorA, csrfToken: 'csrf-a' }));
+    await ui.flush();
+    expect(ui.host.querySelector<HTMLInputElement>('input[type="checkbox"]')?.checked).toBe(true);
     await ui.click(ui.m.author_erasure_close());
     await ui.click(ui.m.author_erasure_action());
     await ui.flush();

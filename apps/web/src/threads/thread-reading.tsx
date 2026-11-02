@@ -469,9 +469,9 @@ export function ThreadReading({
                 {/* Closing secondary actions must retain the actor's confirmation and uncertain command intent. */}
                 <CollapsibleContent id={`thread-actions-${thread.id}`} keepMounted className="pt-2">
                   <AuthorErasureEntry
-                    key={`${thread.id}:${composer.current.viewerId}:${sessionRevision}`}
+                    key={`${thread.id}:${composer.current.viewerId}`}
                     threadId={thread.id}
-                    viewerId={currentPersonal?.viewerId ?? null}
+                    viewerId={currentPersonal?.viewerId ?? composer.current.viewerId}
                     {...authorErasure}
                   />
                 </CollapsibleContent>

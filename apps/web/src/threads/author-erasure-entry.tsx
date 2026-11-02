@@ -36,6 +36,17 @@ export function erasureRefusal(kind: Exclude<ErasureEnqueue['kind'], 'accepted'>
   }
 }
 
+export function authorErasureEntryScope(
+  threadId: string,
+  viewerId: string | null,
+  session: ReturnType<AuthorErasureSessionSource['read']>,
+  previousViewerId: string | null,
+) {
+  const stableViewerId =
+    viewerId ?? (session?.state === 'signed-in' ? session.subject ?? null : null) ?? previousViewerId;
+  return { viewerId: stableViewerId, key: JSON.stringify([threadId, stableViewerId]) };
+}
+
 async function readNative(threadId: string, isCurrent: () => boolean = () => true): Promise<AuthorErasureAdmission> {
   if (!isCurrent()) return { kind: 'unavailable' };
   const { readThreadAuthorErasureAdmission } = await import('./author-erasure-server');
@@ -56,8 +67,18 @@ export function AuthorErasureEntry(props: {
   const source = authorErasureSessionSource(client);
   const revision = useSyncExternalStore(source.subscribe, source.snapshot, source.serverSnapshot);
   const viewerId = props.viewerId ?? null;
-  const visit = JSON.stringify([props.threadId, viewerId, revision]);
-  return <AuthorErasureEntryVisit key={visit} {...props} viewerId={viewerId} source={source} revision={revision} />;
+  const lastViewerId = useRef<string | null>(viewerId);
+  const scope = authorErasureEntryScope(props.threadId, viewerId, source.read(), lastViewerId.current);
+  if (scope.viewerId) lastViewerId.current = scope.viewerId;
+  return (
+    <AuthorErasureEntryVisit
+      key={scope.key}
+      {...props}
+      viewerId={viewerId}
+      source={source}
+      revision={revision}
+    />
+  );
 }
 
 function AuthorErasureEntryVisit({
@@ -85,8 +106,9 @@ function AuthorErasureEntryVisit({
   const [pending, setPending] = useState(false);
   const [result, setResult] = useState<ErasureEnqueue | null>(null);
   const [, updateAdmission] = useState(0);
-  const request = useRef<ReturnType<typeof authorErasureRequest> | null>(null);
+  const request = useRef<ErasureIntent | null>(null);
   const busy = useRef(false);
+  const observedRevision = useRef(revision);
   const reads = useRef(authorErasureAdmissionReads());
   const mounted = useRef(false);
   const connection = useRef(0);
@@ -100,6 +122,15 @@ function AuthorErasureEntryVisit({
       reads.current.retire();
     };
   }, []);
+
+  useEffect(() => {
+    if (observedRevision.current === revision) return;
+    observedRevision.current = revision;
+    if (!busy.current) return;
+    busy.current = false;
+    setPending(false);
+    setResult({ kind: 'uncertain' });
+  }, [revision]);
 
   const isCurrent = (ticket = connection.current) =>
     mounted.current &&
@@ -143,17 +174,13 @@ function AuthorErasureEntryVisit({
     const current = () => isCurrent(ticket);
     busy.current = true;
     setPending(true);
-    if (!request.current) {
-      const originalSend = send;
-      const csrfToken = sessionAtIntent.csrfToken;
-      request.current = authorErasureRequest({ threadId, idempotencyKey: crypto.randomUUID() }, (intent) => {
-        if (!current()) return Promise.resolve({ kind: 'uncertain' });
-        return originalSend ? originalSend(intent) : sendNative(intent, csrfToken, current);
-      });
-    }
+    if (!request.current) request.current = Object.freeze({ threadId, idempotencyKey: crypto.randomUUID() });
     let outcome: ErasureEnqueue;
     try {
-      outcome = await request.current();
+      outcome = await authorErasureRequest(request.current, (intent) => {
+        if (!current()) return Promise.resolve({ kind: 'uncertain' });
+        return send ? send(intent) : sendNative(intent, sessionAtIntent.csrfToken, current);
+      })();
     } catch {
       outcome = { kind: 'uncertain' };
     }
