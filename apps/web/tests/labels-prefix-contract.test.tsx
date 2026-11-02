@@ -29,7 +29,14 @@ test('native-invalid saved prefixes require explicit correction before any priva
     const result = await load({ deps: { query, cursor: 'saved+/cursor==' } });
     expect(result).toEqual({
       kind: 'invalid-address',
-      address: { valid: false, issue: 'prefix', query: null, cursor: null, rawQuery: query, rawCursor: 'saved+/cursor==' },
+      address: {
+        valid: false,
+        issue: 'prefix',
+        query: null,
+        cursor: null,
+        rawQuery: query,
+        rawCursor: 'saved+/cursor==',
+      },
     });
     expect(read).not.toHaveBeenCalled();
   }
