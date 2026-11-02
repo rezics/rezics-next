@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useReducer, useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { m } from '../../paraglide/messages.js';
@@ -58,14 +58,67 @@ function ResolutionForm({
     mayResolve &&
     ((session.state === 'signed-in' && Boolean(session.subject) && Boolean(session.csrfToken)) ||
       (session.state === 'unknown' && onResolve !== resolveAppeal));
+  const focusAttempt = useRef(0);
+  const keyboardActivation = useRef<HTMLElement | null>(null);
+  const resultFocusTarget = useRef<HTMLParagraphElement | null>(null);
+  const pendingFocus = useRef<{
+    attempt: number;
+    command: NonNullable<typeof intent.command>;
+    source: HTMLElement;
+    appealId: string;
+    viewer: string | null;
+    cleanup: () => void;
+  } | null>(null);
+  const focusScope = useRef({ appealId, viewer, admitted });
+
+  function cancelFocusHandoff() {
+    const pending = pendingFocus.current;
+    pendingFocus.current = null;
+    pending?.cleanup();
+  }
+
+  function startFocusHandoff(attempt: number, command: NonNullable<typeof intent.command>, source: HTMLElement) {
+    const cancel = () => cancelFocusHandoff();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Tab') cancel();
+    };
+    const onFocusIn = (event: FocusEvent) => {
+      if (event.target !== source && event.target !== document.body) cancel();
+    };
+    const cleanup = () => {
+      document.removeEventListener('pointerdown', cancel, true);
+      document.removeEventListener('keydown', onKeyDown, true);
+      document.removeEventListener('focusin', onFocusIn, true);
+    };
+    pendingFocus.current = { attempt, command, source, appealId, viewer, cleanup };
+    document.addEventListener('pointerdown', cancel, true);
+    document.addEventListener('keydown', onKeyDown, true);
+    document.addEventListener('focusin', onFocusIn, true);
+  }
+
+  if (
+    focusScope.current.appealId !== appealId ||
+    focusScope.current.viewer !== viewer ||
+    focusScope.current.admitted !== admitted
+  ) {
+    keyboardActivation.current = null;
+    cancelFocusHandoff();
+    focusScope.current = { appealId, viewer, admitted };
+  }
   intent.synchronize(appealId, viewer, admitted);
   // The page owner connects after the first empty render. Private state requires its current admission;
   // callbacks below also check it before accepting the first input or command.
-  if ((intent.statement !== '' || intent.phase !== 'draft') && isCurrent?.() === false) intent.retire();
+  if ((intent.statement !== '' || intent.phase !== 'draft') && isCurrent?.() === false) {
+    keyboardActivation.current = null;
+    cancelFocusHandoff();
+    intent.retire();
+  }
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
+      keyboardActivation.current = null;
+      cancelFocusHandoff();
       // StrictMode can reconnect this owner synchronously; a final unmount discards its private memory.
       queueMicrotask(() => {
         if (!mounted.current) intent.retire();
@@ -107,20 +160,45 @@ function ResolutionForm({
         ? `${m.moderation_appeal_conflict()} ${m.moderation_appeal_intent_conflict_recovery()}`
         : '';
 
+  useLayoutEffect(() => {
+    const handoff = pendingFocus.current;
+    if (!handoff || response?.state !== 'resolved' || intent.phase !== 'settled') return;
+    if (
+      handoff.attempt !== focusAttempt.current ||
+      handoff.command !== intent.command ||
+      handoff.appealId !== appealId ||
+      handoff.viewer !== viewer ||
+      !admitted ||
+      !current()
+    ) {
+      cancelFocusHandoff();
+      return;
+    }
+    cancelFocusHandoff();
+    resultFocusTarget.current?.focus();
+  }, [admitted, appealId, intent, intent.phase, response, viewer]);
+
   function current() {
     if (!mounted.current) return false;
     // A page can retire between render and an input, submit or transport callback.
     if (isCurrent?.() === false) {
+      keyboardActivation.current = null;
+      cancelFocusHandoff();
       if (intent.retire()) redraw();
       return false;
     }
+    if (intent.phase === 'retired') cancelFocusHandoff();
     return intent.phase !== 'retired';
   }
 
-  async function resolve(outcome?: ResolutionCommand['outcome']) {
+  async function resolve(outcome?: ResolutionCommand['outcome'], keyboardTarget?: HTMLElement | null) {
+    keyboardActivation.current = null;
+    cancelFocusHandoff();
     if (!current() || !admitted || result) return;
+    const attempt = ++focusAttempt.current;
     const command = outcome === undefined ? intent.retry() : intent.begin(outcome);
     if (!command) return;
+    if (keyboardTarget) startFocusHandoff(attempt, command, keyboardTarget);
     // Notify synchronously: a second click must not unmount this command before React renders.
     onUnresolvedChange?.(intent.unresolved);
     redraw();
@@ -131,9 +209,13 @@ function ResolutionForm({
         intent.settle(response);
         // A validated receipt acknowledges this frozen statement without waiting for any parent read.
         if (response.state === 'resolved') departure.release();
+        else cancelFocusHandoff();
       }
     } catch {
-      if (current()) intent.uncertain();
+      if (current()) {
+        intent.uncertain();
+        cancelFocusHandoff();
+      }
     } finally {
       if (current()) {
         onUnresolvedChange?.(intent.unresolved);
@@ -146,14 +228,35 @@ function ResolutionForm({
 
   if (result)
     return (
-      <p role="status" className="font-medium">
+      <p ref={resultFocusTarget} role="status" tabIndex={-1} className="font-medium">
         {result.outcome === 'upheld' ? m.moderation_appeal_upheld() : m.moderation_appeal_reversed()}
         <span className="block whitespace-pre-wrap font-normal">{result.statement}</span>
       </p>
     );
 
   return (
-    <div className="space-y-3">
+    <div
+      className="space-y-3"
+      onKeyDownCapture={(event) => {
+        if (event.key === 'Tab') {
+          keyboardActivation.current = null;
+          cancelFocusHandoff();
+        } else if (
+          (event.key === 'Enter' || event.key === ' ') &&
+          event.target instanceof HTMLElement &&
+          event.target.hasAttribute('data-resolution-action')
+        ) {
+          keyboardActivation.current = event.target;
+        }
+      }}
+      onBlurCapture={(event) => {
+        if (event.target === keyboardActivation.current) keyboardActivation.current = null;
+      }}
+      onPointerDownCapture={() => {
+        keyboardActivation.current = null;
+        cancelFocusHandoff();
+      }}
+    >
       {mayResolve || statement ? (
         <form className="space-y-3" aria-busy={pending} onSubmit={(event) => event.preventDefault()}>
           <label className="block space-y-1">
@@ -176,7 +279,15 @@ function ResolutionForm({
               <Button
                 type="button"
                 disabled={!admitted || pending || uncertain || count < 1 || count > 2000}
-                onClick={() => void resolve('uphold')}
+                data-resolution-action="uphold"
+                onClick={(event) =>
+                  void resolve(
+                    'uphold',
+                    event.detail === 0 && keyboardActivation.current === event.currentTarget
+                      ? event.currentTarget
+                      : null,
+                  )
+                }
               >
                 {m.moderation_appeal_uphold_action()}
               </Button>
@@ -184,7 +295,15 @@ function ResolutionForm({
                 type="button"
                 variant="outline"
                 disabled={!admitted || pending || uncertain || count < 1 || count > 2000}
-                onClick={() => void resolve('reverse')}
+                data-resolution-action="reverse"
+                onClick={(event) =>
+                  void resolve(
+                    'reverse',
+                    event.detail === 0 && keyboardActivation.current === event.currentTarget
+                      ? event.currentTarget
+                      : null,
+                  )
+                }
               >
                 {m.moderation_appeal_reverse_action()}
               </Button>
@@ -196,7 +315,18 @@ function ResolutionForm({
       )}
       {message ? <p role="alert">{message}</p> : null}
       {uncertain ? (
-        <Button type="button" variant="outline" disabled={!admitted} onClick={() => void resolve()}>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={!admitted}
+          data-resolution-action="retry"
+          onClick={(event) =>
+            void resolve(
+              undefined,
+              event.detail === 0 && keyboardActivation.current === event.currentTarget ? event.currentTarget : null,
+            )
+          }
+        >
           {m.moderation_appeal_intent_retry()}
         </Button>
       ) : null}
