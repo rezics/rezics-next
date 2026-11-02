@@ -26,6 +26,9 @@ mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('../src/community/space-actions', () => ({
   readSpacePage: async () => ({ ...page, readerOrigin: { kind: 'signed-in', subject: 'reader' } }),
+  readRealmBoards: async () => ({ kind: 'denied' }),
+  readRealmPublications: async () => ({ kind: 'denied' }),
+  changeRealmPublication: async () => ({ kind: 'denied' }),
 }));
 const { createRoot } = await import('react-dom/client');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');

@@ -510,7 +510,7 @@ export function ShelfContinuation({
             className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
             variant="outline"
             disabled={busy}
-            onClick={(event) => activate(event, (intent) => load(false, intent))}
+            onClick={(event) => activate(event, (intent) => load(undefined, intent))}
           >
             {busy ? m.realm_shelf_loading() : label}
           </Button>
