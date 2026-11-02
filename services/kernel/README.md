@@ -2,6 +2,13 @@
 
 The kernel workspace owns the database records and adapters used by the service.
 
+## Growth seed target identifiers
+
+Bulk growth-seed targets keep the lowercase `schema.table` grammar. The supported PostgreSQL server uses UTF-8 and a
+63-byte identifier limit; schema, table and quoted column identifiers are checked against it before the affected
+batch is submitted. Validation is bounded by that limit, rejects NUL and malformed UTF-16 column keys, and keeps the
+existing snapshot-based row and byte batch admission without a separate target-name charge.
+
 ## Commands
 
 Run `bun run --cwd services/kernel typecheck` through the [compiler placement contract](../../docs/development/compiler-check-placement.md).

@@ -69,6 +69,69 @@ test('splits by total rows and preserves placement, table order, and supported e
   });
 });
 
+test('rejects seed targets PostgreSQL would truncate or cannot represent before connecting', async () => {
+  const sharedPrefix = 'a'.repeat(63);
+  const invalidTargets: readonly {
+    readonly records: Readonly<Record<string, readonly SeedRow[]>>;
+    readonly message: RegExp;
+  }[] = [
+    { records: { [`${'s'.repeat(64)}.target`]: [{ id: 1 }] }, message: /schema identifier.*63-byte/ },
+    { records: { [`growth.${'t'.repeat(64)}`]: [{ id: 1 }] }, message: /table identifier.*63-byte/ },
+    { records: { ['growth.bad\ud800']: [{ id: 1 }] }, message: /Invalid table name/ },
+    {
+      records: {
+        [`growth.${sharedPrefix}x`]: [{ id: 1 }],
+        [`growth.${sharedPrefix}y`]: [{ id: 2 }],
+      },
+      message: /table identifier.*63-byte/,
+    },
+    { records: { 'growth.invalid': [{ ['x'.repeat(64)]: 1 }] }, message: /column identifier.*63-byte/ },
+    { records: { 'growth.invalid': [{ '': 1 }] }, message: /column identifier.*must not be empty/ },
+    { records: { 'growth.invalid': [{ ['bad\0key']: 1 }] }, message: /column identifier.*NUL/ },
+    {
+      records: { 'growth.invalid': [{ ['bad\ud800']: 1 }] },
+      message: /column identifier.*unpaired UTF-16 surrogate/,
+    },
+  ];
+
+  for (const { records, message } of invalidTargets) {
+    const database = recordingPool();
+    await expect(seedBulkRows(database.admin, 0, 1, () => 0, () => records)).rejects.toThrow(message);
+    expect(database.calls).toEqual([]);
+    expect(database.connections()).toBe(0);
+  }
+});
+
+test('preserves exact 63-byte identifiers and row admission at the PostgreSQL boundary', async () => {
+  const database = recordingPool();
+  const schema = 's'.repeat(63);
+  const table = 't'.repeat(63);
+  const column = `${'a'.repeat(58)}界"x`;
+  const qualified = `"${schema}"."${table}"`;
+  const quotedColumn = `"${column.replaceAll('"', '""')}"`;
+
+  await seedBulkRows(
+    database.admin,
+    0,
+    1,
+    () => 0,
+    () => ({
+      [`${schema}.${table}`]: Array.from({ length: SEED_BATCH_ROW_LIMIT + 1 }, (_, id) => ({ [column]: id })),
+    }),
+  );
+
+  expect(Buffer.byteLength(column, 'utf8')).toBe(63);
+  expect(database.transactions.map((batch) => batch.map(({ table: target, rows }) => [target, rows.length]))).toEqual([
+    [[`${schema}.${table}`, SEED_BATCH_ROW_LIMIT]],
+    [[`${schema}.${table}`, 1]],
+  ]);
+  expect(database.transactions[0]![0]!.rows[0]).toEqual({ [column]: 0 });
+  expect(database.calls.filter((sql) => sql.startsWith('INSERT INTO'))).toEqual([
+    `INSERT INTO ${qualified} (${quotedColumn}) SELECT ${quotedColumn} FROM jsonb_populate_recordset(NULL::${qualified}, $1::jsonb)`,
+    `INSERT INTO ${qualified} (${quotedColumn}) SELECT ${quotedColumn} FROM jsonb_populate_recordset(NULL::${qualified}, $1::jsonb)`,
+  ]);
+});
+
 test('preserves each ordinal when a row and nested byte container are reused', async () => {
   const database = recordingPool();
   const bytes = new Uint8Array([0]);

@@ -1,5 +1,6 @@
 import pg from 'pg';
 import type { Pool } from 'pg';
+import { seedTableTarget, validateSeedColumnIdentifier } from './growth-seed-identifiers.ts';
 import { createSeedValueEncoder, encodeSeedRow, SEED_BATCH_BYTE_LIMIT } from './growth-seed-values.ts';
 
 export type SeedRow = Readonly<Record<string, unknown>>;
@@ -14,7 +15,6 @@ export const SEED_BATCH_ROW_LIMIT = 500;
 export { SEED_BATCH_BYTE_LIMIT };
 
 const ORDINAL_BATCH_SIZE = 1_000;
-const TABLE_NAME = /^[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*$/;
 
 function stringBytes(value: string, limit: number): number | undefined {
   let bytes = 2;
@@ -145,6 +145,7 @@ function* collectBatches<TPlacement>(
 ): Generator<TableRows[]> {
   const columnsByTable = new Map<string, string[]>();
   const rowNumbers = new Map<string, number>();
+  const validatedColumns = new Set<string>();
   const encoder = createSeedValueEncoder();
   let tables = new Map<string, TableRows>();
   let rowCount = 0;
@@ -155,15 +156,20 @@ function* collectBatches<TPlacement>(
     const byteBudget = { byteArrayBytes: 0 };
     for (const name in records) {
       if (!Object.hasOwn(records, name)) continue;
-      if (!TABLE_NAME.test(name)) throw new Error(`Invalid table name: ${name}`);
+      const { schema, table } = seedTableTarget(name);
       const rows = records[name]!;
-      const [schema, table] = name.split('.') as [string, string];
       for (const row of rows) {
         const columns = Object.keys(row);
         if (!columns.length) throw new Error(`Rows for ${name} must include at least one column`);
+        for (const column of columns) {
+          if (validatedColumns.has(column)) continue;
+          validateSeedColumnIdentifier(column, name);
+          validatedColumns.add(column);
+        }
         const expectedColumns = columnsByTable.get(name);
-        if (!expectedColumns) columnsByTable.set(name, columns);
-        else if (columns.length !== expectedColumns.length || expectedColumns.some((key) => !Object.hasOwn(row, key)))
+        if (!expectedColumns) {
+          columnsByTable.set(name, columns);
+        } else if (columns.length !== expectedColumns.length || expectedColumns.some((key) => !Object.hasOwn(row, key)))
           throw new Error(`Rows for ${name} must have identical columns`);
 
         const rowNumber = (rowNumbers.get(name) ?? 0) + 1;
