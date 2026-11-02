@@ -27,14 +27,13 @@ async function setup(read: OrganizationDeletionReader = async ({ organizationId 
     createRoute({ getParentRoute: () => root, path: '/organizations/delete' }),
     createRoute({ getParentRoute: () => root, path: '/away' }),
   ]);
-  const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/organizations/delete'] }) });
+  const router = createRouter({
+    routeTree,
+    history: createMemoryHistory({ initialEntries: ['/organizations/delete'] }),
+  });
   const view = (id = first, reader = read) => (
     <RouterContextProvider router={router}>
-      <OrganizationDeleteContent
-        organizationId={id}
-        privacyContact="mailto:privacy@example.test"
-        read={reader}
-      />
+      <OrganizationDeleteContent organizationId={id} privacyContact="mailto:privacy@example.test" read={reader} />
     </RouterContextProvider>
   );
   const page = await open(view(), body);
@@ -45,7 +44,15 @@ async function setup(read: OrganizationDeletionReader = async ({ organizationId 
     window.dispatchEvent(event as unknown as Event);
     return event.defaultPrevented;
   };
-  return { ...page, router, view, navigate, choose, unload, input: page.host.querySelector<HTMLInputElement>('input')! };
+  return {
+    ...page,
+    router,
+    view,
+    navigate,
+    choose,
+    unload,
+    input: page.host.querySelector<HTMLInputElement>('input')!,
+  };
 }
 
 test('clean review leaves freely', async () => {

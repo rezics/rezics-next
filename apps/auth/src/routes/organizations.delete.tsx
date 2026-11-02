@@ -131,12 +131,13 @@ export function OrganizationDeleteContent({
   const [outcome, setOutcome] = useState<'form' | 'accepted' | 'unknown'>('form');
   const submitting = useRef<object | null>(null);
   const review = useRef<
-    (OrganizationDeletionReview & {
-      selected?: string | undefined;
-      active: boolean;
-      source: string | undefined;
-      reader: OrganizationDeletionReader;
-    }) | null
+    | (OrganizationDeletionReview & {
+        selected?: string | undefined;
+        active: boolean;
+        source: string | undefined;
+        reader: OrganizationDeletionReader;
+      })
+    | null
   >(null);
   const selectedId = useRef<string | undefined>(undefined);
   const input = useRef<HTMLInputElement>(null);
@@ -150,8 +151,7 @@ export function OrganizationDeleteContent({
     const state = departureState.current;
     const current = review.current;
     const continuation = readOrganizationDeleteStepUp();
-    const hasAuthority =
-      state.loaded === null || state.loaded.kind === 'ready' || state.loaded.kind === 'unavailable';
+    const hasAuthority = state.loaded === null || state.loaded.kind === 'ready' || state.loaded.kind === 'unavailable';
     const unfinished =
       Boolean(state.confirmation.trim()) ||
       state.pending ||
@@ -160,11 +160,11 @@ export function OrganizationDeleteContent({
       continuation.kind === 'pending';
     return Boolean(
       !bypassDeparture.current &&
-        current?.active &&
-        current.source === state.organizationId &&
-        current.reader === state.read &&
-        hasAuthority &&
-        unfinished,
+      current?.active &&
+      current.source === state.organizationId &&
+      current.reader === state.read &&
+      hasAuthority &&
+      unfinished,
     );
   }, []);
 
