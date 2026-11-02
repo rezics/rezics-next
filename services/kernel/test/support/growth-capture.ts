@@ -683,10 +683,11 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
       if (!attribution) return;
       const capture = attribution.capture;
       capture.pending.add(task);
-      const remove = () => {
+      const removeOnSuccess = () => {
         capture.pending.delete(task);
       };
-      void task.then(remove, remove);
+      // Keep rejected work registered until capture draining can report it alongside the initiating failure.
+      void task.then(removeOnSuccess, () => {});
     };
 
     if (typeof callback === 'function') {
@@ -787,7 +788,10 @@ function instrument(client: PoolClient, state: CaptureState): void {
   const removeSetupTask = () => {
     state.setupTasks.delete(setupTask);
   };
-  void setupTask.then(removeSetupTask, removeSetupTask);
+  void setupTask.then(removeSetupTask, (error: unknown) => {
+    state.setupError ??= asError(error);
+    removeSetupTask();
+  });
 }
 
 function instrumentPool(pool: Pool, state: CaptureState): void {
@@ -927,19 +931,19 @@ async function captureInternal<T>(
     }
     // Wait through failures too: queued queries and setup work must settle before attribution is restored.
     const cleanupErrors = await drainCaptureWork(active.pending, state.setupTasks);
-    const primaryError = operationFailed ? operationError : (state.setupError ?? active.error);
-    if (operationFailed || state.setupError || active.error) {
-      if (cleanupErrors.length > 0) {
-        throw new AggregateError(
-          [primaryError, ...cleanupErrors],
-          'Growth capture failed while pending work was settling',
-          { cause: primaryError },
-        );
-      }
-      throw primaryError;
-    }
-    if (cleanupErrors.length > 0)
-      throw new AggregateError(cleanupErrors, 'Growth capture pending work failed while settling');
+    const failures: unknown[] = [];
+    const addFailure = (error: unknown): void => {
+      if (!failures.includes(error)) failures.push(error);
+    };
+    if (operationFailed) addFailure(operationError);
+    if (state.setupError) addFailure(state.setupError);
+    if (active.error) addFailure(active.error);
+    for (const error of cleanupErrors) addFailure(error);
+    if (failures.length === 1) throw failures[0];
+    if (failures.length > 1)
+      throw new AggregateError(failures, 'Growth capture failed while pending work was settling', {
+        cause: failures[0],
+      });
     const foregroundPlanOwners = new Set(active.planStatements);
     const backgroundPlanOwners = new Set(active.backgroundPlanStatements);
     for (const record of active.statementRecords) {
