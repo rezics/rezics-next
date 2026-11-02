@@ -1,11 +1,22 @@
 import type { Pool } from 'pg';
 import { advanceLibraryIdentityNativePlan, advanceLibraryIdentityNativePlanWithWork } from './identity-native-planner.ts';
-import { readLibraryScopeEffectsPage, verifyLibraryScopeEffectsSeal } from './identity-scope-effects.ts';
+import { readLibraryScopeEffectsPage, verifyLibraryScopeEffectsSeal, type LibraryScopeEffectsPage } from './identity-scope-effects.ts';
 import { identitySourceConsumerLibraryWork, type IdentitySourceConsumerMaintenanceContext } from '../semantic/identity-source-consumer-maintenance.ts';
-import type { LibraryIdentityPlanInput } from './identity-native-planner-types.ts';
+import type { LibraryIdentityPlanInput, LibraryIdentityPlanResult } from './identity-native-planner-types.ts';
+
+/** Named public ports retain the opaque seal through its owning page union during declaration emission. */
+export type LibraryIdentityNativePlanner = Readonly<{
+  advance(input: LibraryIdentityPlanInput): Promise<LibraryIdentityPlanResult>;
+  readPage(input: Parameters<typeof readLibraryScopeEffectsPage>[1]): Promise<LibraryScopeEffectsPage>;
+  verifySeal: typeof verifyLibraryScopeEffectsSeal;
+  advancePrepaid(
+    input: Omit<LibraryIdentityPlanInput, 'allowance'>,
+    context: IdentitySourceConsumerMaintenanceContext,
+  ): Promise<LibraryIdentityPlanResult>;
+}>;
 
 /** Default native producer ports. These never borrow receiving acknowledgments or publish a ready Source. */
-export function createLibraryIdentityNativePlanner({pool}: {pool: Pool}) {
+export function createLibraryIdentityNativePlanner({pool}: {pool: Pool}): LibraryIdentityNativePlanner {
   return Object.freeze({
     advance: (input: LibraryIdentityPlanInput) => advanceLibraryIdentityNativePlan(pool, input),
     readPage: (input: Parameters<typeof readLibraryScopeEffectsPage>[1]) => readLibraryScopeEffectsPage(pool, input),

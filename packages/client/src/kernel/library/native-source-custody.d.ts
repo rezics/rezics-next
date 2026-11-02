@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import { type AuthoritativeTime, type CommandTransaction } from '../command/command.ts';
+import { NativeCollectionWork } from './collection-source-work.ts';
 import type { WorkAllowance, WorkReceipt } from './collection-source.ts';
 import type { NativePublicOutputIdentity } from './native-source-output-types.ts';
 export type { NativeOutputActivation, NativePublicOutputIdentity } from './native-source-output-types.ts';
@@ -154,3 +155,16 @@ export declare function retireNativeCollectionCapturePage(client: CommandTransac
     captureId?: string;
     episode: NativeSourceRetirement['episode'];
 }): Promise<NativeSourceRetirementResult>;
+/** A maintenance observation of the real retained raw capture. Does not consult ready-reader Scope state.
+ * The caller holds the Source-local Core transaction; all owner/capture locks remain on that client.
+ */
+export declare function readNativeIdentitySourceBasis(tx: CommandTransaction, identity: NativeSourceIdentity, input: NativeSourceCaptureWork & {
+    captureId?: string;
+}, sharedWork?: NativeCollectionWork): Promise<Unavailable | {
+    status: 'current';
+    frontier: NativeSourceFrontier;
+    complete: boolean;
+    collectionFence: string;
+    accountFence: string;
+    work: WorkReceipt;
+}>;
