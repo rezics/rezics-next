@@ -7,6 +7,7 @@ import type { Task } from './types.ts';
 import type { LaunchContext } from './launch-context.ts';
 import { brief, fixturePool, temporaryDirectory } from './test-support.ts';
 import type { ProofReservation } from './verification.ts';
+import { storybookServers } from './storybook.ts';
 
 test('the worker prompt names the main checkout as read-only and asks for paths inside the worktree', () => {
   const task = {
@@ -18,6 +19,22 @@ test('the worker prompt names the main checkout as read-only and asks for paths 
   const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main');
   expect(prompt).toContain('/repo/main is read-only');
   expect(prompt).toContain('Write files only by paths inside /work/trees/t1');
+});
+
+test('an interface worker is told to start and use its own worktree Storybook', () => {
+  const task = (kind: string, paths: string[]) =>
+    ({
+      worktree: '/work/trees/t1',
+      branch: 'worker/t1',
+      brief: { markdown: 'Polish the card.', kind, paths, acceptance: { command: ['bun', 'test'], tests: [] } },
+    }) as unknown as Task;
+  const prompt = workerPrompt(task('interface', ['packages/ui/src/card.tsx']), undefined, undefined, [], '/repo');
+  const [ui] = storybookServers('/work/trees/t1', { kind: 'interface', paths: ['packages/ui/src/card.tsx'] });
+  expect(prompt).toContain(`--port ${ui!.port} --exact-port`);
+  expect(prompt).toContain(ui!.url);
+  expect(prompt).not.toContain('apps/web storybook');
+  const other = workerPrompt(task('implementation', ['tools/goal/src/a.ts']), undefined, undefined, [], '/repo');
+  expect(other).not.toContain('Storybook');
 });
 
 test('the worker prompt says failures outside the declared paths are reported, not blocking', () => {

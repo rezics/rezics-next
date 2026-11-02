@@ -48,6 +48,13 @@ them: `bun test <files>`, the kernel check for kernel tests and the focused Web 
 these commands for the files the branch already changes, including the sibling tests of changed sources. Waits use one
 call with a yield of at least 300 seconds. The task's acceptance command defines when its work is done.
 
+A task whose paths touch `apps/web` or `packages/ui`, or an interface task without either, works against Storybook
+served from its own worktree (`storybook.ts`). Each catalogue gets a loopback port derived from the worktree path, so
+resumes reconnect and concurrent worktrees never share a server; a Web task also gets its own UI catalogue for the
+`STORYBOOK_UI_URL` ref. The prompt names the start commands and `/mcp` endpoints, and the Codex adapter adds those
+endpoints as MCP servers on fresh launches and resumes. The account's own MCP servers, such as the browser and
+Playwright, stay enabled; consultations still ignore the account configuration.
+
 The dev landing train runs exactly one mandatory root typecheck on each final candidate: once for a combined batch or
 once for an individual landing. It does not run affected, sibling, acceptance, native, import or page-story checks
 before dev advances. Those checks run through the independent verifier after integration. Promotion runs the full

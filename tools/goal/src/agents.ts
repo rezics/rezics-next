@@ -16,8 +16,11 @@ export type AgentLaunchOptions = {
   /** A fresh train editing session; only adapters with supportsResolver may receive this mode. */
   resolver?: boolean;
   codex?: Settings['codex'];
+  /** Streamable HTTP MCP servers this launch adds, such as the worktree's own Storybook. */
+  mcpServers?: readonly McpServer[];
   resumeSession?: string;
 };
+export type McpServer = { name: string; url: string };
 export type SessionUsage = {
   model: string | null;
   effort: string | null;
