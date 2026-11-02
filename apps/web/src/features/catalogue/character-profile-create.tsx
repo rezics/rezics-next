@@ -221,8 +221,7 @@ function CharacterProfileCreateLive({
   const hasMeaningfulWork = () =>
     terms.length > 1 ||
     terms.some(
-      (term) =>
-        term.language !== locale || term.label !== '' || term.description !== '' || term.aliases !== '',
+      (term) => term.language !== locale || term.label !== '' || term.description !== '' || term.aliases !== '',
     ) ||
     facts.length > 0 ||
     field !== '';

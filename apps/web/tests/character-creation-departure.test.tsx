@@ -33,15 +33,8 @@ test('Character creation protects local work, preserves unknown retries on Stay 
   const { act } = await import('react');
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
-  const {
-    createMemoryHistory,
-    createRootRoute,
-    createRoute,
-    createRouter,
-    Outlet,
-    RouterProvider,
-    useRouter,
-  } = await import('@tanstack/react-router');
+  const { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider, useRouter } =
+    await import('@tanstack/react-router');
   const testing = createRequire(require.resolve('storybook/test'));
   const { within, waitFor } = await import(testing.resolve('@testing-library/dom'));
   const { default: userEvent } = await import(testing.resolve('@testing-library/user-event'));
@@ -67,7 +60,11 @@ test('Character creation protects local work, preserves unknown retries on Stay 
     create: (command) => {
       requests.push({ command, credential });
       if (mode === 'invalid')
-        return Promise.resolve({ ok: false, reason: 'invalid', errors: [{ pointer: '/labels/ja', code: 'unsupported' }] });
+        return Promise.resolve({
+          ok: false,
+          reason: 'invalid',
+          errors: [{ pointer: '/labels/ja', code: 'unsupported' }],
+        });
       if (mode === 'unknown') return Promise.resolve({ ok: false, reason: 'unavailable' });
       if (mode === 'deferred') return new Promise((resolve) => (resolveDeferred = resolve));
       return Promise.resolve(success);
@@ -149,7 +146,10 @@ test('Character creation protects local work, preserves unknown retries on Stay 
     });
     await replace(input(m.correction_amount()), '+170');
     await act(async () =>
-      user.selectOptions(canvas.getByRole('combobox', { name: m.correction_unit() }), 'http://www.wikidata.org/entity/Q174728'),
+      user.selectOptions(
+        canvas.getByRole('combobox', { name: m.correction_unit() }),
+        'http://www.wikidata.org/entity/Q174728',
+      ),
     );
     await act(async () =>
       user.selectOptions(canvas.getByRole('combobox', { name: m.correction_add_qualifier() }), 'schema:inLanguage'),
@@ -164,7 +164,9 @@ test('Character creation protects local work, preserves unknown retries on Stay 
     await replace(citation, 'https://example.org/traveler');
     expect(beforeUnloadIsBlocked()).toBe(true);
     await click(m.character_create());
-    await waitFor(() => expect(canvas.getByRole('region', { name: m.character_create_correction_summary() })).toBeDefined());
+    await waitFor(() =>
+      expect(canvas.getByRole('region', { name: m.character_create_correction_summary() })).toBeDefined(),
+    );
     expect(requests).toHaveLength(1);
     const correctionLink = canvas
       .getByRole('region', { name: m.character_create_correction_summary() })
@@ -185,7 +187,10 @@ test('Character creation protects local work, preserves unknown retries on Stay 
     expect(correctionLink.getAttribute('href')).toBe(`#${encodeURIComponent(targetId)}`);
     expect(input(m.catalogue_create_language(), 1).value).toBe('ja');
     expect(amount.value).toBe('+170');
-    expect(canvas.getByRole('combobox', { name: m.correction_unit() })).toHaveProperty('value', 'http://www.wikidata.org/entity/Q174728');
+    expect(canvas.getByRole('combobox', { name: m.correction_unit() })).toHaveProperty(
+      'value',
+      'http://www.wikidata.org/entity/Q174728',
+    );
     expect(qualifier.value).toBe('schema:inLanguage');
     expect(input(m.correction_value()).value).toBe('ja');
     expect(citation.value).toBe('https://example.org/traveler');
