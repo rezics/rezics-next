@@ -14,9 +14,7 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 test('Character creation keeps multilingual identity, initial facts, correction and exact recovery in one family', async () => {
   const require = createRequire(import.meta.url);
   const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
-  const window = new Window({
-    url: 'https://site.invalid/en/catalogue/character',
-  });
+  const window = new Window({ url: 'https://site.invalid/en/catalogue/character' });
   const globals = {
     window,
     document: window.document,
@@ -35,11 +33,7 @@ test('Character creation keeps multilingual identity, initial facts, correction 
   };
   const saved = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals))
-    Object.defineProperty(globalThis, key, {
-      configurable: true,
-      writable: true,
-      value,
-    });
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const testing = createRequire(require.resolve('storybook/test'));
@@ -56,9 +50,7 @@ test('Character creation keeps multilingual identity, initial facts, correction 
   const host = window.document.createElement('main') as unknown as HTMLElement;
   window.document.body.append(host);
   const root = createRoot(host);
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const user = userEvent.setup({ document: window.document, delay: null });
   let generation = 0;
   type Fixture = ReturnType<typeof characterProfileFixture>;
@@ -77,11 +69,7 @@ test('Character creation keeps multilingual identity, initial facts, correction 
             address={`character-family-${generation}`}
             observed={
               signedIn
-                ? {
-                    state: 'signed-in',
-                    subject: 'character-family-reader',
-                    csrfToken: 'original-epoch',
-                  }
+                ? { state: 'signed-in', subject: 'character-family-reader', csrfToken: 'original-epoch' }
                 : { state: 'signed-out', csrfToken: null }
             }
           >
@@ -109,9 +97,7 @@ test('Character creation keeps multilingual identity, initial facts, correction 
       if (text) await user.type(element, text);
     });
   const name = async (text = 'A new traveler') => {
-    const field = await canvas().findByRole('textbox', {
-      name: m.catalogue_create_label(),
-    });
+    const field = await canvas().findByRole('textbox', { name: m.catalogue_create_label() });
     await replace(field, text);
   };
   const add = async (property: string) =>
@@ -140,15 +126,11 @@ test('Character creation keeps multilingual identity, initial facts, correction 
     await add('schema:url');
     await replace(control(m.correction_url()), 'https://example.org/first');
     await add('schema:url');
-    const survivor = canvas().getAllByRole('textbox', {
-      name: m.correction_url(),
-    })[1] as HTMLInputElement;
+    const survivor = canvas().getAllByRole('textbox', { name: m.correction_url() })[1] as HTMLInputElement;
     const survivorId = survivor.id;
     const editSurvivor = capture(survivor);
     await add('schema:url');
-    const removedInput = canvas().getAllByRole('textbox', {
-      name: m.correction_url(),
-    })[2] as HTMLInputElement;
+    const removedInput = canvas().getAllByRole('textbox', { name: m.correction_url() })[2] as HTMLInputElement;
     const editRemoved = capture(removedInput);
     const remove = async (input: HTMLInputElement) => {
       const row = within(input.closest('[data-slot="character-initial-fact"]')! as HTMLElement);
@@ -181,83 +163,40 @@ test('Character creation keeps multilingual identity, initial facts, correction 
     const ready = characterProfileFixture();
     await render(ready);
     await name();
-    const search = canvas().getByRole('link', {
-      name: m.catalogue_create_search(),
-    });
+    const search = canvas().getByRole('link', { name: m.catalogue_create_search() });
     expect(search.getAttribute('href')).toBe('/en/search?q=A%20new%20traveler');
     expect(host.querySelector('form')!.getAttribute('aria-label')).toBe(m.character_create_correction_form());
     expect(control(m.catalogue_create_language()).getAttribute('aria-describedby')).toContain('language-help');
     await click(m.catalogue_create_add_language());
-    const languages = canvas().getAllByRole('textbox', {
-      name: m.catalogue_create_language(),
-    });
+    const languages = canvas().getAllByRole('textbox', { name: m.catalogue_create_language() });
     expect(window.document.activeElement).toBe(languages[1]);
     await replace(languages[1]!, 'ja');
-    await replace(
-      canvas().getAllByRole('textbox', {
-        name: m.catalogue_create_label(),
-      })[1]!,
-      '旅人',
-    );
-    await replace(
-      canvas().getAllByRole('textbox', {
-        name: m.catalogue_create_aliases(),
-      })[1]!,
-      '旅の人\n旅行者',
-    );
+    await replace(canvas().getAllByRole('textbox', { name: m.catalogue_create_label() })[1]!, '旅人');
+    await replace(canvas().getAllByRole('textbox', { name: m.catalogue_create_aliases() })[1]!, '旅の人\n旅行者');
     expect(canvas().getAllByRole('textbox', { name: m.catalogue_create_label() })[1]!.getAttribute('lang')).toBe('ja');
     await click(m.catalogue_create_add_language());
     await act(async () =>
-      user.click(
-        canvas().getAllByRole('button', {
-          name: m.catalogue_create_remove_language(),
-        })[0]!,
-      ),
+      user.click(canvas().getAllByRole('button', { name: m.catalogue_create_remove_language() })[0]!),
     );
     expect(canvas().getAllByRole('textbox', { name: m.catalogue_create_language() })).toHaveLength(3);
     await click(m.candidate_cancel());
     expect(canvas().getAllByRole('textbox', { name: m.catalogue_create_label() })[1]).toHaveProperty('value', '旅人');
     await act(async () =>
-      user.click(
-        canvas().getAllByRole('button', {
-          name: m.catalogue_create_remove_language(),
-        })[0]!,
-      ),
+      user.click(canvas().getAllByRole('button', { name: m.catalogue_create_remove_language() })[0]!),
     );
     await act(async () =>
-      user.click(
-        canvas().getAllByRole('button', {
-          name: m.catalogue_create_remove_language(),
-        })[0]!,
-      ),
+      user.click(canvas().getAllByRole('button', { name: m.catalogue_create_remove_language() })[0]!),
     );
     // Removing the middle row preserves its successor and moves focus within the same terms editor.
     expect(canvas().getAllByRole('textbox', { name: m.catalogue_create_language() })).toHaveLength(2);
     expect(window.document.activeElement).toBe(
-      canvas().getAllByRole('textbox', {
-        name: m.catalogue_create_language(),
-      })[1],
+      canvas().getAllByRole('textbox', { name: m.catalogue_create_language() })[1],
     );
     await click(m.catalogue_create_remove_language());
     await click(m.catalogue_create_add_language());
-    await replace(
-      canvas().getAllByRole('textbox', {
-        name: m.catalogue_create_language(),
-      })[1]!,
-      'ja',
-    );
-    await replace(
-      canvas().getAllByRole('textbox', {
-        name: m.catalogue_create_label(),
-      })[1]!,
-      '旅人',
-    );
-    await replace(
-      canvas().getAllByRole('textbox', {
-        name: m.catalogue_create_aliases(),
-      })[1]!,
-      '旅の人\n旅行者',
-    );
+    await replace(canvas().getAllByRole('textbox', { name: m.catalogue_create_language() })[1]!, 'ja');
+    await replace(canvas().getAllByRole('textbox', { name: m.catalogue_create_label() })[1]!, '旅人');
+    await replace(canvas().getAllByRole('textbox', { name: m.catalogue_create_aliases() })[1]!, '旅の人\n旅行者');
     await add('schema:url');
     expect(window.document.activeElement).toBe(host.querySelector('[data-slot="character-initial-fact"] > div'));
     await replace(control(m.correction_url()), 'https://example.org/traveler');
@@ -272,18 +211,10 @@ test('Character creation keeps multilingual identity, initial facts, correction 
     const facts = host.querySelectorAll('[data-slot="character-initial-fact"]');
     const heightId = control(m.correction_amount()).id;
     await act(async () =>
-      user.click(
-        within(facts[0] as HTMLElement).getByRole('button', {
-          name: m.recipe_remove_field(),
-        }),
-      ),
+      user.click(within(facts[0] as HTMLElement).getByRole('button', { name: m.recipe_remove_field() })),
     );
     await act(async () =>
-      user.click(
-        within(facts[0] as HTMLElement).getByRole('button', {
-          name: m.recipe_remove_field(),
-        }),
-      ),
+      user.click(within(facts[0] as HTMLElement).getByRole('button', { name: m.recipe_remove_field() })),
     );
     expect(control(m.correction_amount()).id).toBe(heightId);
     expect(window.document.activeElement).toBe(host.querySelector('[data-slot="character-initial-fact"] > div'));
@@ -296,22 +227,12 @@ test('Character creation keeps multilingual identity, initial facts, correction 
       aliases: { ja: ['旅の人', '旅行者'] },
       statements: {
         'schema:height': [
-          {
-            value: {
-              type: 'value',
-              content: {
-                amount: '+170',
-                unit: 'http://www.wikidata.org/entity/Q174728',
-              },
-            },
-          },
+          { value: { type: 'value', content: { amount: '+170', unit: 'http://www.wikidata.org/entity/Q174728' } } },
         ],
       },
     });
     expect((writes(ready)[0]!.body as { statements: object }).statements).not.toHaveProperty('schema:url');
-    const reader = canvas().getByRole('link', {
-      name: m.candidate_view_public(),
-    });
+    const reader = canvas().getByRole('link', { name: m.candidate_view_public() });
     expect(reader.getAttribute('href')).toBe(`/en/subjects/${characterCreatedId}/a-new-traveler`);
     expect(canvas().getByRole('link', { name: m.character_correct() }).getAttribute('href')).toBe(
       `${reader.getAttribute('href')}/character`,
@@ -340,9 +261,7 @@ test('Character creation keeps multilingual identity, initial facts, correction 
 
     // Removing an earlier same-property fact cannot retarget the surviving correction.
     await add('schema:height');
-    const secondAmount = canvas().getAllByRole('textbox', {
-      name: m.correction_amount(),
-    })[1] as HTMLInputElement;
+    const secondAmount = canvas().getAllByRole('textbox', { name: m.correction_amount() })[1] as HTMLInputElement;
     await replace(secondAmount, '+');
     await submit();
     const firstFact = within(host.querySelector('[data-slot="character-initial-fact"]') as HTMLElement);
@@ -358,12 +277,7 @@ test('Character creation keeps multilingual identity, initial facts, correction 
     expect(window.document.activeElement).toBe(secondAmount);
     expect(secondAmount.value).toBe('+');
     await click(m.catalogue_create_add_language());
-    await replace(
-      canvas().getAllByRole('textbox', {
-        name: m.catalogue_create_language(),
-      })[1]!,
-      'fr',
-    );
+    await replace(canvas().getAllByRole('textbox', { name: m.catalogue_create_language() })[1]!, 'fr');
     await submit();
     await click(m.catalogue_create_remove_language());
     await click(m.catalogue_create_remove_language());
@@ -437,9 +351,7 @@ test('Character creation keeps multilingual identity, initial facts, correction 
       if (scenario === 'uncertain') {
         await waitFor(() => expect(host.textContent).toContain(m.catalogue_create_uncertain()));
         expect(control(m.catalogue_create_label()).closest('fieldset[disabled]')).not.toBeNull();
-        const remove = canvas().getByRole('button', {
-          name: m.recipe_remove_field(),
-        }) as HTMLButtonElement;
+        const remove = canvas().getByRole('button', { name: m.recipe_remove_field() }) as HTMLButtonElement;
         expect(remove.disabled || remove.closest('fieldset[disabled]') !== null).toBe(true);
         await act(async () => user.click(remove));
         await beforeCommand('https://example.org/late-uncertain');
@@ -475,10 +387,7 @@ test('Character creation keeps multilingual identity, initial facts, correction 
       ...recovered.transport,
       read: async (id) => {
         readIds.push(id);
-        return {
-          state: 'ready',
-          href: `/en/subjects/${id}/recovered-traveler`,
-        };
+        return { state: 'ready', href: `/en/subjects/${id}/recovered-traveler` };
       },
     });
     await name('Recovered traveler');
@@ -504,13 +413,7 @@ test('Character creation keeps multilingual identity, initial facts, correction 
     await name('Conflict draft');
     await submit();
     expect(host.textContent).toContain(m.catalogue_create_conflict());
-    expect(
-      (
-        canvas().getByRole('button', {
-          name: m.correction_retry(),
-        }) as HTMLButtonElement
-      ).disabled,
-    ).toBe(true);
+    expect((canvas().getByRole('button', { name: m.correction_retry() }) as HTMLButtonElement).disabled).toBe(true);
     await click(m.catalogue_create_review_new());
     expect(control(m.catalogue_create_label()).value).toBe('Conflict draft');
     await submit();
@@ -525,27 +428,14 @@ test('Character creation keeps multilingual identity, initial facts, correction 
     const pair = characterProfileFixture();
     await render(pair, pair.transport, true, true);
     await waitFor(() =>
-      expect(
-        canvas().getAllByRole('form', {
-          name: m.character_create_correction_form(),
-        }),
-      ).toHaveLength(2),
+      expect(canvas().getAllByRole('form', { name: m.character_create_correction_form() })).toHaveLength(2),
     );
     const ids = [...host.querySelectorAll('[id]')].map((element) => element.id);
     expect(new Set(ids).size).toBe(ids.length);
-    await replace(
-      canvas().getAllByRole('textbox', {
-        name: m.catalogue_create_label(),
-      })[0]!,
-      'Independent first',
+    await replace(canvas().getAllByRole('textbox', { name: m.catalogue_create_label() })[0]!, 'Independent first');
+    expect((canvas().getAllByRole('textbox', { name: m.catalogue_create_label() })[1] as HTMLInputElement).value).toBe(
+      '',
     );
-    expect(
-      (
-        canvas().getAllByRole('textbox', {
-          name: m.catalogue_create_label(),
-        })[1] as HTMLInputElement
-      ).value,
-    ).toBe('');
 
     const retired = characterProfileFixture();
     let finish!: (result: CreateResult) => void;
@@ -571,11 +461,7 @@ test('Character creation keeps multilingual identity, initial facts, correction 
     expect(control(m.correction_url()).value).toBe('https://example.org/pending');
     await render(retired, delayed, false, false, false);
     await act(async () =>
-      finish({
-        ok: true,
-        id: characterCreatedId,
-        reader: { state: 'ready', href: '/en/retired-reader' },
-      }),
+      finish({ ok: true, id: characterCreatedId, reader: { state: 'ready', href: '/en/retired-reader' } }),
     );
     expect(host.innerHTML).not.toContain('Retired private draft');
     expect(host.innerHTML).not.toContain('/en/retired-reader');

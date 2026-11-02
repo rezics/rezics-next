@@ -131,10 +131,7 @@ function CharacterProfileCreateLive({
   const isCurrent = () => lifetime.active() && !retired.current;
   const o = { locale: locale as never };
   const termsId = useId();
-  const [definitions, setDefinitions] = useState<{
-    source: Release;
-    value: Release;
-  }>();
+  const [definitions, setDefinitions] = useState<{ source: Release; value: Release }>();
   const release = definitions?.source === suppliedRelease ? definitions.value : suppliedRelease;
   const [refreshFailed, setRefreshFailed] = useState(false);
   const [definitionsRequired, setDefinitionsRequired] = useState(false);
@@ -317,10 +314,7 @@ function CharacterProfileCreateLive({
       }}
     >
       <a
-        className={buttonVariants({
-          variant: 'outline',
-          className: actionClassName,
-        })}
+        className={buttonVariants({ variant: 'outline', className: actionClassName })}
         href={`/${locale}/search${terms[0]?.label.trim() ? `?q=${encodeURIComponent(terms[0].label.trim())}` : ''}`}
       >
         {m.catalogue_create_search({}, o)}
@@ -525,11 +519,7 @@ function CharacterProfileCreateLive({
                     definition={definition}
                     locale={locale}
                     read={{ release, public: { related: {} } }}
-                    feedback={{
-                      id: address,
-                      address: 'fact',
-                      errors: scalarFeedback.get(`${address}-fact`) ?? [],
-                    }}
+                    feedback={{ id: address, address: 'fact', errors: scalarFeedback.get(`${address}-fact`) ?? [] }}
                     onChange={(value) => {
                       const admitted = () =>
                         isCurrent() &&

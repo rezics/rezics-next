@@ -19,9 +19,7 @@ mock.module('@rezics/ui/entity-picker', () => ({
 test('Character local choices preserve exact recovery on Stay and fence abandoned holders and picker callbacks', async () => {
   const require = createRequire(import.meta.url);
   const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
-  const window = new Window({
-    url: 'https://site.test/en/catalogue/character',
-  });
+  const window = new Window({ url: 'https://site.test/en/catalogue/character' });
   const globals = {
     window,
     document: window.document,
@@ -38,11 +36,7 @@ test('Character local choices preserve exact recovery on Stay and fence abandone
   };
   const saved = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals))
-    Object.defineProperty(globalThis, key, {
-      configurable: true,
-      writable: true,
-      value,
-    });
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   const { act } = await import('react');
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
@@ -101,9 +95,7 @@ test('Character local choices preserve exact recovery on Stay and fence abandone
   const host = window.document.createElement('main');
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false, gcTime: 0 } },
-  });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   const canvas = within(host),
     screen = within(window.document.body as unknown as HTMLElement);
   const user = userEvent.setup({ document: window.document, delay: null });
@@ -117,11 +109,7 @@ test('Character local choices preserve exact recovery on Stay and fence abandone
           <CandidateReaderBoundary
             key={key}
             address={key}
-            observed={{
-              state: 'signed-in',
-              subject: 'reader',
-              csrfToken: 'current-csrf',
-            }}
+            observed={{ state: 'signed-in', subject: 'reader', csrfToken: 'current-csrf' }}
           >
             <CharacterProfile
               {...fixture.props}
@@ -138,10 +126,7 @@ test('Character local choices preserve exact recovery on Stay and fence abandone
   try {
     await show('creation');
     const label = await waitFor(
-      () =>
-        canvas.getByRole('textbox', {
-          name: m.catalogue_create_label(),
-        }) as HTMLInputElement,
+      () => canvas.getByRole('textbox', { name: m.catalogue_create_label() }) as HTMLInputElement,
     );
     const oldPicker = pickers.get(m.character_choose_existing())!;
     await act(async () => user.type(label, 'Private traveler'));
@@ -149,9 +134,7 @@ test('Character local choices preserve exact recovery on Stay and fence abandone
       user.selectOptions(canvas.getByRole('combobox', { name: m.character_initial_fact() }), 'schema:url'),
     );
     await click(m.character_add_fact());
-    const scalar = canvas.getByRole('textbox', {
-      name: m.correction_url(),
-    }) as HTMLInputElement;
+    const scalar = canvas.getByRole('textbox', { name: m.correction_url() }) as HTMLInputElement;
     await act(async () => user.type(scalar, 'https://example.org/private'));
     const scalarProps = Object.keys(scalar).find((key) => key.startsWith('__reactProps$'))!;
     const oldScalar = Reflect.get(scalar, scalarProps).onChange;
@@ -176,11 +159,7 @@ test('Character local choices preserve exact recovery on Stay and fence abandone
     await act(async () => {
       oldPicker([{ id: 'retired-choice' }]);
       oldScalar({ target: { value: 'https://example.org/retired-choice' } });
-      finishCreate({
-        ok: true,
-        id: 'late-created',
-        reader: { state: 'unavailable' },
-      });
+      finishCreate({ ok: true, id: 'late-created', reader: { state: 'unavailable' } });
     });
     expect(loads).toHaveLength(loadCount);
     expect(host.querySelector('[data-slot="character-created"]')).toBeNull();
@@ -195,15 +174,11 @@ test('Character local choices preserve exact recovery on Stay and fence abandone
       user.selectOptions(canvas.getByRole('combobox', { name: m.relation_property() }), 'schema:character'),
     );
     await choose(m.relation_target(), characterProfileId);
-    const citation = canvas.getByRole('textbox', {
-      name: m.relation_citation(),
-    }) as HTMLInputElement;
+    const citation = canvas.getByRole('textbox', { name: m.relation_citation() }) as HTMLInputElement;
     await act(async () => user.type(citation, 'https://example.test/credit'));
     await click(m.relation_propose());
     const confirmation = within(
-      canvas.getByRole('group', {
-        name: m.candidate_confirm_title({ action: m.relation_propose() }),
-      }),
+      canvas.getByRole('group', { name: m.candidate_confirm_title({ action: m.relation_propose() }) }),
     );
     await click(m.relation_propose(), confirmation);
     await waitFor(() => expect(proposals).toHaveLength(1));

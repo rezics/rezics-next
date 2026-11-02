@@ -95,13 +95,7 @@ function CharacterProfileLive({
   const result = query.data;
   const currentRead = isCurrentCharacterRead(result, query, { id, work });
   if (currentRead) retained.current = result;
-  const reloadContext = {
-    id,
-    work,
-    locale,
-    session,
-    generation: lifetime.generation,
-  };
+  const reloadContext = { id, work, locale, session, generation: lifetime.generation };
   const currentReloadContext = useRef(reloadContext);
   currentReloadContext.current = reloadContext;
   useLayoutEffect(() => {
@@ -277,19 +271,11 @@ function CharacterProfileLive({
                 </details>
                 {created.reader.state === 'ready' ? (
                   <div className="flex flex-wrap gap-2">
-                    <a
-                      className={buttonVariants({
-                        className: createActionClass,
-                      })}
-                      href={created.reader.href}
-                    >
+                    <a className={buttonVariants({ className: createActionClass })} href={created.reader.href}>
                       {m.candidate_view_public({}, o)}
                     </a>
                     <a
-                      className={buttonVariants({
-                        variant: 'outline',
-                        className: createActionClass,
-                      })}
+                      className={buttonVariants({ variant: 'outline', className: createActionClass })}
                       href={`${created.reader.href}/character${work ? `?work=${encodeURIComponent(work)}` : ''}`}
                     >
                       {m.character_correct({}, o)}
@@ -315,10 +301,7 @@ function CharacterProfileLive({
                           setCreated({ ...created, reader });
                         } catch {
                           if (!lifetime.active()) return;
-                          setCreated({
-                            ...created,
-                            reader: { state: 'unavailable' },
-                          });
+                          setCreated({ ...created, reader: { state: 'unavailable' } });
                         } finally {
                           if (!lifetime.active()) return;
                           setReading(false);
@@ -396,10 +379,7 @@ function CharacterProfileLive({
                             <div key={statement.id} className="space-y-2">
                               <PartValue
                                 part={statement}
-                                read={{
-                                  release: current.release,
-                                  public: character,
-                                }}
+                                read={{ release: current.release, public: character }}
                                 locale={locale}
                               />
                               {statement.qualifiers.map((part, index) => (
@@ -412,10 +392,7 @@ function CharacterProfileLive({
                                   :{' '}
                                   <PartValue
                                     part={part}
-                                    read={{
-                                      release: current.release,
-                                      public: character,
-                                    }}
+                                    read={{ release: current.release, public: character }}
                                     locale={locale}
                                   />
                                 </p>
@@ -426,10 +403,7 @@ function CharacterProfileLive({
                                     <PartValue
                                       key={at}
                                       part={part}
-                                      read={{
-                                        release: current.release,
-                                        public: character,
-                                      }}
+                                      read={{ release: current.release, public: character }}
                                       locale={locale}
                                     />
                                   ))}
@@ -466,12 +440,7 @@ function CharacterProfileLive({
                           current.release.properties[property]?.datatype === 'wikibase-item' &&
                           current.release.properties[property]?.relation?.group === 'classification',
                       )}
-                      read={{
-                        ok: true,
-                        release: current.release,
-                        public: character,
-                        source: null,
-                      }}
+                      read={{ ok: true, release: current.release, public: character, source: null }}
                       locale={locale}
                       search={search}
                       transport={facts(character.subject.id)}
