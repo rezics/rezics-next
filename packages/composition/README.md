@@ -192,6 +192,8 @@ standalone BASIC view. The configured limit is the component's page-read cost; i
 The website's bare account continuation cursor requires exactly one distinct planned account-list descriptor.
 Identical descriptors share a continuation read. With no account list or several distinct descriptors, continuation
 is unavailable before any standalone list request; document order never selects its target. Other page reads remain intact.
+Account post rows address the selected post with a localized canonical thread URL and `?post=<post-id>#post-<post-id>`;
+the existing thread reader owns resolving that locator across post pages and preserving it through canonical redirects.
 
 `SearchBox` and `LinkGrid` read nothing. A `LinkGrid` `href` starting with `/` is a site path
 without the locale; the website renderer adds the locale.

@@ -379,6 +379,25 @@ function threadHref(locale: string, thread: { id: unknown; title?: unknown }): s
   return `/${encodeURIComponent(locale)}${canonicalThreadHref({ id, title: threadTitle({ title }) })}`;
 }
 
+/** The locator chooses the native post page; the fragment selects the disclosed post on that page. */
+function accountPostHref(locale: string, post: Record<string, unknown>): string | undefined {
+  if (
+    typeof post.id !== 'string' ||
+    !post.id ||
+    typeof post.threadId !== 'string' ||
+    !post.threadId
+  )
+    return undefined;
+
+  const thread = isRecord(post.thread) ? post.thread : undefined;
+  const href = threadHref(locale, {
+    id: post.threadId,
+    title: thread?.title,
+  });
+  const locator = encodeURIComponent(post.id);
+  return `${href}?post=${locator}#post-${locator}`;
+}
+
 export function AccountPosts(props: Record<string, unknown>) {
   return (
     <AccountList
@@ -396,7 +415,7 @@ export function AccountPosts(props: Record<string, unknown>) {
               ? thread.title
               : m.threads_untitled({}, { locale: value.locale as never });
           const when = dateText(post.createdAt, value.locale);
-          const href = threadHref(value.locale, { id: post.threadId, title: thread?.title });
+          const href = accountPostHref(value.locale, post);
           return (
             <ContentItem
               key={typeof post.id === 'string' ? post.id : index}
