@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { dirname } from 'node:path';
+import { createRequire } from 'node:module';
 import { act, createRef, type ComponentProps } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { LocaleProvider } from '@rezics/ui/locale';
@@ -12,7 +13,7 @@ import { RemovedPost } from '../src/threads/post-removed';
 import type { ThreadPost } from '../src/threads/reads';
 import { ExistingReviewNotice, SignInPrompt } from '../src/threads/write-prompts';
 
-// New observations are authored UNRUN. No native request, clock, authorization or retry is replaced.
+// Component-boundary acceptance: native authority and browser layout remain separate obligations.
 const source = recorded.posts[0]!;
 const deadline = '2099-11-23T03:04:05.000Z';
 const reviewId = '0192f3a0-6c1e-7b2a-9d4e-000000000061';
@@ -160,6 +161,9 @@ test('Complete usable removed post recovery and write prompts: independent callb
   const previousLocale = getLocale();
   setLocale('en', { reload: false });
   const { createRoot } = await import('react-dom/client');
+  const storybookRequire = createRequire(createRequire(import.meta.url).resolve('storybook/test'));
+  const { default: userEvent } = await import(storybookRequire.resolve('@testing-library/user-event'));
+  const user = userEvent.setup({ document: window.document });
   const host = window.document.createElement('div');
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
@@ -207,6 +211,13 @@ test('Complete usable removed post recovery and write prompts: independent callb
       await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
     });
   };
+  const keyboard = async (element: HTMLElement, keys: string) => {
+    await act(async () => {
+      element.focus();
+      await user.keyboard(keys);
+      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+    });
+  };
 
   try {
     await act(async () => { root.render(render()); });
@@ -230,12 +241,12 @@ test('Complete usable removed post recovery and write prompts: independent callb
     // Native controls currently stay enabled; duplicate suppression belongs to the caller's intent.
     expect(restore.disabled).toBe(false);
     expect(refresh.disabled).toBe(false);
-    await click(restore);
+    await keyboard(restore, '{Enter}');
     await click(restore);
     expect(restores).toEqual([1, 0]);
     expect(pending).toBe(true);
-    await click(refresh);
-    await click(button(1, m.thread_post_restore()));
+    await keyboard(refresh, ' ');
+    await keyboard(button(1, m.thread_post_restore()), '{Enter}');
     expect(refreshes).toEqual([0, 1]);
     expect(restores).toEqual([1, 1]);
     expect(first.querySelector('[data-slot="tombstone"]')).not.toBeNull();
@@ -254,15 +265,22 @@ test('Complete usable removed post recovery and write prompts: independent callb
     expect(first.style.minHeight).toBe('320px');
     firstMenu.focus();
     expect(window.document.activeElement).toBe(menus[0]!.current);
-    await click(firstMenu);
+    await keyboard(firstMenu, '{Enter}');
     const copy = [...window.document.querySelectorAll('[role="menuitem"]')]
       .find((element) => element.textContent === m.thread_content_copy_link())!;
     expect(copy).toBeDefined();
-    await click(copy as unknown as HTMLElement);
+    await keyboard(copy as unknown as HTMLElement, '{Enter}');
     expect(copies).toEqual([1, 0]);
     expect(window.document.activeElement).toBe(menus[0]!.current);
     secondMenu.focus();
     expect(window.document.activeElement).toBe(secondMenu);
+    await keyboard(secondMenu, '{Enter}');
+    const secondCopy = [...window.document.querySelectorAll('[role="menuitem"]')]
+      .find((element) => element.textContent === m.thread_content_copy_link())!;
+    expect(secondCopy).toBeDefined();
+    await keyboard(secondCopy as unknown as HTMLElement, '{Enter}');
+    expect(copies).toEqual([1, 1]);
+    expect(window.document.activeElement).toBe(menus[1]!.current);
     restored = true;
     await act(async () => { root.render(render()); });
     expect(rows[0]!.current).toBe(first);
