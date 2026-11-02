@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, useEffect, useState } from 'react';
+import * as routerApi from '@tanstack/react-router';
 import { fromPlainText } from '@rezics/document';
 import type { AuthoredDraft } from '../src/features/catalogue/authored-field-state';
 import { authoredFieldNavigationState } from '../src/features/catalogue/authored-field-navigation';
@@ -52,14 +53,6 @@ test('same-tab and browser-back departures can stay with every retained field or
   const storybook = dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir));
   const { within } = await import(Bun.resolveSync('@testing-library/dom', storybook));
   const { default: userEvent } = await import(Bun.resolveSync('@testing-library/user-event', storybook));
-  const {
-    createMemoryHistory,
-    createRootRoute,
-    createRoute,
-    createRouter,
-    RouterProvider,
-    useNavigate,
-  } = await import('@tanstack/react-router');
   const { AuthoredFieldNavigation } = await import('../src/features/catalogue/authored-field-navigation');
   const { m } = await import('../src/paraglide/messages.js');
   const drafts = {
@@ -68,7 +61,7 @@ test('same-tab and browser-back departures can stay with every retained field or
   };
   let visits = 0;
   function Editor() {
-    const navigate = useNavigate();
+    const navigate = routerApi.useNavigate();
     const [pending, setPending] = useState(false);
     const [active, setActive] = useState('first');
     const [internal, setInternal] = useState('');
@@ -92,12 +85,12 @@ test('same-tab and browser-back departures can stay with every retained field or
     }, []);
     return <p>Destination</p>;
   }
-  const rootRoute = createRootRoute();
-  const editorRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: Editor });
-  const awayRoute = createRoute({ getParentRoute: () => rootRoute, path: 'away', component: Away });
-  const router = createRouter({
+  const rootRoute = routerApi.createRootRoute();
+  const editorRoute = routerApi.createRoute({ getParentRoute: () => rootRoute, path: '/', component: Editor });
+  const awayRoute = routerApi.createRoute({ getParentRoute: () => rootRoute, path: 'away', component: Away });
+  const router = routerApi.createRouter({
     routeTree: rootRoute.addChildren([editorRoute, awayRoute]),
-    history: createMemoryHistory({ initialEntries: ['/away', '/'] }),
+    history: routerApi.createMemoryHistory({ initialEntries: ['/away', '/'] }),
   });
   const host = window.document.createElement('div') as unknown as HTMLElement;
   window.document.body.append(host);
@@ -105,7 +98,7 @@ test('same-tab and browser-back departures can stay with every retained field or
   const user = userEvent.setup({ document: window.document });
   const click = async (name: string) => act(async () => user.click(within(host).getByRole('button', { name })));
   try {
-    await act(async () => root.render(<RouterProvider router={router} />));
+    await act(async () => root.render(<routerApi.RouterProvider router={router} />));
     await click('Switch property');
     await click('Refresh current text');
     await click('Open comparison');
