@@ -562,7 +562,7 @@ test('only the current discard question resets its original replacement, preserv
 for (const action of ['reload', 'field'])
   test(`${action} retires current text before I/O and recovers private replacements after denial`, async () => {
     const view = await mountedFamily();
-    const { host, render, user, within, AuthoredField, authoredFixture, authoredProperty, m, compose, click, input } =
+    const { window, host, render, user, within, AuthoredField, authoredFixture, authoredProperty, m, compose, click, input } =
       view;
     try {
       const fixture = authoredFixture();
@@ -572,7 +572,7 @@ for (const action of ['reload', 'field'])
       initial.release.properties[other] = structuredClone(initial.release.properties[authoredProperty]!);
       initial.release.types[initial.public.subject.type]!.properties.push(other);
       let settle!: (value: AuthoredRead) => void;
-      let defer = true;
+      let defer = false;
       const read = mock(async (property = authoredProperty) =>
         defer
           ? new Promise<AuthoredRead>((resolve) => {
@@ -585,6 +585,10 @@ for (const action of ['reload', 'field'])
       const show = (value = initial) =>
         render(<AuthoredField initial={value} locale="en" transport={transport} confirm={fixture.confirm} />);
       await show();
+      await act(async () => user.selectOptions(within(host).getByRole('combobox'), other));
+      expect(window.document.activeElement).not.toBe(within(host).getByRole('region', { name: m.authored_selected() }));
+      await act(async () => user.selectOptions(within(host).getByRole('combobox'), authoredProperty));
+      defer = true;
       await compose(host, 'Private replacement survives a denied reload.');
       const props = (element: Element) =>
         Reflect.get(
@@ -608,12 +612,13 @@ for (const action of ['reload', 'field'])
       expect(host.innerHTML).not.toContain('An aviator meets');
       expect(host.innerHTML).not.toContain('Private replacement survives');
       expect(host.querySelector('header a')).toBeNull();
-      expect(read.mock.calls[0]).toEqual([action === 'field' ? other : authoredProperty, initial.session]);
+      expect(read.mock.calls.at(-1)).toEqual([action === 'field' ? other : authoredProperty, initial.session]);
       await act(async () => settle({ ok: false, reason: 'denied' }));
       expect(host.textContent).toContain(m.catalogue_result_read_denied());
       expect(host.innerHTML).not.toContain('An aviator meets');
       defer = false;
       await click(host, m.catalogue_retry_loading_result());
+      expect(window.document.activeElement).not.toBe(within(host).getByRole('region', { name: m.authored_selected() }));
       if (action === 'field')
         await act(async () => user.selectOptions(within(host).getByRole('combobox'), authoredProperty));
       const reads = read.mock.calls.length;
@@ -640,6 +645,91 @@ for (const action of ['reload', 'field'])
       await view.close();
     }
   });
+
+test('keyboard read recovery focuses the selected-text boundary after its opener disappears', async () => {
+  const view = await mountedFamily();
+  const { window, host, render, user, within, AuthoredField, authoredFixture, m } = view;
+  try {
+    const fixture = authoredFixture();
+    const initial: AuthoredRead = { ok: false, reason: 'unavailable' };
+    let finishRead!: () => void;
+    const readComplete = new Promise<void>((resolve) => (finishRead = resolve));
+    const read = mock(async (...args: Parameters<typeof fixture.transport.read>) => {
+      const result = await fixture.transport.read(...args);
+      finishRead();
+      return result;
+    });
+    await render(
+      <AuthoredField
+        initial={initial}
+        locale="en"
+        transport={{ ...fixture.transport, read }}
+        confirm={fixture.confirm}
+      />,
+    );
+    const retry = within(host).getByRole('button', { name: m.catalogue_retry_loading_result() });
+    retry.focus();
+    await act(async () => {
+      await user.keyboard('{Enter}');
+      await readComplete;
+      await Bun.sleep(0);
+    });
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(window.document.activeElement).toBe(
+      within(host).getByRole('region', { name: m.authored_selected() }),
+    );
+  } finally {
+    await view.close();
+  }
+});
+
+test('delayed read focus stays quiet after focus moves away and after the read retires', async () => {
+  const view = await mountedFamily();
+  const { window, host, render, user, within, AuthoredField, authoredFixture, m } = view;
+  try {
+    const fixture = authoredFixture();
+    const initial = await fixture.transport.read();
+    const pending: Array<(read: AuthoredRead) => void> = [];
+    const read = mock(() => new Promise<AuthoredRead>((resolve) => pending.push(resolve)));
+    const show = () =>
+      render(
+        <AuthoredField
+          initial={initial}
+          locale="en"
+          transport={{ ...fixture.transport, read }}
+          confirm={fixture.confirm}
+        />,
+      );
+    const outside = window.document.createElement('button');
+    outside.textContent = 'Outside authored text';
+    window.document.body.append(outside);
+    await show();
+    const reload = () => within(host).getByRole('button', { name: m.authored_reload_current_text() });
+    reload().focus();
+    await act(async () => user.keyboard('{Enter}'));
+    outside.focus();
+    outside.blur();
+    outside.focus();
+    await act(async () => {
+      pending[0]!(initial);
+      await Bun.sleep(0);
+    });
+    expect(window.document.activeElement).toBe(outside);
+
+    reload().focus();
+    await act(async () => user.keyboard('{Enter}'));
+    const retired = pending[1]!;
+    await render(null);
+    outside.focus();
+    await act(async () => {
+      retired(initial);
+      await Bun.sleep(0);
+    });
+    expect(window.document.activeElement).toBe(outside);
+  } finally {
+    await view.close();
+  }
+});
 
 test('a Literary reading refusal retains authored originals while retiring old callbacks and results', async () => {
   const view = await mountedFamily();
