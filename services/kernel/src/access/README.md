@@ -3484,6 +3484,8 @@ restore generation, installation, writer fence, physical/receiving custody and
 the original accepted source continuation/receipt. Historical copy publication,
 early source transfer, successful child, registration and page EOF cannot issue it.
 Registration creates only a pending obligation. No identity is backfilled.
+Barrier validation rejects account IDs without a native route before checking
+out a home; a UUID without a route cannot select partition zero through coercion.
 
 `prepareCurrentAuthReceivingClosure` releases its native checkout before returning.
 `verifyCurrentAuthReceivingClosure` re-locks that exact receipt and binding in the

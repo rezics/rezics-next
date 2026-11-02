@@ -27,6 +27,7 @@ function shape(value: AuthErasureBarrier | AuthErasureSource, source: boolean) {
     !value ||
     Object.keys(value).sort().join(',') !== keys ||
     !uuid(value.accountId) ||
+    routeOf(value.accountId) === null ||
     !Number.isSafeInteger(value.version) ||
     value.version < 1 ||
     typeof value.at !== 'string' ||
