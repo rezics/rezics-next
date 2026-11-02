@@ -896,14 +896,14 @@ test('statement family owns labels, independent supplied parts, feedback, exact 
         review: () => navigationFixture.review,
       }),
     );
-    const year = control(host, m.correction_year());
-    await input(year, '1946');
+    const navigationYear = control(host, m.correction_year());
+    await input(navigationYear, '1946');
     await click(host, m.correction_add_reference());
-    const citationSelect = control(host, m.correction_add_part(), 1);
-    await input(citationSelect, 'schema:url');
-    await click(citationSelect.closest('[data-slot="field"]')!.parentElement!, m.correction_add());
-    const citation = 'https://example.org/navigation-retained-citation';
-    await input(control(host, m.correction_url(), 1), citation);
+    const navigationCitationSelect = control(host, m.correction_add_part(), 1);
+    await input(navigationCitationSelect, 'schema:url');
+    await click(navigationCitationSelect.closest('[data-slot="field"]')!.parentElement!, m.correction_add());
+    const navigationCitation = 'https://example.org/navigation-retained-citation';
+    await input(control(host, m.correction_url(), 1), navigationCitation);
     expect(unloadIsProtected()).toBe(true);
     const departure = host.querySelector<HTMLAnchorElement>('a[href="/search"]')!;
     await act(async () => {
