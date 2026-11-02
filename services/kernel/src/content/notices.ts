@@ -11,6 +11,7 @@ import deleteFinalizations from './notice-delete-finalizations.sql';
 import expireFinalizations from './notice-expire-finalizations.sql';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import deleteAccountNoticePageSql from './delete-account-notices-page.sql';
+import eraseAccountNoticePageSql from './account-notice-erasure-page.sql';
 import deleteNoticeSeen from './delete-account-notice-seen.sql';
 import deleteExpiredPage from './delete-expired-notices-page.sql';
 import noticePartitionState from './read-notice-partition-state.sql';
@@ -251,15 +252,151 @@ export async function deleteAccountNoticeSeen(pool: Pool, accountId: string): Pr
   );
 }
 
-/** Provisional consumer contract; the notice erasure producer owns paging and seen-marker cleanup. */
 export type NoticeErasureCursor = string;
 
+type NoticeErasurePageCursor = {
+  version: 1;
+  accountId: string;
+  stage: 'notices' | 'finalizations';
+  noticeAfter: { createdAt: string; noticeId: string } | null;
+  finalizationAfter: { createdAt: string; kind: string; sourceId: string } | null;
+};
+
+type NoticeErasurePage = {
+  found: number;
+  nextStage: 'notices' | 'finalizations' | null;
+  done: boolean;
+  pending: number;
+  noticeCreatedAt: string | null;
+  noticeId: string | null;
+  finalizationCreatedAt: string | null;
+  finalizationKind: string | null;
+  finalizationSourceId: string | null;
+};
+
+function readNoticeErasureCursor(value: string | null, accountId: string): NoticeErasurePageCursor {
+  if (value === null) {
+    return {
+      version: 1,
+      accountId,
+      stage: 'notices',
+      noticeAfter: null,
+      finalizationAfter: null,
+    };
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new TypeError('Invalid notice erasure cursor');
+  }
+  if (
+    !parsed ||
+    typeof parsed !== 'object' ||
+    Array.isArray(parsed) ||
+    !('version' in parsed) ||
+    parsed.version !== 1 ||
+    !('accountId' in parsed) ||
+    parsed.accountId !== accountId ||
+    !('stage' in parsed) ||
+    (parsed.stage !== 'notices' && parsed.stage !== 'finalizations') ||
+    !('noticeAfter' in parsed) ||
+    !('finalizationAfter' in parsed)
+  )
+    throw new TypeError('Invalid notice erasure cursor');
+
+  const validNoticeAfter = (after: unknown): after is NoticeErasurePageCursor['noticeAfter'] =>
+    after === null ||
+    (typeof after === 'object' &&
+      !Array.isArray(after) &&
+      after !== null &&
+      'createdAt' in after &&
+      typeof after.createdAt === 'string' &&
+      Number.isFinite(Date.parse(after.createdAt)) &&
+      'noticeId' in after &&
+      typeof after.noticeId === 'string' &&
+      routeOf(after.noticeId) === routeOf(accountId));
+  const validFinalizationAfter = (after: unknown): after is NoticeErasurePageCursor['finalizationAfter'] =>
+    after === null ||
+    (typeof after === 'object' &&
+      !Array.isArray(after) &&
+      after !== null &&
+      'createdAt' in after &&
+      typeof after.createdAt === 'string' &&
+      Number.isFinite(Date.parse(after.createdAt)) &&
+      'kind' in after &&
+      typeof after.kind === 'string' &&
+      ['reply', 'mention', 'moderation_decision'].includes(after.kind) &&
+      'sourceId' in after &&
+      typeof after.sourceId === 'string' &&
+      routeOf(after.sourceId) !== null);
+
+  if (!validNoticeAfter(parsed.noticeAfter) || !validFinalizationAfter(parsed.finalizationAfter))
+    throw new TypeError('Invalid notice erasure cursor');
+  if (
+    (parsed.stage === 'notices' && parsed.finalizationAfter !== null) ||
+    (parsed.stage === 'finalizations' && parsed.noticeAfter !== null)
+  )
+    throw new TypeError('Invalid notice erasure cursor');
+  return parsed as NoticeErasurePageCursor;
+}
+
+/** Delete one bounded recipient-index page and retain a real keyset cursor for all remaining work. */
 export async function eraseAccountNoticesPage(
-  _deps: { pool: Pool },
-  _accountId: string,
-  _after: NoticeErasureCursor | null,
+  deps: { pool: Pool },
+  accountId: string,
+  after: NoticeErasureCursor | null,
 ): Promise<{ next: NoticeErasureCursor | null; found: number; pending: number }> {
-  const error = new Error('Notice erasure phase unavailable: producer has not landed');
-  error.name = 'CommunityErasureProducerUnavailableError';
-  throw error;
+  const route = requiredRoute(accountId, 'notice account');
+  const cursor = readNoticeErasureCursor(after, accountId);
+  return withWritableNoticeRoute(deps.pool, route, async (client) => {
+    const page = (await eraseAccountNoticePageSql.run(client, {
+      route,
+      account_id: accountId,
+      stage: cursor.stage,
+      notice_after_created_at: cursor.noticeAfter?.createdAt ?? null,
+      notice_after_id: cursor.noticeAfter?.noticeId ?? null,
+      finalization_after_created_at: cursor.finalizationAfter?.createdAt ?? null,
+      finalization_after_kind: cursor.finalizationAfter?.kind ?? null,
+      finalization_after_id: cursor.finalizationAfter?.sourceId ?? null,
+    })) as NoticeErasurePage;
+    if (!page) throw new Error('Notice erasure page returned no status');
+    if (
+      !Number.isSafeInteger(page.found) ||
+      page.found < 0 ||
+      page.found > 50 ||
+      !Number.isSafeInteger(page.pending) ||
+      page.pending < 0 ||
+      page.done !== (page.nextStage === null) ||
+      page.done !== (page.pending === 0)
+    )
+      throw new Error('Notice erasure page returned an invalid completion status');
+    let next: NoticeErasureCursor | null = null;
+    if (!page.done) {
+      const nextStage = page.nextStage;
+      if (nextStage === null) throw new Error('Notice erasure page has pending work without a next stage');
+      next = JSON.stringify({
+        version: 1,
+        accountId,
+        stage: nextStage,
+        noticeAfter:
+          nextStage === 'notices' && page.noticeCreatedAt !== null && page.noticeId !== null
+            ? { createdAt: page.noticeCreatedAt, noticeId: page.noticeId }
+            : null,
+        finalizationAfter:
+          nextStage === 'finalizations' &&
+          cursor.stage === 'finalizations' &&
+          page.finalizationCreatedAt !== null &&
+          page.finalizationKind !== null &&
+          page.finalizationSourceId !== null
+            ? {
+                createdAt: page.finalizationCreatedAt,
+                kind: page.finalizationKind,
+                sourceId: page.finalizationSourceId,
+              }
+            : null,
+      } satisfies NoticeErasurePageCursor);
+    }
+    return { next, found: Number(page.found), pending: Number(page.pending) };
+  });
 }

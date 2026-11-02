@@ -38,6 +38,10 @@ export type PopulationTotalDelivery = Extract<PopulationTotalEvent, { action: 'd
 
 export const RATING_EVENTS = {
   [POPULATION_TOTAL_DELIVERY]: populationTotalDelivery,
+  'com.rezics.rating.erasure-page.applied.v1': Type.Object(
+    { voterId: Type.String({ pattern: UUID }), pageId: Type.String({ pattern: UUID }) },
+    { additionalProperties: false },
+  ),
   'com.rezics.rating.voter-realm.changed.v1': Type.Object(
     { voterId: Type.String({ pattern: UUID }), realmId: Type.String({ pattern: UUID }) },
     { additionalProperties: false },
@@ -115,6 +119,7 @@ export const RATING_EVENTS = {
       {
         voterId: Type.String({ pattern: UUID }),
         direction: Type.Union([Type.Literal('adding'), Type.Literal('removing')]),
+        erasurePageId: Type.Optional(Type.String({ pattern: UUID })),
         votes: Type.Array(
           Type.Object(
             {

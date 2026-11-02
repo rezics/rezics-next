@@ -7,6 +7,7 @@ import type { Effect } from '../events/effects.ts';
 import type { CloudEvent } from '../events/log.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { RATING_EVENTS } from './events.ts';
+import { acknowledgeRatingErasurePage } from './erasure-status.ts';
 import applyComponent from './aggregate-component-apply.sql';
 import { readRatingAggregate } from './aggregate-read-components.ts';
 import readCountedVote from './population-vote-counted-read.sql';
@@ -426,6 +427,7 @@ export async function applyRatingSegmentPageEvent(
     | {
         voterId: string;
         direction: 'adding' | 'removing';
+        erasurePageId?: string;
         votes: Array<{
           questionId: string;
           targetId: string;
@@ -506,6 +508,8 @@ export async function applyRatingSegmentPageEvent(
           }),
         );
   await applyRatingChanges(pool, changes);
+  if ('erasurePageId' in data && data.erasurePageId !== undefined)
+    await acknowledgeRatingErasurePage(pool, data.voterId, data.erasurePageId);
 }
 
 /** Sum at most sixteen shards. A missing question returns null; a question without votes returns zero components. */

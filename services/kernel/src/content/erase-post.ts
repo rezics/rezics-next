@@ -16,6 +16,7 @@ import {
   commandTime,
   authoritativeTimeValue,
   runCommand,
+  type CommandEvent,
   type CommandAuthorization,
   type CommandAttempt,
   type CommandOutcome,
@@ -29,9 +30,9 @@ import { newId, partitionOf, routeOf } from '../route/route.ts';
 import readScope from './read-erasure-scope.sql';
 import boardRealm from './realm-of-board.sql';
 import erase from './erase-content.sql';
+import erasePostLogicalPage from './erase-post-logical-page.sql';
 import takedown from './takedown.sql';
 import insertDecision from './insert-moderation-decision.sql';
-import countRevisions from './erase-post-revisions.sql';
 import validatePage from './validate-erasure-page.sql';
 
 export type ErasePostDependencies = Readonly<{
@@ -532,25 +533,21 @@ export async function erasePostLogicalPageAsInitiator(
       },
       async (tx) => {
         await lockDiscoveryMutation(tx, discovery);
-        let erasedRevisions = 0;
-        const events = [];
-        for (const id of postIds) {
-          const parameters = { route, id, kind: 'post', deleted_at: null };
-          const args = (statement: { params: readonly string[] }) =>
-            statement.params.map((name) => parameters[name as keyof typeof parameters]);
-          const counted = await tx.query<{ revisions: string }>(countRevisions.sql, args(countRevisions));
-          erasedRevisions += Number(counted.rows[0]!.revisions);
-          if (!Number.isSafeInteger(erasedRevisions) || erasedRevisions < 0)
-            throw new RangeError('Operation counter overflow');
-          const changed = (await tx.query<{ security_revision: string }>(erase.sql, args(erase))).rows[0];
-          // An already erased post cannot become a new effect on a different key.
-          if (!changed) throw new GrantDeniedError();
-          events.push({
+        const changed = await erasePostLogicalPage.run(tx, { route, post_ids: postIds });
+        // Every requested post was authorized at this attempt's T and must still
+        // be eligible for its first logical erasure in the same transaction.
+        if (changed.length !== postIds.length) throw new GrantDeniedError();
+        const erasedRevisions = changed.reduce((total, row) => total + Number(row.revisions), 0);
+        if (!Number.isSafeInteger(erasedRevisions) || erasedRevisions < 0)
+          throw new RangeError('Operation counter overflow');
+        const events: CommandEvent[] = changed.map((row) => {
+          if (row.securityRevision === null) throw new Error('Erased post has no security revision');
+          return {
             type: 'com.rezics.content.post.erased.v1',
-            subject: id,
-            data: { postId: id, securityRevision: changed.security_revision },
-          });
-        }
+            subject: row.postId,
+            data: { postId: row.postId, securityRevision: row.securityRevision },
+          };
+        });
         events.push(...(await applyDiscoveryMutation(tx, discovery)));
         return { value: { postIds, processedPosts: postIds.length, erasedRevisions }, events };
       },

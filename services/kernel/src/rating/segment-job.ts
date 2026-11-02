@@ -14,6 +14,7 @@ import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
 import { RATING_EVENTS } from './events.ts';
 import { isRatingEligibilityJob, readRatingEligibilityJob, type RatingEligibilityJob } from './eligibility.ts';
 import { populationsForVoteKey } from './voter-realms.ts';
+import recordErasurePage from './erasure-status-record.sql';
 import decrementPending from './population-pending-decrement.sql';
 import incrementPending from './population-pending-increment.sql';
 import readRealm from './voter-realm-read.sql';
@@ -25,7 +26,7 @@ import ensureVoterState from './voter-state-ensure.sql';
 import readVoterState from './voter-state-read.sql';
 import updateVoterState from './voter-state-update.sql';
 import deleteVotePage from './voter-votes-delete-page.sql';
-import deleteVoterRealms from './voter-realms-delete-all.sql';
+import deleteVoterRealms from './erasure-status-delete-realms.sql';
 import { finishVoterRealmRemoval, type VoterRealmJob } from './voter-realms.ts';
 import { reconcileMergedSubjectVote, resolveSubjectTarget } from './merge-job.ts';
 
@@ -63,6 +64,7 @@ export type SegmentPageEventData = {
   direction: 'adding' | 'removing' | 'rekey';
   at?: string;
   allowMissing?: boolean;
+  erasurePageId?: string;
   votes: SegmentVote[];
 };
 export type SegmentPageResult = {
@@ -363,6 +365,16 @@ export async function processRatingSegmentPage(
           populations: input.populations,
         });
         const eventData = data(page);
+        if (row.purgeVotes) {
+          eventData.erasurePageId = command.transactionId;
+          await recordErasurePage.run(tx, {
+            route: voterRoute,
+            voter_id: input.voterId,
+            page_id: command.transactionId,
+            terminal: false,
+            had_votes: false,
+          });
+        }
         return {
           value: {
             cursor: { questionId: last.questionId, targetId: last.targetId },
@@ -374,7 +386,21 @@ export async function processRatingSegmentPage(
         };
       }
 
-      if (row.purgeVotes) await deleteVoterRealms.run(tx, { route: voterRoute, voter_id: input.voterId });
+      if (row.purgeVotes) {
+        const deleted = await deleteVoterRealms.run(tx, { route: voterRoute, voter_id: input.voterId });
+        if (deleted.length === RATING_SEGMENT_PAGE_SIZE)
+          return {
+            value: { cursor, done: false, eventData: empty, nextJobs: [] },
+            events: [{ type: SEGMENT_PAGE, subject: input.voterId, data: empty }],
+          };
+        await recordErasurePage.run(tx, {
+          route: voterRoute,
+          voter_id: input.voterId,
+          page_id: row.transitionId,
+          terminal: true,
+          had_votes: row.cursorQuestionId !== null,
+        });
+      }
       await updateVoterState.run(tx, {
         route: voterRoute,
         voter_id: input.voterId,
