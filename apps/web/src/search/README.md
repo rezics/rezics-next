@@ -38,8 +38,9 @@ The Revert edits action appears at the bottom of Filters only when condition or 
 the committed search; it restores those drafts, clears draft validation, and focuses a status announcement in the
 active surface.
 
-Range controls show a localized Remove range link only for a committed property range; drafts stay local and blank
-bounds remain invalid on Apply.
+Range controls show a localized Remove range link only for a committed property range; lower/upper strings and units
+stay local to the SearchPage committed-state identity across Filters dismissal and desktop/phone changes, and blank
+bounds remain invalid on Apply. The condition/language Revert action does not reset range drafts.
 
 Property changes preserve values only when released datatypes and value definitions match, ranges only when both
 definitions support the selected unit, and statement qualifiers only when both properties allow the same released

@@ -24,6 +24,7 @@ import { refinementProperties } from './refinement/model';
 import { facetRequest, readFacetPage, facetProblem, refinementKey, type FacetState } from './refinement/request';
 import { Refinement, type RefinementData } from './refinement/refinement';
 import { readRefinement } from './refinement/server';
+import { createRangeDraftState, updateRangeDraft, type RangeDraft } from './refinement/range-draft';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import { readDiscoveryKinds, type LegacySearchPage, type DiscoveryState } from './discovery';
 import {
@@ -427,6 +428,8 @@ export function SearchPage({
   const stateKey = JSON.stringify(committedState);
   const latestStateKey = useRef(stateKey);
   latestStateKey.current = stateKey;
+  const [rangeDraftState, setRangeDraftState] = useState(() => createRangeDraftState(stateKey));
+  if (rangeDraftState.key !== stateKey) setRangeDraftState(createRangeDraftState(stateKey));
   const baseline = { condition: data?.condition, languages: committedState.languages };
   const [draft, setDraft] = useState(() => createFilterDraft(stateKey, baseline));
   const [revertedKey, setRevertedKey] = useState<string>();
@@ -744,6 +747,11 @@ export function SearchPage({
       {data?.refinement && (
         <Refinement
           key={`${surface}-${data.refinement.key}`}
+          rangeDraftKey={stateKey}
+          rangeDraftState={rangeDraftState}
+          onRangeDraftChange={(property: string, draft: RangeDraft) =>
+            setRangeDraftState((previous) => updateRangeDraft(previous, stateKey, property, draft))
+          }
           data={{
             ...data.refinement,
             properties: data.refinement.properties.filter(

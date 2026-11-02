@@ -14,6 +14,13 @@ import { FacetContinuationLedger } from './facet-continuation';
 import { refinementHref, type RefinementConditions, type RefinementProperty } from './model';
 import { PropertyPicker } from './property-picker';
 import { type FacetPage, type FacetState, type RequestedFacet } from './request';
+import {
+  createRangeDraftState,
+  getRangeDraft,
+  updateRangeDraft,
+  type RangeDraft,
+  type RangeDraftState,
+} from './range-draft';
 
 export type RefinementData = {
   key: string;
@@ -30,6 +37,9 @@ type RefinementProps = {
   load: Load;
   showSummary?: boolean;
   onNavigate?: (href: string) => void;
+  rangeDraftKey?: string;
+  rangeDraftState?: RangeDraftState;
+  onRangeDraftChange?: (property: string, draft: RangeDraft) => void;
 };
 
 /** Compose existing native fields and checkboxes inside the page's shared desktop/phone Filters surface. */
@@ -59,6 +69,9 @@ function RefinementInstance({
   load,
   showSummary = true,
   onNavigate,
+  rangeDraftKey,
+  rangeDraftState: suppliedRangeDraftState,
+  onRangeDraftChange,
   queryIdentity,
   isCurrent,
 }: RefinementProps & { queryIdentity: string; isCurrent: () => boolean }) {
@@ -74,6 +87,13 @@ function RefinementInstance({
     data.initial?.status === 'ready' ? data.initial.page.facets : [],
   );
   const [state, setState] = useState(data.initial);
+  const draftKey = rangeDraftKey ?? queryIdentity;
+  const [localRangeDraftState, setLocalRangeDraftState] = useState(() => createRangeDraftState(draftKey));
+  const rangeDraftState = suppliedRangeDraftState ?? localRangeDraftState;
+  const changeRangeDraft =
+    onRangeDraftChange ??
+    ((property: string, draft: RangeDraft) =>
+      setLocalRangeDraftState((previous) => updateRangeDraft(previous, draftKey, property, draft)));
   const [busy, setBusy] = useState(false);
   const active = useRef<AbortController | null>(null);
   const continuations = useRef(new FacetContinuationLedger(queryIdentity));
@@ -338,7 +358,19 @@ function RefinementInstance({
               <p className="text-sm text-muted-foreground">{m.search_subject_types_help()}</p>
             )}
             {definition.mode === 'range' ? (
-              <RangeControl definition={definition} conditions={conditions} href={href} navigate={navigate} />
+              <RangeControl
+                definition={definition}
+                conditions={conditions}
+                href={href}
+                navigate={navigate}
+                draft={getRangeDraft(rangeDraftState, draftKey, definition.property, {
+                  lower: conditions.ranges?.[definition.property]?.gte?.toString() ?? '',
+                  upper: conditions.ranges?.[definition.property]?.lte?.toString() ?? '',
+                  unit: conditions.ranges?.[definition.property]?.unit ?? definition.units[0] ?? '',
+                  invalid: false,
+                })}
+                onDraftChange={(draft) => changeRangeDraft(definition.property, draft)}
+              />
             ) : definition.mode === 'unsupported' ? (
               <p className="text-sm text-muted-foreground">{m.refinement_unsupported()}</p>
             ) : (
@@ -409,29 +441,21 @@ function RangeControl({
   conditions,
   href,
   navigate,
+  draft,
+  onDraftChange,
 }: {
   definition: RefinementProperty;
   conditions: RefinementConditions;
   href: (conditions: RefinementConditions) => string;
   navigate: (href: string) => void;
+  draft: RangeDraft;
+  onDraftChange: (draft: RangeDraft) => void;
 }) {
   const id = useId();
   const range = conditions.ranges?.[definition.property];
   const applied = range !== undefined;
-  const committedLower = range?.gte?.toString() ?? '';
-  const committedUpper = range?.lte?.toString() ?? '';
-  const committedUnit = range?.unit ?? definition.units[0] ?? '';
-  const [lower, setLower] = useState(committedLower);
-  const [upper, setUpper] = useState(committedUpper);
-  const [unit, setUnit] = useState(committedUnit);
-  const [invalid, setInvalid] = useState(false);
+  const { lower, upper, unit, invalid } = draft;
   const time = definition.datatype === 'time';
-  useEffect(() => {
-    setLower(committedLower);
-    setUpper(committedUpper);
-    setUnit(committedUnit);
-    setInvalid(false);
-  }, [applied, committedLower, committedUpper, committedUnit]);
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-2">
@@ -445,8 +469,7 @@ function RangeControl({
             step={time ? '1' : 'any'}
             value={lower}
             onChange={(event) => {
-              setLower(event.currentTarget.value);
-              setInvalid(false);
+              onDraftChange({ ...draft, lower: event.currentTarget.value, invalid: false });
             }}
           />
         </Field>
@@ -460,8 +483,7 @@ function RangeControl({
             step={time ? '1' : 'any'}
             value={upper}
             onChange={(event) => {
-              setUpper(event.currentTarget.value);
-              setInvalid(false);
+              onDraftChange({ ...draft, upper: event.currentTarget.value, invalid: false });
             }}
           />
         </Field>
@@ -469,7 +491,11 @@ function RangeControl({
       {!time && (
         <Field>
           <FieldLabel htmlFor={`${id}-unit`}>{m.refinement_unit()}</FieldLabel>
-          <NativeSelect id={`${id}-unit`} value={unit} onChange={(event) => setUnit(event.currentTarget.value)}>
+          <NativeSelect
+            id={`${id}-unit`}
+            value={unit}
+            onChange={(event) => onDraftChange({ ...draft, unit: event.currentTarget.value })}
+          >
             {definition.units.map((value) => (
               <NativeSelectOption key={value} value={value}>
                 {value}
@@ -513,10 +539,10 @@ function RangeControl({
               ) ||
               (gte !== undefined && lte !== undefined && gte > lte)
             ) {
-              setInvalid(true);
+              onDraftChange({ ...draft, invalid: true });
               return;
             }
-            setInvalid(false);
+            onDraftChange({ ...draft, invalid: false });
             navigate(
               href({
                 ...conditions,
