@@ -173,10 +173,7 @@ function RecipeEditorLive({
       (terms.length !== 1 ||
         terms.some(
           (term, index) =>
-            (index === 0 && term.language !== locale) ||
-            !!term.label ||
-            !!term.description ||
-            !!term.aliases,
+            (index === 0 && term.language !== locale) || !!term.label || !!term.description || !!term.aliases,
         ))) ||
       rows.some((row) =>
         row.result?.ok

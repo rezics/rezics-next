@@ -174,13 +174,7 @@ export const submitRecipeCorrection = createServerFn({ method: 'POST', strict: f
     try {
       const authorization = await candidateAuthorization(data.expectedReader);
       if (!authorization) return { ok: false, reason: 'denied' };
-      return await proposeRecipe(
-        kernelClient(),
-        authorization,
-        data.command,
-        requestLocale() ?? 'en',
-        data.replay,
-      );
+      return await proposeRecipe(kernelClient(), authorization, data.command, requestLocale() ?? 'en', data.replay);
     } catch (error) {
       return {
         ok: false,
