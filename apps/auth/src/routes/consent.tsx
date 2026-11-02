@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { m } from '../paraglide/messages.js';
 import { AuthPage } from '../frame';
 import { authPost, failureMessage } from '../api';
-import { approvedScopes, readConsent, type Consent } from '../consent';
+import { approvedScopes, createConsentReview, type Consent } from '../consent';
 import { ErrorAlert } from '../alert';
 import { PermissionLimits, RequestedPermission } from '../permission-view';
 
@@ -29,26 +29,21 @@ function ConsentRequest({ clientId, scope }: { clientId: string; scope: string }
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState('');
   const submitting = useRef(false);
+  const reader = useRef<ReturnType<typeof createConsentReview> | null>(null);
   const alert = useRef<HTMLDivElement>(null);
   const requested = [...new Set(scope.split(/\s+/).filter(Boolean))];
 
   useEffect(() => {
-    if (!clientId) return;
-    let active = true;
-    void readConsent(clientId).then((result) => {
-      if (!active) return;
-      if (result.ok) {
-        setConsent(result.body);
-        setState('ready');
-      } else if (result.status === 401) setState('signed-out');
-      else if (result.status === 404) setState('not-found');
-      else {
-        setMessage(failureMessage(result.status, result.code, result.retryAfter));
-        setState('failed');
-      }
+    const review = createConsentReview(clientId, (result) => {
+      setConsent(result.consent ?? null);
+      setMessage(result.message ?? '');
+      setState(result.state);
     });
+    reader.current = review;
+    void review.load();
     return () => {
-      active = false;
+      review.dispose();
+      reader.current = null;
     };
   }, [clientId]);
 
@@ -77,6 +72,11 @@ function ConsentRequest({ clientId, scope }: { clientId: string; scope: string }
     <AuthPage heading={m.auth_consent_heading()}>
       <div className="auth-login-form">
         {state === 'loading' ? <p role="status">{m.auth_consent_loading()}</p> : null}
+        {state === 'failed' ? (
+          <Button type="button" onClick={() => void reader.current?.load()}>
+            {m.auth_security_retry_action()}
+          </Button>
+        ) : null}
         {state === 'signed-out' ? (
           <>
             <p>{m.auth_consent_sign_in_required()}</p>

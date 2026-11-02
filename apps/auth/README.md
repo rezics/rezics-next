@@ -106,6 +106,9 @@ target, and the page never redirects.
 Signed-out visitors get a link to `/login`. Unknown and first-party clients show a localized not-found message.
 Other failures use the shared status-and-code messages, including valid `Retry-After` seconds; Auth body text is
 never displayed. Pending approval disables both buttons, and a failure permits retrying.
+Failed review reads offer an explicit retry for the same client and requested scopes. While that read is pending,
+duplicate activation cannot start another read or enable approval. Changing either request parameter or leaving
+the page discards the old reader's results. Retrying the review never submits approval.
 
 Page paths render only for GET and HEAD. Other methods, including `POST /consent` and `POST /signup`, pass the
 original request through to Auth at the issuer origin in production, or through the existing `AUTH_ORIGIN` proxy in
