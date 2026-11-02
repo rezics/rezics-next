@@ -6,6 +6,7 @@ import { expect, within, userEvent, waitFor } from 'storybook/test';
 import { m } from '../../paraglide/messages.js';
 import { sessionQuery } from '../../session/query';
 import { SettingsPageView } from '../../settings/settings-page';
+import { ManagedAccountsSection } from '../../settings/managed-accounts';
 import { AppShell } from '../../shell/shell';
 import { PatternStory } from '../page';
 import { managedAccountsFailure, type ManagedAccountsIO } from '../../settings/managed-accounts-read';
@@ -194,4 +195,266 @@ export const LongLocaleBoundedRecoveryRTL: Story = {
       </div>
     </PatternStory>
   ),
+};
+
+// These supplied names and failure sequences are local contract-shaped examples: recorded routes do not
+// provide the required long-name/recovery combinations. They establish no native or physical-growth evidence.
+const longAccountName =
+  'Independent Readers, Translators and Community Archivists — 読書会 — مجموعة القراءة — ' +
+  'ReadingTogether'.repeat(10);
+const longHandle = 'readers-and-translators-independent-reading-group';
+function longInventory() {
+  const page = managedAccountsExample();
+  page.organizations.items = [page.organizations.items[0]!];
+  page.organizations.items[0]!.account.displayName = longAccountName;
+  page.organizations.items[0]!.account.handle = longHandle;
+  page.responsibilities.items[0]!.account!.displayName = null;
+  page.responsibilities.items[0]!.account!.handle = longHandle;
+  return page;
+}
+type InventoryScenario = 'recovery' | 'preparing' | 'inventory';
+function inventoryJourney(scenario: InventoryScenario): ManagedAccountsIO {
+  let initialReads = 0;
+  let organizations = 0;
+  let responsibilities = 0;
+  return async (cursors) => {
+    const page = longInventory();
+    if (scenario === 'preparing') {
+      page.organizations =
+        cursors.organizationsCursor !== undefined
+          ? { state: 'ready', items: [], next: null }
+          : initialReads++ === 0
+            ? { state: 'preparing', items: [], next: null }
+            : { state: 'ready', items: [], next: 'illustrative sparse organization +/=' };
+      page.responsibilities = {
+        items: [],
+        next: cursors.operatorsCursor ? null : 'illustrative sparse responsibility +/=',
+      };
+      return { ok: true, page };
+    }
+    if (cursors.organizationsCursor) {
+      organizations++;
+      return managedAccountsFailure(
+        organizations === 1 ? 409 : 400,
+        { code: 'stale_cursor' },
+        organizations === 1 ? { 'Retry-After': '1' } : undefined,
+      );
+    }
+    if (cursors.operatorsCursor) {
+      if (responsibilities++ === 0)
+        return managedAccountsFailure(503, { code: 'dependency_unavailable' }, { 'Retry-After': '1' });
+      page.responsibilities = { items: [], next: null };
+      return { ok: true, page };
+    }
+    if (initialReads++ === 0 && scenario === 'inventory')
+      return managedAccountsFailure(503, { code: 'dependency_unavailable' }, { 'Retry-After': '1' });
+    if (initialReads > 1 || scenario === 'inventory') page.organizations.next = null;
+    return { ok: true, page };
+  };
+}
+
+function InventoryJourneyExample({ scenario, multiple = false }: { scenario: InventoryScenario; multiple?: boolean }) {
+  const client = useQueryClient();
+  const [sources] = useState(() => {
+    client.setQueryData(sessionQuery.queryKey, {
+      state: 'signed-in',
+      csrfToken: 'story-csrf-token',
+      subject: managedViewer,
+    });
+    return [inventoryJourney(scenario), inventoryJourney('recovery')] as const;
+  });
+  return (
+    <AppShell>
+      <SettingsPageView
+        page={{
+          signedIn: true,
+          accountId: managedViewer,
+          preferences: { spoilerLevel: 1, suitability: 'blur', version: 1 },
+          notifications: { reply: true, mention: true },
+          csrfToken: 'story-csrf-token',
+          securityHref: 'https://auth.example.test/security',
+        }}
+        csrfToken="story-csrf-token"
+        managedAccountsIO={sources[0]}
+      />
+      {multiple ? (
+        <div dir="rtl">
+          <ManagedAccountsSection io={sources[1]} />
+        </div>
+      ) : null}
+    </AppShell>
+  );
+}
+
+async function inventoryGeometry(inventory: HTMLElement) {
+  const view = inventory.ownerDocument.defaultView!;
+  for (const control of inventory.querySelectorAll<HTMLElement>('a, button')) {
+    await expect(control.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    await expect(view.getComputedStyle(control).whiteSpace).not.toBe('nowrap');
+  }
+  for (const heading of inventory.querySelectorAll<HTMLElement>('[data-content-item-slot="title"]')) {
+    await expect(view.getComputedStyle(heading).getPropertyValue('-webkit-line-clamp')).not.toMatch(/^[12]$/);
+    await expect(heading.scrollWidth).toBeLessThanOrEqual(heading.clientWidth + 1);
+  }
+  await expect(inventory.scrollWidth).toBeLessThanOrEqual(inventory.clientWidth + 1);
+  const document = inventory.ownerDocument;
+  await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth + 1);
+}
+
+/** Keyboard and retained recovery through actual feed controls; shared phone390/desktop1280 globals. UNRUN. */
+export const IndependentRecovery: Story = {
+  render: () => (
+    <PatternStory visitor="Signed In" path="/settings?panel=compact#account">
+      <InventoryJourneyExample scenario="recovery" />
+    </PatternStory>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const organizations = await canvas.findByRole('region', { name: m.managed_organizations_title() });
+    const responsibilities = canvas.getByRole('region', { name: m.managed_operated_title() });
+    const org = within(organizations);
+    const resp = within(responsibilities);
+    const inventory = organizations.closest<HTMLElement>('[data-slot="managed-accounts"]')!;
+    const identity = org.getByRole('link', { name: longAccountName });
+    await expect(identity).toBeVisible();
+    await expect(resp.getByRole('link', { name: `@${longHandle}` })).toBeVisible();
+    const unavailable = resp.getByRole('heading', { name: m.settings_managed_identity_unavailable() }).closest('li')!;
+    await expect(within(unavailable).queryByRole('link')).toBeNull();
+    await inventoryGeometry(inventory);
+    identity.focus();
+    await userEvent.tab();
+    const more = org.getByRole('button', { name: m.settings_managed_load_more() });
+    await expect(more).toHaveFocus();
+    await expect(more.ownerDocument.defaultView!.getComputedStyle(more).boxShadow).not.toBe('none');
+    await expect(more).toHaveAccessibleDescription(m.managed_organizations_title());
+    await userEvent.keyboard('{Enter}');
+    const retry = await org.findByRole('button', { name: m.settings_retry() });
+    const firstPage = org.getByRole('button', { name: m.settings_managed_restart_list() });
+    await expect(retry).toBeDisabled();
+    await expect(firstPage).toBeDisabled();
+    await expect(org.getByRole('status', { name: m.managed_organizations_title() })).toHaveTextContent(
+      m.settings_managed_organizations_retry_wait(),
+    );
+    await expect(resp.queryByRole('alert')).toBeNull();
+    await expect(org.getByRole('link', { name: longAccountName })).toBe(identity);
+    await inventoryGeometry(inventory);
+    await waitFor(() => expect(retry).toBeEnabled(), { timeout: 3000 });
+    retry.focus();
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => expect(firstPage).toBeEnabled());
+    retry.focus();
+    await userEvent.tab();
+    await expect(firstPage).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => expect(org.queryByRole('alert')).toBeNull());
+    await expect(org.queryByRole('button')).toBeNull();
+    await expect(resp.getByRole('button', { name: m.settings_managed_load_more() })).toBeEnabled();
+    await userEvent.click(resp.getByRole('button', { name: m.settings_managed_load_more() }));
+    const responsibilityRetry = await resp.findByRole('button', { name: m.settings_retry() });
+    await expect(responsibilityRetry).toBeDisabled();
+    await expect(org.getByRole('link', { name: longAccountName })).toBeVisible();
+    await expect(resp.getByRole('group', { name: m.managed_operated_title() })).toBeVisible();
+    await expect(responsibilityRetry).toHaveAccessibleDescription(
+      `${m.managed_operated_title()} ${m.managed_unavailable_text()} ${m.settings_managed_responsibilities_retry_wait()}`,
+    );
+    await waitFor(() => expect(responsibilityRetry).toBeEnabled(), { timeout: 3000 });
+    responsibilityRetry.focus();
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => expect(resp.queryByRole('alert')).toBeNull());
+    await expect(resp.queryByRole('button')).toBeNull();
+    await expect(unavailable).toBeVisible();
+    await inventoryGeometry(inventory);
+  },
+};
+
+/** Preparing and empty-but-continuable pages use explicit, independent real controls. UNRUN. */
+export const PreparingAndSparse: Story = {
+  render: () => (
+    <PatternStory visitor="Signed In" path="/settings?panel=compact#account">
+      <InventoryJourneyExample scenario="preparing" />
+    </PatternStory>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const organizations = await canvas.findByRole('region', { name: m.managed_organizations_title() });
+    const responsibilities = canvas.getByRole('region', { name: m.managed_operated_title() });
+    const org = within(organizations);
+    const resp = within(responsibilities);
+    await expect(org.getByRole('status', { name: m.managed_organizations_title() })).toHaveTextContent(
+      m.managed_preparing_text(),
+    );
+    await expect(resp.getByText(m.settings_managed_no_responsibilities_page())).toBeVisible();
+    await userEvent.click(resp.getByRole('button', { name: m.settings_managed_load_more() }));
+    await resp.findByText(m.managed_no_responsibilities());
+    await expect(org.getByRole('button', { name: m.settings_retry() })).toBeEnabled();
+    await userEvent.click(org.getByRole('button', { name: m.settings_retry() }));
+    await org.findByText(m.managed_no_current_page());
+    const more = org.getByRole('button', { name: m.settings_managed_load_more() });
+    more.focus();
+    await userEvent.keyboard('{Enter}');
+    await org.findByText(m.managed_no_organizations());
+    await expect(org.queryByRole('button')).toBeNull();
+    await expect(resp.queryByRole('button')).toBeNull();
+    await inventoryGeometry(organizations.closest<HTMLElement>('[data-slot="managed-accounts"]')!);
+  },
+};
+
+/** Inventory retry has its own heading, cooldown and operation; it never claims an empty success. UNRUN. */
+export const InventoryRecovery: Story = {
+  render: () => (
+    <PatternStory visitor="Signed In" path="/settings?panel=compact#account">
+      <InventoryJourneyExample scenario="inventory" />
+    </PatternStory>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const viewer = within(await canvas.findByRole('region', { name: m.managed_your_account() }));
+    const retry = await viewer.findByRole('button', { name: m.settings_retry() });
+    await expect(retry).toBeDisabled();
+    await expect(viewer.getByRole('status', { name: m.managed_your_account() })).toHaveTextContent(
+      m.settings_managed_inventory_retry_wait(),
+    );
+    await expect(canvas.queryByRole('region', { name: m.managed_organizations_title() })).toBeNull();
+    await waitFor(() => expect(retry).toBeEnabled(), { timeout: 3000 });
+    retry.focus();
+    await userEvent.keyboard('{Enter}');
+    const organizations = await canvas.findByRole('region', { name: m.managed_organizations_title() });
+    await expect(within(organizations).getByRole('link', { name: longAccountName })).toBeVisible();
+    await inventoryGeometry(organizations.closest<HTMLElement>('[data-slot="managed-accounts"]')!);
+  },
+};
+
+/** Two connected inventories, including RTL text flow, keep all heading/control references local. UNRUN. */
+export const IndependentMounts: Story = {
+  render: () => (
+    <PatternStory visitor="Signed In" path="/settings?panel=compact#account">
+      <InventoryJourneyExample scenario="recovery" multiple />
+    </PatternStory>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await waitFor(() => expect(canvas.getAllByRole('link', { name: longAccountName })).toHaveLength(2));
+    const inventories = canvasElement.querySelectorAll<HTMLElement>('[data-slot="managed-accounts"]');
+    await expect(inventories).toHaveLength(2);
+    const ids = [...canvasElement.querySelectorAll('[id]')].map((node) => node.id);
+    await expect(new Set(ids).size).toBe(ids.length);
+    for (const inventory of inventories) {
+      for (const name of [m.managed_your_account(), m.managed_organizations_title(), m.managed_operated_title()]) {
+        const region = within(inventory).getByRole('region', { name });
+        const heading = within(region).getByRole('heading', { level: 3, name });
+        await expect(region).toHaveAttribute('aria-labelledby', heading.id);
+        for (const group of within(region).queryAllByRole('group'))
+          await expect(group).toHaveAttribute('aria-labelledby', heading.id);
+      }
+      await inventoryGeometry(inventory);
+    }
+    const rtl = inventories[1]!;
+    await expect(rtl.ownerDocument.defaultView!.getComputedStyle(rtl).direction).toBe('rtl');
+    const org = within(within(rtl).getByRole('region', { name: m.managed_organizations_title() }));
+    await userEvent.click(org.getByRole('button', { name: m.settings_managed_load_more() }));
+    await org.findByRole('button', { name: m.settings_retry() });
+    await expect(within(inventories[0]!).queryByRole('alert')).toBeNull();
+    await expect(within(inventories[0]!).getByRole('link', { name: longAccountName })).toBeVisible();
+    await inventoryGeometry(rtl);
+  },
 };

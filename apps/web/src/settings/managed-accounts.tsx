@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useSyncExternalStore, type ReactNode } from 'react';
 import { useLocation } from '@tanstack/react-router';
 import { Avatar, AvatarFallback } from '@rezics/ui/shadcn/avatar';
 import { Badge } from '@rezics/ui/shadcn/badge';
@@ -27,13 +27,13 @@ import {
   type ManagedIdentity,
 } from './managed-accounts-read';
 
+const nativeIO: ManagedAccountsIO = (data) => readManagedAccountsInventory({ data });
 // Grow with translated labels while retaining native button and focus behavior.
 const recoveryButtonClassName =
   'h-auto min-h-11 min-w-11 max-w-full shrink whitespace-normal wrap-anywhere py-2 text-center';
-const identityClassName = 'max-w-full wrap-anywhere';
 const stateClassName = 'h-auto min-h-5 max-w-full shrink whitespace-normal wrap-anywhere';
-
-const nativeIO: ManagedAccountsIO = (data) => readManagedAccountsInventory({ data });
+const identityRowClassName =
+  'min-h-14 max-w-full wrap-anywhere [&_[data-content-item-slot=title]]:line-clamp-none [&_[data-slot=list-row-link]]:min-h-11';
 
 function IdentityRow({
   account,
@@ -47,7 +47,7 @@ function IdentityRow({
   const name = account.displayName || (account.handle ? `@${account.handle}` : m.managed_unnamed());
   return (
     <ContentItem
-      className={identityClassName}
+      className={identityRowClassName}
       title={name}
       headingLevel={4}
       href={managedAccountHref(settingsHref, account.id)}
@@ -72,13 +72,18 @@ function Failure({
   firstPage,
   busy,
   scope,
+  headingId,
 }: {
   failure: ManagedAccountsFailure;
   retry: () => void;
   firstPage?: (() => void) | undefined;
   busy: boolean;
   scope: 'inventory' | ManagedFeed;
+  headingId: string;
 }) {
+  const id = useId();
+  const descriptionId = `${id}-description`;
+  const waitId = `${id}-wait`;
   const retryMetadata = useMemo(
     () => ({ status: failure.status, ...(failure.retryAfter ? { retryAfter: failure.retryAfter } : {}) }),
     [failure],
@@ -88,6 +93,7 @@ function Failure({
     <Alert
       variant="destructive"
       className="min-w-0 max-w-full wrap-anywhere"
+      aria-labelledby={headingId}
       data-response-status={failure.status ?? ''}
       data-response-code={failure.code ?? ''}
       data-retry-after={failure.retryAfter}
@@ -96,9 +102,9 @@ function Failure({
         {failure.kind === 'denied' ? m.managed_denied_title() : m.managed_unavailable_title()}
       </AlertTitle>
       <AlertDescription className="min-w-0 space-y-3">
-        <p>{failure.kind === 'denied' ? m.managed_denied_text() : m.managed_unavailable_text()}</p>
+        <p id={descriptionId}>{failure.kind === 'denied' ? m.managed_denied_text() : m.managed_unavailable_text()}</p>
         {waiting ? (
-          <p role="status">
+          <p id={waitId} role="status" aria-labelledby={headingId}>
             {scope === 'inventory'
               ? m.settings_managed_inventory_retry_wait()
               : scope === 'organizations'
@@ -106,11 +112,12 @@ function Failure({
                 : m.settings_managed_responsibilities_retry_wait()}
           </p>
         ) : null}
-        <div className="flex min-w-0 max-w-full flex-wrap gap-2">
+        <div role="group" aria-labelledby={headingId} className="flex min-w-0 max-w-full flex-wrap gap-2">
           <Button
             type="button"
             variant="outline"
             className={recoveryButtonClassName}
+            aria-describedby={`${headingId} ${descriptionId}${waiting ? ` ${waitId}` : ''}`}
             disabled={busy || waiting}
             onClick={retry}
           >
@@ -121,6 +128,7 @@ function Failure({
               type="button"
               variant="outline"
               className={recoveryButtonClassName}
+              aria-describedby={`${headingId} ${descriptionId}${waiting ? ` ${waitId}` : ''}`}
               disabled={busy || waiting}
               onClick={firstPage}
             >
@@ -139,12 +147,14 @@ function FeedActions({
   preparing = false,
   retry,
   firstPage,
+  headingId,
 }: {
   feed: Pick<ManagedAccountsSnapshot['responsibilities'], 'next' | 'busy' | 'failure' | 'restartable'>;
   scope: ManagedFeed;
   preparing?: boolean;
   retry: () => void;
   firstPage: () => void;
+  headingId: string;
 }) {
   return (
     <>
@@ -155,18 +165,31 @@ function FeedActions({
           firstPage={feed.restartable && feed.next !== null && !preparing ? firstPage : undefined}
           busy={feed.busy}
           scope={scope}
+          headingId={headingId}
         />
       ) : null}
       {!feed.failure && (feed.next !== null || preparing) ? (
-        <Button
-          type="button"
-          variant="outline"
-          className={recoveryButtonClassName}
-          disabled={feed.busy}
-          onClick={retry}
-        >
-          {feed.busy ? m.settings_managed_loading() : preparing ? m.settings_retry() : m.settings_managed_load_more()}
-        </Button>
+        <div role="group" aria-labelledby={headingId}>
+          <div
+            role={feed.busy && !preparing ? 'status' : undefined}
+            aria-labelledby={feed.busy && !preparing ? headingId : undefined}
+          >
+            <Button
+              type="button"
+              variant="outline"
+              className={recoveryButtonClassName}
+              aria-describedby={headingId}
+              disabled={feed.busy}
+              onClick={retry}
+            >
+              {feed.busy
+                ? m.settings_managed_loading()
+                : preparing
+                  ? m.settings_retry()
+                  : m.settings_managed_load_more()}
+            </Button>
+          </div>
+        </div>
       ) : null}
     </>
   );
@@ -187,6 +210,10 @@ export function ManagedAccountsView({
   firstPage: (feed: ManagedFeed) => void;
   retry: () => void;
 }) {
+  const id = useId();
+  const viewerHeadingId = `${id}-viewer`;
+  const organizationsHeadingId = `${id}-organizations`;
+  const responsibilitiesHeadingId = `${id}-responsibilities`;
   const { account, organizations, responsibilities } = snapshot;
   return (
     <div
@@ -195,34 +222,57 @@ export function ManagedAccountsView({
       onClickCapture={managedNavigationGuard(current)}
       onAuxClickCapture={managedNavigationGuard(current)}
     >
-      {snapshot.loading || (!account && !snapshot.failure) ? <p role="status">{m.settings_managed_loading()}</p> : null}
-      {snapshot.failure ? (
-        <Failure failure={snapshot.failure} retry={retry} busy={snapshot.loading} scope="inventory" />
-      ) : null}
+      <Card className="min-w-0 max-w-full" role="region" aria-labelledby={viewerHeadingId} aria-busy={snapshot.loading}>
+        <CardHeader className="min-w-0">
+          <CardTitle className="min-w-0 wrap-anywhere">
+            <ContentItemHeading level={3} id={viewerHeadingId}>
+              {m.managed_your_account()}
+            </ContentItemHeading>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="min-w-0">
+          {snapshot.loading || (!account && !snapshot.failure) ? (
+            <p role="status" aria-labelledby={viewerHeadingId}>
+              {m.settings_managed_loading()}
+            </p>
+          ) : null}
+          {snapshot.failure ? (
+            <Failure
+              failure={snapshot.failure}
+              retry={retry}
+              busy={snapshot.loading}
+              scope="inventory"
+              headingId={viewerHeadingId}
+            />
+          ) : null}
+          {account ? (
+            <ul className="min-w-0 max-w-full" aria-label={m.managed_your_account()}>
+              <IdentityRow account={account} settingsHref={settingsHref} />
+            </ul>
+          ) : null}
+        </CardContent>
+      </Card>
       {account ? (
         <>
-          <Card className="min-w-0 max-w-full">
+          <Card
+            className="min-w-0 max-w-full"
+            role="region"
+            aria-labelledby={organizationsHeadingId}
+            aria-busy={organizations.busy}
+          >
             <CardHeader className="min-w-0">
               <CardTitle className="min-w-0 wrap-anywhere">
-                <ContentItemHeading level={3}>{m.managed_your_account()}</ContentItemHeading>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="min-w-0">
-              <ul className="min-w-0 max-w-full" aria-label={m.managed_your_account()}>
-                <IdentityRow account={account} settingsHref={settingsHref} />
-              </ul>
-            </CardContent>
-          </Card>
-          <Card className="min-w-0 max-w-full">
-            <CardHeader className="min-w-0">
-              <CardTitle className="min-w-0 wrap-anywhere">
-                <ContentItemHeading level={3}>{m.managed_organizations_title()}</ContentItemHeading>
+                <ContentItemHeading level={3} id={organizationsHeadingId}>
+                  {m.managed_organizations_title()}
+                </ContentItemHeading>
               </CardTitle>
               <CardDescription className="min-w-0 wrap-anywhere">{m.managed_membership_text()}</CardDescription>
             </CardHeader>
-            <CardContent className="min-w-0 space-y-4" aria-busy={organizations.busy}>
+            <CardContent className="min-w-0 space-y-4">
               {organizations.state === 'preparing' ? (
-                <p role="status">{m.managed_preparing_text()}</p>
+                <p role="status" aria-labelledby={organizationsHeadingId}>
+                  {m.managed_preparing_text()}
+                </p>
               ) : organizations.items.length ? (
                 <ul className="min-w-0 max-w-full" aria-label={m.managed_organizations_title()}>
                   {organizations.items.map(({ account, role }) => (
@@ -244,19 +294,27 @@ export function ManagedAccountsView({
                 preparing={organizations.state === 'preparing'}
                 retry={() => more('organizations')}
                 firstPage={() => firstPage('organizations')}
+                headingId={organizationsHeadingId}
               />
             </CardContent>
           </Card>
-          <Card className="min-w-0 max-w-full">
+          <Card
+            className="min-w-0 max-w-full"
+            role="region"
+            aria-labelledby={responsibilitiesHeadingId}
+            aria-busy={responsibilities.busy}
+          >
             <CardHeader className="min-w-0">
               <CardTitle className="min-w-0 wrap-anywhere">
-                <ContentItemHeading level={3}>{m.managed_operated_title()}</ContentItemHeading>
+                <ContentItemHeading level={3} id={responsibilitiesHeadingId}>
+                  {m.managed_operated_title()}
+                </ContentItemHeading>
               </CardTitle>
               <CardDescription className="min-w-0 wrap-anywhere">
                 {m.managed_responsibility_text()} {m.settings_managed_authority_text()}
               </CardDescription>
             </CardHeader>
-            <CardContent className="min-w-0 space-y-4" aria-busy={responsibilities.busy}>
+            <CardContent className="min-w-0 space-y-4">
               {responsibilities.items.length ? (
                 <ul className="min-w-0 max-w-full" aria-label={m.managed_operated_title()}>
                   {responsibilities.items.map((item) =>
@@ -269,7 +327,7 @@ export function ManagedAccountsView({
                     ) : (
                       <ContentItem
                         key={item.reservationId}
-                        className={identityClassName}
+                        className={identityRowClassName}
                         title={m.settings_managed_identity_unavailable()}
                         headingLevel={4}
                         state={
@@ -293,6 +351,7 @@ export function ManagedAccountsView({
                 scope="responsibilities"
                 retry={() => more('responsibilities')}
                 firstPage={() => firstPage('responsibilities')}
+                headingId={responsibilitiesHeadingId}
               />
             </CardContent>
           </Card>
