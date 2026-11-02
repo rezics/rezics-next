@@ -33,7 +33,9 @@ function updateAt(
     const next = updateAt(children[index]!, rest, update);
     if (next === rejected) return rejected;
     const updated =
-      next === undefined ? children.filter((_, at) => at !== index) : children.map((child, at) => (at === index ? next : child));
+      next === undefined
+        ? children.filter((_, at) => at !== index)
+        : children.map((child, at) => (at === index ? next : child));
     return operator === 'and' ? { and: updated } : { or: updated };
   }
 
