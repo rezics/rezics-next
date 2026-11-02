@@ -1,5 +1,5 @@
 import { Cover, sharedRatio } from '@rezics/ui/cover';
-import { Link } from '@tanstack/react-router';
+import { ContentItem } from '@rezics/ui/content-item';
 import { coverSrc } from '../media/cover-src';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
@@ -22,29 +22,26 @@ export function ThreadSubjects({ subjects }: { subjects: readonly ThreadSubject[
     via: m.thread_cover_via(),
   };
   return (
-    <ul aria-label={m.thread_subjects_heading()} className="flex min-w-0 max-w-full gap-2 overflow-x-auto">
+    <ul aria-label={m.thread_subjects_heading()} className="min-w-0 max-w-full">
       {titled.map((subject) => (
-        <li
+        <ContentItem
           key={subject.id}
-          className="flex shrink-0 items-center gap-2 rounded-lg border border-border/70 bg-card p-1 pe-2 text-sm"
-        >
-          <Cover
-            cover={subject.cover}
-            decorative
-            labels={labels}
-            ratio={ratio}
-            size="xs"
-            src={coverSrc}
-            subject={subject}
-          />
-          <Link
-            to={subject.href.to}
-            params={subject.href.params}
-            className="min-w-0 font-medium break-words underline-offset-4 hover:underline"
-          >
-            {subject.title}
-          </Link>
-        </li>
+          title={subject.title}
+          href={subject.href.href}
+          headingLevel={2}
+          className="min-h-14 max-w-full [overflow-wrap:anywhere] [&_[data-content-item-slot=title]]:line-clamp-none"
+          visual={
+            <Cover
+              cover={subject.cover}
+              decorative
+              labels={labels}
+              ratio={ratio}
+              size="sm"
+              src={coverSrc}
+              subject={subject}
+            />
+          }
+        />
       ))}
     </ul>
   );
