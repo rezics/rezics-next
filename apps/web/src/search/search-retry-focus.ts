@@ -48,9 +48,9 @@ export function searchRetryFocusTarget({
 export function useSearchRetryFocus(current: SearchRetryOwner, settled: boolean) {
   const regionRef = useRef<HTMLElement>(null);
   const retryRef = useRef<HTMLButtonElement>(null);
-  const pending = useRef<
-    (PendingRetryFocus & { document: Document; onFocusIn: (event: FocusEvent) => void }) | null
-  >(null);
+  const pending = useRef<(PendingRetryFocus & { document: Document; onFocusIn: (event: FocusEvent) => void }) | null>(
+    null,
+  );
 
   function clear() {
     const request = pending.current;

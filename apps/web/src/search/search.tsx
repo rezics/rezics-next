@@ -575,10 +575,7 @@ export function SearchPage({
   );
   useRegisterHeaderSearchFilters(hasFilterPanel, filterRegion);
   const revertStatus = useRef<HTMLParagraphElement>(null);
-  const retryFocus = useSearchRetryFocus(
-    { query, locale, session },
-    data?.recovery?.status !== 'loading',
-  );
+  const retryFocus = useSearchRetryFocus({ query, locale, session }, data?.recovery?.status !== 'loading');
   const results = renderResults(
     query,
     result,
@@ -1027,12 +1024,7 @@ function renderResults(
           </a>
         </p>
       )}
-      <section
-        ref={retryFocus?.regionRef}
-        tabIndex={-1}
-        aria-label={m.search_results({}, options)}
-        data-search-results
-      >
+      <section ref={retryFocus?.regionRef} tabIndex={-1} aria-label={m.search_results({}, options)} data-search-results>
         {data?.recovery && data.recovery.status !== 'ready' && data.queryState ? (
           <SearchRecovery
             state={data.recovery}
@@ -1040,9 +1032,7 @@ function renderResults(
             restartHref={discoverySearchHref(locale, { ...data.queryState, cursor: undefined })}
             onRetry={onRetry}
             locale={locale}
-            {...(retryFocus
-              ? { retryRef: retryFocus.retryRef, onRetryFocus: retryFocus.captureRetryFocus }
-              : {})}
+            {...(retryFocus ? { retryRef: retryFocus.retryRef, onRetryFocus: retryFocus.captureRetryFocus } : {})}
           />
         ) : data?.discovery ? (
           <DiscoveryResults
