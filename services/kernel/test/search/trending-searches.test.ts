@@ -89,9 +89,14 @@ test('native projection deduplicates daily contributions and withdrawal blocks l
 test('bounded candidates repair withdrawn and expired contributor ranks', async () => {
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL must name the migrated test database');
   const day = 86_400_000;
-  const source = crypto.randomUUID(), withdrawn = crypto.randomUUID(), expired = crypto.randomUUID(), cleanupAccount = crypto.randomUUID();
+  const source = crypto.randomUUID(),
+    withdrawn = crypto.randomUUID(),
+    expired = crypto.randomUUID(),
+    cleanupAccount = crypto.randomUUID();
   const eligible = Array.from({ length: 10 }, () => crypto.randomUUID());
-  const current = publicTerm(source, 'en', 'Current')!, past = publicTerm(source, 'en', 'Expired')!, cleanup = publicTerm(source, 'en', 'Cleanup')!;
+  const current = publicTerm(source, 'en', 'Current')!,
+    past = publicTerm(source, 'en', 'Expired')!,
+    cleanup = publicTerm(source, 'en', 'Cleanup')!;
   const store = trendingSearchStore(pool, () => new Date(now));
   try {
     await pool.query(
@@ -100,7 +105,17 @@ test('bounded candidates repair withdrawn and expired contributor ranks', async 
         UNION ALL SELECT $3,$4,10,$2 UNION ALL SELECT $5,$6,16,$7 UNION ALL SELECT $8,$9,2,$2
       ) INSERT INTO search.trending_term(route,term_key,language,source_id,display,rank,expires_at)
       SELECT 0,key,'en',$1::uuid,display,rank,expiry FROM fixture`,
-      [source, new Date(now + 7 * day), current.key, current.display, past.key, past.display, new Date(now - 1), cleanup.key, cleanup.display],
+      [
+        source,
+        new Date(now + 7 * day),
+        current.key,
+        current.display,
+        past.key,
+        past.display,
+        new Date(now - 1),
+        cleanup.key,
+        cleanup.display,
+      ],
     );
     await pool.query(
       `WITH fixture AS (
@@ -109,7 +124,19 @@ test('bounded candidates repair withdrawn and expired contributor ranks', async 
         UNION ALL SELECT $7,$8,$5,$6 UNION ALL SELECT $7,$9,$10,$11
       ) INSERT INTO search.trending_member(route,term_key,account_id,day,contributed_at)
       SELECT 0,key,account,day,at FROM fixture`,
-      [source, withdrawn, current.key, eligible, new Date(now).toISOString().slice(0, 10), new Date(now), cleanup.key, cleanupAccount, expired, new Date(now - 7 * day).toISOString().slice(0, 10), new Date(now - 7 * day)],
+      [
+        source,
+        withdrawn,
+        current.key,
+        eligible,
+        new Date(now).toISOString().slice(0, 10),
+        new Date(now),
+        cleanup.key,
+        cleanupAccount,
+        expired,
+        new Date(now - 7 * day).toISOString().slice(0, 10),
+        new Date(now - 7 * day),
+      ],
     );
     expect((await store.contribute(cleanup, cleanupAccount)).value).toBe(false);
     await store.withdraw('account', withdrawn);
@@ -117,7 +144,9 @@ test('bounded candidates repair withdrawn and expired contributor ranks', async 
       "SELECT display,rank,expires_at FROM search.trending_term WHERE source_id=$1 AND display IN ('Stale 1','Cleanup') ORDER BY display",
       [source],
     );
-    expect(refreshed.rows.map(({ display, rank, expires_at }) => [display, Number(rank), expires_at.getTime()])).toEqual([
+    expect(
+      refreshed.rows.map(({ display, rank, expires_at }) => [display, Number(rank), expires_at.getTime()]),
+    ).toEqual([
       ['Cleanup', 1, now + 7 * day],
       ['Stale 1', 0, now],
     ]);
