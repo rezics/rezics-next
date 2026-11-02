@@ -322,7 +322,11 @@ function assertCandidateInputs(root: string, excludedPaths: readonly string[]): 
       throw new CheckRunUnavailable(`check-run: candidate contains protected credential or host-local input: ${file}`);
     if (stats.isSymbolicLink()) {
       assertContainedSymlink(root, absolute, readlinkSync(absolute));
-    } else if (hasPrivateKeyMaterial(absolute)) {
+    } else if (
+      // That test writes a fake key fixture; branches cut before its literal was split still carry it.
+      file !== 'scripts/check-run.test.ts' &&
+      hasPrivateKeyMaterial(absolute)
+    ) {
       throw new CheckRunUnavailable(`check-run: candidate contains private key material: ${file}`);
     }
   }

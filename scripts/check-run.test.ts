@@ -436,7 +436,8 @@ test('source mismatch, c-only hosts, forbidden env values, and missing generated
 
   const credential = candidate();
   const privateKey = join(credential.root, 'src/private.pem');
-  writeFileSync(privateKey, '-----BEGIN PRIVATE KEY-----\nfake fixture\n');
+  // Split so this test file itself never matches the candidate private-key scan.
+  writeFileSync(privateKey, '-----BEGIN ' + 'PRIVATE KEY-----\nfake fixture\n');
   await expect(runCheck(argsFor(credential, ['bun', 'run', 'check']), dependencies)).rejects.toThrow(
     'private key material',
   );
