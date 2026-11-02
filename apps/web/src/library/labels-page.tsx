@@ -137,7 +137,7 @@ export function LabelsPageView({
   const [hydrated, setHydrated] = useState(false);
   const [action, setAction] = useState<LabelAction | null>(() => failedAction(initial));
   const [createName, setCreateName] = useState(() =>
-    initial.feedback?.operation === 'create' && !initial.feedback.ok ? initial.feedback.name ?? '' : '',
+    initial.feedback?.operation === 'create' && !initial.feedback.ok ? (initial.feedback.name ?? '') : '',
   );
   const createField = useRef<HTMLInputElement>(null);
   const renameField = useRef<HTMLInputElement>(null);
@@ -216,23 +216,32 @@ export function LabelsPageView({
     const attempt = attempts.current.get(`${operation}:${id}`);
     if (attempt) return attempt.unresolved ? attempt.input.name : undefined;
     const feedback = page.feedback;
-    return feedback?.operation === operation && (feedback.id ?? '') === id &&
-      !feedback.ok && feedback.reason === 'unavailable' ? feedback.name : undefined;
+    return feedback?.operation === operation &&
+      (feedback.id ?? '') === id &&
+      !feedback.ok &&
+      feedback.reason === 'unavailable'
+      ? feedback.name
+      : undefined;
   }
   const createDirty = hasUnsentLabelName(createName, '', originalName('create'));
-  const renameDirty = action?.operation === 'rename' &&
+  const renameDirty =
+    action?.operation === 'rename' &&
     hasUnsentLabelName(action.name, action.label.name, originalName('rename', action.label.id));
   const navigation = useLabelDraftNavigation({
     dirty: createDirty || renameDirty,
     isCurrent: () =>
       (createDirty && admitted({ operation: 'create', idempotencyKey: page.createKey })) ||
       (renameDirty && admitted({ operation: 'rename', idempotencyKey: action!.label.renameKey })),
-    focus: () => renameDirty ? renameField.current : createField.current,
+    focus: () => (renameDirty ? renameField.current : createField.current),
   });
   function chooseAction(next: LabelAction | null) {
     void navigation.confirm(renameDirty).then((discard) => {
-      if (discard && alive() && !locked.current &&
-        (!originating || originating.isCurrent(`library_label.${next?.operation ?? action?.operation ?? 'rename'}`)))
+      if (
+        discard &&
+        alive() &&
+        !locked.current &&
+        (!originating || originating.isCurrent(`library_label.${next?.operation ?? action?.operation ?? 'rename'}`))
+      )
         setAction(next);
     });
   }
@@ -280,12 +289,15 @@ export function LabelsPageView({
       const result = await attempt.send({ data: attempt.input, headers: attempt.headers });
       if (!admitted(input)) return;
       attempt.unresolved = !result.ok && result.reason === 'unavailable';
-      if (result.ok && input.operation === 'create')
-        setCreateName((value) => value === input.name ? '' : value);
+      if (result.ok && input.operation === 'create') setCreateName((value) => (value === input.name ? '' : value));
       if (result.ok && input.operation === 'rename')
-        setAction((selected) => selected?.label.id !== input.id ? selected :
-          selected.name === input.name ? null :
-            { ...selected, label: { ...selected.label, name: input.name ?? selected.label.name } });
+        setAction((selected) =>
+          selected?.label.id !== input.id
+            ? selected
+            : selected.name === input.name
+              ? null
+              : { ...selected, label: { ...selected.label, name: input.name ?? selected.label.name } },
+        );
       const feedback: LabelFeedback = {
         ...result,
         operation: input.operation,
@@ -345,8 +357,13 @@ export function LabelsPageView({
       current = preserveAttempts(current, latestPage.current);
       setPage({ ...current, feedback: retained, undoKey: retained.undoKey ?? current.undoKey });
       if (input.operation === 'rename' || input.operation === 'delete') {
-        setAction((selected) => (!selected || selected.label.id !== input.id ? selected :
-          result.ok && (input.operation === 'delete' || selected.name === input.name) ? null : selected));
+        setAction((selected) =>
+          !selected || selected.label.id !== input.id
+            ? selected
+            : result.ok && (input.operation === 'delete' || selected.name === input.name)
+              ? null
+              : selected,
+        );
       }
       if ((result.ok && input.operation === 'restore') || undoUnavailable) retireToast();
       if (feedback.undo && admitted(input)) {
