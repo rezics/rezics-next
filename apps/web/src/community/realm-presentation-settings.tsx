@@ -117,6 +117,8 @@ export function RealmAppearanceSettings({
     slot: RealmImageSlot | 'rules';
     owner: object;
     callerId: number;
+    source: RealmAppearanceRead;
+    head: string;
   } | null>(null);
   const ids = useId();
   const callerId = lifetime?.id ?? 0;
@@ -140,7 +142,14 @@ export function RealmAppearanceSettings({
     selectionState.head === read.snapshot.head
       ? selectionState
       : null;
-  const clear = clearState?.owner === control && clearState.callerId === callerId ? clearState.slot : null;
+  const clear =
+    clearState?.owner === control &&
+    clearState.callerId === callerId &&
+    clearState.source === initial &&
+    read.kind === 'ready' &&
+    clearState.head === read.snapshot.head
+      ? clearState.slot
+      : null;
   const selectionGeneration = useRef(0);
   function setSelection(value: Selection | null) {
     if (value === null) selectionGeneration.current++;
@@ -148,7 +157,15 @@ export function RealmAppearanceSettings({
     setSelectionState(value);
   }
   function setClear(value: RealmImageSlot | 'rules' | null) {
-    setClearState(value === null ? null : { slot: value, owner: control, callerId });
+    if (value === null) {
+      setClearState(null);
+      return;
+    }
+    const current = control.getSnapshot().read;
+    if (!control.selectable() || current.kind !== 'ready') return;
+    control.cancelUpload();
+    setSelection(null);
+    setClearState({ slot: value, owner: control, callerId, source: initial, head: current.snapshot.head });
   }
   function currentSelection(selected: Selection) {
     const current = selectionRef.current;
@@ -169,6 +186,8 @@ export function RealmAppearanceSettings({
     );
   }
   function openSelection(slot: RealmImageSlot | 'rules') {
+    if (!control.selectable()) return;
+    control.cancelUpload();
     const snapshot = control.getSnapshot();
     const head = snapshot.read.kind === 'ready' ? snapshot.read.snapshot.head : null;
     const next: Selection = {
@@ -250,6 +269,7 @@ export function RealmAppearanceSettings({
   };
   const selection = visibleSelection;
   const editable = control.editable() && !selection;
+  const selectable = control.selectable() && !selection && !clear;
   const label = (slot: RealmImageSlot | 'rules') =>
     slot === 'avatar'
       ? m.realm_appearance_icon()
@@ -333,7 +353,7 @@ export function RealmAppearanceSettings({
             ) : null}
             {snapshot.canManage ? (
               <div className="flex flex-wrap gap-2">
-                <Button variant="outline" disabled={!editable} onClick={() => openSelection(slot)}>
+                <Button variant="outline" disabled={!selectable} onClick={() => openSelection(slot)}>
                   {m.realm_appearance_choose()}
                 </Button>
                 <Field className="w-full min-w-0 max-w-64">
@@ -344,7 +364,7 @@ export function RealmAppearanceSettings({
                     id={`${ids}-${slot}-upload`}
                     type="file"
                     className="w-full min-w-0"
-                    disabled={!editable}
+                    disabled={!selectable}
                     accept="image/avif,image/gif,image/jpeg,image/png,image/webp"
                     aria-label={`${label(slot)}: ${m.realm_appearance_upload()}`}
                     onChange={(event) => {
@@ -357,7 +377,10 @@ export function RealmAppearanceSettings({
                 <Button
                   variant="ghost"
                   disabled={
-                    !editable || draft.presentation[slot === 'avatar' ? 'avatarMediaId' : 'bannerMediaId'] === null
+                    !selectable ||
+                    (draft.presentation[slot === 'avatar' ? 'avatarMediaId' : 'bannerMediaId'] === null &&
+                      state.pendingUpload?.slot !== slot &&
+                      state.phase !== 'uploading')
                   }
                   onClick={() => setClear(slot)}
                 >
@@ -389,12 +412,12 @@ export function RealmAppearanceSettings({
           <>
             <p className="text-sm text-muted-foreground">{m.realm_appearance_rules_help()}</p>
             <div className="flex gap-2">
-              <Button variant="outline" disabled={!editable} onClick={() => openSelection('rules')}>
+              <Button variant="outline" disabled={!selectable} onClick={() => openSelection('rules')}>
                 {m.realm_appearance_select_rules()}
               </Button>
               <Button
                 variant="ghost"
-                disabled={!editable || draft.presentation.rules === null}
+                disabled={!selectable || draft.presentation.rules === null}
                 onClick={() => setClear('rules')}
               >
                 {m.realm_appearance_clear()}
@@ -485,14 +508,13 @@ export function RealmAppearanceSettings({
             <Button
               disabled={!selection.candidate}
               onClick={() => {
-                if (selection.candidate && currentSelection(selection)) {
-                  control.choose(selection.slot, selection.candidate);
-                  if (selection.slot !== 'rules' && selection.reference)
-                    setUsedReferences((previous) => ({
-                      ...previous,
-                      [selection.slot]: { owner: control, callerId, reference: selection.reference! },
-                    }));
-                }
+                if (!selection.candidate || !currentSelection(selection)) return;
+                control.choose(selection.slot, selection.candidate);
+                if (selection.slot !== 'rules' && selection.reference)
+                  setUsedReferences((previous) => ({
+                    ...previous,
+                    [selection.slot]: { owner: control, callerId, reference: selection.reference! },
+                  }));
                 setSelection(null);
               }}
             >
@@ -519,6 +541,13 @@ export function RealmAppearanceSettings({
               variant="destructive"
               disabled={!editable}
               onClick={() => {
+                const current = control.getSnapshot().read;
+                if (
+                  clearState?.source !== incoming.current ||
+                  current.kind !== 'ready' ||
+                  clearState.head !== current.snapshot.head
+                )
+                  return;
                 control.clear(clear);
                 setClear(null);
               }}

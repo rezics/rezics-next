@@ -192,87 +192,103 @@ export function createRealmAppearance(
       (ticket.head === null || (admitted(state.read) && state.read.snapshot.head === ticket.head))
     );
   }
-  function editable() {
+  function selectable() {
     return (
       active() &&
       admitted(state.read) &&
       state.read.snapshot.canManage &&
-      !state.busy &&
       !state.attempt &&
-      !state.pendingUpload &&
-      (state.phase === 'idle' || state.phase === 'saved')
+      (!state.busy || state.phase === 'uploading') &&
+      (state.phase === 'idle' || state.phase === 'saved' || state.phase === 'uploading')
     );
   }
-  function observe(incoming: RealmAppearanceRead) {
+  function editable() {
+    return selectable() && !state.busy && !state.pendingUpload;
+  }
+  function retireUpload() {
+    operationGeneration++;
+    uploadAbort?.abort();
+    uploadAbort = null;
+  }
+  function cancelUpload() {
+    if (!active() || (!uploadAbort && !state.pendingUpload && state.phase !== 'uploading')) return;
+    retireUpload();
+    update({ busy: false, phase: 'idle', pendingUpload: null });
+  }
+  function observe(incoming: RealmAppearanceRead, refreshed = false) {
     if (!active()) return;
     const read = incoming.kind === 'ready' && !admitted(incoming) ? { kind: 'hidden' as const } : incoming;
-    if (read === state.read) return;
+    const reviewed = state.phase === 'conflict' && admitted(read) && read.snapshot.canManage;
+    if (read === state.read) {
+      if (refreshed) update({ busy: false, reviewed });
+      return;
+    }
     readVersion++;
     const changed = admitted(read) && admitted(state.read) && read.snapshot.head !== state.read.snapshot.head;
+    // A read replaces the authority behind asynchronous previews and responses, not the saved intent.
+    const uploading = Boolean(uploadAbort || state.pendingUpload || state.phase === 'uploading');
+    const saving = state.phase === 'saving';
+    if (uploading) retireUpload();
+    else if (saving) operationGeneration++;
     update({
       read,
       draft: state.draft ?? (admitted(read) ? read.snapshot : null),
-      ...(changed && !state.attempt && !state.busy ? { phase: 'conflict' as const, reviewed: true } : {}),
+      ...(refreshed ? { busy: false, reviewed } : {}),
+      ...(uploading ? { busy: false, phase: 'idle' as const, pendingUpload: null } : {}),
+      ...(saving ? { busy: false, phase: 'uncertain' as const } : {}),
+      ...(changed && !state.attempt && (!state.busy || uploading || refreshed)
+        ? { phase: 'conflict' as const, reviewed: true }
+        : {}),
     });
   }
   function choose(slot: RealmImageSlot | 'rules', selection: RealmAppearanceSelection) {
-    if (!editable() || !state.draft) return;
-    operationGeneration++;
+    if (!selectable() || !state.draft) return;
     const draft = state.draft;
+    let selected: RealmAppearanceDraft;
     if (slot === 'rules' && selection.kind === 'rules') {
-      update({
-        draft: {
-          ...draft,
-          rules: { state: 'available', value: selection.rules },
-          presentation: {
-            ...draft.presentation,
-            rules: { postId: selection.rules.postId, revisionId: selection.rules.revisionId },
-          },
+      selected = {
+        ...draft,
+        rules: { state: 'available', value: selection.rules },
+        presentation: {
+          ...draft.presentation,
+          rules: { postId: selection.rules.postId, revisionId: selection.rules.revisionId },
         },
-        phase: 'idle',
-        notice: 'none',
-      });
+      };
     } else if (
       slot !== 'rules' &&
       selection.kind === 'image-reference' &&
       selection.realmId === realmId &&
       selection.purpose === (slot === 'avatar' ? 'realm-icon' : 'realm-banner')
     ) {
-      update({
-        draft: {
-          ...draft,
-          [slot]: { state: 'unavailable', value: null },
-          presentation: {
-            ...draft.presentation,
-            [slot === 'avatar' ? 'avatarMediaId' : 'bannerMediaId']: selection.mediaId,
-          },
+      selected = {
+        ...draft,
+        [slot]: { state: 'unavailable', value: null },
+        presentation: {
+          ...draft.presentation,
+          [slot === 'avatar' ? 'avatarMediaId' : 'bannerMediaId']: selection.mediaId,
         },
-        phase: 'idle',
-        notice: 'none',
-      });
+      };
     } else if (
       slot !== 'rules' &&
       selection.kind === 'image' &&
       selection.image.containerId === realmId &&
       realmImageSource({ state: 'available', value: selection.image })
     ) {
-      update({
-        draft: {
-          ...draft,
-          [slot]: { state: 'available', value: selection.image },
-          presentation: {
-            ...draft.presentation,
-            [slot === 'avatar' ? 'avatarMediaId' : 'bannerMediaId']: selection.image.id,
-          },
+      selected = {
+        ...draft,
+        [slot]: { state: 'available', value: selection.image },
+        presentation: {
+          ...draft.presentation,
+          [slot === 'avatar' ? 'avatarMediaId' : 'bannerMediaId']: selection.image.id,
         },
-        phase: 'idle',
-        notice: 'none',
-      });
-    }
+      };
+    } else return;
+    retireUpload();
+    update({ draft: selected, busy: false, pendingUpload: null, phase: 'idle', notice: 'none' });
   }
   function clear(slot: RealmImageSlot | 'rules') {
-    if (!editable() || !state.draft) return;
-    operationGeneration++;
+    if (!selectable() || !state.draft) return;
+    retireUpload();
     const key = slot === 'rules' ? 'rules' : slot === 'avatar' ? 'avatarMediaId' : 'bannerMediaId';
     update({
       draft: {
@@ -282,6 +298,8 @@ export function createRealmAppearance(
       },
       phase: 'idle',
       notice: 'none',
+      busy: false,
+      pendingUpload: null,
     });
   }
   async function refresh() {
@@ -301,13 +319,7 @@ export function createRealmAppearance(
       update({ busy: false });
       return;
     }
-    if (read.kind === 'ready' && !admitted(read)) read = { kind: 'hidden' };
-    update({
-      read,
-      busy: false,
-      draft: state.draft ?? (admitted(read) ? read.snapshot : null),
-      reviewed: state.phase === 'conflict' && admitted(read) && read.snapshot.canManage,
-    });
+    observe(read, true);
   }
   async function save() {
     if (state.busy || !admitted(state.read) || !state.read.snapshot.canManage || !state.draft || state.pendingUpload)
@@ -350,6 +362,11 @@ export function createRealmAppearance(
         update({ busy: false, phase: 'uncertain' });
         return;
       }
+      // Receipt replay can confirm an older write without making its snapshot current again.
+      if (attempt.head !== ticket.head && snapshot.head !== ticket.head) {
+        update({ busy: false, phase: 'conflict', reviewed: true });
+        return;
+      }
       update({ read: { kind: 'ready', snapshot }, draft: snapshot, attempt: null, phase: 'saved', busy: false });
     } else if (result.kind === 'unavailable') {
       if (result.read) observe(result.read);
@@ -382,7 +399,12 @@ export function createRealmAppearance(
     return owns(ticket) && stillSelected() ? selected : null;
   }
   async function upload(slot: RealmImageSlot, file?: File) {
-    const pending = state.pendingUpload;
+    // A file is a new selection. Only an explicit retry may reuse a reservation.
+    if (file) {
+      if (!selectable()) return;
+      cancelUpload();
+    }
+    const pending = file ? null : state.pendingUpload;
     const uploadSlot = pending?.slot ?? slot;
     if (!pending && !editable()) return;
     if (state.busy || !admitted(state.read) || !state.read.snapshot.canManage || (!file && !pending)) return;
@@ -398,27 +420,16 @@ export function createRealmAppearance(
         ? await adapter.resume(pending.mediaId, abort.signal)
         : await adapter.upload(realmId, uploadSlot, file!, abort.signal);
       mediaId = media.id;
-      if (abort.signal.aborted || !operationCurrent(ticket)) return;
-      if (!admitted(state.read) || !state.read.snapshot.canManage) {
-        update({ busy: false, phase: 'idle', pendingUpload: { slot: uploadSlot, mediaId } });
-        return;
-      }
+      if (abort.signal.aborted || !owns(ticket)) return;
       update({ pendingUpload: { slot: uploadSlot, mediaId } });
-      if (!owns(ticket) || abort.signal.aborted) {
-        update({ busy: false, phase: 'idle' });
-        return;
-      }
+      if (!owns(ticket) || abort.signal.aborted) return;
       const choice = await adapter.select({
         kind: 'image',
         realmId,
         mediaId,
         purpose: uploadSlot === 'avatar' ? 'realm-icon' : 'realm-banner',
       });
-      if (abort.signal.aborted || !operationCurrent(ticket)) return;
-      if (!owns(ticket)) {
-        update({ busy: false, phase: 'idle' });
-        return;
-      }
+      if (abort.signal.aborted || !owns(ticket)) return;
       if (
         !(
           (choice.kind === 'image' &&
@@ -432,10 +443,9 @@ export function createRealmAppearance(
         )
       )
         throw new Error('Image summary unavailable');
-      update({ busy: false, phase: 'idle', pendingUpload: null });
       choose(uploadSlot, choice);
     } catch (error) {
-      if (abort.signal.aborted || !operationCurrent(ticket)) return;
+      if (abort.signal.aborted || !owns(ticket)) return;
       if (!mediaId && error && typeof error === 'object' && 'mediaId' in error && typeof error.mediaId === 'string')
         mediaId = error.mediaId;
       update({
@@ -463,6 +473,7 @@ export function createRealmAppearance(
       };
     },
     editable,
+    selectable,
     observe,
     choose,
     clear,
@@ -477,12 +488,7 @@ export function createRealmAppearance(
       return disconnect;
     },
     disconnect,
-    cancelUpload() {
-      operationGeneration++;
-      uploadAbort?.abort();
-      uploadAbort = null;
-      update({ busy: false, phase: 'idle', pendingUpload: null });
-    },
+    cancelUpload,
     reviewConflict() {
       if (
         active() &&
