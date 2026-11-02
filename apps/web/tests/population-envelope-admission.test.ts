@@ -19,10 +19,7 @@ test('admits bounded sparse pages and only exact selected, concealed identities'
   const sparse = envelope(ready({ items: [item], next: 'opaque.native.cursor', incomplete: true }));
   expect(admitPopulationEnvelope(sparse, input)).toEqual(sparse);
   expect(
-    admitPopulationEnvelope(
-      envelope(ready({ items: [], next: 'opaque.native.cursor', incomplete: true })),
-      input,
-    ),
+    admitPopulationEnvelope(envelope(ready({ items: [], next: 'opaque.native.cursor', incomplete: true })), input),
   ).toMatchObject({ result: { kind: 'ready', value: { items: [], next: 'opaque.native.cursor' } } });
 
   const selected: PopulationInput = { ...input, selected: [population, otherPopulation] };
@@ -30,7 +27,9 @@ test('admits bounded sparse pages and only exact selected, concealed identities'
   const concealed = envelope(ready({ items: [comparisonItem], next: null, incomplete: true }));
   expect(admitPopulationEnvelope(concealed, selected)).toEqual(concealed);
   const emptySelected: PopulationInput = { ...input, selected: [] };
-  expect(admitPopulationEnvelope(envelope(ready({ items: [], next: null, incomplete: false })), emptySelected)).not.toBeNull();
+  expect(
+    admitPopulationEnvelope(envelope(ready({ items: [], next: null, incomplete: false })), emptySelected),
+  ).not.toBeNull();
   const figure = {
     population,
     count: 5,
@@ -39,7 +38,11 @@ test('admits bounded sparse pages and only exact selected, concealed identities'
     freshness: { asOf: '2026-11-01T00:00:00.000Z', updating: false },
   };
   const comparison = envelope(
-    ready({ items: [{ id: population, name: 'Current Realm', figure: { kind: 'ready', value: figure } }], next: null, incomplete: false }),
+    ready({
+      items: [{ id: population, name: 'Current Realm', figure: { kind: 'ready', value: figure } }],
+      next: null,
+      incomplete: false,
+    }),
   );
   expect(admitPopulationEnvelope(comparison, { ...input, selected: [population] })).toEqual(comparison);
 
@@ -78,7 +81,13 @@ test('rejects malformed envelopes and any invalid directory or selected page as 
       }),
     ),
     envelope(ready({ items: [{ ...item, name: [] }], next: null, incomplete: false })),
-    envelope(ready({ items: [{ ...item, figure: { kind: 'ready', value: { population, count: 1, histogram: [] } } }], next: null, incomplete: false })),
+    envelope(
+      ready({
+        items: [{ ...item, figure: { kind: 'ready', value: { population, count: 1, histogram: [] } } }],
+        next: null,
+        incomplete: false,
+      }),
+    ),
   ];
   for (const value of invalid) expect(admitPopulationEnvelope(value, input)).toBeNull();
 
@@ -94,7 +103,9 @@ test('rejects malformed envelopes and any invalid directory or selected page as 
       selectedExact,
     ),
   ).toBeNull();
-  expect(admitPopulationEnvelope(envelope(ready({ items: [], next: null, incomplete: false })), selectedExact)).toBeNull();
+  expect(
+    admitPopulationEnvelope(envelope(ready({ items: [], next: null, incomplete: false })), selectedExact),
+  ).toBeNull();
   expect(
     admitPopulationEnvelope(
       envelope(ready({ items: [comparisonItem], next: 'continuation', incomplete: false })),
@@ -119,24 +130,14 @@ function clientFor(title: unknown): KernelClient {
 
 test('the native Realm join admits only bounded string titles and conceals malformed labels', async () => {
   for (const title of [[], '', 'x'.repeat(1025)]) {
-    const result = await readRatingPopulations(
-      clientFor(title),
-      new Request('https://web.test'),
-      {},
-      input,
-    );
+    const result = await readRatingPopulations(clientFor(title), new Request('https://web.test'), {}, input);
     expect(result.result).toEqual({
       kind: 'ready',
       value: { items: [], next: null, incomplete: true },
     });
   }
 
-  const admitted = await readRatingPopulations(
-    clientFor('Current Realm'),
-    new Request('https://web.test'),
-    {},
-    input,
-  );
+  const admitted = await readRatingPopulations(clientFor('Current Realm'), new Request('https://web.test'), {}, input);
   expect(admitted.result).toEqual({
     kind: 'ready',
     value: { items: [{ id: population, name: 'Current Realm', figure: idle }], next: null, incomplete: false },

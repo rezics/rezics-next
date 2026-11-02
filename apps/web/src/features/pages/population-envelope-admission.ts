@@ -46,7 +46,9 @@ function admitFailure(value: unknown): (Exclude<RatingOutcome<never>, { kind: 'r
   if (!record(value) || !failureKinds.includes(value.kind as (typeof failureKinds)[number])) return null;
   if (!exactKeys(value, ['kind'], ['retryAfter'])) return null;
   const wait = waitMetadata(value);
-  return wait ? ({ kind: value.kind, ...wait } as Exclude<RatingOutcome<never>, { kind: 'ready' }> & WaitMetadata) : null;
+  return wait
+    ? ({ kind: value.kind, ...wait } as Exclude<RatingOutcome<never>, { kind: 'ready' }> & WaitMetadata)
+    : null;
 }
 
 function admitFigureOutcome(
@@ -54,8 +56,7 @@ function admitFigureOutcome(
   expected: { subject: string; question: string; population: string },
 ): (RatingOutcome<Figure> & WaitMetadata) | null {
   if (!record(value) || typeof value.kind !== 'string') return null;
-  if (value.kind === 'idle')
-    return exactKeys(value, ['kind']) ? ({ kind: 'idle' } as RatingOutcome<Figure>) : null;
+  if (value.kind === 'idle') return exactKeys(value, ['kind']) ? ({ kind: 'idle' } as RatingOutcome<Figure>) : null;
   if (value.kind === 'ready') {
     if (!exactKeys(value, ['kind', 'value'])) return null;
     const admitted = admitRatingAggregate(
@@ -118,7 +119,7 @@ function admitPopulationResult(value: unknown, input: PopulationInput): Populati
     seen.add(item.id);
     items.push(item);
   }
-  if (requested && (page.incomplete !== (seen.size < requested.size))) return null;
+  if (requested && page.incomplete !== seen.size < requested.size) return null;
   return {
     kind: 'ready',
     value: { items, next: page.next, incomplete: page.incomplete },
@@ -128,7 +129,11 @@ function admitPopulationResult(value: unknown, input: PopulationInput): Populati
 /** Validate every browser-consumed field before a transport result becomes query data. */
 export function admitPopulationEnvelope(value: unknown, input: PopulationInput): PopulationEnvelope | null {
   try {
-    if (!validRequest(input) || !record(value) || !exactKeys(value, ['reader', 'subject', 'question', 'result'], ['retryAfter']))
+    if (
+      !validRequest(input) ||
+      !record(value) ||
+      !exactKeys(value, ['reader', 'subject', 'question', 'result'], ['retryAfter'])
+    )
       return null;
     if (
       (value.reader !== null && (typeof value.reader !== 'string' || value.reader.length === 0)) ||

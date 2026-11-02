@@ -330,8 +330,7 @@ function PopulationVisit({
             : { selected }),
         };
         const value = await read(input);
-        if (!matches() || registry.version(hash) !== version)
-          throw new Error('Rating population response retired');
+        if (!matches() || registry.version(hash) !== version) throw new Error('Rating population response retired');
         const admitted = admitPopulationEnvelope(value, input);
         if (
           !admitted ||
