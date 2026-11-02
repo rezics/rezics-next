@@ -53,6 +53,7 @@ validated receipts require no decision; other selected or unattempted work remai
 Clear and Cancel remain local controls, and exact retry never schedules unattempted rows.
 Decision: local selectors and same-tab links use the shared decision, including search-only navigation; injected
 queues reuse an enclosing owner or create their own boundary without acquiring private reader authority.
+Decision: Only a successful explicit cursor continuation transfers local focus to the admitted report article boundary; the route's ordinary focus handling remains in place.
 
 Cost is the existing bounded native page and deduplicated evidence, one constant-size session-cache
 observation per QueryClient shared across loader/mount, one local caller generation and O(page size)
