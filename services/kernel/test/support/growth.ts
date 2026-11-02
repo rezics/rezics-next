@@ -297,10 +297,7 @@ export function validateAttemptSamples(check: GrowthCheck, samples: readonly Rep
             {
               scale: sample.scale,
               repetitions: [maximum],
-              uncertainty: Math.max(
-                GROWTH_UNCERTAINTY[metric].absolute,
-                GROWTH_UNCERTAINTY[metric].relative * maximum,
-              ),
+              uncertainty: Math.max(GROWTH_UNCERTAINTY[metric].absolute, GROWTH_UNCERTAINTY[metric].relative * maximum),
             },
           ];
         });
@@ -329,7 +326,9 @@ export function validateAttemptSamples(check: GrowthCheck, samples: readonly Rep
       if (successfulPoints.length >= 3) {
         const successfulVerdict = classifySeries(successfulPoints, check.bounds[metric], indexProbes);
         if (successfulVerdict.outcome === 'violation')
-          fail(`statement ${fingerprint} ${metric} violates ${check.bounds[metric]} growth bound in successful foreground work`);
+          fail(
+            `statement ${fingerprint} ${metric} violates ${check.bounds[metric]} growth bound in successful foreground work`,
+          );
         else {
           const explanation = `statement ${fingerprint} ${metric} violates ${check.bounds[metric]} only when retry-affected occurrences are included; successful committed or autocommit occurrences do not independently establish the violation`;
           process.stderr.write(
@@ -548,13 +547,7 @@ function selectedVerdict(
     const independentStepViolation = growthViolations(independentSamples, check.bounds, check.slack).some(
       (violation) => violation.metric === metric,
     );
-    independent = classifiedVerdict(
-      metric,
-      independentClassified,
-      rule,
-      independentStepViolation,
-      settleFailed,
-    );
+    independent = classifiedVerdict(metric, independentClassified, rule, independentStepViolation, settleFailed);
   }
 
   const explanation = evidence.explanation
@@ -565,9 +558,7 @@ function selectedVerdict(
   const decision = retainIndependentRetryViolation(independent?.outcome, explanation);
   return {
     verdict:
-      decision.outcome === 'violation'
-        ? reported
-        : { ...reported, outcome: decision.outcome, reason: decision.reason },
+      decision.outcome === 'violation' ? reported : { ...reported, outcome: decision.outcome, reason: decision.reason },
     ...(decision.outcome === 'inconclusive' ? { retryExplanation: decision.explanation } : {}),
   };
 }

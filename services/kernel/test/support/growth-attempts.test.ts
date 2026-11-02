@@ -271,8 +271,10 @@ test('attempted 40001 and 40P01 failures retain inclusive costs without hiding u
           await client.query('COMMIT');
         });
       },
-    })
-      .then(() => undefined, (failure: unknown) => failure);
+    }).then(
+      () => undefined,
+      (failure: unknown) => failure,
+    );
     expect(error).toBeInstanceOf(GrowthBoundError);
     expect((error as Error).message).toContain('statements violates constant growth bound');
     expect((error as Error).message).toContain(`failed attempts by SQLSTATE at scale: 1 {"${sqlstate}":1}`);

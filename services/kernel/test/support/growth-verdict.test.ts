@@ -366,8 +366,10 @@ test('unrelated serialization and deadlock retries do not conceal successful sta
       operation: async (database, scale) => {
         await countStatements(database, scale === 1 ? 1 : scale === 4 ? 2 : 4, scale === 1 ? sqlstate : undefined);
       },
-    })
-      .then(() => undefined, (failure: unknown) => failure);
+    }).then(
+      () => undefined,
+      (failure: unknown) => failure,
+    );
     expect(error).toBeInstanceOf(GrowthBoundError);
     expect((error as Error).message).toContain('statements violates constant growth bound');
     expect((error as Error).message).toContain(`failed attempts by SQLSTATE at scale: 1 {"${sqlstate}":1}`);

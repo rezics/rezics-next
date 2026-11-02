@@ -13,7 +13,7 @@ type RetryRun = Readonly<{ ledger: readonly AttemptLedgerEntry[] }>;
 export type RetryEvidenceSample = Readonly<{
   scale: number;
   cost: Pick<Cost, 'statements' | 'rows' | 'blocks' | 'catalogStatements' | 'failedStatements'>;
-  repetitions: readonly (Pick<Cost, 'statements' | 'rows' | 'blocks' | 'catalogStatements' | 'failedStatements'>)[];
+  repetitions: readonly Pick<Cost, 'statements' | 'rows' | 'blocks' | 'catalogStatements' | 'failedStatements'>[];
   occurrenceRepetitions: readonly StatementOccurrences[];
   attempts?: Readonly<{ repetitions: readonly RetryRun[] }>;
 }>;
@@ -65,20 +65,31 @@ export function successfulMetricEvidence(
       const occurrences = sample.occurrenceRepetitions[repetition]!.statements;
       const ledger = sample.attempts?.repetitions[repetition]?.ledger ?? [];
       if (metric === 'statements' && cost.catalogStatements > 0)
-        return { explanation: `scale ${sample.scale}, repetition ${repetition} has catalog statements that cannot be separated per occurrence` };
+        return {
+          explanation: `scale ${sample.scale}, repetition ${repetition} has catalog statements that cannot be separated per occurrence`,
+        };
       const ledgerOccurrences = new Map<number, AttemptLedgerEntry>();
       for (const attempt of ledger)
         for (const index of attempt.occurrences) {
           const occurrence = occurrences.find((item) => item.index === index);
           if (!occurrence || occurrence.backend !== attempt.backend)
-            return { explanation: `scale ${sample.scale}, repetition ${repetition} has an attempt occurrence without matching foreground attribution` };
+            return {
+              explanation: `scale ${sample.scale}, repetition ${repetition} has an attempt occurrence without matching foreground attribution`,
+            };
           if (ledgerOccurrences.has(index))
-            return { explanation: `scale ${sample.scale}, repetition ${repetition} assigns an occurrence to multiple attempts` };
+            return {
+              explanation: `scale ${sample.scale}, repetition ${repetition} assigns an occurrence to multiple attempts`,
+            };
           ledgerOccurrences.set(index, attempt);
         }
 
-      if (!sample.attempts && occurrences.some(({ statement }) => /^\s*(?:BEGIN|START\s+TRANSACTION)\b/i.test(statement)))
-        return { explanation: `scale ${sample.scale}, repetition ${repetition} contains a transaction without an attempt ledger` };
+      if (
+        !sample.attempts &&
+        occurrences.some(({ statement }) => /^\s*(?:BEGIN|START\s+TRANSACTION)\b/i.test(statement))
+      )
+        return {
+          explanation: `scale ${sample.scale}, repetition ${repetition} contains a transaction without an attempt ledger`,
+        };
 
       const observedFailures: Record<string, number> = {};
       for (const occurrence of occurrences)
@@ -90,7 +101,9 @@ export function successfulMetricEvidence(
           (sqlstate) => observedFailures[sqlstate] !== (recordedFailures[sqlstate] ?? 0),
         )
       )
-        return { explanation: `scale ${sample.scale}, repetition ${repetition} retry failures cannot be matched to foreground occurrences` };
+        return {
+          explanation: `scale ${sample.scale}, repetition ${repetition} retry failures cannot be matched to foreground occurrences`,
+        };
 
       const successful = (occurrence: StatementOccurrence): boolean =>
         isSuccessfulForegroundOccurrence(occurrence, ledger);
@@ -98,15 +111,21 @@ export function successfulMetricEvidence(
         const nonControl = occurrences.filter(({ statement }) => !isControlStatement(statement));
         const observedCount = nonControl.length;
         if (observedCount !== cost.statements + cost.catalogStatements)
-          return { explanation: `scale ${sample.scale}, repetition ${repetition} statement occurrences do not reconcile with the inclusive count` };
+          return {
+            explanation: `scale ${sample.scale}, repetition ${repetition} statement occurrences do not reconcile with the inclusive count`,
+          };
         scaleValues.push(nonControl.filter(successful).length);
       } else {
         const observedTotal = occurrences.reduce((sum, occurrence) => sum + occurrence[metric], 0);
         const inclusive = Math.round(observedTotal);
         if (inclusive !== cost[metric])
-          return { explanation: `scale ${sample.scale}, repetition ${repetition} ${metric} occurrences do not reconcile with the inclusive total` };
+          return {
+            explanation: `scale ${sample.scale}, repetition ${repetition} ${metric} occurrences do not reconcile with the inclusive total`,
+          };
         scaleValues.push(
-          Math.round(occurrences.reduce((sum, occurrence) => sum + (successful(occurrence) ? occurrence[metric] : 0), 0)),
+          Math.round(
+            occurrences.reduce((sum, occurrence) => sum + (successful(occurrence) ? occurrence[metric] : 0), 0),
+          ),
         );
       }
     }
@@ -118,9 +137,7 @@ export function successfulMetricEvidence(
 export function retainIndependentRetryViolation(
   successfulOutcome: 'compatible' | 'violation' | 'inconclusive' | undefined,
   explanation: string,
-):
-  | Readonly<{ outcome: 'violation' }>
-  | Readonly<{ outcome: 'inconclusive'; reason: 'retries'; explanation: string }> {
+): Readonly<{ outcome: 'violation' }> | Readonly<{ outcome: 'inconclusive'; reason: 'retries'; explanation: string }> {
   return successfulOutcome === 'violation'
     ? { outcome: 'violation' }
     : { outcome: 'inconclusive', reason: 'retries', explanation };
