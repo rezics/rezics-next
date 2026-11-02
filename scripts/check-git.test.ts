@@ -1,15 +1,21 @@
 import { afterEach, expect, test } from 'bun:test';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { randomBytes } from 'node:crypto';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { stageCheckGit, restoreCheckGit } from './check-git.ts';
+import {
+  stageCheckGit,
+  restoreCheckGit,
+  releaseCheckGit,
+  fetchCheckGitScript,
+  type CheckGitPublication,
+} from './check-git.ts';
 
 const roots: string[] = [];
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 function sandbox() {
-  const root = mkdtempSync(join(tmpdir(), 'rezics-check-git-'));
+  const root = mkdtempSync(join(import.meta.dir, '../.temp/rezics-check-git-'));
   roots.push(root);
   return root;
 }
@@ -127,3 +133,116 @@ test('native check Git custody rejects a corrupt manifest before publishing a us
   expect(readFileSync(join(checkout, 'tracked.txt'), 'utf8')).toBe('committed\n');
   expect(existsSync(join(checkout, '.git'))).toBe(false);
 }, 30000);
+
+function publicOrigin(root: string, source: string) {
+  const origin = join(root, 'origin.git');
+  git(root, 'init', '--bare', '-q', origin);
+  git(source, 'remote', 'add', 'origin', origin);
+  git(source, 'push', '-q', 'origin', 'HEAD:refs/heads/dev');
+  return origin;
+}
+function fetchPublication(publication: CheckGitPublication, checkout: string, store: string, origin: string) {
+  return Bun.spawnSync(['sh', '-c', fetchCheckGitScript(publication, checkout, store, origin)], {
+    stdout: 'pipe',
+    stderr: 'pipe',
+    timeout: 30000,
+  });
+}
+
+test('a check-only publication sends only new objects and both hosts restore the exact native identities', async () => {
+  const root = sandbox();
+  const { source, base } = repository(root);
+  writeFileSync(join(source, 'large.bin'), randomBytes(128000));
+  git(source, 'add', 'large.bin');
+  git(source, 'commit', '-qm', 'shared public objects');
+  const head = git(source, 'rev-parse', 'HEAD');
+  const origin = publicOrigin(root, source);
+  const previous = new Set(
+    git(root, '--git-dir', origin, 'rev-list', '--objects', '--all')
+      .split('\n')
+      .map((line) => line.split(' ')[0]),
+  );
+  writeFileSync(join(source, 'staged.txt'), 'staged candidate\n');
+  git(source, 'add', 'staged.txt');
+  const indexTree = git(source, 'write-tree');
+  const status = git(source, 'status', '--porcelain');
+  const manifestPath = await stageCheckGit(source, join(root, 'publication'), { ref: 'refs/checks/worker-check' });
+  const publication = JSON.parse(readFileSync(manifestPath, 'utf8')) as CheckGitPublication;
+  expect(publication.remote.ref).toBe('refs/checks/worker-check');
+  expect(git(root, '--git-dir', origin, 'rev-parse', 'refs/heads/dev')).toBe(head);
+  const added = git(root, '--git-dir', origin, 'rev-list', '--objects', '--all')
+    .split('\n')
+    .map((line) => line.split(' ')[0]!)
+    .filter((oid) => !previous.has(oid));
+  expect(added).toHaveLength(3); // candidate commit, staged tree and changed blob; history is already public.
+  const bytes = added.reduce(
+    (sum, oid) => sum + statSync(join(origin, 'objects', oid.slice(0, 2), oid.slice(2))).size,
+    0,
+  );
+  expect(bytes).toBeLessThan(2048);
+  for (const host of ['host-one', 'host-two']) {
+    const checkout = join(root, host, 'runs', 'worker-check');
+    const store = join(root, host, 'check-git.git');
+    const restored = fetchPublication(publication, checkout, store, origin);
+    expect(restored.exitCode, restored.stderr.toString()).toBe(0);
+    expect(git(checkout, 'rev-parse', 'HEAD')).toBe(head);
+    expect(git(checkout, 'write-tree')).toBe(indexTree);
+    expect(git(checkout, 'rev-parse', 'dev')).toBe(base);
+    expect(readFileSync(join(checkout, 'staged.txt'), 'utf8')).toBe('staged candidate\n');
+    expect(readFileSync(join(checkout, '.git/objects/info/alternates'), 'utf8').trim()).toBe(join(store, 'objects'));
+  }
+  expect(git(source, 'status', '--porcelain')).toBe(status);
+  releaseCheckGit(source, manifestPath);
+  expect(git(root, '--git-dir', origin, 'for-each-ref', '--format=%(refname)', 'refs/checks/')).toBe('');
+}, 30000);
+
+test.each(['push', 'fetch'])(
+  '%s failure falls back to a full snapshot with identical HEAD, index and dev',
+  async (failure) => {
+    const root = sandbox();
+    const { source, head, base } = repository(root);
+    const origin = publicOrigin(root, source);
+    writeFileSync(join(source, 'staged.txt'), 'staged\n');
+    git(source, 'add', 'staged.txt');
+    const indexTree = git(source, 'write-tree');
+    writeFileSync(join(source, 'tracked.txt'), 'unstaged\n');
+    if (failure === 'push') git(source, 'remote', 'set-url', 'origin', join(root, 'unreachable.git'));
+    const published = await stageCheckGit(source, join(root, 'publication'), { ref: 'refs/checks/fallback' });
+    let manifest = published;
+    if (failure === 'fetch') {
+      const publication = JSON.parse(readFileSync(published, 'utf8')) as CheckGitPublication;
+      const result = fetchPublication(
+        publication,
+        join(root, 'failed-fetch'),
+        join(root, 'store.git'),
+        join(root, 'unreachable.git'),
+      );
+      expect(result.exitCode).not.toBe(0);
+      expect(existsSync(join(root, 'failed-fetch/.git'))).toBe(false);
+      manifest = await stageCheckGit(source, join(root, 'fallback'));
+    }
+    expect(existsSync(join(dirname(manifest), 'snapshot.pack'))).toBe(true);
+    const checkout = join(root, 'restored');
+    copyWorkingFiles(source, checkout);
+    await restoreCheckGit(manifest, checkout);
+    expect(git(checkout, 'rev-parse', 'HEAD')).toBe(head);
+    expect(git(checkout, 'write-tree')).toBe(indexTree);
+    expect(git(checkout, 'rev-parse', 'dev')).toBe(base);
+    expect(git(checkout, 'status', '--porcelain')).toBe(git(source, 'status', '--porcelain'));
+    if (failure === 'fetch') releaseCheckGit(source, published);
+  },
+  30000,
+);
+
+test('private key material in the staged tree is refused before a ref can be pushed', async () => {
+  const root = sandbox();
+  const { source } = repository(root);
+  const origin = publicOrigin(root, source);
+  writeFileSync(join(source, 'staged.txt'), ['-----BEGIN', 'PRIVATE KEY-----'].join(' '));
+  git(source, 'add', 'staged.txt');
+  writeFileSync(join(source, 'staged.txt'), 'innocent working file\n');
+  await expect(stageCheckGit(source, join(root, 'publication'), { ref: 'refs/checks/secret' })).rejects.toThrow(
+    'private key',
+  );
+  expect(git(root, '--git-dir', origin, 'for-each-ref', '--format=%(refname)', 'refs/checks/')).toBe('');
+});

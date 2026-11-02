@@ -5,7 +5,7 @@ import { TrainResolver, TrainResolverInfrastructureError, type TrainConflict } f
 import { groupMembers, processIdentity, sameProcess, type ProcessIdentity } from './process.ts';
 import { authenticatedManager } from './priority-authority.ts';
 import { createHash, randomUUID } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { Database } from 'bun:sqlite';
@@ -1322,6 +1322,49 @@ type SpawnTextResult = {
 };
 type SpawnText = (command: string, args: string[], options: { cwd: string; encoding: 'utf8' }) => SpawnTextResult;
 
+/** A shared lock and timestamp bound origin traffic across train instances, even when a push fails. */
+export function devPushScript(stateDirectory: string, branch: string): string {
+  const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
+  return `set -eu
+mkdir -p ${quote(stateDirectory)}
+(
+  flock -n 9 || exit 0
+  stamp=${quote(join(stateDirectory, 'dev-origin-push.timestamp'))}
+  now=$(date +%s)
+  last=$(cat "$stamp" 2>/dev/null || echo 0)
+  [ "$((now - last))" -ge 60 ] || exit 0
+  printf '%s\\n' "$now" > "$stamp"
+  if ! GIT_TERMINAL_PROMPT=0 git push --no-verify origin ${quote(`refs/heads/${branch}:refs/heads/${branch}`)}; then
+    echo 'merge-train: background dev push failed; landing continues' >&2
+  fi
+) 9>${quote(join(stateDirectory, 'dev-origin-push.lock'))}`;
+}
+
+function pushDevInBackground(checkout: string, stateDirectory: string, branch: string, logPath: string): void {
+  let descriptor: number | undefined;
+  try {
+    git(checkout, 'remote', 'get-url', '--push', 'origin');
+    descriptor = openSync(logPath, 'a');
+    const child = spawn('sh', ['-c', devPushScript(stateDirectory, branch)], {
+      cwd: checkout,
+      detached: true,
+      stdio: ['ignore', descriptor, descriptor],
+    });
+    child.on('error', (error) => {
+      try {
+        appendFileSync(logPath, `merge-train: background dev push failed: ${error.message}\n`);
+      } catch {}
+    });
+    child.unref();
+  } catch (error) {
+    try {
+      appendFileSync(logPath, `merge-train: background dev push failed: ${error}\n`);
+    } catch {}
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor);
+  }
+}
+
 export class MergeTrain {
   private readonly workspaceFailures = new Map<number, GateOutcome[]>();
   constructor(private readonly options: TrainOptions) {}
@@ -2019,6 +2062,7 @@ export class MergeTrain {
           continue;
         }
         committed = true;
+        pushDevInBackground(o.mainCheckout, o.stateDirectory, branch, logPaths.get(prepared[0]!.entry.id)!);
         for (const [id, outcome] of localOutcomes) {
           outcome.hostMs = Date.now() - memberStarted.get(id)!;
           outcomes.set(id, outcome);
@@ -3270,6 +3314,8 @@ export class MergeTrain {
           if (controlPlane) retryMovedControlPlaneRefs();
           continue;
         }
+        if (targetBranch === (o.integrationBranch ?? 'dev'))
+          pushDevInBackground(o.mainCheckout, o.stateDirectory, targetBranch, logPath);
         if (workspace) {
           workspace.integrated(recorded.workspace!.module, candidate);
           try {
@@ -3504,6 +3550,8 @@ export class MergeTrain {
               this.options.runCandidateGit,
             );
           git(checkout, 'update-ref', targetRef, commit, targetHead);
+          if (targetBranch === (this.options.integrationBranch ?? 'dev'))
+            pushDevInBackground(checkout, this.options.stateDirectory, targetBranch, logPath);
           return { commit };
         } catch (error) {
           const current = spawnSync('git', ['rev-parse', '--verify', targetRef], {
@@ -3685,6 +3733,7 @@ export class MergeTrain {
         }
         try {
           git(this.options.mainCheckout, 'update-ref', devRef, merged, expected);
+          pushDevInBackground(this.options.mainCheckout, this.options.stateDirectory, devBranch, logPath);
           rmSync(join(this.options.stateDirectory, 'stabilize-conflict.json'), { force: true });
           return;
         } catch (error) {
@@ -5971,6 +6020,13 @@ export class MergeTrain {
       input: `${lines.join('\n')}\n`,
     });
     if (transaction.status === 0) {
+      if (snapshot.devHead !== record.devCommit)
+        pushDevInBackground(
+          this.options.mainCheckout,
+          this.options.stateDirectory,
+          snapshot.devBranch,
+          join(this.options.stateDirectory, 'dev-origin-push.log'),
+        );
       rmSync(join(this.options.stateDirectory, 'control-plane-conflict.json'), { force: true });
       rmSync(this.controlPlaneConflictPath(record.taskId), { force: true });
       return true;

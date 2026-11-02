@@ -55,6 +55,7 @@ import {
   selectSlotClass,
   slotScript,
   workspaceFiles,
+  gitWorkspaceOverlay,
   parseCommandPhases,
 } from './remote-check.ts';
 
@@ -733,6 +734,9 @@ if (script.includes('/proc/loadavg')) {
   console.log('BASE ' + (config.base ?? '-'));
   console.log('AGE ' + (config.baseAgeSeconds === undefined ? '-' : String(config.baseAgeSeconds)));
   console.log('ZSTD ' + (config.zstd === false ? '0' : '1'));
+} else if (script.includes('REMOTE_CHECK_GITHUB_FETCH')) {
+  log({ kind: 'github-fetch', script, slotHeld: slotHeld() });
+  process.exit(config.gitFetchExit ?? 0);
 } else if (script.includes('systemd-run')) {
   const runNumber = count('run');
   if (runNumber < (config.preCommandFailures ?? 0)) {
@@ -951,6 +955,7 @@ ${javascript}
 
 type Event = { kind: string; address?: string; [key: string]: unknown };
 type HostConfig = {
+  gitFetchExit?: number;
   available?: number;
   tmpBytes?: number;
   tmpInodes?: number;
@@ -2856,6 +2861,48 @@ test('the workspace upload compresses with zstd and sends only what differs from
   expect(result.stderr).toContain('remote-check: rsync 0.');
   expect(result.stderr).toContain('1234 bytes sent');
 });
+
+test('a fetched staged tree needs only working edits and untracked inputs, with deleted paths removed', () => {
+  const directory = workspace();
+  writeFileSync(join(directory, 'src/staged.ts'), 'staged input\n');
+  spawnSync('git', ['add', 'src/staged.ts'], { cwd: directory });
+  writeFileSync(join(directory, 'src/tracked.ts'), 'working edit\n');
+  const overlay = gitWorkspaceOverlay(directory, workspaceFiles(directory));
+  expect(overlay.files.sort()).toEqual(['src/tracked.ts', 'src/untracked.ts']);
+  expect(overlay.removed).toEqual(['src/gone.ts']);
+  expect(overlay.files).not.toContain('src/staged.ts');
+});
+
+test.each([0, 1])(
+  'GitHub fetch exit %i uses an overlay or full upload and deletes the shared check ref',
+  async (gitFetchExit) => {
+    const fixture = scenario({
+      a: { available: 8e9, gitFetchExit, preCommandFailures: gitFetchExit === 0 ? 1 : 0 },
+      ...(gitFetchExit === 0 ? { b: { available: 8e9, gitFetchExit } } : {}),
+    });
+    const directory = workspace();
+    const origin = join(directory, '.temp/origin.git');
+    const git = (...args: string[]) => spawnSync('git', args, { cwd: directory, encoding: 'utf8' });
+    expect(git('init', '--bare', '-q', origin).status).toBe(0);
+    expect(git('remote', 'add', 'origin', origin).status).toBe(0);
+    expect(git('push', '-q', 'origin', 'HEAD:refs/heads/dev').status).toBe(0);
+    const result = await remote(fixture.env, directory);
+    expect(result.code, result.stderr).toBe(0);
+    const fetched = fixture.events().filter((event) => event.kind === 'github-fetch');
+    expect(fetched).toHaveLength(gitFetchExit === 0 ? 2 : 1);
+    expect(fetched.every((event) => event.slotHeld === false)).toBe(true);
+    const uploads = fixture.events().filter((event) => event.kind === 'rsync');
+    for (const upload of uploads) {
+      const files = upload.files as string[];
+      if (gitFetchExit === 0) {
+        expect(files).toEqual(['src/untracked.ts']);
+        expect(upload.args as string[]).not.toContain('--checksum');
+      } else expect(files.some((file) => file.endsWith('/snapshot.pack'))).toBe(true);
+    }
+    expect(result.stderr.match(/check-git: Writing objects: 100%/g)).toHaveLength(1);
+    expect(git('--git-dir', origin, 'for-each-ref', '--format=%(refname)', 'refs/checks/').stdout.trim()).toBe('');
+  },
+);
 
 test("a host without zstd support uses rsync's default compression", async () => {
   const { env, events } = scenario({ a: { available: 8e9, zstd: false } });
