@@ -54,6 +54,8 @@ returns the useful prepared page or final 200 page. The 202 response and owner/p
 receipt. Preparation cannot manufacture a successful empty members or next page, treat permanent 202 as progress,
 or make a missing or unavailable runtime ready; unavailable work remains 503. A genuinely exhausted 200 retains
 `{members:[],next:null}`. Zone `POST /v1/zones/{id}:readPage` and its existing `202 {next}` wire are unchanged.
+Members status recovery retains the original Collection, filter and opaque cursor through 202/503/200; only the current response sets preparation feedback, and a completed response clears earlier preparation feedback.
+
 The private owner list `GET /v1/collections?curatorAccountId=...` includes logical Everything and proven in-use state tuples before stored rows exist, without `collection:create` or a write scope. `GET /v1/accounts/:accountId/collections` remains public-profile disclosure and honors `public_views.collections`, even for the curator.
 A state set is in use through live entries or retained session/holding facts with actual accepted pins. Labels and trash do not establish state-set support. Discovery unions the supported sibling state identities; each contributing fact retains its own accepted pin and meaning. Retirement blocks new bindings but retained facts keep old pinned identities resolvable, including for undo.
 Soft-deleted facts can keep identities resolvable for undo but never contribute membership. State listing is paged and creates no fanout.

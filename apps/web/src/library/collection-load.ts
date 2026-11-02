@@ -62,9 +62,7 @@ export type CollectionPageResult = (EditableCollectionPage | DynamicCollectionPa
 export type DynamicMembersResult = Pick<
   DynamicCollectionPage,
   'members' | 'next' | 'preparing' | 'retryAfterMs' | 'unavailable'
-> &
-  Pick<DynamicCollectionPage, 'filterStatus'> &
-  CollectionReadResult;
+> & { filterStatus?: DynamicCollectionPage['filterStatus'] } & CollectionReadResult;
 
 export function collectionResultMatches(
   result: CollectionReadResult & { id?: string },
@@ -145,6 +143,29 @@ function generatedClientDTO<Value>(value: unknown): Value {
   return value as Value;
 }
 
+/** Capture the addressed Source/filter once; status retries only supply the same opaque cursor.
+ * Each request still goes through the generated client and its current credential/disclosure transport.
+ */
+function collectionMembersReader(
+  client: KernelClient,
+  id: string,
+  headers: { headers: { authorization: string } } | Record<string, never>,
+  filter?: FilterDocument,
+) {
+  const filterQuery = collectionFilterQuery(filter);
+  return async (cursor?: string): Promise<unknown> => {
+    try {
+      return await client.collections({ collectionId: id }).members.get({
+        query: { ...libraryListQuery(cursor), ...filterQuery } as never,
+        ...headers,
+      });
+    } catch (error) {
+      if (![202, 400, 422, 503].includes(resultStatus(error) ?? 0)) throw error;
+      return error;
+    }
+  };
+}
+
 export async function loadDynamicMembers(
   client: KernelClient,
   id: string,
@@ -152,19 +173,7 @@ export async function loadDynamicMembers(
   headers: { headers: { authorization: string } } | Record<string, never> = {},
   filter?: FilterDocument,
 ): Promise<DynamicMembersResult> {
-  let result: unknown;
-  try {
-    result = await client.collections({ collectionId: id }).members.get({
-      query: {
-        ...libraryListQuery(cursor),
-        ...collectionFilterQuery(filter),
-      } as never,
-      ...headers,
-    });
-  } catch (error) {
-    if (![202, 400, 422, 503].includes(resultStatus(error) ?? 0)) throw error;
-    result = error;
-  }
+  const result = await collectionMembersReader(client, id, headers, filter)(cursor);
   const status = resultStatus(result);
   if (filter && (status === 400 || status === 422)) {
     return {
@@ -184,6 +193,7 @@ export async function loadDynamicMembers(
       preparing: true,
       retryAfterMs: retryAfterMs(result),
       unavailable: false,
+      filterStatus: filter ? 'preparing' : undefined,
     };
   if (finalStatus === 503)
     return {
@@ -192,6 +202,7 @@ export async function loadDynamicMembers(
       preparing: false,
       retryAfterMs: 1000,
       unavailable: true,
+      filterStatus: undefined,
     };
   const page = generatedClientDTO<DynamicMembersPage>(
     readLibraryResult(result as Parameters<typeof readLibraryResult>[0]),
@@ -205,6 +216,8 @@ export async function loadDynamicMembers(
     preparing: false,
     retryAfterMs: 1000,
     unavailable: false,
+    // Results are merged into the retained page; omission would retain an old preparing marker.
+    filterStatus: undefined,
   };
 }
 
@@ -308,6 +321,8 @@ export async function loadEditableCollectionPage(
   },
   credentialMode: ReadCredentialMode = 'session',
 ): Promise<CollectionPageResult> {
+  // A pending read must retain the original address even if its caller edits the input while awaiting I/O.
+  input = structuredClone(input);
   let authorization: string | null = null;
   if (credentialMode === 'session') {
     const signedOut = await prepareSession(request, sessionEnv);
@@ -340,28 +355,19 @@ export async function loadEditableCollectionPage(
     viewer === collection.curatorAccountId;
   if (input.editor && !editor) throw notFound();
   const memberHeaders = publicMembership && !editor ? {} : headers;
-  const filterState: { status: EditableCollectionPage['filterStatus'] } = { status: input.filterStatus };
-  const readMembers = async (cursor?: string, filter = input.filter) => {
+  const filterState: { status: EditableCollectionPage['filterStatus'] } = {
+    status: input.filterStatus === 'preparing' ? undefined : input.filterStatus,
+  };
+  const readAddress = collectionMembersReader(client, input.id, memberHeaders, input.filter);
+  const readMembers = async (cursor?: string) => {
     if (filterState.status === 'failed') return { status: 200, data: { members: [], next: null } };
-    const query = {
-      ...libraryListQuery(cursor),
-      ...collectionFilterQuery(filter),
-    };
-    let result: unknown;
-    try {
-      result = await client
-        .collections({ collectionId: input.id })
-        .members.get({ query: query as never, ...memberHeaders });
-    } catch (error) {
-      if (![202, 400, 422, 503].includes(resultStatus(error) ?? 0)) throw error;
-      result = error;
-    }
+    const result = await readAddress(cursor);
     const status = resultStatus(result);
-    if (filter && (status === 400 || status === 422)) {
+    if (input.filter && (status === 400 || status === 422)) {
       filterState.status = 'unsupported';
       return { status: 200, data: { members: [], next: null } };
     }
-    if (filter && status === 202) filterState.status = 'preparing';
+    if (input.filter && status === 202) filterState.status = 'preparing';
     return result;
   };
   const [first, viewerActions] = await Promise.all([
@@ -381,6 +387,7 @@ export async function loadEditableCollectionPage(
     const following = authorization ? await readCollectionFollow(client, collection.id, authorization) : null;
     const filterFields = {
       provenance,
+      ...(input.cursor ? { cursor: input.cursor } : {}),
       ...collectionPresentationOf(collectionEnvelope.collection),
       ...(collection.revision === undefined ? {} : { revision: collection.revision }),
       ...(collection.curatorAccountId === undefined ? {} : { curatorAccountId: collection.curatorAccountId }),
@@ -405,7 +412,6 @@ export async function loadEditableCollectionPage(
         preparing: true,
         retryAfterMs: retryAfterMs(membersResult),
         unavailable: false,
-        ...(input.cursor ? { cursor: input.cursor } : {}),
         ...filterFields,
       };
     }
@@ -445,7 +451,6 @@ export async function loadEditableCollectionPage(
       description: collection.description ?? null,
       curator: accountOf(collection.curator),
       ...dynamicMembers,
-      ...(input.cursor ? { cursor: input.cursor } : {}),
       ...filterFields,
     };
   }

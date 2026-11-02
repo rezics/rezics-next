@@ -2,7 +2,7 @@ import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { loadEditableCollectionPage } from '../src/library/collection-load';
+import { loadDynamicMembers, loadEditableCollectionPage } from '../src/library/collection-load';
 import { admitsCollectionOperation, readCollectionViewerActions } from '../src/library/collection-records';
 import { collectionMemberRatio, collectionPageAddress } from '../src/library/collection-presentation';
 
@@ -149,4 +149,93 @@ test('Unavailable native action discovery never grants an owner action', async (
   const actions = await readCollectionViewerActions(client, id, null);
   expect(actions).toEqual({ state: 'unavailable' });
   expect(admitsCollectionOperation(actions, 'collection:update', 'collection.update')).toBe(false);
+});
+
+test('Members status recovery keeps the addressed Collection, filter and cursor and clears preparing on completion', async () => {
+  const filter = { type: { in: ['schema:Book'] } };
+  const cursor = 'opaque+direct/cursor=';
+  for (const kind of ['curated', 'dynamic'] as const) {
+    for (const status of [202, 503, 200]) {
+      const calls: URL[] = [];
+      const client = createKernelClient('https://kernel.test', {
+        fetch: async (input, init) => {
+          const request = new Request(input, init);
+          const url = new URL(request.url);
+          expect(request.headers.has('authorization')).toBe(false);
+          if (url.pathname.endsWith('/members')) {
+            calls.push(url);
+            return Response.json(
+              status === 200
+                ? {
+                    members: [
+                      {
+                        id: 'occurrence',
+                        subjectId: id,
+                        note: null,
+                        addedAt: stamp,
+                        subject: { id, type: 'schema:Book', label: 'Completed member' },
+                      },
+                    ],
+                    next: 'next-cursor',
+                  }
+                : { preparing: status === 202 },
+              { status, headers: { 'Retry-After': '2' } },
+            );
+          }
+          return Response.json({
+            collection: {
+              id,
+              membershipKind: kind,
+              title: 'Recovery',
+              visibility: 'public',
+              revision: 1,
+              curatorAccountId: 'curator',
+              memberCount: 99,
+              description: null,
+              createdAt: stamp,
+              updatedAt: stamp,
+            },
+          });
+        },
+      });
+      const input = { id, cursor, filter: structuredClone(filter), filterStatus: 'preparing' as const };
+      const pending = loadEditableCollectionPage(
+        client,
+        new Request('https://rezics.test/collections/' + id),
+        {},
+        input,
+        'anonymous',
+      );
+      // An edit while metadata is pending must not retarget the in-flight Members request.
+      input.id = 'another-collection';
+      input.cursor = 'another-cursor';
+      input.filter.type.in[0] = 'schema:Movie';
+      const page = await pending;
+      expect(page).toMatchObject({ id, cursor, filter });
+      expect(page.filterStatus).toBe(status === 202 ? 'preparing' : undefined);
+      if ('preparing' in page) {
+        expect(page.preparing).toBe(status === 202);
+        expect(page.unavailable).toBe(status === 503);
+        if (status === 202) expect(page.retryAfterMs).toBe(2000);
+        const result = await loadDynamicMembers(client, id, cursor, {}, filter);
+        const recovered = { ...page, filterStatus: 'preparing', ...result };
+        expect(recovered.filterStatus).toBe(status === 202 ? 'preparing' : undefined);
+      } else {
+        expect(page.memberState).toBe(status === 200 ? 'ready' : status === 202 ? 'preparing' : 'unavailable');
+        expect(page.memberCount).toBeNull();
+      }
+      expect(page.members.map((member) => member.subject?.label)).toEqual(status === 200 ? ['Completed member'] : []);
+      expect(page.next).toBe(status === 200 ? 'next-cursor' : null);
+      expect(calls).toHaveLength(kind === 'dynamic' ? 2 : 1);
+      for (const url of calls) {
+        expect(url.pathname).toBe(`/v1/collections/${id}/members`);
+        expect(Object.fromEntries(url.searchParams)).toEqual({
+          limit: '100',
+          view: 'FULL',
+          cursor,
+          filter: JSON.stringify(filter),
+        });
+      }
+    }
+  }
 });
