@@ -22,11 +22,7 @@ const { createRoot } = await import('react-dom/client');
 const { within, userEvent } = await import('storybook/test');
 const { ResourceAccessPage } = await import('../src/accounts/resource-access/page');
 const { m } = await import('../src/paraglide/messages.js');
-const { getLocale, setLocale } = await import('../src/paraglide/runtime.js');
-const locale = getLocale();
-setLocale('en', { reload: false });
 afterAll(async () => {
-  setLocale(locale, { reload: false });
   await window.happyDOM.close();
   for (const [key, descriptor] of previous)
     descriptor ? Object.defineProperty(globalThis, key, descriptor) : Reflect.deleteProperty(globalThis, key);
@@ -43,14 +39,8 @@ for (const boundary of ['handle', 'kind', 'cancel', 'resource', 'actor'] as cons
       await act(async () => user.click(canvas.getByRole('button', { name })));
     };
     const page = structuredClone(snapshot);
-    let resolve!: (identity: Identity | null) => void, reject!: (error: Error) => void;
-    const lookup = mock(
-      () =>
-        new Promise<Identity | null>((yes, no) => {
-          resolve = yes;
-          reject = no;
-        }),
-    );
+    let pending = Promise.withResolvers<Identity | null>();
+    const lookup = mock(() => (pending = Promise.withResolvers<Identity | null>()).promise);
     const save = mock(async (_change: Change) => ({ status: 'saved' as const }));
     const io = { lookup, save, read: async (): Promise<AccessState> => ({ status: 'ready', page }) };
     try {
@@ -59,8 +49,7 @@ for (const boundary of ['handle', 'kind', 'cancel', 'resource', 'actor'] as cons
       await act(async () => user.type(canvas.getByLabelText(m.access_handle()), 'old'));
       await click(m.access_find_account());
       expect((canvas.getByRole('button', { name: m.access_save() }) as HTMLButtonElement).disabled).toBe(true);
-      const oldResolve = resolve,
-        oldReject = reject;
+      const { resolve: oldResolve, reject: oldReject } = pending;
       if (boundary === 'handle') await act(async () => user.clear(canvas.getByLabelText(m.access_handle())));
       else if (boundary === 'kind')
         await act(async () => user.selectOptions(canvas.getByLabelText(m.access_recipient()), 'organization'));
@@ -81,7 +70,7 @@ for (const boundary of ['handle', 'kind', 'cancel', 'resource', 'actor'] as cons
       const end = (canvas.getByLabelText(m.access_ends()) as HTMLInputElement).value;
       expect(end).toBe('2027-01-01T12:30');
       await click(m.access_find_account());
-      await act(async () => reject(new Error('Read unavailable')));
+      await act(async () => pending.reject(new Error('Read unavailable')));
       expect(canvas.getByRole('alert').textContent).toBe(m.access_unavailable());
       expect((canvas.getByLabelText(m.access_ends()) as HTMLInputElement).value).toBe(end);
       await click(m.access_find_account());
@@ -93,7 +82,7 @@ for (const boundary of ['handle', 'kind', 'cancel', 'resource', 'actor'] as cons
         ...snapshot.identities[1]!,
         kind: boundary === 'kind' ? ('organization' as const) : ('actor' as const),
       };
-      await act(async () => resolve(current));
+      await act(async () => pending.resolve(current));
       await click(m.access_save());
       expect(save.mock.calls[0]?.[0]).toMatchObject({
         resourceId: page.resource.id,
