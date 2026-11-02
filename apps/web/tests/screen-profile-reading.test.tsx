@@ -84,6 +84,8 @@ test('Screen refresh keeps corrections and exact uncertain requests; recovery re
           />
         </QueryClientProvider>,
       );
+    });
+    await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 20));
     });
     expect(reading().textContent).toContain('Supplied assertion');
