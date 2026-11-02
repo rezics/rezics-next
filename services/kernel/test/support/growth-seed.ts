@@ -4,7 +4,6 @@ import pg from 'pg';
 import type { Pool } from 'pg';
 import { GrowthSettleInfrastructureError, settleAdmin, vacuumFollows } from './growth-capture.ts';
 import { seedBulkRows, type SeedRow } from './growth-seed-batches.ts';
-import { createSeedValueEncoder, encodeSeedRow } from './growth-seed-values.ts';
 
 export type SeedTarget = { readonly pool: Pool; readonly admin: pg.Pool };
 export type Row = SeedRow;
@@ -29,8 +28,6 @@ export type Population = {
 };
 
 const WRITE_CONCURRENCY = 4;
-const VALUE_WORK_ORDINAL_WINDOW = 1_000;
-const TABLE_NAME = /^[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*$/;
 
 function assertOrdinal(ordinal: number): void {
   if (!Number.isSafeInteger(ordinal) || ordinal < 0)
@@ -90,37 +87,12 @@ export async function seed(target: SeedTarget, population: Population, range: Se
   if (Boolean(population.rows) === Boolean(population.write))
     throw new Error('population must supply exactly one of rows or write');
   if (population.rows) {
-    let currentWindow = -1;
-    let encoder = createSeedValueEncoder();
-    const rowNumbers = new Map<string, number>();
     await seedBulkRows(
       target.admin,
       range.from,
       range.to,
       (ordinal) => placement(population, ordinal),
-      (placementValue) => {
-        const window = Math.floor((placementValue.ordinal - range.from) / VALUE_WORK_ORDINAL_WINDOW);
-        if (window !== currentWindow) {
-          currentWindow = window;
-          encoder = createSeedValueEncoder();
-          rowNumbers.clear();
-        }
-        const records = population.rows!(placementValue);
-        const encoded = Object.create(null) as Record<string, readonly Row[]>;
-        const byteBudget = { byteArrayBytes: 0 };
-        for (const [name, rows] of Object.entries(records)) {
-          if (!TABLE_NAME.test(name)) {
-            encoded[name] = rows;
-            continue;
-          }
-          encoded[name] = rows.map((row) => {
-            const rowNumber = (rowNumbers.get(name) ?? 0) + 1;
-            rowNumbers.set(name, rowNumber);
-            return encodeSeedRow(row, name, rowNumber, Object.keys(row), encoder, byteBudget);
-          });
-        }
-        return encoded;
-      },
+      (placementValue) => population.rows!(placementValue),
     );
   } else {
     await writeRange(target, population, range);

@@ -47,7 +47,7 @@ test('splits by total rows and preserves placement, table order, and supported e
     ({ ordinal, route }) => ({
       'growth.parent': Array.from({ length: SEED_BATCH_ROW_LIMIT + 1 }, (_, id) => ({ route, id: ordinal * 501 + id })),
       'growth.child': [
-        { route, id: 900n + BigInt(ordinal), created, bytes: new Uint8Array([0, 255]), values: [undefined, null] },
+        { route, id: 900n + BigInt(ordinal), created, bytes: new Uint8Array([0, 255]), values: [null, true] },
       ],
     }),
   );
@@ -65,8 +65,34 @@ test('splits by total rows and preserves placement, table order, and supported e
     id: '904',
     created: '2025-04-03T02:01:00.000Z',
     bytes: '\\x00ff',
-    values: [null, null],
+    values: [null, true],
   });
+});
+
+test('preserves each ordinal when a row and nested byte container are reused', async () => {
+  const database = recordingPool();
+  const bytes = new Uint8Array([0]);
+  const nested = { n: 0 };
+  const row = { id: 0n, bytes, nested };
+  await seedBulkRows(database.admin, 0, 3, (ordinal) => ordinal, (ordinal) => {
+    row.id = BigInt(ordinal);
+    bytes[0] = ordinal;
+    nested.n = ordinal;
+    return { 'growth.reused': [row] };
+  });
+
+  expect(database.transactions).toEqual([
+    [
+      {
+        table: 'growth.reused',
+        rows: [
+          { id: '0', bytes: '\\x00', nested: { n: 0 } },
+          { id: '1', bytes: '\\x01', nested: { n: 1 } },
+          { id: '2', bytes: '\\x02', nested: { n: 2 } },
+        ],
+      },
+    ],
+  ]);
 });
 
 test('keeps total encoded payload bytes within each batch below the row limit', async () => {

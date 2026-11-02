@@ -461,7 +461,8 @@ Background limitations retain their native plan paths and identify the backgroun
 unattributed. Excluded background plans add no limitations.
 
 Bulk-row seed values preserve finite JSON values, BigInt as decimal text, Date as ISO 8601 text and Uint8Array as
-PostgreSQL bytea hex text. Traversal is limited to 64 nested levels and 100,000 visits per existing 1,000-ordinal
+PostgreSQL bytea hex text. Each admitted row is owned as that encoded snapshot before later ordinals can mutate the
+source row or nested containers. Traversal is limited to 64 nested levels and 100,000 visits per existing 1,000-ordinal
 input window; raw byte arrays are limited to 524,285 bytes per ordinal. Unsupported, cyclic, too-deep or over-budget
 values fail with table, row and column location before the SQL batch containing them is submitted.
 

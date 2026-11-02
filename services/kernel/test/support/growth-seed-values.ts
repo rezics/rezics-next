@@ -1,5 +1,4 @@
-import { SEED_BATCH_BYTE_LIMIT } from './growth-seed-batches.ts';
-
+export const SEED_BATCH_BYTE_LIMIT = 1_048_576;
 export const MAX_SEED_VALUE_DEPTH = 64;
 export const MAX_SEED_VALUE_NODES_PER_BATCH = 100_000;
 export const MAX_SEED_VALUE_BYTE_ARRAY_BYTES_PER_ORDINAL = Math.floor((SEED_BATCH_BYTE_LIMIT - 5) / 2);

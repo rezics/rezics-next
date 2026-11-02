@@ -1,5 +1,6 @@
 import pg from 'pg';
 import type { Pool } from 'pg';
+import { createSeedValueEncoder, encodeSeedRow, SEED_BATCH_BYTE_LIMIT } from './growth-seed-values.ts';
 
 export type SeedRow = Readonly<Record<string, unknown>>;
 type TableRows = {
@@ -10,7 +11,7 @@ type TableRows = {
 };
 
 export const SEED_BATCH_ROW_LIMIT = 500;
-export const SEED_BATCH_BYTE_LIMIT = 1_048_576;
+export { SEED_BATCH_BYTE_LIMIT };
 
 const ORDINAL_BATCH_SIZE = 1_000;
 const TABLE_NAME = /^[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*$/;
@@ -136,20 +137,6 @@ function rowBytes(row: SeedRow, table: string, ordinal: number): number {
   return bytes;
 }
 
-export function jsonValue(value: unknown): unknown {
-  if (typeof value === 'bigint') return value.toString(10);
-  if (value instanceof Date) return value.toISOString();
-  if (value instanceof Uint8Array) {
-    let hex = '';
-    for (const byte of value) hex += byte.toString(16).padStart(2, '0');
-    return `\\x${hex}`;
-  }
-  if (Array.isArray(value)) return value.map(jsonValue);
-  if (value && typeof value === 'object')
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, jsonValue(item)]));
-  return value;
-}
-
 function* collectBatches<TPlacement>(
   from: number,
   to: number,
@@ -157,25 +144,32 @@ function* collectBatches<TPlacement>(
   rowsFor: (placement: TPlacement) => Readonly<Record<string, readonly SeedRow[]>>,
 ): Generator<TableRows[]> {
   const columnsByTable = new Map<string, string[]>();
+  const rowNumbers = new Map<string, number>();
+  const encoder = createSeedValueEncoder();
   let tables = new Map<string, TableRows>();
   let rowCount = 0;
   let byteCount = 0;
 
   for (let ordinal = from; ordinal < to; ordinal++) {
     const records = rowsFor(place(ordinal));
+    const byteBudget = { byteArrayBytes: 0 };
     for (const name in records) {
       if (!Object.hasOwn(records, name)) continue;
       if (!TABLE_NAME.test(name)) throw new Error(`Invalid table name: ${name}`);
       const rows = records[name]!;
       const [schema, table] = name.split('.') as [string, string];
       for (const row of rows) {
-        const encodedBytes = rowBytes(row, name, ordinal);
         const columns = Object.keys(row);
         if (!columns.length) throw new Error(`Rows for ${name} must include at least one column`);
         const expectedColumns = columnsByTable.get(name);
         if (!expectedColumns) columnsByTable.set(name, columns);
         else if (columns.length !== expectedColumns.length || expectedColumns.some((key) => !Object.hasOwn(row, key)))
           throw new Error(`Rows for ${name} must have identical columns`);
+
+        const rowNumber = (rowNumbers.get(name) ?? 0) + 1;
+        rowNumbers.set(name, rowNumber);
+        const snapshot = encodeSeedRow(row, name, rowNumber, expectedColumns ?? columns, encoder, byteBudget);
+        const encodedBytes = rowBytes(snapshot, name, ordinal);
 
         let target = tables.get(name);
         let addedBytes = encodedBytes + (target ? 1 : 2);
@@ -192,7 +186,7 @@ function* collectBatches<TPlacement>(
           target = { schema, table, columns: expectedColumns ?? columns, rows: [] };
           tables.set(name, target);
         }
-        target.rows.push(row);
+        target.rows.push(snapshot);
         rowCount++;
         byteCount += addedBytes;
       }
@@ -211,7 +205,7 @@ async function insertBatch(admin: Pool, tables: TableRows[]): Promise<void> {
     for (const target of tables) {
       const qualified = `${pg.escapeIdentifier(target.schema)}.${pg.escapeIdentifier(target.table)}`;
       const columns = target.columns.map((column) => pg.escapeIdentifier(column)).join(', ');
-      const values = JSON.stringify(jsonValue(target.rows));
+      const values = JSON.stringify(target.rows);
       await client.query(
         `INSERT INTO ${qualified} (${columns}) SELECT ${columns} FROM jsonb_populate_recordset(NULL::${qualified}, $1::jsonb)`,
         [values],
