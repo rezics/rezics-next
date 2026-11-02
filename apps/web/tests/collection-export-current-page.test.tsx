@@ -56,7 +56,11 @@ test('a replacement public Collection export stays usable while retired clipboar
   const pageA: CollectionPublicPage = {
     id: 'public-list',
     revision: 1,
-    provenance: { mode: 'anonymous', viewerId: null, request: JSON.stringify(['page', 'public-list', null, false, []]) },
+    provenance: {
+      mode: 'anonymous',
+      viewerId: null,
+      request: JSON.stringify(['page', 'public-list', null, false, []]),
+    },
     visibility: null,
     disclosedVisibility: 'public',
     memberState: 'ready',
@@ -87,11 +91,18 @@ test('a replacement public Collection export stays usable while retired clipboar
     await act(async () => {
       root.render(
         <StrictMode>
-          {visible ? <CollectionExport page={page} context={context} laterPage={laterPage} request={async () => {
-            const file = collectionPublicDocument(page, context)!;
-            if (preparation) await preparation.promise;
-            return { state: 'complete', file };
-          }} /> : null}
+          {visible ? (
+            <CollectionExport
+              page={page}
+              context={context}
+              laterPage={laterPage}
+              request={async () => {
+                const file = collectionPublicDocument(page, context)!;
+                if (preparation) await preparation.promise;
+                return { state: 'complete', file };
+              }}
+            />
+          ) : null}
         </StrictMode>,
       );
     });
@@ -153,7 +164,9 @@ test('a replacement public Collection export stays usable while retired clipboar
     preparation = deferred();
     await act(async () => download().click());
     expectPending();
-    const cancel = [...host.querySelectorAll('button')].find((button) => button.textContent === m.library_collection_cancel())!;
+    const cancel = [...host.querySelectorAll('button')].find(
+      (button) => button.textContent === m.library_collection_cancel(),
+    )!;
     await act(async () => cancel.click());
     expectReady();
     await act(async () => preparation!.resolve());

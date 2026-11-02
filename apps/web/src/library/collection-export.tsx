@@ -8,9 +8,18 @@ import {
 } from './collection-public-document';
 
 import type { CollectionPageResult } from './collection-load';
-import { captureCollectionExport, CollectionExportAttempt, type CollectionExportCapture, type CollectionExportFile, type CollectionExportResult } from './collection-export-request';
+import {
+  captureCollectionExport,
+  CollectionExportAttempt,
+  type CollectionExportCapture,
+  type CollectionExportFile,
+  type CollectionExportResult,
+} from './collection-export-request';
 
-type ExportRequest = (capture: CollectionExportCapture, context: CollectionPublicContext) => Promise<CollectionExportResult>;
+type ExportRequest = (
+  capture: CollectionExportCapture,
+  context: CollectionPublicContext,
+) => Promise<CollectionExportResult>;
 const nativeExportRequest: ExportRequest = async (capture, context) => {
   const { readCollectionExport } = await import('./collection-export-read');
   return readCollectionExport({ data: { capture, context } });
@@ -101,10 +110,13 @@ function CollectionExportActions({
   const inFlight = useRef<object | null>(null);
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState('');
-  useLayoutEffect(() => () => {
-    attempt.current.cancel();
-    inFlight.current = null;
-  }, []);
+  useLayoutEffect(
+    () => () => {
+      attempt.current.cancel();
+      inFlight.current = null;
+    },
+    [],
+  );
 
   function cancel() {
     attempt.current.cancel();
@@ -160,9 +172,11 @@ function CollectionExportActions({
         >
           {m.library_collection_export_copy()}
         </Button>
-        {pending ? <Button type="button" variant="outline" onClick={cancel}>
-          {m.library_collection_cancel()}
-        </Button> : null}
+        {pending ? (
+          <Button type="button" variant="outline" onClick={cancel}>
+            {m.library_collection_cancel()}
+          </Button>
+        ) : null}
       </div>
       <p id={descriptionId} className="text-sm text-muted-foreground">
         {m.library_collection_export_note()}

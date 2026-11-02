@@ -27,13 +27,18 @@ export function captureCollectionExport(page: CollectionPageResult): CollectionE
   const dynamic = 'preparing' in page;
   if (
     !page.provenance ||
-    !Number.isSafeInteger(page.revision) || page.revision! < 1 ||
-    page.cursor || page.next !== null || page.members.length > LIBRARY_PAGE_LIMIT ||
-    page.filterStatus || page.filterIgnored?.length ||
+    !Number.isSafeInteger(page.revision) ||
+    page.revision! < 1 ||
+    page.cursor ||
+    page.next !== null ||
+    page.members.length > LIBRARY_PAGE_LIMIT ||
+    page.filterStatus ||
+    page.filterIgnored?.length ||
     (page.filterActive && !page.filter) ||
     (dynamic ? page.preparing || page.unavailable : page.memberState !== 'ready' || !page.firstPage) ||
     (!dynamic && page.filter !== undefined)
-  ) return null;
+  )
+    return null;
   const population: ExportPopulation[number][] = [];
   for (const member of page.members) {
     if (!member.subject) return null;
@@ -56,9 +61,13 @@ export function captureCollectionExport(page: CollectionPageResult): CollectionE
 export function validateCollectionExportCapture(value: unknown): CollectionExportCapture {
   const capture = value as CollectionExportCapture | null;
   if (
-    !capture || typeof capture !== 'object' ||
-    typeof capture.id !== 'string' || !capture.id || capture.id.length > 128 ||
-    !Number.isSafeInteger(capture.revision) || capture.revision < 1 ||
+    !capture ||
+    typeof capture !== 'object' ||
+    typeof capture.id !== 'string' ||
+    !capture.id ||
+    capture.id.length > 128 ||
+    !Number.isSafeInteger(capture.revision) ||
+    capture.revision < 1 ||
     typeof capture.dynamic !== 'boolean' ||
     !capture.provenance ||
     !['anonymous', 'session'].includes(capture.provenance.mode) ||
@@ -66,13 +75,21 @@ export function validateCollectionExportCapture(value: unknown): CollectionExpor
       ? capture.provenance.viewerId !== null
       : typeof capture.provenance.viewerId !== 'string' || !capture.provenance.viewerId) ||
     typeof capture.provenance.request !== 'string' ||
-    !Array.isArray(capture.population) || capture.population.length > LIBRARY_PAGE_LIMIT ||
-    capture.population.some((entry) => !entry || typeof entry.id !== 'string' || !entry.id ||
-      typeof entry.subjectId !== 'string' || !entry.subjectId ||
-      (entry.note !== null && typeof entry.note !== 'string')) ||
+    !Array.isArray(capture.population) ||
+    capture.population.length > LIBRARY_PAGE_LIMIT ||
+    capture.population.some(
+      (entry) =>
+        !entry ||
+        typeof entry.id !== 'string' ||
+        !entry.id ||
+        typeof entry.subjectId !== 'string' ||
+        !entry.subjectId ||
+        (entry.note !== null && typeof entry.note !== 'string'),
+    ) ||
     new Set(capture.population.map((entry) => entry.id)).size !== capture.population.length ||
     (!capture.dynamic && capture.filter !== undefined)
-  ) throw new Error('Invalid Collection export capture');
+  )
+    throw new Error('Invalid Collection export capture');
   return structuredClone(capture);
 }
 
@@ -98,18 +115,31 @@ export async function finishCollectionExport(
       identifier: capture.population[index]!.id,
       position: index + 1,
       ...('note' in member && member.note !== null ? { description: member.note } : {}),
-      url: new URL(subjectHref({
-        id: member.subject!.id,
-        label: pageText(libraryTitleValue(member.subject!.label), context.locale).text,
-      }, context.locale).href, origin).href,
+      url: new URL(
+        subjectHref(
+          {
+            id: member.subject!.id,
+            label: pageText(libraryTitleValue(member.subject!.label), context.locale).text,
+          },
+          context.locale,
+        ).href,
+        origin,
+      ).href,
     }));
-    return { state: 'complete', file: {
-      filename: `collection-${capture.id.replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 80)}.jsonld`,
-      mediaType: 'application/ld+json',
-      text: JSON.stringify({ '@context': 'https://schema.org', '@type': 'ItemList',
-        numberOfItems: items.length, itemListOrder: 'https://schema.org/ItemListOrderAscending',
-        itemListElement: items }).replaceAll('<', '\\u003c'),
-    } };
+    return {
+      state: 'complete',
+      file: {
+        filename: `collection-${capture.id.replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 80)}.jsonld`,
+        mediaType: 'application/ld+json',
+        text: JSON.stringify({
+          '@context': 'https://schema.org',
+          '@type': 'ItemList',
+          numberOfItems: items.length,
+          itemListOrder: 'https://schema.org/ItemListOrderAscending',
+          itemListElement: items,
+        }).replaceAll('<', '\\u003c'),
+      },
+    };
   } catch {
     return { state: 'unavailable' };
   }
@@ -119,13 +149,22 @@ export async function finishCollectionExport(
 export class CollectionExportAttempt {
   private generation = 0;
   private readonly capture: CollectionExportCapture;
-  constructor(capture: CollectionExportCapture) { this.capture = structuredClone(capture); }
-  cancel() { this.generation++; }
-  async run(request: (capture: CollectionExportCapture) => Promise<CollectionExportResult>): Promise<CollectionExportResult> {
+  constructor(capture: CollectionExportCapture) {
+    this.capture = structuredClone(capture);
+  }
+  cancel() {
+    this.generation++;
+  }
+  async run(
+    request: (capture: CollectionExportCapture) => Promise<CollectionExportResult>,
+  ): Promise<CollectionExportResult> {
     const generation = ++this.generation;
     let result: CollectionExportResult;
-    try { result = await request(structuredClone(this.capture)); }
-    catch { result = { state: 'unavailable' }; }
+    try {
+      result = await request(structuredClone(this.capture));
+    } catch {
+      result = { state: 'unavailable' };
+    }
     return generation === this.generation ? result : { state: 'cancelled' };
   }
 }
