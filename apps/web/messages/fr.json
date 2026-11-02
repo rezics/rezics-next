@@ -4117,6 +4117,8 @@
   "library_selected_labels_open": "Ajouter une étiquette existante",
   "library_selected_labels_description": "Ajoutez une étiquette privée aux éléments sélectionnés sur cette page chargée. Leurs autres étiquettes et leur propriétaire restent inchangés.",
   "library_selected_labels_search": "Rechercher une étiquette existante",
+  "library_shelf_label_input_invalid": "Utilisez au maximum 100 valeurs scalaires Unicode après normalisation NFC et réduction des espaces, et supprimez les caractères de contrôle et les substituts isolés.",
+  "library_shelf_label_input_transport_limit": "La recherche brute doit contenir au maximum 4 096 unités de code UTF-16 pour le transport.",
   "library_selected_labels_loading": "Chargement des étiquettes…",
   "library_selected_labels_no_matches": "Aucune étiquette ne correspond à cette recherche.",
   "library_selected_labels_confirm": "Ajouter « {name} » à {count} éléments sélectionnés sur cette page chargée ?",

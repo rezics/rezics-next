@@ -4117,6 +4117,8 @@
   "library_selected_labels_open": "既存のラベルを追加",
   "library_selected_labels_description": "読み込み済みのこのページで選択した項目に、非公開ラベルを1つ追加します。他のラベルや所有者は変わりません。",
   "library_selected_labels_search": "既存のラベルを検索",
+  "library_shelf_label_input_invalid": "NFC 正規化と空白の整理後、Unicode スカラー値を 100 個以内にし、制御文字と対応する組のないサロゲートを削除してください。",
+  "library_shelf_label_input_transport_limit": "送信時の安全上、検索文字列は UTF-16 コード単位で 4,096 個以内にしてください。",
   "library_selected_labels_loading": "ラベルを読み込み中…",
   "library_selected_labels_no_matches": "検索に一致するラベルはありません。",
   "library_selected_labels_confirm": "このページで選択した{count}件に「{name}」を追加しますか？",

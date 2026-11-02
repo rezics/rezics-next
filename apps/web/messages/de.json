@@ -4117,6 +4117,8 @@
   "library_selected_labels_open": "Vorhandenes Label hinzufügen",
   "library_selected_labels_description": "Füge den ausgewählten Einträgen dieser geladenen Seite ein privates Label hinzu. Andere Labels und die Eigentümerschaft bleiben erhalten.",
   "library_selected_labels_search": "Vorhandenes Label suchen",
+  "library_shelf_label_input_invalid": "Verwende nach NFC-Normalisierung und Leerraum-Bereinigung höchstens 100 Unicode-Skalarwerte und entferne Steuerzeichen sowie ungepaarte Surrogate.",
+  "library_shelf_label_input_transport_limit": "Die unveränderte Suche darf für die Übertragung höchstens 4.096 UTF-16-Codeeinheiten umfassen.",
   "library_selected_labels_loading": "Labels werden geladen…",
   "library_selected_labels_no_matches": "Keine Labels entsprechen dieser Suche.",
   "library_selected_labels_confirm": "„{name}“ zu {count} ausgewählten Einträgen dieser geladenen Seite hinzufügen?",

@@ -95,6 +95,8 @@ scopes. They add no resource type or scope and change no Collection action. The 
 
 **WEB ADDRESS DECISION:** Labels preserves `q` exactly up to 100 Unicode scalar values; correcting a prefix starts at page one, while correcting a cursor carries the unchanged valid prefix.
 
+**WEB SHELF LABEL SEARCH DECISION:** Assign and unassign keep the raw draft, validate and search with an NFC/Unicode-whitespace-normalized copy, and enforce the server action's existing 4,096 UTF-16-unit transport bound separately from the native 100-scalar limit.
+
 **WEB NAME INPUT DECISION:** Create and rename explain and validate the normalized 100-scalar native bound without rewriting raw drafts or captured commands; the separate 1000 UTF-16-unit input cap remains, and uncertain retries retain their original operands.
 
 **SUBJECT PICKER INPUT DECISION:** Preserve raw drafts with local normalized-name feedback and a separate 1000 UTF-16-unit transport bound; empty prefixes list labels, while empty names require correction before creation.

@@ -1,4 +1,4 @@
-import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import {
@@ -15,6 +15,7 @@ import { m } from '../paraglide/messages.js';
 import { useSession } from '../session/query';
 import { readSubjectLabelPage } from './labels-actions';
 import { labelReadMessage, SubjectLabelMore, SubjectLabelReadNotice } from './subject-labels.tsx';
+import { normalizeShelfLabelPrefix } from './shelf-label-input';
 import type { useShelfRows } from './shelf-rows';
 import type { ShelfLabelKind } from './shelf-label-request';
 import type { ShelfLabelOutcome } from './shelf-selection';
@@ -32,6 +33,14 @@ export function ShelfLabelAction({ controls, kind = 'assign' }: { controls: Cont
   const origin = useContext(PersonalShelfOrigin);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const inputErrorId = useId();
+  const inputValidation = normalizeShelfLabelPrefix(query);
+  const activeQuery = inputValidation.ok ? inputValidation.query : '';
+  const inputError = inputValidation.ok
+    ? null
+    : inputValidation.error === 'invalid'
+      ? m.library_shelf_label_input_invalid()
+      : m.library_shelf_label_input_transport_limit();
   const [choiceId, setChoiceId] = useState('');
   const [page, setPage] = useState<LabelPage | null>(null);
   const requestId = useRef(0);
@@ -126,11 +135,12 @@ export function ShelfLabelAction({ controls, kind = 'assign' }: { controls: Cont
   };
   useEffect(() => {
     const id = ++requestId.current;
-    if (!open || !listAdmitted || !isCurrent()) return;
+    const validation = normalizeShelfLabelPrefix(query);
+    if (!open || !listAdmitted || !isCurrent() || !validation.ok) return;
     timer.current = setTimeout(() => {
       timer.current = undefined;
       if (id !== requestId.current || !isCurrent()) return;
-      void readSubjectLabelPage({ data: { query } })
+      void readSubjectLabelPage({ data: { query: validation.query } })
         .then((result) => {
           if (id !== requestId.current || !isCurrent()) return;
           liveChoice.current = '';
@@ -173,10 +183,11 @@ export function ShelfLabelAction({ controls, kind = 'assign' }: { controls: Cont
             {m.library_selected_labels_search()}
             <input
               autoComplete="off"
-              maxLength={200}
               value={query}
+              aria-invalid={inputError ? true : undefined}
+              aria-describedby={inputError ? inputErrorId : undefined}
               onChange={(event) => {
-                const value = event.currentTarget.value.slice(0, 200);
+                const value = event.currentTarget.value;
                 if (!retainedCurrent() || value === query) return;
                 invalidate();
                 setQuery(value);
@@ -184,6 +195,11 @@ export function ShelfLabelAction({ controls, kind = 'assign' }: { controls: Cont
               className="h-11 w-full min-w-0 rounded-md border bg-background px-3"
             />
           </label>
+          {inputError ? (
+            <p id={inputErrorId} role="alert" className="text-sm text-destructive">
+              {inputError}
+            </p>
+          ) : null}
           {session.state === 'signed-out' ? (
             <p role="status">{m.library_sign_in()}</p>
           ) : !listAdmitted ? (
@@ -222,18 +238,18 @@ export function ShelfLabelAction({ controls, kind = 'assign' }: { controls: Cont
               </ul>
               {!page.labels.length ? (
                 <p role="status">
-                  {query || page.next ? m.library_selected_labels_no_matches() : m.library_labels_empty()}
+                  {activeQuery || page.next ? m.library_selected_labels_no_matches() : m.library_labels_empty()}
                 </p>
               ) : null}
               <SubjectLabelMore
-                key={`${query}:${requestId.current}`}
-                query={query}
+                key={`${activeQuery}:${requestId.current}`}
+                query={activeQuery}
                 next={page.next && page.next.length <= 4096 ? page.next : null}
                 isCurrent={retainedCurrent}
                 acceptPage={(result, request) => {
                   if (!retainedCurrent()) return false;
                   if (
-                    request.query !== query ||
+                    request.query !== activeQuery ||
                     (request.cursor !== undefined && request.cursor !== page.next) ||
                     !accept(result, request)
                   ) {

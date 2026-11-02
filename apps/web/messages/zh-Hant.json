@@ -4117,6 +4117,8 @@
   "library_selected_labels_open": "加入現有標籤",
   "library_selected_labels_description": "為目前已載入頁面中選取的條目加入一個私人標籤。其他標籤和擁有權保持不變。",
   "library_selected_labels_search": "尋找現有標籤",
+  "library_shelf_label_input_invalid": "NFC 正規化並整理空白後，最多使用 100 個 Unicode 純量值；請移除控制字元和未配對的代理項。",
+  "library_shelf_label_input_transport_limit": "原始搜尋內容最多為 4,096 個 UTF-16 程式碼單位，以符合傳輸限制。",
   "library_selected_labels_loading": "正在載入標籤…",
   "library_selected_labels_no_matches": "沒有符合搜尋的標籤。",
   "library_selected_labels_confirm": "將「{name}」加入此頁面中選取的 {count} 個條目？",

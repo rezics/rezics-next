@@ -4117,6 +4117,8 @@
   "library_selected_labels_open": "添加现有标签",
   "library_selected_labels_description": "为当前已加载页面中选中的条目添加一个私有标签。其他标签和所有权保持不变。",
   "library_selected_labels_search": "查找现有标签",
+  "library_shelf_label_input_invalid": "NFC 规范化并整理空白后，最多使用 100 个 Unicode 标量值；请移除控制字符和未配对的代理项。",
+  "library_shelf_label_input_transport_limit": "原始搜索内容最多为 4,096 个 UTF-16 代码单元，以符合传输限制。",
   "library_selected_labels_loading": "正在加载标签…",
   "library_selected_labels_no_matches": "没有与搜索匹配的标签。",
   "library_selected_labels_confirm": "将“{name}”添加到此页面中选中的 {count} 个条目？",

@@ -4117,6 +4117,8 @@
   "library_selected_labels_open": "Añadir una etiqueta existente",
   "library_selected_labels_description": "Añade una etiqueta privada a los elementos seleccionados de esta página cargada. Sus demás etiquetas y su propiedad se mantienen.",
   "library_selected_labels_search": "Buscar una etiqueta existente",
+  "library_shelf_label_input_invalid": "Usa como máximo 100 valores escalares Unicode tras normalizar en NFC y limpiar los espacios; elimina los controles y los sustitutos sin pareja.",
+  "library_shelf_label_input_transport_limit": "La búsqueda sin modificar debe tener como máximo 4.096 unidades de código UTF-16 para el transporte.",
   "library_selected_labels_loading": "Cargando etiquetas…",
   "library_selected_labels_no_matches": "Ninguna etiqueta coincide con esta búsqueda.",
   "library_selected_labels_confirm": "¿Añadir «{name}» a {count} elementos seleccionados de esta página cargada?",

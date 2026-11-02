@@ -4320,6 +4320,8 @@
   "library_selected_labels_open": "Add an existing label",
   "library_selected_labels_description": "Add one private label to selected items on this loaded page. Their other labels and ownership stay the same.",
   "library_selected_labels_search": "Find an existing label",
+  "library_shelf_label_input_invalid": "Use at most 100 Unicode scalar values after NFC normalization and whitespace cleanup; remove controls and unpaired surrogates.",
+  "library_shelf_label_input_transport_limit": "Keep the raw search at or below 4,096 UTF-16 code units for transport.",
   "library_selected_labels_loading": "Loading labels…",
   "library_selected_labels_no_matches": "No labels match this search.",
   "library_selected_labels_confirm": "Add “{name}” to {count} selected items on this loaded page?",
