@@ -36,10 +36,12 @@ function AccessRoute() {
       key={resourceId}
       initial={initial}
       io={{
-        read: (cursor, signal) => readResourceAccess({ data: { resourceId, ...(cursor ? { cursor } : {}) }, signal }),
-        transfer: (data, signal) => transferResourceOwner({ data, headers: csrfHeaders(), signal }),
-        save: (data, signal) => saveResourceAccess({ data, headers: csrfHeaders(), signal }),
-        lookup: (handle, signal) => findAccessIdentity({ data: { resourceId, handle }, signal }),
+        read: (cursor, signal) =>
+          readResourceAccess({ data: { resourceId, ...(cursor ? { cursor } : {}) }, ...(signal ? { signal } : {}) }),
+        transfer: (data, signal) =>
+          transferResourceOwner({ data, headers: csrfHeaders(), ...(signal ? { signal } : {}) }),
+        save: (data, signal) => saveResourceAccess({ data, headers: csrfHeaders(), ...(signal ? { signal } : {}) }),
+        lookup: (handle, signal) => findAccessIdentity({ data: { resourceId, handle }, ...(signal ? { signal } : {}) }),
       }}
     />
   );

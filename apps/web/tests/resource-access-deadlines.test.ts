@@ -186,7 +186,7 @@ test('caller cancellation releases stalled review and lookup; an already cancell
   caller.abort();
   expect((await reading).status).toBe('unavailable');
   expect(signal.aborted).toBe(true);
-  expect(remove.mock.calls[0]).toEqual(add.mock.calls[0]);
+  expect(remove.mock.calls[0]).toEqual(add.mock.calls[0]!.slice(0, 2));
   await expect(
     recipientRequest(() => {
       throw new Error('must not start');
