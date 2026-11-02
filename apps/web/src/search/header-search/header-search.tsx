@@ -674,8 +674,12 @@ function HeaderSearchController({
     if (onNavigate) onNavigate(href);
     else window.location.assign(href);
   };
-  const searchLanguages = () => {
-    const selected = (fields ?? []).flatMap(([key, value]) => (key === 'language' ? [value] : []));
+  const searchLanguages = (scope?: SearchScope) => {
+    const action = headerSearchAction(locale, scope);
+    const context = scope
+      ? [...(action ? new URL(action, 'https://rezics.invalid').searchParams : [])]
+      : (fields ?? []);
+    const selected = context.flatMap(([key, value]) => (key === 'language' ? [value] : []));
     return selected.length ? selected : undefined;
   };
   const submitQuery = (query: string, scope: SearchScope | undefined, resumed?: RecentEntry) => {
@@ -686,7 +690,7 @@ function HeaderSearchController({
       return;
     }
     setQueryLimitError(false);
-    history?.remember(query, scope, resumed ? resumed.languages : searchLanguages());
+    history?.remember(query, scope, resumed ? resumed.languages : searchLanguages(scope));
     const url = new URL(action, window.location.origin);
     url.searchParams.delete('q');
     url.searchParams.delete('cursor');
@@ -731,7 +735,7 @@ function HeaderSearchController({
       onSuggestion={(href) => {
         if (!canSelectSuggestion()) return;
         if (state.scope || isWithinGlobalSearchQueryLimit(state.query))
-          history?.remember(state.query, state.scope, searchLanguages());
+          history?.remember(state.query, state.scope, searchLanguages(state.scope));
         visit(href);
       }}
       onActive={(index) => {
@@ -796,7 +800,7 @@ function HeaderSearchController({
             event.preventDefault();
             const hit = subjects[visibleState.activeIndex]!;
             if (state.scope || isWithinGlobalSearchQueryLimit(state.query))
-              history?.remember(state.query, state.scope, searchLanguages());
+              history?.remember(state.query, state.scope, searchLanguages(state.scope));
             visit(subjectHref({ id: hit.id, label: localizedLabel(hit.labels, locale).text }, locale).href);
           }
         },
@@ -814,7 +818,7 @@ function HeaderSearchController({
             return;
           }
           setQueryLimitError(false);
-          history?.remember(state.query, state.scope, searchLanguages());
+          history?.remember(state.query, state.scope, searchLanguages(state.scope));
           if (!onNavigate) return;
           event.preventDefault();
           const url = new URL(action, window.location.origin);
