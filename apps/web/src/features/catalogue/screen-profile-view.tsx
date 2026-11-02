@@ -90,7 +90,7 @@ function ScreenPart({
       snak={part}
       related={read.public.related}
       subject={read.public.subject.id}
-      documents={read.public.documents}
+      documents={'documents' in read.public ? read.public.documents : undefined}
       locale={locale}
     />
   );

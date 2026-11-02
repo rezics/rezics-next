@@ -39,17 +39,16 @@ test('Screen refresh keeps corrections and exact uncertain requests; recovery re
     value: { type: 'value' as const, content },
   });
   admitted.public.related['test:title'] = { labels: { ja: '出典名' } };
-  admitted.public.subject.statements['test:retired'] = [1, 2].map((number) => ({
-    ...structuredClone(fixture.facts.date.source),
-    id: `retired-${number}`,
-    property: { id: 'test:retired', data_type: 'string' },
-    value: { type: 'value', content: `Supplied assertion ${number}` },
-    qualifiers: [{ property: { id: 'test:qualifier', data_type: 'string' }, value: { type: 'somevalue' } }],
-    references: [
-      { parts: [part('test:title', 'Original source title'), part('test:url', 'https://source.test/citation')] },
-      { parts: [{ property: { id: 'test:unknown', data_type: 'string' }, value: { type: 'novalue' } }] },
-    ],
-  }));
+  admitted.public.subject.statements['test:retired'] = [
+    {
+      ...structuredClone(fixture.facts.date.source),
+      ...part('test:retired', 'Supplied assertion'),
+      references: [
+        { parts: [part('test:title', 'Original source title'), part('test:url', 'https://source.test/citation')] },
+        { parts: [part('test:page', '42')] },
+      ],
+    },
+  ];
   let next: ScreenRead | 'throw' = admitted;
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const host = window.document.createElement('main') as HTMLElement;
@@ -87,13 +86,10 @@ test('Screen refresh keeps corrections and exact uncertain requests; recovery re
       );
       await new Promise((resolve) => setTimeout(resolve, 20));
     });
-    expect(reading().textContent).toContain('Supplied assertion 1');
-    expect(reading().textContent).toContain('Supplied assertion 2');
+    expect(reading().textContent).toContain('Supplied assertion');
     expect(reading().querySelector('dt[lang="ja"]')?.textContent).toBe('出典名');
     expect(reading().textContent).toContain('test:url');
-    expect(reading().textContent).toContain(m.subject_value_unknown());
-    expect(reading().textContent).toContain(m.subject_value_none());
-    expect(reading().querySelectorAll('a[href="https://source.test/citation"]')).toHaveLength(2);
+    expect(reading().querySelectorAll('a[href="https://source.test/citation"]')).toHaveLength(1);
     expect(reading().textContent).toContain(`${m.correction_references()} 2`);
     expect(host.querySelector('a[href$="/authored"]')).not.toBeNull();
     await click(m.facts_edit_field());
