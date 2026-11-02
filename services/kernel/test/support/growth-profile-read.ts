@@ -2,6 +2,9 @@ import type { CalibrationCheck, CalibrationRunPoint } from './growth-calibration
 import type { GrowthModelBound } from './growth-model.ts';
 import { admitGrowthProfileInput, growthProfileLines } from './growth-profile-input.ts';
 
+/** Omitted-check × source-run pairs admitted before missing-run lists, matching calibration's 256×32 capacities. */
+export const GROWTH_PROFILE_DIAGNOSTIC_EXPANSION = 256 * 32;
+
 export const GROWTH_PROFILE_METRICS = ['rows', 'blocks', 'statements'] as const;
 export type GrowthProfileMetric = (typeof GROWTH_PROFILE_METRICS)[number];
 export type GrowthProfileOutcome = 'compatible' | 'violation' | 'inconclusive';
@@ -238,10 +241,10 @@ export function readGrowthProfiles(sources: readonly GrowthProfileRunSource[]): 
 
   const omitted: OmittedGrowthProfileCheck[] = [];
   const complete: GrowthProfileEntry[][] = [];
+  let diagnosticExpansion = 0;
   for (const group of entriesByCheck.values()) {
     const first = group[0]!;
     const byRun = new Map(group.map((entry) => [entry.run, entry]));
-    const missingRuns = sources.map(({ name }) => name).filter((name) => !byRun.has(name));
     const scalesByRun = group.map(({ run, scales }) => ({ run, scales }));
     const referenceScales = group[0]!.scales;
     const scalesMatch = group.every(
@@ -251,20 +254,26 @@ export function readGrowthProfiles(sources: readonly GrowthProfileRunSource[]): 
     const boundsMatch = group.every(({ bounds }) =>
       GROWTH_PROFILE_METRICS.every((metric) => bounds[metric] === first.bounds[metric]),
     );
-    if (missingRuns.length > 0 || !scalesMatch || !boundsMatch) {
-      omitted.push({
-        file: first.file,
-        check: first.check,
-        occurrence: first.occurrence,
-        missingRuns,
-        scalesByRun,
-        ...(boundsMatch ? {} : { incompatibleBoundsByRun: group.map(({ run, bounds }) => ({ run, bounds })) }),
-      });
+    if (byRun.size === sources.length && scalesMatch && boundsMatch) {
+      complete.push(
+        sources.map(({ name }) => byRun.get(name)!).filter((entry): entry is GrowthProfileEntry => entry !== undefined),
+      );
       continue;
     }
-    complete.push(
-      sources.map(({ name }) => byRun.get(name)!).filter((entry): entry is GrowthProfileEntry => entry !== undefined),
-    );
+    diagnosticExpansion += sources.length;
+    if (diagnosticExpansion > GROWTH_PROFILE_DIAGNOSTIC_EXPANSION) {
+      throw new TypeError(
+        `Growth profile ${growthProfileCheckId(first.file, first.check, first.occurrence)} exceeds the ${GROWTH_PROFILE_DIAGNOSTIC_EXPANSION} check×run diagnostic expansion (${diagnosticExpansion} check×run pairs)`,
+      );
+    }
+    omitted.push({
+      file: first.file,
+      check: first.check,
+      occurrence: first.occurrence,
+      missingRuns: sources.map(({ name }) => name).filter((name) => !byRun.has(name)),
+      scalesByRun,
+      ...(boundsMatch ? {} : { incompatibleBoundsByRun: group.map(({ run, bounds }) => ({ run, bounds })) }),
+    });
   }
 
   complete.sort(
