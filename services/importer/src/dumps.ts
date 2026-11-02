@@ -24,6 +24,33 @@ function object(text: string): Record<string, unknown> {
 const positive = (value: unknown): value is number =>
   typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
 
+type WikiScan = { depth: number; quoted: boolean; escaped: boolean; started: boolean };
+function scanWikiEntity(text: string, scan: WikiScan): boolean | null {
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i]!;
+    if (scan.quoted) {
+      if (scan.escaped) scan.escaped = false;
+      else if (char === '\\') scan.escaped = true;
+      else if (char === '"') scan.quoted = false;
+      continue;
+    }
+    if (char === '"') scan.quoted = true;
+    else if (char === '{') {
+      scan.started = true;
+      scan.depth++;
+    } else if (char === '}') {
+      if (scan.depth === 0) return invalid();
+      if (--scan.depth === 0) {
+        const tail = text.slice(i + 1).trim();
+        if (tail !== '' && tail !== ',') return invalid();
+        return tail === ',';
+      }
+    }
+  }
+  if (!scan.started) return invalid();
+  return null;
+}
+
 function copyCell(cell: string, memory: DumpMemory, counters: DumpCounters): string | null {
   if (cell === '\\N') return null;
   // PostgreSQL COPY text escapes are decoded into bytes before UTF-8 decoding,
@@ -87,7 +114,10 @@ export async function* readDump(
   memory.hold(8, source, 'metadata');
   let columns: string[] | null = null;
   let table: string | null = null;
-  let wiki: 'start' | 'lines' | 'first' | 'value' | 'separator' | 'closed' = 'start';
+  let wiki: 'start' | 'lines' | 'first' | 'value' | 'valueOrClose' | 'separator' | 'closed' = 'start';
+  let wikiParts: string[] | null = null;
+  let wikiBytes = 0;
+  const wikiScan: WikiScan = { depth: 0, quoted: false, escaped: false, started: false };
   const lineCap = () =>
     source === 'vndb' && table === null ? Math.max(cap + 1, 65536) : cap + (source === 'wikidata' ? 2 : 1);
   try {
@@ -103,6 +133,7 @@ export async function* readDump(
         let recordBytes = bytes.length;
         if (source === 'wikidata') {
           text = text.trim();
+          let assembled = false;
           if (!text) continue;
           if (wiki === 'closed') return invalid();
           if (wiki === 'start') {
@@ -117,24 +148,47 @@ export async function* readDump(
             wiki = 'lines';
           }
           if (wiki !== 'lines') {
-            if (text === ']') {
-              if (wiki !== 'first' && wiki !== 'separator') return invalid();
-              wiki = 'closed';
+            if (wikiParts === null) {
+              if (text === ']') {
+                if (wiki !== 'first' && wiki !== 'separator' && wiki !== 'valueOrClose') return invalid();
+                wiki = 'closed';
+                continue;
+              }
+              if (text === ',') {
+                if (wiki !== 'separator') return invalid();
+                wiki = 'value';
+                continue;
+              }
+              if (wiki !== 'first' && wiki !== 'value' && wiki !== 'valueOrClose') return invalid();
+              wikiParts = [];
+              wikiBytes = 0;
+              wikiScan.depth = 0;
+              wikiScan.quoted = false;
+              wikiScan.escaped = false;
+              wikiScan.started = false;
+            }
+            wikiParts.push(text);
+            wikiBytes += bytes.length + (wikiParts.length > 1 ? 1 : 0);
+            memory.hold(4, wikiParts);
+            const comma = scanWikiEntity(text, wikiScan);
+            if (comma === null) {
+              if (wikiBytes > cap + 1) return invalid();
               continue;
             }
-            if (text === ',') {
-              if (wiki !== 'separator') return invalid();
-              wiki = 'value';
-              continue;
-            }
-            if (wiki !== 'first' && wiki !== 'value') return invalid();
-            const comma = text.endsWith(',');
-            if (comma) text = text.slice(0, -1).trimEnd();
-            wiki = comma ? 'value' : 'separator';
+            text = wikiParts.join('\n');
+            if (comma) text = text.slice(0, -1);
+            memory.hold(14, text);
+            wikiParts = null;
+            memory.hold(4, null);
+            memory.hold(4, text);
+            memory.hold(14, null);
+            wiki = comma ? 'valueOrClose' : 'separator';
+            assembled = true;
           }
           memory.hold(4, text);
           const encoded = new TextEncoder().encode(text);
           memory.hold(11, encoded);
+          if (assembled) counters.copiedBytes += encoded.length;
           counters.copiedBytes += encoded.length;
           recordBytes = encoded.length;
           memory.hold(11, null);
@@ -237,10 +291,15 @@ export async function* readDump(
         memory.sample();
         yield { source, key, revision, payload };
       } finally {
-        for (const slot of [3, 4, 5, 6, 7, 11, 12, 13]) memory.hold(slot, null);
+        for (const slot of [3, 5, 6, 7, 11, 12, 13]) memory.hold(slot, null);
+        if (wikiParts === null) memory.hold(4, null);
       }
     }
-    if (table !== null || (source === 'wikidata' && !['start', 'lines', 'closed'].includes(wiki))) return invalid();
+    if (
+      table !== null ||
+      (source === 'wikidata' && (wikiParts !== null || !['start', 'lines', 'closed'].includes(wiki)))
+    )
+      return invalid();
   } finally {
     memory.close();
   }

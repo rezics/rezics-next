@@ -24,7 +24,17 @@ const property = {
   claims: {},
 };
 async function* bytes(rows: unknown[]) {
-  yield new TextEncoder().encode('[\n' + rows.map((row) => JSON.stringify(row)).join(',\n') + '\n]\n');
+  yield new TextEncoder().encode(
+    '[\n' +
+      rows
+        .map((row) => {
+          const lines = JSON.stringify(row, null, 2)!.split('\n');
+          lines[lines.length - 1] += ',';
+          return lines.join('\n');
+        })
+        .join('\n') +
+      '\n]\n',
+  );
 }
 
 test('native mixed Wikidata dump imports only items and preserves refresh and mass-stop semantics', async () => {
