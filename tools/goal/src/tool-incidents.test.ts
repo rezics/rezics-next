@@ -9,7 +9,9 @@ import { harness } from './test-support.ts';
 import { listOpenToolIncidents, recordToolBlockerFailure, TOOL_INCIDENT_PROBE_MS } from './tool-incidents.ts';
 
 test('a failed notice is recovered through the SQLite inbox without reopening the incident or probe', async () => {
-  const h = harness(), now = Date.now(), errorLine = 'ENOSPC: shared cache read failed';
+  const h = harness(),
+    now = Date.now(),
+    errorLine = 'ENOSPC: shared cache read failed';
   try {
     const tasks = Array.from({ length: 3 }, () => h.tasks.dispatch(h.briefFile));
     writeFileSync(join(h.root, 'README.md'), `${errorLine}\n`);
@@ -26,9 +28,18 @@ test('a failed notice is recovered through the SQLite inbox without reopening th
     };
     const refs = tasks.map((task) => {
       const ref = { taskId: task.id, attempt: 0 };
-      h.store.nextAttempt(ref, (attempt) => ({
-        taskId: task.id, attempt, state: 'exited', failureKind: 'tool', blocker: errorLine, result: errorLine,
-      }) as unknown as Attempt);
+      h.store.nextAttempt(
+        ref,
+        (attempt) =>
+          ({
+            taskId: task.id,
+            attempt,
+            state: 'exited',
+            failureKind: 'tool',
+            blocker: errorLine,
+            result: errorLine,
+          }) as unknown as Attempt,
+      );
       return { taskId: task.id, attempt: 1 };
     });
     const observe = (ref: (typeof refs)[number]) =>
@@ -38,8 +49,11 @@ test('a failed notice is recovered through the SQLite inbox without reopening th
     expect(inbox.read(h.settings.integration.supermanager)).toEqual([]);
     const incident = listOpenToolIncidents(h.store)[0]!;
     expect(incident).toMatchObject({
-      line: errorLine.toLowerCase(), errorLine, probe: refs[2],
-      nextProbeAt: new Date(now + TOOL_INCIDENT_PROBE_MS).toISOString(), noticeDelivered: false,
+      line: errorLine.toLowerCase(),
+      errorLine,
+      probe: refs[2],
+      nextProbeAt: new Date(now + TOOL_INCIDENT_PROBE_MS).toISOString(),
+      noticeDelivered: false,
     });
     expect(refs.map((ref) => h.store.retryIntent(ref)?.status)).toEqual(['pending', 'pending', 'pending']);
 
@@ -47,7 +61,10 @@ test('a failed notice is recovered through the SQLite inbox without reopening th
     expect(listOpenToolIncidents(h.store)).toHaveLength(1);
     expect(tasks.map((task) => h.store.task(task.id).currentAttempt)).toEqual([1, 1, 1]);
     expect(listOpenToolIncidents(h.store)[0]).toMatchObject({
-      id: incident.id, probe: incident.probe, nextProbeAt: incident.nextProbeAt, noticeDelivered: true,
+      id: incident.id,
+      probe: incident.probe,
+      nextProbeAt: incident.nextProbeAt,
+      noticeDelivered: true,
     });
     const messages = inbox.read(h.settings.integration.supermanager);
     expect(messages).toHaveLength(1);

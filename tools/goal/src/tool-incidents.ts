@@ -76,7 +76,12 @@ function openIncidentForFingerprint(store: WorkerStore, fingerprint: string): To
 }
 
 function blockerLine(attempt: Attempt): string {
-  return (attempt.blocker || attempt.result || '').split(/\r?\n/, 1)[0]?.replace(/\x1b\[[0-9;]*m/g, '').trim() ?? '';
+  return (
+    (attempt.blocker || attempt.result || '')
+      .split(/\r?\n/, 1)[0]
+      ?.replace(/\x1b\[[0-9;]*m/g, '')
+      .trim() ?? ''
+  );
 }
 
 function trackedSourceLocation(checkout: string, message: string): string {
@@ -192,8 +197,7 @@ export function recordToolBlockerFailure(
     .query('SELECT 1 FROM worker_events WHERE task_id=? AND attempt=? AND kind=? LIMIT 1')
     .get(ref.taskId, ref.attempt, FAILURE_EVENT);
 
-  if (!existingFailure)
-    insertEvent(store, ref, FAILURE_EVENT, at, { fingerprint, line, rawLine });
+  if (!existingFailure) insertEvent(store, ref, FAILURE_EVENT, at, { fingerprint, line, rawLine });
 
   let opened = false;
   let incident = store.db
@@ -204,16 +208,13 @@ export function recordToolBlockerFailure(
         const examples = [...current.exampleTasks];
         if (!examples.some((example) => example.taskId === task.id))
           examples.push({ taskId: task.id, attempt: attempt.attempt });
-        const probingFailure =
-          current.probe.taskId === ref.taskId && ref.attempt === current.probe.attempt + 1;
+        const probingFailure = current.probe.taskId === ref.taskId && ref.attempt === current.probe.attempt + 1;
         const updated: ToolIncident = {
           ...current,
           updatedAt: at,
           taskIds,
           exampleTasks: examples.slice(0, 5),
-          ...(probingFailure
-            ? { probe: ref, nextProbeAt: new Date(now + TOOL_INCIDENT_PROBE_MS).toISOString() }
-            : {}),
+          ...(probingFailure ? { probe: ref, nextProbeAt: new Date(now + TOOL_INCIDENT_PROBE_MS).toISOString() } : {}),
         };
         saveState(store, ref, 'open', updated);
         return updated;
@@ -316,8 +317,7 @@ export function resolveToolIncidentsAfterAttempt(
   task: Task,
   attempt: Attempt,
 ): ToolIncident[] {
-  const fingerprint =
-    attempt.failureKind === 'tool' ? blockerFingerprint(attempt, task.worktree) : null;
+  const fingerprint = attempt.failureKind === 'tool' ? blockerFingerprint(attempt, task.worktree) : null;
   const resolved: ToolIncident[] = [];
   for (const incident of listOpenToolIncidents(store)) {
     if (
