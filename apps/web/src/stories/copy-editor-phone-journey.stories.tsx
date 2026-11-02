@@ -58,7 +58,7 @@ function Editor({ inline }: { inline: boolean }) {
   });
   const [mode, setMode] = useState<'add' | 'edit' | null>(null);
   const [outcome, setOutcome] = useState('');
-  const [key, setKey] = useState(() => crypto.randomUUID());
+  const [key, setKey] = useState<string>(() => crypto.randomUUID());
   return (
     <div className="min-w-0 space-y-4 p-4">
       <div className="flex flex-wrap gap-3">
@@ -137,14 +137,16 @@ async function journey(canvasElement: HTMLElement) {
   await userEvent.click(adding.getByRole('button', { name: m.library_copy_less() }));
   await userEvent.click(adding.getByRole('button', { name: m.library_copy_more() }));
   expect(adding.getByLabelText(m.library_copy_location())).toHaveValue('  Study 📚  ');
-  await userEvent.click(adding.getByRole('button', { name: m.library_copy_add_submit() }));
+  adding.getByRole('button', { name: m.library_copy_add_submit() }).focus();
+  await userEvent.keyboard('{Enter}');
   await waitFor(() => expect(page.getByRole('status')).toHaveTextContent('Created'));
   await userEvent.click(page.getByRole('button', { name: m.library_copy_edit() }));
   const edit = await body.findByRole('form', { name: m.library_copy_edit() });
   const editing = await disclose(edit);
   expect(editing.getByLabelText(m.library_copy_note())).toHaveValue('Exact note with spaces  ');
   await userEvent.type(editing.getByLabelText(m.library_copy_note()), 'updated');
-  await userEvent.click(editing.getByRole('button', { name: m.library_copy_save() }));
+  editing.getByRole('button', { name: m.library_copy_save() }).focus();
+  await userEvent.keyboard('{Enter}');
   await waitFor(() => expect(page.getByRole('status')).toHaveTextContent('Saved'));
   await userEvent.click(page.getByRole('button', { name: m.library_copy_edit() }));
   const deleting = await body.findByRole('form', { name: m.library_copy_edit() });
@@ -180,7 +182,13 @@ export const HistoricalClose: Story = {
     expect(within(form).getByText('Kept at acceptance')).toBeVisible();
     expect(within(form).queryByRole('combobox', { name: m.library_copy_new_status() })).not.toBeInTheDocument();
     await disclose(form);
-    await userEvent.click(within(form).getByRole('button', { name: m.library_copy_cancel() }));
+    const dialog = form.closest('[role=dialog]')!;
+    for (const control of dialog.querySelectorAll<HTMLElement>('[data-slot=dialog-close], [data-slot=drawer-close]')) {
+      expect(control.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+      expect(control.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
+    }
+    within(form).getByRole('button', { name: m.library_copy_cancel() }).focus();
+    await userEvent.keyboard('{Enter}');
     await waitFor(() => expect(body.queryByRole('form')).not.toBeInTheDocument());
   },
 };
