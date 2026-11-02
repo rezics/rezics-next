@@ -236,7 +236,8 @@ export function VerificationCard({
   );
   const form = useRef<HTMLFormElement>(null);
   const [showValidation, setShowValidation] = useState(false);
-  const [confirmation, setConfirmation] = useState(false);
+  // Confirmation belongs to the observed request; a new read or subject choice requires a fresh decision.
+  const [confirmation, setConfirmation] = useState<AgentVerificationRequest | null>(null);
   // Capture the genuine label in the action handler, before a send clears current status or the draft changes.
   const [action, setAction] = useState<{ kind: 'request' | 'withdraw'; subject: string } | null>(null);
   const [acknowledged, setAcknowledged] = useState<Omit<VerificationInput, 'idempotencyKey'> | null>(null);
@@ -296,10 +297,10 @@ export function VerificationCard({
   }
 
   async function withdraw() {
-    if (!isCurrent() || !csrfToken || !confirmation || !canWithdraw) return;
+    if (!isCurrent() || !csrfToken || confirmation !== verification || !canWithdraw) return;
     setAction({ kind: 'withdraw', subject: subjectLabel(subjectTitle, verification?.catalogueSubjectId) });
     await controller.withdraw(true);
-    if (isCurrent()) setConfirmation(false);
+    if (isCurrent()) setConfirmation(null);
   }
 
   return (
@@ -384,7 +385,14 @@ export function VerificationCard({
               </Alert>
             ) : null}
             <FieldGroup>
-              <VerificationSubjectChooser selected={selected} onSelect={setSelected} disabled={pending || !csrfToken} />
+              <VerificationSubjectChooser
+                selected={selected}
+                onSelect={(subject) => {
+                  setSelected(subject);
+                  setConfirmation(null);
+                }}
+                disabled={pending || !csrfToken}
+              />
               <Field data-invalid={errors.has(`${id}-statement`)}>
                 <FieldLabel htmlFor={`${id}-statement`}>{m.settings_verification_statement()}</FieldLabel>
                 <Textarea
@@ -415,7 +423,7 @@ export function VerificationCard({
           </form>
         ) : null}
         {canWithdraw ? (
-          confirmation ? (
+          confirmation === verification ? (
             <Alert>
               <AlertTitle>{m.settings_verification_confirm_title()}</AlertTitle>
               <AlertDescription className="flex min-w-0 max-w-full flex-wrap gap-2">
@@ -432,7 +440,7 @@ export function VerificationCard({
                   type="button"
                   variant="outline"
                   className={verificationActionClassName}
-                  onClick={() => setConfirmation(false)}
+                  onClick={() => setConfirmation(null)}
                 >
                   {m.settings_verification_cancel()}
                 </Button>
@@ -443,7 +451,7 @@ export function VerificationCard({
               type="button"
               variant="outline"
               className={verificationActionClassName}
-              onClick={() => setConfirmation(true)}
+              onClick={() => setConfirmation(verification)}
             >
               {m.settings_verification_withdraw()}
             </Button>

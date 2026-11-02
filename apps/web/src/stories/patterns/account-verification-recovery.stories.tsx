@@ -196,6 +196,16 @@ export const RequestLostResponse: Story = {
     await expect(url).toHaveValue('https://example.test/later');
     await expect(view.getAllByRole('textbox', { name: m.settings_verification_link_url() })).toHaveLength(5);
     await expect(view.getByText(`Avery · ${m.settings_verification_person()}`)).toBeVisible();
+    await userEvent.click(view.getByRole('button', { name: m.settings_verification_withdraw() }));
+    await view.findByText(m.settings_verification_confirm_title());
+    await userEvent.click(view.getByRole('button', { name: m.settings_verification_read_current() }));
+    await waitFor(() => expect(view.queryByText(m.settings_verification_confirm_title())).toBeNull());
+    await userEvent.click(view.getByRole('button', { name: m.settings_verification_withdraw() }));
+    await view.findByText(m.settings_verification_confirm_title());
+    await userEvent.click(view.getByRole('button', { name: m.settings_verification_change_subject() }));
+    await expect(view.queryByText(m.settings_verification_confirm_title())).toBeNull();
+    await expect(view.getByRole('combobox')).toHaveValue('');
+    await expect(statement).toHaveValue('Later draft');
     await expect(view.queryByText(m.settings_verification_verified())).toBeNull();
     await expect(view.queryByText(m.settings_verification_sent())).toBeNull();
   },
