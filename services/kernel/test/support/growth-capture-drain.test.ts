@@ -13,7 +13,10 @@ test('drains failed work and tasks registered while draining', async () => {
   setupTasks.add(
     Promise.resolve().then(() => {
       pendingQueries.add(lateQuery);
-      void lateQuery.then(() => pendingQueries.delete(lateQuery), () => {});
+      void lateQuery.then(
+        () => pendingQueries.delete(lateQuery),
+        () => {},
+      );
     }),
   );
 
