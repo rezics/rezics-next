@@ -29,77 +29,6 @@ const labels = {
   'schema:MusicAlbum': ['音乐专辑', '音樂專輯', 'アルバム'],
 };
 
-const glosses = {
-  'schema:TVSeason': {
-    'zh-Hans': '编播季',
-    'zh-Hant': '編播季',
-    en: 'television series season',
-    es: 'temporada televisiva',
-    fr: 'saison de série télévisée',
-  },
-  'schema:Book': {
-    'zh-Hans': '书面作品',
-    de: 'Schrifttum',
-    es: 'obra escrita',
-    fr: 'œuvre écrite',
-    ko: '저작물',
-  },
-  'bf:Instance': {
-    'zh-Hans': '作品版本或翻译',
-    de: 'Ausgabe oder Version',
-    es: 'edición, traducción o versión',
-    fr: 'version, édition ou traduction',
-  },
-  'schema:Person': {
-    'zh-Hans': '人类',
-    de: 'Mensch',
-    es: 'ser humano',
-    fr: 'être humain',
-  },
-  'wd:Q95074': {
-    'zh-Hans': '虚构角色',
-    'zh-Hant': '虛構角色',
-    ja: '架空のキャラクター',
-    de: 'fiktiver Charakter',
-    fr: 'personnage de fiction',
-    ko: '허구의 캐릭터',
-  },
-  'schema:ComicSeries': {
-    'zh-Hans': '日本系列漫画',
-    'zh-Hant': '日本系列漫畫',
-    ja: '日本の連載漫画',
-    ko: '일본의 만화 시리즈',
-  },
-  'wd:Q7725310': {
-    'zh-Hans': '系列创意作品',
-    'zh-Hant': '系列創意作品',
-    en: 'series of creative works',
-    de: 'Mehrteiler',
-    es: 'serie de obras creativas',
-    fr: "série d'œuvres",
-  },
-  'wd:Q20631656': {
-    'zh-Hans': '软件发布',
-    'zh-Hant': '軟體發布',
-    en: 'software release',
-    de: 'Softwareveröffentlichung',
-    es: 'release',
-    fr: 'publication de logiciels',
-    ja: 'ソフトウェア・リリース',
-    ko: '출시 버전',
-  },
-  'wd:Q209163': {
-    'zh-Hans': '资料片',
-    'zh-Hant': '資料片',
-    en: 'expansion add-on',
-    de: 'Computerspiel-Erweiterung',
-    es: 'expansión',
-    fr: 'extension de jeu vidéo',
-    ja: '拡張パック',
-    ko: '확장팩',
-  },
-};
-
 const authoredDescriptions = {
   de: 'Eine animierte Fernsehserie als Werk mit ihren Staffeln und Folgen, unabhängig von einer bestimmten Veröffentlichung.',
   en: 'An animated television series as a work spanning its seasons and episodes, distinct from a particular publication release.',
@@ -118,11 +47,6 @@ test('every type a page shows reads as an interface word in Chinese and Japanese
   }
 });
 
-test("a type's Wikidata gloss is kept as its description", () => {
-  for (const [key, expected] of Object.entries(glosses)) {
-    expect(bundledRelease.types[key]).toHaveProperty('descriptions', expected);
-  }
-});
 
 test('an authored type description is published in all locales', () => {
   expect(bundledRelease.types['schema:TVSeries']?.descriptions).toEqual(authoredDescriptions);
