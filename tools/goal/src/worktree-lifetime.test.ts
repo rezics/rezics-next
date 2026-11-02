@@ -144,8 +144,9 @@ test('finished-worktree cleanup defers within a finite pass under sustained I/O 
   let commands = 0;
   const pressured = fake({
     pressure: () => IO_PRESSURE_LIMIT + 1,
-    sleep: async () => {
-      waits++;
+    sleep: async (ms) => {
+      expect(ms).toBe(1000);
+      expect(++waits).toBeLessThanOrEqual(IO_PRESSURE_WAIT_ATTEMPTS);
     },
     command: () => {
       commands++;

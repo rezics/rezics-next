@@ -236,6 +236,8 @@ export async function removeFinishedWorktree(
     // Git may partially remove a worktree before reporting EACCES. Pruning while its directory still exists can
     // discard the registration needed to retry after remediation, so preserve all such registrations this sweep.
     let unresolvedCleanup = hasUnresolvedCleanup(candidates, roots, store);
+    // Share the wait budget across candidates whose state or directory changes while waiting.
+    let pressureWaits = 0;
     for (const task of candidates) {
       if (!eligibleDirectory(task, roots)) continue;
       let taskLease: DirectoryLease;
@@ -260,7 +262,6 @@ export async function removeFinishedWorktree(
           continue;
 
         let pressure = io.pressure() ?? 0;
-        let pressureWaits = 0;
         while (pressure > IO_PRESSURE_LIMIT && pressureWaits < IO_PRESSURE_WAIT_ATTEMPTS) {
           await io.sleep(1000);
           pressureWaits++;
