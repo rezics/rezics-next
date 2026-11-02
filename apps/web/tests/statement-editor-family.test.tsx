@@ -725,7 +725,10 @@ test('statement family owns labels, independent supplied parts, feedback, exact 
           ...lifecycle.transport,
           change: async (command) => {
             commands.push(command);
-            if (hold) return new Promise<ContributionResult>((resolve) => { held = resolve; });
+            if (hold)
+              return new Promise<ContributionResult>((resolve) => {
+                held = resolve;
+              });
             const result = await lifecycle.transport.change(command);
             if (command.operation === 'restore' && loseRestore) {
               loseRestore = false;
@@ -734,7 +737,10 @@ test('statement family owns labels, independent supplied parts, feedback, exact 
             return result;
           },
         }}
-        onLifecycleClear={() => { clears++; throw new Error('Clearing failed after confirmed effect'); }}
+        onLifecycleClear={() => {
+          clears++;
+          throw new Error('Clearing failed after confirmed effect');
+        }}
       />
     );
     const dialogNow = () => window.document.querySelector('[role="alertdialog"]')!;
@@ -749,7 +755,9 @@ test('statement family owns labels, independent supplied parts, feedback, exact 
       await until(() => !!dialogNow());
       await click(dialogNow(), m.contribution_confirm());
     };
-    await act(async () => { await router.navigate({ to: '/edit' }); });
+    await act(async () => {
+      await router.navigate({ to: '/edit' });
+    });
     await render(lifecyclePage());
     expect(unloadIsProtected()).toBe(false);
     await input(control(host, m.correction_year()), '1946');
@@ -787,13 +795,19 @@ test('statement family owns labels, independent supplied parts, feedback, exact 
     await depart();
     await click(dialogNow(), m.thread_authoring_leave());
     await until(() => router.state.location.pathname === '/search');
-    await act(async () => { await router.navigate({ to: '/edit' }); });
+    await act(async () => {
+      await router.navigate({ to: '/edit' });
+    });
     await render(lifecyclePage());
     outside.focus();
     const before = host.textContent;
     await act(async () => {
       retiredAction();
-      held!({ ok: true, operation: 'delete', current: { subject: 'available', candidate: 'deleted', selected: false } });
+      held!({
+        ok: true,
+        operation: 'delete',
+        current: { subject: 'available', candidate: 'deleted', selected: false },
+      });
     });
     await settle();
     expect(host.textContent).toBe(before);
@@ -801,7 +815,6 @@ test('statement family owns labels, independent supplied parts, feedback, exact 
     expect(commands).toHaveLength(5);
     expect(window.document.activeElement).toBe(outside);
     expect(unloadIsProtected()).toBe(false);
-
   } finally {
     await act(async () => root.unmount());
     client.clear();
