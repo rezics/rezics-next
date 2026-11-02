@@ -1,7 +1,6 @@
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { PROFILE_FORMAT, profileDigest, type CompositionDocument, type PresentationProfile } from '@rezics/composition';
 import { presentationEditorDictionary } from '../src/features/pages/curate-view-editor-messages';
 import { m } from '../src/paraglide/messages.js';
@@ -46,39 +45,7 @@ test('dictionary follows an explicit locale, keeps Puck tokens, and stays ambien
   }
 });
 
-test('view labels and editor controls follow an explicit locale while ambient English differs', async () => {
-  mock.module('cloudflare:workers', () => ({ env: {} }));
-  const { PresentationViewEditor, presentationViewNames } = await import('../src/features/pages/curate-view-editor');
-  const previous = getLocale();
-  setLocale('en', { reload: false });
-  try {
-    const views = presentationViewNames('ja');
-    expect(views.overview).toBe(m.subject_overview({}, ja));
-    expect(views.overview).not.toBe(m.subject_overview());
-    expect(presentationViewNames().overview).toBe(m.subject_overview());
-
-    const html = renderToStaticMarkup(
-      createElement(PresentationViewEditor, {
-        initial,
-        locale: 'ja',
-        transport: { read: async () => initial, publish: async () => ({ ok: false, reason: 'unavailable' }) },
-      }),
-    );
-    expect(html).toContain(m.curation_heading({}, ja));
-    expect(html).toContain(m.curation_publish({}, ja));
-    expect(html).toContain(m.curation_templates({}, ja));
-    expect(html).toContain(m.curation_view({}, ja));
-    expect(html).toContain(m.subject_overview({}, ja));
-    expect(html).toContain(m.subject_details({}, ja));
-    expect(html).not.toContain(m.curation_heading());
-    expect(html).not.toContain(m.curation_publish());
-    expect(html).not.toContain(m.subject_overview());
-  } finally {
-    setLocale(previous, { reload: false });
-  }
-});
-
-test('both departure warnings follow the editor locale while ambient English differs', async () => {
+test('editor controls, view labels and both departure warnings follow an explicit locale while ambient English differs', async () => {
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
@@ -91,6 +58,7 @@ test('both departure warnings follow the editor locale while ambient English dif
     HTMLElement: window.HTMLElement,
     HTMLButtonElement: window.HTMLButtonElement,
     HTMLInputElement: window.HTMLInputElement,
+    HTMLTextAreaElement: window.HTMLTextAreaElement,
     HTMLIFrameElement: window.HTMLIFrameElement,
     Element: window.Element,
     Node: window.Node,
@@ -110,13 +78,31 @@ test('both departure warnings follow the editor locale while ambient English dif
   const { createRoot } = await import('react-dom/client');
   const { createMemoryHistory, createRootRoute, createRoute, createRouter, Link, Outlet, RouterProvider } =
     await import('@tanstack/react-router');
-  const { PresentationViewEditor } = await import('../src/features/pages/curate-view-editor');
+  const { PresentationViewEditor, presentationViewNames } = await import('../src/features/pages/curate-view-editor');
   const runtime = await import('../src/paraglide/runtime.js');
   const originalLocale = runtime.getLocale();
   runtime.setLocale('en', { reload: false });
   const host = window.document.createElement('div');
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
+  const page = (id: string): CompositionDocument => ({
+    root: { props: {} },
+    content: [{ type: 'Heading', props: { id, level: 2, text: { en: 'Reading notes', ja: '読書ノート' } } }],
+  });
+  const authored: PresentationProfile = {
+    format: PROFILE_FORMAT,
+    generic: { views: { overview: page('overview'), details: page('generic-details') } },
+    bases: [],
+    types: [{ type: 'schema:Book', views: { overview: page('book'), details: page('details') } }],
+    routes: [],
+  };
+  const read = {
+    ok: true as const,
+    reader: initial.reader,
+    profile: authored,
+    head: 7,
+    digest: profileDigest(authored),
+  };
   const initialLocation = '/curate/presentation';
   const rootRoute = createRootRoute({ component: Outlet });
   const editorRoute = createRoute({
@@ -128,10 +114,10 @@ test('both departure warnings follow the editor locale while ambient English dif
         null,
         createElement(Link, { to: '/search' }, 'Search destination'),
         createElement(PresentationViewEditor, {
-          initial,
+          initial: read,
           locale: 'ja',
           transport: {
-            read: async () => initial,
+            read: async () => read,
             publish: async () => ({ ok: false, reason: 'unavailable', outcome: 'unknown' }),
           },
         }),
@@ -151,15 +137,17 @@ test('both departure warnings follow the editor locale while ambient English dif
       await act(async () => {
         await Bun.sleep(10);
       });
-    expect(ready()).toBe(true);
+    expect(ready(), router.state.location.pathname).toBe(true);
   };
   const button = (label: string) =>
-    [...host.querySelectorAll('button')].find((item) => item.textContent?.trim() === label)!;
-  const labeled = (name: string) =>
-    [...host.querySelectorAll('label')].find((label) => label.textContent === name)!.control as HTMLInputElement;
+    [...(window.document.querySelector('[role="alertdialog"]') ?? host).querySelectorAll('button')].find(
+      (item) => item.textContent?.trim() === label,
+    )!;
+  const textField = (name: string) => [...host.querySelectorAll('textarea')].find((field) => field.name === name);
   const leave = async (warning: string, ambient: string) => {
     await act(async () => {
-      void router.navigate({ to: '/search' });
+      (host.querySelector('a') as HTMLElement).focus();
+      (host.querySelector('a') as HTMLElement).click();
     });
     await settle(() => !!window.document.querySelector('[role="alertdialog"]'));
     expect(router.state.location.pathname).toBe(initialLocation);
@@ -171,21 +159,35 @@ test('both departure warnings follow the editor locale while ambient English dif
   try {
     await router.load();
     await act(async () => root.render(createElement(RouterProvider, { router })));
-    await settle(() => !!labeled(m.curation_key({}, ja)));
+    expect(presentationViewNames('ja').overview).toBe(m.subject_overview({}, ja));
+    expect(presentationViewNames('ja').overview).not.toBe(m.subject_overview());
+    expect(presentationViewNames().overview).toBe(m.subject_overview());
+    expect(host.textContent).toContain(m.curation_heading({}, ja));
+    expect(host.textContent).toContain(m.curation_publish({}, ja));
+    expect(host.textContent).toContain(m.curation_templates({}, ja));
+    expect(host.textContent).toContain(m.curation_view({}, ja));
+    expect(host.textContent).toContain(m.subject_overview({}, ja));
+    expect(host.textContent).not.toContain(m.curation_heading());
+    expect(host.textContent).not.toContain(m.curation_publish());
+    expect(host.textContent).not.toContain(m.subject_overview());
+    await act(async () => button(`generic: ${m.curation_generic({}, ja)}`).click());
+    await settle(() => !!host.querySelector('[data-puck-layer-tree-id="overview"]'));
     await act(async () => {
-      const field = labeled(m.curation_key({}, ja));
-      field.focus();
-      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(field, 'schema:Zine');
-      field.dispatchEvent(new window.Event('input', { bubbles: true }));
+      const row = host.querySelector('[data-puck-layer-tree-id="overview"]')!;
+      [...row.querySelectorAll('button')].find((control) => control.textContent === 'Heading')!.click();
     });
-    await act(async () => button(m.curation_add({}, ja)).click());
+    await settle(() => !!textField('text.en'));
+    await act(async () => {
+      const field = textField('text.en')!;
+      field.focus();
+      Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!.call(field, 'Draft');
+      field.dispatchEvent(new window.Event('input', { bubbles: true }));
+      field.blur();
+    });
     await settle(() => host.textContent?.includes(m.curation_unsaved({}, ja)) === true);
     const draftDialog = await leave(m.curation_leave_warning({}, ja), m.curation_leave_warning());
-    await act(async () => {
-      [...draftDialog.querySelectorAll('button')].find((item) => item.textContent?.trim() === m.curation_stay({}, ja))!.click();
-    });
+    await act(async () => button(m.curation_stay({}, ja)).click());
     await settle(() => !window.document.querySelector('[role="alertdialog"]'));
-    await act(async () => button(m.curation_close({}, ja)).click());
     await act(async () => button(m.curation_publish({}, ja)).click());
     await settle(() => host.textContent?.includes(m.curation_unknown()) === true);
     await leave(m.curation_leave_recovery({}, ja), m.curation_leave_recovery());
