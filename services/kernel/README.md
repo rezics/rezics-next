@@ -508,9 +508,10 @@ recorded in `statementErrors` or `backgroundStatementErrors`; reports list faile
 produces no plan for it, so its rows and blocks are not measured. Completed statements earlier in an aborted attempt
 retain all their measured work; the harness assigns no estimated cost to a failed statement.
 
-Statements in the operation's async context count toward its cost, as do statements issued by a DBOS workflow while a
-capture runs; workflows started by a schedule and their children, and loops started outside both, are reported as
-background work. Background statement counts follow measured
+Statements in the operation's async context count toward its cost. A DBOS workflow counts as foreground only when the
+capture associates it with a start from that operation's async context; every other workflow remains background
+regardless of workflow-ID spelling. Workflows started by a schedule and their children, and loops started outside both,
+are reported as background work. Background statement counts follow measured
 wall time, while rows and blocks per background statement must stay within the default constant-cost slack as data
 grows when the statement reads an application relation. Statements reading only DBOS system relations remain
 reported, but their row and block growth is not bounded because `grow` does not seed DBOS history; that history's
