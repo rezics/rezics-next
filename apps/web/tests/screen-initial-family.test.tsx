@@ -526,6 +526,8 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
         if (result.ok && releaseReads++ > 0) {
           const release = structuredClone(result.release);
           delete release.properties['schema:episodeNumber'];
+          for (const type of Object.values(release.types))
+            type.properties = type.properties.filter((id) => id !== 'schema:episodeNumber');
           return { ...result, release };
         }
         return result;

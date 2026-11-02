@@ -120,6 +120,8 @@ function Journey({
         if (stale && run.loads > 1 && read.ok) {
           const release = structuredClone(read.release);
           delete release.properties['schema:episodeNumber'];
+          for (const type of Object.values(release.types))
+            type.properties = type.properties.filter((id) => id !== 'schema:episodeNumber');
           return { ...read, release };
         }
         return read;
