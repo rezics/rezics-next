@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { checkMediaImportRequest, type MediaImportRequest } from '@rezics/definitions/media-import';
 import { claimCoverMedia, checkMediaObject } from '../../src/content/cover-reference.ts';
 import { runCommand } from '../../src/command/command.ts';
-import type { ClaimMediaInput } from '../../src/content/media.ts';
+import { claimMedia, type ClaimMediaInput } from '../../src/content/media.ts';
 import { currentCommand, type CommandAuthorization } from '../../src/command/command.ts';
 import { resourceAuthorization } from '../../src/access/resource-authorization.ts';
 import { accessCommandAuthorization } from '../../src/request/access.ts';
@@ -502,7 +502,7 @@ test('a cover claim is admitted under statement:propose or subject:create evalua
         );
       }
     }
-    async function attempt(action: string, resource = global, outside = false, receiptOnly = false) {
+    async function attempt(action: string, resource = global, outside = false, receiptOnly = false, claim = claimCoverMedia) {
       const mediaRoute = outside ? targetRoute + 16 : targetRoute;
       const subject = outside ? newId(mediaRoute) : target;
       const id = newId(mediaRoute);
@@ -539,7 +539,7 @@ test('a cover claim is admitted under statement:propose or subject:create evalua
         : authorization;
       const command = runCommand(db.pool, { ...commandOptions, partition, authorization: binding }, async (tx) => {
         expect(currentCommand(tx).authorization).toMatchObject({ action, resource, mode: 'execute' });
-        await claimCoverMedia(tx, {
+        await claim(tx, {
           mediaIds: [id],
           containerId: subject,
           author,
@@ -569,7 +569,10 @@ test('a cover claim is admitted under statement:propose or subject:create evalua
         ).not.toBeNull();
       }
     }
-    for (const action of actions.slice(0, 2)) await attempt(action);
+    for (const action of actions.slice(0, 2)) {
+      await attempt(action);
+      await attempt(action, global, false, false, claimMedia);
+    }
     await attempt(actions[2]!);
     for (const action of actions.slice(0, 2)) {
       await attempt(action, other);

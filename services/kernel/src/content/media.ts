@@ -687,7 +687,6 @@ export async function claimMedia(transaction: CommandTransaction, input: ClaimMe
     command.basis.clientId !== owner.clientId ||
     command.basis.requestedBy !== owner.requestedBy ||
     command.authorization?.mode !== 'execute' ||
-    (command.authorization.action !== 'thread:create' && command.authorization.resource.route !== r) ||
     input.mediaIds.length > 32
   )
     throw new GrantDeniedError();
@@ -697,15 +696,18 @@ export async function claimMedia(transaction: CommandTransaction, input: ClaimMe
       input.revisionId !== undefined ||
       input.reference.subjectId !== input.containerId ||
       routeOf(input.reference.subjectId) !== r ||
-      routeOf(input.reference.candidateId) !== r ||
-      command.authorization.resource.id !== input.containerId
+      routeOf(input.reference.candidateId) !== r
     )
       throw new GrantDeniedError();
+    // The cover port admits subject authority or the documented Global Context
+    // statement:propose/subject:create authority. The latter can live on another
+    // route; media, container and candidate still share this command's route.
     await claimCoverMedia(transaction, input);
     return;
   }
   if (
     input.reference !== undefined ||
+    (command.authorization.action !== 'thread:create' && command.authorization.resource.route !== r) ||
     (command.authorization.action !== 'thread:create' &&
       command.authorization.action !== 'post:create' &&
       command.authorization.action !== 'post:revise') ||
