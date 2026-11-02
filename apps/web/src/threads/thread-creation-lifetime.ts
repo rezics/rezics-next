@@ -12,6 +12,29 @@ import {
 } from 'react';
 import { getLocale } from '../paraglide/runtime.js';
 import { sessionQuery } from '../session/query';
+import type { AuthoringLocation } from './authoring-departure';
+
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** The route and its departure guard admit exactly the same preset. Titles are display hints. */
+export function threadCreationPreset(search: Record<string, unknown>): { subject?: string; subjectTitle?: string } {
+  const subject = typeof search.subject === 'string' && uuid.test(search.subject) ? search.subject : undefined;
+  const subjectTitle =
+    subject && typeof search.subjectTitle === 'string' && search.subjectTitle.length <= 512
+      ? search.subjectTitle
+      : undefined;
+  return { ...(subject ? { subject } : {}), ...(subjectTitle ? { subjectTitle } : {}) };
+}
+
+/** Include the preset intent while leaving unrelated queries and anchors alone. */
+export function threadCreationNavigationContext({ pathname, search }: AuthoringLocation): string {
+  return JSON.stringify([pathname, threadCreationPreset(search).subject ?? null]);
+}
+
+/** Only a committed board/preset transition starts a replacement editor. */
+export function threadCreationEditorKey(boardId: string, presetSubject: string | undefined): string {
+  return JSON.stringify([boardId, presetSubject ?? null]);
+}
 
 export type ThreadCreationSession = {
   state?: string;
@@ -269,7 +292,6 @@ export type ThreadCreationScope = {
   purpose: string;
   initialKey: string;
   initialSubject?: string;
-  initialSubjectTitle?: string;
 };
 
 export function useThreadCreationLifetime(scope: ThreadCreationScope, admission: ThreadCreationReaderAdmission) {
@@ -282,7 +304,6 @@ export function useThreadCreationLifetime(scope: ThreadCreationScope, admission:
     scope.purpose,
     scope.initialKey,
     scope.initialSubject ?? null,
-    scope.initialSubjectTitle ?? null,
     observation.subject,
     observation.dataUpdateCount,
     observation.errorUpdateCount,

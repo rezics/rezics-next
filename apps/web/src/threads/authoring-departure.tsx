@@ -32,6 +32,10 @@ type Draft = {
 };
 type Decision = { kind: 'navigation'; resolve: (stay: boolean) => void } | { kind: 'discard'; draftId: number };
 
+export type AuthoringLocation = { pathname: string; search: Record<string, unknown> };
+type NavigationContext = (location: AuthoringLocation) => string;
+const pathnameContext: NavigationContext = (location) => location.pathname;
+
 /** A page-local registry keeps editors' state in their owners while presenting one shared decision. */
 export class AuthoringDepartureState {
   private drafts = new Map<number, Draft>();
@@ -103,8 +107,8 @@ export class AuthoringDepartureState {
     this.notify();
   };
 
-  block = (currentPathname: string, nextPathname: string, focused: HTMLElement | null) => {
-    if (!this.active || currentPathname === nextPathname || !this.needsDecision()) return false;
+  block = (currentContext: string, nextContext: string, focused: HTMLElement | null) => {
+    if (!this.active || currentContext === nextContext || !this.needsDecision()) return false;
     if (this.decision) return true;
     this.focusTarget = focused;
     this.leaving = false;
@@ -165,7 +169,13 @@ export class AuthoringDepartureState {
 const DepartureContext = createContext<AuthoringDepartureState | null>(null);
 
 /** Use one page owner for sibling reply and inline-edit composers. */
-export function AuthoringDepartureProvider({ children }: { children: ReactNode }) {
+export function AuthoringDepartureProvider({
+  children,
+  navigationContext = pathnameContext,
+}: {
+  children: ReactNode;
+  navigationContext?: NavigationContext;
+}) {
   const [navigation] = useState(() => new AuthoringDepartureState());
   const revision = useSyncExternalStore(navigation.subscribe, navigation.snapshot, navigation.snapshot);
   const router = useRouter({ warn: false });
@@ -232,7 +242,7 @@ export function AuthoringDepartureProvider({ children }: { children: ReactNode }
       ) : (
         children
       )}
-      {router ? <RouterDeparture navigation={navigation} /> : null}
+      {router ? <RouterDeparture navigation={navigation} navigationContext={navigationContext} /> : null}
       <AlertDialog
         open={navigation.prompt !== null}
         onOpenChange={(open) => {
@@ -245,12 +255,18 @@ export function AuthoringDepartureProvider({ children }: { children: ReactNode }
   );
 }
 
-function RouterDeparture({ navigation }: { navigation: AuthoringDepartureState }) {
+function RouterDeparture({
+  navigation,
+  navigationContext,
+}: {
+  navigation: AuthoringDepartureState;
+  navigationContext: NavigationContext;
+}) {
   useBlocker({
     shouldBlockFn: ({ current, next }) =>
       navigation.block(
-        current.pathname,
-        next.pathname,
+        navigationContext(current),
+        navigationContext(next),
         document.activeElement instanceof HTMLElement ? document.activeElement : null,
       ),
     withResolver: false,

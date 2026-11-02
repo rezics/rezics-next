@@ -72,7 +72,7 @@ async function mountPage(initial: PageConfig) {
     await import('@tanstack/react-router');
   const { setLocale } = await import('../src/paraglide/runtime.js');
   const { sessionQuery } = await import('../src/session/query');
-  const { observeThreadCreationReader } = await import('../src/threads/thread-creation-lifetime');
+  const { observeThreadCreationReader, threadCreationPreset } = await import('../src/threads/thread-creation-lifetime');
   const { NewThreadComposition } = await import('../src/routes/boards/$id_.new');
   const actions = await import('../src/threads/actions');
   const voteRead = await import('../src/threads/review-vote-read');
@@ -111,6 +111,8 @@ async function mountPage(initial: PageConfig) {
   let poke!: () => void;
   function ComposePage() {
     const [config, setConfig] = useState(initial);
+    const search = composeRoute.useSearch();
+    const params = composeRoute.useParams();
     const [readerAdmission] = useState(() => {
       const observation = observeThreadCreationReader(client);
       return observation ? { observation, actualSubject: observation.subject } : null;
@@ -122,11 +124,11 @@ async function mountPage(initial: PageConfig) {
       <>
         {config.visible && readerAdmission ? (
           <NewThreadComposition
-            board={board(config)}
+            board={board({ ...config, boardId: params.id })}
             idempotencyKey={config.key}
             readerAdmission={readerAdmission}
-            presetSubject={config.presetSubject}
-            presetSubjectTitle={config.presetSubjectTitle}
+            {...(search.subject ? { presetSubject: search.subject } : {})}
+            {...(search.subjectTitle ? { presetSubjectTitle: search.subjectTitle } : {})}
           />
         ) : null}
         <button type="button" onClick={() => setConfig((current) => ({ ...current, visible: false }))}>
@@ -136,7 +138,12 @@ async function mountPage(initial: PageConfig) {
     );
   }
   const rootRoute = createRootRoute({ component: Outlet });
-  const composeRoute = createRoute({ getParentRoute: () => rootRoute, path: '/compose', component: ComposePage });
+  const composeRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/boards/$id/new',
+    validateSearch: threadCreationPreset,
+    component: ComposePage,
+  });
   const boardRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: '/boards/$id',
@@ -144,7 +151,11 @@ async function mountPage(initial: PageConfig) {
   });
   const router = createRouter({
     routeTree: rootRoute.addChildren([composeRoute, boardRoute]),
-    history: createMemoryHistory({ initialEntries: ['/compose'] }),
+    history: createMemoryHistory({
+      initialEntries: [
+        `/boards/${initial.boardId}/new?${new URLSearchParams({ subject: initial.presetSubject, subjectTitle: initial.presetSubjectTitle })}`,
+      ],
+    }),
   });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(sessionQuery.queryKey, owner);
@@ -188,6 +199,15 @@ async function mountPage(initial: PageConfig) {
       form().dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     });
   };
+  const go = (href: string) => act(() => void router.navigate({ href }));
+  const choose = async (choice: 'stay' | 'leave') => {
+    await settle(() => !!document.querySelector('[role="alertdialog"]'));
+    const label = choice === 'stay' ? m.thread_authoring_stay() : m.thread_authoring_leave();
+    await act(async () =>
+      user.click([...document.querySelectorAll('button')].find((node) => node.textContent === label)!),
+    );
+    await settle(() => !document.querySelector('[role="alertdialog"]'));
+  };
   const resolveWrite = async (index: number, result: Awaited<ReturnType<typeof actions.startThread>>) => {
     await act(async () => {
       writes[index]!.work.resolve(result);
@@ -226,6 +246,8 @@ async function mountPage(initial: PageConfig) {
     settle,
     fill,
     submit,
+    choose,
+    go,
     resolveWrite,
     updateConfig,
     poke,
@@ -256,6 +278,7 @@ test('real new-thread composition preserves a selected review citation and retri
     await page.fill('A review title', 'My review stays attached to this subject.');
     await page.poke();
     expect(page.host.querySelector<HTMLElement>('[role="checkbox"]')?.getAttribute('aria-checked')).toBe('true');
+    await act(async () => page.updateConfig((current) => ({ ...current, key: id(5) })));
     await page.submit();
     await page.settle(() => page.writes.length === 1);
     const original = structuredClone(page.writes[0]!.data);
@@ -265,11 +288,20 @@ test('real new-thread composition preserves a selected review citation and retri
       kind: 'review',
       subjectId: id(2),
       voteCitation: vote,
+      idempotencyKey: id(3),
     });
     expect(page.writes[0]!.csrf).toBe(owner.csrfToken);
+    const changePreset = () => page.go(`/boards/${id(1)}/new?subject=${id(4)}`);
+    await changePreset();
+    await page.choose('stay');
+    expect(page.host.querySelector('[role="checkbox"]')?.getAttribute('aria-checked')).toBe('true');
+    expect(page.writes).toHaveLength(1);
 
     await act(async () => page.writes[0]!.work.reject(new Error('Response lost after commit')));
     await page.settle(() => page.host.textContent?.includes(page.m.thread_write_unavailable()) === true);
+    await changePreset();
+    await page.choose('stay');
+    expect(page.writes).toHaveLength(1);
     await act(async () => {
       const retry = [...page.host.querySelectorAll('button')].find(
         (button) => button.textContent?.trim() === page.m.thread_write_retry(),
@@ -350,7 +382,7 @@ test('same-turn session away and back retires late review reads, writes and thei
   }
 });
 
-test('ordinary discussion composition preserves a dirty composer when its board target changes', async () => {
+test('preset navigation and Back/Forward preserve a draft on Stay and replace it only on Leave', async () => {
   const page = await mountPage({
     boardId: id(21),
     purpose: 'discussion',
@@ -361,20 +393,74 @@ test('ordinary discussion composition preserves a dirty composer when its board 
   });
   try {
     await page.render();
-    await page.settle(() => !!page.editor() && page.host.textContent?.includes('1') === true);
-    expect(page.host.textContent).toContain('1');
+    await page.settle(() => !!page.editor());
     await page.fill('A discussion title', 'A discussion can cite an ordered reference list.');
-    await page.poke();
+    const png = Uint8Array.from(
+      atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg=='),
+      (char) => char.charCodeAt(0),
+    );
+    spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      if (String(input).endsWith('/original')) return new Response(png, { headers: { 'content-type': 'image/png' } });
+      if (init?.method === 'PUT') return new Response(null, { status: 204 });
+      return Response.json({
+        media: { id: id(90), state: 'available', mediaType: 'image/png', byteCount: png.length },
+      });
+    });
+    await act(async () => {
+      await page.user.click(page.editor()!);
+      const event = new page.window.Event('paste', { bubbles: true, cancelable: true });
+      const clipboardData = {
+        files: [],
+        items: [],
+        types: ['text/html'],
+        getData: () => `<img src="/media/${id(75)}" alt="Draft chart">`,
+      };
+      Object.defineProperty(event, 'clipboardData', { value: clipboardData });
+      page.editor()!.dispatchEvent(event);
+    });
+    await page.settle(
+      () =>
+        !!page.host.querySelector('[role="img"][aria-label="Draft chart"]') &&
+        page.host.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled === false,
+    );
+    const original = { title: page.title(), editor: page.editor(), body: page.editor()!.innerHTML };
+    const href = (subject: string) => `/boards/${id(21)}/new?subject=${subject}`;
+    await page.go(`${href(id(22))}&subjectTitle=New+hint&unrelated=1#anchor`);
+    original.title!.focus();
+    await page.go(href(id(24)));
+    await page.choose('stay');
+    await page.settle(() => document.activeElement === original.title);
+    expect(page.title()).toBe(original.title);
+    expect(page.editor()!.innerHTML).toBe(original.body);
     expect(page.host.textContent).toContain('Discussion subject');
-    expect(page.title()?.value).toBe('A discussion title');
-
-    const originalTitleNode = page.title();
-    await act(async () => page.updateConfig((current) => ({ ...current, boardId: id(24) })));
-    await page.settle(() => page.host.textContent?.includes(page.m.thread_authoring_session_changed()) === true);
-    expect(page.host.textContent).not.toContain('Discussion subject');
-    expect(page.title()?.value).toBe('A discussion title');
-    expect(page.title()).toBe(originalTitleNode);
-    expect(page.writes).toHaveLength(0);
+    await page.go(href(id(24)));
+    await page.choose('leave');
+    await page.settle(() => !!page.editor() && page.title()?.value === '');
+    expect(page.editor()).not.toBe(original.editor);
+    expect(page.host.innerHTML).not.toContain('Draft chart');
+    await page.fill('Replacement draft', 'Replacement body');
+    await act(async () => page.router.history.back());
+    await page.choose('stay');
+    expect(page.title()?.value).toBe('Replacement draft');
+    for (const direction of ['back', 'forward'] as const) {
+      await act(async () => page.router.history[direction]());
+      await page.choose('leave');
+      await page.settle(() => !!page.editor() && page.title()?.value === '');
+      await page.fill('Another draft', 'Writing in the selected context');
+    }
+    await page.submit();
+    await page.settle(() => page.writes.length === 1);
+    expect(page.writes[0]!.data).toMatchObject({ subjectIds: [id(24)] });
+    expect(page.writes[0]!.data.idempotencyKey).not.toBe(id(23));
+    await page.go(`/boards/${id(25)}/new`);
+    await page.choose('leave');
+    await page.settle(() => !!page.editor() && page.title()?.value === '');
+    await page.resolveWrite(0, { ok: true, thread: { id: id(28), title: 'Late thread' } } as Awaited<
+      ReturnType<typeof startThread>
+    >);
+    expect(page.navigation).toEqual([]);
+    expect(page.window.document.cookie).not.toContain('rezics_draft_key=');
+    expect(page.writes).toHaveLength(1);
   } finally {
     await page.dispose();
   }
@@ -417,7 +503,7 @@ test('ordinary discussion submission keeps its ordered preset and current succes
   }
 });
 
-test('same-account CSRF replacement retires the route without clearing its composer or sending with the new token', async () => {
+test('same-account CSRF replacement immediately clears private writing and cannot send with the new token', async () => {
   const page = await mountPage({
     boardId: id(31),
     purpose: 'discussion',
@@ -430,12 +516,12 @@ test('same-account CSRF replacement retires the route without clearing its compo
     await page.render();
     await page.settle(() => !!page.editor() && page.host.textContent?.includes('Current reference') === true);
     await page.fill('Private discussion', 'This exact draft remains in the mounted composer.');
-    const originalTitleNode = page.title();
     await act(async () => page.client.setQueryData(page.sessionKey, { ...owner, csrfToken: 'replacement-csrf' }));
     await page.settle(() => page.host.textContent?.includes(page.m.thread_authoring_session_changed()) === true);
     expect(page.host.textContent).not.toContain('Current reference');
-    expect(page.title()?.value).toBe('Private discussion');
-    expect(page.title()).toBe(originalTitleNode);
+    expect(page.title()).toBeNull();
+    expect(page.editor()).toBeNull();
+    expect(page.host.innerHTML).not.toContain('Private discussion');
     expect(page.writes).toHaveLength(0);
   } finally {
     await page.dispose();

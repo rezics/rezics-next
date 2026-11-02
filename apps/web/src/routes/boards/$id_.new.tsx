@@ -22,12 +22,12 @@ import {
   observeThreadCreationReader,
   threadCreationReaderObservationMatches,
   ThreadCreationLifetimeProvider,
+  threadCreationEditorKey,
+  threadCreationNavigationContext,
+  threadCreationPreset,
   useThreadCreationLifetime,
   type ThreadCreationReaderAdmission,
 } from '../../threads/thread-creation-lifetime';
-
-type NewThreadSearch = { subject?: string; subjectTitle?: string };
-const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export const Route = createFileRoute('/boards/$id_/new')({
   beforeLoad: requireSignedIn,
@@ -35,14 +35,7 @@ export const Route = createFileRoute('/boards/$id_/new')({
     loadAdmittedNewThreadPage(context.queryClient, params.id, (expectedReaderSubject) =>
       readNewThreadPage({ data: { id: params.id, expectedReaderSubject } }),
     ),
-  validateSearch: (search: Record<string, unknown>): NewThreadSearch => {
-    const subject = typeof search.subject === 'string' && uuid.test(search.subject) ? search.subject : undefined;
-    const subjectTitle =
-      subject && typeof search.subjectTitle === 'string' && search.subjectTitle.length <= 512
-        ? search.subjectTitle
-        : undefined;
-    return { ...(subject ? { subject } : {}), ...(subjectTitle ? { subjectTitle } : {}) };
-  },
+  validateSearch: threadCreationPreset,
   head: ({ loaderData, match }) =>
     pageHead(
       { title: loaderData?.board.title ?? m.thread_new_heading(), robots: 'noindex, nofollow' },
@@ -82,30 +75,33 @@ function NewThreadPage() {
   );
 }
 
-export function NewThreadComposition({
-  board,
-  idempotencyKey,
-  readerAdmission,
-  presetSubject,
-  presetSubjectTitle,
-}: {
+type NewThreadCompositionProps = {
   board: Awaited<ReturnType<typeof readNewThreadPage>>['board'];
   idempotencyKey: string;
   readerAdmission: ThreadCreationReaderAdmission;
   presetSubject?: string;
   presetSubjectTitle?: string;
-}) {
-  const visit = useThreadCreationLifetime(
-    {
-      boardId: board.id,
-      purpose: board.purpose,
-      initialKey: idempotencyKey,
-      ...(presetSubject ? { initialSubject: presetSubject } : {}),
-      ...(presetSubjectTitle ? { initialSubjectTitle: presetSubjectTitle } : {}),
-    },
-    readerAdmission,
-  );
-  const { lifetime, ticket, current, bound } = visit;
+};
+
+export function NewThreadComposition(props: NewThreadCompositionProps) {
+  const context = threadCreationEditorKey(props.board.id, props.presetSubject);
+  const [editor, setEditor] = useState(() => ({ context, key: props.idempotencyKey }));
+  if (editor.context !== context) {
+    // Search navigation can reuse loader data. A replacement must never borrow the retired intent's key.
+    setEditor({ context, key: crypto.randomUUID() });
+    return null;
+  }
+  return <NewThreadEditor key={editor.context} {...props} idempotencyKey={editor.key} />;
+}
+
+function NewThreadEditor({
+  board,
+  idempotencyKey,
+  readerAdmission,
+  presetSubject,
+  presetSubjectTitle,
+}: NewThreadCompositionProps) {
+  // Loader refreshes and display-hint changes keep the original draft and immutable command key.
   const [origin] = useState(() => ({
     board,
     boardId: board.id,
@@ -114,6 +110,16 @@ export function NewThreadComposition({
     presetSubject: presetSubject ?? null,
     presetSubjectTitle: presetSubjectTitle ?? null,
   }));
+  const visit = useThreadCreationLifetime(
+    {
+      boardId: board.id,
+      purpose: board.purpose,
+      initialKey: origin.idempotencyKey,
+      ...(presetSubject ? { initialSubject: presetSubject } : {}),
+    },
+    readerAdmission,
+  );
+  const { lifetime, ticket, current, bound } = visit;
   const [initiallyAdmitted] = useState(() => bound);
   const review = origin.purpose === 'reviews';
   const [subjectId, setSubjectId] = useState<string | null>(origin.presetSubject);
@@ -177,7 +183,7 @@ export function NewThreadComposition({
 
   return (
     <ThreadCreationLifetimeProvider lifetime={lifetime}>
-      <AuthoringDepartureProvider>
+      <AuthoringDepartureProvider navigationContext={threadCreationNavigationContext}>
         <article className="max-w-4xl space-y-8 text-foreground">
           <header className="space-y-3">
             {bound ? (

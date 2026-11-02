@@ -1,6 +1,6 @@
 # New thread caller lifetime
 
-A new-thread page owns one caller for its original board, purpose, loader key, preset subject and locale. The caller
+A new-thread page owns one caller for its original board, purpose, loader key, validated preset subject and locale. The caller
 also captures the existing session `QueryClient`, its observed session-cache revision, signed-in account and CSRF
 token. It retires permanently when any of those inputs changes, when readiness is lost, or when its mounted
 connection ends. Successful replacement of the existing session cache advances the revision even when the
@@ -11,9 +11,12 @@ retry. The review vote read checks the selected subject, current visit and conne
 completion. A stale result cannot publish a private preview or citation. Discussion selections keep their existing
 ordered zero-to-128 reference contract and are admitted only while the route visit is current and unlocked.
 
-The composer remains mounted as its caller retires, preserving its departure protection and any immutable uncertain
-intent. Route submit and success callbacks use the original caller; an obsolete success cannot write the draft cookie
-or navigate. A fresh explicit route mount creates a fresh usable visit.
+The departure owner decides before navigation to a different pathname or preset subject can commit. Stay preserves
+the caller and any immutable uncertain intent; Leave unmounts the old editor and creates a fresh usable visit for the
+selected board/subject with a fresh key even when loader data is reused. Display-title changes and refreshed loader
+keys alone preserve the original visit and key.
+Other caller retirement leaves the composer mounted until its own account/session privacy rules clear it. Route
+submit and success callbacks use the original caller; an obsolete success cannot write the draft cookie or navigate.
 
 `tests/thread-creation-lifetime.test.tsx` covers the real route composition, private vote read, both metadata fields,
 and `PostComposer` against the existing session cache and deferred server-function seams. Those composed assertions

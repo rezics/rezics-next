@@ -6,6 +6,12 @@ unresolved outcomes register with the page's authoring-departure owner. The owne
 decision for router navigation and coordinates an explicit discard decision for changed inline edits. Editors retain
 their own draft and command state; the navigation owner keeps only live predicates and never copies a command.
 
+New-thread navigation compares the pathname and validated preset subject, including browser Back/Forward. Stay keeps
+the mounted draft, references, media and focus; Leave retires it and mounts the selected board/subject context with
+a fresh command key, even if search navigation reuses the loader result.
+Subject titles are display hints: title-only, unrelated query and anchor changes keep the current editor without a
+prompt, as do refreshed loader command keys for the same context. Session observations still retire authority.
+
 While any registered work needs protection, the page also installs the browser's native `beforeunload` warning.
 Browsers provide its text. A confirmed submission releases protection synchronously before its existing success
 navigation. A refusal keeps the changed editor protected. An unknown result remains protected with wording that
