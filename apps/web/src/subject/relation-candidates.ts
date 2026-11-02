@@ -349,8 +349,7 @@ export async function confirmRelation(
     result.ok &&
     result.kind === 'selected' &&
     !result.public?.subject.statements[input.slot.property]?.some(
-      (statement) =>
-        statement.id === candidate.id && statement.rank !== 'deprecated',
+      (statement) => statement.id === candidate.id && statement.rank !== 'deprecated',
     )
   )
     return { ...result, kind: input.operation === 'accept' ? 'accepted' : 'pending' };
