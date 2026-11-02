@@ -495,6 +495,7 @@ function RuleForm({
   const attempted = useRef(false);
   const choiceAddress = useRef({ raw: '', q: '', cursor: undefined as string | undefined, generation: 0 });
   const choiceContext = useRef({ q: '', next: page.choices.labels.next, generation: 0 });
+  const labelContext = choiceContext.current;
   const [savedId, setSavedId] = useState<string | null>(null);
   const confirmed = useRef(false);
   const snapshot = ruleDraftSnapshot({ filter, title, description });
@@ -634,7 +635,7 @@ function RuleForm({
       operation.finish();
     }
   }
-  async function labelPage(cursor?: string) {
+  async function labelPage(cursor?: string, context = choiceContext.current) {
     if (
       !isCurrent() ||
       !labels ||
@@ -644,7 +645,8 @@ function RuleForm({
       !prefix.ok ||
       query !== choiceAddress.current.raw ||
       (cursor !== undefined &&
-        (prefix.query !== choiceContext.current.q ||
+        (context !== choiceContext.current ||
+          prefix.query !== choiceContext.current.q ||
           choiceAddress.current.generation !== choiceContext.current.generation ||
           cursor !== choiceContext.current.next))
     )
@@ -664,7 +666,8 @@ function RuleForm({
       }
       if (
         result?.viewerId === viewerId &&
-        (!result.address || (result.address.q === requested.q && result.address.cursor === (requested.cursor ?? null)))
+        result.address?.q === requested.q &&
+        result.address.cursor === (requested.cursor ?? null)
       ) {
         choiceContext.current = { q: requested.q, next: result.choices.labels.next, generation: requested.generation };
         setChoices(result.choices);
@@ -785,7 +788,11 @@ function RuleForm({
                     prefix.ok &&
                     choiceContext.current.q === prefix.query &&
                     choiceContext.current.generation === choiceAddress.current.generation && (
-                      <Button type="button" variant="outline" onClick={() => void labelPage(choices.labels.next!)}>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => void labelPage(choices.labels.next!, labelContext)}
+                      >
                         {m.library_label_more()}
                       </Button>
                     )}
