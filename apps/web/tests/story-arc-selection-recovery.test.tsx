@@ -69,7 +69,12 @@ test('selection refresh retains drafts, switches retire targets, and created rea
         </QueryClientProvider>,
       ),
     );
-    await settle(() => button(m.facts_edit_field()).click());
+    const keywords = [...host.querySelectorAll('section')].find(
+      (node) => node.getAttribute('aria-label') === fixture.release.properties['schema:keywords']!.labels.en,
+    )!;
+    await settle(() =>
+      [...keywords.querySelectorAll('button')].find((node) => node.textContent === m.facts_edit_field())!.click(),
+    );
     const valueLabel = [...host.querySelectorAll('label')].find((node) => node.textContent === m.correction_value())!;
     const draft = window.document.getElementById(valueLabel.htmlFor);
     expect(draft).not.toBeNull();
