@@ -126,6 +126,11 @@ to contribution permits only the existing localized creation or canonical subjec
 its selected field and statement. Current authority, validation and writes remain with those editors and their
 private session BFF; the guide has no mutation or publication controls.
 
+The current type, property and release address owns the guide selection, including when a mounted guide is
+reused or history returns to an earlier address. A type chosen locally remains selected across ordinary
+rerenders of that address; navigation to another definition address resets it before showing content.
+Changing only the validated return destination does not discard that local choice.
+
 Adopt the complete reader journey recommended by [subject design research](research/web-subject-design.md):
 discovery or a collection → current canonical identity → public facts and text → traversable relations, editions
 and credits → original evidence and current rights. Work, edition and agent identities remain separate until their

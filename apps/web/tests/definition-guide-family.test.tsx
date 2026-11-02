@@ -146,6 +146,29 @@ test('same-address mounted guides associate labels with unique stable native sel
   );
 });
 
+test('one mounted guide follows property, type, Back and pinned addresses without retaining a local choice', async () => {
+  await mounted(async ({ host, render, change, DefinitionGuideContent, definitionGuideFixture, definitionText }) => {
+    const { readGuide, fetchGuideRelease } = await import('../src/features/catalogue/definition-guide');
+    const fixture = definitionGuideFixture();
+    const book = { type: 'schema:Book', property: 'schema:author' };
+    for (const address of [book, { ...book, property: 'schema:datePublished' },
+      { type: 'schema:Recipe', property: 'schema:cookTime' }, book, definitionGuideFixture('pinned').address,
+      {}, { type: 'missing:type' }, { ...book, property: 'missing:field' }, book]) {
+      const read = await readGuide(address, (digest) => fetchGuideRelease(fixture.client, digest));
+      await render(<DefinitionGuideContent address={address} locale="en" read={read} retry={() => {}} />);
+      const type = read.ok && address.type ? read.release.types[address.type] : undefined;
+      const field = read.ok && address.property ? read.release.properties[address.property] : undefined;
+      expect([host.querySelector('select')?.value, host.querySelector('h2')?.textContent,
+        field && host.querySelector('h3')?.textContent, host.querySelector('code')?.textContent]).toEqual([
+        read.ok ? address.type ?? '' : undefined, type ? definitionText(type.labels, 'en').text : undefined,
+        field && definitionText(field.labels, 'en').text, read.ok ? read.release.digest : undefined,
+      ]);
+      expect(host.querySelector('[role="alert"]') !== null).toBe(!read.ok);
+      if (type) await change(host.querySelector('select')!, 'schema:Person');
+    }
+  });
+});
+
 test('supplied field rows retain native list order, exact links, missing meaning and language fallback in the shared frame', async () => {
   await mounted(async ({ host, render, DefinitionGuideContent, definitionGuideFixture, m, languageName }) => {
     const fixture = definitionGuideFixture();

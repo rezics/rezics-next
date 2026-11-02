@@ -235,7 +235,19 @@ export function DefinitionGuideContent({
 }) {
   const o = { locale: locale as never };
   const typeId = useId();
-  const [selected, setSelected] = useState(address.type ?? '');
+  // A local choice belongs to this exact definition address. Object identity is
+  // unsuitable here: route search objects can be recreated without navigation.
+  const addressKey = JSON.stringify([address.type, address.property, address.release]);
+  const [selection, setSelection] = useState({
+    addressKey,
+    type: address.type ?? '',
+  });
+  const selected = selection.addressKey === addressKey ? selection.type : (address.type ?? '');
+  if (selection.addressKey !== addressKey) {
+    // Reset during render so neither a stale frame nor a later Back navigation
+    // can restore a local choice made for a previous address.
+    setSelection({ addressKey, type: selected });
+  }
   const back = guideReturnTo(address.returnTo, locale) ?? `/${locale}/catalogue/new`;
   const release = read?.ok ? read.release : undefined;
   const types = release ? guideTypes(release, locale) : [];
@@ -300,7 +312,12 @@ export function DefinitionGuideContent({
                 id={typeId}
                 aria-describedby={type ? `${typeId}-meaning` : undefined}
                 value={selected}
-                onChange={(event) => setSelected(event.target.value)}
+                onChange={(event) =>
+                  setSelection({
+                    addressKey,
+                    type: event.target.value,
+                  })
+                }
               >
                 <NativeSelectOption value="">{m.catalogue_create_choose_type({}, o)}</NativeSelectOption>
                 {types.map((entry) => (
