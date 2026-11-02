@@ -15,7 +15,7 @@ export function createSubjectViewRecovery() {
   let active: { visit: object; promise: Promise<void> } | null = null;
   return (router: SubjectViewRecoveryRouter, visit: object, reset: () => void) => {
     if (active?.visit === visit) return active.promise;
-    let attempt: { visit: string; promise: Promise<void> };
+    let attempt: { visit: object; promise: Promise<void> };
     const promise = Promise.resolve()
       .then(() => router.invalidate())
       .then(() => {
