@@ -664,7 +664,10 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
     expect(
       (within(host).getByRole('button', { name: m.catalogue_create_submit() }) as HTMLButtonElement).disabled,
     ).toBe(true);
-    const metadata = client.getQueryCache().findAll({ queryKey: ['screen-profile'] }).at(-1)!;
+    const metadata = client
+      .getQueryCache()
+      .findAll({ queryKey: ['screen-profile'] })
+      .at(-1)!;
     expect(metadata.state).toMatchObject({ status: 'error', data: { ok: true } });
     await act(async () => queuedSubmit()());
     expect(submitted).toHaveLength(1);
@@ -719,7 +722,9 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
       references: [{ parts: [{ value: { type: 'value', content: 'https://example.org/corrected' } }] }],
     });
     expect(select(host, m.catalogue_create_type()).disabled).toBe(true);
-    await until(() => metadataReads === 7 && !within(host).queryByRole('button', { name: m.catalogue_create_saving() }));
+    await until(
+      () => metadataReads === 7 && !within(host).queryByRole('button', { name: m.catalogue_create_saving() }),
+    );
     expect(host.textContent).toContain(m.catalogue_create_unavailable());
     const sealedWrite = structuredClone(nativeWrites(recovery)[0]!);
     await click(host.querySelector('form')!, m.catalogue_create_retry());
