@@ -161,7 +161,8 @@ function meanAllowance(points: readonly CalibrationPoint[], absolute: number, re
     sum = next;
   }
   const mean = scale * Math.min(1, sum / points.length);
-  if (!Number.isFinite(mean)) throw new TypeError(`Calibration fit objective for ${points.length} points is not finite`);
+  if (!Number.isFinite(mean))
+    throw new TypeError(`Calibration fit objective for ${points.length} points is not finite`);
   if (mean === 0) throw new TypeError(`Calibration fit objective for ${points.length} points is below numeric range`);
   return mean;
 }
@@ -308,10 +309,16 @@ export function detectableSlope(
       return high + Math.log1p(Math.exp(Math.min(left, right) - high));
     };
     const valueLogs = coordinates.map((coordinate) =>
-      addLogs(logOf(base), slope === 0 || coordinate === 0 ? Number.NEGATIVE_INFINITY : logOf(slope) + logOf(coordinate)),
+      addLogs(
+        logOf(base),
+        slope === 0 || coordinate === 0 ? Number.NEGATIVE_INFINITY : logOf(slope) + logOf(coordinate),
+      ),
     );
     const uncertaintyLogs = valueLogs.map((valueLog) =>
-      Math.max(logOf(uncertainty.absolute), uncertainty.relative === 0 ? Number.NEGATIVE_INFINITY : logOf(uncertainty.relative) + valueLog),
+      Math.max(
+        logOf(uncertainty.absolute),
+        uncertainty.relative === 0 ? Number.NEGATIVE_INFINITY : logOf(uncertainty.relative) + valueLog,
+      ),
     );
     const scaleLog = Math.max(0, ...valueLogs, ...uncertaintyLogs);
     const fromLog = (valueLog: number): number =>
