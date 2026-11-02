@@ -19,9 +19,11 @@ import { recordedMoneyUnit, recordedTaxBehavior } from './money-schema';
 import { formatMinorAmount } from './money';
 
 // Only this page's edited rows are retained; untouched rows follow the current read.
-const RetainOffer = createContext<(offer: CreatorOffer) => void>(() => {});
-const ReleaseOffer = createContext<(id: string) => void>(() => {});
-const ConfirmOffer = createContext<((id: string) => Promise<CreatorOffer | null>) | undefined>(undefined);
+const OfferJourney = createContext<{
+  retain(offer: CreatorOffer): void;
+  release(id: string): void;
+  confirmOffer: ((id: string) => Promise<CreatorOffer | null>) | undefined;
+}>({ retain() {}, release() {}, confirmOffer: undefined });
 
 function OwnedOfferControls({
   offer,
@@ -94,9 +96,7 @@ function OfferCommands({
 }) {
   const memory = useCreatorIntent<ChangeIntent>(guard, offer.id);
   const [resume] = useState(memory.value);
-  const retain = useContext(RetainOffer);
-  const release = useContext(ReleaseOffer);
-  const confirmOffer = useContext(ConfirmOffer);
+  const { retain, release, confirmOffer } = useContext(OfferJourney);
   // Keep the observed row and original command stable while a write's outcome is uncertain.
   const [draft, setDraft] = useState(resume);
   const observed = draft?.observed ?? offer;
@@ -289,7 +289,13 @@ function OfferCommands({
         )}
         {result && <p role={result.kind === 'saved' ? 'status' : 'alert'}>{creatorNotice(result.kind)}</p>}
         {result?.kind === 'saved' && !confirmed && confirmOffer && (
-          <Button type="button" variant="outline" className="min-h-11" disabled={checking} onClick={() => void refreshSaved()}>
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11"
+            disabled={checking}
+            onClick={() => void refreshSaved()}
+          >
             {checking ? m.creator_offers_preparing() : m.creator_offers_refresh()}
           </Button>
         )}
@@ -409,9 +415,7 @@ export function CreatorOffersPage({
               <p className="text-sm text-muted-foreground">{m.creator_offers_empty_hint()}</p>
             </div>
           ) : (
-            <RetainOffer.Provider value={retain}>
-              <ReleaseOffer.Provider value={release}>
-                <ConfirmOffer.Provider value={onConfirm}>
+            <OfferJourney.Provider value={{ retain, release, confirmOffer: onConfirm }}>
               <ul className="space-y-3 rounded-xl border bg-card p-3 text-card-foreground sm:p-5">
                 {offers.map((offer) => (
                   <ContentItem
@@ -463,9 +467,7 @@ export function CreatorOffersPage({
                   />
                 ))}
               </ul>
-                </ConfirmOffer.Provider>
-              </ReleaseOffer.Provider>
-            </RetainOffer.Provider>
+            </OfferJourney.Provider>
           )}
           <nav aria-label={m.creator_offers_pagination()} className="flex flex-wrap gap-3">
             {cursor && (
