@@ -203,6 +203,14 @@ review/reconciliation flow. Completed deletion offers no session-dependent actio
 form/card items and wrapping actions at phone widths without clipping details or focus. Rename confirmation appears
 only after a valid handle is entered; password guidance is shown before the Security password field.
 
+## Organization membership
+
+`/organizations/members` offers Reload after an unavailable initial read. Recovery retries session discovery only
+until an initiating account is known; subsequent reads retain that account and organization. Leaving or changing
+organizations ends pending browser continuations before they can install a review or start another request.
+An already dispatched change continues independently; its stored command, exact operands and original key remain
+available for explicit confirmation and native reconciliation. Failed identity confirmation keeps the current review usable.
+
 ## Step-up
 
 A signed-in browser whose session is not fresh enough for `prompt=login` or `max_age` arrives at

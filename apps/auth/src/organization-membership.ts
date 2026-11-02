@@ -365,12 +365,18 @@ function outcome(status: number, code: string): MembershipOutcome {
 /** Persist before dispatch. A lost execute response keeps the same immutable
  * operation, approval and key. No reapproval or operation replacement on retry.
  */
-export async function submitMembership(command: MembershipCommand): Promise<MembershipOutcome> {
-  if (!validCommand(command) || !membershipSessionMatches(await loadAccountSession(), command.accountId))
-    return 'denied';
+export async function submitMembership(
+  command: MembershipCommand,
+  isActive: () => boolean = () => true,
+): Promise<MembershipOutcome> {
+  if (!isActive() || !validCommand(command)) return 'denied';
+  const session = await loadAccountSession();
+  if (!isActive()) return 'unavailable';
+  if (!membershipSessionMatches(session, command.accountId)) return 'denied';
   if (command.unresolved && !command.reference) return 'unknown';
   if (!command.reference) {
     const current = await loadSelectedMembership(command.operation.organizationId, command.operation.memberAccountId);
+    if (!isActive()) return 'unavailable';
     if (current.kind !== 'ready') return current.kind === 'denied' ? 'denied' : 'unavailable';
     if ((current.membership?.reservationId ?? undefined) !== command.operation.reservationId) return 'conflict';
     const approved = await authPost<unknown>('/account-operations/approve', {
@@ -378,6 +384,7 @@ export async function submitMembership(command: MembershipCommand): Promise<Memb
       operationKey: command.operationKey,
       operation: command.operation,
     });
+    if (!isActive()) return 'unavailable';
     if (!approved.ok) return outcome(approved.status, approved.code);
     if (
       !record(approved.body) ||
@@ -390,6 +397,8 @@ export async function submitMembership(command: MembershipCommand): Promise<Memb
       return 'unavailable';
     command.reference = approved.body.reference;
   }
+  // Only undispatched browser stages end with the page. Once execute starts,
+  // retain its original command regardless of navigation or a lost response.
   command.unresolved = true;
   if (!saveMembershipCommand(command)) return 'unavailable';
   const executed = await authPost<unknown>('/account-operations/execute', {
@@ -417,18 +426,23 @@ export async function reauthenticateMembership(
   command: MembershipCommand,
   email: string,
   password: string,
+  isActive: () => boolean = () => true,
 ): Promise<boolean> {
+  if (!isActive()) return false;
   const saved = readMembershipCommand();
   if (!saved || saved === 'invalid' || JSON.stringify(saved) !== JSON.stringify(command)) return false;
-  return reauthenticateMembershipSession(command.accountId, email, password);
+  return reauthenticateMembershipSession(command.accountId, email, password, isActive);
 }
 export async function reauthenticateMembershipSession(
   accountId: string,
   email: string,
   password: string,
+  isActive: () => boolean = () => true,
 ): Promise<boolean> {
   const profile = membershipProfile();
-  if (!profile) return false;
+  if (!isActive() || !profile) return false;
   const response = await authPost('/signin', { email, password, ...profile });
-  return response.ok && membershipSessionMatches(await loadAccountSession(), accountId);
+  if (!isActive() || !response.ok) return false;
+  const session = await loadAccountSession();
+  return isActive() && membershipSessionMatches(session, accountId);
 }

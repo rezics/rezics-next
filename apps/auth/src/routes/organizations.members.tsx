@@ -36,7 +36,7 @@ export const Route = createFileRoute('/organizations/members')({
 });
 function MembershipRoute() {
   const { organizationId } = Route.useSearch();
-  return <OrganizationMembersPage key={organizationId} organizationId={organizationId} />;
+  return <OrganizationMembersPage organizationId={organizationId} />;
 }
 function statusMessage(kind: string) {
   switch (kind) {
@@ -63,6 +63,9 @@ function statusMessage(kind: string) {
   }
 }
 export function OrganizationMembersPage({ organizationId }: { organizationId: string }) {
+  return <MembershipReview key={organizationId} organizationId={organizationId} />;
+}
+function MembershipReview({ organizationId }: { organizationId: string }) {
   const [page, setPage] = useState<MembershipPage | null>(null);
   const [accountId, setAccountId] = useState('');
   const [command, setCommand] = useState<MembershipCommand | null>(null);
@@ -77,48 +80,23 @@ export function OrganizationMembersPage({ organizationId }: { organizationId: st
   const [password, setPassword] = useState('');
   const [observed, setObserved] = useState(false);
   const lock = useRef(false);
+  const activity = useRef<() => boolean>(() => false);
   const feedback = useRef<HTMLDivElement>(null);
   const confirmation = useRef<HTMLHeadingElement>(null);
 
-  useEffect(() => {
+  // Invalidate before another page can handle input. Each continuation captures
+  // this particular lifetime, including across Strict Mode effect replay.
+  useLayoutEffect(() => {
     let active = true;
-    setPage(null);
-    setCommand(null);
-    setConfirmed(false);
-    setReauth(false);
-    setNotice('');
-    void (async () => {
-      if (!membershipId(organizationId)) {
-        if (active) setPage({ kind: 'missing' });
-        return;
-      }
-      const session = await loadAccountSession();
-      if (!active) return;
-      if (session.kind !== 'ready') {
-        setPage({ kind: session.kind === 'signed-out' ? 'signed-out' : 'unavailable' });
-        return;
-      }
-      const saved = readMembershipCommand();
-      if (
-        saved === 'invalid' ||
-        (saved && (saved.accountId !== session.accountId || saved.operation.organizationId !== organizationId))
-      ) {
-        setPage({ kind: 'unavailable' });
-        return;
-      }
-      setAccountId(session.accountId);
-      setNeedsProfile(!membershipSessionMatches(session, session.accountId));
-      if (saved) {
-        setCommand(saved);
-        setNotice(saved.unresolved ? 'unknown' : 'step-up');
-      }
-      const result = await loadMembershipPage(organizationId, session.accountId);
-      if (active) setPage(result);
-    })();
+    activity.current = () => active;
     return () => {
       active = false;
+      lock.current = false;
     };
-  }, [organizationId]);
+  }, []);
+  useEffect(() => {
+    void reload();
+  }, []);
   useLayoutEffect(() => {
     if (notice) feedback.current?.focus();
   }, [notice]);
@@ -127,19 +105,52 @@ export function OrganizationMembersPage({ organizationId }: { organizationId: st
   }, [command?.operationKey]);
 
   async function reload(cursor?: string) {
-    if (lock.current) return;
+    const isActive = activity.current;
+    if (!isActive() || lock.current) return;
     lock.current = true;
     setBusy(true);
     setPage(null);
     try {
-      setPage(await loadMembershipPage(organizationId, accountId, cursor));
+      if (!membershipId(organizationId)) {
+        setPage({ kind: 'missing' });
+        return;
+      }
+      let initiatingAccount = accountId;
+      if (!initiatingAccount) {
+        const session = await loadAccountSession();
+        if (!isActive()) return;
+        if (session.kind !== 'ready') {
+          setPage({ kind: session.kind === 'signed-out' ? 'signed-out' : 'unavailable' });
+          return;
+        }
+        const saved = readMembershipCommand();
+        if (
+          saved === 'invalid' ||
+          (saved && (saved.accountId !== session.accountId || saved.operation.organizationId !== organizationId))
+        ) {
+          setPage({ kind: 'unavailable' });
+          return;
+        }
+        initiatingAccount = session.accountId;
+        setAccountId(initiatingAccount);
+        setNeedsProfile(!membershipSessionMatches(session, initiatingAccount));
+        if (saved) {
+          setCommand(saved);
+          setNotice(saved.unresolved ? 'unknown' : 'step-up');
+        }
+      }
+      const result = await loadMembershipPage(organizationId, initiatingAccount, cursor);
+      if (isActive()) setPage(result);
     } finally {
-      lock.current = false;
-      setBusy(false);
+      if (isActive()) {
+        lock.current = false;
+        setBusy(false);
+      }
     }
   }
   async function select(memberAccountId: string, desired: 'owner' | 'member' | null) {
-    if (lock.current || command || !membershipId(memberAccountId) || !accountId) return;
+    const isActive = activity.current;
+    if (!isActive() || lock.current || command || !membershipId(memberAccountId) || !accountId) return;
     if (needsProfile) {
       setReauth(true);
       setNotice('step-up');
@@ -149,6 +160,7 @@ export function OrganizationMembersPage({ organizationId }: { organizationId: st
     setBusy(true);
     try {
       const current = await loadSelectedMembership(organizationId, memberAccountId);
+      if (!isActive()) return;
       if (current.kind !== 'ready') {
         setNotice(current.kind);
         return;
@@ -173,13 +185,16 @@ export function OrganizationMembersPage({ organizationId }: { organizationId: st
       setNotice('');
       setObserved(false);
     } finally {
-      lock.current = false;
-      setBusy(false);
+      if (isActive()) {
+        lock.current = false;
+        setBusy(false);
+      }
     }
   }
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (lock.current || !command || !confirmed) return;
+    const isActive = activity.current;
+    if (!isActive() || lock.current || !command || !confirmed) return;
     lock.current = true;
     setBusy(true);
     setNotice('');
@@ -194,30 +209,35 @@ export function OrganizationMembersPage({ organizationId }: { organizationId: st
         setConfirmed(false);
         return;
       }
-      const result: MembershipOutcome = await submitMembership(command);
+      const result: MembershipOutcome = await submitMembership(command, isActive);
+      if (!isActive()) return;
       setNotice(result);
       setConfirmed(false);
       if (result === 'step-up') setReauth(true);
       const current = await loadSelectedMembership(organizationId, command.operation.memberAccountId);
+      if (!isActive()) return;
       setObserved(result === 'acknowledged' && membershipReadback(command, current));
-      setPage(await loadMembershipPage(organizationId, accountId));
+      const resultPage = await loadMembershipPage(organizationId, accountId);
+      if (isActive()) setPage(resultPage);
     } finally {
-      lock.current = false;
-      setBusy(false);
+      if (isActive()) {
+        lock.current = false;
+        setBusy(false);
+      }
     }
   }
   async function authenticate(event: FormEvent) {
     event.preventDefault();
-    if (lock.current || !accountId || !email || !password) return;
+    const isActive = activity.current;
+    if (!isActive() || lock.current || !accountId || !email || !password) return;
     lock.current = true;
     setBusy(true);
     try {
-      if (
-        !(await (command
-          ? reauthenticateMembership(command, email, password)
-          : reauthenticateMembershipSession(accountId, email, password)))
-      ) {
-        setPage({ kind: 'unavailable' });
+      const authenticated = await (command
+        ? reauthenticateMembership(command, email, password, isActive)
+        : reauthenticateMembershipSession(accountId, email, password, isActive));
+      if (!isActive()) return;
+      if (!authenticated) {
         setNotice('unavailable');
         return;
       }
@@ -226,11 +246,14 @@ export function OrganizationMembersPage({ organizationId }: { organizationId: st
       setConfirmed(false);
       setNotice('step-up');
       setPage(null);
-      setPage(await loadMembershipPage(organizationId, accountId));
+      const result = await loadMembershipPage(organizationId, accountId);
+      if (isActive()) setPage(result);
     } finally {
-      setPassword('');
-      lock.current = false;
-      setBusy(false);
+      if (isActive()) {
+        setPassword('');
+        lock.current = false;
+        setBusy(false);
+      }
     }
   }
   function dismiss() {
@@ -441,7 +464,7 @@ export function OrganizationMembersPage({ organizationId }: { organizationId: st
           </section>
         ) : null}
         {page && page.kind !== 'ready' ? (
-          <Button type="button" variant="outline" disabled={busy || !accountId} onClick={() => void reload()}>
+          <Button type="button" variant="outline" disabled={busy} onClick={() => void reload()}>
             {m.auth_inventory_reload()}
           </Button>
         ) : null}
