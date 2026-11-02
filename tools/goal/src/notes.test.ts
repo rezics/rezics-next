@@ -26,7 +26,7 @@ test('a reminder is due from its time, and a recurring one at its latest period'
   expect(occurrence({ text: 'x', remindAt: '2026-10-27T03:00:00Z', everyHours: 24 }, at + 50 * 3_600_000)).toBe(
     '2026-10-29T03:00:00.000Z',
   );
-  expect(occurrence({ text: 'x', remindAt: '2026-10-27T03:00:00Z', everyHours: 0.5 }, at + 3_600_000)).toBe(
+  expect(occurrence({ text: 'x', remindAt: '2026-10-27T03:00:00Z', everyHours: 0.5 }, at + 45 * 60_000)).toBe(
     '2026-10-27T03:30:00.000Z',
   );
 });
