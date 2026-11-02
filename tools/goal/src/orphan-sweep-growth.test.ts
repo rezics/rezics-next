@@ -206,7 +206,7 @@ test('command and host sweeps read and lease a constant live candidate set as se
         expect(store.task(id).currentAttempt).toBe(1);
         expect(counts.leases).toBe(2);
         recoveryWork(native.drain(`orphan-repeat:${settledCount}:${adoptRunning}`));
-        store.updateTask(id, (task) => {
+        store.updateTask({ taskId: id, attempt: 1 }, (task) => {
           task.state = 'integrated';
         });
         store.updateAttempt({ taskId: id, attempt: 1 }, (attempt) => {
