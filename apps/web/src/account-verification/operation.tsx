@@ -35,39 +35,76 @@ export function resultLabel(result: OperationResult) {
   }[result.state]();
 }
 
-export function useOperationAttempt(scope: string | null, submit: SubmitOperation, refresh: () => void) {
+export function useOperationAttempt(
+  scope: string | null,
+  submit: SubmitOperation,
+  refresh: () => void,
+  canWrite = true,
+) {
   const [attempt, setAttempt] = useState<Operation | null>(null);
+  const [command, setCommand] = useState<Operation | null>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<OperationResult | null>(null);
-  const locked = useRef(false);
-  const storageReady = useRef(false);
+  const refreshCurrentList = useRef(refresh);
   useEffect(() => {
+    refreshCurrentList.current = refresh;
+  }, [refresh]);
+  const current = useRef<{
+    scope: string | null;
+    active: boolean;
+    ready: boolean;
+    locked: boolean;
+    pending: Operation | null;
+  } | null>(null);
+  useEffect(() => {
+    const lifetime = { scope, active: true, ready: false, locked: false, pending: null as Operation | null };
+    current.current = lifetime;
     setAttempt(null);
+    setCommand(null);
     setResult(null);
-    storageReady.current = false;
-    if (!scope) return;
-    try {
-      setAttempt(readAttempt(sessionStorage, scope));
-      storageReady.current = true;
-    } catch {
-      setResult({ state: 'unavailable' });
+    setBusy(false);
+    if (scope) {
+      try {
+        lifetime.pending = readAttempt(sessionStorage, scope);
+        setAttempt(lifetime.pending);
+        setCommand(lifetime.pending);
+        lifetime.ready = true;
+      } catch {
+        setResult({ state: 'unavailable' });
+      }
     }
+    return () => {
+      lifetime.active = false;
+    };
   }, [scope]);
 
   async function run(operation: Operation) {
-    if (!scope || locked.current || !storageReady.current) return;
-    locked.current = true;
+    const lifetime = current.current;
+    if (!scope || !canWrite || !lifetime?.active || lifetime.scope !== scope || lifetime.locked || !lifetime.ready)
+      return;
+    // Only the saved command may reconcile an unfinished submission.
+    if (
+      lifetime.pending &&
+      (lifetime.pending.key !== operation.key ||
+        lifetime.pending.targetId !== operation.targetId ||
+        lifetime.pending.action !== operation.action ||
+        lifetime.pending.reason !== operation.reason)
+    )
+      return;
+    lifetime.locked = true;
     setBusy(true);
     // Save before dispatch; a response loss/reload must resume exactly this input and key.
     try {
       saveAttempt(sessionStorage, scope, operation);
     } catch {
       setResult({ state: 'unavailable' });
-      locked.current = false;
+      lifetime.locked = false;
       setBusy(false);
       return;
     }
+    lifetime.pending = operation;
     setAttempt(operation);
+    setCommand(operation);
     setResult(null);
     let outcome: OperationResult;
     try {
@@ -75,23 +112,32 @@ export function useOperationAttempt(scope: string | null, submit: SubmitOperatio
     } catch {
       outcome = { state: 'uncertain' };
     }
+    // Navigation may have replaced this viewer/scope while the native command was running.
+    if (!lifetime.active || current.current !== lifetime) return;
     if (['accepted', 'conflict', 'invalid'].includes(outcome.state)) {
       try {
         clearAttempt(sessionStorage, scope);
+        lifetime.pending = null;
         setAttempt(null);
       } catch {
         /* Retaining the same operation is safer than generating a second key. */
       }
     }
     setResult(outcome);
-    locked.current = false;
+    lifetime.locked = false;
     setBusy(false);
-    refresh();
+    refreshCurrentList.current();
   }
-  return { attempt, busy, result, run };
+  return { attempt, command, busy, result, run };
 }
 
-export function OperationFeedback({ operation }: { operation: ReturnType<typeof useOperationAttempt> }) {
+export function OperationFeedback({
+  operation,
+  disabled = false,
+}: {
+  operation: ReturnType<typeof useOperationAttempt>;
+  disabled?: boolean;
+}) {
   const feedback = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (operation.result) feedback.current?.focus();
@@ -104,7 +150,11 @@ export function OperationFeedback({ operation }: { operation: ReturnType<typeof 
       {operation.attempt && (
         <>
           <p>{m.av_resume_help()}</p>
-          <Button type="button" disabled={operation.busy} onClick={() => void operation.run(operation.attempt!)}>
+          <Button
+            type="button"
+            disabled={disabled || operation.busy}
+            onClick={() => void operation.run(operation.attempt!)}
+          >
             {m.av_resume({ action: actionLabel(operation.attempt.action) })}
           </Button>
         </>
@@ -118,15 +168,18 @@ export function OperationForm({
   targetId,
   disabled,
   onSubmit,
+  draft,
 }: {
   actions: Operation['action'][];
   targetId: string;
   disabled: boolean;
   onSubmit: (operation: Operation) => void;
+  draft?: Operation | null;
 }) {
   const id = useId();
-  const [action, setAction] = useState(actions[0]!);
-  const [reason, setReason] = useState('');
+  const initial = draft?.targetId === targetId ? draft : null;
+  const [action, setAction] = useState(initial && actions.includes(initial.action) ? initial.action : actions[0]!);
+  const [reason, setReason] = useState(initial?.reason ?? '');
   const [confirm, setConfirm] = useState(false);
   const hasReason = action === 'approve' || action === 'reject' || action === 'revoke';
   return (

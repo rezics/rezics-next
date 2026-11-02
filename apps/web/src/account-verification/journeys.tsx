@@ -10,13 +10,28 @@ import type { SubmitOperation } from './operation';
 const submit: SubmitOperation = (data) => decideVerification({ data, headers: csrfHeaders() });
 
 export function ReviewJourney() {
-  const { state, csrfToken } = useSession();
+  const { state, csrfToken, subject } = useSession();
+  const viewerId = state === 'signed-in' ? (subject ?? null) : null;
+  return (
+    <ReviewerJourney key={viewerId ?? state} viewerId={viewerId} loading={state === 'unknown'} canWrite={!!csrfToken} />
+  );
+}
+
+function ReviewerJourney({
+  viewerId,
+  loading,
+  canWrite,
+}: {
+  viewerId: string | null;
+  loading: boolean;
+  canWrite: boolean;
+}) {
   const [cursor, setCursor] = useState<string | undefined>();
   const query = useQuery({
     ...personalRead,
     retry: false,
-    queryKey: ['account-verification', 'review', cursor],
-    enabled: personalRead.enabled && state === 'signed-in',
+    queryKey: ['account-verification', 'review', viewerId, cursor],
+    enabled: personalRead.enabled && !!viewerId,
     queryFn: () => readReviewPage({ data: cursor ? { cursor } : {} }),
   });
   const refresh = () => {
@@ -24,11 +39,19 @@ export function ReviewJourney() {
   };
   return (
     <ReviewPageView
-      page={query.isError ? { state: 'unavailable' } : (query.data?.page ?? { state: 'loading' })}
-      viewerId={query.data?.viewerId ?? null}
-      operations={query.data?.operations ?? []}
+      page={
+        loading
+          ? { state: 'loading' }
+          : !viewerId || (query.data && query.data.viewerId !== viewerId)
+            ? { state: 'denied' }
+            : query.isError
+              ? { state: 'unavailable' }
+              : (query.data?.page ?? { state: 'loading' })
+      }
+      viewerId={viewerId}
+      operations={query.data?.viewerId === viewerId ? (query.data?.operations ?? []) : []}
       submit={submit}
-      canWrite={!!csrfToken}
+      canWrite={canWrite}
       refresh={refresh}
       next={(value) => {
         setCursor(value);

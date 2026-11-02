@@ -6,7 +6,7 @@ import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { subjectHref } from '../subject/subject-href';
 import type { AccountPage, AgentVerificationRequest, Identity, Operation, ReadState, ReviewPage } from './transport';
-import { OperationFeedback, OperationForm, useOperationAttempt, type SubmitOperation } from './operation';
+import { actionLabel, OperationFeedback, OperationForm, useOperationAttempt, type SubmitOperation } from './operation';
 
 const linkClass = 'font-medium text-primary underline underline-offset-4 break-words';
 export const verificationHref = (id: string) => `/${getLocale()}/accounts/${encodeURIComponent(id)}/verification`;
@@ -146,14 +146,36 @@ export function ReviewPageView({
   first: () => void;
   canWrite?: boolean;
 }) {
-  const operation = useOperationAttempt(viewerId ? `verification:${viewerId}:review` : null, submit, refresh);
-  const disabled = !canWrite || operation.busy || !!operation.attempt || operation.result?.state === 'accepted';
+  const operation = useOperationAttempt(viewerId ? `verification:${viewerId}:review` : null, submit, refresh, canWrite);
+  const disabled = !viewerId || !canWrite || operation.busy || !!operation.attempt;
   const actions: Operation['action'][] = [];
   if (operations.includes('verification_request.approve')) actions.push('approve');
   if (operations.includes('verification_request.reject')) actions.push('reject');
+  const command = operation.command;
   return (
     <Frame title={m.av_review_title()}>
       <p className="max-w-prose text-muted-foreground">{m.av_review_help()}</p>
+      {viewerId && page.state !== 'denied' && page.state !== 'preparing' && (operation.result || operation.attempt) && (
+        <div className="space-y-3">
+          {command && (
+            <div className="space-y-2 break-words">
+              <p>
+                {m.av_application()}: {command.targetId}
+              </p>
+              <p>
+                {m.av_decision()}: {actionLabel(command.action)}
+              </p>
+              <p className="whitespace-pre-wrap">
+                {m.av_reason()}: {command.reason}
+              </p>
+            </div>
+          )}
+          <OperationFeedback
+            operation={operation}
+            disabled={!canWrite || page.state !== 'ready' || !command || !actions.includes(command.action)}
+          />
+        </div>
+      )}
       {page.state !== 'ready' ? (
         <PageState state={page.state} retry={first} />
       ) : (
@@ -166,7 +188,6 @@ export function ReviewPageView({
               {m.av_first_page()}
             </Button>
           </div>
-          {(operation.result || operation.attempt) && <OperationFeedback operation={operation} />}
           {page.value.requests.length === 0 && (
             <p role="status" className="rounded-xl border border-border p-5">
               {m.av_empty()}
@@ -205,9 +226,13 @@ export function ReviewPageView({
                     <Evidence request={request} />
                     {request.state === 'pending' && actions.length > 0 && (
                       <OperationForm
+                        key={`${viewerId}:${request.id}:${actions.join(',')}:${command?.targetId === request.id ? command.key : ''}`}
                         actions={actions}
                         targetId={request.id}
-                        disabled={disabled}
+                        draft={command?.targetId === request.id ? command : null}
+                        disabled={
+                          disabled || (command?.targetId === request.id && operation.result?.state === 'accepted')
+                        }
                         onSubmit={(input) => void operation.run(input)}
                       />
                     )}
