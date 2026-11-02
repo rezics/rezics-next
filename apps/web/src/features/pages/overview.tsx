@@ -16,6 +16,7 @@ import {
 } from '@rezics/ui/cover';
 import { MetaLine } from '@rezics/ui/meta-line';
 import { ContentItemFrame, ContentItemHeading, ContentItemTitleLink } from '@rezics/ui/content-item';
+import { ListRowControl } from '@rezics/ui/list-row';
 import { CoverViewer } from '@rezics/ui/cover-viewer';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
@@ -1212,26 +1213,48 @@ export function SourcesSection({
             />
           </li>
         )}
-        {records.map((record) => (
-          <li key={record.url}>
-            <span className="me-2 font-medium text-muted-foreground">{value.source}</span>
-            <a className={`${linkClass} ${linkColor}`} href={record.url}>
-              {record.name}
-            </a>
-            {record.licence && (
-              <>
-                {' · '}
-                {value.licence}:{' '}
-                {record.licence.url ? (
-                  <a className={`${linkClass} ${linkColor}`} href={record.licence.url}>
-                    {record.licence.id}
-                  </a>
-                ) : (
-                  record.licence.id
-                )}
-              </>
-            )}
-            {record.attribution ? ` · ${record.attribution}` : null}
+        {records.map((record, index) => (
+          <li key={index} className="min-w-0 [overflow-wrap:anywhere]">
+            <ContentItemFrame as="div" className="min-w-0 py-3 sm:py-4">
+              <div data-content-item-slot="context" className="mb-2 font-medium text-muted-foreground">
+                {value.source}
+              </div>
+              <ContentItemHeading
+                level={3}
+                className="min-w-0 text-[17px] leading-snug font-semibold [overflow-wrap:anywhere] sm:text-lg md:text-xl"
+              >
+                <ContentItemTitleLink
+                  stretch={false}
+                  className={`block min-h-11 content-center rounded-sm ${linkClass} ${linkColor} focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`}
+                  href={record.url}
+                >
+                  {record.name}
+                </ContentItemTitleLink>
+              </ContentItemHeading>
+              {(record.licence || record.attribution) && (
+                <ListRowControl
+                  data-content-item-slot="metadata"
+                  className="mt-2 min-w-0 space-y-1 text-sm text-muted-foreground [overflow-wrap:anywhere]"
+                >
+                  {record.licence && (
+                    <p>
+                      {value.licence}:{' '}
+                      {record.licence.url ? (
+                        <a
+                          className={`inline-block min-h-11 min-w-11 max-w-full content-center rounded-sm align-middle ${linkClass} ${linkColor} focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`}
+                          href={record.licence.url}
+                        >
+                          {record.licence.id}
+                        </a>
+                      ) : (
+                        record.licence.id
+                      )}
+                    </p>
+                  )}
+                  {record.attribution && <p>{record.attribution}</p>}
+                </ListRowControl>
+              )}
+            </ContentItemFrame>
           </li>
         ))}
         {sources.urls.map((url) => (
