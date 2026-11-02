@@ -4884,14 +4884,7 @@ async function copyReturns(
     ],
     { stdin: new Blob([`${present.join('\0')}\0`]), stdout: 'pipe', stderr: 'pipe' },
   );
-  const { code: synced, vanishedFiles } = await finishedRsync(
-    sync,
-    signal,
-    host,
-    'returns copy',
-    transferLimit,
-    false,
-  );
+  const { code: synced, vanishedFiles } = await finishedRsync(sync, signal, host, 'returns copy', transferLimit, false);
   reportDuration('rsync back', started, host.name);
   if (signal.aborted) throw new Aborted();
   if (synced === 24) reportVanishedFiles('from', host.name, vanishedFiles);
@@ -5006,13 +4999,11 @@ async function uploadRun(
       ],
       { stdin: new Blob([`${uploadFiles.join('\0')}\0`]), stdout: 'pipe', stderr: 'pipe' },
     );
-    const { code: synced, bytesSent, vanishedFiles } = await finishedRsync(
-      sync,
-      signal,
-      host,
-      'workspace upload',
-      transferLimit,
-    );
+    const {
+      code: synced,
+      bytesSent,
+      vanishedFiles,
+    } = await finishedRsync(sync, signal, host, 'workspace upload', transferLimit);
     reportDuration('rsync', rsyncStarted, host.name, bytesSent);
     if (signal.aborted) throw new Aborted();
     if ([10, 12, 30, 35, 255].includes(synced)) throw new RemoteTransportError(host.name, 'workspace upload', synced);

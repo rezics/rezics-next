@@ -937,8 +937,22 @@ type HostConfig = {
   rsyncBackExit?: number;
   slowUploadMs?: number;
   slowReturnsMs?: number;
-  uploadProgressMode?: 'increasing' | 'fragmented' | 'repeated' | 'decreasing' | 'malformed' | 'diagnostic-only' | 'progress-then-stall';
-  returnsProgressMode?: 'increasing' | 'fragmented' | 'repeated' | 'decreasing' | 'malformed' | 'diagnostic-only' | 'progress-then-stall';
+  uploadProgressMode?:
+    | 'increasing'
+    | 'fragmented'
+    | 'repeated'
+    | 'decreasing'
+    | 'malformed'
+    | 'diagnostic-only'
+    | 'progress-then-stall';
+  returnsProgressMode?:
+    | 'increasing'
+    | 'fragmented'
+    | 'repeated'
+    | 'decreasing'
+    | 'malformed'
+    | 'diagnostic-only'
+    | 'progress-then-stall';
   rsyncProgressIntervalMs?: number;
   returnedContent?: string;
   stallUpload?: boolean;
@@ -4872,8 +4886,16 @@ test('transfer progress that stalls after real progress reports its byte count a
   const uploadResult = await remote(upload.env, workspace(), ['true']);
   expect(uploadResult.code).toBe(75);
   expect(uploadResult.stderr).toContain('last observed byte count: 1024');
-  expect(upload.events().filter((event) => event.kind === 'rsync-stopped').map((event) => event.pid)).toEqual(
-    upload.events().filter((event) => event.kind === 'rsync').map((event) => event.pid),
+  expect(
+    upload
+      .events()
+      .filter((event) => event.kind === 'rsync-stopped')
+      .map((event) => event.pid),
+  ).toEqual(
+    upload
+      .events()
+      .filter((event) => event.kind === 'rsync')
+      .map((event) => event.pid),
   );
   expect(upload.events().filter((event) => event.kind === 'run')).toHaveLength(0);
   expect(slotMarkers(upload.env, 'a')).toEqual([]);
@@ -4921,7 +4943,13 @@ test('transfer progress cancellation racing active output and the deadline reaps
       phase === 'returns' ? ['--returns', '.temp/output'] : [],
     );
     await waitFor(() =>
-      fixture.events().some((event) => event.kind === 'rsync-progress' && event.step === (phase === 'upload' ? 'workspace upload' : 'returns copy')),
+      fixture
+        .events()
+        .some(
+          (event) =>
+            event.kind === 'rsync-progress' &&
+            event.step === (phase === 'upload' ? 'workspace upload' : 'returns copy'),
+        ),
     );
     await Bun.sleep(85);
     requestExecutionCancellation(cancellation);
@@ -4933,7 +4961,8 @@ test('transfer progress cancellation racing active output and the deadline reaps
       (event) => event.kind === 'rsync' && event.step === (phase === 'upload' ? 'workspace upload' : 'returns copy'),
     )!;
     const stopped = seen.find(
-      (event) => event.kind === 'rsync-stopped' && event.step === (phase === 'upload' ? 'workspace upload' : 'returns copy'),
+      (event) =>
+        event.kind === 'rsync-stopped' && event.step === (phase === 'upload' ? 'workspace upload' : 'returns copy'),
     )!;
     expect(stopped.pid, phase).toBe(transfer.pid);
     expect(seen.filter((event) => event.kind === 'rsync' && event.step === transfer.step)).toHaveLength(1);
