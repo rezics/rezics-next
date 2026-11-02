@@ -34,6 +34,7 @@ const globals = {
   document: window.document,
   HTMLElement: window.HTMLElement,
   HTMLButtonElement: window.HTMLButtonElement,
+  Element: window.Element,
   Node: window.Node,
   IS_REACT_ACT_ENVIRONMENT: true,
 };

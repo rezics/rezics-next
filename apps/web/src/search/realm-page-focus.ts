@@ -3,8 +3,12 @@ import { useEffect, useLayoutEffect as useBrowserLayoutEffect, useRef, type RefO
 const useFocusLayoutEffect = typeof document === 'undefined' ? useEffect : useBrowserLayoutEffect;
 
 function actionButton(target: EventTarget | null): HTMLButtonElement | null {
-  const element = target instanceof Element ? target : target instanceof Node ? target.parentElement : null;
-  return element?.closest('button') ?? null;
+  if (target instanceof HTMLButtonElement) return target;
+  if (!(target instanceof Node)) return null;
+  const start = target.nodeType === 1 ? target : target.parentElement;
+  if (!start || typeof (start as { closest?: unknown }).closest !== 'function') return null;
+  const button = (start as { closest(selector: string): unknown }).closest('button');
+  return button instanceof HTMLButtonElement ? button : null;
 }
 
 function recoverTarget(root: HTMLElement | null, source: HTMLButtonElement): HTMLElement | null {
