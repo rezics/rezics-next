@@ -422,9 +422,7 @@ test('Album recovery retires every current surface and retains private drafts an
     expect(text(m.catalogue_create_label(), secondTerms).value).toBe('Album privé');
     expect(submitted[0]).toBe(originalCommand);
     expect(submitted[0]).toEqual(exactFirstCommand);
-    await settle(() =>
-      finishFirstCreate({ ok: false, reason: 'invalid', refreshDefinitions: true }),
-    );
+    await settle(() => finishFirstCreate({ ok: false, reason: 'invalid', refreshDefinitions: true }));
     const retiredCreation = () => {
       expect(host.querySelector('form')).toBe(form);
       expect(host.textContent).not.toContain('Original Album authority');
