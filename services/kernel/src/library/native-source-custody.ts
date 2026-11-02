@@ -183,6 +183,8 @@ import retireChildren from './native-source-custody-retire-children.sql';
 import retireProof from './native-source-custody-retire-proof.sql';
 import retireCapture from './native-source-custody-retire-capture.sql';
 import nextCapture from './native-source-custody-next.sql';
+import identityCapture from './identity-native-planner-source.sql';
+import identityRetention from './identity-native-planner-retention.sql';
 import terminalScope from './erasure-scope.sql';
 import rawMember from './native-source-custody-raw-member.sql';
 import rawEntry from './native-source-custody-raw-entry.sql';
@@ -333,7 +335,7 @@ function executor(client: CommandTransaction, work: NativeCollectionWork, deadli
         values: args,
         query_timeout: Math.max(1, deadline - Date.now()),
       };
-      const result = await client.query<R>(config);
+      const result = await admitted.query(() => client.query<R>(config));
       admitted.settle({ emptySeeks: keys && result.rows.length === 0 ? 1 : 0 });
       return result.rows;
     } catch (error) {
@@ -648,6 +650,9 @@ export function createNativeLibrarySourceCustody({
           const [proof] = await run<{ transactionId: string }>(proofQuery, values, 64, 3);
           if (!receipt || !proof || receipt.transactionId !== proof.transactionId) throw new Refused('binding');
         } else if (receipt) throw new Refused('binding');
+        // Never partially delete receipts/holds below native plan evidence. The FK is also a
+        // concurrent-registration barrier; missing handoff is a retained source, not erased data.
+        if ((await run(identityRetention, values, 2, 1, 1)).length) return blocked('source');
         if ((await run(retireActive, values, 16, 1, 1)).length) return blocked('live_hold');
         const children = await run<{ id: string; transactionId: string; released: boolean; committed: boolean }>(
           retireHolds,
@@ -934,4 +939,71 @@ export async function retireNativeCollectionCapturePage(
     }),
   );
   return { ...result, work: work.receipt() };
+}
+/** A maintenance observation of the real retained raw capture. Does not consult ready-reader Scope state.
+ * The caller holds the Source-local Core transaction; all owner/capture locks remain on that client.
+ */
+export async function readNativeIdentitySourceBasis(
+  tx: CommandTransaction,
+  identity: NativeSourceIdentity,
+  input: NativeSourceCaptureWork & { captureId?: string },
+  sharedWork?: NativeCollectionWork,
+): Promise<
+  | Unavailable
+  | {
+      status: 'current';
+      frontier: NativeSourceFrontier;
+      complete: boolean;
+      collectionFence: string;
+      accountFence: string;
+      work: WorkReceipt;
+    }
+> {
+  const work = sharedWork ?? new NativeCollectionWork(input.allowance, input.deadline);
+  try {
+    if (currentCommand(tx).partition !== partitionOf(identity.route)) throw new Refused('binding');
+    const run = executor(tx, work, input.deadline);
+    const fences = await bindOwner(run, identity, false);
+    const [capture] = await run<
+      NativeSourceFrontier & {
+        complete: boolean;
+        collectionFence: string;
+        accountFence: string;
+      }
+    >(
+      identityCapture,
+      {
+        ...parameters(identity),
+        capture_id: input.captureId ?? null,
+        collection_fence: fences.collectionFence,
+        account_fence: fences.accountFence,
+      },
+      32,
+      1,
+    );
+    if (!capture) throw new Refused('binding');
+    if (capture.complete) {
+      const [proof] = await run(
+        proofQuery,
+        {
+          ...parameters(identity),
+          capture_id: capture.captureId,
+        },
+        64,
+        3,
+      );
+      if (!proof || capture.driver !== 'done') throw new Refused('binding');
+    }
+    return {
+      status: 'current',
+      frontier: frontier(capture),
+      complete: capture.complete,
+      ...fences,
+      work: work.receipt(),
+    };
+  } catch (error) {
+    if (error instanceof Refused) return { status: 'unavailable', reason: error.reason, work: work.receipt() };
+    if (error instanceof Error) Object.defineProperty(error, 'work', { get: () => work.receipt(), configurable: true });
+    throw error;
+  }
 }

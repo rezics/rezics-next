@@ -271,3 +271,39 @@ required. Runtime and these measurements remain incomplete; documentation adopti
   owners, clear/Undo fresh order, denied/CAS/replay/overflow rollback and terminal no-resurrection, with three-scale
   owner/entry/history captures. This document task executes or claims no such runtime/growth test. Filter-plan
   numeric budgets remain owned by [filtered lists](filtered-lists.md).
+
+### Native identity expected effects
+
+Library's native Source plan owns the complete expected effect set for one admitted job, native Source identity
+and `collection-source` scope. The default module advances the actual saved input-generation transform through
+bounded raw member/entry/label/session/copy/output pages, withdraws OLD derived readiness separately, and
+builds a distinct structural canonical generation. It preserves immutable facts/pins, occurrence IDs, order,
+notes, duplicates and owner state-write sequence. Existing owner selection still uses the highest live
+`owner_write_seq`, including retained conflicts. Planning needs no ordinary ready Source or receiving ACK.
+
+Only exhaustive applicable native coverage, enrolled OLD/NEW/first-apply/handoff work, final native writer and
+prearm/claim/owner/capture fences, and a retained genuine commit receipt can seal a generation/version/frontier.
+An actual zero takes the same path. Native late birth, writer change or rekey invalidates old currentness before
+commit. Expected pages are bounded to 100 and sealed pagination still needs caller exhaustion plus current
+verification on the SAME Source-home Core transaction. A JSON brand, EOF, count or whole-participant ACK
+supplies no substitute. Supported native account-backed same-home work is independent of unsupported public,
+frozen or foreign physical execution. Native scope success grants no permission, query publication, follow
+completion, ALL-Library acknowledgement, custody release or erasure. Plan-held captures and detached old
+metadata remain in existing terminal retention until real control handoff.
+
+#### Cost
+
+- Touches: route-leading native driver/effect/OLD ranges; exact retained plan, source/account/owner/capture,
+  admission/input-generation/current-claim/prearm, seal/receipt points and native command controls. Receiving
+  application and foreign Source/History producers retain their own bodies and prices.
+- Bound: literal SQL and complete eight-axis operation declarations are in the
+  [Library module](../services/kernel/src/library/README.md#native-identity-scope-planning-and-current-seals).
+  Limits are 1..100 raw keys, inclusive indexed EOF/FK/control work, schema-bounded bytes or actual
+  same-snapshot size admission. One unchanged genuine cumulative reservation charges successful, unavailable,
+  failed, repeated and rolled-back work without refill. A local cap is not Source funding. Accounts' local
+  selected admission is fully spent; Source/Library remainders and the complete authentic parent price remain
+  unknown until their actual owners supply all additive terms and exact normal receiving recognition.
+- Growth check: focused native scope-effects outcomes are authored for six-driver positive pages, omitted
+  effect, exhaustive zero, late first apply, changed fences/rekey and failure/repeat/rollback accounting.
+  Source delivery defers integrated native, database, browser and whole-feature/growth acceptance; typing
+  alone establishes none of those outcomes.

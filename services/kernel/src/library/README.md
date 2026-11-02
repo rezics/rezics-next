@@ -2483,3 +2483,87 @@ rows, statements, blocks and bytes remain independent inclusive bounds; no nativ
 `collection-list-facts.test.ts` supplies native API/persona, configuration, concealment, tuple/identity/source-race and
 raw-width cases. `collection-list-facts-growth.test.ts` measures the whole fixed native page and its actual helpers at
 64/512/4096 unrelated fact/history populations, including failed and private/source-change work.
+
+### Native identity scope planning and current seals
+
+`createLibraryIdentityNativePlanner` in `module.ts` exposes the default native `advance`, `readPage` and
+same-command `verifySeal` ports. The exact key is `{job, sourceIdentity, scope: 'collection-source'}`.
+The admitted saved `IdentityJob` and `identityEpochStore.pageChanges` transform immutable input-generation
+originals. Ordinary pending mappings never supply a guessed destination. Metadata, raw capture and raw
+planning are independent of ordinary Source readiness. Supported placement is a genuine same-home account,
+Source and admitted job: curated members, private built-in entry/label/session/copy, and committed active
+account-backed explicit output. State Sources traverse the independent four-family owner ranges, including
+excluded originals and unreserved label keys. Public-output, frozen and foreign-home authority stays unavailable.
+
+The native `identity_scope_plan` IS the expected manifest. It retains capture, writer/prearm fences,
+source/owner incarnation and OLD head/ready/working references. OLD withdrawal traverses retained derived
+references even when the original native fact was removed. The distinct working generation stores structural
+canonical references; original values, pins, occurrence IDs/order/notes/duplicates and immutable output are
+untouched. Original owner state and its conflicts remain with the existing owner-index writer and
+`currentOwnerState`'s highest live `owner_write_seq`; planning creates no timestamp-based winner. Raw work
+enrolls deterministic collision-checked OLD, NEW and first-apply operations, plus handoff when retained old
+state exists, in the same transaction as derived writes/frontier advancement. Invalidation retains its separate
+meaning. Neither this generation nor its seal publishes a ready query, applies receiving work, or acknowledges
+ALL-Library/follow work.
+
+Every applicable driver must exhaust before the final locked source/capture/current-job/prearm comparison.
+The seal retains the executor-native commit receipt for that exact generation/version/frontier. The page API
+uses the effect-key/disposition tuple, limits 1..100 and returns pending for an unfinished or changed plan.
+A sealed full page is not caller exhaustion; callers continue until `exhausted` and verify the same current seal
+on their genuine Source-home Core client. Zero follows exactly the same complete raw capture/traversal,
+committed receipt and current fence path. Native collection/account writer triggers serialize with these
+locks: births, rekeys, changes and late writes invalidate prior currentness before commit. Admission input,
+claim, prearm bridge/directory, cancellation/release and owner/capture changes also fail current verification.
+
+Plan/effect/seal evidence keeps native custody. Foreign keys retain the raw capture and derived generations;
+immutable effects/seals cannot be silently pruned. Native capture retirement checks the indexed plan hold
+before deleting any child receipt. Missing real control handoff stays a retained Source in the existing terminal
+inventory/minimizer, never `nativeNoData` or erasure success. The native implementation does not release old
+physical custody or infer destination erasure.
+
+#### Cost
+
+- Touches: exact route/collection/plan primary keys; one bounded effect or retained OLD range; the existing
+  native raw driver and custody SQL; admitted saved job/input-generation pages; native local mapping claims;
+  current account/Collection/Core owner, capture and commit receipt; prearm input/group/bridge/directory locks;
+  derived references; and the actual command event/native receipt/COMMIT or ROLLBACK. No receiving SQL is
+  dispatched by this producer; the receiving owner must price its own reached bodies.
+- Bound: `identity-native-planner-statements.ts` lists literal SQL identities and per-operation bounds;
+  `libraryIdentityFootprint` in `identity-native-planner-work.ts` recognizes only those exact statements and
+  the imported literal framework/job/mapping statements. Every declaration contains `candidateKeys`,
+  `nativeRows`, `identityMetadataRows`, `nativePoints`, `witnessKeys`, `statements`, `bytes`, `emptySeeks`.
+  A range admits LIMIT plus one indexed EOF slot, not result count. Effects page: `n` candidate keys,
+  `n+1` native rows, zero identity metadata, one native point, zero witnesses, one statement,
+  SQL+serialized binds+`512n` bytes, one empty seek. Locked plan: one native row/point, zero identity
+  metadata, one statement, SQL+binds+12288 bytes, one empty seek. Current capture: seven joined native
+  rows/points, one identity metadata row, one statement, SQL+binds+64 bytes, one empty seek. Current
+  admitted job: admission/owner, at most two inputs plus EOF, group/bridge/directory and bounded CTE
+  revisits admit 15 native/identity rows, 12 points, one statement, SQL+binds+2048 bytes, four possible
+  empty seeks. Seal receipt: five native rows/points, two identity metadata rows, one statement,
+  SQL+binds+256 bytes, one empty seek. Insert-plan additionally charges all three possible FK points.
+  Known transaction controls have zero rows/points/metadata/candidates/witnesses/seeks but one statement
+  and their actual SQL bytes; native checkout charges one point. No witnesses are constructed anywhere.
+  Unknown statements remain unknown. Saved job JSON first has a same-snapshot size admission before
+  its real transform read; no unbounded projection is priced as a fabricated constant. Native metadata,
+  raw and custody calls transfer only the actual remaining reservation to their existing declared ledger,
+  then settle its exact eight-axis receipt back. Their SQL/projection bounds remain in
+  `collection-source-native.ts` and `native-source-custody.ts`, including capture/receipt/retention.
+- Growth check: `test/library/identity-scope-effects.test.ts` supplies focused native outcome cases for all
+  six drivers, bounded positive pages, omitted enrollment/rollback, genuine exhaustive zero, late first apply,
+  writer/rekey/prearm changes, repeat and failure accounting. These tests are authored, not executed in this
+  source delivery. No new growth harness or measured native bound is claimed; integrated native/growth
+  acceptance remains required.
+
+The real `NativeCollectionWork` reservation is cumulative. Its original ID, Pool, deadline and command resources
+are retained; dispatched misses, SQL failures, repeated calls, rollbacks and settlement cannot refill native rows.
+Command cleanup is reserved before BEGIN. `advancePrepaid` uses the existing live Source Library partition
+in place, without a replacement frame. Existing caller `compose` transfers are bounded by that same cumulative
+parent and settle their actual receipts; a historical capture allowance cannot fund a continuation. Verification
+resolves the already-live allocation before any SQL and performs no checkout or foreign IO. Normal Semantic
+receiving can recognize the concrete exported `libraryIdentityFootprint` declaration; its strict unknown refusal
+must remain until its actual SQL owner adopts the reached bodies. The local 512-row/32-point/16-statement/
+262144-byte cap is not additional Source funding. Accounts' selected current original admission/position/control
+is local and fully spent, with Source/Library remainders still null. The whole authentic parent must reserve the
+disjoint Accounts local, all reached Source/History, all reached Library and transfer-control terms before first
+IO, preserving original/position/Pool/WorkClient/SDK/registry/deadline and live callback. That complete parent
+price remains unknown; this native declaration supplies no guessed zero or replacement foreign producer.
