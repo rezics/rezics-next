@@ -170,7 +170,7 @@ type BanReviewIntent = {
   trigger: HTMLButtonElement;
   token: number;
   realmId: string;
-  caller: string;
+  caller: number;
   generation: number;
 };
 
