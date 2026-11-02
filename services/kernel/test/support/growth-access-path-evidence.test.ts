@@ -82,7 +82,7 @@ test('relation costs and footprints are traversed once per repetition and sample
     ) as Cost['relations'];
     const measuredRelations = new Proxy(relations, {
       ownKeys(target) {
-        relationTraversals[repetitionIndex]++;
+        relationTraversals[repetitionIndex] = relationTraversals[repetitionIndex]! + 1;
         return Reflect.ownKeys(target);
       },
     });
