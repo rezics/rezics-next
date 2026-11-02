@@ -1,13 +1,14 @@
 import { afterAll, expect, test } from 'bun:test';
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { chromium, type Browser } from 'playwright';
+import { chromium, type Browser, type Page } from 'playwright';
 import { createStoryRecordedKernelFetch } from '../src/kernel/fake';
 import { readSessionState } from '../src/session/state';
 import type { SessionEnv } from '../src/session/client';
+import { cleanupAll, ownNodeProcess, withCleanup, type ProcessCustody } from './support/server-custody.ts';
 
 const app = join(import.meta.dir, '..');
 const timeout = 300_000;
@@ -59,19 +60,106 @@ const backend = Bun.serve({
     return recorded(request);
   },
 });
-let child: ChildProcess | undefined;
-let browser: Browser | undefined;
+let custody: ProcessCustody | undefined;
 let directory: string | undefined;
 let started: Promise<string> | undefined;
+type ResourceScope = 'suite' | 'test';
+type OwnedResource = { label: string; scope: ResourceScope; close: () => Promise<void> };
+type ResourceLease<T> = OwnedResource & { value: Promise<T> };
+const resources = new Set<OwnedResource>();
+const resourceByValue = new WeakMap<object, OwnedResource>();
+let browserLease: ResourceLease<Browser> | undefined;
+let teardownStarted = false;
+
+function ownResource<T extends object>(
+  label: string,
+  scope: ResourceScope,
+  create: () => T | PromiseLike<T>,
+  dispose: (resource: T) => unknown | PromiseLike<unknown>,
+): ResourceLease<T> {
+  if (teardownStarted) throw new Error(`${label} acquisition began after suite teardown`);
+  let resource: T | undefined;
+  let closing: Promise<void> | undefined;
+  let lease!: ResourceLease<T>;
+  const value = Promise.resolve()
+    .then(create)
+    .then((created) => {
+      resource = created;
+      resourceByValue.set(created, lease);
+      if (teardownStarted) void lease.close().catch(() => {});
+      return created;
+    });
+  void value.catch(() => {});
+  const close = () =>
+    (closing ??= (async () => {
+      let current = resource;
+      if (current === undefined) {
+        try {
+          current = await value;
+        } catch {
+          resources.delete(lease);
+          return;
+        }
+      }
+      await dispose(current);
+      resources.delete(lease);
+    })());
+  lease = { label, scope, value, close };
+  resources.add(lease);
+  return lease;
+}
+
+function browserForTest(): Promise<Browser> {
+  if (teardownStarted) throw new Error('Signed-in-routes browser acquisition began after suite teardown');
+  browserLease ??= ownResource('Signed-in-routes browser', 'suite', () => chromium.launch(), (browser) => browser.close());
+  return browserLease.value;
+}
+
+function resourceCleanupActions(scope?: ResourceScope, after?: Set<OwnedResource>) {
+  return [...resources]
+    .filter((resource) => (scope === undefined || resource.scope === scope) && (after === undefined || !after.has(resource)))
+    .map((resource) => ({ label: resource.label, run: resource.close, timeoutMs: 6000 }));
+}
+
+function lifetimeTest(name: string, operation: () => void | Promise<void>, timeoutMs?: number): void {
+  const run = async () => {
+    const existing = new Set(resources);
+    await withCleanup(operation, [
+      {
+        label: 'Signed-in-routes test pages',
+        run: () => cleanupAll(resourceCleanupActions('test', existing)),
+        timeoutMs: 8000,
+      },
+    ]);
+  };
+  if (timeoutMs === undefined) test(name, run);
+  else test(name, run, timeoutMs);
+}
+
+function pageForTest(): Promise<Page> {
+  if (teardownStarted) throw new Error('Signed-in-routes page acquisition began after suite teardown');
+  return browserForTest().then((browser) => {
+    const lease = ownResource('Signed-in-routes browser page', 'test', () => browser.newPage(), (page) => page.close());
+    return lease.value;
+  });
+}
+
+async function closePage(page: Page): Promise<void> {
+  const resource = resourceByValue.get(page);
+  await (resource ? resource.close() : page.close());
+}
 function site() {
   return (started ??= (async () => {
-    const root = resolve(app, '../..');
-    await mkdir(join(root, '.temp'), { recursive: true });
-    directory = await mkdtemp(join(root, '.temp/signed-in-routes-'));
-    const config = join(directory, 'vite.config.ts');
-    // Substitute only the session store boundary. Routing, queries and loaders remain real.
-    await Bun.write(
-      config,
+    let siteCustody: ProcessCustody | undefined;
+    try {
+      if (teardownStarted) throw new Error('Signed-in-routes Vite acquisition began after suite teardown');
+      const root = resolve(app, '../..');
+      await mkdir(join(root, '.temp'), { recursive: true });
+      directory = await mkdtemp(join(root, '.temp/signed-in-routes-'));
+      const config = join(directory, 'vite.config.ts');
+      // Substitute only the session store boundary. Routing, queries and loaders remain real.
+      await Bun.write(
+        config,
       `
       import { resolveWebViteConfig } from ${JSON.stringify(pathToFileURL(join(app, 'tests/support/vite-config.ts')).href)};
       export default async (env) => {
@@ -87,55 +175,100 @@ function site() {
         }
       }] };
       };
-    `,
-    );
-    const port = await new Promise<number>((done, reject) => {
-      const probe = createServer();
-      probe.once('error', reject);
-      probe.listen(0, '127.0.0.1', () => {
-        const { port } = probe.address() as { port: number };
-        probe.close(() => done(port));
+      `,
+      );
+      const port = await new Promise<number>((done, reject) => {
+        const probe = createServer();
+        probe.once('error', reject);
+        probe.listen(0, '127.0.0.1', () => {
+          const { port } = probe.address() as { port: number };
+          probe.close(() => done(port));
+        });
       });
-    });
-    let output = '';
-    child = spawn(
-      'bun',
-      ['run', 'dev', '--config', config, '--host', '127.0.0.1', '--port', String(port), '--strictPort'],
-      {
-        cwd: app,
-        detached: true,
-        stdio: ['ignore', 'pipe', 'pipe'],
-        env: { ...process.env, KERNEL_ORIGIN: backend.url.origin, PUBLIC_ORIGIN: 'https://www.rezics.test' },
-      },
-    );
-    child.stdout!.on('data', (chunk) => (output = (output + chunk).slice(-12000)));
-    child.stderr!.on('data', (chunk) => (output = (output + chunk).slice(-12000)));
-    const origin = `http://127.0.0.1:${port}`;
-    const deadline = Date.now() + 150_000;
-    while (Date.now() < deadline) {
-      if (child.exitCode !== null) throw new Error(output);
-      try {
-        if ((await fetch(`${origin}/en`)).status === 200) return origin;
-      } catch {}
-      await Bun.sleep(250);
+      const origin = `http://127.0.0.1:${port}`;
+      if (teardownStarted) throw new Error('Signed-in-routes Vite acquisition began after suite teardown');
+      const child = spawn(
+        'bun',
+        ['run', 'dev', '--config', config, '--host', '127.0.0.1', '--port', String(port), '--strictPort'],
+        {
+          cwd: app,
+          detached: true,
+          stdio: ['ignore', 'pipe', 'pipe'],
+          env: { ...process.env, KERNEL_ORIGIN: backend.url.origin, PUBLIC_ORIGIN: 'https://www.rezics.test' },
+        },
+      );
+      siteCustody = ownNodeProcess(child, { label: 'Signed-in-routes Vite server', outputLimit: 12_000 });
+      custody = siteCustody;
+      const deadline = Date.now() + 150_000;
+      while (Date.now() < deadline) {
+        if (teardownStarted) throw new Error('Signed-in-routes Vite readiness ended when suite teardown began');
+        if (child.exitCode !== null) throw new Error(siteCustody.diagnostics());
+        try {
+          if ((await fetch(`${origin}/en`, { signal: AbortSignal.timeout(60_000) })).status === 200) return origin;
+        } catch {}
+        await Bun.sleep(250);
+      }
+      throw new Error(`dev server did not serve /en in time:\n${siteCustody.diagnostics()}`);
+    } catch (error) {
+      if (siteCustody) {
+        await withCleanup(
+          async () => {
+            throw error;
+          },
+          [{ label: 'Signed-in-routes Vite startup', run: () => siteCustody!.close(), timeoutMs: 7000 }],
+        );
+      } else if (directory) {
+        const partialDirectory = directory;
+        await withCleanup(
+          async () => {
+            throw error;
+          },
+          [
+            {
+              label: 'Partial signed-in-routes Vite fixture directory',
+              run: async () => {
+                await rm(partialDirectory, { recursive: true, force: true });
+                if (directory === partialDirectory) directory = undefined;
+              },
+              timeoutMs: 5000,
+            },
+          ],
+        );
+      }
+      throw error;
     }
-    throw new Error(`dev server did not serve /en in time:\n${output}`);
   })());
 }
 afterAll(async () => {
-  await browser?.close();
-  if (child?.pid && child.exitCode === null && child.signalCode === null) {
-    const exited = new Promise((done) => child!.once('exit', done));
-    try {
-      process.kill(-child.pid, 'SIGTERM');
-    } catch {}
-    await exited;
-  }
-  backend.stop(true);
-  if (directory) await rm(directory, { recursive: true, force: true });
+  teardownStarted = true;
+  await withCleanup(
+    () =>
+      withCleanup(
+        () => cleanupAll(resourceCleanupActions('test')),
+        [
+          ...resourceCleanupActions('suite'),
+          { label: 'Signed-in-routes Vite server', run: () => custody?.close(), timeoutMs: 7000 },
+          { label: 'Signed-in-routes fixture backend', run: () => backend.stop(true), timeoutMs: 5000 },
+        ],
+      ),
+    [
+      {
+        label: 'Signed-in-routes generated Vite config and cache directory',
+        run: async () => {
+          if (!directory) return;
+          await started?.catch(() => {});
+          if (!directory || (custody && !custody.settled)) return;
+          const ownedDirectory = directory;
+          await rm(ownedDirectory, { recursive: true, force: true });
+          if (directory === ownedDirectory) directory = undefined;
+        },
+        timeoutMs: 5000,
+      },
+    ],
+  );
 });
 
-test('every signed-in route guards beforeLoad and every private or offer head uses pageHead noindex, nofollow', async () => {
+lifetimeTest('every signed-in route guards beforeLoad and every private or offer head uses pageHead noindex, nofollow', async () => {
   for (const [file] of routes) {
     const source = await Bun.file(join(app, 'src/routes', file)).text();
     if (file === 'library/progress.index.tsx' || file === 'library/progress.$id.tsx') {
@@ -161,15 +294,14 @@ test('every signed-in route guards beforeLoad and every private or offer head us
   }
 });
 
-test(
+lifetimeTest(
   'private pages, My Realms and the public offer produce noindex, nofollow metadata through their route heads',
   async () => {
     const origin = await site();
     state = 'signed-out';
-    browser ??= await chromium.launch();
-    const page = await browser.newPage();
-    await page.setExtraHTTPHeaders(visitorHeaders());
-    try {
+    const page = await pageForTest();
+    await withCleanup(async () => {
+      await page.setExtraHTTPHeaders(visitorHeaders());
       const sessionResponse = page.waitForResponse((response) => response.url().includes('/_serverFn/'));
       await page.goto(origin + '/en');
       await page.waitForSelector('html[data-hydrated]');
@@ -189,14 +321,12 @@ test(
           file,
         ).toBe(true);
       }
-    } finally {
-      await page.close();
-    }
+    }, [{ label: 'Signed-in-routes metadata browser page', run: () => closePage(page), timeoutMs: 6000 }]);
   },
   timeout,
 );
 
-test(
+lifetimeTest(
   'signed-out GETs redirect 302 with the full localized path and search before any loader, with one session read and zero kernel reads',
   async () => {
     const origin = await site();
@@ -219,15 +349,14 @@ test(
   timeout,
 );
 
-test(
+lifetimeTest(
   'client navigations use the cached session and redirect before loaders',
   async () => {
     const origin = await site();
     state = 'signed-out';
-    browser ??= await chromium.launch();
-    const page = await browser.newPage();
-    await page.setExtraHTTPHeaders(visitorHeaders());
-    try {
+    const page = await pageForTest();
+    await withCleanup(async () => {
+      await page.setExtraHTTPHeaders(visitorHeaders());
       for (const [, path] of routes) {
         // Observe before navigation so a fast session response cannot race the observer.
         const sessionResponse = page.waitForResponse((response) => response.url().includes('/_serverFn/'));
@@ -255,42 +384,40 @@ test(
         expect(sessionReads).toBe(0);
         expect(kernelReads).toBe(0);
       }
-    } finally {
-      await page.close();
-    }
+    }, [{ label: 'Signed-in-routes client navigation browser page', run: () => closePage(page), timeoutMs: 6000 }]);
   },
   timeout,
 );
 
-test(
+lifetimeTest(
   'a protected server render hydrates the cached session and its CSRF token without another session read',
   async () => {
     const origin = await site();
     state = 'signed-in';
-    browser ??= await chromium.launch();
-    const page = await browser.newPage();
-    await page.setExtraHTTPHeaders(visitorHeaders());
     try {
-      sessionReads = kernelReads = 0;
-      await page.goto(origin + '/en/collections/new');
-      await page.waitForSelector('html[data-hydrated]');
-      await page.waitForLoadState('networkidle');
-      const token = await page.evaluate(async () => {
-        const { sessionCsrfToken } = await import('/src/session/query.ts');
-        return sessionCsrfToken();
-      });
-      expect(token).toBe('cached-session-csrf');
-      expect(sessionReads).toBe(1);
-      expect(kernelReads).toBe(0);
+      const page = await pageForTest();
+      await withCleanup(async () => {
+        await page.setExtraHTTPHeaders(visitorHeaders());
+        sessionReads = kernelReads = 0;
+        await page.goto(origin + '/en/collections/new');
+        await page.waitForSelector('html[data-hydrated]');
+        await page.waitForLoadState('networkidle');
+        const token = await page.evaluate(async () => {
+          const { sessionCsrfToken } = await import('/src/session/query.ts');
+          return sessionCsrfToken();
+        });
+        expect(token).toBe('cached-session-csrf');
+        expect(sessionReads).toBe(1);
+        expect(kernelReads).toBe(0);
+      }, [{ label: 'Signed-in-routes protected SSR browser page', run: () => closePage(page), timeoutMs: 6000 }]);
     } finally {
       state = 'signed-out';
-      await page.close();
     }
   },
   timeout,
 );
 
-test('a failed session-store read is unavailable rather than signed out', async () => {
+lifetimeTest('a failed session-store read is unavailable rather than signed out', async () => {
   const session = await readSessionState(
     new Request('https://site.test/en/settings', {
       headers: { cookie: '__Host-rezics_session=' + 'a'.repeat(43) },
@@ -311,7 +438,7 @@ test('a failed session-store read is unavailable rather than signed out', async 
   expect(session.state).toBe('unavailable');
 });
 
-test(
+lifetimeTest(
   'an unavailable session shows the existing error page without running loaders or redirecting',
   async () => {
     const origin = await site();
@@ -342,7 +469,7 @@ function blocked(robots: string, path: string) {
       ).test(path),
     );
 }
-test(
+lifetimeTest(
   'robots.txt is a plain-text server route blocking private paths in every locale while allowing My Realms, offers and public pages',
   async () => {
     expect(await Bun.file(join(app, 'src/routes/robots[.]txt.ts')).exists()).toBe(true);
@@ -370,7 +497,7 @@ test(
   timeout,
 );
 
-test(
+lifetimeTest(
   'only auth and server-function responses carry X-Robots-Tag noindex, including refused requests',
   async () => {
     const origin = await site();

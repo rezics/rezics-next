@@ -1,10 +1,10 @@
 import { afterAll, expect, test } from 'bun:test';
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
-import { chromium, type Browser, type Page } from 'playwright';
+import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
 import { createStoryRecordedKernelFetch, storyViewerId } from '../src/kernel/fake';
 import spaceAddress from '../src/kernel/recorded/space-address.json';
 import space from '../src/kernel/recorded/space.json';
@@ -14,6 +14,7 @@ import thread from '../src/kernel/recorded/thread.json';
 import threadPosts from '../src/kernel/recorded/thread-posts.json';
 import collection from '../src/kernel/recorded/library-collection.json';
 import { threadHref } from '../src/threads/thread-href';
+import { cleanupAll, ownNodeProcess, withCleanup, type ProcessCustody } from './support/server-custody.ts';
 
 const app = join(import.meta.dir, '..');
 const root = resolve(app, '../..');
@@ -114,10 +115,86 @@ const kernel = Bun.serve({
   },
 });
 
-let child: ChildProcess | undefined;
-let browser: Browser | undefined;
+let custody: ProcessCustody | undefined;
 let started: Promise<string> | undefined;
 let directory: string | undefined;
+type ResourceScope = 'suite' | 'test';
+type OwnedResource = { label: string; scope: ResourceScope; close: () => Promise<void> };
+type ResourceLease<T> = OwnedResource & { value: Promise<T> };
+const resources = new Set<OwnedResource>();
+const resourceByValue = new WeakMap<object, OwnedResource>();
+let browserLease: ResourceLease<Browser> | undefined;
+let teardownStarted = false;
+
+function ownResource<T extends object>(
+  label: string,
+  scope: ResourceScope,
+  create: () => T | PromiseLike<T>,
+  dispose: (resource: T) => unknown | PromiseLike<unknown>,
+): ResourceLease<T> {
+  if (teardownStarted) throw new Error(`${label} acquisition began after suite teardown`);
+  let resource: T | undefined;
+  let closing: Promise<void> | undefined;
+  let lease!: ResourceLease<T>;
+  const value = Promise.resolve()
+    .then(create)
+    .then((created) => {
+      resource = created;
+      resourceByValue.set(created, lease);
+      if (teardownStarted) void lease.close().catch(() => {});
+      return created;
+    });
+  void value.catch(() => {});
+  const close = () =>
+    (closing ??= (async () => {
+      let current = resource;
+      if (current === undefined) {
+        try {
+          current = await value;
+        } catch {
+          resources.delete(lease);
+          return;
+        }
+      }
+      await dispose(current);
+      resources.delete(lease);
+    })());
+  lease = { label, scope, value, close };
+  resources.add(lease);
+  return lease;
+}
+
+function browserForTest(): Promise<Browser> {
+  if (teardownStarted) throw new Error('Anonymous-reads browser acquisition began after suite teardown');
+  browserLease ??= ownResource('Anonymous-reads browser', 'suite', () => chromium.launch(), (browser) => browser.close());
+  return browserLease.value;
+}
+
+function resourceCleanupActions(scope?: ResourceScope, after?: Set<OwnedResource>) {
+  return [...resources]
+    .filter((resource) => (scope === undefined || resource.scope === scope) && (after === undefined || !after.has(resource)))
+    .map((resource) => ({ label: resource.label, run: resource.close, timeoutMs: 6000 }));
+}
+
+async function closeContext(context: BrowserContext): Promise<void> {
+  const resource = resourceByValue.get(context);
+  await (resource ? resource.close() : context.close());
+}
+
+function lifetimeTest(name: string, operation: () => void | Promise<void>, timeoutMs?: number): void {
+  const run = async () => {
+    const existing = new Set(resources);
+    await withCleanup(operation, [
+      {
+        label: 'Anonymous-reads test browser contexts',
+        run: () => cleanupAll(resourceCleanupActions('test', existing)),
+        timeoutMs: 8000,
+      },
+    ]);
+  };
+  if (timeoutMs === undefined) test(name, run);
+  else test(name, run, timeoutMs);
+}
 function reset() {
   kernelCalls.length = 0;
   sessionReads = 0;
@@ -137,13 +214,16 @@ function freePort(): Promise<number> {
 
 function site(): Promise<string> {
   return (started ??= (async () => {
-    await mkdir(join(root, '.temp'), { recursive: true });
-    directory = await mkdtemp(join(root, '.temp/anonymous-reads-'));
-    const config = join(directory, 'vite.config.ts');
-    const sessionReadUrl = `${kernel.url.origin}/session-read`;
-    const credentialReadUrl = `${kernel.url.origin}/credential-read`;
-    await Bun.write(
-      config,
+    let siteCustody: ProcessCustody | undefined;
+    try {
+      if (teardownStarted) throw new Error('Anonymous-reads Vite acquisition began after suite teardown');
+      await mkdir(join(root, '.temp'), { recursive: true });
+      directory = await mkdtemp(join(root, '.temp/anonymous-reads-'));
+      const config = join(directory, 'vite.config.ts');
+      const sessionReadUrl = `${kernel.url.origin}/session-read`;
+      const credentialReadUrl = `${kernel.url.origin}/credential-read`;
+      await Bun.write(
+        config,
       `
       import { resolveWebViteConfig } from ${JSON.stringify(pathToFileURL(join(app, 'tests/support/vite-config.ts')).href)};
       export default async (env) => {
@@ -165,73 +245,139 @@ function site(): Promise<string> {
       }] };
       };
       `,
-    );
-    const port = await freePort();
-    const origin = `http://localhost:${port}`;
-    let output = '';
-    const keep = (chunk: Buffer) => (output = (output + chunk.toString()).slice(-12000));
-    child = spawn(
-      'bun',
-      ['run', 'dev', '--config', config, '--host', '127.0.0.1', '--port', String(port), '--strictPort'],
-      {
-        cwd: app,
-        detached: true,
-        stdio: ['ignore', 'pipe', 'pipe'],
-        env: {
-          ...process.env,
-          KERNEL_ORIGIN: kernel.url.origin,
-          PUBLIC_ORIGIN: origin,
-          AUTH_ISSUER: `${kernel.url.origin}/auth`,
-          WEBSITE_CLIENT_ID: 'rezics-anonymous-reads',
-          WEBSITE_CLIENT_KEY: JSON.stringify({ kty: 'EC', crv: 'P-256', d: 'fixture', kid: 'anonymous-reads' }),
-          API_RESOURCE: 'https://api.rezics.test',
-          WEBSITE_SCOPES: 'media:create media:read media:complete media:erase',
+      );
+      const port = await freePort();
+      const origin = `http://localhost:${port}`;
+      if (teardownStarted) throw new Error('Anonymous-reads Vite acquisition began after suite teardown');
+      const child = spawn(
+        'bun',
+        ['run', 'dev', '--config', config, '--host', '127.0.0.1', '--port', String(port), '--strictPort'],
+        {
+          cwd: app,
+          detached: true,
+          stdio: ['ignore', 'pipe', 'pipe'],
+          env: {
+            ...process.env,
+            KERNEL_ORIGIN: kernel.url.origin,
+            PUBLIC_ORIGIN: origin,
+            AUTH_ISSUER: `${kernel.url.origin}/auth`,
+            WEBSITE_CLIENT_ID: 'rezics-anonymous-reads',
+            WEBSITE_CLIENT_KEY: JSON.stringify({ kty: 'EC', crv: 'P-256', d: 'fixture', kid: 'anonymous-reads' }),
+            API_RESOURCE: 'https://api.rezics.test',
+            WEBSITE_SCOPES: 'media:create media:read media:complete media:erase',
+          },
         },
-      },
-    );
-    child.stdout!.on('data', keep);
-    child.stderr!.on('data', keep);
-    const deadline = Date.now() + 150_000;
-    while (Date.now() < deadline) {
-      if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
-      try {
-        if ((await fetch(`${origin}/en`)).status < 500) return origin;
-      } catch {}
-      await Bun.sleep(250);
+      );
+      siteCustody = ownNodeProcess(child, { label: 'Anonymous-reads Vite server', outputLimit: 12_000 });
+      custody = siteCustody;
+      const deadline = Date.now() + 150_000;
+      while (Date.now() < deadline) {
+        if (teardownStarted) throw new Error('Anonymous-reads Vite readiness ended when suite teardown began');
+        if (child.exitCode !== null)
+          throw new Error(`dev server exited with ${child.exitCode}:\n${siteCustody.diagnostics()}`);
+        try {
+          if ((await fetch(`${origin}/en`, { signal: AbortSignal.timeout(60_000) })).status < 500) return origin;
+        } catch {}
+        await Bun.sleep(250);
+      }
+      throw new Error(`dev server did not start:\n${siteCustody.diagnostics()}`);
+    } catch (error) {
+      if (siteCustody) {
+        await withCleanup(
+          async () => {
+            throw error;
+          },
+          [{ label: 'Anonymous-reads Vite startup', run: () => siteCustody!.close(), timeoutMs: 7000 }],
+        );
+      } else if (directory) {
+        const partialDirectory = directory;
+        await withCleanup(
+          async () => {
+            throw error;
+          },
+          [
+            {
+              label: 'Partial anonymous-reads Vite fixture directory',
+              run: async () => {
+                await rm(partialDirectory, { recursive: true, force: true });
+                if (directory === partialDirectory) directory = undefined;
+              },
+              timeoutMs: 5000,
+            },
+          ],
+        );
+      }
+      throw error;
     }
-    throw new Error(`dev server did not start:\n${output}`);
   })());
 }
 
 async function signedInPage(origin: string): Promise<Page> {
-  browser ??= await chromium.launch();
-  const context = await browser.newContext();
-  const cookieUrl = new URL(origin);
-  cookieUrl.protocol = 'https:';
-  await context.addCookies([
-    { name: sessionCookie, value: sessionId, url: cookieUrl.href, secure: true, sameSite: 'Lax' },
-  ]);
-  const page = await context.newPage();
-  // Keep session counts scoped to page data reads; cover authorization has its own session path.
-  const appOrigin = new URL(origin).origin;
-  await page.route(
-    (url) => url.origin === appOrigin && url.pathname.startsWith('/media/'),
-    (route) => route.abort(),
-  );
-  return page;
+  const existing = new Set(resources);
+  try {
+    const browser = await browserForTest();
+    const lease = ownResource('Anonymous-reads browser context', 'test', () => browser.newContext(), (context) => context.close());
+    const context = await lease.value;
+    const cookieUrl = new URL(origin);
+    cookieUrl.protocol = 'https:';
+    await context.addCookies([
+      { name: sessionCookie, value: sessionId, url: cookieUrl.href, secure: true, sameSite: 'Lax' },
+    ]);
+    const page = await context.newPage();
+    // Keep session counts scoped to page data reads; cover authorization has its own session path.
+    const appOrigin = new URL(origin).origin;
+    await page.route(
+      (url) => url.origin === appOrigin && url.pathname.startsWith('/media/'),
+      (route) => route.abort(),
+    );
+    return page;
+  } catch (error) {
+    await withCleanup<Page>(
+      async () => {
+        throw error;
+      },
+      [
+        {
+          label: 'Partial anonymous-reads browser setup',
+          run: () => cleanupAll(resourceCleanupActions('test', existing)),
+          timeoutMs: 8000,
+        },
+      ],
+    );
+    throw error;
+  }
 }
 
 afterAll(async () => {
-  await browser?.close();
-  if (child?.pid)
-    try {
-      process.kill(-child.pid, 'SIGTERM');
-    } catch {}
-  kernel.stop(true);
-  if (directory) await rm(directory, { recursive: true, force: true });
+  teardownStarted = true;
+  await withCleanup(
+    () =>
+      withCleanup(
+        () => cleanupAll(resourceCleanupActions('test')),
+        [
+          ...resourceCleanupActions('suite'),
+          { label: 'Anonymous-reads Vite server', run: () => custody?.close(), timeoutMs: 7000 },
+          { label: 'Anonymous-reads kernel fake', run: () => kernel.stop(true), timeoutMs: 5000 },
+        ],
+      ),
+    [
+      {
+        label: 'Anonymous-reads generated Vite config and cache directory',
+        run: async () => {
+          if (!directory) return;
+          await started?.catch(() => {});
+          if (!directory || (custody && !custody.settled)) return;
+          const ownedDirectory = directory;
+          await rm(ownedDirectory, { recursive: true, force: true });
+          if (directory === ownedDirectory) directory = undefined;
+        },
+        timeoutMs: 5000,
+      },
+    ],
+  );
 });
 
-test(
+lifetimeTest(
   'Space, Realm, board, thread and collection server renders do not resolve a session or send a credential',
   async () => {
     const origin = await site();
@@ -255,7 +401,7 @@ test(
   timeout,
 );
 
-test(
+lifetimeTest(
   'the signed-in Space browser reads membership after hydration without rereading the page',
   async () => {
     const origin = await site();
@@ -275,12 +421,12 @@ test(
     expect(memberReads[0]?.authorization).toBe(readerCredential);
     expect(sessionReads).toBe(1);
     expect(credentialReads).toBe(1);
-    await page.context().close();
+    await closeContext(page.context());
   },
   timeout,
 );
 
-test(
+lifetimeTest(
   'a signed-in Realm page reads membership after hydration without rereading its page',
   async () => {
     const origin = await site();
@@ -301,12 +447,12 @@ test(
     expect(sessionReads).toBe(1);
     expect(credentialReads).toBe(1);
     realmHasNoAddress = false;
-    await page.context().close();
+    await closeContext(page.context());
   },
   timeout,
 );
 
-test(
+lifetimeTest(
   'a signed-in marked board rereads once after hydration and keeps the session mode for navigation',
   async () => {
     const origin = await site();
@@ -331,12 +477,12 @@ test(
     expect(threadRead[0]?.authorization).toBe(readerCredential);
     expect(sessionReads).toBe(1);
     expect(credentialReads).toBe(1);
-    await page.context().close();
+    await closeContext(page.context());
   },
   timeout,
 );
 
-test(
+lifetimeTest(
   'a signed-in collection loads curator controls after hydration without rereading on the server',
   async () => {
     const origin = await site();
@@ -357,12 +503,12 @@ test(
     expect(memberReads.map((call) => call.authorization)).toEqual([null, readerCredential]);
     expect(sessionReads).toBe(1);
     expect(credentialReads).toBe(1);
-    await page.context().close();
+    await closeContext(page.context());
   },
   timeout,
 );
 
-test(
+lifetimeTest(
   'an anonymous reader gets one protected Space read set and signed-in members and non-members get two',
   async () => {
     const origin = await site();
@@ -402,14 +548,14 @@ test(
       const html = await page.locator('html').innerHTML();
       if (access === 'non-member')
         expect(html).toMatch(/name="robots"[^>]*content="noindex"|content="noindex"[^>]*name="robots"/);
-      await page.context().close();
+      await closeContext(page.context());
     }
     spaceAccess = 'public';
   },
   timeout,
 );
 
-test(
+lifetimeTest(
   'a not-found thread becomes visible for a signed-in reader, with at most one reread',
   async () => {
     const origin = await site();
@@ -436,12 +582,12 @@ test(
     expect(sessionReads).toBe(1);
     expect(credentialReads).toBe(1);
     privateThreadEnabled = false;
-    await page.context().close();
+    await closeContext(page.context());
   },
   timeout,
 );
 
-test(
+lifetimeTest(
   'a not-found thread stays not found for a signed-in reader without access, with only one reread',
   async () => {
     const origin = await site();
@@ -464,12 +610,12 @@ test(
     );
     privateThreadEnabled = false;
     privateThreadAccess = 'member';
-    await page.context().close();
+    await closeContext(page.context());
   },
   timeout,
 );
 
-test('closed and not-found pages return their real status and robots noindex', async () => {
+lifetimeTest('closed and not-found pages return their real status and robots noindex', async () => {
   const origin = await site();
   reset();
   spaceAccess = 'non-member';
@@ -488,7 +634,7 @@ test('closed and not-found pages return their real status and robots noindex', a
   expect(await missing.text()).toMatch(/name="robots"[^>]*content="noindex"|content="noindex"[^>]*name="robots"/);
 });
 
-test('public community routes render without session rereads', async () => {
+lifetimeTest('public community routes render without session rereads', async () => {
   for (const path of ['spaces/$address', 'realms/$id', 'boards/$id', 'threads/$id_.$slug', 'collections/$id']) {
     const source = await Bun.file(join(app, `src/routes/${path}.tsx`)).text();
     expect(source).not.toContain('sessionReread: true');
