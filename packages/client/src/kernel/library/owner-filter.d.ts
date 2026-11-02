@@ -79,6 +79,8 @@ export type CollectionMemberAdmission = {
     /** Bound only after every expanded private-family branch has passed current viewer-self admission. */
     owner: OwnerFilterLeafProvider | null;
 };
+/** Native point implementation only. Callers must independently admit the owner and complete original closure. */
+export declare function leafProvider(accountId: string, filter: FilterDocument, deadline: number): OwnerFilterLeafProvider;
 export declare function matchOwnerFilterSupport(leaf: Exclude<OwnerLeaf['owner'], {
     state: unknown;
 }>, fact: OwnerFilterNativeFact, releases: ReadonlyMap<string, Release>): RelationFacetMatch;

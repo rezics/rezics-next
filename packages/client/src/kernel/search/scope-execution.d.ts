@@ -7,6 +7,7 @@ import type { PublicFilterCost } from '../semantic/public-filter-source-contract
 import { type CurrentOwnerFilterPlan } from './current-filter-plan.ts';
 import type { ScopeEvaluationProgress, ScopeEvaluationReservation } from './scope-source.ts';
 import type { RelationFacetMatch } from './source.ts';
+import { type MembersExecution } from './scope-members-work.ts';
 export declare const scopeWorkAxes: readonly ['candidateKeys', 'nativeRows', 'identityMetadataRows', 'emptySeeks', 'nativePoints', 'witnessKeys', 'statements', 'bytes'];
 export declare function zeroScopeWork(): WorkDimensions;
 /** Compatibility ceilings are independent of the candidate reservation. They never grow on refill. */
@@ -41,6 +42,7 @@ export declare function evaluateScopeSubjects(input: Readonly<{
     reservation: ScopeEvaluationReservation;
     work: ScopeWork;
     resume?: ScopeLeafResume | null;
+    members?: MembersExecution;
     owner?: Readonly<{
         admission: Parameters<typeof readOwnerFilterCandidate>[1];
         binding: Parameters<typeof readOwnerFilterCandidateClosure>[0];

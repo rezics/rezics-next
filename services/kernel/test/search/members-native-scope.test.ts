@@ -356,7 +356,7 @@ test('genuine Members native scopes evaluate owner facts and continue ID/ordinal
               code: 'dependency_unavailable',
               work: { used: { statements: 0 } },
             });
-            if (requested.sort === 'id' && scale === 1) {
+            if (requested.sort === 'id') {
               // Change the supplied episode during real dependent SQL, without faking a native getter result.
               // The final fresh reread must refuse both a positive and an empty result.
               const mutable = { ...locator };
@@ -406,63 +406,71 @@ test('genuine Members native scopes evaluate owner facts and continue ID/ordinal
 test('genuine Members admission refuses stale native source, expired episode and revoked owner without fake readiness', async () => {
   const native = await membersPreparationRuntime();
   try {
-    const f = await preparedFixture(native);
-    const requested = definition('id');
-    const mixed = definition('id', { and: [presence, { type: { in: ['schema:Book'] } }] });
-    const mixedLocator = (await f.store.reserve(await native.actor(f.owner), f.collectionId, [mixed])).episodes[0]!
-      .locator;
-    await step(native, mixedLocator, async (work, deadline) => {
-      const connect = native.db.pool.connect;
-      native.db.pool.connect = (() => {
-        throw new Error('Mixed Members opened another client');
-      }) as typeof connect;
-      try {
-        // The real admitted private source is useful, but supplies no independent public predicate proof.
-        await expect(
-          adapter(native, work, deadline).prepare(mixed.filter, { allowance: original().next() }),
-        ).rejects.toMatchObject({ code: 'dependency_unavailable' });
-      } finally {
-        native.db.pool.connect = connect;
+    for (const scale of [1, 10, 100]) {
+      const f = await preparedFixture(native);
+      for (let index = 0; index < scale; index++) {
+        const id = await subject(native, f.owner, `Unrelated native admission control ${scale}:${index}`);
+        expect((await native.send(f.owner, 'PUT', `/v1/libraryEntries/${id}`, { state: f.entryState })).status).toBe(
+          201,
+        );
       }
-    });
-    const reserve = async () =>
-      (await f.store.reserve(await native.actor(f.owner), f.collectionId, [requested])).episodes[0]!.locator;
-    const stale = await reserve();
-    const added = await subject(native, f.owner, 'Actual changed curated source');
-    expect(
-      (await native.send(f.owner, 'POST', `/v1/collections/${f.collectionId}/members`, { subjectId: added })).status,
-    ).toBe(201);
-    await expect(
-      step(native, stale, async (work, deadline) =>
-        adapter(native, work, deadline).prepare(requested.filter, { allowance: original().next() }),
-      ),
-    ).rejects.toMatchObject({ code: 'semantic_not_ready' });
-    const fresh = await reserve();
-    await expect(
-      step(
-        native,
-        fresh,
-        async (work, deadline) =>
+      const requested = definition('id');
+      const mixed = definition('id', { and: [presence, { type: { in: ['schema:Book'] } }] });
+      const mixedLocator = (await f.store.reserve(await native.actor(f.owner), f.collectionId, [mixed])).episodes[0]!
+        .locator;
+      await step(native, mixedLocator, async (work, deadline) => {
+        const connect = native.db.pool.connect;
+        native.db.pool.connect = (() => {
+          throw new Error('Mixed Members opened another client');
+        }) as typeof connect;
+        try {
+          // The real admitted private source is useful, but supplies no independent public predicate proof.
+          await expect(
+            adapter(native, work, deadline).prepare(mixed.filter, { allowance: original().next() }),
+          ).rejects.toMatchObject({ code: 'dependency_unavailable' });
+        } finally {
+          native.db.pool.connect = connect;
+        }
+      });
+      const reserve = async () =>
+        (await f.store.reserve(await native.actor(f.owner), f.collectionId, [requested])).episodes[0]!.locator;
+      const stale = await reserve();
+      const added = await subject(native, f.owner, 'Actual changed curated source');
+      expect(
+        (await native.send(f.owner, 'POST', `/v1/collections/${f.collectionId}/members`, { subjectId: added })).status,
+      ).toBe(201);
+      await expect(
+        step(native, stale, async (work, deadline) =>
           adapter(native, work, deadline).prepare(requested.filter, { allowance: original().next() }),
-        () => new Date(Date.now() + 25 * 3600000),
-      ),
-    ).rejects.toMatchObject({ code: 'semantic_not_ready' });
-    expect(
-      (
-        await native.send(native.personas.staff, 'POST', `/v1/accounts/${f.owner.accountId}:suspend`, {
-          reason: 'Native admission current owner control',
-        })
-      ).status,
-    ).toBe(200);
-    await expect(
-      step(native, fresh, async (work, deadline) =>
-        adapter(native, work, deadline).prepare(requested.filter, { allowance: original().next() }),
-      ),
-    ).rejects.toBeDefined();
+        ),
+      ).rejects.toMatchObject({ code: 'semantic_not_ready' });
+      const fresh = await reserve();
+      await expect(
+        step(
+          native,
+          fresh,
+          async (work, deadline) =>
+            adapter(native, work, deadline).prepare(requested.filter, { allowance: original().next() }),
+          () => new Date(Date.now() + 25 * 3600000),
+        ),
+      ).rejects.toMatchObject({ code: 'semantic_not_ready' });
+      expect(
+        (
+          await native.send(native.personas.staff, 'POST', `/v1/accounts/${f.owner.accountId}:suspend`, {
+            reason: 'Native admission current owner control',
+          })
+        ).status,
+      ).toBe(200);
+      await expect(
+        step(native, fresh, async (work, deadline) =>
+          adapter(native, work, deadline).prepare(requested.filter, { allowance: original().next() }),
+        ),
+      ).rejects.toBeDefined();
+    }
   } finally {
     await native.close();
   }
-}, 120000);
+}, 240000);
 
 // Accounting regression only; it is deliberately separate from the connected native claim above.
 test('Members work reserves all eight axes before dispatch and settles failures and repeats once', async () => {
