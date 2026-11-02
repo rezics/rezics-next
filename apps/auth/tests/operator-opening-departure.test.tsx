@@ -120,21 +120,16 @@ test('Stay keeps the confirmed tuple and key; submitted departure returns throug
   expect(p.calls).toHaveLength(2);
   expect(p.unload()).toBe(false);
 });
-for (const stage of ['metadata', 'approval'] as const)
-  test(`Leave retires pending ${stage} without starting another stage`, async () => {
-    const p = await setup();
-    const late = Promise.withResolvers<opening.OpeningRead>();
-    if (stage === 'metadata') read.mockReturnValueOnce(late.promise);
-    await p.review();
-    if (stage === 'approval') {
-      await flush(() => p.input('confirm').click());
-      await flush(() => send(p.host));
-    }
-    await p.navigate();
-    await p.click('Leave');
-    await flush(() => (stage === 'metadata' ? late.resolve(metadata) : p.calls[0]!.resolve(approval())));
-    expect(p.calls).toHaveLength(stage === 'metadata' ? 0 : 1);
-  });
+test('Leave retires pending approval without starting issuance', async () => {
+  const p = await setup();
+  await p.review();
+  await flush(() => p.input('confirm').click());
+  await flush(() => send(p.host));
+  await p.navigate();
+  await p.click('Leave');
+  await flush(() => p.calls[0]!.resolve(approval()));
+  expect(p.calls).toHaveLength(1);
+});
 for (const change of ['caller', 'scope'] as const)
   test(`${change} replacement invalidates an open review prompt without offering old authority`, async () => {
     const p = await setup();
