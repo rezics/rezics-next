@@ -64,7 +64,6 @@ test('diagnostics are read-only, tolerate unknown dependencies and use controlle
       };
     },
     retryIntent: () => ({ status: 'pending' }),
-    attempt: () => ({}),
     attempts: () => [],
     records: () => [],
   } as unknown as WorkerStore;
