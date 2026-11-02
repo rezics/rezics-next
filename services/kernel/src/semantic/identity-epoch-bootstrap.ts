@@ -200,6 +200,9 @@ async function stepBootstrapHome(
       ]);
       recordIdentityEpochNativeCommit(tx, 'bootstrap');
       registerCommandCallback(tx, async (transactionId) => {
+        const allocation = rows.length
+          ? await reserveIdentityTerminalClosure(tx, transactionId, rows[0]!.terminal, rows.length)
+          : null;
         await tx.query("SELECT set_config('semantic.erasure_native_transaction',$1,true)", [transactionId]);
         await query(tx, bootstrapInsertBootstrapPage.sql, [
           partition,
@@ -208,8 +211,7 @@ async function stepBootstrapHome(
           phase,
           caughtUp,
         ]);
-        if (rows.length) {
-          const allocation = await reserveIdentityTerminalClosure(tx, transactionId, rows[0]!.terminal, rows.length);
+        if (allocation) {
           await tx.query(`UPDATE semantic.identity_epoch_bootstrap_page SET closure_page_reservation=$3
             WHERE partition_no=$1 AND transaction_id=$2`, [partition, transactionId, allocation]);
         }

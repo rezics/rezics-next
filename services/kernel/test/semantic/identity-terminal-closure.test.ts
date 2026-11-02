@@ -134,6 +134,39 @@ test('first enrollment after source export uses the changed successor instead of
   } finally { await db.close(); }
 });
 
+test('cancelled first fill releases its successor ticket from the changed original home', async () => {
+  const db = await isolatedDeployment();
+  try {
+    const ids = await seedChain(db, 2);
+    const [a, b, terminal] = ids as [string, string, string];
+    const replacement = await seedLegacyRoot(db, 0x73a0);
+    await db.install();
+    let cancelledEnrollment: string | null = null;
+    await atBoundary(db, 'hold', 'after-commit', async () => {
+      const held = (await db.admin.query(`SELECT closure_successor_ticket,closure_successor_original
+        FROM semantic.identity_epoch_mapping WHERE route=$1 AND original=$2`, [routeOf(b), b])).rows[0]!;
+      expect(held.closure_successor_original).toBe(a);
+      cancelledEnrollment = held.closure_successor_ticket;
+      await appendEdge(db, a, replacement);
+      expect((await db.admin.query(`SELECT closure_cancelled_successor FROM semantic.identity_epoch_mapping
+        WHERE route=$1 AND original=$2`, [routeOf(a), a])).rows).toEqual([{ closure_cancelled_successor: true }]);
+    }, async () => {
+      for (let round = 0; round < 128 && !cancelledEnrollment; round++)
+        for (const partition of [...new Set([...ids].reverse().map(home))]) await stepIdentityEpochBootstrap(db.pool, partition);
+    }, home(b), a);
+    expect(cancelledEnrollment).not.toBeNull();
+    // Only A is driven here. B's native command is reached by A's retained
+    // cancellation; it does not depend on a separate B worker invocation.
+    await stepIdentityEpochBootstrap(db.pool, home(a));
+    expect((await db.admin.query(`SELECT closure_successor_ticket FROM semantic.identity_epoch_mapping
+      WHERE route=$1 AND original=$2`, [routeOf(b), b])).rows).toEqual([{ closure_successor_ticket: null }]);
+    expect((await settle(db, [...ids, replacement], a, 512)).observed).toMatchObject({ state: 'mapped', original: a, terminal: replacement });
+    expect((await readIdentityMappings(db.pool, [b, terminal])).map(row => row.state === 'mapped' && row.terminal)).toEqual([terminal, terminal]);
+    expect((await db.admin.query(`SELECT closure_cancelled_successor FROM semantic.identity_epoch_mapping
+      WHERE route=$1 AND original=$2`, [routeOf(a), a])).rows).toEqual([{ closure_cancelled_successor: false }]);
+  } finally { await db.close(); }
+});
+
 test('ACK of h cannot erase a native h+1 committed after the ACK response', async () => {
   const db = await isolatedDeployment();
   try {
