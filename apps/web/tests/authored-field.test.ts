@@ -9,12 +9,27 @@ import {
   type AuthoredCommand,
 } from '../src/features/catalogue/authored-field';
 import { candidateIsPublic } from '../src/subject/candidates';
+import { dirname } from 'node:path';
+import { m } from '../src/paraglide/messages.js';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { readAuthoredField, type AuthoredRead } from '../src/features/catalogue/authored-field';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { AuthoredField } = await import('../src/features/catalogue/authored-field-view');
+
+// Resolve the actual label association: React's stable IDs may include colons.
+async function associatedControl(html: string, name: string) {
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
+  const window = new Window();
+  window.document.body.innerHTML = html;
+  const label = Array.from(window.document.querySelectorAll('label')).find((label: any) => label.textContent === name) as any;
+  const control = label ? window.document.getElementById(label.htmlFor) : null;
+  await window.happyDOM.close();
+  return control;
+}
 
 test('Write licensed original catalogue text and review its actual candidate through the declared native contract with truthful authority and failure states', async () => {
   const fixture = authoredFixture();
@@ -160,8 +175,8 @@ test('authorized authored ready and conflict states show the real form while sel
       createElement(AuthoredField, { initial, locale: 'en', transport: fixture.transport, confirm: fixture.confirm }),
     );
     expect(html).toContain('<form');
-    expect(html).toContain('id="authored-language"');
-    expect(html).toContain('id="authored-licence"');
+    expect((await associatedControl(html, m.authored_language({}, { locale: 'en' })))?.tagName).toBe('INPUT');
+    expect((await associatedControl(html, m.authored_licence({}, { locale: 'en' })))?.tagName).toBe('INPUT');
     expect(html).toContain('An aviator meets a young traveller in the desert.');
     const statement = authoredStatement(
       authoredProperty,
@@ -254,7 +269,7 @@ test('unsupported metadata, denied reads and an unbound production transport nev
       createElement(AuthoredField, { initial, locale: 'en', transport: fixture.transport, confirm: fixture.confirm }),
     );
     expect(html).not.toContain('<form');
-    expect(html).not.toContain('id="authored-language"');
+    expect(await associatedControl(html, m.authored_language({}, { locale: 'en' }))).toBeNull();
     expect(html).not.toContain('An aviator meets a young traveller in the desert.');
   }
 });

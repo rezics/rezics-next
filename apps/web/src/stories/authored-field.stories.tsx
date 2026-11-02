@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { fromPlainText } from '@rezics/document';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { AuthoredField } from '../features/catalogue/authored-field-view';
 import { authoredFixture, type AuthoredScenario } from '../kernel/fake/authored-field';
@@ -245,8 +246,14 @@ export const Unavailable: Story = {
           canvas.getByRole('button', { name: m.correction_submit() }),
         ])
           await target(control);
-        for (const label of article.querySelectorAll<HTMLElement>('label[for^="authored-"]')) await contained(label);
-        const originalLabel = article.querySelector<HTMLElement>('label[for="authored-original"]')!;
+        for (const label of article.querySelectorAll<HTMLLabelElement>('label[for]')) {
+          const control = article.ownerDocument.getElementById(label.htmlFor);
+          if (control && article.contains(control)) await contained(label);
+        }
+        const original = canvas.getByRole('checkbox', { name: m.authored_original() });
+        const originalLabel = Array.from(article.querySelectorAll<HTMLLabelElement>('label[for]')).find(
+          (label) => label.htmlFor === original.id,
+        )!;
         await target(originalLabel);
         if (getLocale() === 'en') {
           const text = canvasElement.ownerDocument.createRange();
@@ -343,5 +350,204 @@ export const Selected: Story = {
     await expect(
       (await within(comparison).findAllByText('A quiet story about friendship.')).length,
     ).toBeGreaterThanOrEqual(3);
+  },
+};
+
+const longName = `The traveller’s original account — ${'A name without a short substitute '.repeat(10)}終章`;
+const longBody = `The complete supplied text begins here. ${'Friendship, responsibility and a journey across distant worlds. '.repeat(30)}The complete supplied text ends here.`;
+const longAttribution = `Supplied original authors and contributors — ${'A complete credit without truncation '.repeat(12)}`;
+const longCitation = `https://example.org/notes/${'unbroken-source-name'.repeat(24)}`;
+
+// Constructed supplied-content fixtures, not native disclosure or visual evidence.
+function SuppliedEditor({ slot, long }: { slot: string; long: boolean }) {
+  const locale = getLocale();
+  const fixture = useMemo(() => {
+    const fixture = authoredFixture('ready', locale);
+    if (long) {
+      fixture.publicRead.subject.labels = { [locale]: longName };
+      fixture.old.references = Array.from({ length: 3 }, (_, index): (typeof fixture.old.references)[number] => ({
+        hash: `supplied-citation-${index}`,
+        parts: [
+          {
+            property: { id: 'schema:url', data_type: 'url' },
+            value: { type: 'value', content: `${longCitation}/${index}` },
+          },
+        ],
+      }));
+      for (const [id, document] of fixture.documents) {
+        const { subjectId, candidateId, revision, language, digest } = document;
+        fixture.documents.set(id, {
+          id,
+          subjectId,
+          candidateId,
+          revision,
+          language,
+          digest,
+          availability: 'available',
+          body: fromPlainText(longBody),
+          source: {
+            source: 'fixture',
+            external_id: 'supplied-notes',
+            record_revision: '1',
+            digest,
+            converter_revision: 'fixture',
+            field_group: 'summary',
+            references: [],
+          },
+          rights: { license: 'CC-BY-4.0', obligations: ['attribution'], attribution: longAttribution },
+        });
+      }
+    }
+    return fixture;
+  }, [locale, long]);
+  const query = useQuery({
+    queryKey: ['authored-supplied', slot, locale, long],
+    retry: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    queryFn: () => fixture.transport.read(),
+  });
+  if (!query.data) return <p role="status">{m.candidate_loading()}</p>;
+  return <AuthoredField initial={query.data} locale={locale} transport={fixture.transport} confirm={fixture.confirm} />;
+}
+function IndependentExamples({ long = false }: { long?: boolean }) {
+  return (
+    <PatternStory visitor="Signed In">
+      <AppShell>
+        <div className="min-w-0 space-y-8">
+          <SuppliedEditor slot="first" long={long} />
+          <SuppliedEditor slot="second" long={long} />
+        </div>
+      </AppShell>
+    </PatternStory>
+  );
+}
+const unrun = {
+  docs: {
+    description: {
+      story:
+        'UNRUN: actual AuthoredField composition with supplied fixtures. Native, browser, accessibility, geometry and visual acceptance remain deferred.',
+    },
+  },
+};
+async function independentForms(canvasElement: HTMLElement) {
+  const canvas = within(canvasElement);
+  await waitFor(() => expect(canvas.getAllByRole('form', { name: m.authored_replacement() })).toHaveLength(2));
+  const articles = canvas.getAllByRole('article');
+  const first = within(articles[0]!);
+  const second = within(articles[1]!);
+  const firstLanguage = first.getByRole('textbox', { name: m.authored_language() });
+  const secondLanguage = second.getByRole('textbox', { name: m.authored_language() });
+  await expect(firstLanguage.id).not.toBe(secondLanguage.id);
+  await userEvent.type(firstLanguage, 'en');
+  await expect(secondLanguage).toHaveValue('');
+  await userEvent.click(first.getByRole('button', { name: m.correction_submit() }));
+  await first.findByText(m.authored_invalid());
+  await expect(second.queryByText(m.authored_invalid())).toBeNull();
+  const errors = first.getByRole('alert');
+  for (const link of within(errors).getAllByRole('link')) {
+    const target = canvasElement.ownerDocument.getElementById(
+      decodeURIComponent((link as HTMLAnchorElement).hash.slice(1)),
+    );
+    await expect(target).not.toBeNull();
+    await expect(articles[0]!.contains(target)).toBe(true);
+    await expect(articles[1]!.contains(target)).toBe(false);
+  }
+  await expect(first.getByRole('textbox', { name: m.authored_language() }).id).toBe(firstLanguage.id);
+  return { articles, first, second };
+}
+export const IndependentForms: Story = {
+  render: () => <IndependentExamples />,
+  parameters: unrun,
+  play: async ({ canvasElement }) => {
+    await independentForms(canvasElement);
+  },
+};
+export const LongSuppliedContent: Story = {
+  render: () => <IndependentExamples long />,
+  parameters: unrun,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await waitFor(() => expect(canvas.getAllByRole('form', { name: m.authored_replacement() })).toHaveLength(2));
+    for (const article of canvas.getAllByRole('article')) {
+      const local = within(article);
+      await expect(local.getByRole('link', { name: longName })).toHaveTextContent(longName);
+      const selected = local.getByRole('region', { name: m.authored_selected() });
+      await expect(within(selected).getByText(longBody)).toBeVisible();
+      await expect(
+        within(selected)
+          .getByText(/CC-BY-4.0/)
+          .closest('details'),
+      ).toBeNull();
+      await expect(within(selected).getByText(longAttribution)).toBeVisible();
+      await expect(within(selected).getByText(longAttribution).closest('details')).toBeNull();
+      const summary = selected.querySelector('summary')!;
+      summary.focus();
+      await userEvent.keyboard('{Enter}');
+      for (let index = 0; index < 3; index++)
+        await expect(within(selected).getByRole('link', { name: `${longCitation}/${index}` })).toBeVisible();
+      await expect(local.getByRole('textbox', { name: m.authored_text() })).toHaveTextContent('');
+    }
+  },
+};
+export const PhoneAssociations: Story = {
+  render: () => <IndependentExamples long />,
+  parameters: unrun,
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  play: async ({ canvasElement }) => {
+    const { articles } = await independentForms(canvasElement);
+    for (const article of articles) {
+      const local = within(article);
+      const bounds = article.getBoundingClientRect();
+      await expect(bounds.width).toBeLessThanOrEqual(390);
+      const selected = local.getByRole('region', { name: m.authored_selected() });
+      await userEvent.click(selected.querySelector('summary')!);
+      for (const control of [
+        local.getByRole('combobox', { name: m.candidate_field() }),
+        ...local.getAllByRole('textbox').filter((element) => element.tagName === 'INPUT'),
+        local.getByRole('checkbox', { name: m.authored_original() }),
+        ...local.getAllByRole('button', { name: m.correction_submit() }),
+        ...local.getAllByRole('link'),
+        selected.querySelector('summary')!,
+      ]) {
+        const rect = control.getBoundingClientRect();
+        await expect(rect.height).toBeGreaterThanOrEqual(44);
+        await expect(rect.width).toBeGreaterThanOrEqual(44);
+        await expect(rect.left).toBeGreaterThanOrEqual(bounds.left);
+        await expect(rect.right).toBeLessThanOrEqual(bounds.right);
+        await expect(control.scrollWidth).toBeLessThanOrEqual(control.clientWidth + 1);
+      }
+      await expect(article.scrollWidth).toBeLessThanOrEqual(article.clientWidth + 1);
+    }
+  },
+};
+export const KeyboardAssociations: Story = {
+  render: () => <IndependentExamples />,
+  parameters: unrun,
+  play: async ({ canvasElement }) => {
+    const { articles, first, second } = await independentForms(canvasElement);
+    const language = second.getByRole('textbox', { name: m.authored_language() });
+    const languageLabel = Array.from(articles[1]!.querySelectorAll<HTMLLabelElement>('label[for]')).find(
+      (label) => label.htmlFor === language.id,
+    )!;
+    await userEvent.click(languageLabel);
+    await expect(language).toHaveFocus();
+    await userEvent.type(language, 'ja');
+    await userEvent.tab();
+    await expect(second.getByRole('textbox', { name: m.authored_licence() })).toHaveFocus();
+    await userEvent.type(canvasElement.ownerDocument.activeElement!, 'CC0-1.0');
+    await userEvent.tab();
+    await expect(second.getByRole('textbox', { name: m.authored_citation() })).toHaveFocus();
+    await userEvent.tab();
+    const original = second.getByRole('checkbox', { name: m.authored_original() });
+    await expect(original).toHaveFocus();
+    await userEvent.keyboard(' ');
+    await expect(original).toBeChecked();
+    await expect(first.getByRole('checkbox', { name: m.authored_original() })).not.toBeChecked();
+    await expect(first.getByRole('textbox', { name: m.authored_language() })).toHaveValue('en');
+    const errorLink = within(first.getByRole('alert')).getByRole('link', { name: m.authored_licence() });
+    errorLink.focus();
+    await userEvent.keyboard('{Enter}');
+    await expect(first.getByRole('textbox', { name: m.authored_licence() })).toHaveFocus();
   },
 };

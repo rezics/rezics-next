@@ -1,10 +1,11 @@
 import { useCandidateWork, type CandidateWork } from '../../subject/candidate-lifetime';
-import { useEffect, useReducer, useRef, useState, type ComponentProps } from 'react';
+import { useEffect, useId, useReducer, useRef, useState, type ComponentProps } from 'react';
 import { RichTextEditor } from '@rezics/ui';
 import { DocumentBody } from '../../document-body';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
-import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { Field, FieldDescription, FieldError, FieldLabel, FieldLegend, FieldSet } from '@rezics/ui/shadcn/field';
+import { ContentItem, ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Input } from '@rezics/ui/shadcn/input';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import type { Violation } from '@rezics/definitions/validate';
@@ -32,26 +33,22 @@ const actionClassName =
 const inputClassName = 'min-w-0 min-h-11 md:pointer-fine:min-h-8';
 // NativeSelect puts className on the wrapper, so size its actual native control as well.
 const selectClassName = 'min-w-0 max-w-full [&_select]:min-h-11 md:pointer-fine:[&_select]:min-h-8';
-const labelClassName = 'min-w-0 max-w-full whitespace-normal break-words';
+const labelClassName = 'min-w-0 max-w-full whitespace-normal [overflow-wrap:anywhere]';
+const linkClassName =
+  'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal py-2 text-primary underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const summaryClassName =
+  'min-h-11 min-w-11 cursor-pointer py-3 text-sm [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
-function Body({ body, locale }: { body: AuthoredBody | null | undefined; locale: string }) {
+function Provenance({ body, locale }: { body: AuthoredBody | null | undefined; locale: string }) {
+  if (!body?.ok || body.document.availability !== 'available' || !body.document.body) return null;
   const o = { locale: locale as never };
-  if (!body?.ok || body.document.availability !== 'available' || !body.document.body)
-    return <p role="status">{m.authored_body_unavailable({}, o)}</p>;
   const document = body.document;
   return (
-    <div className="space-y-3">
-      <div lang={document.language}>
-        <DocumentBody
-          document={document.body!}
-          locale={locale}
-          labels={{ revealSpoiler: m.thread_reveal_spoiler({}, o) }}
-        />
-      </div>
-      <p className="text-sm text-muted-foreground">
+    <div className="space-y-2 text-sm text-muted-foreground [overflow-wrap:anywhere]">
+      <p>
         {m.authored_language({}, o)}: {document.language}
       </p>
-      <p className="text-sm text-muted-foreground">
+      <p>
         {m.authored_licence({}, o)}:{' '}
         {'origin' in document && document.origin === 'account'
           ? document.licence
@@ -59,7 +56,34 @@ function Body({ body, locale }: { body: AuthoredBody | null | undefined; locale:
             ? document.rights.license
             : ''}
       </p>
-      {'rights' in document && <p className="text-sm text-muted-foreground">{document.rights.attribution}</p>}
+      {'rights' in document && <p>{document.rights.attribution}</p>}
+    </div>
+  );
+}
+
+function Body({
+  body,
+  locale,
+  includeProvenance = true,
+}: {
+  body: AuthoredBody | null | undefined;
+  locale: string;
+  includeProvenance?: boolean;
+}) {
+  const o = { locale: locale as never };
+  if (!body?.ok || body.document.availability !== 'available' || !body.document.body)
+    return <p role="status">{m.authored_body_unavailable({}, o)}</p>;
+  const document = body.document;
+  return (
+    <div className="min-w-0 space-y-3 [overflow-wrap:anywhere]">
+      <div lang={document.language}>
+        <DocumentBody
+          document={document.body!}
+          locale={locale}
+          labels={{ revealSpoiler: m.thread_reveal_spoiler({}, o) }}
+        />
+      </div>
+      {includeProvenance && <Provenance body={body} locale={locale} />}
     </div>
   );
 }
@@ -86,6 +110,18 @@ function AuthoredFieldLive({
   transport: AuthoredTransport;
   confirm: CandidateTransport['confirm'];
 }) {
+  const formId = useId();
+  const ids = {
+    property: `${formId}-property`,
+    document: `${formId}-document`,
+    language: `${formId}-language`,
+    licence: `${formId}-licence`,
+    citation: `${formId}-citation`,
+    original: `${formId}-original`,
+    draft: `${formId}-draft`,
+    draftHint: `${formId}-draft-hint`,
+    errors: `${formId}-errors`,
+  };
   const o = { locale: locale as never };
   const [metadata, setMetadata] = useState(initial);
   const [current, setCurrent] = useState(initial.ok ? initial : undefined);
@@ -309,18 +345,25 @@ function AuthoredFieldLive({
   };
   const selectedContent = current?.selected && (
     <>
-      <Body body={current.body} locale={locale} />
+      <Body body={current.body} locale={locale} includeProvenance={false} />
       <details>
-        <summary className="cursor-pointer text-sm">{m.authored_current_citations({}, o)}</summary>
-        <div className="space-y-2 py-2">
+        <summary className={summaryClassName}>{m.authored_current_citations({}, o)}</summary>
+        <div className="min-w-0 py-2 [overflow-wrap:anywhere] [&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:items-center [&_a]:py-2 [&_a]:whitespace-normal [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring">
           {current.selected.references.length ? (
-            current.selected.references.map((reference, index) => (
-              <div key={index}>
-                {reference.parts.map((part, index) => (
-                  <CandidateValue key={index} snak={part} related={current.public.related} locale={locale} />
-                ))}
-              </div>
-            ))
+            <ul className="min-w-0 space-y-2">
+              {current.selected.references.map((reference, index) => (
+                <ContentItem
+                  key={index}
+                  title={m.authored_citation({}, o)}
+                  headingLevel={3}
+                  preview={reference.parts.map((part, index) => (
+                    <div key={index} className="min-w-0">
+                      <CandidateValue snak={part} related={current.public.related} locale={locale} />
+                    </div>
+                  ))}
+                />
+              ))}
+            </ul>
           ) : (
             <p>{m.authored_no_citations({}, o)}</p>
           )}
@@ -330,13 +373,13 @@ function AuthoredFieldLive({
   );
 
   return (
-    <article className="mx-auto min-w-0 w-full max-w-4xl space-y-6 p-4 sm:p-6">
+    <article className="mx-auto min-w-0 w-full max-w-4xl space-y-6 p-4 [overflow-wrap:anywhere] sm:p-6">
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold">{m.authored_title({}, o)}</h1>
         {current && (
           <p>
             <a
-              className="text-primary underline-offset-4 hover:underline"
+              className={linkClassName}
               href={subjectHref({ id: current.public.subject.id, label: title }, locale).href}
             >
               {title || m.subject_value_unlabelled({}, o)}
@@ -349,7 +392,7 @@ function AuthoredFieldLive({
         <p className="text-sm text-muted-foreground">{m.authored_intro({}, o)}</p>
       </header>
       {failure && (
-        <div className="space-y-3 rounded-xl border border-border p-4">
+        <ContentItemFrame as="div" className="min-w-0 space-y-3 p-4">
           {readFailure && !command ? (
             <p role="alert">
               {readFailure === 'denied'
@@ -377,7 +420,7 @@ function AuthoredFieldLive({
                   ? m.authored_review_draft({}, o)
                   : m.correction_reload({}, o)}
           </Button>
-        </div>
+        </ContentItemFrame>
       )}
       {busy && <p role="status">{reading ? m.candidate_loading({}, o) : m.correction_saving({}, o)}</p>}
       {proposed && !current && <p role="status">{m.authored_submitted({}, o)}</p>}
@@ -385,11 +428,11 @@ function AuthoredFieldLive({
       {current && property && (
         <>
           <Field>
-            <FieldLabel htmlFor="authored-property" className={labelClassName}>
+            <FieldLabel htmlFor={ids.property} className={labelClassName}>
               {m.candidate_field({}, o)}
             </FieldLabel>
             <NativeSelect
-              id="authored-property"
+              id={ids.property}
               className={selectClassName}
               value={property}
               disabled={locked}
@@ -402,25 +445,28 @@ function AuthoredFieldLive({
               ))}
             </NativeSelect>
           </Field>
-          <section className="space-y-3 rounded-xl bg-muted/30 p-4" aria-label={m.authored_selected({}, o)}>
-            <h2 className="text-lg font-semibold">{m.authored_selected({}, o)}</h2>
-            {current.selected ? (
-              spoilerLevel(current.selected) > 0 ? (
-                <SpoilerGate label={m.thread_reveal_spoiler({}, o)}>{selectedContent}</SpoilerGate>
+          <section aria-label={m.authored_selected({}, o)}>
+            <ContentItemFrame as="div" className="min-w-0 space-y-3 p-4">
+              <ContentItemHeading className="text-lg font-semibold">{m.authored_selected({}, o)}</ContentItemHeading>
+              {current.selected ? (
+                spoilerLevel(current.selected) > 0 ? (
+                  <SpoilerGate label={m.thread_reveal_spoiler({}, o)}>{selectedContent}</SpoilerGate>
+                ) : (
+                  selectedContent
+                )
               ) : (
-                selectedContent
-              )
-            ) : (
-              <p>{m.authored_no_selected({}, o)}</p>
-            )}
-            <Button
-              variant="outline"
-              className={actionClassName}
-              disabled={busy || !!command}
-              onClick={() => void refresh(property, false, true)}
-            >
-              {m.authored_reload_current_text({}, o)}
-            </Button>
+                <p>{m.authored_no_selected({}, o)}</p>
+              )}
+              {current.selected && <Provenance body={current.body} locale={locale} />}
+              <Button
+                variant="outline"
+                className={actionClassName}
+                disabled={busy || !!command}
+                onClick={() => void refresh(property, false, true)}
+              >
+                {m.authored_reload_current_text({}, o)}
+              </Button>
+            </ContentItemFrame>
           </section>
         </>
       )}
@@ -428,117 +474,145 @@ function AuthoredFieldLive({
         <>
           {draft && failure !== 'denied' && (
             <form
-              className="space-y-4"
+              className="min-w-0"
+              aria-labelledby={ids.draft}
+              aria-describedby={ids.draftHint}
+              aria-busy={busy}
               onSubmit={(event) => {
                 event.preventDefault();
                 void submit();
               }}
             >
-              <h2 className="text-lg font-semibold">{m.authored_replacement({}, o)}</h2>
-              <p className="text-sm text-muted-foreground">{m.authored_preserved({}, o)}</p>
-              {errors.length > 0 && (
-                <div role="alert" className="space-y-2">
-                  <p>{m.authored_invalid({}, o)}</p>
-                  <ul>
-                    {[...new Set(errors.map(errorField))].map((field) => (
-                      <li key={field}>
-                        <a className="text-primary underline" href={`#authored-${field}`}>
-                          {labels[field]}
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              <div id="authored-document">
-                <RichTextEditor
-                  value={draft.document}
-                  label={labels.document}
-                  labels={editorLabels()}
-                  disabled={locked}
-                  onChange={(document) => update({ document })}
-                  {...(draft.language ? { lang: draft.language } : {})}
-                />
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field>
-                  <FieldLabel htmlFor="authored-language" className={labelClassName}>
-                    {labels.language}
-                  </FieldLabel>
-                  <Input
-                    id="authored-language"
-                    className={inputClassName}
-                    value={draft.language}
-                    maxLength={128}
-                    disabled={locked}
-                    aria-invalid={errors.some((error) => errorField(error) === 'language')}
-                    placeholder="en"
-                    onChange={(event) => update({ language: event.target.value })}
-                  />
-                  <p className="text-sm text-muted-foreground">{m.authored_language_hint({}, o)}</p>
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="authored-licence" className={labelClassName}>
-                    {labels.licence}
-                  </FieldLabel>
-                  <Input
-                    id="authored-licence"
-                    className={inputClassName}
-                    value={draft.licence}
-                    maxLength={128}
-                    disabled={locked}
-                    aria-invalid={errors.some((error) => errorField(error) === 'licence')}
-                    placeholder="CC-BY-4.0"
-                    onChange={(event) => update({ licence: event.target.value })}
-                  />
-                  <p className="text-sm text-muted-foreground">{m.authored_licence_hint({}, o)}</p>
-                </Field>
-              </div>
-              <Field>
-                <FieldLabel htmlFor="authored-citation" className={labelClassName}>
-                  {labels.citation}
-                </FieldLabel>
-                <Input
-                  id="authored-citation"
-                  className={inputClassName}
-                  type="url"
-                  value={draft.citation}
-                  disabled={locked}
-                  aria-invalid={errors.some((error) => errorField(error) === 'citation')}
-                  onChange={(event) => update({ citation: event.target.value })}
-                />
-                <p className="text-sm text-muted-foreground">{m.authored_citation_hint({}, o)}</p>
-              </Field>
-              <Field orientation="horizontal">
-                <Checkbox
-                  id="authored-original"
-                  checked={draft.original}
-                  disabled={locked}
-                  onCheckedChange={(checked) => update({ original: checked === true })}
-                />
-                <FieldLabel
-                  htmlFor="authored-original"
-                  className="min-h-11 min-w-0 max-w-full whitespace-normal break-words md:pointer-fine:min-h-0"
-                >
-                  {labels.original}
-                </FieldLabel>
-              </Field>
-              <p role="status" className="text-sm text-muted-foreground">
-                {proposed
-                  ? proposalSelected
-                    ? m.candidate_selected({}, o)
-                    : m.authored_submitted({}, o)
-                  : m.authored_draft({}, o)}
-              </p>
-              {!proposed && (
-                <Button
-                  type="submit"
-                  className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
-                  disabled={locked}
-                >
-                  {m.correction_submit({}, o)}
-                </Button>
-              )}
+              <ContentItemFrame as="div" className="min-w-0 p-4">
+                <FieldSet disabled={locked} className="min-w-0 gap-4">
+                  <FieldLegend className="mb-0 max-w-full">
+                    <ContentItemHeading id={ids.draft} className="text-lg font-semibold">
+                      {m.authored_replacement({}, o)}
+                    </ContentItemHeading>
+                  </FieldLegend>
+                  <FieldDescription id={ids.draftHint}>{m.authored_preserved({}, o)}</FieldDescription>
+                  {errors.length > 0 && (
+                    <FieldError id={ids.errors} className="space-y-2">
+                      <p>{m.authored_invalid({}, o)}</p>
+                      <ul>
+                        {[...new Set(errors.map(errorField))].map((field) => (
+                          <li key={field} id={`${ids[field]}-error`}>
+                            <a className={linkClassName} href={`#${ids[field]}`}>
+                              {labels[field]}
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    </FieldError>
+                  )}
+                  <Field
+                    id={ids.document}
+                    tabIndex={-1}
+                    aria-label={labels.document}
+                    aria-invalid={errors.some((error) => errorField(error) === 'document')}
+                    aria-describedby={
+                      errors.some((error) => errorField(error) === 'document') ? `${ids.document}-error` : undefined
+                    }
+                    className="min-w-0 scroll-mt-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  >
+                    <RichTextEditor
+                      value={draft.document}
+                      label={labels.document}
+                      labels={editorLabels()}
+                      disabled={locked}
+                      onChange={(document) => update({ document })}
+                      {...(draft.language ? { lang: draft.language } : {})}
+                    />
+                  </Field>
+                  <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+                    <Field>
+                      <FieldLabel htmlFor={ids.language} className={labelClassName}>
+                        {labels.language}
+                      </FieldLabel>
+                      <Input
+                        id={ids.language}
+                        className={inputClassName}
+                        value={draft.language}
+                        maxLength={128}
+                        disabled={locked}
+                        aria-invalid={errors.some((error) => errorField(error) === 'language')}
+                        aria-describedby={`${ids.language}-hint${errors.some((error) => errorField(error) === 'language') ? ` ${ids.language}-error` : ''}`}
+                        placeholder="en"
+                        onChange={(event) => update({ language: event.target.value })}
+                      />
+                      <FieldDescription id={`${ids.language}-hint`}>{m.authored_language_hint({}, o)}</FieldDescription>
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor={ids.licence} className={labelClassName}>
+                        {labels.licence}
+                      </FieldLabel>
+                      <Input
+                        id={ids.licence}
+                        className={inputClassName}
+                        value={draft.licence}
+                        maxLength={128}
+                        disabled={locked}
+                        aria-invalid={errors.some((error) => errorField(error) === 'licence')}
+                        aria-describedby={`${ids.licence}-hint${errors.some((error) => errorField(error) === 'licence') ? ` ${ids.licence}-error` : ''}`}
+                        placeholder="CC-BY-4.0"
+                        onChange={(event) => update({ licence: event.target.value })}
+                      />
+                      <FieldDescription id={`${ids.licence}-hint`}>{m.authored_licence_hint({}, o)}</FieldDescription>
+                    </Field>
+                  </div>
+                  <Field>
+                    <FieldLabel htmlFor={ids.citation} className={labelClassName}>
+                      {labels.citation}
+                    </FieldLabel>
+                    <Input
+                      id={ids.citation}
+                      className={inputClassName}
+                      type="url"
+                      value={draft.citation}
+                      disabled={locked}
+                      aria-invalid={errors.some((error) => errorField(error) === 'citation')}
+                      aria-describedby={`${ids.citation}-hint${errors.some((error) => errorField(error) === 'citation') ? ` ${ids.citation}-error` : ''}`}
+                      onChange={(event) => update({ citation: event.target.value })}
+                    />
+                    <FieldDescription id={`${ids.citation}-hint`}>{m.authored_citation_hint({}, o)}</FieldDescription>
+                  </Field>
+                  <Field orientation="horizontal">
+                    <Checkbox
+                      id={ids.original}
+                      className="size-11 shrink-0 md:pointer-fine:size-4"
+                      aria-invalid={errors.some((error) => errorField(error) === 'original')}
+                      aria-describedby={
+                        errors.some((error) => errorField(error) === 'original') ? `${ids.original}-error` : undefined
+                      }
+                      checked={draft.original}
+                      disabled={locked}
+                      onCheckedChange={(checked) => update({ original: checked === true })}
+                    />
+                    <FieldLabel
+                      htmlFor={ids.original}
+                      className="min-h-11 min-w-0 max-w-full whitespace-normal break-words md:pointer-fine:min-h-0"
+                    >
+                      {labels.original}
+                    </FieldLabel>
+                  </Field>
+                  <p role="status" className="text-sm text-muted-foreground">
+                    {proposed
+                      ? proposalSelected
+                        ? m.candidate_selected({}, o)
+                        : m.authored_submitted({}, o)
+                      : m.authored_draft({}, o)}
+                  </p>
+                  {!proposed && (
+                    <Button
+                      type="submit"
+                      className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
+                      disabled={locked}
+                    >
+                      {m.correction_submit({}, o)}
+                    </Button>
+                  )}
+                </FieldSet>
+              </ContentItemFrame>
             </form>
           )}
           {proposed && id && current && (
@@ -550,13 +624,14 @@ function AuthoredFieldLive({
               ) : (
                 <>
                   {proposalBody !== undefined && (
-                    <section
-                      aria-label={m.authored_candidate({}, o)}
-                      className="space-y-3 rounded-xl border border-border p-4"
-                    >
-                      <h2 className="text-lg font-semibold">{m.authored_candidate({}, o)}</h2>
-                      <p className="text-sm text-muted-foreground">{m.authored_candidate_hint({}, o)}</p>
-                      <Body body={proposalBody} locale={locale} />
+                    <section aria-label={m.authored_candidate({}, o)}>
+                      <ContentItemFrame as="div" className="min-w-0 space-y-3 p-4">
+                        <ContentItemHeading className="text-lg font-semibold">
+                          {m.authored_candidate({}, o)}
+                        </ContentItemHeading>
+                        <p className="text-sm text-muted-foreground">{m.authored_candidate_hint({}, o)}</p>
+                        <Body body={proposalBody} locale={locale} />
+                      </ContentItemFrame>
                     </section>
                   )}
                   <CandidateReview

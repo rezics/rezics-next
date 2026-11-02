@@ -250,6 +250,22 @@ test('A contributor retries only the failed reading after a confirmed save', asy
     expect(host.querySelector('form')).toBeNull();
     expect(submitStale).toHaveBeenCalledTimes(3);
 
+    // Authored-only associations; the Terms helper and its scenarios stay independent.
+    const authoredControl = (name: string) => {
+      const label = Array.from(host.querySelectorAll('label')).find((element: any) => element.textContent === name) as any;
+      expect(label, `Expected the actual ${name} label`).toBeDefined();
+      const control = window.document.getElementById(label.htmlFor);
+      expect(control, `Expected the locally associated ${name} control`).not.toBeNull();
+      expect(host.contains(control!)).toBe(true);
+      return control!;
+    };
+    const authoredInput = async (name: string, value: string) => {
+      await act(async () => {
+        const element = authoredControl(name);
+        Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(element, value);
+        element.dispatchEvent(new window.Event('input', { bubbles: true }));
+      });
+    };
     const authored = authoredFixture();
     const initial = await authored.transport.read();
     if (!initial.ok || !initial.body?.ok) throw new Error('Expected the authorized current document');
@@ -282,10 +298,10 @@ test('A contributor retries only the failed reading after a confirmed save', asy
       await Bun.sleep(180);
       editor.dispatchEvent(new window.FocusEvent('blur'));
     });
-    await input('authored-language', 'en');
-    await input('authored-licence', 'CC-BY-4.0');
-    await input('authored-citation', 'https://example.org/original-notes');
-    await act(async () => host.querySelector('#authored-original')!.click());
+    await authoredInput(m.authored_language(), 'en');
+    await authoredInput(m.authored_licence(), 'CC-BY-4.0');
+    await authoredInput(m.authored_citation(), 'https://example.org/original-notes');
+    await act(async () => authoredControl(m.authored_original()).click());
     await act(async () => button(m.correction_submit()).click());
     const proposal = await propose.mock.results[0]!.value;
     if (!proposal.ok) throw new Error('Expected a confirmed authored proposal');
@@ -326,9 +342,9 @@ test('A contributor retries only the failed reading after a confirmed save', asy
       'An aviator meets a young traveller in the desert.',
     );
     expect(host.textContent).not.toContain(m.candidate_selected());
-    expect(host.querySelector('#authored-language')!.value).toBe('en');
-    expect(host.querySelector('#authored-licence')!.value).toBe('CC-BY-4.0');
-    expect(host.querySelector('#authored-citation')!.value).toBe('https://example.org/original-notes');
+    expect(authoredControl(m.authored_language()).value).toBe('en');
+    expect(authoredControl(m.authored_licence()).value).toBe('CC-BY-4.0');
+    expect(authoredControl(m.authored_citation()).value).toBe('https://example.org/original-notes');
     expect(host.querySelector('[contenteditable="true"]')).toBeNull();
     expect(propose).toHaveBeenCalledTimes(1);
     expect(confirm).not.toHaveBeenCalled();
