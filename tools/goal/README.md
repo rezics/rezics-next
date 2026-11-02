@@ -1682,8 +1682,15 @@ bun tools/goal/scripts/cp-sync.ts --rollback
 Run it from any checkout; it finds the main checkout by its checked-out `main`, and requires `main` to be inside
 `dev`. It adds a temporary worktree of the current `main` head in `../worktrees` beside the main checkout, replaces
 its `tools/goal` with dev's (`git checkout --no-overlay`, so dev's deletions apply) and checks it there: root and
-`tools/goal` installs, the `tools/goal` type check, and a CLI smoke, `bun tools/goal/src/cli.ts status`, with
-`GOAL_MAIN_CHECKOUT` and `GOAL_LOCAL_CONFIG` naming the live checkout and its settings. The smoke's state directory
+`tools/goal` installs, the `tools/goal` type check, a config smoke, and a CLI smoke. The config smoke runs
+`bun tools/goal/scripts/cp-config-smoke.ts` with `GOAL_MAIN_CHECKOUT` and `GOAL_LOCAL_CONFIG` naming the live checkout
+and its settings, and invokes the candidate's `checkSettings` and `readRouting` against those live files (the local
+settings and the routing table they name). `checkSettings` is strict and writes nothing, so the gate cannot create
+last-valid snapshots, launch workers, signal processes or touch live controller state. Numbered routing versions
+parse as their labels. A mismatch names the file and field, with secrets redacted, and refuses before any ref or
+checkout move. `goal status` loads settings but not the routing table, so it cannot catch this class by itself.
+
+The CLI smoke is `bun tools/goal/src/cli.ts status` with the same live checkout and settings. Its state directory
 holds a copy of the live `goal.sqlite` made by `VACUUM INTO` over a read-only connection, so the candidate's
 migrations and orphan recovery act on the copy; `GOAL_MANAGER` keeps that recovery from handing a train to a
 detached process that would act on live refs. cp-sync never writes the live database. Each step runs in its own
