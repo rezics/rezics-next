@@ -4,10 +4,9 @@ import type { PresentationProfile } from '@rezics/composition';
 import { publishProfile } from '../src/features/pages/curate';
 
 test('an HTTP activation failure retains the completed publish phase', async () => {
-  const profiles = Object.assign(
-    () => ({ $activate: { post: async () => ({ status: 503 }) } }),
-    { post: async () => ({ status: 201, data: { digest: 'digest' } }) },
-  );
+  const profiles = Object.assign(() => ({ $activate: { post: async () => ({ status: 503 }) } }), {
+    post: async () => ({ status: 201, data: { digest: 'digest' } }),
+  });
   const client = { presentation: { profiles } } as unknown as KernelClient;
   expect(
     await publishProfile(client, {
