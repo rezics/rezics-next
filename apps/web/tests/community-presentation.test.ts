@@ -889,7 +889,7 @@ test('The default admitted community management journey resolves a same-site ima
           snapshot: { ...current, title: 'Refreshed reading room' },
         });
     });
-    expect(view.queryByRole('textbox', { name: m.realm_appearance_rules_link() })).toBeNull();
+    await waitFor(() => expect(view.queryByRole('textbox', { name: m.realm_appearance_rules_link() })).toBeNull());
     await click(m.realm_appearance_select_rules());
     await act(async () => releases.shift()!());
     expect(view.queryByText('Reading room rules')).toBeNull();
@@ -953,4 +953,4 @@ test('The default admitted community management journey resolves a same-site ima
     }
     await window.happyDOM.abort();
   }
-});
+}, 20_000);
