@@ -16,6 +16,8 @@ import { PatternStory } from './page';
 const longName = '読書と旅の記録 — مكتبة الرحلات والقراءة — Carnets de lecture et de voyage';
 const trashZone = fixtureZone(true);
 const deadline = trashZone.restoreUntil!;
+const desktopGlobals = { viewport: { value: 'desktop1280', isRotated: false } };
+const phoneGlobals = { viewport: { value: 'phone390', isRotated: false } };
 type Example = Scenario | 'empty-trash' | 'long-active' | 'long-trash' | 'growth' | 'retired';
 
 function ControlsExample({
@@ -131,7 +133,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const ActiveDesktop: Story = {
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: desktopGlobals,
   play: async ({ canvasElement }) => {
     const list = await within(canvasElement).findByRole('list', { name: m.zones_owner_active() });
     const row = within(within(list).getAllByRole('listitem')[0]!);
@@ -147,11 +149,11 @@ export const ActiveDesktop: Story = {
     expect(row.getByRole('button', { name: m.zones_owner_trash_action() })).toHaveFocus();
   },
 };
-export const ActivePhone: Story = { ...ActiveDesktop, globals: { viewport: { value: 'phone390', isRotated: false } } };
+export const ActivePhone: Story = { ...ActiveDesktop, globals: phoneGlobals };
 export const RtlPhone: Story = { ...ActivePhone, args: { rtl: true } };
 export const TrashDesktop: Story = {
   args: { example: 'long-trash' },
-  globals: ActiveDesktop.globals,
+  globals: desktopGlobals,
   play: async ({ canvasElement }) => {
     const list = within(await within(canvasElement).findByRole('list', { name: m.zones_owner_trash() }));
     const rows = list.getAllByRole('listitem');
@@ -162,13 +164,13 @@ export const TrashDesktop: Story = {
     expect(within(rows[1]!).getByRole('status')).toHaveTextContent(m.zones_owner_expired());
   },
 };
-export const TrashPhone: Story = { ...TrashDesktop, globals: ActivePhone.globals };
+export const TrashPhone: Story = { ...TrashDesktop, globals: phoneGlobals };
 export const EmptyActive: Story = { args: { example: 'empty' } };
 export const EmptyTrash: Story = { args: { example: 'empty-trash' } };
 export const Denied: Story = { args: { example: 'denied' } };
 export const Unavailable: Story = { args: { example: 'unavailable' } };
 export const StaleCursor: Story = { args: { example: 'stale' } };
-export const BoundedSuppliedPage: Story = { args: { example: 'growth' }, globals: ActivePhone.globals };
+export const BoundedSuppliedPage: Story = { args: { example: 'growth' }, globals: phoneGlobals };
 
 async function openConfirmation(canvasElement: HTMLElement) {
   const trigger = (await within(canvasElement).findAllByRole('button', { name: m.zones_owner_trash_action() }))[0]!;
@@ -195,7 +197,7 @@ export const IndependentInstances: Story = {
   args: { example: 'list', independent: true },
 };
 export const LongConfirmationPhone: Story = {
-  globals: ActivePhone.globals,
+  globals: phoneGlobals,
   play: async ({ canvasElement }) => {
     const { trigger, dialog } = await openConfirmation(canvasElement);
     expect(dialog).toHaveAccessibleName(m.zones_owner_confirm_title({ title: `${longName} 1` }));
