@@ -453,13 +453,15 @@ test('an idle active Goal waits while the host starts another manager, then inbo
     });
     await s.managers.start({ ...s.spec, id: 'second' });
     expect(s.managers.get('second')).toMatchObject({ status: 'running', threadId: 'thread-2' });
-    expect(s.requests().filter((r) => r.method === 'turn/start' && r.params.threadId === manager.threadId)).toHaveLength(
-      1,
-    );
     expect(
-      s.requests().some((r) =>
-        ['thread/fork', 'thread/goal/clear', 'thread/settings/update', 'turn/interrupt'].includes(r.method),
-      ),
+      s.requests().filter((r) => r.method === 'turn/start' && r.params.threadId === manager.threadId),
+    ).toHaveLength(1);
+    expect(
+      s
+        .requests()
+        .some((r) =>
+          ['thread/fork', 'thread/goal/clear', 'thread/settings/update', 'turn/interrupt'].includes(r.method),
+        ),
     ).toBe(false);
     expect(s.requests().some((r) => r.method === 'thread/goal/set' && r.params.status === 'paused')).toBe(false);
     s.inbox.deliver({ managerId: manager.id, kind: 'instruction', summary: 'Choose the next brief' });
