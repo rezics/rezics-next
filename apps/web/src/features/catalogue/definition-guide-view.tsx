@@ -54,7 +54,7 @@ type GuideFocusIntent = {
 type GuideFocusRef = { current: GuideFocusIntent | undefined };
 
 function useGuideFocusIntent() {
-  const intent = useRef<GuideFocusIntent>();
+  const intent = useRef<GuideFocusIntent | undefined>(undefined);
   useEffect(() => {
     const retireOnPointer = (event: PointerEvent) => {
       const current = intent.current;
