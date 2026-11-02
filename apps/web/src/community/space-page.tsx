@@ -21,6 +21,7 @@ import { changeRealmPublication, readRealmBoards, readRealmPublications } from '
 import {
   PublicationControls,
   ShelfContinuation,
+  useShelfContinuationFocus,
   usePublicationControls,
   type PublicationSend,
 } from './publication-controls-view';
@@ -61,21 +62,29 @@ function Boards({
   unavailable,
   continuation,
   complete,
+  focus,
 }: {
   boards: RealmBoard[];
   unavailable: number;
   continuation: React.ReactNode;
   complete: boolean;
+  focus: ReturnType<typeof useShelfContinuationFocus>;
 }) {
   return (
     <section className="space-y-4" aria-labelledby="realm-boards-heading">
-      <h2 id="realm-boards-heading" className="text-xl font-semibold">
+      <h2 ref={focus.boundaryRef} tabIndex={-1} id="realm-boards-heading" className="text-xl font-semibold">
         {m.realm_boards_heading()}
       </h2>
       {boards.length ? (
         <ul className="space-y-1">
           {boards.map((board) => (
-            <ListRow key={board.id} className="flex items-start gap-4 rounded-xl px-4 py-3">
+            <ListRow
+              key={board.id}
+              ref={board.id === focus.firstId ? focus.itemRef : undefined}
+              tabIndex={-1}
+              aria-label={board.id === focus.firstId ? focus.regionLabel : undefined}
+              className="flex items-start gap-4 rounded-xl px-4 py-3 focus-visible:outline-2 focus-visible:outline-ring"
+            >
               <Link
                 to="/boards/$id"
                 params={{ id: board.id }}
@@ -104,6 +113,9 @@ function Boards({
       ) : null}
       {unavailable > 0 ? <p className="text-muted-foreground">{m.realm_boards_unavailable()}</p> : null}
       {continuation}
+      <p role="status" className="sr-only">
+        {focus.announcement}
+      </p>
     </section>
   );
 }
@@ -116,6 +128,7 @@ function Published({
   complete,
   refresh,
   search,
+  focus,
 }: {
   realm: RealmHome;
   control: ReturnType<typeof usePublicationControls>;
@@ -124,6 +137,7 @@ function Published({
   complete: boolean;
   refresh: () => Promise<void>;
   search?: EntityPickerSearch | undefined;
+  focus: ReturnType<typeof useShelfContinuationFocus>;
 }) {
   const locale = getLocale();
   const titled: { subject: PublishedSubject; cover: CoverSubject }[] = realm.published.map((subject) => ({
@@ -133,7 +147,7 @@ function Published({
   const ratio = sharedRatio(titled.map((item) => item.cover));
   return (
     <section className="space-y-4" aria-labelledby="realm-published-heading">
-      <h2 id="realm-published-heading" className="text-xl font-semibold">
+      <h2 ref={focus.boundaryRef} tabIndex={-1} id="realm-published-heading" className="text-xl font-semibold">
         {m.realm_published_heading()}
       </h2>
       <p className="text-sm text-muted-foreground">{m.realm_publication_open_view()}</p>
@@ -141,32 +155,40 @@ function Published({
       {titled.length ? (
         <CoverRow ratio={ratio} label={`${m.realm_published_heading()} (${titled.length})`}>
           {titled.map(({ subject, cover }) => (
-            <CoverCard
+            <div
               key={subject.id}
-              href={`${subjectHref({ id: subject.id, label: subjectTitle(subject, locale) }, locale).href}?realm=${encodeURIComponent(realm.id)}`}
-              cover={{ subject: cover, cover: subject.cover, src: coverSrc }}
-              title={cover.title}
-              secondary={subject.typeName}
-              menuLabel={m.realm_publication_actions({ title: cover.title })}
-              {...(editable
-                ? {
-                    menuEntries: [
-                      {
-                        type: 'item' as const,
-                        label: m.realm_publication_withdraw(),
-                        disabled: control.locked || !subject.publicationId,
-                        onSelect: () => void control.change('withdraw', { ...subject, title: cover.title }),
-                      },
-                      {
-                        type: 'destructive' as const,
-                        label: m.realm_publication_reject(),
-                        disabled: control.locked || !subject.publicationId,
-                        onSelect: () => void control.change('reject', { ...subject, title: cover.title }),
-                      },
-                    ],
-                  }
-                : {})}
-            />
+              ref={subject.id === focus.firstId ? focus.itemRef : undefined}
+              role="group"
+              tabIndex={-1}
+              aria-label={subject.id === focus.firstId ? focus.regionLabel : undefined}
+              className="h-full focus-visible:outline-2 focus-visible:outline-ring"
+            >
+              <CoverCard
+                href={`${subjectHref({ id: subject.id, label: subjectTitle(subject, locale) }, locale).href}?realm=${encodeURIComponent(realm.id)}`}
+                cover={{ subject: cover, cover: subject.cover, src: coverSrc }}
+                title={cover.title}
+                secondary={subject.typeName}
+                menuLabel={m.realm_publication_actions({ title: cover.title })}
+                {...(editable
+                  ? {
+                      menuEntries: [
+                        {
+                          type: 'item' as const,
+                          label: m.realm_publication_withdraw(),
+                          disabled: control.locked || !subject.publicationId,
+                          onSelect: () => void control.change('withdraw', { ...subject, title: cover.title }),
+                        },
+                        {
+                          type: 'destructive' as const,
+                          label: m.realm_publication_reject(),
+                          disabled: control.locked || !subject.publicationId,
+                          onSelect: () => void control.change('reject', { ...subject, title: cover.title }),
+                        },
+                      ],
+                    }
+                  : {})}
+              />
+            </div>
           ))}
         </CoverRow>
       ) : null}
@@ -176,6 +198,9 @@ function Published({
         <p className="text-muted-foreground">{m.realm_published_empty()}</p>
       ) : null}
       {continuation}
+      <p role="status" className="sr-only">
+        {focus.announcement}
+      </p>
     </section>
   );
 }
@@ -225,6 +250,8 @@ export function RealmShelf({
     lifetime,
     !transport?.publications,
   );
+  const boardFocus = useShelfContinuationFocus(boards, m.realm_boards_heading());
+  const publicationFocus = useShelfContinuationFocus(publications, m.realm_published_heading());
   const sendPublication = useCallback<PublicationSend>(
     (input) =>
       transport?.change
@@ -252,12 +279,21 @@ export function RealmShelf({
   return (
     <>
       <Boards
+        focus={boardFocus}
         boards={boards.items}
         unavailable={boards.unavailable}
         complete={!boards.next && !boards.failure}
-        continuation={<ShelfContinuation {...boards} label={m.realm_boards_more()} />}
+        continuation={
+          <ShelfContinuation
+            {...boards}
+            label={m.realm_boards_more()}
+            onContinue={boardFocus.activate}
+            recoveryRef={boardFocus.recoveryRef}
+          />
+        }
       />
       <Published
+        focus={publicationFocus}
         realm={{
           ...realm,
           published: publications.items,
@@ -269,7 +305,14 @@ export function RealmShelf({
         complete={!publications.next && !publications.failure}
         refresh={() => publications.load(true)}
         search={search}
-        continuation={<ShelfContinuation {...publications} label={m.realm_publications_more()} />}
+        continuation={
+          <ShelfContinuation
+            {...publications}
+            label={m.realm_publications_more()}
+            onContinue={publicationFocus.activate}
+            recoveryRef={publicationFocus.recoveryRef}
+          />
+        }
       />
     </>
   );

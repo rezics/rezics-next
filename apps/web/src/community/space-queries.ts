@@ -31,6 +31,13 @@ export type RealmPageQueryResult = {
 type ShelfRead = { restart: boolean; cursor: string | null };
 type FailedShelfRead = ShelfRead & { kind: 'denied' | 'unavailable' | 'stale' };
 
+export type ShelfContinuationResult = {
+  intent: object | undefined;
+  firstId: string | null;
+  count: number;
+  current: () => boolean;
+};
+
 /** A failed read retains its admitted window and request; a successful restart replaces the window. */
 export function useShelfList<T extends { id: string }>(
   initial: { items: T[]; next: string | null; unavailable: number; credentialMode: ReadCredentialMode },
@@ -42,12 +49,13 @@ export function useShelfList<T extends { id: string }>(
   requireReaderOrigin = false,
 ) {
   const queryClient = useQueryClient();
-  const [page, setPage] = useState(initial);
+  const [page, setPage] = useState({ ...initial, continuation: null as ShelfContinuationResult | null });
   const [failedRead, setFailedRead] = useState<FailedShelfRead | null>(null);
   const [busy, setBusy] = useState(false);
   const generation = useRef(0);
   const mounted = useRef(true);
   const active = useRef<{ token: object; generation: number } | null>(null);
+  const latestRead = useRef<object | null>(null);
   const visit = useRef(lifetime);
   useEffect(() => {
     mounted.current = true;
@@ -62,12 +70,12 @@ export function useShelfList<T extends { id: string }>(
     visit.current = lifetime;
     generation.current++;
     active.current = null;
-    setPage(initial);
+    setPage({ ...initial, continuation: null });
     setFailedRead(null);
     setBusy(false);
   }, [lifetime]);
   const canPublish = () => mounted.current && (!lifetime || lifetime.current());
-  async function requestPage({ restart, cursor }: ShelfRead) {
+  async function requestPage({ restart, cursor }: ShelfRead, intent?: object) {
     const previous = active.current;
     if (!canPublish() || (previous && previous.generation === generation.current)) return;
     const shelfTicket = lifetime
@@ -78,6 +86,7 @@ export function useShelfList<T extends { id: string }>(
     if ((lifetime || requireReaderOrigin) && !shelfTicket) return;
     const request = { token: {}, generation: generation.current };
     active.current = request;
+    latestRead.current = request;
     const started = generation.current;
     const ticket = lifetime?.ticket();
     let settled = false;
@@ -91,8 +100,13 @@ export function useShelfList<T extends { id: string }>(
           lifetime.owns(ticket) &&
           lifetime.shelfReadOwns(shelfTicket))) &&
       (!requireReaderOrigin || !!lifetime || (!!shelfTicket && standaloneShelfReadIsCurrent(shelfTicket)));
-    const fail = (kind: FailedShelfRead['kind']) =>
+    const current = () => owns() && latestRead.current === request;
+    const fail = (kind: FailedShelfRead['kind']) => {
       setFailedRead((previous) => (owns() ? { kind, restart, cursor } : previous));
+      setPage((previous) =>
+        owns() ? { ...previous, continuation: { intent, firstId: null, count: 0, current } } : previous,
+      );
+    };
     if (!owns()) {
       if (active.current === request) active.current = null;
       return;
@@ -127,12 +141,22 @@ export function useShelfList<T extends { id: string }>(
       setPage((previous) => {
         if (!owns()) return previous;
         const items = new Map((restart ? [] : previous.items).map((item) => [item.id, item]));
-        for (const item of result.items) items.set(item.id, item);
+        let firstId: string | null = null;
+        let count = 0;
+        // Inspect only this accepted native page; existing entries do not count as additions.
+        for (const item of result.items) {
+          if (!items.has(item.id)) {
+            firstId ??= item.id;
+            count++;
+          }
+          items.set(item.id, item);
+        }
         return {
           ...previous,
           items: [...items.values()],
           next: result.next,
           unavailable: (restart ? 0 : previous.unavailable) + result.unavailable,
+          continuation: { intent, firstId, count, current },
         };
       });
     } catch {
@@ -144,13 +168,13 @@ export function useShelfList<T extends { id: string }>(
       if (stillOwns) setBusy(false);
     }
   }
-  function load(restart = false) {
+  function load(restart = false, intent?: object) {
     if (!restart && !page.next) return Promise.resolve();
-    return requestPage({ restart, cursor: restart ? null : page.next });
+    return requestPage({ restart, cursor: restart ? null : page.next }, intent);
   }
-  function retry() {
+  function retry(intent?: object) {
     if (!failedRead) return Promise.resolve();
-    return requestPage(failedRead);
+    return requestPage(failedRead, intent);
   }
   function update(change: (previous: typeof initial) => typeof initial) {
     if (!canPublish()) return;
@@ -160,7 +184,7 @@ export function useShelfList<T extends { id: string }>(
     setPage((previous) => {
       if (!mounted.current) return previous;
       if (lifetime && (ticket === undefined || !lifetime.owns(ticket))) return previous;
-      return change(previous);
+      return { ...change(previous), continuation: null };
     });
   }
   return { ...page, failure: failedRead?.kind ?? null, busy, load, retry, update };

@@ -1,5 +1,14 @@
 import { QueryClientContext, type QueryClient } from '@tanstack/react-query';
-import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import {
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type MouseEvent,
+} from 'react';
 import { EntityPicker, type EntityPickerSearch } from '@rezics/ui/entity-picker';
 import { Cover } from '@rezics/ui/cover';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
@@ -18,6 +27,7 @@ import type { PublicationChange } from './publication-controls';
 import type { PublishedSubject } from './space';
 import { sessionQuery, useSession } from '../session/query';
 import { useAuthoringDeparture } from '../threads/authoring-departure';
+import type { ShelfContinuationResult } from './space-queries';
 
 export type { PublicationSend, PublicationTarget } from './publication-subject-picker';
 
@@ -367,6 +377,78 @@ export function PublicationControls({
   );
 }
 
+type ShelfActivation = (action: (intent?: object) => Promise<void>, event: MouseEvent<HTMLButtonElement>) => void;
+
+/** Only an explicit keyboard continuation can hand off focus, while its accepted read still owns the page. */
+export function useShelfContinuationFocus(
+  shelf: { continuation: ShelfContinuationResult | null; busy: boolean; failure: string | null },
+  name: string,
+) {
+  const boundaryRef = useRef<HTMLHeadingElement>(null);
+  const item = useRef<HTMLElement | null>(null);
+  const recoveryRef = useRef<HTMLButtonElement>(null);
+  const pending = useRef<{ intent: object; trigger: HTMLButtonElement } | null>(null);
+  const [result, setResult] = useState<{ receipt: ShelfContinuationResult; text: string } | null>(null);
+  const receipt = shelf.continuation;
+  const activate: ShelfActivation = (action, event) => {
+    pending.current = null;
+    setResult(null);
+    if (event.detail === 0 && event.currentTarget === document.activeElement) {
+      pending.current = { intent: {}, trigger: event.currentTarget };
+    }
+    void action(pending.current?.intent);
+  };
+
+  usePublicationLayoutEffect(() => {
+    if (!shelf.busy || !pending.current) return;
+    const cancel = () => {
+      pending.current = null;
+    };
+    const moved = (event: FocusEvent) => {
+      if (event.target !== pending.current?.trigger) cancel();
+    };
+    document.addEventListener('pointerdown', cancel);
+    document.addEventListener('focusin', moved);
+    return () => {
+      document.removeEventListener('pointerdown', cancel);
+      document.removeEventListener('focusin', moved);
+    };
+  }, [shelf.busy]);
+
+  usePublicationLayoutEffect(() => {
+    const activation = pending.current;
+    if (shelf.busy || !activation || receipt?.intent !== activation.intent) return;
+    pending.current = null;
+    if (!receipt.current()) return;
+    // Disabling or removing the activated button can leave focus on the document body.
+    const active = document.activeElement;
+    if (active !== activation.trigger && active !== document.body) return;
+    const target = shelf.failure ? recoveryRef.current : (item.current ?? boundaryRef.current);
+    if (!target?.isConnected) return;
+    target.focus();
+    if (!shelf.failure) {
+      setResult({
+        receipt,
+        text: receipt.count
+          ? m.realm_shelf_added({ shelf: name, count: receipt.count })
+          : m.realm_shelf_sparse({ shelf: name }),
+      });
+    }
+  }, [receipt, shelf.busy, shelf.failure, name]);
+
+  return {
+    boundaryRef,
+    itemRef: (node: HTMLElement | null) => {
+      item.current = node;
+    },
+    recoveryRef,
+    activate,
+    firstId: receipt?.firstId ?? null,
+    regionLabel: m.realm_shelf_added_region({ shelf: name }),
+    announcement: result?.receipt.current() ? result.text : '',
+  };
+}
+
 export function ShelfContinuation({
   next,
   busy,
@@ -374,14 +456,22 @@ export function ShelfContinuation({
   load,
   retry,
   label,
+  onContinue,
+  recoveryRef,
 }: {
   next: string | null;
   busy: boolean;
   failure: 'denied' | 'unavailable' | 'stale' | null;
-  load: (restart?: boolean) => Promise<void>;
-  retry: () => Promise<void>;
+  load: (restart?: boolean, intent?: object) => Promise<void>;
+  retry: (intent?: object) => Promise<void>;
   label: string;
+  onContinue?: ShelfActivation;
+  recoveryRef?: React.Ref<HTMLButtonElement>;
 }) {
+  const activate = (event: MouseEvent<HTMLButtonElement>, action: (intent?: object) => Promise<void>) => {
+    if (onContinue) onContinue(action, event);
+    else void action();
+  };
   return (
     <ContentItemFrame as="div" className="min-w-0 space-y-2 [overflow-wrap:anywhere]" aria-busy={busy}>
       {failure ? (
@@ -396,28 +486,31 @@ export function ShelfContinuation({
       <ListRowControl data-content-item-slot="actions">
         {failure === 'stale' || failure === 'denied' ? (
           <Button
+            ref={recoveryRef}
             className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
             variant="outline"
             disabled={busy}
-            onClick={() => void load(true)}
+            onClick={(event) => activate(event, (intent) => load(true, intent))}
           >
             {m.realm_shelf_restart()}
           </Button>
         ) : failure === 'unavailable' ? (
           <Button
+            ref={recoveryRef}
             className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
             variant="outline"
             disabled={busy}
-            onClick={() => void retry()}
+            onClick={(event) => activate(event, retry)}
           >
             {busy ? m.realm_shelf_loading() : m.realm_shelf_retry()}
           </Button>
         ) : next ? (
           <Button
+            ref={recoveryRef}
             className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
             variant="outline"
             disabled={busy}
-            onClick={() => void load()}
+            onClick={(event) => activate(event, (intent) => load(false, intent))}
           >
             {busy ? m.realm_shelf_loading() : label}
           </Button>

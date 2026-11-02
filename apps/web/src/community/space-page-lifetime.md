@@ -50,6 +50,9 @@ generation can run while an older transport is still pending; the older callback
 rows. Board and publication reads retain independent cursors and their existing limits, order, disclosure filters and
 subject-summary reads.
 
+Keyboard continuation focuses the first newly admitted visible entry, or the named shelf heading for a sparse page;
+moving focus or using a pointer cancels the handoff, and only the accepted current shelf read may announce its result.
+
 There is no current producer for a monotonically versioned native bearer credential that can be serialized with a page
 without exposing a secret or adding session work. For example, a same-subject bearer rotation that retains the same
 CSRF value and occurs entirely between independent QueryClient observations is indistinguishable from no rotation.
