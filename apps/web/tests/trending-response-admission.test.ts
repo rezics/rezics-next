@@ -65,9 +65,7 @@ test('a malformed Trending page is unavailable as a whole and cannot call onSele
   const settle = (body: unknown) => act(async () => pending.at(-1)!(Response.json(body)));
   const rows = () => [...host.querySelectorAll('[data-trending-searches] li')];
   try {
-    await act(async () =>
-      root.render(createElement(Harness, { onSelect: (query: string) => selected.push(query) })),
-    );
+    await act(async () => root.render(createElement(Harness, { onSelect: (query: string) => selected.push(query) })));
     await settle({
       next: null,
       trendingSearches: [...page('Prince').trendingSearches, { query: 'unrelated', display: 'shown' }],
@@ -83,7 +81,9 @@ test('a malformed Trending page is unavailable as a whole and cannot call onSele
     await settle(page('Prince', 'Dune', 'Prince'));
     expect(rows().map((row) => row.textContent)).toEqual(['Prince', 'Dune', 'Prince']);
     for (const row of rows())
-      await act(async () => row.querySelector('button')!.dispatchEvent(new window.MouseEvent('click', { bubbles: true })));
+      await act(async () =>
+        row.querySelector('button')!.dispatchEvent(new window.MouseEvent('click', { bubbles: true })),
+      );
     expect(selected).toEqual(['"Prince"', '"Dune"', '"Prince"']);
   } finally {
     await act(async () => root.unmount());
