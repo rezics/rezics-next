@@ -48,6 +48,8 @@ test('changed draft warns; Stay preserves invalid input, feedback and usable foc
   expect(feedback).toContain('organization-handle-error');
   expect(page.unload()).toBe(true);
   await page.navigate();
+  expect(page.router.history.location.pathname).toBe('/organizations/new');
+  expect(document.body.innerHTML).toContain('Leave organization creation?');
   expect(document.querySelector('[role="alertdialog"]')).not.toBeNull();
   await page.choose('Stay');
   expect(page.router.history.location.pathname).toBe('/organizations/new');
