@@ -256,6 +256,12 @@ test('Literary native corrections name only current scalar and citation controls
   });
 });
 
+function queuedInput(input: HTMLInputElement) {
+  const key = Object.keys(input).find((key) => key.startsWith('__reactProps$'))!;
+  const change = Reflect.get(input, key).onChange;
+  return (value: string) => change({ target: { value } });
+}
+
 test('mounted Literary creation keeps the complete initial bibliography family and native command journey', async () => {
   await mounted(async ({ host, client, render, click, change, input, until }) => {
     const { LiteraryProfile } = await import('../src/features/catalogue/literary-profile-view');
@@ -322,6 +328,48 @@ test('mounted Literary creation keeps the complete initial bibliography family a
     expect(left.calls).toHaveLength(2);
     expect(right.calls).toHaveLength(2);
 
+    // A nested scalar emission edits only its current part against the latest sibling drafts.
+    await show(literaryFixture());
+    await enter();
+    const amount = () => labelledInput(row(), m.correction_amount());
+    const citation = () => labelledInput(row(), m.correction_url());
+    const savedAmount = queuedInput(amount()),
+      savedCitation = queuedInput(citation());
+    await add('schema:inLanguage');
+    const sibling = panel().querySelectorAll('section')[1]!;
+    await input(labelledInput(sibling, m.correction_value()), 'ja');
+    await act(async () => {
+      savedAmount('+15000');
+      savedCitation(cite);
+    });
+    expect(amount().value).toBe('+15000');
+    expect(citation().value).toBe(cite);
+    await input(citation(), '');
+    await act(async () => savedCitation('https://stale.test'));
+    expect(citation().value).toBe('');
+    expect(labelledInput(sibling, m.correction_value()).value).toBe('ja');
+    await act(async () => savedAmount('+99999'));
+    expect(amount().value).toBe('+15000');
+    const removedAmount = queuedInput(amount()),
+      removedCitation = queuedInput(citation());
+    await click(m.literary_remove_fact(), row());
+    await click(m.literary_remove_fact(), row());
+    await add('schema:wordCount');
+    const replacement = () => panel().querySelectorAll<HTMLElement>('section')[1]!;
+    await act(async () => {
+      removedAmount('+99999');
+      removedCitation('https://stale.test');
+    });
+    expect(labelledInput(replacement(), m.correction_amount()).value).toBe('');
+    expect(labelledInput(sibling, m.correction_value()).value).toBe('ja');
+    const oldType = queuedInput(labelledInput(replacement(), m.correction_amount()));
+    await change(type(), 'schema:BookSeries');
+    await change(type(), 'schema:Book');
+    await act(async () => oldType('+99999'));
+    expect(labelledInput(replacement(), m.correction_amount()).value).toBe('');
+    await input(labelledInput(replacement(), m.correction_amount()), '+16000');
+    expect(labelledInput(replacement(), m.correction_amount()).value).toBe('+16000');
+
     // Complete long, localized supplied metadata remains in a real h3 and native form ancestry.
     const rich = literaryFixture('uncertain');
     const load = rich.transport.load;
@@ -382,6 +430,8 @@ test('mounted Literary creation keeps the complete initial bibliography family a
     await input(labelledInput(fact, m.correction_url()), '');
     await input(labelledInput(fact, m.correction_url()), cite);
     expect(rich.calls).toHaveLength(2); // All staging, focus and bibliography composition are local.
+    const lockedAmount = queuedInput(labelledInput(fact, m.correction_amount()));
+    const lockedCitation = queuedInput(labelledInput(fact, m.correction_url()));
     await click(m.literary_remove_fact(), fact);
     await click(m.catalogue_create_submit());
     await until(() => host.textContent!.includes(m.catalogue_create_uncertain()));
@@ -417,8 +467,11 @@ test('mounted Literary creation keeps the complete initial bibliography family a
       metadataFailed = failed;
       await act(async () => {
         await client.invalidateQueries({ predicate: (query) => query.queryKey[0] === 'literary-profile' });
+        lockedAmount('+99999');
+        lockedCitation('https://stale.test');
       });
       expect(labelledInput(row(), m.correction_amount()).value).toBe('+12000');
+      expect(labelledInput(row(), m.correction_url()).value).toBe(cite);
       expect(panel().disabled).toBe(true);
       expect(posts()).toHaveLength(1);
     }
@@ -552,9 +605,15 @@ test('mounted Literary creation keeps the complete initial bibliography family a
     await show(staleDefinition);
     await enter();
     const retainedId = row().id;
+    const retiredAmount = queuedInput(labelledInput(row(), m.correction_amount()));
+    const retiredCitation = queuedInput(labelledInput(row(), m.correction_url()));
     metadata = 'failed';
     await act(async () => {
       await client.invalidateQueries({ predicate: (query) => query.queryKey[0] === 'literary-profile' });
+    });
+    await act(async () => {
+      retiredAmount('+99999');
+      retiredCitation('https://stale.test');
     });
     expect(row().id).toBe(retainedId);
     expect(labelledInput(row(), m.correction_amount()).value).toBe('+12000');
@@ -563,6 +622,10 @@ test('mounted Literary creation keeps the complete initial bibliography family a
       await client.invalidateQueries({ predicate: (query) => query.queryKey[0] === 'literary-profile' });
     });
     await until(() => host.textContent!.includes(m.correction_stale()));
+    await act(async () => {
+      retiredAmount('+99999');
+      retiredCitation('https://stale.test');
+    });
     expect(panel().querySelector('h3')).toBeNull();
     expect(button(panel(), m.literary_remove_fact()).className).toContain('min-h-11');
     await click(m.literary_remove_fact(), panel());
@@ -689,10 +752,25 @@ test('mounted Literary creation keeps the complete initial bibliography family a
     await until(() => !!type());
     await enter();
     const saved = queuedSubmit(host.querySelector('form')!);
-    await click(m.catalogue_create_submit());
+    const pendingAmount = queuedInput(labelledInput(row(), m.correction_amount()));
+    const pendingCitation = queuedInput(labelledInput(row(), m.correction_url()));
+    await act(async () => {
+      void saved({ preventDefault() {} });
+      pendingAmount('+99999');
+      pendingCitation('https://stale.test');
+    });
     await until(() => writes === 1);
+    await act(async () => {
+      pendingAmount('+99999');
+      pendingCitation('https://stale.test');
+    });
+    expect(labelledInput(row(), m.correction_amount()).value).toBe('+12000');
     await reader('00000000-0000-4000-8000-000000000002');
     await until(() => !!type());
+    await act(async () => {
+      pendingAmount('+99999');
+      pendingCitation('https://stale.test');
+    });
     await act(async () => {
       release({
         ok: true,

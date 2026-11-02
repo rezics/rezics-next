@@ -215,19 +215,29 @@ function CreateSubjectFormLive({
   // Retrying an uncertain command needs its original identity, even while definitions are unavailable.
   const definitionsFailed = profile?.metadata ? !profile.metadata.ready : definitions.isError;
   const definitionsBlocked = !request.current && (definitionsFailed || definitions.isFetching || types.length === 0);
-  // A producer's retained callbacks share this form's current Type and command admission.
-  const editScope = useMemo(() => ({}), [type]);
-  const profileEdit = useRef({ scope: editScope, allowed: false });
-  profileEdit.current = {
-    scope: editScope,
-    allowed: !disabled && !definitionsBlocked && !profile?.metadata?.pending && !!selectedType && !created,
-  };
-  const canEditProfile = () =>
-    lifetime.active() &&
-    profileEdit.current.scope === editScope &&
-    profileEdit.current.allowed &&
-    !running.current &&
-    request.current === null;
+  // Profile callbacks share this form's workspace and command lock, including before busy renders.
+  const profileEditable = !disabled && !definitionsBlocked && !profile?.metadata?.pending && !!selectedType && !created;
+  const currentEdit = useRef<object | null>(null);
+  const edit = useMemo(() => {
+    const token = {};
+    return {
+      token,
+      active: () =>
+        currentEdit.current === token &&
+        lifetime.active() &&
+        profileEditable &&
+        !running.current &&
+        !request.current &&
+        !confirmed.current,
+    };
+  }, [type, session, profileEditable, lifetime]);
+  currentEdit.current = edit.token;
+  useLayoutEffect(() => {
+    currentEdit.current = edit.token;
+    return () => {
+      currentEdit.current = null;
+    };
+  }, [edit]);
 
   const termControl = createSubjectControls(rows);
   const control = (pointer: string) => targets.current.get(pointer)?.id || termControl(pointer);
@@ -597,7 +607,7 @@ function CreateSubjectFormLive({
               </Field>
               {profile && (
                 <CreateSubjectProfileDraft type={type} onDirty={setProfileDirty}>
-                  {profile.fields(type, disabled, canEditProfile)}
+                  {profile.fields(type, disabled, edit.active)}
                 </CreateSubjectProfileDraft>
               )}
               {failure && (

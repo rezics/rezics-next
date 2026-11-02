@@ -6,7 +6,7 @@ import {
 } from './editor-lifetime';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { pickText } from '@rezics/composition';
-import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
@@ -28,6 +28,7 @@ import { isLiteraryType, literaryFields, literaryInitialItem, type LiteraryRead 
 export type LiteraryTransport = Pick<CreateTransport, 'submit' | 'read'> & { load: () => Promise<LiteraryRead> };
 type Ready = Extract<LiteraryRead, { ok: true }>;
 type InitialRow = { id: string; statement: StatementInput };
+const editableInitialFacts = () => true;
 const coarseTarget = 'max-md:min-h-11 max-md:min-w-11 pointer-coarse:min-h-11 pointer-coarse:min-w-11';
 const wrappingLink = `${coarseTarget} max-w-full whitespace-normal break-words`;
 const keyboardFocus = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
@@ -208,6 +209,7 @@ export function InitialFacts({
   disabled,
   rows,
   change,
+  canEdit = editableInitialFacts,
 }: {
   type: string;
   read: Ready;
@@ -215,15 +217,59 @@ export function InitialFacts({
   disabled: boolean;
   rows: InitialRow[];
   change: (rows: InitialRow[]) => void;
+  canEdit?: () => boolean;
 }) {
   const o = { locale: locale as never };
   const [property, setProperty] = useState('');
   const propertyId = useId();
+  const latest = useRef({ rows, change });
+  latest.current = { rows, change };
+  const holders = useRef(new WeakMap<InitialRow, { row: object; value: object; citation: object }>());
+  for (const row of rows) if (!holders.current.has(row)) holders.current.set(row, { row: {}, value: {}, citation: {} });
+  const observation = useMemo(() => ({}), [type, locale, read.release, disabled, canEdit]);
+  const current = useRef<object | null>(observation);
+  current.current = observation;
+  useLayoutEffect(() => {
+    current.current = observation;
+    return () => {
+      current.current = null;
+    };
+  }, [observation]);
+  const admitted = () => current.current === observation && !disabled && canEdit();
   if (!isLiteraryType(type)) return null;
   const fields = literaryFields(read.release, type, locale).scalars;
   const context = { release: read.release, public: { related: {} } };
-  const update = (id: string, statement: StatementInput) =>
-    change(rows.map((row) => (row.id === id ? { ...row, statement } : row)));
+  const currentRow = (row: InitialRow) => {
+    const holder = holders.current.get(row);
+    return admitted()
+      ? latest.current.rows.find(
+          (candidate) => candidate.id === row.id && holders.current.get(candidate)?.row === holder?.row,
+        )
+      : undefined;
+  };
+  const update = (row: InitialRow, part: 'value' | 'citation', value: StatementInput['value']) => {
+    const next = currentRow(row);
+    if (!next) return;
+    const citation = row.statement.references[0]?.parts[0];
+    if (holders.current.get(next)![part] !== holders.current.get(row)![part]) return;
+    const statement = { ...next.statement };
+    if (part === 'value') statement.value = value;
+    else {
+      const references = [...statement.references];
+      const first = references[0];
+      const parts = [...(first?.parts ?? [])];
+      if (value.type === 'value' && value.content === '') parts.shift();
+      else parts.splice(0, 1, { ...(citation ?? { property: { id: 'schema:url' } }), value });
+      if (parts.length) references.splice(0, 1, { ...first, parts });
+      else references.shift();
+      statement.references = references;
+    }
+    const replacement = { ...next, statement };
+    holders.current.set(replacement, { ...holders.current.get(next)!, [part]: {} });
+    const updated = latest.current.rows.map((candidate) => (candidate === next ? replacement : candidate));
+    latest.current = { ...latest.current, rows: updated };
+    latest.current.change(updated);
+  };
   return (
     <fieldset disabled={disabled} className="min-w-0 max-w-full">
       <legend className="max-w-full px-1 font-semibold [overflow-wrap:anywhere]">
@@ -269,7 +315,7 @@ export function InitialFacts({
                       definition={definition}
                       read={context}
                       locale={locale}
-                      onChange={(value) => update(id, { ...statement, value })}
+                      onChange={(value) => update(row, 'value', value)}
                     />
                     <h4 className="text-sm font-medium">{m.correction_references({}, o)}</h4>
                     <ScalarControl
@@ -278,13 +324,7 @@ export function InitialFacts({
                       definition={read.release.properties['schema:url']}
                       read={context}
                       locale={locale}
-                      onChange={(value) =>
-                        update(id, {
-                          ...statement,
-                          references:
-                            value.type === 'value' && value.content === '' ? [] : [{ parts: [{ ...citation, value }] }],
-                        })
-                      }
+                      onChange={(value) => update(row, 'citation', value)}
                     />
                   </>
                 ) : (
@@ -294,7 +334,13 @@ export function InitialFacts({
                   row={row}
                   disabled={disabled}
                   locale={locale}
-                  onRemove={() => change(rows.filter((row) => row.id !== id))}
+                  onRemove={() => {
+                    const next = currentRow(row);
+                    if (!next) return;
+                    const updated = latest.current.rows.filter((candidate) => candidate !== next);
+                    latest.current = { ...latest.current, rows: updated };
+                    latest.current.change(updated);
+                  }}
                 />
               </ContentItemFrame>
             </section>
@@ -338,19 +384,30 @@ export function InitialFacts({
                 rows.some((row) => row.statement.property.id === property))
             }
             onClick={() => {
-              change([
-                ...rows,
+              const currentRows = latest.current.rows;
+              if (
+                !admitted() ||
+                !fields.includes(property) ||
+                currentRows.length >= 12 ||
+                (!read.release.properties[property]?.multivalued &&
+                  currentRows.some((row) => row.statement.property.id === property))
+              )
+                return;
+              const updated = [
+                ...currentRows,
                 {
                   id: crypto.randomUUID(),
                   statement: {
                     property: { id: property },
-                    value: { type: 'value', content: '' },
+                    value: { type: 'value' as const, content: '' },
                     qualifiers: [],
                     references: [],
-                    rank: 'normal',
+                    rank: 'normal' as const,
                   },
                 },
-              ]);
+              ];
+              latest.current = { ...latest.current, rows: updated };
+              latest.current.change(updated);
               setProperty('');
             }}
           >
@@ -562,12 +619,13 @@ function LiteraryProfileLive({
             descriptionLanguage: (type) =>
               pickText(read.release.types[type]?.descriptions ?? {}, locale).lang ?? undefined,
             control: (pointer, type) => initialFactControl(pointer, latest.current[type] ?? [], read, type, locale),
-            fields: (type, disabled) => (
+            fields: (type, disabled, canEdit) => (
               <InitialFacts
                 type={type}
                 read={read}
                 locale={locale}
                 disabled={disabled}
+                canEdit={canEdit}
                 rows={drafts[type] ?? []}
                 change={(rows) => setDrafts((previous) => ({ ...previous, [type]: rows }))}
               />
