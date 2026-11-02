@@ -265,9 +265,7 @@ function formatLimited(items: readonly string[]): string {
 
 function formatRelationName(name: string): string {
   const safeName = name.replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ');
-  return safeName.length > MAX_RELATION_NAME_LENGTH
-    ? `${safeName.slice(0, MAX_RELATION_NAME_LENGTH - 1)}…`
-    : safeName;
+  return safeName.length > MAX_RELATION_NAME_LENGTH ? `${safeName.slice(0, MAX_RELATION_NAME_LENGTH - 1)}…` : safeName;
 }
 
 function formatRelationContext(samples: readonly GrowthSample[]): string[] {
