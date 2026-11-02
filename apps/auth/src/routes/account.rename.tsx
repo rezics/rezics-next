@@ -427,7 +427,7 @@ function RenameReview({
       >
         <AlertDialogContent
           ref={departureDialog}
-          onKeyDown={(event) => {
+          onKeyDownCapture={(event) => {
             if (event.key === 'Escape') {
               event.preventDefault();
               stay();
