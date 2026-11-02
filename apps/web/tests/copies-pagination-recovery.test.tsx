@@ -296,6 +296,35 @@ test('requested cursor provenance survives one bounded native read and the exist
   }
 });
 
+test('invalid addresses show correction without starting a browser copy read or opening an editor', async () => {
+  for (const search of [
+    { subjectId: 'bad-selector', cursor: 'old' },
+    { subjectId: edition, cursor: 'x'.repeat(2049) },
+  ]) {
+    const h = await mount(search);
+    try {
+      expect(h.host.querySelector('[role="alert"]')).not.toBeNull();
+      expect(h.host.querySelector('form')?.getAttribute('method')).toBe('get');
+      expect(h.form()).toBeNull();
+      expect(h.lists).toHaveLength(0);
+    } finally {
+      await h.close();
+    }
+  }
+});
+
+test('a native cursor restart is visible and its first-page link keeps the subject', async () => {
+  const h = await mount({ subjectId: edition, cursor: 'stale' }, { cursorRestarted: true });
+  try {
+    expect(h.host.textContent).toContain(m.library_copies_address_cursor_restarted());
+    const target = new URL(h.link(m.library_collections_first_page())!.href);
+    expect(target.searchParams.get('subjectId')).toBe(edition);
+    expect(target.searchParams.has('cursor')).toBe(false);
+  } finally {
+    await h.close();
+  }
+});
+
 test('empty first pages keep library/filter wording; later and sparse pages offer a cursorless edition-preserving recovery', async () => {
   for (const subjectId of [undefined, edition]) {
     const filter = subjectId ? { subjectId } : {};
