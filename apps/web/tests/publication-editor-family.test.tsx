@@ -238,6 +238,7 @@ test('independent publication creation, local corrections, immutable recovery an
     await add('schema:isbn', 1);
     await replace(input(m.correction_value(), 1), 'Second ISBN draft');
     await click(m.relation_remove(), 1);
+    await click(m.relation_remove(), 1);
     expect(scope(1).queryByRole('textbox', { name: m.correction_value() })).toBeNull();
     expect(input(m.correction_value()).value).toBe('978-0-140-44430-8');
     const stableIds = ids();
@@ -441,6 +442,7 @@ test('independent publication creation, local corrections, immutable recovery an
     );
     const removedFact = scope().getByRole('heading', { name: 'language', level: 3 }).closest('fieldset')!;
     await act(async () => user.click(within(removedFact).getByRole('button', { name: m.relation_remove() })));
+    await act(async () => user.click(within(removedFact).getByRole('button', { name: m.relation_remove() })));
     expect(recoveryButton().disabled).toBe(false);
     await click(m.catalogue_create_review_new());
     await click(m.publication_submit());
@@ -467,6 +469,7 @@ test('independent publication creation, local corrections, immutable recovery an
     expect(recoveryButton().disabled).toBe(true);
     expect(article().textContent).toContain('Supplied publisher');
     const publisherFact = scope().getByRole('heading', { name: 'publisher', level: 3 }).closest('fieldset')!;
+    await act(async () => user.click(within(publisherFact).getByRole('button', { name: m.relation_remove() })));
     await act(async () => user.click(within(publisherFact).getByRole('button', { name: m.relation_remove() })));
     await replace(input(m.relation_citation()), '');
     expect(recoveryButton().disabled).toBe(false);
@@ -623,6 +626,7 @@ test('independent publication creation, local corrections, immutable recovery an
     expect(searchCalls.at(-1)).toBe('Press');
     expect(publisher.fixture.calls).toHaveLength(3);
     await act(async () => user.click(choice));
+    await click(m.relation_remove());
     await click(m.relation_remove());
     await add('schema:publisher');
     const freshPicker = scope().getByRole('combobox', { name: publisherName }) as HTMLInputElement;

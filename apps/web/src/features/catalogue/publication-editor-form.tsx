@@ -19,7 +19,7 @@ import { Field, FieldDescription, FieldError, FieldLabel, FieldLegend, FieldSet 
 import { Input } from '@rezics/ui/shadcn/input';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { cn } from '@rezics/ui/utils';
-import { useId, useRef, useState, type FormEvent } from 'react';
+import { useId, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { coverSrc } from '../../media/cover-src';
 import { m } from '../../paraglide/messages.js';
 import { PageHeading } from '../../shell/page-heading';
@@ -47,6 +47,132 @@ const linkClassName =
   'inline-flex min-h-11 min-w-11 max-w-full items-center underline [overflow-wrap:anywhere] md:pointer-fine:min-h-8';
 const actionLinkClassName = cn(buttonVariants(), actionClassName);
 const outlineLinkClassName = cn(buttonVariants({ variant: 'outline' }), actionClassName);
+
+function hasFactContent(value: unknown): boolean {
+  if (typeof value === 'string') return !!value.trim();
+  if (value == null) return false;
+  if (typeof value === 'object') return Object.values(value).some(hasFactContent);
+  return true;
+}
+
+/** Keep confirmation with the property-keyed row, outside the submitted fact value. */
+function PublicationFactRemoval({
+  property,
+  populated,
+  disabled,
+  editable,
+  onRemove,
+  locale,
+}: {
+  property: string;
+  populated: boolean;
+  disabled: boolean;
+  editable: () => boolean;
+  onRemove: () => void;
+  locale: string;
+}) {
+  const o = { locale };
+  const [confirmingProperty, setConfirmingProperty] = useState<string>();
+  const confirming = confirmingProperty === property;
+  const holder = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const cancel = useRef<HTMLButtonElement>(null);
+  const restoreFocus = useRef(false);
+  const current = useRef({ property, disabled, editable, onRemove });
+  current.current = { property, disabled, editable, onRemove };
+  const canRemove = () =>
+    current.current.property === property && !current.current.disabled && current.current.editable();
+
+  useLayoutEffect(() => {
+    if (disabled) return;
+    if (confirming) cancel.current?.focus();
+    else if (restoreFocus.current) {
+      trigger.current?.focus();
+      restoreFocus.current = false;
+    }
+  }, [confirming, disabled]);
+
+  function cancelRemoval() {
+    restoreFocus.current = true;
+    setConfirmingProperty(undefined);
+  }
+
+  function remove() {
+    const section = holder.current?.closest('fieldset');
+    if (!canRemove() || !section?.isConnected) return;
+    const controls = [
+      ...(section.closest('form')?.querySelectorAll<HTMLElement>(
+        'button, input, select, textarea, [tabindex="0"]',
+      ) ?? []),
+    ];
+    const first = controls.findIndex((control) => section.contains(control));
+    const last = controls.findLastIndex((control) => section.contains(control));
+    [...controls.slice(last + 1), ...controls.slice(0, first).reverse()]
+      .find(
+        (control) =>
+          !control.matches(':disabled, [aria-disabled="true"], [type="hidden"]') &&
+          !control.closest('[hidden], [inert]'),
+      )
+      ?.focus();
+    current.current.onRemove();
+  }
+
+  return (
+    <div ref={holder}>
+      {confirming ? (
+        <div
+          role="group"
+          aria-label={m.candidate_confirm_title({ action: m.relation_remove({}, o) }, o)}
+          className="space-y-2"
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              cancelRemoval();
+            }
+          }}
+        >
+          <p>{m.candidate_confirm_title({ action: m.relation_remove({}, o) }, o)}</p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              ref={cancel}
+              className={actionClassName}
+              type="button"
+              variant="outline"
+              disabled={disabled}
+              onClick={cancelRemoval}
+            >
+              {m.candidate_cancel({}, o)}
+            </Button>
+            <Button
+              className={actionClassName}
+              type="button"
+              variant="destructive"
+              disabled={disabled}
+              onClick={remove}
+            >
+              {m.relation_remove({}, o)}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <Button
+          ref={trigger}
+          className={actionClassName}
+          type="button"
+          variant="ghost"
+          disabled={disabled}
+          onClick={() => {
+            if (!canRemove()) return;
+            if (populated) setConfirmingProperty(property);
+            else remove();
+          }}
+        >
+          {m.relation_remove({}, o)}
+        </Button>
+      )}
+    </div>
+  );
+}
 
 /** Ordinary initial facts for one independently identified publication, anchored to an existing work. */
 export const PublicationEditor = catalogueEditor(PublicationEditorLive);
@@ -596,19 +722,22 @@ function PublicationEditorLive({
                         {invalid(`/statements/${property}`) && (
                           <FieldError>{m.catalogue_create_invalid_field({}, o)}</FieldError>
                         )}
-                        <Button
-                          className={actionClassName}
-                          type="button"
-                          variant="ghost"
-                          onClick={() =>
+                        <PublicationFactRemoval
+                          property={property}
+                          locale={locale}
+                          populated={
+                            value.type !== 'value' || hasFactContent(value.content) ||
+                            (property === 'schema:publisher' && publisher.length > 0)
+                          }
+                          disabled={disabled}
+                          editable={() => lifetime.active() && !running.current && !disabled && !created}
+                          onRemove={() =>
                             edit(() => {
                               setFacts(Object.fromEntries(Object.entries(facts).filter(([id]) => id !== property)));
                               if (property === 'schema:publisher') setPublisher([]);
                             })
                           }
-                        >
-                          {m.relation_remove({}, o)}
-                        </Button>
+                        />
                       </FieldSet>
                     </ContentItemFrame>
                   ))}
