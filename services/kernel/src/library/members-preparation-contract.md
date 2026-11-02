@@ -158,6 +158,20 @@ own drained inventory/ACK is not whole-role NoData, overall erasure completion o
 
 ## Cost and required native evidence
 
+The private [parent composition](members-preparation-budget.ts) transfers the complete eight-axis declaration
+from the caller's existing ledger before invoking any child. Its declaration includes the Members body (at most
+16 statements), constant operational History registration (464), receiving/readback (429), executor controls,
+all History transfers, and explicit Source, Access, selected-runtime, transfer-control and cleanup declarations.
+The declaration builder uses History's actual exported prices; all other owner prices remain explicit. The caller's
+retry and rollback declarations include repeated History bodies and failed prefixes under the native deadline policy.
+Shared `NativeCollectionWork.transferChildren` holds every child before checkout, inherits the original deadline,
+retains dispatched charges and closes all children before returning unused capacity. A preparation key transfers only
+once from that parent. Native callers still need the actual Pool binding and final current Source and physical authority.
+This composition is a private allocation seam, not native integration or a release of any missing owner declaration.
+
+Decision: use the shared native child-transfer allocator, require explicit Source and native authority, and preserve
+the existing request retry policy rather than adding a retry-count cap.
+
 ### First preparation admission and duplicate
 
 - Touches: existing ready lookup/direct prepare decision and its released snapshot; then Core time, all Access

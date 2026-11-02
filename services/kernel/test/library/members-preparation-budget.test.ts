@@ -1,9 +1,10 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import { ProblemError } from '../../src/http/problem.ts';
 import type { WorkDimensions } from '../../src/library/collection-source.ts';
 import { NativeCollectionWork } from '../../src/library/collection-source-work.ts';
 import {
   MEMBERS_PREPARATION_CHILDREN,
+  declareMembersPreparationParent,
   transferMembersPreparationBudget,
   type MembersPreparationDeclarations,
 } from '../../src/library/members-preparation-budget.ts';
@@ -131,4 +132,38 @@ test('failed child receipts stay charged and poison the parent after settlement'
   expect(funded.finish().used).toEqual(cost(2));
   expect(() => original.assertReady()).toThrow('Source failed');
   expect(() => dispatch(funded.children.sourceVerify, 1)).toThrow('allocation is closed');
+});
+
+test('the complete declaration includes constant History prices and cannot assume a missing Source price', () => {
+  const declared = declareMembersPreparationParent(declarations());
+  expect(declared.children.historyRegistration.statements).toBe(464);
+  expect(declared.children.receivingReadback.statements).toBe(429);
+  expect(declared.children.members.statements).toBeLessThanOrEqual(16);
+  const original = new NativeCollectionWork(
+    { reservationId: 'original', remaining: declared.total },
+    Date.now() + 60000,
+  );
+  const funded = transferMembersPreparationBudget(original, 'key', declared.children);
+  for (const axis of axes) expect(original.available(axis)).toBe(0);
+  expect(funded.children.historyRegistration.deadlineAt).toBe(original.deadlineAt);
+  expect(funded.finish().used).toEqual(cost(0));
+  expect(() => declareMembersPreparationParent({ ...declarations(), sourceResolve: null })).toThrow(ProblemError);
+  expect(() => declareMembersPreparationParent({ ...declarations(), members: cost(17) })).toThrow(
+    'Members preparation body exceeds 16 statements',
+  );
+  expect(() => declareMembersPreparationParent({ ...declarations(), sourceVerify: cost(Infinity) })).toThrow(TypeError);
+});
+
+test('expiration refuses initial and transferred work before checkout without extending the original deadline', () => {
+  const original = parent();
+  const other = parent(MEMBERS_PREPARATION_CHILDREN.length * 2, original.deadlineAt);
+  const funded = transferMembersPreparationBudget(original, 'key', declarations());
+  const now = spyOn(Date, 'now').mockReturnValue(original.deadlineAt);
+  try {
+    expect(() => dispatch(funded.children.sourceResolve, 1)).toThrow(ProblemError);
+    expect(() => transferMembersPreparationBudget(other, 'other', declarations())).toThrow(ProblemError);
+    expect(funded.finish().used).toEqual(cost(0));
+  } finally {
+    now.mockRestore();
+  }
 });
