@@ -1,5 +1,4 @@
 import { expect, test } from 'bun:test';
-import type { FilterRelease } from '@rezics/filter';
 import type { Pool } from 'pg';
 import type { OpenSearch } from '../../src/search/opensearch.ts';
 import { subjectAlias, subjectIndexName, SUBJECT_SORT_FORMAT } from '../../src/search/indices.ts';
@@ -9,9 +8,9 @@ import { subjectConsumer } from '../../src/search/runner.ts';
 import freshness from '../../src/search/freshness.sql';
 import { createFakeSource } from './support/fake-source.ts';
 
-function catalogue(n: number): FilterRelease {
+function catalogue(n: number) {
   return {
-    types: Object.fromEntries(
+    types: Object.fromEntries<{ bases: string[]; labels: Record<string, string>; icon: string | null }>(
       Array.from({ length: 9 }, (_, i) => [
         `kind:Kind${n}-${i}`,
         { bases: [], labels: { en: `Kind ${n}-${i}` }, icon: i === 0 ? 'book' : null },
@@ -35,14 +34,15 @@ test('successive catalogue digests cannot grow the kind snapshot cache without b
   expect(enumerations).toBe(1);
   expect(pinned.digest).toBe(digest);
   expect(compileKinds(first, digest)).toBe(pinned);
-  first.types['kind:Kind0-0'] = { bases: [], labels: { en: 'Mutated' } };
+  first.types['kind:Kind0-0'] = { bases: [], labels: { en: 'Mutated' }, icon: 'book' };
   expect(pinned.label('kind:Kind0-0', ['en'])).toEqual({ value: 'Kind 0-0', language: 'en' });
 
   const later = Array.from({ length: CURRENT_METADATA_RETENTION }, (_, n) => {
     const release = catalogue(n + 1);
     return compileKinds(release, kindDigest(release));
   });
-  expect(compileKinds(catalogue(CURRENT_METADATA_RETENTION), later.at(-1)!.digest)).toBe(later.at(-1));
+  const retained = later[later.length - 1]!;
+  expect(compileKinds(catalogue(CURRENT_METADATA_RETENTION), retained.digest)).toBe(retained);
   expect(compileKinds(first, digest)).not.toBe(pinned);
   expect(enumerations).toBe(2);
   expect(pinned.page(undefined, ['en']).values).toHaveLength(8);
@@ -116,8 +116,8 @@ function catalogueEngine(prefix: string) {
   const searchWaiters: ((count: number) => void)[] = [];
   const scripts = new Map<string, { script: unknown }>();
   const alias = subjectAlias(prefix);
-  const client: OpenSearch = {
-    async request(method, path, body) {
+  const client = {
+    async request(method: string, path: string, body?: unknown) {
       if (path.startsWith('/_scripts/')) {
         if (method === 'PUT') {
           scripts.set(path, body as { script: unknown });
@@ -168,7 +168,7 @@ function catalogueEngine(prefix: string) {
     async bulk() {
       throw new Error('unexpected bulk');
     },
-  };
+  } as unknown as OpenSearch;
   return {
     client,
     setActive(generation: number) {
