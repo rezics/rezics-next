@@ -1,0 +1,431 @@
+import { expect, mock, test } from 'bun:test';
+import { createRequire } from 'node:module';
+import { act, createElement as h, useState, type ReactNode } from 'react';
+import type { FactCommand, FactDraft } from '../src/features/catalogue/subject-facts';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+
+// Authored UNRUN under MINIMAL. A mounted DOM proves neither browser geometry nor native acceptance.
+async function mounted(
+  run: (page: {
+    host: HTMLElement;
+    render: (node: ReactNode) => Promise<void>;
+    choose: (select: HTMLSelectElement, value: string) => Promise<void>;
+    enter: (input: HTMLInputElement, value: string) => Promise<void>;
+  }) => Promise<void>,
+) {
+  const require = createRequire(import.meta.url);
+  const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
+  const window = new Window({ url: 'https://site.invalid/en' });
+  const globals = [
+    'window',
+    'document',
+    'navigator',
+    'HTMLElement',
+    'HTMLInputElement',
+    'HTMLSelectElement',
+    'Element',
+    'Node',
+    'DocumentFragment',
+    'MutationObserver',
+    'ResizeObserver',
+    'getComputedStyle',
+    'requestAnimationFrame',
+    'cancelAnimationFrame',
+    'IS_REACT_ACT_ENVIRONMENT',
+  ];
+  const saved = new Map(globals.map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const key of globals)
+    Object.defineProperty(globalThis, key, {
+      configurable: true,
+      writable: true,
+      value: key === 'window' ? window : key === 'IS_REACT_ACT_ENVIRONMENT' ? true : window[key],
+    });
+  const { createRoot } = await import('react-dom/client');
+  const { setLocale } = await import('../src/paraglide/runtime.js');
+  setLocale('en', { reload: false });
+  const host = window.document.createElement('main') as HTMLElement;
+  window.document.body.append(host);
+  const root = createRoot(host);
+  let generation = 0;
+  try {
+    await run({
+      host,
+      render: async (node) => {
+        await act(async () => root.render(h('div', { key: ++generation }, node)));
+      },
+      choose: async (select, value) => {
+        await act(async () => {
+          select.value = value;
+          select.dispatchEvent(new window.Event('change', { bubbles: true }));
+        });
+      },
+      enter: async (input, value) => {
+        await act(async () => {
+          Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+          input.dispatchEvent(new window.Event('input', { bubbles: true }));
+        });
+      },
+    });
+  } finally {
+    await act(async () => root.unmount());
+    await window.happyDOM.abort();
+    for (const [key, descriptor] of saved) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+  }
+}
+
+function button(region: Element, name: string) {
+  const found = [...region.querySelectorAll<HTMLButtonElement>('button')].find((node) => node.textContent === name);
+  expect(found).toBeDefined();
+  return found!;
+}
+function include(region: Element) {
+  const control = region.querySelector<HTMLElement>('[data-slot="checkbox"]')!;
+  expect(control).not.toBeNull();
+  const input = control.parentElement!.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+  expect(input).not.toBeNull();
+  const label = [...region.querySelectorAll<HTMLLabelElement>('label')].find((node) => node.htmlFor === input.id)!;
+  expect(label).toBeDefined();
+  expect(region.ownerDocument.getElementById(label.htmlFor)).toBe(input);
+  expect(control.getAttribute('aria-labelledby')?.split(' ')).toContain(label.id);
+  return { control, input, label };
+}
+
+test('Complete Subject facts family: same-property mounted FactFields keep independent source, draft and inclusion controls', async () => {
+  await mounted(async ({ host, render, choose, enter }) => {
+    const { FactField } = await import('../src/features/catalogue/subject-facts-view');
+    const { stageFact } = await import('../src/features/catalogue/subject-facts');
+    const { identifiersProfileFixture, identifiersCitation } =
+      await import('../src/kernel/fake/catalogue-identifiers-profile');
+    const { m } = await import('../src/paraglide/messages.js');
+    const fixture = identifiersProfileFixture();
+    const read = await fixture.transport.read();
+    if (!read.ok) throw new Error('Expected current identifier evidence');
+    const property = 'schema:sameAs';
+    const first = read.public.subject.statements[property]![0]!;
+    const second = structuredClone(first);
+    second.id = '00000000-0000-4000-8000-00000000d113';
+    const longValue =
+      'https://catalogue.example/editions/' +
+      'original-unabridged-edition-'.repeat(12) +
+      '?record=A%2Fb&lang=ja#complete';
+    const citation = 'https://archive.example/records/second-edition?scan=original%2Fpage-24#citation';
+    second.value = { type: 'value', content: longValue };
+    second.qualifiers = [
+      {
+        property: { id: 'schema:name', data_type: 'monolingualtext' },
+        value: { type: 'value', content: { text: 'Édition originale intégrale', language: 'fr' } },
+      },
+    ];
+    second.references[0]!.parts[0]!.value = { type: 'value', content: citation };
+    read.public.subject.statements[property]!.push(second);
+    const before = structuredClone(read.public);
+    const initialCalls = structuredClone(fixture.calls);
+    const stages: (string | null)[][] = [[], []];
+    const edits: FactDraft[][] = [[], []];
+    function Pair() {
+      const [drafts, setDrafts] = useState<(FactDraft | undefined)[]>([undefined, undefined]);
+      return (
+        <>
+          {[0, 1].map((index) => (
+            <FactField
+              key={index}
+              property={property}
+              read={read}
+              locale="en"
+              href="/en/subjects/edition"
+              busy={false}
+              canStage={true}
+              draft={drafts[index]}
+              onReview={() => {
+                throw new Error('Unexpected review');
+              }}
+              onStage={(source) => {
+                stages[index]!.push(source);
+                setDrafts((previous) =>
+                  previous.map((draft, slot) => (slot === index ? stageFact(read, property, source)! : draft)),
+                );
+              }}
+              onChange={(next) => {
+                edits[index]!.push(next);
+                setDrafts((previous) => previous.map((draft, slot) => (slot === index ? next : draft)));
+              }}
+            />
+          ))}
+        </>
+      );
+    }
+    await render(<Pair />);
+    const fields = [...host.querySelectorAll<HTMLElement>('section[aria-label="exact match"]')];
+    expect(fields).toHaveLength(2);
+    const selects = fields.map((field) => field.querySelector<HTMLSelectElement>('select')!);
+    expect(selects[0]!.id).not.toBe(selects[1]!.id);
+    for (const [index, select] of selects.entries()) {
+      expect(fields[index]!.querySelector(`label[for="${select.id}"]`)?.textContent).toBe(m.facts_choose_value());
+      expect([...select.options].map((option) => option.value)).toEqual(['', first.id, second.id]);
+      expect(button(fields[index]!, m.facts_edit_field()).disabled).toBe(true);
+      const current = fields[index]!.querySelector('section')!;
+      expect(current.querySelector('h4[data-content-item-slot="title"]')?.textContent).toBe(m.candidate_current());
+      const evidence = [...current.querySelectorAll(':scope > ol > li')];
+      expect(evidence).toHaveLength(2);
+      expect(evidence.map((node) => node.querySelector('p')?.textContent)).toEqual([
+        m.facts_selected_value({ number: 1 }),
+        m.facts_selected_value({ number: 2 }),
+      ]);
+      expect(evidence[1]!.textContent).toContain(longValue);
+      expect(evidence[1]!.querySelector('dl [lang="fr"]')?.textContent).toBe('Édition originale intégrale');
+      expect(
+        [...evidence[1]!.querySelectorAll<HTMLAnchorElement>('a')].map((node) => node.getAttribute('href')),
+      ).toEqual([longValue, citation]);
+      expect(evidence[1]!.querySelector('ul [lang="ja"]')?.textContent).toBe('原本の書誌');
+      expect(current.querySelector('a a, a button, [data-slot="list-row-link"]')).toBeNull();
+    }
+    await choose(selects[1]!, second.id);
+    expect(selects[0]!.value).toBe('');
+    expect(button(fields[0]!, m.facts_edit_field()).disabled).toBe(true);
+    expect(stages).toEqual([[], []]);
+    await choose(selects[0]!, first.id);
+    await act(async () => button(fields[0]!, m.facts_edit_field()).click());
+    await act(async () => button(fields[1]!, m.facts_edit_field()).click());
+    expect(stages).toEqual([[first.id], [second.id]]);
+    const controls = fields.map(include);
+    expect(controls[0]!.input.id).not.toBe(controls[1]!.input.id);
+    expect(new Set([...host.querySelectorAll('[id]')].map((node) => node.id)).size).toBe(
+      host.querySelectorAll('[id]').length,
+    );
+    for (const { control, label } of controls) {
+      expect(label.textContent).toBe(m.facts_include());
+      expect(control.getAttribute('aria-checked')).toBe('true');
+      expect(control.classList.contains('size-11')).toBe(true);
+      expect(label.classList.contains('min-h-11')).toBe(true);
+    }
+    await act(async () => controls[1]!.label.click());
+    expect(include(fields[0]!).control.getAttribute('aria-checked')).toBe('true');
+    expect(include(fields[1]!).control.getAttribute('aria-checked')).toBe('false');
+    expect(edits[0]).toEqual([]);
+    expect(edits[1]!.at(-1)?.included).toBe(false);
+    const valueInputs = fields.map((field) =>
+      field.querySelector<HTMLInputElement>(`input[aria-label="${m.correction_value()}"]`)!,
+    );
+    expect(valueInputs[0]!.value).toBe(identifiersCitation);
+    expect(valueInputs[1]!.value).toBe(longValue);
+    const changedValue = 'https://catalogue.example/explicit-private-draft';
+    await enter(valueInputs[1]!, changedValue);
+    expect(edits[1]!.at(-1)?.statement.value).toEqual({ type: 'value', content: changedValue });
+    expect(valueInputs[0]!.value).toBe(identifiersCitation);
+    expect(fields[1]!.querySelector('section')!.textContent).not.toContain(changedValue);
+    expect(fields[1]!.querySelector('section')!.textContent).toContain(longValue);
+    expect(include(fields[1]!).input.id).toBe(controls[1]!.input.id);
+    await act(async () => controls[0]!.label.click());
+    expect(include(fields[0]!).control.getAttribute('aria-checked')).toBe('false');
+    expect(include(fields[1]!).control.getAttribute('aria-checked')).toBe('false');
+    expect(read.public).toEqual(before);
+    expect(fixture.calls).toEqual(initialCalls);
+  });
+});
+
+test('Actual repeated SubjectFacts workspaces stage and include only their own field, without extra reads or proposals', async () => {
+  await mounted(async ({ host, render, choose }) => {
+    const { SubjectFacts } = await import('../src/features/catalogue/subject-facts-view');
+    const { subjectFactsFixture } = await import('../src/kernel/fake/subject-facts');
+    const { m } = await import('../src/paraglide/messages.js');
+    const fixture = subjectFactsFixture();
+    const read = await fixture.transport.read();
+    if (!read.ok) throw new Error('Expected current facts');
+    const before = structuredClone(read.public);
+    const calls = structuredClone(fixture.date.calls);
+    expect(calls.map((call) => call.method)).toEqual(['GET', 'GET', 'GET']);
+    expect(fixture.language.calls).toEqual([]);
+    await render(
+      <>
+        {[0, 1].map((index) => (
+          <SubjectFacts key={index} initial={read} locale="en" transport={fixture.transport} review={fixture.review} />
+        ))}
+      </>,
+    );
+    const workspaces = [...host.querySelectorAll<HTMLElement>('article')];
+    expect(workspaces).toHaveLength(2);
+    const label = read.release.properties['schema:inLanguage']!.labels.en;
+    const fields = workspaces.map((workspace) =>
+      workspace.querySelector<HTMLElement>(`section[aria-label="${label}"]`)!,
+    );
+    const selected = read.public.subject.statements['schema:inLanguage']!;
+    await choose(fields[1]!.querySelector('select')!, selected[1]!.id);
+    await act(async () => button(fields[1]!, m.facts_edit_field()).click());
+    expect(fields[0]!.querySelector('[data-slot="checkbox"]')).toBeNull();
+    await choose(fields[0]!.querySelector('select')!, selected[0]!.id);
+    await act(async () => button(fields[0]!, m.facts_edit_field()).click());
+    const first = include(fields[0]!);
+    const second = include(fields[1]!);
+    expect(first.input.id).not.toBe(second.input.id);
+    await act(async () => first.label.click());
+    expect(first.control.getAttribute('aria-checked')).toBe('false');
+    expect(second.control.getAttribute('aria-checked')).toBe('true');
+    expect(
+      fields.map(
+        (field) => field.querySelector<HTMLInputElement>(`input[aria-label="${m.correction_value()}"]`)!.value,
+      ),
+    ).toEqual(['en', 'fr']);
+    for (const workspace of workspaces) {
+      expect(button(workspace, m.facts_submit()).disabled).toBe(true);
+      expect(workspace.querySelector('form h2[data-content-item-slot="title"]')).not.toBeNull();
+    }
+    expect(fixture.date.calls).toEqual(calls);
+    expect(fixture.language.calls).toEqual([]);
+    expect(read.public).toEqual(before);
+  });
+});
+
+test('Selected evidence keeps special assertions, ordered qualifiers and every reference part visible', async () => {
+  await mounted(async ({ host, render }) => {
+    const { SelectedFacts } = await import('../src/features/catalogue/subject-facts-view');
+    const { identifiersProfileFixture, identifiersCitation } =
+      await import('../src/kernel/fake/catalogue-identifiers-profile');
+    const { m } = await import('../src/paraglide/messages.js');
+    const fixture = identifiersProfileFixture();
+    const read = await fixture.transport.read();
+    if (!read.ok) throw new Error('Expected current identifier evidence');
+    const property = 'schema:sameAs';
+    const original = read.public.subject.statements[property]![0]!;
+    const unknown = structuredClone(original);
+    unknown.id = '00000000-0000-4000-8000-00000000d114';
+    unknown.value = { type: 'somevalue' };
+    const absent = structuredClone(original);
+    absent.id = '00000000-0000-4000-8000-00000000d115';
+    absent.value = { type: 'novalue' };
+    absent.qualifiers = [
+      {
+        property: { id: 'schema:name', data_type: 'monolingualtext' },
+        value: { type: 'value', content: { text: 'Première édition', language: 'fr' } },
+      },
+      {
+        property: { id: 'schema:name', data_type: 'monolingualtext' },
+        value: { type: 'value', content: { text: '原版', language: 'ja' } },
+      },
+    ];
+    const additional = structuredClone(absent.references[0]!);
+    const citation = 'https://archive.example/second?exact=A%2Fb#reference';
+    additional.parts[0]!.value = { type: 'value', content: citation };
+    absent.references.push(additional);
+    read.public.subject.statements[property] = [original, unknown, absent];
+    const before = structuredClone(read.public);
+    const calls = structuredClone(fixture.calls);
+    await render(<SelectedFacts property={property} read={read} locale="en" />);
+    const items = [...host.querySelectorAll('section > ol > li')];
+    expect(items.map((item) => item.querySelector('p')?.textContent)).toEqual(
+      [1, 2, 3].map((number) => m.facts_selected_value({ number })),
+    );
+    expect(items[1]!.textContent).toContain(m.subject_value_unknown());
+    expect(items[2]!.textContent).toContain(m.subject_value_none());
+    expect(
+      [...items[2]!.querySelectorAll('dd [lang]')].map((part) => [part.getAttribute('lang'), part.textContent]),
+    ).toEqual([
+      ['fr', 'Première édition'],
+      ['ja', '原版'],
+    ]);
+    const references = [...items[2]!.querySelectorAll('ol > li')];
+    expect(references.map((reference) => reference.querySelector('p')?.textContent)).toEqual([
+      `${m.correction_references()} 1`,
+      `${m.correction_references()} 2`,
+    ]);
+    expect(references.map((reference) => reference.querySelector('a')?.getAttribute('href'))).toEqual([
+      identifiersCitation,
+      citation,
+    ]);
+    expect(references.map((reference) => reference.querySelector('[lang="ja"]')?.textContent)).toEqual([
+      '原本の書誌',
+      '原本の書誌',
+    ]);
+    expect(host.querySelector('input, button, [data-slot="list-row-link"]')).toBeNull();
+    expect(read.public).toEqual(before);
+    expect(fixture.calls).toEqual(calls);
+  });
+});
+
+test('Mounted field outcomes preserve separate partial results and the exact original uncertain command and native request bounds', async () => {
+  await mounted(async ({ host, render, choose, enter }) => {
+    const { SubjectFacts } = await import('../src/features/catalogue/subject-facts-view');
+    const { subjectFactsFixture } = await import('../src/kernel/fake/subject-facts');
+    const { m } = await import('../src/paraglide/messages.js');
+    for (const scenario of ['partial', 'lost-response'] as const) {
+      const fixture = subjectFactsFixture(scenario);
+      const read = await fixture.transport.read();
+      if (!read.ok) throw new Error('Expected current facts');
+      const before = structuredClone(read.public);
+      const commands: FactCommand[] = [];
+      await render(
+        <SubjectFacts
+          initial={read}
+          locale="en"
+          review={fixture.review}
+          transport={{
+            read: fixture.transport.read,
+            propose: (command) => {
+              commands.push(command);
+              return fixture.transport.propose(command);
+            },
+          }}
+        />,
+      );
+      const field = (property: string) =>
+        host.querySelector<HTMLElement>(`section[aria-label="${read.release.properties[property]!.labels.en}"]`)!;
+      const date = field('schema:datePublished');
+      const language = field('schema:inLanguage');
+      await act(async () => button(date, m.facts_edit_field()).click());
+      await enter(date.querySelector<HTMLInputElement>(`input[aria-label="${m.correction_year()}"]`)!, '1946');
+      await choose(language.querySelector('select')!, read.public.subject.statements['schema:inLanguage']![0]!.id);
+      await act(async () => button(language, m.facts_edit_field()).click());
+      await enter(language.querySelector<HTMLInputElement>(`input[aria-label="${m.correction_value()}"]`)!, 'de');
+      expect(commands).toEqual([]);
+      await act(async () => button(host, m.facts_submit()).click());
+      expect(commands).toHaveLength(2);
+      expect(read.public).toEqual(before);
+      const submitted = structuredClone(commands);
+      if (scenario === 'partial') {
+        expect(host.textContent).toContain(m.facts_results({ count: 1 }));
+        expect(language.textContent).toContain(m.correction_denied());
+        expect(date.textContent).toContain(m.correction_proposed());
+        expect(date.querySelector('[data-slot="checkbox"]')).toBeNull();
+      } else {
+        expect(host.textContent?.split(m.facts_uncertain())).toHaveLength(3);
+        for (const region of [date, language]) {
+          expect(include(region).control.getAttribute('aria-disabled')).toBe('true');
+          expect(
+            [...region.querySelectorAll<HTMLInputElement>('input[aria-label]')].every((input) => input.disabled),
+          ).toBe(true);
+        }
+        expect(host.querySelector('a[href*="candidate="]')).toBeNull();
+      }
+      await act(async () => button(host, m.facts_submit()).click());
+      expect(commands).toHaveLength(scenario === 'partial' ? 3 : 4);
+      expect(commands.slice(0, 2)).toEqual(submitted);
+      for (const command of commands.slice(2)) {
+        const original = commands.find((item) => item.statement.property.id === command.statement.property.id)!;
+        expect(command).toBe(original);
+        expect(command).toEqual(
+          submitted.find((item) => item.statement.property.id === command.statement.property.id)!,
+        );
+      }
+      if (scenario === 'lost-response') expect(host.textContent).toContain(m.facts_results({ count: 2 }));
+      for (const slot of [fixture.date, fixture.language]) {
+        const writes = slot.calls.filter((call) => call.method === 'POST');
+        expect(writes).toHaveLength(scenario === 'partial' && slot === fixture.date ? 1 : 2);
+        const original = commands.find((command) => command.statement.property.id === slot.address.property)!;
+        for (const write of writes) {
+          expect(write.path).toBe(`/v1/subjects/${slot.id}/candidates`);
+          expect(write.authorization).toBe('Bearer fixture');
+          expect(write.session).toBe(original.session ?? null);
+          expect(write.key).toBe(original.key);
+          expect(write.body).toEqual({ statement: original.statement });
+        }
+        expect(slot.calls.filter((call) => call.method === 'GET')).toHaveLength(slot === fixture.date ? 3 : 0);
+        expect(slot.candidate.decision).toBeNull();
+      }
+      expect(read.public).toEqual(before);
+      expect(host.querySelector('a a, a button')).toBeNull();
+    }
+  });
+});

@@ -1,6 +1,7 @@
 import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useId, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
@@ -70,37 +71,56 @@ function SelectedFacts({ property, read, locale }: { property: string; read: Fac
   const o = { locale: locale as never };
   const selected = read.public.subject.statements[property] ?? [];
   return (
-    <section className="space-y-3 rounded-lg bg-muted/30 p-4">
-      <h4 className="text-sm font-medium">{m.candidate_current({}, o)}</h4>
+    <section className="min-w-0 space-y-3 [overflow-wrap:anywhere] [&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:items-center [&_a]:whitespace-normal [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring">
+      <ContentItemHeading level={4} className="text-sm font-semibold text-muted-foreground">
+        {m.candidate_current({}, o)}
+      </ContentItemHeading>
       {!selected.length && <p className="text-sm text-muted-foreground">{m.facts_no_value({}, o)}</p>}
-      {selected.map((statement, index) => (
-        <div key={statement.id} className="space-y-2">
-          <p className="text-sm font-medium">{m.facts_selected_value({ number: index + 1 }, o)}</p>
-          <PartValue part={statement} read={read} locale={locale} />
-          {statement.qualifiers.map((part, index) => (
-            <div key={index} className="text-sm">
-              <span className="text-muted-foreground">
-                {pageText(read.release.properties[part.property.id]?.labels, locale).text ||
-                  m.subject_value_unlabelled({}, o)}
-                :{' '}
-              </span>
-              <PartValue part={part} read={read} locale={locale} />
-            </div>
-          ))}
-          {statement.references.map((reference, index) => (
-            <div key={index} className="border-s-2 border-border ps-3 text-sm">
-              <p className="text-muted-foreground">
-                {m.correction_references({}, o)} {index + 1}
-              </p>
-              {reference.parts.map((part, partIndex) => (
-                <div key={partIndex}>
-                  <PartValue part={part} read={read} locale={locale} />
-                </div>
-              ))}
-            </div>
-          ))}
-        </div>
-      ))}
+      <ol className="min-w-0 space-y-3">
+        {selected.map((statement, index) => (
+          <li key={statement.id} className="min-w-0">
+            <ContentItemFrame as="div" className="min-w-0 space-y-3 rounded-xl bg-muted/30 p-4">
+              <p className="text-sm font-semibold">{m.facts_selected_value({ number: index + 1 }, o)}</p>
+              <div className="min-w-0 text-base leading-relaxed">
+                <PartValue part={statement} read={read} locale={locale} />
+              </div>
+              <dl className="min-w-0 space-y-2 text-sm">
+                {statement.qualifiers.map((part, index) => (
+                  <div key={index} className="min-w-0 space-y-1">
+                    <dt
+                      className="text-muted-foreground"
+                      lang={pageText(read.release.properties[part.property.id]?.labels, locale).lang}
+                    >
+                      {pageText(read.release.properties[part.property.id]?.labels, locale).text ||
+                        m.subject_value_unlabelled({}, o)}
+                      :{' '}
+                    </dt>
+                    <dd className="min-w-0">
+                      <PartValue part={part} read={read} locale={locale} />
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              <ol className="min-w-0 space-y-3">
+                {statement.references.map((reference, index) => (
+                  <li key={index} className="min-w-0 space-y-1 border-s-2 border-border ps-3 text-sm">
+                    <p className="text-muted-foreground">
+                      {m.correction_references({}, o)} {index + 1}
+                    </p>
+                    <ul className="min-w-0 space-y-1">
+                      {reference.parts.map((part, partIndex) => (
+                        <li key={partIndex} className="min-w-0">
+                          <PartValue part={part} read={read} locale={locale} />
+                        </li>
+                      ))}
+                    </ul>
+                  </li>
+                ))}
+              </ol>
+            </ContentItemFrame>
+          </li>
+        ))}
+      </ol>
     </section>
   );
 }
@@ -136,143 +156,164 @@ function FactField({
   const selected = read.public.subject.statements[property] ?? [];
   const [source, setSource] = useState(selected.length === 1 ? selected[0]!.id : '');
   const sourceId = useId();
+  const includeId = useId();
   const sourceIndex = draft?.source ? selected.findIndex((item) => item.id === draft.source) : -1;
   const locked = !!draft && factLocked(draft);
   return (
-    <section aria-label={label} className="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-5">
-      <div lang={pageText(definition.labels, locale).lang}>
-        <h3 className="text-lg font-semibold">{label}</h3>
-      </div>
-      <p className="text-sm text-muted-foreground">
-        {definition.multivalued ? m.correction_multiple({}, o) : m.correction_single({}, o)}
-      </p>
-      <SelectedFacts property={property} read={read} locale={locale} />
-      {!draft ? (
-        <div className="flex min-w-0 flex-col gap-3">
-          {!!selected.length && (
-            <Field className="w-full min-w-0">
-              <FieldLabel htmlFor={sourceId}>{m.facts_choose_value({}, o)}</FieldLabel>
-              <NativeSelect
-                id={sourceId}
-                className="w-full [&>select]:min-h-11"
-                aria-label={m.facts_choose_value({}, o)}
-                value={source}
-                onChange={(event) => setSource(event.target.value)}
-              >
-                <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
-                {selected.map((statement, index) => (
-                  <NativeSelectOption key={statement.id} value={statement.id}>
-                    {m.facts_selected_value({ number: index + 1 }, o)}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-            </Field>
-          )}
-          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
-            <Button
-              type="button"
-              variant="outline"
-              className="h-auto min-h-11 max-w-full whitespace-normal"
-              disabled={busy || !canStage || (!!selected.length && !source)}
-              onClick={() => onStage(source || null)}
-            >
-              {m.facts_edit_field({}, o)}
-            </Button>
-            {!!selected.length && definition.multivalued && (
+    <section aria-label={label} className="min-w-0 [overflow-wrap:anywhere]">
+      <ContentItemFrame as="div" className="min-w-0 space-y-4 rounded-xl bg-card p-4 sm:p-5">
+        <div lang={pageText(definition.labels, locale).lang}>
+          <ContentItemHeading level={3} className="text-lg font-semibold">
+            {label}
+          </ContentItemHeading>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          {definition.multivalued ? m.correction_multiple({}, o) : m.correction_single({}, o)}
+        </p>
+        <SelectedFacts property={property} read={read} locale={locale} />
+        {!draft ? (
+          <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+            {!!selected.length && (
+              <Field className="w-full min-w-0">
+                <FieldLabel className="min-w-0 flex-wrap [overflow-wrap:anywhere]" htmlFor={sourceId}>
+                  {m.facts_choose_value({}, o)}
+                </FieldLabel>
+                <NativeSelect
+                  id={sourceId}
+                  className="w-full min-w-0 [&>select]:min-h-11"
+                  aria-label={m.facts_choose_value({}, o)}
+                  value={source}
+                  onChange={(event) => setSource(event.target.value)}
+                >
+                  <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
+                  {selected.map((statement, index) => (
+                    <NativeSelectOption key={statement.id} value={statement.id}>
+                      {m.facts_selected_value({ number: index + 1 }, o)}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </Field>
+            )}
+            <div className="flex min-w-0 flex-col flex-wrap gap-2 sm:flex-row sm:flex-wrap">
               <Button
                 type="button"
                 variant="outline"
-                className="h-auto min-h-11 max-w-full whitespace-normal"
-                disabled={busy || !canStage}
-                onClick={() => onStage(null)}
+                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
+                disabled={busy || !canStage || (!!selected.length && !source)}
+                onClick={() => onStage(source || null)}
               >
-                {m.facts_add_value({}, o)}
+                {m.facts_edit_field({}, o)}
               </Button>
-            )}
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          <p className="text-sm font-medium">
-            {m.facts_private({}, o)}
-            {draft.source && (
-              <>
-                {' '}
-                ·{' '}
-                {sourceIndex >= 0 ? m.facts_selected_value({ number: sourceIndex + 1 }, o) : m.correction_stale({}, o)}
-              </>
-            )}
-          </p>
-          {!draft.result?.ok && (
-            <fieldset disabled={busy || locked} className="space-y-5">
-              <StatementFields
-                heading="h4"
-                draft={draft.statement}
-                current={{ ...read, source: selected.find((item) => item.id === draft.source) ?? null }}
-                locale={locale}
-                change={(statement) => onChange({ ...draft, statement, command: undefined, result: undefined })}
-                guideReturn={`${href}/edit`}
-                {...(editorHref ? { guideReturn: editorHref } : {})}
-              />
-            </fieldset>
-          )}
-          {!draft.result?.ok && (
-            <Field orientation="horizontal">
-              <Checkbox
-                id={`include-${property}`}
-                checked={draft.included}
-                disabled={busy || locked}
-                onCheckedChange={(included) => onChange({ ...draft, included: included === true })}
-              />
-              <FieldLabel htmlFor={`include-${property}`}>{m.facts_include({}, o)}</FieldLabel>
-            </Field>
-          )}
-          {!factChanged(draft) && <p className="text-sm text-muted-foreground">{m.facts_unchanged({}, o)}</p>}
-          {draft.result && (
-            <div className="space-y-3" role="status">
-              {draft.result.ok ? (
-                <>
-                  <p>{m.correction_proposed({}, o)}</p>
-                  <a
-                    href={`${href}/edit?${new URLSearchParams({ reviewProperty: property, candidate: draft.result.candidate })}`}
-                    {...(editorHref
-                      ? {
-                          href: `${editorHref}?${new URLSearchParams({ reviewProperty: property, candidate: draft.result.candidate })}`,
-                        }
-                      : {})}
-                    className={buttonVariants({
-                      variant: 'outline',
-                      className: 'h-auto min-h-11 max-w-full whitespace-normal',
-                    })}
-                    onClick={(event) => {
-                      if (event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
-                        event.preventDefault();
-                        if (draft.result?.ok)
-                          onReview({ property, candidate: draft.result.candidate, session: draft.result.session });
-                      }
-                    }}
-                  >
-                    {m.correction_review({}, o)}
-                  </a>
-                </>
-              ) : (
-                <>
-                  {draft.result.reason === 'uncertain' ? (
-                    <p>{m.facts_uncertain({}, o)}</p>
-                  ) : (
-                    <EditorFailure reason={draft.result.reason} locale={locale} />
-                  )}
-                  {draft.result.reason === 'invalid' && (
-                    <p>
-                      {m.correction_invalid_part({}, o)} {label}
-                    </p>
-                  )}
-                </>
+              {!!selected.length && definition.multivalued && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
+                  disabled={busy || !canStage}
+                  onClick={() => onStage(null)}
+                >
+                  {m.facts_add_value({}, o)}
+                </Button>
               )}
             </div>
-          )}
-        </div>
-      )}
+          </div>
+        ) : (
+          <div className="min-w-0 space-y-4 border-t border-border pt-4">
+            <ContentItemHeading level={4} className="text-base font-semibold">
+              {m.facts_private({}, o)}
+              {draft.source && (
+                <>
+                  {' '}
+                  ·{' '}
+                  {sourceIndex >= 0
+                    ? m.facts_selected_value({ number: sourceIndex + 1 }, o)
+                    : m.correction_stale({}, o)}
+                </>
+              )}
+            </ContentItemHeading>
+            {!draft.result?.ok && (
+              <fieldset disabled={busy || locked} className="space-y-5">
+                <StatementFields
+                  heading="h4"
+                  draft={draft.statement}
+                  current={{ ...read, source: selected.find((item) => item.id === draft.source) ?? null }}
+                  locale={locale}
+                  change={(statement) => onChange({ ...draft, statement, command: undefined, result: undefined })}
+                  guideReturn={`${href}/edit`}
+                  {...(editorHref ? { guideReturn: editorHref } : {})}
+                />
+              </fieldset>
+            )}
+            {!draft.result?.ok && (
+              <Field orientation="horizontal" className="min-w-0">
+                <Checkbox
+                  id={includeId}
+                  className="size-11 after:inset-0"
+                  checked={draft.included}
+                  disabled={busy || locked}
+                  onCheckedChange={(included) => onChange({ ...draft, included: included === true })}
+                />
+                <FieldLabel
+                  className="min-h-11 min-w-0 items-center whitespace-normal [overflow-wrap:anywhere]"
+                  htmlFor={includeId}
+                >
+                  {m.facts_include({}, o)}
+                </FieldLabel>
+              </Field>
+            )}
+            {!factChanged(draft) && <p className="text-sm text-muted-foreground">{m.facts_unchanged({}, o)}</p>}
+            {draft.result && (
+              <ContentItemFrame as="div" className="min-w-0 space-y-3 rounded-xl bg-muted/30 p-4" role="status">
+                {draft.result.ok ? (
+                  <>
+                    <p className="font-semibold">{m.correction_proposed({}, o)}</p>
+                    <a
+                      href={`${href}/edit?${new URLSearchParams({ reviewProperty: property, candidate: draft.result.candidate })}`}
+                      {...(editorHref
+                        ? {
+                            href: `${editorHref}?${new URLSearchParams({ reviewProperty: property, candidate: draft.result.candidate })}`,
+                          }
+                        : {})}
+                      className={buttonVariants({
+                        variant: 'outline',
+                        className: 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2',
+                      })}
+                      onClick={(event) => {
+                        if (
+                          event.button === 0 &&
+                          !event.metaKey &&
+                          !event.ctrlKey &&
+                          !event.shiftKey &&
+                          !event.altKey
+                        ) {
+                          event.preventDefault();
+                          if (draft.result?.ok)
+                            onReview({ property, candidate: draft.result.candidate, session: draft.result.session });
+                        }
+                      }}
+                    >
+                      {m.correction_review({}, o)}
+                    </a>
+                  </>
+                ) : (
+                  <>
+                    {draft.result.reason === 'uncertain' ? (
+                      <p>{m.facts_uncertain({}, o)}</p>
+                    ) : (
+                      <EditorFailure reason={draft.result.reason} locale={locale} />
+                    )}
+                    {draft.result.reason === 'invalid' && (
+                      <p>
+                        {m.correction_invalid_part({}, o)} {label}
+                      </p>
+                    )}
+                  </>
+                )}
+              </ContentItemFrame>
+            )}
+          </div>
+        )}
+      </ContentItemFrame>
     </section>
   );
 }
@@ -379,7 +420,10 @@ function SubjectFactsLive({
   }
   const groupLabels = { text: m.facts_text({}, o), time: m.facts_dates({}, o), quantity: m.facts_quantities({}, o) };
   return (
-    <article className="mx-auto w-full max-w-4xl space-y-6 p-4 sm:p-6" aria-busy={busy}>
+    <article
+      className="mx-auto w-full min-w-0 max-w-4xl space-y-6 p-4 sm:p-6 [overflow-wrap:anywhere]"
+      aria-busy={busy}
+    >
       {!embedded && (
         <header className="space-y-3">
           {profile ? (
@@ -390,7 +434,10 @@ function SubjectFactsLive({
           {subject && (
             <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
               <span lang={pageText(subject.labels, locale).lang}>
-                <a href={href} className="underline underline-offset-4">
+                <a
+                  href={href}
+                  className="inline-flex min-h-11 min-w-11 max-w-full items-center underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                >
                   {label}
                 </a>
               </span>
@@ -424,7 +471,10 @@ function SubjectFactsLive({
       {!read.ok && <EditorFailure reason={read.reason} locale={locale} />}
       {current && (
         <>
-          <nav aria-label={m.facts_other_editors({}, o)} className="flex flex-wrap gap-3">
+          <nav
+            aria-label={m.facts_other_editors({}, o)}
+            className="flex min-w-0 flex-wrap gap-3 [&_a]:h-auto [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:whitespace-normal [&_a]:break-words [&_a]:py-2"
+          >
             <a className={buttonVariants({ variant: 'outline' })} href={`${href}/terms`}>
               {m.catalogue_terms_title({}, o)}
             </a>
@@ -455,7 +505,9 @@ function SubjectFactsLive({
                 .filter(([, properties]) => properties.length)
                 .map(([group, properties]) => (
                   <section key={group} className="space-y-4">
-                    <h2 className="text-xl font-semibold">{groupLabels[group as keyof typeof groupLabels]}</h2>
+                    <ContentItemHeading level={2} className="text-xl font-semibold">
+                      {groupLabels[group as keyof typeof groupLabels]}
+                    </ContentItemHeading>
                     {properties.map((property) => (
                       <FactField
                         key={property}
@@ -478,19 +530,21 @@ function SubjectFactsLive({
                     ))}
                   </section>
                 ))}
-              <div className="space-y-3 rounded-xl border border-border bg-card p-4">
-                <p>{m.facts_selection({ count: changed.length, limit: factLimit }, o)}</p>
+              <ContentItemFrame as="div" className="min-w-0 space-y-3 rounded-xl bg-card p-4 sm:p-5">
+                <ContentItemHeading level={2} className="text-lg font-semibold">
+                  {m.facts_selection({ count: changed.length, limit: factLimit }, o)}
+                </ContentItemHeading>
                 <p className="text-sm text-muted-foreground">{m.facts_separate_results({}, o)}</p>
                 {!!success && <p role="status">{m.facts_results({ count: success }, o)}</p>}
                 {busy && <p role="status">{m.correction_saving({}, o)}</p>}
                 <Button
                   type="submit"
-                  className="h-auto min-h-11 max-w-full whitespace-normal"
+                  className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
                   disabled={busy || !changed.length}
                 >
                   {m.facts_submit({}, o)}
                 </Button>
-              </div>
+              </ContentItemFrame>
             </fieldset>
           </form>
           {profileRelations}
@@ -509,7 +563,13 @@ function SubjectFactsLive({
           )}
         </>
       )}
-      <Button type="button" variant="outline" disabled={busy} onClick={() => void reload()}>
+      <Button
+        type="button"
+        variant="outline"
+        className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
+        disabled={busy}
+        onClick={() => void reload()}
+      >
         {m.correction_reload({}, o)}
       </Button>
     </article>
