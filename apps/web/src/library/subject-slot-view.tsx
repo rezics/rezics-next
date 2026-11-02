@@ -4,6 +4,7 @@ import { EntryUndoForm, EntryRemoveForm, EntryRestoreFeedback } from './entry-un
 import { Exposure, operationIsAdmitted, useOperation } from '../kernel/exposure';
 import { undoToast } from '@rezics/ui/undo-toast';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { ContentItem } from '@rezics/ui/content-item';
 import { useQueryClient } from '@tanstack/react-query';
 import { Menu } from '@rezics/ui/menu';
@@ -59,6 +60,13 @@ type SubjectSlotProps = {
 const buttonClass = buttonVariants({ variant: 'outline' });
 const primaryClass = buttonVariants({ variant: 'default' });
 const linkClass = 'text-sm text-primary underline-offset-4 hover:underline';
+const controlFocusClass = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const labelButtonClass = cn(
+  buttonClass,
+  'h-auto min-h-[44px] min-w-0 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere]',
+  controlFocusClass,
+);
+const labelChoiceClass = `min-h-[44px] w-full min-w-0 rounded px-2 py-2 text-start text-sm whitespace-normal [overflow-wrap:anywhere] hover:bg-muted disabled:opacity-50 ${controlFocusClass}`;
 const removeValue = 'remove';
 const otherStateValue = '__library_other__';
 const subscribe = () => () => {};
@@ -1129,12 +1137,12 @@ function SubjectLibrarySlotView({
                       {collections.map((collection) => (
                         <li key={collection.id}>
                           <button
-                            className={`${linkClass} inline-flex min-h-9 w-full items-center justify-between gap-2 rounded-md px-2 text-start hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60`}
+                            className={`${linkClass} inline-flex min-h-[44px] w-full min-w-0 items-center justify-between gap-2 rounded-md px-2 py-2 text-start whitespace-normal hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60 ${controlFocusClass}`}
                             type="button"
                             disabled={!hydrated}
                             onClick={() => void addToCollection(collection.id)}
                           >
-                            <span className="truncate">{collection.title}</span>
+                            <span className="min-w-0 [overflow-wrap:anywhere]">{collection.title}</span>
                             <span className="shrink-0 text-muted-foreground">{collection.memberCount}</span>
                           </button>
                         </li>
@@ -1146,7 +1154,7 @@ function SubjectLibrarySlotView({
                 ) : (
                   <form method="get" action={action} onSubmit={(event) => void loadCollections(event)}>
                     <input type="hidden" name="slot" value="collections" />
-                    <button className={buttonClass} type="submit">
+                    <button className={labelButtonClass} type="submit">
                       {m.library_subject_load_collections()}
                     </button>
                   </form>
@@ -1238,18 +1246,18 @@ function SubjectLibrarySlotView({
       ) : null}
       {data.session === 'signed-in' && data.labels !== null ? (
         <Exposure operation="library_label.assignment_list">
-          <div data-subject-labels className="basis-full space-y-2">
+          <div data-subject-labels className="min-w-0 max-w-full basis-full space-y-2">
             {labels.length ? (
               <ul className="flex flex-wrap items-center gap-2">
                 {labels.map((label) => (
                   <li
                     key={label.id}
                     data-subject-label-chip
-                    className="inline-flex min-w-0 items-center gap-1 rounded-full border bg-muted/60 px-3 py-1 text-sm"
+                    className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-full border bg-muted/60 px-3 py-1 text-sm"
                   >
                     <a
                       href={`/${encodeURIComponent(locale)}/library?label=${encodeURIComponent(label.labelId)}`}
-                      className="max-w-48 truncate text-primary underline-offset-4 hover:underline"
+                      className={`inline-flex min-h-[44px] min-w-[44px] items-center rounded-sm py-2 text-primary underline-offset-4 [overflow-wrap:anywhere] hover:underline ${controlFocusClass}`}
                     >
                       {label.name}
                     </a>
@@ -1259,7 +1267,7 @@ function SubjectLibrarySlotView({
                         method="post"
                         action={action}
                         onSubmit={(event) => onRemoveForm(event, label)}
-                        className="m-0"
+                        className="m-0 shrink-0"
                       >
                         <input type="hidden" name="intent" value="unassign" />
                         <input type="hidden" name="subjectId" value={subject.id} />
@@ -1272,7 +1280,7 @@ function SubjectLibrarySlotView({
                           type="submit"
                           disabled={hydrated && labelPending}
                           aria-label={m.library_subject_label_remove({ name: label.name })}
-                          className="rounded-full px-1 text-muted-foreground hover:text-foreground disabled:opacity-50"
+                          className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full px-2 text-muted-foreground hover:text-foreground disabled:opacity-50 ${controlFocusClass}`}
                         >
                           ×
                         </button>
@@ -1303,7 +1311,7 @@ function SubjectLibrarySlotView({
                   ref={labelPickerTrigger}
                   role="button"
                   aria-expanded={hydrated ? labelPickerOpen : undefined}
-                  className={`${buttonClass} cursor-pointer list-none`}
+                  className={`${labelButtonClass} cursor-pointer list-none`}
                 >
                   {m.library_subject_label_add()}
                 </summary>
@@ -1348,13 +1356,13 @@ function SubjectLibrarySlotView({
                     </label>
                     <div className="flex flex-wrap gap-2">
                       <Exposure operation="library_label.create">
-                        <button type="submit" disabled={hydrated && labelPending} className={buttonClass}>
+                        <button type="submit" disabled={hydrated && labelPending} className={labelButtonClass}>
                           {m.library_subject_label_add()}
                         </button>
                       </Exposure>
                       <button
                         type="button"
-                        className={buttonClass}
+                        className={labelButtonClass}
                         onClick={() => {
                           if (!labelLifetime.current()) return;
                           searchOrigin.current = {
@@ -1404,7 +1412,7 @@ function SubjectLibrarySlotView({
                                 type="button"
                                 disabled={hydrated && labelPending}
                                 onClick={() => void writeLabel({ intent: 'assign', label: choice })}
-                                className="w-full rounded px-2 py-1 text-start text-sm hover:bg-muted disabled:opacity-50"
+                                className={labelChoiceClass}
                               >
                                 {choice.name}
                               </button>
@@ -1421,7 +1429,7 @@ function SubjectLibrarySlotView({
                                 type="button"
                                 disabled={hydrated && labelPending}
                                 onClick={() => void writeLabel({ intent: 'create-and-assign', name: labelQuery })}
-                                className="w-full rounded px-2 py-1 text-start text-sm font-medium text-primary hover:bg-muted disabled:opacity-50"
+                                className={`${labelChoiceClass} font-medium text-primary`}
                               >
                                 {m.library_subject_label_create({ name: normalizeLibraryLabelName(labelQuery) })}
                               </button>
@@ -1451,7 +1459,7 @@ function SubjectLibrarySlotView({
             {uncertainLabel.current ? (
               <button
                 type="button"
-                className={buttonClass}
+                className={labelButtonClass}
                 disabled={labelPending}
                 onClick={() => {
                   if (labelLifetime.current() && uncertainLabel.current)
@@ -1466,7 +1474,7 @@ function SubjectLibrarySlotView({
                 data-label-undo
                 method="post"
                 action={action}
-                className="flex items-center gap-2 text-sm"
+                className="flex flex-wrap items-center gap-2 text-sm"
                 onSubmit={(event) => {
                   if (!hydrated) return;
                   event.preventDefault();
@@ -1496,7 +1504,10 @@ function SubjectLibrarySlotView({
                 <input type="hidden" name="revision" value={labelUndo.revision} />
                 <input type="hidden" name="csrf_token" value={data.csrfToken ?? ''} />
                 <span>{m.library_subject_label_removed_status()}</span>
-                <button type="submit" className={linkClass}>
+                <button
+                  type="submit"
+                  className={`${linkClass} min-h-[44px] min-w-[44px] rounded px-2 py-2 ${controlFocusClass}`}
+                >
                   {m.library_subject_label_undo()}
                 </button>
               </form>
