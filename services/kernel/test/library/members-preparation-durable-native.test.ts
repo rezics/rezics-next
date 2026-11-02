@@ -1,7 +1,9 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { runOperationalTransaction } from '../../src/command/operational.ts';
+import canonicalize from 'canonicalize';
+import { createHash } from 'node:crypto';
+import { runOperationalTransaction, type OperationalTransaction } from '../../src/command/operational.ts';
 import type { PreparationLocator } from '../../src/library/members-preparation.ts';
-import { partitionOf } from '../../src/route/route.ts';
+import { newId, partitionOf } from '../../src/route/route.ts';
 import {
   fundOperationalWorkOriginal,
   OPERATIONAL_WORK_LOCAL_DECLARATION,
@@ -25,6 +27,90 @@ beforeAll(async () => {
 }, 120_000);
 afterAll(async () => {
   await native?.close();
+});
+
+function step<T>(locator: PreparationLocator, body: (tx: OperationalTransaction) => Promise<T>) {
+  return runOperationalTransaction(
+    native.db.pool,
+    {
+      mode: 'work-step',
+      partition: partitionOf(locator.route),
+      kind: 'library.membersPreparation.step',
+      accounts: [locator.ownerAccountId],
+      workClient: native.workClient,
+    },
+    body,
+  );
+}
+
+test('retained definitions recover exact immutable meaning without granting Source or result authority', async () => {
+  const fixture = await native.fixture();
+  const selected = definition();
+  const reserved = await fixture.store.reserve(fixture.actor, fixture.collectionId, [
+    selected,
+    { ...selected, sort: 'ordinal' },
+  ]);
+  expect(await fixture.store.readRetainedDefinition({} as OperationalTransaction, reserved.episodes[0]!.locator)).toBeNull();
+  for (const episode of reserved.episodes) {
+    const locator = episode.locator;
+    let ended!: OperationalTransaction;
+    await step(locator, async (tx) => {
+      ended = tx;
+      const recovered = await fixture.store.readRetainedDefinition(tx, locator);
+      expect(recovered).toEqual({ ...selected, sort: episode === reserved.episodes[0] ? 'id' : 'ordinal' });
+      await expect(fixture.store.readWorkDefinition(tx, locator)).rejects.toMatchObject({
+        code: 'dependency_unavailable',
+      });
+      expect(await fixture.store.readRetainedDefinition(tx, { ...locator, episodeId: newId(locator.route) })).toBeNull();
+      expect(await fixture.store.readRetainedDefinition(tx, { ...locator, collectionId: newId(locator.route) })).toBeNull();
+      // A cached complete flag without final current Source authority cannot produce a ready result.
+      await tx.query('UPDATE library.members_preparation SET complete=true WHERE episode_id=$1', [locator.episodeId]);
+      await expect(fixture.store.readWorkDefinition(tx, locator)).rejects.toMatchObject({
+        code: 'dependency_unavailable',
+      });
+    });
+    expect(await fixture.store.readRetainedDefinition(ended, locator)).toBeNull();
+  }
+});
+
+test('retained recovery rejects digest, canonical, namespace and immutable-release substitutions and expires honestly', async () => {
+  const fixture = await native.fixture();
+  const reserved = await fixture.store.reserve(fixture.actor, fixture.collectionId, [definition()]);
+  const locator = reserved.episodes[0]!.locator;
+  const header = (await native.rows(fixture.owner))[0]!;
+  const basis = JSON.parse(header.canonical_basis);
+  const mutations = [
+    [basis, false],
+    [[...basis, 'extra'], true],
+    [[2, ...basis.slice(1)], true],
+    [[basis[0], newId(locator.route), ...basis.slice(2)], true],
+    [[...basis.slice(0, 2), newId(locator.route), ...basis.slice(3)], true],
+    [[...basis.slice(0, 3), { unknown: true }, ...basis.slice(4)], true],
+  ] as const;
+  await step(locator, async (tx) => {
+    for (const [value, matchingDigest] of mutations) {
+      const bytes = canonicalize(value)!;
+      await tx.query('UPDATE library.members_preparation SET canonical_basis=$2,basis_digest=$3 WHERE episode_id=$1', [
+        locator.episodeId, bytes, matchingDigest ? createHash('sha256').update(bytes).digest() : Buffer.alloc(32),
+      ]);
+      await expect(fixture.store.readRetainedDefinition(tx, locator)).rejects.toMatchObject({ code: 'unsupported_query' });
+    }
+    const missingRelease = canonicalize([...basis.slice(0, 5), `sha256:${'0'.repeat(64)}`])!;
+    await tx.query('UPDATE library.members_preparation SET canonical_basis=$2,basis_digest=$3 WHERE episode_id=$1', [
+      locator.episodeId, missingRelease, createHash('sha256').update(missingRelease).digest(),
+    ]);
+    await expect(fixture.store.readRetainedDefinition(tx, locator)).rejects.toMatchObject({ code: 'dependency_unavailable' });
+    const bytes = ` ${header.canonical_basis}`;
+    await tx.query('UPDATE library.members_preparation SET canonical_basis=$2,basis_digest=$3 WHERE episode_id=$1', [
+      locator.episodeId, bytes, createHash('sha256').update(bytes).digest(),
+    ]);
+    await expect(fixture.store.readRetainedDefinition(tx, locator)).rejects.toMatchObject({ code: 'unsupported_query' });
+    await tx.query('UPDATE library.members_preparation SET canonical_basis=$2,basis_digest=$3,last_read_at=$4 WHERE episode_id=$1', [
+      locator.episodeId, header.canonical_basis, header.basis_digest, new Date(0),
+    ]);
+    expect(await fixture.store.readRetainedDefinition(tx, locator)).toBeNull();
+    expect(await fixture.store.readWorkDefinition(tx, locator)).toBeNull();
+  });
 });
 
 test('one funded History child registers the real native reservation and transfers committed receiving and readback work', async () => {

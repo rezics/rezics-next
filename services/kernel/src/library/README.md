@@ -2638,6 +2638,11 @@ physical execution authority. Receiving remains pending Source currentness, resu
 retirement cannot claim Source completion. Source capture, native completion, result reads and deletion cleanup
 must be connected before prepared/direct dispatch is mounted.
 
+`MembersPreparation.readRetainedDefinition` now recovers the exact owner/Collection-bound canonical definition
+after same-client native episode admission and immutable-release validation. It supplies data only. Obsolete
+episodes return null; valid live episodes still make `readWorkDefinition` unavailable until current Source
+binding is implemented. A retained complete flag supplies no authority.
+
 ### Retained Kind controls
 
 Collection presentation no longer invokes automatic Kind admission, consent, raw input, Type evidence or
