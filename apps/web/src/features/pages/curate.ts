@@ -169,7 +169,7 @@ export function resetCompanionView(
     throw new TypeError('Unsupported companion view');
 
   function resetBody(body: TemplateBody): TemplateBody {
-    if (!('views' in body) || body.views[view] === undefined) return body;
+    if (!body.views || body.views[view] === undefined) return body;
     const views: Partial<ViewDocuments> = { ...body.views };
     delete views[view];
     const overview = views.overview;
@@ -191,7 +191,7 @@ export function resetCompanionView(
     }
     case 'base': {
       const entry = profile.bases.find((item) => item.base === template.key);
-      if (!entry || !('views' in entry) || entry.views[view] === undefined) return profile;
+      if (!entry?.views || entry.views[view] === undefined) return profile;
       return {
         ...profile,
         bases: replace(profile.bases, (item) => item.base, template.key, {
@@ -202,7 +202,7 @@ export function resetCompanionView(
     }
     case 'type': {
       const entry = profile.types.find((item) => item.type === template.key);
-      if (!entry || !('views' in entry) || entry.views[view] === undefined) return profile;
+      if (!entry?.views || entry.views[view] === undefined) return profile;
       return {
         ...profile,
         types: replace(profile.types, (item) => item.type, template.key, {

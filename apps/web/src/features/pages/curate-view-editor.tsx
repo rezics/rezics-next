@@ -751,7 +751,7 @@ function AdmittedPresentationViewEditor({
       return {
         ...value,
         profile: resetCompanionView(value.profile, template, view),
-        selection: { template, view: 'overview' },
+        selection: { template, view: 'overview' as const },
         editors,
       };
     });
