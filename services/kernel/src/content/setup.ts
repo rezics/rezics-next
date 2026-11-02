@@ -5,7 +5,7 @@ import type { Access, AccountActor } from '../request/access.ts';
 import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import readGlobalContext from '../semantic/setup-read-global.sql';
 
-/** Install Global subject reaction standing once, without restoring revoked grants. */
+/** Install Global subject reaction and report standing once, without restoring revoked grants. */
 export async function setupContent(pool: Pool): Promise<void> {
   const actor: AccountActor = {
     kind: 'account',
@@ -46,5 +46,12 @@ export async function setupContent(pool: Pool): Promise<void> {
     authority,
     context,
     actions: ['reaction:set'],
+  });
+  await installStandingParentGrant({
+    access,
+    parent,
+    authority,
+    context: { ...context, actor: { ...actor, accountId: '00000000-0000-8000-8000-000000000003' } },
+    actions: ['report:create'],
   });
 }

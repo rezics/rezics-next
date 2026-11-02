@@ -10,6 +10,8 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import read from './read-report.sql';
 import { reportBoardPlacement } from './board-report-candidates.ts';
 import boardUpsert from './board-report-upsert.sql';
+import catalogueUpsert from './catalogue-report-upsert.sql';
+import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import { REPORT_EVENTS, type ReportEventData } from './report-events.ts';
 import upsert from './upsert-report-target.sql';
 
@@ -123,6 +125,28 @@ export async function applyReportEffect(pool: Pool, event: CloudEvent): Promise<
     if (!(error instanceof AlreadyProjected)) throw error;
   }
   // Also runs after exact-target replay: a crash between the two partition writes is repairable.
+  if (report.targetKind === 'subject') {
+    await runCommand(pool, { partition: partitionOf(0), deadline }, async (tx) => {
+      const added = await catalogueUpsert.run(tx, {
+        report_route: reportRoute,
+        report_id: data.reportId,
+        subject_id: report.targetId,
+        created_at: report.createdAt,
+      });
+      if (!added) return noEffect(null);
+      return {
+        value: null,
+        events: [
+          {
+            type: 'com.rezics.content.catalogue-report.projected.v1',
+            subject: GLOBAL_CONTEXT,
+            data: { reportId: data.reportId },
+          },
+        ],
+      };
+    });
+    return;
+  }
   await projectBoardCandidate(
     pool,
     { kind: report.targetKind, id: report.targetId },

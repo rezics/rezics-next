@@ -5,6 +5,7 @@ import { customMethod } from '../http/custom-method.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, SESSION_HEADER } from '../http/request.ts';
+import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import { routeOf } from '../route/route.ts';
 import type { documentRoutes } from './document-routes.ts';
 import { ContentForbiddenError, ContentNotFoundError as CommandNotFoundError } from './commands.ts';
@@ -15,6 +16,7 @@ import { parseReportBody, reportRequestContext, requireReportInspection } from '
 import {
   createReport,
   listSelectedTargetReports,
+  listCatalogueReports,
   readReport,
   reportReadView,
   ReportProofRequiredError,
@@ -25,6 +27,8 @@ import {
 } from './reports.ts';
 import {
   ReportPageQuerySchema,
+  CatalogueReportPageQuerySchema,
+  CatalogueReportPageResponseSchema,
   ReportReceiptSchema,
   ReportInputSchema,
   ReportPageResponseSchema,
@@ -147,7 +151,7 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
         },
         detail: {
           operationId: 'report.create',
-          'x-resource-types': ['content.board', 'content.thread', 'content.post'],
+          'x-resource-types': ['content.board', 'content.thread', 'content.post', 'semantic.subject'],
           'x-exposure': 'public',
           'x-action': 'report:create',
           'x-rate-limit': defineRateLimit({ family: 'report', units: 1 }),
@@ -255,7 +259,7 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
       );
     },
   );
-  return thread.get(
+  const post = thread.get(
     '/v1/posts/:id/reports',
     {
       ...listOptions,
@@ -279,33 +283,92 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
     },
   );
 
+  const subject = post.get(
+    '/v1/subjects/:id/reports',
+    {
+      ...listOptions,
+      query: CatalogueReportPageQuerySchema,
+      response: {
+        200: withHeaders(strictContentSchema(CatalogueReportPageResponseSchema), privateHeaders),
+        ...readFailures,
+      },
+      detail: {
+        operationId: 'subject_report.list',
+        'x-resource-types': ['semantic.subject'],
+        'x-exposure': 'public',
+        'x-action': 'moderation:read_reports',
+        security: [{ bearerAuth: [] }],
+      },
+    },
+    ({ params: { id }, query, actor, admission, job, session, set }) => {
+      set.headers['cache-control'] = 'private, no-store';
+      return list(
+        { kind: 'subject', id },
+        { actor, deadline: job.deadline },
+        query,
+        (operation) => admission.run('normal', job, operation),
+        session,
+      );
+    },
+  );
+  return subject.get(
+    '/v1/catalogue/reports',
+    {
+      query: CatalogueReportPageQuerySchema,
+      response: {
+        200: withHeaders(strictContentSchema(CatalogueReportPageResponseSchema), privateHeaders),
+        ...readFailures,
+      },
+      detail: {
+        operationId: 'catalogue_report.list',
+        'x-exposure': 'public',
+        'x-action': 'moderation:read_reports',
+        security: [{ bearerAuth: [] }],
+      },
+    },
+    ({ query, actor, admission, job, session, set }) => {
+      set.headers['cache-control'] = 'private, no-store';
+      return list(
+        { kind: 'catalogue', id: GLOBAL_CONTEXT },
+        { actor, deadline: job.deadline },
+        query,
+        (operation) => admission.run('normal', job, operation),
+        session,
+      );
+    },
+  );
+
   function list(
-    target: ReportTarget,
+    target: ReportTarget | { kind: 'catalogue'; id: string },
     context: Parameters<typeof listSelectedTargetReports>[2],
     query: { cursor?: string; limit?: number } & import('./reports.ts').ReportSelection,
     admit: <T>(operation: () => Promise<T>) => Promise<T>,
     session: { record: (value: ReturnType<typeof component>) => void },
   ) {
     existingId(target.id);
+    const authorityId = target.kind === 'subject' || target.kind === 'catalogue' ? GLOBAL_CONTEXT : target.id;
     return reportOperation(
       () =>
         admit(async () => {
-          await requireReportInspection(dependencies, target.id, context);
+          await requireReportInspection(dependencies, authorityId, context);
           let page;
           try {
-            page = await listSelectedTargetReports(
-              dependencies,
-              target,
-              context,
-              query.cursor,
-              query.limit ?? 20,
-              query,
-            );
+            page =
+              target.kind === 'catalogue'
+                ? await listCatalogueReports(dependencies, context, query.cursor, query.limit ?? 20, query)
+                : await listSelectedTargetReports(
+                    dependencies,
+                    target,
+                    context,
+                    query.cursor,
+                    query.limit ?? 20,
+                    query,
+                  );
           } catch (error) {
             if (query.cursor !== undefined && error instanceof TypeError) throw new ProblemError('invalid_cursor');
             throw error;
           }
-          await requireReportInspection(dependencies, target.id, context);
+          await requireReportInspection(dependencies, authorityId, context);
           session.record(component(page.anchor));
           return { reports: [...page.entries], next: page.nextCursor };
         }),

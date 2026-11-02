@@ -3,11 +3,17 @@ import { Type, type Static } from 'typebox';
 const UUID = Type.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
 
 export const REPORT_EVENTS = {
+  'com.rezics.content.catalogue-report.projected.v1': Type.Object({ reportId: UUID }, { additionalProperties: false }),
   'com.rezics.content.report.resolved.v1': Type.Object({ reportId: UUID }, { additionalProperties: false }),
   'com.rezics.content.report.created.v1': Type.Object(
     {
       reportId: UUID,
-      targetKind: Type.Union([Type.Literal('board'), Type.Literal('thread'), Type.Literal('post')]),
+      targetKind: Type.Union([
+        Type.Literal('board'),
+        Type.Literal('thread'),
+        Type.Literal('post'),
+        Type.Literal('subject'),
+      ]),
       targetId: UUID,
       revisionId: Type.Optional(UUID),
     },
@@ -16,7 +22,12 @@ export const REPORT_EVENTS = {
   'com.rezics.content.report-target.projected.v1': Type.Object(
     {
       reportId: UUID,
-      targetKind: Type.Union([Type.Literal('board'), Type.Literal('thread'), Type.Literal('post')]),
+      targetKind: Type.Union([
+        Type.Literal('board'),
+        Type.Literal('thread'),
+        Type.Literal('post'),
+        Type.Literal('subject'),
+      ]),
       targetId: UUID,
     },
     { additionalProperties: false },

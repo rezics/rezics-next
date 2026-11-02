@@ -245,6 +245,7 @@ export const EVENT_CLASSIFICATIONS = Object.freeze({
   'com.rezics.content.reaction.changed.v1': personal('actor'),
   'com.rezics.content.report-reporter.erased.v1': personal('reporter'),
   'com.rezics.content.report-reporter.projected.v1': personal('reporter'),
+  'com.rezics.content.catalogue-report.projected.v1': personal('reporter'),
   'com.rezics.content.report-target.projected.v1': personal('reporter', 'author', 'operator'),
   'com.rezics.content.report.created.v1': personal('reporter', 'author', 'operator'),
   'com.rezics.content.report.evidence-erased.v1': personal('reporter', 'author', 'operator'),

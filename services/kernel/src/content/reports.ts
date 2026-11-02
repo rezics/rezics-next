@@ -2,6 +2,7 @@ import { createHmac } from 'node:crypto';
 import type { Pool } from 'pg';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { createResourceAnonymousEligibility } from '../access/eligibility.ts';
+import { commandAccessContext } from '../access/command-admission.ts';
 import { resourceAuthorization } from '../access/resource-authorization.ts';
 import {
   authoritativeTimeValue,
@@ -19,10 +20,17 @@ import { discardConnection, withConnection } from '../database/pool.ts';
 import { readAccount } from '../access/account-data.ts';
 import { anonymousCommandTarget, anonymousRequestDigest, requestDigest } from '../http/request.ts';
 import { readPartition } from '../partition/partition.ts';
-import { accessCheck, type Access, type AccessClient, type Actor } from '../request/access.ts';
+import { accessCheck, type Access, type AccessClient, type AccessCheck, type Actor } from '../request/access.ts';
 import { anchorRoute, derivedId, partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
+import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
+import { globalContextAnchor } from '../semantic/context.ts';
+import { subjectReadEligibility } from '../semantic/eligibility.ts';
+import { readSubjectReference } from '../semantic/references.ts';
+import { SubjectRedirectError } from '../semantic/merges.ts';
+import subjectFacts from './read-report-subject.sql';
+import cataloguePage from './catalogue-report-page.sql';
 import insert from './insert-report.sql';
 import page from './page-target-reports.sql';
 import boardPage from './board-report-page.sql';
@@ -40,7 +48,14 @@ import type { Anchored, BoardId, Page, PostId, ReportId, RequestContext, Revisio
 export type ReportTarget =
   | Readonly<{ kind: 'board'; id: BoardId }>
   | Readonly<{ kind: 'thread'; id: ThreadId }>
-  | Readonly<{ kind: 'post'; id: PostId }>;
+  | Readonly<{ kind: 'post'; id: PostId }>
+  | Readonly<{ kind: 'subject'; id: string }>;
+type ReportScope = ReportTarget | Readonly<{ kind: 'catalogue'; id: string }>;
+export const CATALOGUE_REPORT_PAGE_LIMIT = 50;
+// Four independently current inspections per candidate, each with Global and Subject snapshots, plus report fill.
+export const SUBJECT_REPORT_INSPECTIONS_PER_CANDIDATE = 4;
+export const CATALOGUE_REPORT_SNAPSHOT_CEILING =
+  3 + CATALOGUE_REPORT_PAGE_LIMIT * (2 * SUBJECT_REPORT_INSPECTIONS_PER_CANDIDATE + 1);
 export type ReportSelection = Readonly<{
   status?: 'all' | 'pending' | 'resolved';
   targetKind?: 'all' | ReportTarget['kind'];
@@ -134,7 +149,8 @@ function route(id: string): number {
 }
 
 function validateTarget(target: ReportTarget): void {
-  if (!target || !['board', 'thread', 'post'].includes(target.kind)) throw new TypeError('Invalid report target');
+  if (!target || !['board', 'thread', 'post', 'subject'].includes(target.kind))
+    throw new TypeError('Invalid report target');
   route(target.id);
 }
 
@@ -182,6 +198,10 @@ async function snapshot<T>(
  * exact route and ID. Missing ancestry, cycles and depth overflow fail closed. */
 async function targetFacts(client: AccessClient, target: ReportTarget): Promise<TargetFacts | null> {
   const home = route(target.id);
+  if (target.kind === 'subject') {
+    const subject = await subjectFacts.run(client, { route: home, subject_id: target.id });
+    return subject ? { fingerprint: JSON.stringify(subject) } : null;
+  }
   if (target.kind === 'board') {
     const board = await readReportBoard.run(client, { route: home, id: target.id });
     return board ? { fingerprint: JSON.stringify(board) } : null;
@@ -218,6 +238,10 @@ async function discloseTarget(
   const initial = await snapshot(dependencies, target.id, context.deadline, (client) => targetFacts(client, target));
   const facts = initial.value;
   if (!facts) throw new ReportUnavailableError();
+  if (target.kind === 'subject') {
+    if (!(await readableSubject(dependencies, target.id, context))) throw new ReportUnavailableError();
+    return facts;
+  }
   const readers = { pool: dependencies.pool, access: dependencies.access, tokens: tokens(dependencies) };
   const disclosed =
     target.kind === 'board'
@@ -236,7 +260,8 @@ async function exactRevision(
   revisionId: string | null,
 ): Promise<boolean> {
   if (!revisionId) return true;
-  if (target.kind === 'board' || !facts.threadId || route(revisionId) !== route(target.id)) return false;
+  if (target.kind === 'board' || target.kind === 'subject' || !facts.threadId || route(revisionId) !== route(target.id))
+    return false;
   const revision = await readReportRevision.run(client, {
     route: route(revisionId),
     id: revisionId,
@@ -304,7 +329,9 @@ export async function createReport(
     if (proof?.ok !== true) throw new ReportProofRequiredError();
   }
   let validRevision = false;
-  const resource = { route: route(target.id), id: target.id };
+  let subjectReadCheck: AccessCheck | undefined;
+  const resource =
+    target.kind === 'subject' ? globalContextAnchor.resource : { route: route(target.id), id: target.id };
   const eligibility = createResourceAnonymousEligibility({
     resource,
     action: createAction,
@@ -324,8 +351,12 @@ export async function createReport(
     action: createAction,
     anchor: {
       resource: { ...resource, eligibility },
-      async validate(client) {
-        const partition = await readPartition(client, partitionOf(resource.route));
+      async validate(client, time) {
+        if (target.kind === 'subject') {
+          if (!(await globalContextAnchor.validate(client, time))) return false;
+          if (!subjectReadCheck || !(await subjectReadCheck(client, time))) throw new ReportUnavailableError();
+        }
+        const partition = await readPartition(client, partitionOf(route(target.id)));
         if (!partition || partition.writeState === 'moved' || !observed) return false;
         const current = await targetFacts(client, target);
         if (!current || current.fingerprint !== observed.fingerprint) return false;
@@ -343,6 +374,19 @@ export async function createReport(
       // Resolve disclosure inside each live command attempt before report:create
       // authorization can turn an unreadable target into a generic denial.
       observed = await discloseTarget(dependencies, target, { actor, deadline: context.deadline });
+      if (target.kind === 'subject') {
+        subjectReadCheck = await accessCheck(
+          dependencies.access,
+          actor,
+          'subject:read',
+          {
+            route: route(target.id),
+            id: target.id,
+            eligibility: subjectReadEligibility({ route: route(target.id), id: target.id }),
+          },
+          commandAccessContext({ pool: dependencies.pool, deadline: context.deadline }, attempt),
+        );
+      }
       return accessAuthorization.prepare!(attempt);
     },
   };
@@ -398,7 +442,34 @@ export async function createReport(
   });
 }
 
-async function inspect(dependencies: ReportDependencies, target: ReportTarget, context: ReadContext) {
+async function readableSubject(dependencies: ReportDependencies, id: string, context: ReadContext): Promise<boolean> {
+  const resource = { route: route(id), id, eligibility: subjectReadEligibility({ route: route(id), id }) };
+  const check = await accessCheck(dependencies.access, context.actor, 'subject:read', resource, {
+    pool: dependencies.pool,
+    deadline: context.deadline,
+  });
+  try {
+    return !!(await within(context.deadline, () =>
+      readSubjectReference(dependencies.pool, id, (client) => check(deadlineClient(client, context.deadline))),
+    ));
+  } catch (error) {
+    if (error instanceof SubjectRedirectError) return false;
+    throw error;
+  }
+}
+
+async function inspect(dependencies: ReportDependencies, target: ReportScope, context: ReadContext) {
+  if (target.kind === 'catalogue') return inspectCatalogue(dependencies, context);
+  if (target.kind === 'subject') {
+    const subject = await snapshot(
+      dependencies,
+      target.id,
+      context.deadline,
+      async (client) => !!(await targetFacts(client, target)),
+    );
+    const allowed = await inspectCatalogue(dependencies, context);
+    return { ...subject, value: subject.value && allowed.value };
+  }
   const check =
     context.actor.kind === 'account'
       ? await accessCheck(
@@ -414,6 +485,31 @@ async function inspect(dependencies: ReportDependencies, target: ReportTarget, c
     target.id,
     context.deadline,
     async (client) => !!check && !!(await targetFacts(client, target)) && (await check(client)),
+  );
+}
+
+async function inspectCatalogue(dependencies: ReportDependencies, context: ReadContext) {
+  const check =
+    context.actor.kind === 'account'
+      ? await accessCheck(dependencies.access, context.actor, inspectAction, globalContextAnchor.resource, {
+          pool: dependencies.pool,
+          deadline: context.deadline,
+        })
+      : null;
+  return snapshot(
+    dependencies,
+    GLOBAL_CONTEXT,
+    context.deadline,
+    async (client) =>
+      !!check &&
+      !!(
+        await client.query('SELECT 1 FROM semantic.context WHERE route = $1 AND context_id = $2 AND kind = $3', [
+          0,
+          GLOBAL_CONTEXT,
+          'global',
+        ])
+      ).rowCount &&
+      (await check(client)),
   );
 }
 
@@ -510,6 +606,8 @@ async function targetAvailability(
   target: ReportTarget,
   context: ReadContext,
 ): Promise<ReporterReportView['targetAvailability']> {
+  if (target.kind === 'subject')
+    return (await readableSubject(dependencies, target.id, context)) ? 'available' : 'unavailable';
   const readers = { pool: dependencies.pool, access: dependencies.access, tokens: tokens(dependencies) };
   if (target.kind === 'board') {
     const { value } = await readBoard(readers, target.id, context);
@@ -608,7 +706,7 @@ export async function listTargetReports(
   target: ReportTarget,
   context: ReadContext,
   cursor?: string,
-  limit = 100,
+  limit = target.kind === 'subject' ? CATALOGUE_REPORT_PAGE_LIMIT : 100,
 ): Promise<Page<ReportView>> {
   return listSelectedTargetReports(dependencies, target, context, cursor, limit);
 }
@@ -619,17 +717,40 @@ export async function listSelectedTargetReports(
   target: ReportTarget,
   context: ReadContext,
   cursor?: string,
-  limit = 100,
+  limit = target.kind === 'subject' ? CATALOGUE_REPORT_PAGE_LIMIT : 100,
   selection: ReportSelection = {},
 ): Promise<Page<ReportView>> {
-  validateTarget(target);
+  return listReports(dependencies, target, context, cursor, limit, selection);
+}
+
+export function listCatalogueReports(
+  dependencies: ReportDependencies,
+  context: ReadContext,
+  cursor?: string,
+  limit = 20,
+  selection: ReportSelection = {},
+) {
+  return listReports(dependencies, { kind: 'catalogue', id: GLOBAL_CONTEXT }, context, cursor, limit, selection);
+}
+
+async function listReports(
+  dependencies: ReportDependencies,
+  target: ReportScope,
+  context: ReadContext,
+  cursor: string | undefined,
+  limit: number,
+  selection: ReportSelection,
+): Promise<Page<ReportView>> {
+  if (target.kind !== 'catalogue') validateTarget(target);
+  if ((target.kind === 'catalogue' || target.kind === 'subject') && limit > CATALOGUE_REPORT_PAGE_LIMIT)
+    throw new RangeError('Report limit must be 1 to 50');
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new RangeError('Report limit must be 1 to 100');
   const status = selection.status ?? 'all';
   const targetKind = selection.targetKind ?? 'all';
   const order = selection.order ?? 'newest';
   if (
     !['all', 'pending', 'resolved'].includes(status) ||
-    !['all', 'board', 'thread', 'post'].includes(targetKind) ||
+    !['all', 'board', 'thread', 'post', 'subject'].includes(targetKind) ||
     !['newest', 'oldest'].includes(order)
   )
     throw new TypeError('Invalid report selection');
@@ -639,7 +760,7 @@ export async function listSelectedTargetReports(
   const ring = tokens(dependencies);
   const binding: CursorBinding = {
     // Versioned binding deliberately refuses legacy cursors lacking selection/credential authority.
-    operation: 'content.target-reports.v2',
+    operation: target.kind === 'catalogue' ? 'catalogue_report.list' : 'content.target-reports.v2',
     parameters: {
       kind: target.kind,
       id: target.id,
@@ -681,7 +802,7 @@ export async function listSelectedTargetReports(
       report_id: after?.id ?? '00000000-0000-0000-0000-000000000000',
       limit: limit + 1,
     };
-    const statement = target.kind === 'board' ? boardPage : page;
+    const statement = target.kind === 'catalogue' ? cataloguePage : target.kind === 'board' ? boardPage : page;
     const { rows } = await client.query<{
       report_route: number;
       report_id: string;

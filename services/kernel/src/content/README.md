@@ -137,6 +137,40 @@ after the original decision did. Each notice stores only its identity, kind, tim
 and target ids: thread and post, or decision and report as applicable. It stores no text. The inbox links to the
 author-readable decision or reporter-readable report for statements, deadlines and outcomes.
 
+Subject reports use the same `POST /v1/reports` receipt, evidence, rate family, idempotency,
+reporter locator, reporter status and erasure minimization as other report targets. Admission uses the
+native `readSubjectReference` boundary and current `subject:read`; missing, hidden, taken-down,
+redirected and denied identities return the same 404. A Subject has no reported post revision.
+Global `report:create` standing uses a separate setup principal so existing reaction-install receipts remain valid.
+
+`GET /v1/subjects/{id}/reports` (`subject_report.list`) and `GET /v1/catalogue/reports`
+(`catalogue_report.list`) require current `moderation:read_reports` on the seeded Global Context.
+Both expose private moderator pages with the existing selection and sealed credential-bound cursor;
+limit is 1–50, default 20. The catalogue contains only Subject reports. Its Global-partition candidate
+projection stores report and Subject references and time, never evidence or reporter identity.
+Each page seeks `(route, created_at, report_id)` through at most 51 candidates, hydrates at most 50,
+and checks current Global authority and native Subject existence independently at disclosure.
+Hidden Subjects remain inspectable. Existing report dismissal uses Global `moderation:takedown`
+for a Subject. Reporting or owning a report grants no inspection permission.
+
+Decision: redirected Subjects are unavailable report targets; visibility reductions retain a text-free
+Content action reference and resolve Subject reports without inventing a Content moderation decision.
+The existing Subject visibility event resolves open reports created at or before its native source time,
+using existing outcome pages, notices and checkpoints. Restoration does not reopen reports. The latest
+reduction reference repairs late report projections even after restoration; a report submitted after
+that reduction stays pending until a later reduction or dismissal. Replays preserve the first outcome.
+
+Bounds: native Subject reference admission examines at most three relation rows and two data statements,
+plus its existing bounded Access evidence. A catalogue page admits 51 candidate references and at most
+50 report fills. Each candidate has four inspections, each comprising one Global snapshot and one exact
+Subject snapshot, plus one report fill: `3 + 50 * (2 * 4 + 1) = 453` adapter snapshots. The constants
+`CATALOGUE_REPORT_PAGE_LIMIT`, `SUBJECT_REPORT_INSPECTIONS_PER_CANDIDATE` and
+`CATALOGUE_REPORT_SNAPSHOT_CEILING` record this composition; each Access invocation retains its
+producer's existing finite evidence bounds. Subject outcome pages reuse `REPORT_OUTCOME_PAGE_SIZE = 100`,
+at most 100 report-home commands and 100 reporter notice finalizations per page. Native source recovery
+examines one existing outbox envelope (at most 1000 events), then one full-key source-time probe.
+All owner checkouts release before the next home; no Subject, report-history or grant scan discovers work.
+
 Board report queues include reports on the board and its descendant threads and posts. The registered
 `content_report_target` effect consumes `report.created` references, releases the report source snapshot,
 reads native post → thread → board keys, releases that snapshot, and writes the board's partition.

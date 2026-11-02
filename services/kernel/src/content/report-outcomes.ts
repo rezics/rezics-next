@@ -16,7 +16,8 @@ import type { CloudEvent } from '../events/log.ts';
 import { requestDigest } from '../http/request.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AccessClient, Actor } from '../request/access.ts';
-import { newId, partitionOf, routeOf } from '../route/route.ts';
+import { derivedId, newId, partitionOf, routeOf } from '../route/route.ts';
+import { globalContextAnchor } from '../semantic/context.ts';
 import { CONTENT_EVENTS } from './events.ts';
 import { writeNotices } from './notices.ts';
 import type { ReportDependencies, ReportTarget } from './reports.ts';
@@ -30,13 +31,22 @@ import progress from './read-report-outcome-progress.sql';
 import checkpoint from './checkpoint-report-outcome.sql';
 import page from './page-target-reports.sql';
 import sourceEvent from './read-outbox-event-index.sql';
+import { EVENT_TYPES } from '../events/catalogue.ts';
+import subjectActionRead from './report-subject-action-read.sql';
+import subjectActionUpsert from './report-subject-action-upsert.sql';
 
 const takedown = 'com.rezics.content.moderation.takedown.v1';
 const resolved = 'com.rezics.content.report.resolved.v1';
 const projected = 'com.rezics.content.report-target.projected.v1';
 export const REPORT_OUTCOME_PAGE_SIZE = 100;
 export class ReportResolvedError extends Error {}
-type Decision = NonNullable<Awaited<ReturnType<typeof decision.run>>>;
+type Decision = {
+  decision_id: string | null;
+  decider_account_id: string | null;
+  decided_at: string | null;
+  work_id?: string;
+};
+const subjectVisibility = 'com.rezics.subject.visibility_changed.v1';
 
 /** Each checkout belongs to one independently anchored partition. */
 async function atPartition<T>(
@@ -115,13 +125,16 @@ export async function dismissReport(deps: ReportDependencies, actor: Actor, id: 
     access: deps.access,
     actor,
     action: 'moderation:takedown',
-    anchor: {
-      resource: { route: targetRoute, id: reference.target_id },
-      async validate(client) {
-        const partition = await readPartition(client, partitionOf(targetRoute));
-        return !!partition && partition.writeState !== 'moved';
-      },
-    },
+    anchor:
+      reference.target_kind === 'subject'
+        ? globalContextAnchor
+        : {
+            resource: { route: targetRoute, id: reference.target_id },
+            async validate(client) {
+              const partition = await readPartition(client, partitionOf(targetRoute));
+              return !!partition && partition.writeState !== 'moved';
+            },
+          },
     context: { pool: deps.pool, partition: partitionOf(route), deadline: context.deadline },
   });
   const result = await runCommand(
@@ -210,7 +223,7 @@ async function verifiedSource(pool: Pool, event: CloudEvent, id: string) {
   const match = /^urn:rezics:log:(\d+)\.([1-9][0-9]*)$/.exec(event.source);
   if (route === null || !match || Number(match[1]) !== partitionOf(route) || !/^\d{19}$/.test(event.sequence))
     throw new TypeError('Invalid report outcome source');
-  await atPartition(pool, route, false, async (client) => {
+  return atPartition(pool, route, false, async (client) => {
     const rows = await sourceEvent.run(client, {
       partition_no: partitionOf(route),
       epoch: Number(match[2]),
@@ -221,14 +234,54 @@ async function verifiedSource(pool: Pool, event: CloudEvent, id: string) {
       data: event.data,
     });
     if (rows.length !== 1) throw new TypeError('Report outcome source missing');
+    if (event.type === subjectVisibility) {
+      const time = await client.query<{ recorded_at: string }>(
+        `SELECT to_char(recorded_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS recorded_at
+         FROM core.outbox WHERE partition_no=$1 AND epoch=$2 AND position=$3 AND event_seq=$4`,
+        [partitionOf(route), Number(match[2]), event.sequence, rows[0]!.event_seq],
+      );
+      if (!time.rows[0]) throw new TypeError('Report outcome source time missing');
+      return time.rows[0].recorded_at;
+    }
+    return undefined;
   });
 }
 
 export function createReportOutcomeEffect(pool: Pool): Effect {
   return {
     name: 'content_report_outcome',
-    types: [takedown, resolved, projected],
+    types: [takedown, resolved, projected, subjectVisibility],
     async run(event) {
+      if (event.type === subjectVisibility) {
+        if (!Value.Check(EVENT_TYPES[subjectVisibility], event.data))
+          throw new TypeError('Invalid Subject visibility event');
+        const data = event.data as { id: string; visibility: string; security_revision: number };
+        if (event.subject !== data.id || !Number.isFinite(Date.parse(event.time)))
+          throw new TypeError('Invalid Subject visibility identity');
+        const decidedAt = (await verifiedSource(pool, event, data.id))!;
+        if (data.visibility === 'visible') return;
+        const route = routeOf(data.id)!;
+        const actionId = derivedId(data.id, `subject-report:${data.security_revision}`, route);
+        await atPartition(pool, route, true, (client) =>
+          subjectActionUpsert.run(client, {
+            route,
+            subject_id: data.id,
+            security_revision: data.security_revision,
+            action_id: actionId,
+            decided_at: decidedAt,
+          }),
+        );
+        return actionTargetReports(
+          pool,
+          { kind: 'subject', id: data.id },
+          {
+            decision_id: null,
+            work_id: actionId,
+            decider_account_id: null,
+            decided_at: decidedAt,
+          },
+        );
+      }
       if (
         ![takedown, resolved, projected].includes(event.type) ||
         !Value.Check(CONTENT_EVENTS[event.type as keyof typeof CONTENT_EVENTS], event.data)
@@ -244,6 +297,19 @@ export function createReportOutcomeEffect(pool: Pool): Effect {
       if (event.type === resolved) return notify(pool, data.reportId);
       const target: ReportTarget = { kind: data.targetKind, id: data.targetId };
       const route = routeOf(target.id)!;
+      if (target.kind === 'subject') {
+        const reduction = await atPartition(pool, route, false, (client) =>
+          subjectActionRead.run(client, { route, subject_id: target.id }),
+        );
+        if (reduction)
+          await actionReport(pool, data.reportId, target, {
+            decision_id: null,
+            work_id: reduction.action_id,
+            decider_account_id: null,
+            decided_at: reduction.decided_at,
+          });
+        return;
+      }
       const chosen = await atPartition(pool, route, false, (client) =>
         decision.run(client, {
           route,
@@ -258,28 +324,33 @@ export function createReportOutcomeEffect(pool: Pool): Effect {
       }
       // A late reverse projection must not fall behind a completed takedown cursor.
       if (event.type === projected) return actionReport(pool, data.reportId, target, chosen);
-      const saved = await atPartition(pool, route, false, (client) =>
-        progress.run(client, { route, decision_id: chosen.decision_id }),
-      );
-      if (saved?.done) return;
-      let after = saved ? { createdAt: saved.after_at!, reportId: saved.after_id } : undefined;
-      for (;;) {
-        const rows = await reportOutcomePage(pool, target, after);
-        for (const row of rows) await actionReport(pool, row.report_id, target, chosen);
-        const last = rows.at(-1);
-        if (last) after = { createdAt: last.created_at!, reportId: last.report_id };
-        const done = rows.length < REPORT_OUTCOME_PAGE_SIZE;
-        await atPartition(pool, route, true, (client) =>
-          checkpoint.run(client, {
-            route,
-            decision_id: chosen.decision_id,
-            after_at: after?.createdAt ?? 'infinity',
-            after_id: after?.reportId ?? '00000000-0000-0000-0000-000000000000',
-            done,
-          }),
-        );
-        if (done) return;
-      }
+      return actionTargetReports(pool, target, chosen);
     },
   };
+}
+
+async function actionTargetReports(pool: Pool, target: ReportTarget, chosen: Decision) {
+  const route = routeOf(target.id)!;
+  const saved = await atPartition(pool, route, false, (client) =>
+    progress.run(client, { route, decision_id: (chosen.work_id ?? chosen.decision_id)! }),
+  );
+  if (saved?.done) return;
+  let after = saved ? { createdAt: saved.after_at!, reportId: saved.after_id } : undefined;
+  for (;;) {
+    const rows = await reportOutcomePage(pool, target, after);
+    for (const row of rows) await actionReport(pool, row.report_id, target, chosen);
+    const last = rows.at(-1);
+    if (last) after = { createdAt: last.created_at!, reportId: last.report_id };
+    const done = rows.length < REPORT_OUTCOME_PAGE_SIZE;
+    await atPartition(pool, route, true, (client) =>
+      checkpoint.run(client, {
+        route,
+        decision_id: (chosen.work_id ?? chosen.decision_id)!,
+        after_at: after?.createdAt ?? 'infinity',
+        after_id: after?.reportId ?? '00000000-0000-0000-0000-000000000000',
+        done,
+      }),
+    );
+    if (done) return;
+  }
 }

@@ -67,7 +67,10 @@ export const ContentIdSchema = t.String({
 });
 const nullableId = t.Union([ContentIdSchema, t.Null()]);
 const reportTarget = t.Object(
-  { kind: t.Union([t.Literal('board'), t.Literal('thread'), t.Literal('post')]), id: ContentIdSchema },
+  {
+    kind: t.Union([t.Literal('board'), t.Literal('thread'), t.Literal('post'), t.Literal('subject')]),
+    id: ContentIdSchema,
+  },
   closed,
 );
 const reportReason = t.Union([
@@ -636,7 +639,9 @@ export const ReportPageQuerySchema = t.Object(
     cursor: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
     limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100, multipleOf: 1 })),
     status: t.Optional(t.Union([t.Literal('all'), t.Literal('pending'), t.Literal('resolved')])),
-    targetKind: t.Optional(t.Union([t.Literal('all'), t.Literal('board'), t.Literal('thread'), t.Literal('post')])),
+    targetKind: t.Optional(
+      t.Union([t.Literal('all'), t.Literal('board'), t.Literal('thread'), t.Literal('post'), t.Literal('subject')]),
+    ),
     order: t.Optional(t.Union([t.Literal('newest'), t.Literal('oldest')])),
   },
   closed,
@@ -646,6 +651,21 @@ export const ReportPageResponseSchema = t.Object(
   {
     reports: t.Array(ModeratorReportResponseSchema.properties.report, { maxItems: 100 }),
     next: t.Union([t.String(), t.Null()]),
+  },
+  closed,
+);
+
+export const CatalogueReportPageQuerySchema = t.Object(
+  {
+    ...ReportPageQuerySchema.properties,
+    limit: t.Optional(t.Numeric({ minimum: 1, maximum: 50, multipleOf: 1 })),
+  },
+  closed,
+);
+export const CatalogueReportPageResponseSchema = t.Object(
+  {
+    ...ReportPageResponseSchema.properties,
+    reports: t.Array(ModeratorReportResponseSchema.properties.report, { maxItems: 50 }),
   },
   closed,
 );
