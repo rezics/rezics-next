@@ -3,7 +3,9 @@ import { act, useState } from 'react';
 import { dirname } from 'node:path';
 import type { SearchPageData } from '../src/search/search';
 
-const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+);
 const window = new Window({ url: 'https://search.test/en/search?q=reading' });
 let width = 1280;
 const mediaListeners = new Set<(event: MediaQueryListEvent) => void>();
@@ -12,7 +14,8 @@ const media = {
     return width >= 1024;
   },
   addEventListener: (_type: string, listener: (event: MediaQueryListEvent) => void) => mediaListeners.add(listener),
-  removeEventListener: (_type: string, listener: (event: MediaQueryListEvent) => void) => mediaListeners.delete(listener),
+  removeEventListener: (_type: string, listener: (event: MediaQueryListEvent) => void) =>
+    mediaListeners.delete(listener),
 };
 Object.defineProperty(window, 'matchMedia', { configurable: true, value: () => media });
 const globals = {
@@ -55,7 +58,13 @@ test('range drafts survive Filters remounts and reset to the next committed rang
       refinement: {
         key: committed.query,
         properties: [
-          { property: 'fixture:amount', labels: { en: 'Amount' }, mode: 'range', datatype: 'quantity', units: ['kg', 'lb'] },
+          {
+            property: 'fixture:amount',
+            labels: { en: 'Amount' },
+            mode: 'range',
+            datatype: 'quantity',
+            units: ['kg', 'lb'],
+          },
         ],
         initial: { status: 'ready', page: { as_of: '2026-11-03T00:00:00Z', facets: [] } },
       },
@@ -67,7 +76,10 @@ test('range drafts survive Filters remounts and reset to the next committed rang
     );
   };
   const route = createRootRoute({ component: screen });
-  const router = createRouter({ routeTree: route, history: createMemoryHistory({ initialEntries: ['/en/search?q=reading'] }) });
+  const router = createRouter({
+    routeTree: route,
+    history: createMemoryHistory({ initialEntries: ['/en/search?q=reading'] }),
+  });
   const host = document.createElement('main');
   document.body.append(host);
   const root = createRoot(host);
