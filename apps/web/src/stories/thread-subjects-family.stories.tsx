@@ -76,7 +76,7 @@ async function observeList(element: HTMLElement, subjects: readonly ThreadSubjec
     const title = subjectTitle(subject, getLocale()) ?? m.threads_untitled();
     const row = within(rows[index]!);
     const heading = row.getByRole('heading', { level: 2, name: title });
-    const link = row.getByRole('link', { name: title, exact: true });
+    const link = row.getByRole('link', { name: title });
     await expect(heading).toHaveAttribute('data-content-item-slot', 'title');
     await expect(link).toHaveAttribute(
       'href',
