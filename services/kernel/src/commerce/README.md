@@ -290,13 +290,13 @@ Checkout link. Root navigation adds the immutable `commerce.creator-offers` pers
 order 15 for `offer.list`.
 
 Caller seam: `loadCreatorOffers` / `readCreatorOffers` in Web's `checkout/creator-offers.ts`.
-The current adapter uses generated `offers.get` with private no-store/manual-redirect transport.
-Controller API/client generation remains authoritative for new mounted operations; generated declarations are
-not edited by hand. Stories `pages-commerce-creator-offers--history`,
+The generated client in this base has no `offers.get`; the authorized exact typed unavailable adapter is used,
+without hand-editing generated declarations or inventing a public-read substitute. Controller API/client generation
+must replace that adapter with the actual generated binding. Stories `pages-commerce-creator-offers--history`,
 `--second-page`, `--empty`, `--denied`, `--unavailable`, `--error`, `--stale`, `--preparing`, `--long-title`,
 `--mobile390` and `--desktop1280` describe contract-shaped source states, not recorded native evidence.
 390/1280 browser visual review, native acceptance and promoted-main proof remain controller work under minimal
-verification. The private-sales source producer is described below; target use and native sale/use proof remain open.
+verification. The native private-sales producer, target use and native sale/use proof remain open.
 
 ### Served creator sales
 
@@ -858,8 +858,8 @@ unknown classifications/FX/tax evidence cannot justify payment. A full customer 
 or earnings because tax/fees may remain. Do not fabricate tax credits, zero fees or full reversal evidence.
 Further commercial/shared adoption is required before runtime bodies for provider allocation versus reserves,
 release conditions, same-currency negative carry and positive evidence-complete payable rules; and richer external
-attestation with actual date/method/amount/currency/reference. The provider report recommends these additions;
-they remain unadopted economics. Reserve duration, clawback, thresholds, partial external
+attestation with actual date/method/amount/currency/reference. These are the provider
+report's recommendations, not hidden adopted economics. Reserve duration, clawback, thresholds, partial external
 payment, correction states and FX netting remain unchosen. Existing mark-paid records an authorized external reference
 on a statement; it sends no Stripe transfer and does not prove payability or external finality.
 
