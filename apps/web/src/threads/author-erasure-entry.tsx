@@ -2,7 +2,7 @@ import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { QueryClientContext } from '@tanstack/react-query';
 import { Trash2 } from 'lucide-react';
-import { useContext, useLayoutEffect, useRef, useState, useSyncExternalStore, useId } from 'react';
+import { useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, useId } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { authorErasureAdmissionReads, type AuthorErasureAdmission } from './author-erasure-admission';
@@ -42,8 +42,8 @@ export function authorErasureEntryScope(
   session: ReturnType<AuthorErasureSessionSource['read']>,
   previousViewerId: string | null,
 ) {
-  const stableViewerId =
-    viewerId ?? (session?.state === 'signed-in' ? session.subject ?? null : null) ?? previousViewerId;
+  const sessionViewerId = session?.state === 'signed-in' ? session.subject : undefined;
+  const stableViewerId = viewerId ?? sessionViewerId ?? previousViewerId;
   return { viewerId: stableViewerId, key: JSON.stringify([threadId, stableViewerId]) };
 }
 
