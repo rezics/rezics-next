@@ -120,13 +120,14 @@ async function startNavigation(router: ReturnType<typeof createRouter>, to: stri
 
 test('clean navigation is quiet; Stay preserves the proposed handle and confirmation', async () => {
   const ui = await mount(source());
-  const { navigation: clean } = await startNavigation(ui.router, '/next');
-  await flush(() => clean);
-  const { navigation: back } = await startNavigation(ui.router, '/account/rename');
-  await flush(() => back);
-  await tick();
+  const cleanUnload = new dom.Event('beforeunload', { cancelable: true });
+  window.dispatchEvent(cleanUnload);
+  expect(cleanUnload.defaultPrevented).toBe(false);
   await setHandle(ui.host, 'after');
   await confirm(ui.host);
+  const dirtyUnload = new dom.Event('beforeunload', { cancelable: true });
+  window.dispatchEvent(dirtyUnload);
+  expect(dirtyUnload.defaultPrevented).toBe(true);
   const { navigation } = await startNavigation(ui.router, '/next');
   expect(ui.host.querySelector('[role="alertdialog"]')).not.toBeNull();
   await flush(() => ui.host.querySelector<HTMLButtonElement>('[data-stay]')!.click());
