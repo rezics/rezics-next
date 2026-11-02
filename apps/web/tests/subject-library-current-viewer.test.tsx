@@ -617,6 +617,73 @@ test('The mounted leaf partitions admission and return-address ABA reads and req
   expect(host.textContent).toContain('A private label');
 });
 
+test('Subject label input explains native failures locally and preserves valid raw drafts through Create', async () => {
+  await paint();
+  await openLabels();
+  const input = host.querySelector<HTMLInputElement>('input[name="name"]')!;
+  const feedback = () => input.getAttribute('aria-describedby')!.split(' ').map((id) => window.document.getElementById(id)?.textContent).join(' ');
+  for (const [raw, reason] of [
+    ['📚'.repeat(101), m.library_subject_label_input_too_long()],
+    ['A\u0000B', m.library_subject_label_input_controls()],
+    ['A\ud800', m.library_subject_label_input_surrogates()],
+    ['\udc00B', m.library_subject_label_input_surrogates()],
+  ]) {
+    await labelName(raw!);
+    expect(input.value).toBe(raw);
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+    expect(feedback()).toContain(reason!);
+    expect(feedback()).toContain(m.library_subject_label_input_hint());
+    await submit('[data-subject-label-picker]');
+    expect(prefixes).toHaveLength(1);
+    expect(labels).toHaveLength(0);
+    expect(host.textContent).not.toContain(m.library_subject_label_unavailable());
+  }
+  for (const raw of ['📚'.repeat(100), `  ${'e\u0301'.repeat(100)}  `, `A${'\u2003'.repeat(300)}B`]) {
+    const count = prefixes.length;
+    await labelName(raw);
+    expect(prefixes).toHaveLength(count + 1);
+    expect(prefixes.at(-1)!.data).toEqual({ query: raw });
+    expect(input.value).toBe(raw);
+    expect(input.getAttribute('aria-invalid')).not.toBe('true');
+    expect(input.hasAttribute('maxlength')).toBe(false);
+    await act(async () => prefixes.at(-1)!.resolve({ ...page('A', raw), labels: [] }));
+  }
+  await click(m.library_subject_label_create({ name: 'A B' }));
+  expect(labels[0]!.data).toMatchObject({ intent: 'create-and-assign', name: input.value });
+});
+
+test('Correcting invalid Subject label input settles one search and fences earlier completions, including the same prefix', async () => {
+  await paint();
+  await openLabels();
+  await labelName('Recovered');
+  const old = prefixes.at(-1)!;
+  await labelName('x'.repeat(101));
+  expect(host.querySelector('[data-subject-label-picker] ul')).toBeNull();
+  await labelName('Recovered');
+  expect(prefixes).toHaveLength(3);
+  await act(async () => prefixes.at(-1)!.resolve({ ...page('A', 'Recovered'), labels: [{ id: id(22), name: 'Recovered', revision: 1 }] }));
+  await act(async () => old.resolve(page('A', 'Recovered', 'old-cursor')));
+  expect(host.textContent).not.toContain('A choice');
+  expect(host.textContent).not.toContain(m.library_label_more());
+  await submit('[data-subject-label-picker]');
+  expect(labels[0]!.data).toMatchObject({ intent: 'assign', labelId: id(22) });
+});
+
+test('Empty normalized Subject prefixes list labels with null CSRF; empty creation has field feedback and reads never admit writes', async () => {
+  await act(async () => client.setQueryData(['session'], { ...viewer(), csrfToken: null }));
+  await paint({ ...baseline(), csrfToken: null, provenance: { ...baseline().provenance!, csrfToken: null } });
+  await openLabels();
+  await labelName(' \t\u2003 ');
+  expect(prefixes).toHaveLength(2);
+  await act(async () => prefixes.at(-1)!.resolve({ ...page('A', ' \t\u2003 '), provenance: { viewer: 'A', csrfToken: null, query: ' \t\u2003 ' } }));
+  expect(button('A choice').disabled).toBe(true);
+  await submit('[data-subject-label-picker]');
+  const input = host.querySelector<HTMLInputElement>('input[name="name"]')!;
+  expect(input.getAttribute('aria-invalid')).toBe('true');
+  expect(window.document.getElementById(input.getAttribute('aria-errormessage')!)?.textContent).toBe(m.library_subject_label_input_empty());
+  expect(labels).toHaveLength(0);
+});
+
 test('A tokenless reader sees current native slot facts and can retry reads; token arrival never submits commands', async () => {
   const reads: ReturnType<typeof deferred<SubjectLibrarySlotData>>[] = [];
   const source = queries.subjectLibraryQuery;
