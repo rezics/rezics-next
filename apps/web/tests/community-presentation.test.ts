@@ -831,6 +831,7 @@ test('The default admitted community management journey resolves a same-site ima
       '/media/not-an-id/webp-320',
       `https://foreign.test${imageLink}`,
       `https://reader:secret@site.test${imageLink}`,
+      `https://@site.test${imageLink}`,
       `//site.test${imageLink}`,
       `/en${imageLink}`,
       `/ignored/..${imageLink}`,

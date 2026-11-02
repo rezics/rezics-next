@@ -60,7 +60,7 @@ export const Readonly: Story = {
   args: { ...Available.args, initial: { kind: 'ready', snapshot: { ...available, canManage: false } } },
   render,
 };
-export const Cleared: Story = { ...Manage };
+export const Cleared: Story = { args: Manage.args, render };
 export const Unavailable: Story = { args: { ...Manage.args, initial: { kind: 'unavailable' } }, render };
 export const OptionalUnavailable: Story = {
   args: {

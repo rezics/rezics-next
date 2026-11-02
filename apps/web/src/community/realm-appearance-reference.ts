@@ -14,7 +14,8 @@ export function realmAppearanceReference(
   const link = text.trim();
   // Accept root-relative links or explicit HTTP(S) URLs, without URL-parser path repair.
   const path = /^(?:https?:\/\/[^/?#]+)?(\/[^?#]*)$/i.exec(link)?.[1];
-  if (!path || link.length > 2048 || /[\s\\%]/u.test(link) || link.startsWith('//')) return null;
+  if (!path || link.length > 2048 || /[\s\\%]/u.test(link) || link.startsWith('//') || /^https?:\/\/[^/]*@/i.test(link))
+    return null;
   try {
     const url = new URL(link, origin);
     if (
