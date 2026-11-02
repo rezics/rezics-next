@@ -124,17 +124,36 @@ export function ownerConflictGitConfig(cwd: string): string[] {
   return ['-c', 'rerere.enabled=true', '-c', 'rerere.autoupdate=true', '-c', `rerere.dir=${rrCache}`];
 }
 
+/** Caps inherited pairs so validation cannot walk an unbounded GIT_CONFIG_COUNT. */
+const MAX_INHERITED_GIT_CONFIG_COUNT = 65_536;
+/** Matches the three `-c` rerere settings from ownerConflictGitConfig. */
+const OWNER_CONFLICT_APPENDED_CONFIG_PAIRS = 3;
+
+function inheritedGitConfigOffset(env: NodeJS.ProcessEnv, added: number): number {
+  const raw = env.GIT_CONFIG_COUNT;
+  if (raw === undefined || raw === '') return 0;
+  if (!/^\d+$/.test(raw)) throw new Error('inherited GIT_CONFIG_COUNT is not a decimal integer');
+  const count = Number(raw);
+  if (!Number.isSafeInteger(count) || count > MAX_INHERITED_GIT_CONFIG_COUNT || !Number.isSafeInteger(count + added))
+    throw new Error('inherited GIT_CONFIG_COUNT overflows the appendable range');
+  for (let index = 0; index < count; index++) {
+    if (env[`GIT_CONFIG_KEY_${index}`] === undefined) throw new Error(`inherited GIT_CONFIG_KEY_${index} is missing`);
+    if (env[`GIT_CONFIG_VALUE_${index}`] === undefined) throw new Error(`inherited GIT_CONFIG_VALUE_${index} is missing`);
+  }
+  return count;
+}
+
 /** Git settings for commands started by a resumed worker, scoped to that process tree. */
 export function ownerConflictEnvironment(cwd: string): Record<string, string> {
+  const offset = inheritedGitConfigOffset(process.env, OWNER_CONFLICT_APPENDED_CONFIG_PAIRS);
   const config = ownerConflictGitConfig(cwd);
   const pairs: [string, string][] = [];
   for (let index = 0; index < config.length; index += 2) {
     if (config[index] !== '-c') continue;
-    const separator = config[index + 1]!.indexOf('=');
-    pairs.push([config[index + 1]!.slice(0, separator), config[index + 1]!.slice(separator + 1)]);
+    const spec = config[index + 1]!;
+    const separator = spec.indexOf('=');
+    pairs.push([spec.slice(0, separator), spec.slice(separator + 1)]);
   }
-  const existingCount = Number(process.env.GIT_CONFIG_COUNT ?? 0);
-  const offset = Number.isSafeInteger(existingCount) && existingCount >= 0 ? existingCount : 0;
   const environment: Record<string, string> = {
     GIT_CONFIG_COUNT: String(offset + pairs.length),
     GIT_EDITOR: 'true',
