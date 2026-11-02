@@ -32,7 +32,7 @@ const { overwriteGetLocale } = await import('../src/paraglide/runtime.js');
 const { m } = await import('../src/paraglide/messages.js');
 overwriteGetLocale(() => 'en');
 const identitySource = async () => ({ kind: 'unavailable' as const });
-const flush = (action: () => void) => act(action);
+const flush = (action: () => void) => act(async () => action());
 const deferred = <T,>() => Promise.withResolvers<T>();
 let host: HTMLDivElement, root: Root;
 let calls: unknown[];
