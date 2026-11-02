@@ -69,14 +69,14 @@ test('selection refresh retains drafts, switches retire targets, and created rea
         </QueryClientProvider>,
       ),
     );
-    const keywords = [...host.querySelectorAll('section')].find(
-      (node) => node.getAttribute('aria-label') === fixture.release.properties['schema:keywords']!.labels.en,
+    const url = [...host.querySelectorAll('section')].find(
+      (node) => node.getAttribute('aria-label') === fixture.release.properties['schema:url']!.labels.en,
     )!;
-    expect(keywords, host.innerHTML).toBeDefined();
+    expect(url).toBeDefined();
     await settle(() =>
-      [...keywords.querySelectorAll('button')].find((node) => node.textContent === m.facts_edit_field())!.click(),
+      [...url.querySelectorAll('button')].find((node) => node.textContent === m.facts_edit_field())!.click(),
     );
-    const valueLabel = [...host.querySelectorAll('label')].find((node) => node.textContent === m.correction_value())!;
+    const valueLabel = [...host.querySelectorAll('label')].find((node) => node.textContent === m.correction_url())!;
     const draft = window.document.getElementById(valueLabel.htmlFor);
     expect(draft).not.toBeNull();
     failure = true;
