@@ -1166,15 +1166,15 @@ export async function settle(
     try {
       for (const relation of names) {
         const sql = [
-          "VACUUM (INDEX_CLEANUP ON",
-          options.analyze ? ", ANALYZE" : "",
-          ") ",
+          'VACUUM (INDEX_CLEANUP ON',
+          options.analyze ? ', ANALYZE' : '',
+          ') ',
           qualifiedIdentifier(relation),
-        ].join("");
+        ].join('');
         try {
           await client.query(sql);
         } catch (error) {
-          const current = await database.admin.query<{ name: string }>("SELECT current_database() AS name");
+          const current = await database.admin.query<{ name: string }>('SELECT current_database() AS name');
           throw new GrowthSettleInfrastructureError(
             `Could not settle database ${current.rows[0]!.name} relation ${relation}: ${error instanceof Error ? error.message : String(error)}`,
           );

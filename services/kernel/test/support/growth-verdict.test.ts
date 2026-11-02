@@ -490,9 +490,9 @@ test('a held snapshot does not hide measured rows and blocks or create settle fa
     const measuredSamples = error.samples as unknown as readonly ReportSample[];
     expect(measuredSamples).toHaveLength(3);
     expect(measuredSamples.every(({ settleFailures }) => !settleFailures?.length)).toBe(true);
-    expect(
-      measuredSamples.every(({ repetitions }) => repetitions[0]!.rows > 0 && repetitions[0]!.blocks > 0),
-    ).toBe(true);
+    expect(measuredSamples.every(({ repetitions }) => repetitions[0]!.rows > 0 && repetitions[0]!.blocks > 0)).toBe(
+      true,
+    );
     expect(captured.lines.map(reviewJson).some(({ metric }) => metric === 'blocks')).toBe(true);
     expect(captured.lines.map(reviewJson).some(({ reason }) => reason === 'settle')).toBe(false);
     const profileLine = JSON.parse((await readFile(profilePath, 'utf8')).trim());

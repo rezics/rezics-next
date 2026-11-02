@@ -45,7 +45,9 @@ test('Growth setup does not require or inspect invisible tuple versions as bound
       [relation],
     );
     expect(after.rows[0]!.vacuumCount).toBe(before.rows[0]!.vacuumCount + 1);
-    expect(statements.some((sql) => /pg_visibility|pg_check_visible|\bctid\b|\bxmin\b|\bxmax\b/i.test(sql))).toBe(false);
+    expect(statements.some((sql) => /pg_visibility|pg_check_visible|\bctid\b|\bxmin\b|\bxmax\b/i.test(sql))).toBe(
+      false,
+    );
   } finally {
     db.admin.query = originalQuery;
     await holder.query('ROLLBACK');
