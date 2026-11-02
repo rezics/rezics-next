@@ -25,6 +25,7 @@ export type WriteResult = { status: 'saved' | 'denied' | 'conflict' | 'refused' 
 export type AccessIO = {
   read(cursor?: string): Promise<AccessState>;
   save(change: Change): Promise<WriteResult>;
+  /** Null confirms no eligible recipient; unavailable reads reject for the form's retry path. */
   lookup(handle: string): Promise<Identity | null>;
   transfer?(input: OwnerTransfer): Promise<TransferResult>;
 };
@@ -182,6 +183,19 @@ export async function writeAccess(client: KernelClient, authorization: string, c
   }
 }
 
+/** Check current management disclosure before making the single public identity lookup.
+ * A failed prerequisite is a rejected read, never evidence that the recipient is absent. */
+export async function lookupAccessIdentity(
+  client: KernelClient,
+  authorization: string,
+  resourceId: string,
+  handle: string,
+): Promise<Identity | null> {
+  const current = await loadAccess(client, authorization, resourceId);
+  if (current.status !== 'ready') throw new Error('Resource access unavailable');
+  return lookupIdentity(client, authorization, handle);
+}
+
 export async function lookupIdentity(
   client: KernelClient,
   authorization: string,
@@ -191,6 +205,11 @@ export async function lookupIdentity(
     query: { handle: handle.replace(/^@/, '').trim() },
     headers: { authorization },
   });
+  // Only a successful native read can establish an empty or ineligible result.
+  // Leave transport rejections intact so both forms retain their draft and offer lookup again.
+  if (result.error || result.status >= 300 || !result.data) {
+    throw new Error('Identity lookup unavailable');
+  }
   const account = result.data?.accounts[0];
-  return !result.error && account?.state === 'active' ? account : null;
+  return account?.state === 'active' ? account : null;
 }

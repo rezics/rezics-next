@@ -5,7 +5,7 @@ import { env } from 'cloudflare:workers';
 import { kernelClient } from '../../kernel/client';
 import type { SessionEnv } from '../../session/client';
 import { prepareSession, viewerCredential } from '../../session/request';
-import { loadAccess, lookupIdentity, parseChange, routedId, writeAccess, type AccessState } from './data';
+import { loadAccess, lookupAccessIdentity, parseChange, routedId, writeAccess, type AccessState } from './data';
 
 async function viewer() {
   setResponseHeader('cache-control', 'private, no-store');
@@ -53,10 +53,8 @@ export const findAccessIdentity = createServerFn({ method: 'GET' })
   })
   .handler(async ({ data }) => {
     const authorization = await viewer();
-    if (!authorization) return null;
-    const client = kernelClient();
-    const current = await loadAccess(client, authorization, data.resourceId);
-    return current.status === 'ready' ? lookupIdentity(client, authorization, data.handle) : null;
+    if (!authorization) throw new Error('Resource access unavailable');
+    return lookupAccessIdentity(kernelClient(), authorization, data.resourceId, data.handle);
   });
 
 export const transferResourceOwner = createServerFn({ method: 'POST' })
