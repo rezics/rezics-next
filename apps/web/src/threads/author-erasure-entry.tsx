@@ -93,6 +93,8 @@ function AuthorErasureEntryVisit({
   revision: number;
 }) {
   const heading = useId();
+  const review = useId();
+  const action = useId();
   const [open, setOpen] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [pending, setPending] = useState(false);
@@ -114,6 +116,10 @@ function AuthorErasureEntryVisit({
       reads.current.retire();
     };
   }, []);
+
+  useLayoutEffect(() => {
+    if (open) document.getElementById(heading)?.focus();
+  }, [heading, open]);
 
   useEffect(() => {
     if (observedRevision.current === revision) return;
@@ -191,8 +197,10 @@ function AuthorErasureEntryVisit({
       <Button
         variant="ghost"
         size="sm"
+        id={action}
         className="h-auto min-h-11 max-w-full whitespace-normal text-left"
         aria-expanded={open}
+        aria-controls={open ? review : undefined}
         onClick={() => toggle(!open)}
         disabled={pending}
       >
@@ -202,11 +210,12 @@ function AuthorErasureEntryVisit({
       {open ? (
         <ContentItemFrame
           as="div"
+          id={review}
           data-slot="content-item-frame"
           className="mt-3 min-w-0 space-y-4 p-4 sm:p-5"
           aria-labelledby={heading}
         >
-          <ContentItemHeading id={heading} level={2} className="font-semibold">
+          <ContentItemHeading id={heading} tabIndex={-1} level={2} className="font-semibold">
             {m.author_erasure_confirm_title()}
           </ContentItemHeading>
           <p className="max-w-prose break-words leading-relaxed text-muted-foreground">{m.author_erasure_scope()}</p>
@@ -274,7 +283,10 @@ function AuthorErasureEntryVisit({
                   variant="outline"
                   className="h-auto min-h-11 max-w-full whitespace-normal text-left"
                   disabled={pending}
-                  onClick={() => toggle(false)}
+                  onClick={() => {
+                    document.getElementById(action)?.focus();
+                    toggle(false);
+                  }}
                 >
                   {m.author_erasure_close()}
                 </Button>

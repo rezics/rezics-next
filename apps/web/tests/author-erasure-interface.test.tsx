@@ -86,6 +86,7 @@ test('author erasure production views keep their named shared anatomy, bounded c
 
   try {
     let admissionReads = 0;
+    let settleLateAdmission!: () => void;
     const intents: { threadId: string; idempotencyKey: string }[] = [];
     let acceptedOperation = '';
     const send = async (intent: { threadId: string; idempotencyKey: string }) => {
@@ -98,6 +99,7 @@ test('author erasure production views keep their named shared anatomy, bounded c
         viewerId: authorId,
         readAdmission: async () => {
           admissionReads += 1;
+          if (admissionReads === 2) await new Promise<void>((resolve) => (settleLateAdmission = resolve));
           return { kind: 'current', authorId, mayErase: true } as const;
         },
         send,
@@ -109,7 +111,10 @@ test('author erasure production views keep their named shared anatomy, bounded c
     await click(m.author_erasure_action());
 
     const confirmation = host.querySelector('[data-slot="content-item-frame"]');
+    const opener = button(m.author_erasure_action());
     expect(confirmation).not.toBeNull();
+    expect(opener.getAttribute('aria-controls')).toBe(confirmation?.id);
+    expect(window.document.activeElement).toBe(host.querySelector('h2'));
     expect(confirmation?.classList.contains('border')).toBe(false);
     expect(confirmation?.classList.contains('bg-card')).toBe(false);
     expect(host.querySelector('h2')?.textContent).toBe(m.author_erasure_confirm_title());
@@ -124,6 +129,7 @@ test('author erasure production views keep their named shared anatomy, bounded c
     const checkbox = host.querySelector<HTMLInputElement>('input[type="checkbox"]');
     expect(checkbox).not.toBeNull();
     expect(checkbox?.closest('label')?.textContent).toContain(m.author_erasure_confirmation());
+    await act(async () => checkbox?.click());
     expect(button(m.author_erasure_close())).toBeDefined();
     expect(button(m.author_erasure_check_again())).toBeDefined();
     expect(button(m.author_erasure_confirm()).disabled).toBe(false);
@@ -142,13 +148,16 @@ test('author erasure production views keep their named shared anatomy, bounded c
     await click(m.author_erasure_check_again());
     expect(admissionReads).toBe(2);
     await click(m.author_erasure_close());
-    expect(host.querySelector('[data-slot="content-item-frame"]')).toBeNull();
-    await click(m.author_erasure_action());
-    const reopenedCheckbox = host.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
     await act(async () => {
-      reopenedCheckbox.click();
+      settleLateAdmission();
       await Promise.resolve();
     });
+    expect(host.querySelector('[data-slot="content-item-frame"]')).toBeNull();
+    expect(window.document.activeElement).toBe(opener);
+    expect(intents).toHaveLength(0);
+    await click(m.author_erasure_action());
+    const reopenedCheckbox = host.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    expect(reopenedCheckbox.checked).toBe(true);
     await click(m.author_erasure_confirm());
     expect(host.querySelector('[role="alert"]')?.textContent).toBe(m.author_erasure_uncertain());
     await click(m.author_erasure_retry());
