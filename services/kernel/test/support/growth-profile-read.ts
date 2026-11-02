@@ -316,8 +316,7 @@ export function readGrowthProfiles(sources: readonly GrowthProfileRunSource[]): 
       isIdentifiedGrowthMeasurement(referenceMeasurement) &&
       group.every(
         ({ measurement }) =>
-          isIdentifiedGrowthMeasurement(measurement) &&
-          sameIdentifiedMeasurement(measurement, referenceMeasurement),
+          isIdentifiedGrowthMeasurement(measurement) && sameIdentifiedMeasurement(measurement, referenceMeasurement),
       );
     if (byRun.size === sources.length && scalesMatch && boundsMatch && measurementsMatch) {
       complete.push(
