@@ -5,8 +5,9 @@ import { SqliteManagerInbox } from './inbox.ts';
 import { WorkerJob } from './job.ts';
 import { harness, markdown } from './test-support.ts';
 import { StaleAttemptError, type ManagerEvent } from './contracts.ts';
+import { runWorkerCommand } from './worker-commands.ts';
 
-test('cancelling a task sends each manager owning a task held after it one event naming the held tasks', async () => {
+test.each([0, 3])('cancelling generation %i sends each manager owning a task held after it one event naming the held tasks', async (generation) => {
   const h = harness();
   try {
     const blocker = h.tasks.dispatch(h.briefFile);
@@ -24,7 +25,19 @@ test('cancelling a task sends each manager owning a task held after it one event
     const second = await dispatchHeld('second', 'manager-a');
     const third = await dispatchHeld('third', 'manager-b');
 
-    await h.tasks.cancel(blocker.id);
+    for (let attempt = 0; attempt < generation; attempt++) {
+      const worker = await h.tasks.retry(blocker.id);
+      await worker.exited;
+    }
+    const options = { settings: h.settings, store: h.store, tasks: h.tasks, env: {} };
+    await expect(runWorkerCommand('cancel', [blocker.id], {
+      ...options, env: { GOAL_TASK_ID: blocker.id, GOAL_ATTEMPT: String(generation + 1) },
+    })).rejects.toThrow(StaleAttemptError);
+    expect(h.store.task(blocker.id).state).not.toBe('cancelled');
+    expect(await runWorkerCommand('cancel', [blocker.id], options)).toBe(0);
+    expect(h.store.task(blocker.id)).toMatchObject({ state: 'cancelled', currentAttempt: generation });
+    if (generation > 0)
+      expect(() => h.store.event({ taskId: blocker.id, attempt: generation }, 'late-worker-write', {})).toThrow(StaleAttemptError);
 
     const inbox = new SqliteManagerInbox(h.store.db, h.settings.integration.inboxDirectory);
     const notices = ['manager-a', 'manager-b'].flatMap((manager) =>
@@ -36,7 +49,7 @@ test('cancelling a task sends each manager owning a task held after it one event
       ['manager-b', blocker.id, 'instruction', expect.stringContaining(third.id)],
     ]);
   } finally {
-    h.dispose();
+    await h.disposeAsync();
   }
 });
 

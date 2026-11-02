@@ -1978,8 +1978,9 @@ export class WorkerTasks {
         kind: 'instruction' as const,
         summary: `Cancelled dependency ${taskId} is holding tasks ${heldTasks.join(', ')}; decide whether the dependency is still needed.`,
       };
-      this.store.event({ taskId, attempt: dependency.currentAttempt }, 'cancelled-dependency-notice', event);
-      inbox.deliver(event);
+      this.store.notifyCancelledDependency({ taskId, attempt: dependency.currentAttempt }, event, (notice) =>
+        inbox.deliver(notice),
+      );
     }
   }
   /** Later integration follows the stabilize branch. A running attempt is left alone. */

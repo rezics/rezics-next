@@ -1481,6 +1481,7 @@ after it remain held because cancellation does not satisfy `after`; each manager
 instruction naming the held tasks and cancelled dependency. During host recovery, a held task with a cancelled
 dependency that predates this notification is reported once to its manager. The manager decides whether to revise the
 dependency.
+Cancellation notices use the committed cancelled generation without reopening ordinary worker writes; genuinely stale command generations still refuse.
 A held amendment keeps its old live attempt's ownership until settlement, even if its dependencies integrate first.
 The next host sweep can then release it under the task lease and start the amended contract from the updated base.
 An unstarted held task can use `retry --brief` on the same task id to replace the brief and dependency edges while keeping attempt 0, its branch, worktree and uncommitted files. The host creates its first attempt once the new dependencies are merged.

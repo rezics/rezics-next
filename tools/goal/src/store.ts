@@ -1557,6 +1557,28 @@ export class WorkerStore implements AttemptFence {
   putRecord(record: AttemptRecord): void {
     this.write(record, () => this.saveRecord(record));
   }
+  /** Notify from a committed cancellation without restoring a terminal worker's write authority. */
+  notifyCancelledDependency(ref: AttemptRef, event: ManagerEvent, deliver: (event: ManagerEvent) => void): void {
+    this.db
+      .transaction(() => {
+        const task = this.task(ref.taskId);
+        if (task.currentAttempt !== ref.attempt || task.state !== 'cancelled')
+          throw new StaleAttemptError(ref, task.currentAttempt);
+        if (event.taskId !== ref.taskId) throw new Error('cancellation notice must name its dependency');
+        const recorded = this.db
+          .query(
+            `SELECT 1 FROM worker_events WHERE task_id=? AND attempt=? AND kind='cancelled-dependency-notice'
+             AND json_extract(body,'$.managerId')=? LIMIT 1`,
+          )
+          .get(ref.taskId, ref.attempt, event.managerId);
+        if (recorded) return;
+        this.db
+          .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
+          .run(ref.taskId, ref.attempt, 'cancelled-dependency-notice', new Date().toISOString(), JSON.stringify(event));
+        deliver(event);
+      })
+      .immediate();
+  }
   event(ref: AttemptRef, kind: string, body: unknown): void {
     this.write(ref, () => {
       this.db
