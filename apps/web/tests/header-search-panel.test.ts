@@ -529,12 +529,13 @@ test('recent history round-trips native query text without trimming its meaning'
   expect(rememberRecent([], '   ')).toEqual([]);
 });
 
-test('the sole phone discovery placement uses the real original RealmDiscovery component and one shared native adapter instead of its provisional unavailable boundary while preserving lifecycle and request bounds', async () => {
+test('the sole phone discovery placement reuses the strict Search Realm reader while preserving lifecycle and request bounds', async () => {
   const { RealmDiscoverySection } = await import('../src/community/realm-discovery');
   const source = await Bun.file(new URL('../src/search/realm-discovery-section.tsx', import.meta.url)).text();
   expect(source).toContain("from '../community/realm-discovery'");
-  expect(source.match(/\bloadRealmDiscovery\(/gu) ?? []).toHaveLength(1);
-  expect(source).toMatch(/return\s+loadRealmDiscovery\(kernelClient\(data\.locale\),\s*\{/u);
+  expect(source).toContain("readRealmDiscovery, type RealmDiscoveryWindow");
+  expect(source).not.toContain('createServerFn');
+  expect(source).not.toContain('loadRealmDiscovery(');
   expect(source).not.toContain('.realms.discovery.get');
   expect(source).not.toContain('realmDiscoveryProducer');
 

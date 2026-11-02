@@ -17,7 +17,7 @@ export type RealmDiscoveryReader = (input: {
 const input = v.strictObject({
   locale: v.pipe(v.string(), v.minLength(1), v.maxLength(35)),
   sort: v.picklist(['popular', 'trending']),
-  cursor: v.exactOptional(v.pipe(v.string(), v.minLength(1), v.maxLength(4864))),
+  cursor: v.exactOptional(v.pipe(v.string(), v.minLength(1), v.maxLength(4096))),
 });
 
 /** Existing server-function transport, delegating once to Content's original adapter. */

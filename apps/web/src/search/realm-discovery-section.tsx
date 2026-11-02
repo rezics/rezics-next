@@ -1,7 +1,6 @@
-import { createServerFn } from '@tanstack/react-start';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { RealmDiscoverySection, loadRealmDiscovery, type RealmDiscoveryState } from '../community/realm-discovery';
-import { type RealmDiscoveryWindow } from './realm-discovery-loader';
+import { RealmDiscoverySection, type RealmDiscoveryState } from '../community/realm-discovery';
+import { readRealmDiscovery, type RealmDiscoveryWindow } from './realm-discovery-loader';
 import { createRealmPageProgress } from './realm-page-progress';
 
 export type {
@@ -19,22 +18,17 @@ export type SearchRealmDiscoveryRequest = Readonly<{
   cursor?: string;
   limit: typeof REALM_DISCOVERY_LIMIT;
 }>;
-export type SearchRealmDiscoveryLoader = (input: SearchRealmDiscoveryRequest) => Promise<Page>;
+export type SearchRealmDiscoveryLoader = (input: SearchRealmDiscoveryRequest, signal?: AbortSignal) => Promise<Page>;
 
-const readSearchRealmDiscovery = createServerFn({ method: 'GET' })
-  .validator((data: SearchRealmDiscoveryRequest) => ({
-    locale: data.locale,
-    ...(data.cursor === undefined ? {} : { cursor: data.cursor }),
-  }))
-  .handler(async ({ data }): Promise<Page> => {
-    const { kernelClient } = await import('../kernel/client');
-    return loadRealmDiscovery(kernelClient(data.locale), {
-      sort: 'trending',
-      limit: REALM_DISCOVERY_LIMIT,
-      ...(data.cursor === undefined ? {} : { cursor: data.cursor }),
-    });
+export const loadSearchRealmDiscovery: SearchRealmDiscoveryLoader = (request, signal) => {
+  const { sort: _sort, limit: _limit, ...readerInput } = request;
+  void _sort;
+  void _limit;
+  return readRealmDiscovery({
+    data: { ...readerInput, sort: 'trending' },
+    ...(signal === undefined ? {} : { signal }),
   });
-const loadSearchRealmDiscovery: SearchRealmDiscoveryLoader = (data) => readSearchRealmDiscovery({ data });
+};
 
 /** Accumulated public rows, one bounded page per action; disposal fences every late completion. */
 export function createSearchRealmDiscoveryPage(

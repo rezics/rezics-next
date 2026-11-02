@@ -29,6 +29,7 @@ Includes the public index tier, admitted catalogue plans and preparation, presen
 page read aggregation. [Public scope](../scope.md) owns discovery boundaries. Private library facts remain in their
 owner's PostgreSQL partition; a public index is never an authorization authority. Web owns interface integration.
 Realm browsing advances one explicit page at a time: successful More replaces the visible window (up to 20 rows), pending and failed reads preserve it, and broken cursors offer a first-page restart.
+Header and Recent Realm browsing reuse the strict Search reader through the shared one-page controller; injected loaders keep their request shape and receive its AbortSignal as an optional second argument.
 A relation stream admits a native links or relations page only when its raw row count is within the composition descriptor limit; an over-limit continuation keeps the last admitted window for retry and does not use Retry-After metadata.
 After profile persistence, any activation refusal remains retryable with its original head and idempotency keys; later edits stay in the separate draft.
 A native save or activation Retry-After is captured once as an absolute deadline; expiry enables a manual retry of that original intent and never publishes on its own.
