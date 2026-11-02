@@ -42,7 +42,10 @@ test('header messages follow each locale when locales coexist', async () => {
       ['aria-label="Suggestions"', 'aria-label="搜索建议"'],
       ['Suggestions could not be loaded.', '暂时无法提供搜索建议。'],
       ['Try again', '重试'],
-      ['Ctrl+K or Command+K to search. Esc closes and keeps your draft.', '按 Ctrl+K 或 Command+K 搜索；按 Esc 关闭并保留草稿。'],
+      [
+        'Ctrl+K or Command+K to search. Esc closes and keeps your draft.',
+        '按 Ctrl+K 或 Command+K 搜索；按 Esc 关闭并保留草稿。',
+      ],
     ] as const)
       for (const text of pair) expect(markup).toContain(text);
   } finally {

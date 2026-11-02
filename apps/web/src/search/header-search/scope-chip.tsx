@@ -2,15 +2,7 @@ import { X } from 'lucide-react';
 import { m } from '../../paraglide/messages.js';
 import type { SearchScope } from './types';
 
-export function ScopeChip({
-  scope,
-  locale,
-  onRemove,
-}: {
-  scope: SearchScope;
-  locale?: string;
-  onRemove: () => void;
-}) {
+export function ScopeChip({ scope, locale, onRemove }: { scope: SearchScope; locale?: string; onRemove: () => void }) {
   const removeLabel =
     locale === undefined
       ? m.header_search_remove_scope({ scope: scope.name })
