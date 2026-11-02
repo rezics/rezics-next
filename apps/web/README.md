@@ -3203,7 +3203,6 @@ After a definite released-definition refusal, the Recipe editor requires an expl
 compatible draft values remain intact, while changed or removed fields stay visible and read-only until removed, and
 uncertain commands retain their original payload and key.
 
-
 ## Private creator Sales
 
 `/creator/sales` uses the existing signed-in route and list/card family. Its current read prepares one server

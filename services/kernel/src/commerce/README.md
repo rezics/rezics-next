@@ -162,6 +162,7 @@ all native privacy/physical/whole-journey/main obligations below remain in force
 
 The focused acceptance is `test/commerce/subject-offers.test.ts`. Source delivery and typing do not establish
 native sale, protected use, privacy, reviewed Subject slot, whole-suite acceptance or promoted-main completion.
+
 ### Private creator sales accounting
 
 `GET /v1/commerceSales` publishes operation `commerce_sale.list`, the exact `commerce_sale:list` consent/action,

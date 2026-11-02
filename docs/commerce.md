@@ -37,7 +37,6 @@ The single focused `apps/web/tests/buyer-receipt.test.ts` exercises the actual g
 renderer using bounded HTTP inputs, including repricing isolation and failed/canceled versus paid/revoked messaging.
 Native persistence, provider, browser, visual and original acceptance execution remain integration obligations.
 
-
 ## Private creator accounting delivery
 
 `GET /v1/commerceSales` retains the exact own-account `commerce_sale:list` consent/action, selling gate,

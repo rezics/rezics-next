@@ -148,7 +148,6 @@ and unproved. Do not wait for private setup to prove deterministic signed-event,
 Commercial/shared adoption of tax/unit, reserve/carry/payability, richer attestation and authenticated recovery
 remains explicit in the owner contract; unknown economics cannot be silently implemented.
 
-
 ### Creator Sales source delivery
 
 The native order-event producer, exact source-role holds, immutable live-copy receiver, bounded WorkModule recovery,
