@@ -32,6 +32,13 @@ export async function lockOperationalSDKInventory(
     throw new OperationalWorkUnavailable('operational-work-sdk-original-recreated-or-changed');
 }
 
+/** Native columns and JSON carry the same discriminated stamp, including legacy absence. */
+function sameMappedStamp(mapping: Record<string, unknown>, source: OperationalWorkSource): boolean {
+  return mapping.source_domain === (source.stamp?.domain ?? 'legacy-unpositioned') &&
+    mapping.source_epoch === source.epoch && mapping.source_position === source.position &&
+    mapping.source_generation === source.generation && mapping.workflow_id === source.workflowId;
+}
+
 const roles = (value: readonly { accountRoute: number; accountId: string; roles: number }[]) =>
   [...value].sort((a, b) => a.accountRoute - b.accountRoute || a.accountId.localeCompare(b.accountId));
 export async function readbackOperationalInventory(
@@ -62,9 +69,10 @@ export async function readbackOperationalInventory(
  * client. It registers the actual original SDK execution; it performs NO second enqueue. */
 export async function receiveOperationalWorkDestination(
   pool: Pool, work: WorkClient, origin: CommittedOperationalWork, transfer: OperationalWorkTransfer,
-): Promise<'registered-pending-position' | 'uncaptured'> {
+): Promise<'registered-pending-source-currentness' | 'registered-pending-position' | 'uncaptured'> {
   const source = operationalWorkSource(pool, origin);
-  const { deadline } = consumeOperationalWorkTransfer(pool, transfer, 'receive', source.custodyId);
+  const { deadline: transferDeadline } = consumeOperationalWorkTransfer(pool, transfer, 'receive', source.custodyId);
+  const deadline = Math.min(transferDeadline, source.deadline);
   return withConnection(pool, async client => {
     const tx = operationalWorkDeadlineClient(client, deadline);
     await tx.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
@@ -76,28 +84,31 @@ export async function receiveOperationalWorkDestination(
       )).rows[0];
       const domain = (await tx.query('SELECT generation::text FROM core.history_family_domain WHERE singleton FOR SHARE')).rows[0];
       if (!receiver || !domain) throw new OperationalWorkUnavailable('operational-work-receiving-home-unavailable');
+      await guardHistoryAccounts(tx, 0, source.scope.accounts);
       await lockOperationalSDKInventory(tx, pool, work, source);
       await tx.query(
         `INSERT INTO core.operational_work_mapping(partition_no,custody_id,workflow_id,source_partition,source_transaction,
-         source_epoch,source_position,source_generation,request_digest,source,receiver_epoch,receiver_generation,sdk_writer)
-         VALUES(0,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT DO NOTHING`,
+         source_epoch,source_position,source_generation,request_digest,source,receiver_epoch,receiver_generation,sdk_writer,source_domain,log_gap)
+         VALUES(0,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) ON CONFLICT DO NOTHING`,
         [source.custodyId, source.workflowId, source.partition, source.transactionId, source.epoch, source.position,
-          source.generation, Buffer.from(source.digest, 'hex'), source, receiver.epoch, domain.generation, source.sdkWriter],
+          source.generation, Buffer.from(source.digest, 'hex'), source, receiver.epoch, domain.generation, source.sdkWriter,
+          source.stamp?.domain ?? 'legacy-unpositioned', source.stamp ? null : source.gap],
       );
       const mapping = (await tx.query(
-        `SELECT source,receiver_epoch,receiver_generation::text,workflow_id FROM core.operational_work_mapping
+        `SELECT source,receiver_epoch,receiver_generation::text,workflow_id,source_domain,source_epoch,source_position::text,source_generation::text FROM core.operational_work_mapping
          WHERE partition_no=0 AND custody_id=$1 FOR SHARE`, [source.custodyId],
       )).rows[0];
-      if (!mapping || mapping.workflow_id !== source.workflowId || canonicalize(mapping.source) !== canonicalize(source) ||
+      if (!mapping || !sameMappedStamp(mapping, source) || mapping.workflow_id !== source.workflowId || canonicalize(mapping.source) !== canonicalize(source) ||
         mapping.receiver_epoch !== receiver.epoch || mapping.receiver_generation !== domain.generation)
         throw new OperationalWorkUnavailable('operational-work-receiving-restore-or-binding-changed');
-      await guardHistoryAccounts(tx, 0, source.scope.accounts);
       await insertOperationalWorkInventory(tx, 0, source.custodyId, Buffer.from(source.digest, 'hex'),
         source.scope, source.intent, source.partition, source.transactionId);
       await readbackOperationalInventory(tx, source);
       if (Date.now() >= deadline) throw new OperationalWorkUnavailable('operational-work-deadline');
+      await tx.query("SELECT set_config('statement_timeout',$1,true)", [String(Math.max(1, deadline - Date.now()))]);
       await tx.query('COMMIT');
-      return source.creationCaptured ? 'registered-pending-position' : 'uncaptured';
+      return !source.creationCaptured ? 'uncaptured' : source.stamp
+        ? 'registered-pending-source-currentness' : 'registered-pending-position';
     } catch (error) { await client.query('ROLLBACK'); throw error; }
   });
 }
@@ -110,7 +121,8 @@ async function checkMappedOperationalWork(
   phase: 'replay' | 'retirement', custodyId?: string,
 ): Promise<string | null> {
   const source = operationalWorkSource(pool, origin);
-  const { deadline } = consumeOperationalWorkTransfer(pool, transfer, phase, source.custodyId);
+  const { deadline: transferDeadline } = consumeOperationalWorkTransfer(pool, transfer, phase, source.custodyId);
+  const deadline = Math.min(transferDeadline, source.deadline);
   if (custodyId !== undefined && custodyId !== source.custodyId)
     throw new TypeError('Foreign operational History retirement locator');
   return withConnection(pool, async client => {
@@ -122,14 +134,12 @@ async function checkMappedOperationalWork(
       const receiver = (await tx.query("SELECT epoch FROM core.partition WHERE partition_no=0 AND write_state='active' FOR SHARE")).rows[0];
       const domain = (await tx.query('SELECT generation::text FROM core.history_family_domain WHERE singleton FOR SHARE')).rows[0];
       const mapping = (await tx.query(
-        `SELECT source,receiver_epoch,receiver_generation::text FROM core.operational_work_mapping
+        `SELECT source,receiver_epoch,receiver_generation::text,workflow_id,source_domain,source_epoch,source_position::text,source_generation::text FROM core.operational_work_mapping
          WHERE partition_no=0 AND custody_id=$1 FOR SHARE`, [source.custodyId],
       )).rows[0];
-      if (!mapping || !receiver || mapping.receiver_epoch !== receiver.epoch ||
+      if (!mapping || !sameMappedStamp(mapping, source) || !receiver || mapping.receiver_epoch !== receiver.epoch ||
         mapping.receiver_generation !== domain?.generation || canonicalize(mapping.source) !== canonicalize(source))
         throw new OperationalWorkUnavailable('operational-work-receiving-restore-or-binding-changed');
-      await lockOperationalSDKInventory(tx, pool, work, source);
-      await readbackOperationalInventory(tx, source);
       for (const account of source.scope.accounts) {
         const seal = (await tx.query(
           `SELECT phase FROM core.history_seal WHERE partition_no=0 AND account_route=$1 AND account_id=$2 FOR SHARE`,
@@ -138,7 +148,10 @@ async function checkMappedOperationalWork(
         if (phase === 'replay' && seal?.phase !== 'open')
           throw new OperationalWorkUnavailable('operational-work-account-history-sealed');
       }
+      await lockOperationalSDKInventory(tx, pool, work, source);
+      await readbackOperationalInventory(tx, source);
       if (Date.now() >= deadline) throw new OperationalWorkUnavailable('operational-work-deadline');
+      await tx.query("SELECT set_config('statement_timeout',$1,true)", [String(Math.max(1, deadline - Date.now()))]);
       await tx.query('COMMIT');
       return source.creationCaptured ? source.gap : 'operational-work-uncaptured-older-execution';
     } catch (error) { await client.query('ROLLBACK'); throw error; }
