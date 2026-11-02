@@ -109,6 +109,7 @@ for (const clear of [false, true])
     await click(clear ? m.reaction_like() : m.reaction_love());
     await click(m.reaction_love()); // A queued choice cannot escape uncertainty.
     await settle(writes[0]!, new Error('Response lost'));
+    expect(host.querySelector('[role="status"]')?.textContent).toBe(m.candidate_unavailable());
     expect(button(m.reaction_like()).disabled).toBe(true);
     await click(m.editorial_retry());
     await click(m.editorial_retry());
@@ -145,7 +146,10 @@ for (const boundary of ['target', 'account', 'csrf'] as const)
           boundary === 'account' ? session('other-reader') : { ...session(), csrfToken: 'replacement' },
         );
       });
-    const target = { kind: 'thread' as const, id: boundary === 'target' ? 'two' : 'one' };
+    const target = {
+      kind: boundary === 'target' ? ('thread' as const) : ('post' as const),
+      id: boundary === 'target' ? 'two' : 'one',
+    };
     await paint({ target, counts: { like: 20, love: 30 }, value: 'love' });
     await act(async () => retired.click());
     await settle(reads[0]!, { ok: true, counts: { like: 99 }, value: 'like' });
@@ -155,7 +159,7 @@ for (const boundary of ['target', 'account', 'csrf'] as const)
     expect(reads).toHaveLength(1);
     await click(m.reaction_like());
     expect(writes[2]!.data).toMatchObject({
-      target: 'thread',
+      target: target.kind,
       id: target.id,
       expectedReader: boundary === 'account' ? 'other-reader' : 'reader',
     });
