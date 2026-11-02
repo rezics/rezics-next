@@ -249,15 +249,20 @@ async function putBytes(media: ReservedMedia, file: File, signal: AbortSignal): 
   await response.body?.cancel().catch(() => {});
 }
 
+async function readReservation(id: string, signal: AbortSignal): Promise<ReservedMedia> {
+  const response = await siteFetch(`/media/${encodeURIComponent(id)}`, { method: 'GET', signal });
+  if (!response.ok) throw await refusalFrom(response);
+  const media = mediaOf(await response.json());
+  if (!media || media.id !== id) throw new UploadRefusal('unavailable');
+  return media;
+}
+
 async function poll(id: string, signal: AbortSignal): Promise<ReservedMedia> {
   const started = Date.now();
   let delay = initialDelay;
   for (let read = 0; read < maxReads; read += 1) {
     throwIfAborted(signal);
-    const response = await siteFetch(`/media/${encodeURIComponent(id)}`, { method: 'GET', signal });
-    if (!response.ok) throw await refusalFrom(response);
-    const media = mediaOf(await response.json());
-    if (!media || media.id !== id) throw new UploadRefusal('unavailable');
+    const media = await readReservation(id, signal);
     if (media.state === 'available' || media.state === 'rejected') return media;
     const wait = Math.min(delay, maxDelay);
     delay = Math.min(delay * 2, maxDelay);
@@ -313,9 +318,25 @@ export function uploadReplyImage(target: PostReserveTarget, file: File, signal: 
   return uploadImage(target, file, signal, 'post-image');
 }
 
-/** Read the original reservation on manual retry, using the original file only for preview dimensions. */
-export function resumeReplyImageUpload(mediaId: string, file: File, signal: AbortSignal): Promise<UploadedImage> {
-  return readUploadedImage(mediaId, file, signal);
+/** Resume only missing bytes on the original reservation, then observe its native processing state. */
+export async function resumeReplyImageUpload(mediaId: string, file: File, signal: AbortSignal): Promise<UploadedImage> {
+  try {
+    throwIfAborted(signal);
+    if (!isPostImageType(file.type)) throw new UploadRefusal('type');
+    if (!Number.isSafeInteger(file.size) || file.size < 1) throw new UploadRefusal('unavailable');
+    if (file.size > postImageByteLimit) throw new UploadRefusal('too-large');
+    const current = await readReservation(mediaId, signal);
+    if (current.mediaType !== file.type || current.byteCount !== file.size) throw new UploadRefusal('unavailable');
+    if (current.state === 'rejected') throw new UploadRefusal('rejected');
+    if (current.state === 'reserved') await putBytes(current, file, signal);
+    return await readUploadedImage(mediaId, file, signal);
+  } catch (error) {
+    throwIfAborted(signal);
+    if (isAbort(error)) throw error;
+    const failure = error instanceof UploadRefusal ? error : new UploadRefusal('unavailable');
+    failure.mediaId = mediaId;
+    throw failure;
+  }
 }
 
 export function uploadAvatar(accountId: string, file: File, signal: AbortSignal): Promise<UploadedImage> {

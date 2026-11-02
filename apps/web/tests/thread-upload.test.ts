@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 
 mock.module('../src/session/query', () => ({ sessionCsrfToken: () => 'site-csrf' }));
 const { resumeReplyImageUpload, uploadReplyImage, uploadAvatar, UploadRefusal } = await import('../src/threads/upload');
+const { ReplyImageUploadRecovery } = await import('../src/threads/media-upload-recovery');
 
 const mediaId = '0192f3a0-6c1e-7b2a-9d4e-000000000001';
 const mediaPath = `/media/${mediaId}`;
@@ -130,6 +131,48 @@ test('manual resume reads one original reservation and uses the original File fo
     expect(init.credentials).toBe('same-origin');
     expect(init.cache).toBe('no-store');
     expect(new Headers(init.headers).get('X-CSRF-Token')).toBe(init.method === 'GET' ? null : 'site-csrf');
+  }
+});
+
+test('retrying a lost PUT resumes reserved bytes or observes accepted bytes without another reservation', async () => {
+  let state = 'reserved';
+  let puts = 0;
+  let firstPutAccepted = false;
+  intercept((_path, init) => {
+    if (init.method === 'POST') return media('reserved');
+    if (init.method === 'PUT') {
+      puts += 1;
+      if (puts === 1) {
+        state = firstPutAccepted ? 'uploaded' : 'reserved';
+        throw new Error('lost PUT response');
+      }
+      state = 'available';
+      return new Response(null, { status: 204 });
+    }
+    if (state === 'uploaded') {
+      state = 'available';
+      return media('uploaded');
+    }
+    return media(state);
+  });
+
+  for (const accepted of [false, true]) {
+    calls.length = 0;
+    state = 'reserved';
+    puts = 0;
+    firstPutAccepted = accepted;
+    const recovery = new ReplyImageUploadRecovery(() => ({
+      target: { containerId: 'original-thread' },
+      session: { subject: 'writer', csrfToken: 'site-csrf' },
+    }));
+    expect(await refusal(recovery.upload(file, signal()))).toMatchObject({ reason: 'unavailable', mediaId });
+    expect(calls.map(({ init }) => init.method)).toEqual(['POST', 'PUT']);
+    expect(await recovery.upload(file, signal())).toEqual({ src: mediaId, width: 7, height: 5 });
+    expect(calls.filter(({ init }) => init.method === 'POST')).toHaveLength(1);
+    expect(calls.filter(({ init }) => init.method === 'PUT')).toHaveLength(accepted ? 1 : 2);
+    expect(calls.filter(({ init }) => init.method !== 'POST').every(({ path }) => path === mediaPath)).toBe(true);
+    for (const { init } of calls.filter(({ init }) => init.method === 'PUT'))
+      expect(await (init.body as Blob).text()).toBe(await file.text());
   }
 });
 
