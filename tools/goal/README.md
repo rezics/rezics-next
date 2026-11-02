@@ -776,7 +776,7 @@ complete while a required branch is missing the recorded release.
 
 Use the normal train for a local emergency patch: have the supermanager write a `control-plane` brief naming the
 changed `tools/goal/` paths and a regression case, dispatch it, then land it through the controller. Do not patch
-`main`, `stabilize` or `dev` directly.
+`main`, `stabilize` or `dev` directly; [cp-sync](#control-plane-on-dev-cp-sync) publishes dev's control plane to main.
 
 ```sh
 bun tools/goal/src/cli.ts dispatch .temp/goal/control-plane-emergency.md
@@ -1345,6 +1345,68 @@ A manual smoke test for an authenticated local Codex manager is available withou
 ```sh
 CODEX_HOME="/absolute/path/to/<cli-config-directory>" bun tools/goal/scripts/smoke-codex-manager.ts
 ```
+
+## Control plane on dev: cp-sync
+
+Control-plane changes iterate on `dev` with the products. `cp-sync` makes dev's `tools/goal` live on `main` without
+the main-release proof:
+
+```sh
+bun tools/goal/scripts/cp-sync.ts --dry-run
+bun tools/goal/scripts/cp-sync.ts
+bun tools/goal/scripts/cp-sync.ts --rollback
+```
+
+Run it from any checkout; it finds the main checkout by its checked-out `main`, and requires `main` to be inside
+`dev`. It adds a temporary worktree of the current `main` head in `../worktrees` beside the main checkout, replaces
+its `tools/goal` with dev's (`git checkout --no-overlay`, so dev's deletions apply) and checks it there: root and
+`tools/goal` installs, the `tools/goal` type check, and a CLI smoke, `bun tools/goal/src/cli.ts status`, with
+`GOAL_MAIN_CHECKOUT` and `GOAL_LOCAL_CONFIG` naming the live checkout and its settings. The smoke's state directory
+holds a copy of the live `goal.sqlite` made by `VACUUM INTO` over a read-only connection, so the candidate's
+migrations and orphan recovery act on the copy; `GOAL_MANAGER` keeps that recovery from handing a train to a
+detached process that would act on live refs. cp-sync never writes the live database. Each step runs in its own
+process group under a time box. Children otherwise get no `GOAL_*`, `CLAUDE*`, `CODEX_*`, Git location or
+secret-named variables, and output is redacted before it is printed or written to `.temp/goal/cp-sync/<run>/`.
+
+Before the checks it lists the root files dev's `tools/goal` loads by relative path (imports and `import.meta.dir`
+joins, followed through their own imports) that differ from main's, as runtime or test references, and main's root
+configuration that names `tools/goal` paths the candidate lacks. The checks use main's copies of root files;
+`--include <path>` (repeatable) also syncs a named root path from dev. `tools/goal` has its own lockfile, so its
+dependencies travel with it.
+
+The candidate is committed as `control-plane: sync tools/goal from dev <short sha>` on the detached worktree before
+the checks, so tests that read the checkout's HEAD see it, as in the main-release proof.
+
+Every step must exit 0. `--full` adds the main-release proof's suite, `bun test --timeout 30000 tools/goal/src`,
+stopped and reported after 30 minutes. The suite does not pass on an unmodified fresh checkout of main, so it is
+gated on no new failures: it must finish with every counted failure named, and every failing test (keyed by file and
+name) must also fail when the installs and suite run on a worktree of unmodified main. That baseline runs only when
+the candidate's suite fails and is cached per main commit in `.temp/goal/cp-sync/baseline-<main>-<checks>.json`; a
+full sync records the published commit's result as the next baseline, and `--fresh-baseline` reruns it. Failures
+main lacks get one rerun of their test files; those that pass then are reported as flaky, and any that fail again
+refuse the sync. Each run's step results are in `.temp/goal/cp-sync/<run>/results.json`. Processes still running in
+a temporary worktree, such as detached test fixtures, are stopped before it is removed.
+
+Only when the gate passes does cp-sync publish. It first moves the main checkout's index and files with
+`git read-tree -m -u <old> <new>`, then moves the refs in one `git update-ref --stdin` transaction against their
+captured values: `main` to the sync commit, `stabilize` (when present) to a merge of it that takes main's
+control-plane paths, and `dev` to a merge that keeps dev's tree. Main stays inside stabilize and dev, so promotion
+still fast-forwards and the next sync finds main inside dev. A failed transaction moves the files back.
+(`git merge --ff-only` cannot do this step: once the ref has moved, the checkout's HEAD already names the new commit.)
+Running processes hand over on the new `main:tools/goal` as after any control-plane release. If
+`tools/goal/package.json` or its lockfile changed, cp-sync reinstalls in the main checkout. Each sync appends the
+previous and new main, stabilize and dev heads to `.temp/goal/cp-sync-history.log`.
+
+cp-sync refuses when the main checkout has uncommitted or untracked files under the synced paths, when `main`
+moved, when stabilize changed control-plane paths that dev lacks, or while another run holds `.temp/goal/cp-sync.lock`.
+`--dry-run` does everything except moving refs and the checkout, prints the diff stat, step results and the ref moves
+it would make, and exits 1 when a real run would refuse. Unlike a real run, it runs the later steps after a failed
+type check. `--keep-worktree` keeps the temporary worktree.
+
+`--rollback` restores the synced paths of the main commit before the newest sync not yet rolled back, and refuses
+if main moved since the last cp-sync. The repository's reference-transaction hook lets main move only forward, so the
+rollback is a new commit holding that tree, published the same way. Dev keeps its code; stabilize takes the rollback
+unless it already has newer control-plane code, which its next promotion republishes. Fix forward on dev, then sync.
 
 ## Pausing and resuming the Goal
 
