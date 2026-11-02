@@ -1,16 +1,7 @@
 import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { SubjectTermsNavigationGuard } from './subject-terms-navigation';
 import { useQuery } from '@tanstack/react-query';
-import {
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type FormEvent,
-  type MouseEvent,
-} from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import {
@@ -196,16 +187,14 @@ function SubjectTermsPageLive({
     () => ({}),
     [query.data, query.error, query.dataUpdatedAt, query.errorUpdatedAt, initialRetry, visit],
   );
-  currentOrigin.current =
-    !base && !query.isPending && !query.isFetching && !retryAction.current ? origin : null;
+  currentOrigin.current = !base && !query.isPending && !query.isFetching && !retryAction.current ? origin : null;
   useEffect(() => {
     const cancelOnPointer = () => {
       if (retryFocus.current) retryFocus.current.cancelled = true;
     };
     const cancelOnFocus = (event: FocusEvent) => {
       const intent = retryFocus.current;
-      if (intent && event.target !== intent.opener && event.target !== document.body)
-        intent.cancelled = true;
+      if (intent && event.target !== intent.opener && event.target !== document.body) intent.cancelled = true;
     };
     document.addEventListener('pointerdown', cancelOnPointer, true);
     document.addEventListener('focusin', cancelOnFocus, true);
@@ -238,10 +227,7 @@ function SubjectTermsPageLive({
     const action = {};
     retryAction.current = action;
     currentOrigin.current = null;
-    const intent =
-      event.detail === 0
-        ? { action, visit, opener: event.currentTarget, cancelled: false }
-        : null;
+    const intent = event.detail === 0 ? { action, visit, opener: event.currentTarget, cancelled: false } : null;
     retryFocus.current = intent;
     setSettledRetry(null);
     setInitialRetry('pending');
@@ -261,12 +247,7 @@ function SubjectTermsPageLive({
     setSettledRetry(null);
     setInitialRetry(undefined);
     if (retryFocus.current === settledRetry) retryFocus.current = null;
-    if (
-      settledRetry.cancelled ||
-      !lifetime.active() ||
-      currentVisit.current !== settledRetry.visit
-    )
-      return;
+    if (settledRetry.cancelled || !lifetime.active() || currentVisit.current !== settledRetry.visit) return;
     const active = document.activeElement;
     if (settledRetry.opener.isConnected && active === settledRetry.opener) return;
     if (active !== document.body && active !== settledRetry.opener) return;
