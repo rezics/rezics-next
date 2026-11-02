@@ -390,29 +390,29 @@ export function createCollectionBulkOperations(deps: CollectionBulkDependencies)
                     prepared.resolved,
                   )
                 : await (async () => {
-                  const rows = await tx.query<{ subjectId: string; incarnation: string | null; revision: number }>(
-                    `SELECT subject_id AS "subjectId",incarnation_id AS incarnation,revision FROM library.entry
+                    const rows = await tx.query<{ subjectId: string; incarnation: string | null; revision: number }>(
+                      `SELECT subject_id AS "subjectId",incarnation_id AS incarnation,revision FROM library.entry
                       WHERE route=$1 AND account_id=$2 AND subject_id=ANY($3::uuid[]) ORDER BY subject_id`,
-                    [route, owner.accountId, prepared.resolved.map((subject) => subject.subjectId)],
-                  );
-                  const entries = new Map(rows.rows.map((entry) => [entry.subjectId, entry]));
-                  return prepared.resolved.map((subject): CollectionBulkTarget => {
-                    const entry = entries.get(subject.subjectId);
-                    if (entry && !entry.incarnation) throw new ProblemError('dependency_unavailable');
-                    return {
-                      kind: 'subject',
-                      ...subject,
-                      expected: entry
-                        ? {
-                            kind: 'present',
-                            incarnation: entry.incarnation!,
-                            admissionSequence: '0',
-                            revision: entry.revision,
-                          }
-                        : { kind: 'absent', slotGeneration: '0' },
-                    };
-                  });
-                })();
+                      [route, owner.accountId, prepared.resolved.map((subject) => subject.subjectId)],
+                    );
+                    const entries = new Map(rows.rows.map((entry) => [entry.subjectId, entry]));
+                    return prepared.resolved.map((subject): CollectionBulkTarget => {
+                      const entry = entries.get(subject.subjectId);
+                      if (entry && !entry.incarnation) throw new ProblemError('dependency_unavailable');
+                      return {
+                        kind: 'subject',
+                        ...subject,
+                        expected: entry
+                          ? {
+                              kind: 'present',
+                              incarnation: entry.incarnation!,
+                              admissionSequence: '0',
+                              revision: entry.revision,
+                            }
+                          : { kind: 'absent', slotGeneration: '0' },
+                      };
+                    });
+                  })();
           const request = { ...parsed, selection: { kind: 'explicit' as const } };
           const operation = { route, id: operationId, kind: BULK_PREVIEW_COMMAND, sourceId: operationId };
           const record: DurableInitiatorRecord = {

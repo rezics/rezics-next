@@ -62,7 +62,9 @@ async function worker() {
 async function outcomes(operationId: string) {
   const response = await f.send('owner', 'GET', `/v1/libraryOperations/${operationId}/outcomes`);
   expect(response.status).toBe(200);
-  return (await response.json()) as { outcomes: { state: string; reason: string | null; resultingMemberId: string | null }[] };
+  return (await response.json()) as {
+    outcomes: { state: string; reason: string | null; resultingMemberId: string | null }[];
+  };
 }
 
 test('explicit add preview stores native targets without membership effects; replay and lost response reuse one occurrence', async () => {
@@ -111,11 +113,15 @@ test('explicit add preview stores native targets without membership effects; rep
     });
   }
   const members = await f.send('owner', 'GET', `/v1/collections/${collectionId}/members`);
-  expect((await members.json() as { members: unknown[] }).members).toHaveLength(0);
+  expect(((await members.json()) as { members: unknown[] }).members).toHaveLength(0);
 
   const confirmKey = key();
-  expect((await f.send('owner', 'POST', `/v1/libraryOperations/${operationId}:confirm`, {}, confirmKey)).status).toBe(200);
-  expect((await f.send('owner', 'POST', `/v1/libraryOperations/${operationId}:confirm`, {}, confirmKey)).status).toBe(200);
+  expect((await f.send('owner', 'POST', `/v1/libraryOperations/${operationId}:confirm`, {}, confirmKey)).status).toBe(
+    200,
+  );
+  expect((await f.send('owner', 'POST', `/v1/libraryOperations/${operationId}:confirm`, {}, confirmKey)).status).toBe(
+    200,
+  );
   const runtime = await worker();
   await runCollectionBulkPage(runtime, { route, operationId });
   await runCollectionBulkPage(runtime, { route, operationId });
@@ -124,18 +130,18 @@ test('explicit add preview stores native targets without membership effects; rep
   expect(result.outcomes[0]).toMatchObject({ state: 'applied', reason: null });
   expect(result.outcomes[0]?.resultingMemberId).toBeTruthy();
   const appliedMembers = await f.send('owner', 'GET', `/v1/collections/${collectionId}/members`);
-  expect((await appliedMembers.json() as { members: { subjectId: string }[] }).members.map((member) => member.subjectId)).toEqual([
-    subjectId,
-  ]);
+  expect(
+    ((await appliedMembers.json()) as { members: { subjectId: string }[] }).members.map((member) => member.subjectId),
+  ).toEqual([subjectId]);
 });
 
 test('represented subjects skip and capacity failures stay individual outcomes', async () => {
   const collectionId = await collection('Bulk add outcomes');
   const represented = await f.createSubject('game', 'Already represented');
   const newSubject = await f.createSubject('game', 'At capacity');
-  expect((await f.send('owner', 'POST', `/v1/collections/${collectionId}/members`, { subjectId: represented })).status).toBe(
-    201,
-  );
+  expect(
+    (await f.send('owner', 'POST', `/v1/collections/${collectionId}/members`, { subjectId: represented })).status,
+  ).toBe(201);
   const { response } = await preview(collectionId, [represented, newSubject]);
   expect(response.status).toBe(201);
   const created = (await response.json()) as { operation: { id: string; route: number } };
@@ -160,9 +166,9 @@ test('represented subjects skip and capacity failures stay individual outcomes',
     ['failed', 'collection_full'],
   ]);
   const members = await f.send('owner', 'GET', `/v1/collections/${collectionId}/members`);
-  expect((await members.json() as { members: { subjectId: string }[] }).members.map(({ subjectId }) => subjectId)).toEqual([
-    represented,
-  ]);
+  expect(
+    ((await members.json()) as { members: { subjectId: string }[] }).members.map(({ subjectId }) => subjectId),
+  ).toEqual([represented]);
 });
 
 test('a destination that loses authority remains the stored target through confirmation', async () => {
@@ -182,7 +188,12 @@ test('a destination that loses authority remains the stored target through confi
     ),
   );
   expect(ownerRole.rows).toHaveLength(1);
-  await createGrantCommands({ pool: f.pool, access: f.access, managementAction: 'access:grant', clock }).transferRealmOwner(
+  await createGrantCommands({
+    pool: f.pool,
+    access: f.access,
+    managementAction: 'access:grant',
+    clock,
+  }).transferRealmOwner(
     { pool: f.pool, actor: f.steward.actor, deadline: Date.now() + 30_000 },
     {
       resource: { route, id: destination },
@@ -193,8 +204,12 @@ test('a destination that loses authority remains the stored target through confi
     },
   );
   const confirmKey = key();
-  expect((await f.send('owner', 'POST', `/v1/libraryOperations/${operationId}:confirm`, {}, confirmKey)).status).toBe(200);
-  expect((await f.send('owner', 'POST', `/v1/libraryOperations/${operationId}:confirm`, {}, confirmKey)).status).toBe(200);
+  expect((await f.send('owner', 'POST', `/v1/libraryOperations/${operationId}:confirm`, {}, confirmKey)).status).toBe(
+    200,
+  );
+  expect((await f.send('owner', 'POST', `/v1/libraryOperations/${operationId}:confirm`, {}, confirmKey)).status).toBe(
+    200,
+  );
 
   const stored = await withConnection(f.pool, async (tx) => {
     const locator = { route, accountId: f.owner.actor.accountId, operationId };
@@ -209,5 +224,5 @@ test('a destination that loses authority remains the stored target through confi
   await runCollectionBulkPage(await worker(), { route, operationId });
   expect((await outcomes(operationId)).outcomes[0]).toMatchObject({ state: 'cancelled', reason: 'authority_lost' });
   const replacementMembers = await f.send('owner', 'GET', `/v1/collections/${otherDestination}/members`);
-  expect((await replacementMembers.json() as { members: unknown[] }).members).toHaveLength(0);
+  expect(((await replacementMembers.json()) as { members: unknown[] }).members).toHaveLength(0);
 });
