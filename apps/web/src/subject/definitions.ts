@@ -172,9 +172,7 @@ export async function typeNames(types: Iterable<string>, locale: string): Promis
   const descriptors = await readTypeDescriptors(types, locale);
   return new Map(
     [...descriptors].flatMap(([type, descriptor]) =>
-      descriptor.label
-        ? [[type, displayTypeLabel(descriptor.label, descriptor.language ?? locale)] as const]
-        : [],
+      descriptor.label ? [[type, displayTypeLabel(descriptor.label, descriptor.language ?? locale)] as const] : [],
     ),
   );
 }

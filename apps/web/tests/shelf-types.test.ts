@@ -77,11 +77,16 @@ test('a reader chooses an indexed Type absent from loaded entries, retains the n
     const req = new Request(input, init);
     const url = new URL(req.url);
     if (url.pathname.startsWith('/v1/definitionTypes/')) {
-      
       const typeId = decodeURIComponent(url.pathname.slice('/v1/definitionTypes/'.length));
       const definition = definitions.release.types[typeId as keyof typeof definitions.release.types];
       if (!definition) return new Response(null, { status: 404 });
-      return Response.json({ typeId, releaseDigest: definitions.digest, label: definition.labels.en, language: 'en', definition });
+      return Response.json({
+        typeId,
+        releaseDigest: definitions.digest,
+        label: definition.labels.en,
+        language: 'en',
+        definition,
+      });
     }
     if (url.pathname === '/v1/definitions/active') return Response.json({ digest: definitions.digest });
     if (url.pathname.startsWith('/v1/definitions/releases/')) return Response.json(definitions);

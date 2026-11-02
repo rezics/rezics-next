@@ -198,7 +198,13 @@ test('Whole Shelf type chooser binds actual same-read viewer and cursor provenan
       const typeId = decodeURIComponent(path.slice('/v1/definitionTypes/'.length));
       const definition = definitions.release.types[typeId as keyof typeof definitions.release.types];
       if (!definition) return new Response(null, { status: 404 });
-      return Response.json({ typeId, releaseDigest: definitions.digest, label: definition.labels.en, language: 'en', definition });
+      return Response.json({
+        typeId,
+        releaseDigest: definitions.digest,
+        label: definition.labels.en,
+        language: 'en',
+        definition,
+      });
     }
     if (path === '/v1/definitions/active')
       return namesFail ? new Response(null, { status: 503 }) : Response.json({ digest: definitions.digest });

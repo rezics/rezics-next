@@ -58,8 +58,7 @@ export async function readTypeDescriptor(typeId: string, locale: string): Promis
     return { ok: false, reason: 'missing' };
   try {
     const response = await definitionTypes(locale)({ typeId }).get({ query: { locale } });
-    if (response.error)
-      return { ok: false, reason: httpStatus(response.error) === 404 ? 'missing' : 'unavailable' };
+    if (response.error) return { ok: false, reason: httpStatus(response.error) === 404 ? 'missing' : 'unavailable' };
     const descriptor = response.data;
     if (
       !descriptor ||
