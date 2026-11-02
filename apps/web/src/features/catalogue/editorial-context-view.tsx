@@ -3,6 +3,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { pickText } from '@rezics/composition';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Tombstone } from '@rezics/ui/tombstone';
 import { Input } from '@rezics/ui/shadcn/input';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
@@ -171,193 +172,204 @@ function EditorialContextWorkspaceLive({
       className="min-w-0 space-y-6"
       data-editorial-workspace
     >
-      <header className="space-y-2">
-        <h2 className="text-2xl font-semibold">
-          {active ? pickText(active.labels, locale).text || m.context_unnamed({}, o) : m.editorial_title({}, o)}
-        </h2>
-        <p className="text-sm text-muted-foreground">{m.editorial_intro({}, o)}</p>
-      </header>
-      {busy && <p role="status">{m.candidate_loading({}, o)}</p>}
-      {notice && (notice !== 'delete' || !knownDeleted) && (
-        <p role="status">
-          {notice === 'delete'
-            ? m.editorial_deleted({}, o)
-            : notice === 'restore'
-              ? m.editorial_restored({}, o)
-              : m.editorial_created({}, o)}
-        </p>
-      )}
-      {knownDeleted && !active && (
-        <div role="status">
-          <Tombstone shape="row" reason="deleted" labels={{ deleted: m.editorial_deleted({}, o) }} />
-        </div>
-      )}
-      {failure && <p role="alert">{errorText(failure.reason)}</p>}
-      {reading && !reading.ok && <p role="status">{errorText(reading.reason)}</p>}
-      {!currentId && (
-        <form
-          className="max-w-xl space-y-4"
-          data-editorial-form
-          onSubmit={(event) => {
-            event.preventDefault();
-            void submit('create');
-          }}
-        >
-          <p>{m.editorial_empty({}, o)}</p>
-          <Field>
-            <FieldLabel htmlFor={`${fieldId}-language`}>{m.catalogue_create_language({}, o)}</FieldLabel>
-            <NativeSelect
-              id={`${fieldId}-language`}
-              className={languageControlClass}
-              data-editorial-control
-              value={language}
-              disabled={busy || !!pending}
-              onChange={(event) => lifetime.active() && !running.current && !pending && setLanguage(event.target.value)}
-            >
-              {locales.map((value) => (
-                <NativeSelectOption key={value} value={value}>
-                  {languageNames.of(value) ?? value}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
-          </Field>
-          <Field>
-            <FieldLabel htmlFor={`${fieldId}-name`}>{m.catalogue_create_label({}, o)}</FieldLabel>
-            <Input
-              id={`${fieldId}-name`}
-              className={formControlClass}
-              data-editorial-control
-              value={name}
-              maxLength={250}
-              required
-              disabled={busy || !!pending}
-              onChange={(event) => {
-                if (!lifetime.active() || running.current || pending) return;
-                setName(event.target.value);
-                setFailure(undefined);
-              }}
-            />
-          </Field>
-          {!pending && (
-            <Button type="submit" className={actionControlClass} data-editorial-control disabled={busy || !name.trim()}>
-              {m.editorial_create({}, o)}
-            </Button>
-          )}
-        </form>
-      )}
-      {active?.kind === 'global' && <p>{m.editorial_global({}, o)}</p>}
-      {active && (
-        <div className="flex flex-wrap gap-3" data-editorial-action-row>
-          {reviewHref && (
+      <ContentItemFrame as="div" className="min-w-0 space-y-6 p-4 [overflow-wrap:anywhere] sm:p-6" data-editorial-panel>
+        <header className="space-y-2">
+          <ContentItemHeading level={2} className="text-2xl font-semibold">
+            {active ? pickText(active.labels, locale).text || m.context_unnamed({}, o) : m.editorial_title({}, o)}
+          </ContentItemHeading>
+          <p className="text-sm text-muted-foreground">{m.editorial_intro({}, o)}</p>
+        </header>
+        {busy && <p role="status">{m.candidate_loading({}, o)}</p>}
+        {notice && (notice !== 'delete' || !knownDeleted) && (
+          <p role="status">
+            {notice === 'delete'
+              ? m.editorial_deleted({}, o)
+              : notice === 'restore'
+                ? m.editorial_restored({}, o)
+                : m.editorial_created({}, o)}
+          </p>
+        )}
+        {knownDeleted && !active && (
+          <div role="status">
+            <Tombstone shape="row" reason="deleted" labels={{ deleted: m.editorial_deleted({}, o) }} />
+          </div>
+        )}
+        {failure && <p role="alert">{errorText(failure.reason)}</p>}
+        {reading && !reading.ok && <p role="status">{errorText(reading.reason)}</p>}
+        {!currentId && (
+          <form
+            className="max-w-xl space-y-4"
+            data-editorial-form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void submit('create');
+            }}
+          >
+            <p>{m.editorial_empty({}, o)}</p>
+            <Field>
+              <FieldLabel htmlFor={`${fieldId}-language`}>{m.catalogue_create_language({}, o)}</FieldLabel>
+              <NativeSelect
+                id={`${fieldId}-language`}
+                className={languageControlClass}
+                data-editorial-control
+                value={language}
+                disabled={busy || !!pending}
+                onChange={(event) =>
+                  lifetime.active() && !running.current && !pending && setLanguage(event.target.value)
+                }
+              >
+                {locales.map((value) => (
+                  <NativeSelectOption key={value} value={value}>
+                    {languageNames.of(value) ?? value}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor={`${fieldId}-name`}>{m.catalogue_create_label({}, o)}</FieldLabel>
+              <Input
+                id={`${fieldId}-name`}
+                className={formControlClass}
+                data-editorial-control
+                value={name}
+                maxLength={250}
+                required
+                disabled={busy || !!pending}
+                onChange={(event) => {
+                  if (!lifetime.active() || running.current || pending) return;
+                  setName(event.target.value);
+                  setFailure(undefined);
+                }}
+              />
+            </Field>
+            {!pending && (
+              <Button
+                type="submit"
+                className={actionControlClass}
+                data-editorial-control
+                disabled={busy || !name.trim()}
+              >
+                {m.editorial_create({}, o)}
+              </Button>
+            )}
+          </form>
+        )}
+        {active?.kind === 'global' && <p>{m.editorial_global({}, o)}</p>}
+        {active && (
+          <div className="flex flex-wrap gap-3" data-editorial-action-row>
+            {reviewHref && (
+              <a
+                className={buttonVariants({ variant: 'outline', className: actionControlClass })}
+                data-editorial-control
+                href={reviewHref(active.id)}
+              >
+                {m.editorial_review({}, o)}
+              </a>
+            )}
             <a
               className={buttonVariants({ variant: 'outline', className: actionControlClass })}
               data-editorial-control
-              href={reviewHref(active.id)}
+              href={`/${locale}/contexts/${encodeURIComponent(active.id)}${createHref?.includes('?') ? createHref.slice(createHref.indexOf('?')) : ''}`}
             >
-              {m.editorial_review({}, o)}
+              {m.editorial_open({}, o)}
             </a>
-          )}
+          </div>
+        )}
+        {currentId && !pending && (
           <a
             className={buttonVariants({ variant: 'outline', className: actionControlClass })}
             data-editorial-control
-            href={`/${locale}/contexts/${encodeURIComponent(active.id)}${createHref?.includes('?') ? createHref.slice(createHref.indexOf('?')) : ''}`}
+            href={createHref ?? `/${locale}/contexts/new`}
           >
-            {m.editorial_open({}, o)}
+            {m.editorial_create({}, o)}
           </a>
-        </div>
-      )}
-      {currentId && !pending && (
-        <a
-          className={buttonVariants({ variant: 'outline', className: actionControlClass })}
-          data-editorial-control
-          href={createHref ?? `/${locale}/contexts/new`}
-        >
-          {m.editorial_create({}, o)}
-        </a>
-      )}
-      {(currentId || pending) && (
-        <div className="space-y-3 rounded-xl border border-border bg-card p-4 sm:p-6">
-          {currentId && <p className="text-sm text-muted-foreground">{m.editorial_authority({}, o)}</p>}
-          {confirmation && (
-            <p>{confirmation === 'delete' ? m.editorial_confirm_delete({}, o) : m.editorial_confirm_restore({}, o)}</p>
-          )}
-          <div className="flex flex-wrap gap-3" data-editorial-action-row>
-            {pending ? (
-              <>
-                {!restoreBlocked && (
-                  <Button
-                    className={actionControlClass}
-                    data-editorial-control
-                    disabled={busy}
-                    onClick={() => void submit(pending.operation)}
-                  >
-                    {m.editorial_retry({}, o)}
-                  </Button>
-                )}
-                {!uncertain && (
-                  <Button
-                    variant="outline"
-                    className={actionControlClass}
-                    data-editorial-control
-                    disabled={busy}
-                    onClick={() => {
-                      if (!lifetime.active() || running.current || uncertain) return;
-                      setPending(undefined);
-                      setFailure(undefined);
-                      if (currentId) void refresh();
-                    }}
-                  >
-                    {m.editorial_revise({}, o)}
-                  </Button>
-                )}
-              </>
-            ) : (
-              eligibleAttempt && (
+        )}
+        {(currentId || pending) && (
+          <div className="min-w-0 space-y-3" data-content-item-slot="state">
+            {currentId && <p className="text-sm text-muted-foreground">{m.editorial_authority({}, o)}</p>}
+            {confirmation && (
+              <p>
+                {confirmation === 'delete' ? m.editorial_confirm_delete({}, o) : m.editorial_confirm_restore({}, o)}
+              </p>
+            )}
+            <div className="flex flex-wrap gap-3" data-editorial-action-row>
+              {pending ? (
                 <>
-                  <Button
-                    variant={action === 'delete' ? 'destructive' : 'default'}
-                    className={actionControlClass}
-                    data-editorial-control
-                    disabled={busy}
-                    onClick={() =>
-                      lifetime.active() &&
-                      !running.current &&
-                      (confirmation ? void submit(action) : setConfirmation(action))
-                    }
-                  >
-                    {confirmation
-                      ? m.contribution_confirm({}, o)
-                      : action === 'delete'
-                        ? m.editorial_delete({}, o)
-                        : m.editorial_restore({}, o)}
-                  </Button>
-                  {confirmation && (
+                  {!restoreBlocked && (
+                    <Button
+                      className={actionControlClass}
+                      data-editorial-control
+                      disabled={busy}
+                      onClick={() => void submit(pending.operation)}
+                    >
+                      {m.editorial_retry({}, o)}
+                    </Button>
+                  )}
+                  {!uncertain && (
                     <Button
                       variant="outline"
                       className={actionControlClass}
                       data-editorial-control
-                      onClick={() => lifetime.active() && !running.current && setConfirmation(undefined)}
+                      disabled={busy}
+                      onClick={() => {
+                        if (!lifetime.active() || running.current || uncertain) return;
+                        setPending(undefined);
+                        setFailure(undefined);
+                        if (currentId) void refresh();
+                      }}
                     >
-                      {m.candidate_cancel({}, o)}
+                      {m.editorial_revise({}, o)}
                     </Button>
                   )}
                 </>
-              )
-            )}
-            {currentId && !pending && (
-              <Button
-                variant="outline"
-                className={actionControlClass}
-                data-editorial-control
-                disabled={busy}
-                onClick={() => void refresh()}
-              >
-                {m.candidate_reload({}, o)}
-              </Button>
-            )}
+              ) : (
+                eligibleAttempt && (
+                  <>
+                    <Button
+                      variant={action === 'delete' ? 'destructive' : 'default'}
+                      className={actionControlClass}
+                      data-editorial-control
+                      disabled={busy}
+                      onClick={() =>
+                        lifetime.active() &&
+                        !running.current &&
+                        (confirmation ? void submit(action) : setConfirmation(action))
+                      }
+                    >
+                      {confirmation
+                        ? m.contribution_confirm({}, o)
+                        : action === 'delete'
+                          ? m.editorial_delete({}, o)
+                          : m.editorial_restore({}, o)}
+                    </Button>
+                    {confirmation && (
+                      <Button
+                        variant="outline"
+                        className={actionControlClass}
+                        data-editorial-control
+                        onClick={() => lifetime.active() && !running.current && setConfirmation(undefined)}
+                      >
+                        {m.candidate_cancel({}, o)}
+                      </Button>
+                    )}
+                  </>
+                )
+              )}
+              {currentId && !pending && (
+                <Button
+                  variant="outline"
+                  className={actionControlClass}
+                  data-editorial-control
+                  disabled={busy}
+                  onClick={() => void refresh()}
+                >
+                  {m.candidate_reload({}, o)}
+                </Button>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </ContentItemFrame>
       {active && !busy && children?.(active.id)}
     </section>
   );

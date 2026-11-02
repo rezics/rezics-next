@@ -1,3 +1,7 @@
+import { useMemo } from 'react';
+import { EditorialContextWorkspace } from '../features/catalogue/editorial-context-view';
+import { editorialContextFixture } from '../kernel/fake/editorial-context';
+import { getLocale } from '../paraglide/runtime';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { EditorialContextStory } from '../features/catalogue/editorial-context-story';
@@ -207,3 +211,84 @@ export const RetrySameCreation: Story = {
   },
 };
 export const Loading: Story = { args: { scenario: 'loading' } };
+
+// Authored UNRUN: independent real workspaces, using the original isolated request fixture.
+function IndependentWorkspaces() {
+  const locale = getLocale();
+  const fixtures = useMemo(
+    () => [editorialContextFixture('create', locale), editorialContextFixture('create', locale)],
+    [locale],
+  );
+  return (
+    <article className="mx-auto max-w-4xl space-y-8 p-4 sm:p-8">
+      {fixtures.map((fixture, index) => (
+        <EditorialContextWorkspace key={index} locale={locale} transport={fixture.transport} />
+      ))}
+    </article>
+  );
+}
+async function independentWorkspaceJourney(canvasElement: HTMLElement) {
+  const workspaces = canvasElement.querySelectorAll<HTMLElement>('[data-editorial-workspace]');
+  await expect(workspaces).toHaveLength(2);
+  const [first, second] = [...workspaces];
+  const inputs = [...canvasElement.querySelectorAll<HTMLInputElement>('input[data-editorial-control]')];
+  await expect(new Set(inputs.map((input) => input.id)).size).toBe(2);
+  for (const workspace of workspaces) {
+    await expect(workspace.querySelector('[data-editorial-panel]')).toHaveClass('group');
+    await expect(within(workspace).getByRole('heading', { level: 2 })).toHaveTextContent(m.editorial_title());
+    for (const label of workspace.querySelectorAll<HTMLLabelElement>('label')) {
+      await expect(workspace.querySelector(`[id="${label.htmlFor}"]`)).not.toBeNull();
+    }
+  }
+  const longName = '読者の選択 — Gemeinschaft für gemeinsame Lektüre et les récits partagés '.repeat(3);
+  await userEvent.type(inputs[0]!, longName);
+  await expect(inputs[1]!).toHaveValue('');
+  await userEvent.selectOptions(first!.querySelector('select')!, 'ja');
+  await expect(second!.querySelector('select')).toHaveValue(getLocale());
+  await userEvent.click(within(first!).getByRole('button', { name: m.editorial_create() }));
+  await within(first!).findByText(m.editorial_created());
+  await expect(within(first!).getByRole('heading', { level: 2 })).toHaveTextContent(longName.trim());
+  await expect(inputs[1]!).toHaveValue('');
+  await expect(within(second!).queryByText(m.editorial_created())).toBeNull();
+  for (const workspace of workspaces) {
+    const bounds = workspace.getBoundingClientRect();
+    await expect(bounds.width).toBeLessThanOrEqual(390);
+    await expect(workspace.scrollWidth).toBeLessThanOrEqual(workspace.clientWidth + 1);
+    for (const control of workspace.querySelectorAll<HTMLElement>('[data-editorial-control]')) {
+      const rect = control.getBoundingClientRect();
+      await expect(control).toBeVisible();
+      await expect(rect.width).toBeGreaterThanOrEqual(44);
+      await expect(rect.height).toBeGreaterThanOrEqual(44);
+      await expect(rect.left).toBeGreaterThanOrEqual(bounds.left - 1);
+      await expect(rect.right).toBeLessThanOrEqual(bounds.right + 1);
+      await expect(control.scrollWidth).toBeLessThanOrEqual(control.clientWidth + 1);
+      await expect(control.scrollHeight).toBeLessThanOrEqual(control.clientHeight + 1);
+    }
+  }
+}
+export const IndependentWorkspacesPhone: Story = {
+  render: () => <IndependentWorkspaces />,
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  play: async ({ canvasElement }) => independentWorkspaceJourney(canvasElement),
+};
+export const IndependentWorkspacesDesktopRtl: Story = {
+  render: () => (
+    <div dir="rtl">
+      <IndependentWorkspaces />
+    </div>
+  ),
+  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  play: async ({ canvasElement }) => {
+    const workspaces = canvasElement.querySelectorAll<HTMLElement>('[data-editorial-workspace]');
+    await expect(workspaces).toHaveLength(2);
+    for (const workspace of workspaces) {
+      await expect(workspace.scrollWidth).toBeLessThanOrEqual(workspace.clientWidth + 1);
+      const select = workspace.querySelector('select')!;
+      await userEvent.click(select);
+      await userEvent.tab();
+      await expect(workspace.querySelector('input')).toHaveFocus();
+      await userEvent.tab({ shift: true });
+      await expect(select).toHaveFocus();
+    }
+  },
+};
