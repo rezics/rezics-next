@@ -47,7 +47,6 @@ test('every type a page shows reads as an interface word in Chinese and Japanese
   }
 });
 
-
 test('an authored type description is published in all locales', () => {
   expect(bundledRelease.types['schema:TVSeries']?.descriptions).toEqual(authoredDescriptions);
 });
