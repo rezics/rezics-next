@@ -1,5 +1,6 @@
 import { useId, useRef, useState, type ReactNode } from 'react';
 import {
+  FILTER_LIMITS,
   facetProperties,
   type FilterDocument,
   type FilterQualifier,

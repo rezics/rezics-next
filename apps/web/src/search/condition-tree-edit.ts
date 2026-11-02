@@ -20,13 +20,20 @@ function updateAt(
 
   if ('and' in value || 'or' in value) {
     const operator = 'and' in value ? 'and' : 'or';
-    const children = value[operator];
+    const children: readonly FilterDocument[] = 'and' in value ? value.and : value.or;
     const [group, index, ...rest] = path;
-    if (group !== operator || typeof index !== 'number' || !Number.isInteger(index) || index < 0 || index >= children.length)
+    if (
+      group !== operator ||
+      typeof index !== 'number' ||
+      !Number.isInteger(index) ||
+      index < 0 ||
+      index >= children.length
+    )
       return rejected;
     const next = updateAt(children[index]!, rest, update);
     if (next === rejected) return rejected;
-    const updated = next === undefined ? children.filter((_, at) => at !== index) : children.map((child, at) => (at === index ? next : child));
+    const updated =
+      next === undefined ? children.filter((_, at) => at !== index) : children.map((child, at) => (at === index ? next : child));
     return operator === 'and' ? { and: updated } : { or: updated };
   }
 
@@ -45,7 +52,7 @@ function withinStructuralLimits(value: FilterDocument | undefined): boolean {
   const visit = (node: FilterDocument, depth: number, underNot: boolean): boolean => {
     if ('and' in node || 'or' in node) {
       const operator = 'and' in node ? 'and' : 'or';
-      const children = node[operator];
+      const children: readonly FilterDocument[] = 'and' in node ? node.and : node.or;
       if (depth >= FILTER_LIMITS.depth || (operator === 'or' && children.length > FILTER_LIMITS.or)) return false;
       return children.every((child) => visit(child, depth + 1, false));
     }
