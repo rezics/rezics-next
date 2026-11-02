@@ -112,8 +112,12 @@ test('unsupported repetition dimensions fail before mapping, including later-omi
     bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
     shadow: { rows: { outcome: 'compatible' }, blocks: { outcome: 'compatible' }, statements: { outcome: 'compatible' } },
   });
-  reject(
-    { name: 'heavy-run', text: line },
+  expect(() =>
+    readGrowthProfiles([
+      { name: 'heavy-run', text: `${line}\n${profile('later-omitted')}` },
+      { name: 'other-run', text: profile('other') },
+    ]),
+  ).toThrow(
     `heavy-run:1.repetitions[0] exceeds the ${GROWTH_PROFILE_EXPANSION.repetitions} repetition capacity (${heavy.length} repetitions at scale 1)`,
   );
 });
