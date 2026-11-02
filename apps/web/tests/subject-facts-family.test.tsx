@@ -146,7 +146,7 @@ test('Complete Subject facts family: same-property mounted FactFields keep indep
           <button type="button">Other</button>
           {[0, 1].map((index) => (
             <FactField
-              key={`${phase}:${index}`}
+              key={mode === 'replaced' ? `${phase}:${index}` : index}
               property={property}
               read={read}
               locale="en"
