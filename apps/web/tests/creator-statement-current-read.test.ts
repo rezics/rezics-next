@@ -144,17 +144,31 @@ test('default private statement reads use current credentials without caching or
     expect(calls.every((call) => new URL(call.url).origin === 'https://kernel.test')).toBe(true);
     expect(responseHeaders.get('cache-control')).toBe('private, no-store');
     expect(responseHeaders.get('x-robots-tag')).toBe('noindex, nofollow');
-    for (const [status, code, kind] of [[400, 'invalid_cursor', 'error'], [409, 'stale_cursor', 'stale']] as const) {
+    for (const [status, code, kind] of [
+      [400, 'invalid_cursor', 'error'],
+      [409, 'stale_cursor', 'stale'],
+    ] as const) {
       respond = () => Response.json({ code }, { status });
       const point = await readCreatorStatement({ data: { id: statement.id, cursor: 'signed/line+page' } });
       expect(point).toEqual({ kind: 'unavailable' });
-      const html = await render(createElement(CreatorStatementPage, {
-        page: point, id: statement.id, locale: 'en', cursor: 'signed/line+page', from: 'signed/list+page',
-      }));
-      expect(html).toContain(`href="/en/creator/statements/${statement.id}?cursor=signed%2Fline%2Bpage&amp;from=signed%2Flist%2Bpage"`);
-      respond = (call) => new URL(call.url).pathname.endsWith('/lines') ? Response.json({ code }, { status }) : healthy(call);
+      const html = await render(
+        createElement(CreatorStatementPage, {
+          page: point,
+          id: statement.id,
+          locale: 'en',
+          cursor: 'signed/line+page',
+          from: 'signed/list+page',
+        }),
+      );
+      expect(html).toContain(
+        `href="/en/creator/statements/${statement.id}?cursor=signed%2Fline%2Bpage&amp;from=signed%2Flist%2Bpage"`,
+      );
+      respond = (call) =>
+        new URL(call.url).pathname.endsWith('/lines') ? Response.json({ code }, { status }) : healthy(call);
       expect(await readCreatorStatement({ data: { id: statement.id, cursor: 'signed/line+page' } })).toEqual({
-        kind: 'ready', statement, lines: { kind },
+        kind: 'ready',
+        statement,
+        lines: { kind },
       });
     }
   } finally {
