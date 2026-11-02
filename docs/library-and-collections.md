@@ -240,6 +240,7 @@ results support navigation and retries without repeating completed effects. The
 Decision: Web bulk add captures only the loaded selected canonical Subjects in first-selection order before destination choice; choosing a destination freezes its identity and revision independently of subsequent list refreshes.
 
 Decision: Web occurrence-removal review captures only loaded selected member IDs in first-selection order, retaining duplicate Subjects and the source Collection independently of later edits.
+Decision: Inline bulk add recovery reads one native outcome page at a time; a new confirmation uses the preview's captured sender, credential and headers with its own key, and uncertain retries retain that entire command.
 
 Web's public download controls admit a detached first-page capture of viewer, native metadata revision and exact
 occurrences, then compare it with current native FULL reads at admission and terminal delivery. Each read uses the

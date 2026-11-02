@@ -1,7 +1,12 @@
 import { expect, test } from 'bun:test';
 import { Value } from 'typebox/value';
 import { BULK_ADMISSION_BODY_BYTES, BULK_MAX_SELECTION_IDS } from '../../src/library/bulk-limits.ts';
-import { bulkAdmissionSchema, bulkCancelSchema, bulkOutcomeQuerySchema } from '../../src/library/bulk-schemas.ts';
+import {
+  bulkAdmissionSchema,
+  bulkPreviewSchema,
+  bulkCancelSchema,
+  bulkOutcomeQuerySchema,
+} from '../../src/library/bulk-schemas.ts';
 test('bulk HTTP schemas distinguish subjects occurrences and exact full type predicates', () => {
   const id = '019a1b2c-3d4e-7f00-8a00-000000000001';
   const query = {
@@ -35,6 +40,14 @@ test('bulk HTTP schemas distinguish subjects occurrences and exact full type pre
   expect(Value.Check(bulkCancelSchema, { undo: true })).toBe(false);
   expect(Value.Check(bulkOutcomeQuerySchema, { limit: 20 })).toBe(true);
   expect(Value.Check(bulkOutcomeQuerySchema, { limit: 21 })).toBe(false);
+  const add = {
+    action: 'add_to_collection',
+    collectionId: id,
+    selection: { kind: 'explicit', targets: [{ subjectId: id }] },
+  };
+  expect(Value.Check(bulkPreviewSchema, add)).toBe(true);
+  expect(Value.Check(bulkPreviewSchema, { ...add, actor: id })).toBe(false);
+  expect(Value.Check(bulkPreviewSchema, { ...add, selection: { kind: 'explicit', targets: [] } })).toBe(false);
 });
 
 test('bulk admission accepts up to 1,000 UUID targets within the finite body bound', () => {

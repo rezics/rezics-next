@@ -65,7 +65,7 @@ The mounted native API is `POST /v1/libraryOperations` (preview), `POST /v1/libr
 `POST /v1/libraryOperations/:id:cancel`. Creation returns a `preview` phase and a stable operation ID; only
 confirmation emits the Core execution intent. Reads require current `library_entry:list`; commands and restored
 status effects require current `library_entry:update`, the personal-library gate and native account lifecycle.
-The wire preview advertises only `set_status`; query capture returns `dependency_unavailable` until the complete
+The wire preview advertises `set_status`, `add_to_collection` and `remove_from_library`; query capture returns `dependency_unavailable` until the complete
 Members reader is installed. Other action executor exports remain integration seams, never successful fallbacks.
 
 Decision: explicit status changes existing tracked entries only; a missing entry is individually skipped with
