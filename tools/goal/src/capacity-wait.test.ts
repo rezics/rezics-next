@@ -73,7 +73,7 @@ test('a start waiting for host capacity counts running attempts with one indexed
           // Bun exposes no statement-status counters: replay the captured SQL against this same native fixture.
           // VM steps count executed opcodes; fullscan steps exclude indexed visits. Neither is rows examined.
           const native = Bun.spawnSync(['sqlite3', '-readonly', path], {
-            stdin: `.eqp on\n.stats on\n${sql};\n`,
+            stdin: Buffer.from(`.eqp on\n.stats on\n${sql};\n`),
           });
           expect(native.exitCode).toBe(0);
           expect(native.stderr.toString()).toBe('');
