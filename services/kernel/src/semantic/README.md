@@ -1855,6 +1855,18 @@ See [the runtime contract](#current-list-presentation-facts).
   the frozen `list-presentation-facts.test.ts`. Native execution and quantitative fit receipts are
   deferred to post-integration acceptance under the current minimal verification instruction.
 
+### Subject revision history and statement disclosure
+
+The public revision-history route reads the first page and a deep cursor page at a fixed page size. Rows and statements
+stay constant for both pages; indexed blocks grow logarithmically with the selected subject's revision history and are
+independent of other subjects' histories. Statement disclosure measures one candidate mutation with fixed fanout;
+rows and statements stay constant and indexed blocks grow logarithmically with unrelated candidate history.
+
+| Operation                    | Bound                                                                                          | Growth check                                                                                                                         |
+| ---------------------------- | ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Revision-history pages       | Constant rows/statements for two fixed-size pages; logarithmic blocks in subject history.      | `test/semantic/revision-history-growth.test.ts`: first and deep cursor pages at scales `[1, 8, 64]`.                                 |
+| Statement disclosure change | Constant rows/statements for one affected candidate; logarithmic blocks in unrelated candidates. | `test/semantic/revision-history-growth.test.ts`: one-candidate disclosure change at scales `[1, 8, 64]`.                            |
+
 ## Native subject page publication
 
 `createSubjectPagePublicationStore({ pool, access, clock, routeKey })` reads persisted publication points and proves
