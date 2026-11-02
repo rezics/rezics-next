@@ -6,7 +6,7 @@ import {
 } from './editor-lifetime';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { pickText } from '@rezics/composition';
-import { useId, useRef, useState, type ReactNode } from 'react';
+import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
@@ -35,8 +35,122 @@ const disclosureSummary = `min-h-8 min-w-0 cursor-pointer break-words text-xl fo
 const initialAction = `h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 [overflow-wrap:anywhere] ${keyboardFocus} max-md:w-full pointer-coarse:w-full`;
 const initialPropertySelect = `w-full min-w-0 max-w-full [&_select]:min-h-11 [&_select]:min-w-11 [&_select]:max-w-full [&_select]:whitespace-normal [&_select]:[overflow-wrap:anywhere] [&_select:focus-visible]:outline-2 [&_select:focus-visible]:outline-offset-2 [&_select:focus-visible]:outline-ring [&_select]:ps-3 [&_select]:pe-8 rtl:[&_[data-slot=native-select-icon]]:right-auto rtl:[&_[data-slot=native-select-icon]]:left-2.5`;
 
+/** Keep confirmation attached to the private row, including when its definition retires. */
+function InitialFactRemoval({
+  row,
+  disabled,
+  locale,
+  onRemove,
+}: {
+  row: InitialRow;
+  disabled: boolean;
+  locale: string;
+  onRemove: () => void;
+}) {
+  const o = { locale: locale as never };
+  const holder = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const cancel = useRef<HTMLButtonElement>(null);
+  const restoreFocus = useRef(false);
+  const [confirmingId, setConfirmingId] = useState<string>();
+  const confirming = confirmingId === row.id;
+  const current = useRef({ disabled, id: row.id, onRemove });
+  current.current = { disabled, id: row.id, onRemove };
+  const editable = () => !current.current.disabled && current.current.id === row.id;
+  useLayoutEffect(() => {
+    if (disabled) return;
+    if (confirming) cancel.current?.focus();
+    else if (restoreFocus.current) {
+      trigger.current?.focus();
+      restoreFocus.current = false;
+    }
+  }, [confirming, disabled]);
+  const cancelRemoval = () => {
+    restoreFocus.current = true;
+    setConfirmingId(undefined);
+  };
+  const remove = () => {
+    const section = holder.current?.closest('section');
+    if (!editable() || !section?.isConnected) return;
+    const controls = [
+      ...((section.closest('form') ?? section.closest('fieldset'))?.querySelectorAll<HTMLElement>(
+        'button, input, select, textarea, [tabindex="0"], [contenteditable="true"]',
+      ) ?? []),
+    ];
+    const first = controls.findIndex((control) => section.contains(control));
+    const last = controls.findLastIndex((control) => section.contains(control));
+    [...controls.slice(last + 1), ...controls.slice(0, first).reverse()]
+      .find(
+        (control) =>
+          !control.matches(':disabled, [aria-disabled="true"], [type="hidden"]') &&
+          !control.closest('[hidden], [inert]'),
+      )
+      ?.focus();
+    current.current.onRemove();
+  };
+  const hasContent = (value: unknown): boolean => {
+    if (typeof value === 'string') return !!value.trim();
+    if (value == null) return false;
+    if (typeof value === 'object') return Object.values(value).some(hasContent);
+    return true;
+  };
+  const populatedPart = (part: StatementInput | StatementInput['references'][number]['parts'][number]) =>
+    part.value.type !== 'value' || hasContent(part.value.content);
+  const populated =
+    populatedPart(row.statement) ||
+    row.statement.qualifiers?.some(populatedPart) ||
+    row.statement.references.some((reference) => reference.parts.some(populatedPart));
+  return (
+    <div ref={holder}>
+      {confirming ? (
+        <div
+          role="group"
+          aria-label={m.candidate_confirm_title({ action: m.literary_remove_fact({}, o) }, o)}
+          className="space-y-2"
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              cancelRemoval();
+            }
+          }}
+        >
+          <p>{m.candidate_confirm_title({ action: m.literary_remove_fact({}, o) }, o)}</p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              ref={cancel}
+              className={initialAction}
+              type="button"
+              variant="outline"
+              disabled={disabled}
+              onClick={cancelRemoval}
+            >
+              {m.candidate_cancel({}, o)}
+            </Button>
+            <Button className={initialAction} type="button" variant="destructive" disabled={disabled} onClick={remove}>
+              {m.literary_remove_fact({}, o)}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <Button
+          ref={trigger}
+          className={initialAction}
+          type="button"
+          variant="ghost"
+          disabled={disabled}
+          onClick={() => {
+            if (editable()) populated ? setConfirmingId(row.id) : remove();
+          }}
+        >
+          {m.literary_remove_fact({}, o)}
+        </Button>
+      )}
+    </div>
+  );
+}
+
 /** Optional initial facts share the scalar codecs. A row exists only after an explicit Add action. */
-function InitialFacts({
+export function InitialFacts({
   type,
   read,
   locale,
@@ -66,29 +180,11 @@ function InitialFacts({
       </legend>
       <ContentItemFrame as="div" className="min-w-0 space-y-4 rounded-xl bg-card p-4 sm:p-6 [overflow-wrap:anywhere]">
         <p className="text-sm text-muted-foreground">{m.literary_initial_help({}, o)}</p>
-        {rows.map(({ id, statement }) => {
+        {rows.map((row) => {
+          const { id, statement } = row;
           const definition = read.release.properties[statement.property.id];
-          if (!definition)
-            return (
-              <section key={id} className="min-w-0">
-                <ContentItemFrame
-                  as="div"
-                  className="min-w-0 space-y-3 rounded-xl bg-muted/30 p-4 [overflow-wrap:anywhere]"
-                >
-                  <EditorFailure locale={locale} reason="stale" />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    className={initialAction}
-                    onClick={() => change(rows.filter((row) => row.id !== id))}
-                  >
-                    {m.literary_remove_fact({}, o)}
-                  </Button>
-                </ContentItemFrame>
-              </section>
-            );
-          const label = pickText(definition.labels, locale);
-          const description = pickText(definition.descriptions ?? {}, locale);
+          const label = pickText(definition?.labels ?? {}, locale);
+          const description = pickText(definition?.descriptions ?? {}, locale);
           const citation = statement.references[0]?.parts[0] ?? {
             property: { id: 'schema:url' },
             value: { type: 'value' as const, content: '' },
@@ -99,50 +195,54 @@ function InitialFacts({
                 as="div"
                 className="min-w-0 space-y-3 rounded-xl bg-muted/30 p-4 [overflow-wrap:anywhere]"
               >
-                <ContentItemHeading
-                  level={3}
-                  lang={label.lang ?? undefined}
-                  className="break-words font-semibold [overflow-wrap:anywhere]"
-                >
-                  {label.text}
-                </ContentItemHeading>
-                {description.text && (
-                  <p
-                    lang={description.lang ?? undefined}
-                    className="break-words text-sm text-muted-foreground [overflow-wrap:anywhere]"
-                  >
-                    {description.text}
-                  </p>
+                {definition ? (
+                  <>
+                    <ContentItemHeading
+                      level={3}
+                      lang={label.lang ?? undefined}
+                      className="break-words font-semibold [overflow-wrap:anywhere]"
+                    >
+                      {label.text}
+                    </ContentItemHeading>
+                    {description.text && (
+                      <p
+                        lang={description.lang ?? undefined}
+                        className="break-words text-sm text-muted-foreground [overflow-wrap:anywhere]"
+                      >
+                        {description.text}
+                      </p>
+                    )}
+                    <ScalarControl
+                      part={statement}
+                      definition={definition}
+                      read={context}
+                      locale={locale}
+                      onChange={(value) => update(id, { ...statement, value })}
+                    />
+                    <h4 className="text-sm font-medium">{m.correction_references({}, o)}</h4>
+                    <ScalarControl
+                      part={citation}
+                      definition={read.release.properties['schema:url']}
+                      read={context}
+                      locale={locale}
+                      onChange={(value) =>
+                        update(id, {
+                          ...statement,
+                          references:
+                            value.type === 'value' && value.content === '' ? [] : [{ parts: [{ ...citation, value }] }],
+                        })
+                      }
+                    />
+                  </>
+                ) : (
+                  <EditorFailure locale={locale} reason="stale" />
                 )}
-                <ScalarControl
-                  part={statement}
-                  definition={definition}
-                  read={context}
+                <InitialFactRemoval
+                  row={row}
+                  disabled={disabled}
                   locale={locale}
-                  onChange={(value) => update(id, { ...statement, value })}
+                  onRemove={() => change(rows.filter((row) => row.id !== id))}
                 />
-                <h4 className="text-sm font-medium">{m.correction_references({}, o)}</h4>
-                <ScalarControl
-                  part={citation}
-                  definition={read.release.properties['schema:url']}
-                  read={context}
-                  locale={locale}
-                  onChange={(value) =>
-                    update(id, {
-                      ...statement,
-                      references:
-                        value.type === 'value' && value.content === '' ? [] : [{ parts: [{ ...citation, value }] }],
-                    })
-                  }
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className={initialAction}
-                  onClick={() => change(rows.filter((row) => row.id !== id))}
-                >
-                  {m.literary_remove_fact({}, o)}
-                </Button>
               </ContentItemFrame>
             </section>
           );

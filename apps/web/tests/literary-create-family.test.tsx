@@ -262,8 +262,12 @@ test('mounted Literary creation keeps the complete initial bibliography family a
     await input(labelledInput(fact, m.correction_url()), '');
     await input(labelledInput(fact, m.correction_url()), cite);
     expect(rich.calls).toHaveLength(2); // All staging, focus and bibliography composition are local.
+    await click(m.literary_remove_fact(), fact);
     await click(m.catalogue_create_submit());
     await until(() => host.textContent!.includes(m.catalogue_create_uncertain()));
+    expect(button(fact, m.literary_remove_fact()).disabled).toBe(true);
+    await act(async () => button(fact, m.literary_remove_fact()).click());
+    expect(labelledInput(fact, m.correction_url()).value).toBe(cite);
     const posts = () => rich.calls.filter((call) => call.method === 'POST' && call.path === '/v1/subjects');
     expect(posts()).toHaveLength(1);
     expect(posts()[0]!.body).toEqual({
@@ -336,6 +340,7 @@ test('mounted Literary creation keeps the complete initial bibliography family a
     expect(propertyControl(panel()).querySelector('option[value="schema:inLanguage"]')).not.toBeNull();
     await change(propertyControl(panel()), 'schema:inLanguage');
     expect(button(panel(), m.correction_add()).disabled).toBe(true);
+    await click(m.literary_remove_fact(), row());
     await click(m.literary_remove_fact(), row());
     expect(panel().querySelectorAll('section[id^="literary-fact-"]')).toHaveLength(11);
     expect(button(panel(), m.correction_add()).disabled).toBe(false);
@@ -443,6 +448,10 @@ test('mounted Literary creation keeps the complete initial bibliography family a
     await until(() => host.textContent!.includes(m.correction_stale()));
     expect(panel().querySelector('h3')).toBeNull();
     expect(button(panel(), m.literary_remove_fact()).className).toContain('min-h-11');
+    await click(m.literary_remove_fact(), panel());
+    await click(m.candidate_cancel(), panel());
+    expect(row().id).toBe(retainedId);
+    await click(m.literary_remove_fact(), panel());
     await click(m.literary_remove_fact(), panel());
     expect(panel().textContent).not.toContain(m.correction_stale());
     expect(staleDefinition.calls.every((call) => call.method === 'GET' || call.path === '/v1/subjects')).toBe(true);
