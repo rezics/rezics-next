@@ -10,14 +10,20 @@ import {
   type RealmClaimAdapter,
   type RealmClaimRead,
 } from './realm-claim';
+import type { RealmClaimCallerLifetime } from './realm-claim-caller-lifetime';
 
 function OriginalDate({ value }: { value: string }) {
   return (
-    <time dateTime={value}>
-      {new Intl.DateTimeFormat(getLocale(), { dateStyle: 'long', timeStyle: 'short', timeZone: 'UTC' }).format(
-        new Date(value),
-      )}{' '}
-      UTC
+    <time dateTime={value} className="block min-w-0 [overflow-wrap:anywhere]">
+      <span className="block">
+        {new Intl.DateTimeFormat(getLocale(), { dateStyle: 'long', timeStyle: 'short', timeZone: 'UTC' }).format(
+          new Date(value),
+        )}{' '}
+        UTC
+      </span>
+      <span dir="ltr" className="mt-1 block select-all font-mono text-xs text-muted-foreground">
+        {value}
+      </span>
     </time>
   );
 }
@@ -32,6 +38,8 @@ export function RealmClaimControls({
   load = false,
   onRead,
   recoveryOnly = false,
+  lifetime,
+  connectionRevision = 0,
 }: {
   realmId: string;
   initial: RealmClaimRead;
@@ -41,34 +49,60 @@ export function RealmClaimControls({
   load?: boolean;
   onRead?: (read: RealmClaimRead) => void;
   recoveryOnly?: boolean;
+  lifetime?: RealmClaimCallerLifetime;
+  connectionRevision?: number;
 }) {
   const id = useId();
-  const control = useMemo(() => createRealmClaim(realmId, initial, adapter), [realmId, adapter]);
+  const control = useMemo(
+    () => createRealmClaim(realmId, initial, adapter, undefined, lifetime),
+    [realmId, adapter, lifetime],
+  );
   const state = useSyncExternalStore(control.subscribe, control.getSnapshot, control.getSnapshot);
-  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const [copy, setCopy] = useState<{
+    control: typeof control;
+    requestId: string;
+    state: 'copied' | 'failed';
+  } | null>(null);
   const pageSnapshot = initial.kind === 'ready' ? initial.snapshot : null;
   const pageKind = initial.kind;
+  useEffect(() => {
+    control.reconnect();
+    return () => control.disconnect();
+  }, [control]);
   useEffect(() => {
     if (pageSnapshot) control.observePage(pageSnapshot);
     else if (pageKind !== 'ready') control.observeUnavailable({ kind: pageKind });
   }, [control, pageSnapshot, pageKind]);
   useEffect(() => {
-    if (load) void control.refresh();
-  }, [control, load]);
+    if (load || (lifetime && connectionRevision > 0)) {
+      const ticket = lifetime?.ticket();
+      queueMicrotask(() => {
+        if (lifetime && ticket !== undefined && !lifetime.owns(ticket)) return;
+        void control.refresh();
+      });
+    }
+  }, [control, load, lifetime, connectionRevision]);
   useEffect(() => {
     onRead?.(control.getSnapshot().read);
   }, [control, state.read, onRead, pageSnapshot]);
-  const current = state.read.kind === 'ready' ? state.read : null;
+  const active = ready && (!lifetime || lifetime.current());
+  const current = state.read.kind === 'ready' && state.read.snapshot.realmId === realmId ? state.read : null;
   const orphan = current?.snapshot.ownershipState === 'orphaned' ? current.snapshot : null;
-  const receipt = state.recovered ?? state.request;
+  const suppliedReceipt = state.recovered ?? state.request;
+  const receipt = active && suppliedReceipt?.realmId === realmId ? suppliedReceipt : null;
   const request =
-    !state.busy && orphan && receipt?.orphanedAt === orphan.orphanedAt && current?.admission === 'allowed'
+    !state.busy &&
+    orphan &&
+    receipt?.realmId === realmId &&
+    receipt.orphanedAt === orphan.orphanedAt &&
+    current?.admission === 'allowed'
       ? receipt
       : null;
   const owned = current?.snapshot.ownershipState === 'owned';
-  if (recoveryOnly && !(orphan && current?.admission === 'allowed') && !state.intent) return null;
+  const copyState = copy?.control === control && copy.requestId === request?.requestId ? copy.state : 'idle';
+  if (recoveryOnly && !orphan && !state.intent) return null;
   return (
-    <section aria-labelledby={`${id}-heading`}>
+    <section aria-labelledby={`${id}-heading`} aria-busy={state.busy}>
       <ContentItemFrame as="div" data-slot="content-item-frame" className="w-full min-w-0 space-y-4 p-5 sm:p-6">
         <header className="min-w-0 space-y-2">
           <ContentItemHeading level={2} id={`${id}-heading`} className="text-lg font-semibold">
@@ -118,6 +152,14 @@ export function RealmClaimControls({
                   <OriginalDate value={request.requestedAt} />
                 </dd>
               </div>
+              {'approvedAt' in request && request.approvedAt ? (
+                <div>
+                  <dt className="text-muted-foreground">{m.realm_claim_status_approved_at()}</dt>
+                  <dd>
+                    <OriginalDate value={request.approvedAt} />
+                  </dd>
+                </div>
+              ) : null}
             </dl>
             <details className="min-w-0">
               <summary className="min-h-11 cursor-pointer py-2 font-medium underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
@@ -133,11 +175,12 @@ export function RealmClaimControls({
                 <Button
                   variant="outline"
                   onClick={async () => {
+                    if (control.getSnapshot().read !== state.read || (lifetime && !lifetime.current())) return;
                     try {
                       await navigator.clipboard.writeText(request.requestId);
-                      setCopyState('copied');
+                      setCopy({ control, requestId: request.requestId, state: 'copied' });
                     } catch {
-                      setCopyState('failed');
+                      setCopy({ control, requestId: request.requestId, state: 'failed' });
                     }
                   }}
                 >
@@ -168,17 +211,17 @@ export function RealmClaimControls({
             </Button>
           </div>
         ) : null}
-        {state.outcome === 'uncertain' ? (
+        {active && state.outcome === 'uncertain' ? (
           <p role="alert" className="text-sm">
             {m.realm_claim_uncertain()}
           </p>
         ) : null}
-        {state.outcome === 'conflict' ? (
+        {active && state.outcome === 'conflict' ? (
           <p role="alert" className="text-sm">
             {m.realm_claim_conflict()}
           </p>
         ) : null}
-        {state.outcome === 'refused' || current?.admission === 'denied' ? (
+        {(active && state.outcome === 'refused') || current?.admission === 'denied' ? (
           <p role="alert" className="text-sm">
             {m.realm_claim_refused()}
           </p>
@@ -189,12 +232,12 @@ export function RealmClaimControls({
           </Button>
         ) : null}
         <div className="flex flex-wrap gap-2">
-          {mayRequestRealmClaim(state) ? (
+          {current?.admission === 'allowed' && mayRequestRealmClaim(state) ? (
             <Button disabled={!ready} onClick={() => void control.submit()}>
               {m.realm_claim_request()}
             </Button>
           ) : null}
-          {mayRetryRealmClaim(state) ? (
+          {current?.admission === 'allowed' && mayRetryRealmClaim(state) ? (
             <Button disabled={!ready} onClick={() => void control.retry()}>
               {m.realm_claim_retry()}
             </Button>
@@ -204,7 +247,7 @@ export function RealmClaimControls({
               {m.realm_claim_review_current()}
             </Button>
           ) : null}
-          <Button variant="outline" disabled={state.busy} onClick={() => void control.refresh()}>
+          <Button variant="outline" disabled={!ready || state.busy} onClick={() => void control.refresh()}>
             {state.busy ? m.realm_claim_working() : m.realm_claim_refresh()}
           </Button>
         </div>

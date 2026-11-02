@@ -1,5 +1,6 @@
 import type { KernelClient } from '@rezics/client';
 import { realmClaimStatusResponse, type RealmClaimStatus, type RealmClaimStatusRead } from './realm-claim-status';
+import type { RealmClaimCallerLifetime } from './realm-claim-caller-lifetime';
 
 type NativeRealm = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['realms']>['get']>>['data']>['realm'];
 export type RealmClaimSnapshot = Pick<
@@ -110,6 +111,8 @@ export function mayRequestRealmClaim(state: RealmClaimState) {
 export function mayRetryRealmClaim(state: RealmClaimState) {
   return (
     !state.busy &&
+    !state.request &&
+    !state.recovered &&
     state.outcome === 'uncertain' &&
     !!state.intent &&
     state.read.kind === 'ready' &&
@@ -124,9 +127,23 @@ export function createRealmClaim(
   initial: RealmClaimRead,
   adapter: RealmClaimAdapter,
   key: () => string = () => crypto.randomUUID(),
+  lifetime?: RealmClaimCallerLifetime,
 ) {
+  const initialRead: RealmClaimRead =
+    initial.kind === 'ready' && initial.snapshot.realmId !== realmId ? { kind: 'unavailable' } : initial;
+  const hiddenState: RealmClaimState = {
+    read:
+      initialRead.kind === 'ready' && initialRead.admission === 'signed-out' ? initialRead : { kind: 'unavailable' },
+    intent: null,
+    request: null,
+    outcome: 'idle',
+    busy: false,
+    reviewed: false,
+    recovered: null,
+    recovery: 'unchecked',
+  };
   let state: RealmClaimState = {
-    read: initial,
+    read: initialRead,
     intent: null,
     request: null,
     outcome: 'idle',
@@ -136,22 +153,31 @@ export function createRealmClaim(
     recovery: adapter.mine ? 'unchecked' : 'unused',
   };
   let generation = 0;
+  let disconnected = false;
+  let connection = 0;
+  const callerCurrent = () => !disconnected && (!lifetime || lifetime.current());
+  const callerOwns = (visit: number, ticket: number) =>
+    callerCurrent() && connection === visit && (!lifetime || lifetime.owns(ticket));
   const listeners = new Set<() => void>();
   function update(change: Partial<RealmClaimState>) {
     state = { ...state, ...change };
     for (const listener of listeners) listener();
   }
   async function refresh() {
-    if (state.busy) return;
+    if (state.busy || !callerCurrent()) return;
     const version = ++generation;
+    const visit = connection;
+    const ticket = lifetime?.ticket() ?? 0;
+    const owns = () => version === generation && callerOwns(visit, ticket);
     update({ busy: true });
     let read: RealmClaimRead;
     try {
+      if (!owns()) return;
       read = await adapter.read(realmId);
     } catch {
       read = { kind: 'unavailable' };
     }
-    if (version !== generation) return;
+    if (!owns()) return;
     if (read.kind === 'ready' && read.snapshot.realmId !== realmId) read = { kind: 'unavailable' };
     let recovered: RealmClaimStatus | null = null;
     let recovery: RealmClaimState['recovery'] = adapter.mine ? 'unchecked' : 'unused';
@@ -163,11 +189,12 @@ export function createRealmClaim(
     ) {
       let mine: RealmClaimStatusRead;
       try {
+        if (!owns()) return;
         mine = await adapter.mine(realmId);
       } catch {
         mine = { kind: 'unavailable' };
       }
-      if (version !== generation) return;
+      if (!owns()) return;
       recovery = 'unavailable';
       if (mine.kind === 'ready' && sameRealmClaimSource(mine.source, read.snapshot)) {
         const receipt = realmClaimStatusResponse({ claimRequest: mine.claimRequest }, { realmId });
@@ -180,17 +207,29 @@ export function createRealmClaim(
       else if (mine.kind === 'signed-out') read = { ...read, admission: 'signed-out' };
       else if (mine.kind === 'ready') read = { kind: 'unavailable' };
     }
-    update({ read, recovered, recovery, busy: false, reviewed: read.kind === 'ready' });
+    update({
+      read,
+      recovered,
+      recovery,
+      busy: false,
+      reviewed: read.kind === 'ready',
+      outcome: recovered ? 'pending' : state.outcome,
+    });
   }
   async function send(intent: RealmClaimIntent) {
+    if (!callerCurrent()) return;
     const version = ++generation;
+    const visit = connection;
+    const ticket = lifetime?.ticket() ?? 0;
     update({ busy: true, outcome: 'sending', reviewed: false });
     let result: RealmClaimResult;
     try {
+      if (!callerOwns(visit, ticket)) return;
       result = await adapter.request({ realmId: intent.realmId, idempotencyKey: intent.idempotencyKey });
     } catch {
       result = { kind: 'unavailable' };
     }
+    if (!callerOwns(visit, ticket)) return;
     if (
       result.kind === 'pending' &&
       (result.request.realmId !== realmId ||
@@ -221,16 +260,19 @@ export function createRealmClaim(
     }
   }
   return {
-    getSnapshot: () => state,
+    getSnapshot: () => (callerCurrent() ? state : hiddenState),
     subscribe(listener: () => void) {
       listeners.add(listener);
+      const unsubscribe = lifetime?.subscribe(listener);
       return () => {
         listeners.delete(listener);
+        unsubscribe?.();
       };
     },
     refresh,
     observePage(snapshot: RealmClaimSnapshot) {
       if (
+        !callerCurrent() ||
         snapshot.realmId !== realmId ||
         (state.read.kind === 'ready' && sameRealmClaimSource(state.read.snapshot, snapshot))
       )
@@ -246,11 +288,12 @@ export function createRealmClaim(
       });
     },
     observeUnavailable(read: Exclude<RealmClaimRead, { kind: 'ready' }>) {
+      if (!callerCurrent()) return;
       generation++;
       update({ read, reviewed: false, busy: false, recovered: null, recovery: adapter.mine ? 'unchecked' : 'unused' });
     },
     async submit() {
-      if (!mayRequestRealmClaim(state) || state.read.kind !== 'ready') return;
+      if (!callerCurrent() || !mayRequestRealmClaim(state) || state.read.kind !== 'ready') return;
       const intent = Object.freeze({
         realmId,
         idempotencyKey: key(),
@@ -260,10 +303,11 @@ export function createRealmClaim(
       await send(intent);
     },
     async retry() {
-      if (mayRetryRealmClaim(state) && state.intent) await send(state.intent);
+      if (callerCurrent() && mayRetryRealmClaim(state) && state.intent) await send(state.intent);
     },
     review() {
       if (
+        !callerCurrent() ||
         state.busy ||
         !state.reviewed ||
         state.read.kind !== 'ready' ||
@@ -271,6 +315,16 @@ export function createRealmClaim(
       )
         return;
       update({ intent: null, outcome: 'idle', reviewed: false });
+    },
+    disconnect() {
+      disconnected = true;
+      connection++;
+      generation++;
+      // A detached send may have applied remotely. Reconnecting can only retry its original intent.
+      update({ busy: false, outcome: state.outcome === 'sending' ? 'uncertain' : state.outcome });
+    },
+    reconnect() {
+      disconnected = false;
     },
   };
 }

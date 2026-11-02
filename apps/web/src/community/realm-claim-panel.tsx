@@ -1,5 +1,5 @@
-import { useMemo, useRef } from 'react';
-import { useSession } from '../session/query';
+import { useMemo } from 'react';
+import { useRealmClaimCaller } from './realm-claim-caller-lifetime';
 import { readRealmClaimState, readOwnRealmClaimStatus, submitRealmClaim } from './space-actions';
 import { RealmClaimControls } from './realm-claim-controls';
 import type { RealmClaimAdapter, RealmClaimRead, RealmClaimSnapshot } from './realm-claim';
@@ -18,41 +18,43 @@ export function RealmClaimPanel({
   adapter?: RealmClaimAdapter;
   onRead: (read: RealmClaimRead) => void;
 }) {
-  const session = useSession();
-  const latest = useRef(session);
-  latest.current = session;
+  const { session, ready, lifetime, connectionRevision } = useRealmClaimCaller(realmId);
   const native = useMemo<RealmClaimAdapter>(
     () => ({
-      read: (realmId) =>
-        readRealmClaimState({
-          data: {
-            realmId,
-            credentialMode: latest.current.state === 'signed-in' ? 'session' : 'anonymous',
-          },
-        }),
+      read: (target) =>
+        lifetime.current() && target === realmId
+          ? readRealmClaimState({
+              data: {
+                realmId,
+                credentialMode: 'session',
+              },
+            })
+          : Promise.resolve({ kind: 'unavailable' }),
       request: (data) =>
-        latest.current.state === 'signed-in' && latest.current.csrfToken
-          ? submitRealmClaim({ data, headers: { 'X-CSRF-Token': latest.current.csrfToken } })
+        lifetime.current() && data.realmId === realmId && session.csrfToken
+          ? submitRealmClaim({ data, headers: { 'X-CSRF-Token': session.csrfToken } })
           : Promise.resolve({ kind: 'signed-out' }),
-      mine: (realmId) =>
-        latest.current.state === 'signed-in'
+      mine: (target) =>
+        lifetime.current() && target === realmId
           ? readOwnRealmClaimStatus({ data: { realmId } })
           : Promise.resolve({ kind: 'signed-out' }),
     }),
-    [],
+    [realmId, lifetime, session.csrfToken],
   );
   const first: RealmClaimRead = initial
     ? { kind: 'ready', snapshot: initial, admission: session.state === 'signed-out' ? 'signed-out' : 'unavailable' }
     : { kind: 'unavailable' };
   return (
     <RealmClaimControls
-      key={`${realmId}:${session.subject ?? session.state}`}
+      key={lifetime.id}
       realmId={realmId}
       initial={first}
       returnTo={returnTo}
       adapter={adapter ?? native}
-      ready={!!session.csrfToken || !!adapter}
-      load={session.state !== 'unknown'}
+      ready={ready}
+      load={ready}
+      lifetime={lifetime}
+      connectionRevision={connectionRevision}
       onRead={onRead}
       recoveryOnly
     />
