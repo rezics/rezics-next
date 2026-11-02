@@ -29,7 +29,10 @@ const figure = {
   score: null,
 };
 
-function client(status: Partial<Record<(typeof RATING_SOURCES)[number] | 'directory' | 'realm', number>>, hint?: string) {
+function client(
+  status: Partial<Record<(typeof RATING_SOURCES)[number] | 'directory' | 'realm', number>>,
+  hint?: string,
+) {
   const headers = hint ? { 'retry-after': hint } : undefined;
   return createKernelClient('https://kernel.invalid', {
     fetch: async (input, init) => {
@@ -37,8 +40,7 @@ function client(status: Partial<Record<(typeof RATING_SOURCES)[number] | 'direct
       const limited = (code: number) => Response.json({ code: 'rate_limited' }, { status: code, headers });
       if (url.pathname.startsWith('/v1/rating-questions/'))
         return status.question === 429 ? limited(429) : Response.json(question);
-      if (url.pathname.endsWith('/figure'))
-        return status.figure === 429 ? limited(429) : Response.json({ figure });
+      if (url.pathname.endsWith('/figure')) return status.figure === 429 ? limited(429) : Response.json({ figure });
       if (url.pathname.endsWith('/source-statistics'))
         return status.statistics === 429 ? limited(429) : Response.json([]);
       if (url.pathname.endsWith('/ratings/populations'))
@@ -46,9 +48,7 @@ function client(status: Partial<Record<(typeof RATING_SOURCES)[number] | 'direct
           ? limited(429)
           : Response.json({ populations: [{ population: realm, count: 4 }], next: null });
       if (url.pathname.startsWith('/v1/realms/'))
-        return status.realm === 429
-          ? limited(429)
-          : Response.json({ realm: { realmId: realm, title: 'Quiet Realm' } });
+        return status.realm === 429 ? limited(429) : Response.json({ realm: { realmId: realm, title: 'Quiet Realm' } });
       if (url.pathname.endsWith('/ratings'))
         return status.global === 429
           ? limited(429)
