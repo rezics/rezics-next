@@ -37,7 +37,7 @@ const statement = (index: number, part: Snak, qualifiers: Snak[] = []): Statemen
 
 /** Illustrative finite factual variants on a recorded native DTO, not new native success evidence. */
 function suppliedFacts(): SubjectRead {
-  const body = structuredClone(recordedSubject) as SubjectRead;
+  const body = structuredClone(recordedSubject) as unknown as SubjectRead;
   body.summary = null;
   body.subject.descriptions = {};
   body.subject.sourceRecords = [];
@@ -304,7 +304,7 @@ async function readingJourney({ canvasElement }: { canvasElement: HTMLElement })
     await userEvent.keyboard('{Enter}');
     await expect(destinations).toEqual([item.getAttribute('href'), external]);
     await readableGeometry(canvasElement);
-    const reveal = canvas.getByRole('button', { name: m.subject_spoiler_show(), exact: true });
+    const reveal = canvas.getByRole('button', { name: m.subject_spoiler_show() });
     reveal.focus();
     await userEvent.keyboard('{Enter}');
     await expect(canvas.getByRole('link', { name: 'Concealed original' })).toHaveAttribute(

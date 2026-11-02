@@ -30,7 +30,7 @@ const statement = (index: number, part: Snak, qualifiers: Snak[] = []): Statemen
 
 // Supplied-data variants of a recorded native DTO, never evidence of native acceptance.
 function suppliedFacts() {
-  const body = structuredClone(recordedSubject) as SubjectRead;
+  const body = structuredClone(recordedSubject) as unknown as SubjectRead;
   body.summary = null;
   body.subject.descriptions = {};
   body.subject.sourceRecords = [];
