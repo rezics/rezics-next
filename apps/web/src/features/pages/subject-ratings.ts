@@ -187,11 +187,7 @@ function isPublicFigure(value: unknown): value is PublicFigure {
 }
 
 function isFreshness(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    (value.asOf === null || isDateTime(value.asOf)) &&
-    typeof value.updating === 'boolean'
-  );
+  return isRecord(value) && (value.asOf === null || isDateTime(value.asOf)) && typeof value.updating === 'boolean';
 }
 
 function isAggregateFigure(value: unknown): value is Figure {
@@ -294,9 +290,7 @@ export async function readRatings(client: KernelClient, id: string, only?: Ratin
       )
         return { kind: 'failed' };
       const value = result.data.figures.find((item) => item.population === GLOBAL);
-      return value
-        ? { kind: 'ready', value }
-        : { kind: 'failed' };
+      return value ? { kind: 'ready', value } : { kind: 'failed' };
     }),
     settle('statistics', async () => {
       const result = await subject['source-statistics'].get();

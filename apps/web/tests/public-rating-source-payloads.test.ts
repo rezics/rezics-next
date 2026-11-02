@@ -50,10 +50,7 @@ function client(overrides: Partial<Responses> = {}) {
 }
 
 test('malformed successful public payloads fail only their own sources', async () => {
-  const invalidStatistics = await readRatings(
-    client({ statistics: [{ source: 'vndb', scale: null }] }),
-    subject,
-  );
+  const invalidStatistics = await readRatings(client({ statistics: [{ source: 'vndb', scale: null }] }), subject);
   expect(invalidStatistics.statistics.kind).toBe('failed');
   expect(invalidStatistics.global.kind).toBe('ready');
   expect(invalidStatistics.question.kind).toBe('ready');
@@ -111,6 +108,9 @@ test('valid hidden and updating native figures and imported attribution stay rea
 
     expect(data.figure).toMatchObject({ kind: 'ready', value: { state, mean: null, score: null } });
     expect(data.global).toMatchObject({ kind: 'ready', value: { count: 3, remaining: 2, freshness: { updating } } });
-    expect(data.statistics).toMatchObject({ kind: 'ready', value: [{ scale: { min: 1, max: 10 }, attribution: 'VNDB' }] });
+    expect(data.statistics).toMatchObject({
+      kind: 'ready',
+      value: [{ scale: { min: 1, max: 10 }, attribution: 'VNDB' }],
+    });
   }
 });
