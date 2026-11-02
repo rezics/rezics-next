@@ -5,6 +5,7 @@ import { prepareSession, sessionSubject, viewerCredential } from '../session/req
 import { readSessionIdentity } from '../session/state';
 import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
 import type { LibraryLabelSummary } from './subject-labels';
+import { libraryLabelNameIssue } from './subject-label-name';
 
 export type LibraryLabel = LibraryLabelSummary;
 export type LabelOperation = 'create' | 'rename' | 'delete' | 'restore';
@@ -48,6 +49,10 @@ function labelProblem(value: unknown): { code?: string; detail?: string } {
 }
 
 export function validateLabelInput(value: unknown): LabelInput {
+  return readLabelInput(value, true);
+}
+
+function readLabelInput(value: unknown, validateName: boolean): LabelInput {
   if (!value || typeof value !== 'object') throw new Error('Invalid label input');
   const input = value as Record<string, unknown>;
   const operation = input.operation;
@@ -68,7 +73,9 @@ export function validateLabelInput(value: unknown): LabelInput {
     throw new Error('Invalid label revision');
   if (
     (operation === 'create' || operation === 'rename') &&
-    (typeof input.name !== 'string' || input.name.length > 1000)
+    (typeof input.name !== 'string' ||
+      input.name.length > 1000 ||
+      (validateName && libraryLabelNameIssue(input.name) !== undefined))
   )
     throw new Error('Invalid label name');
   return {
@@ -267,10 +274,11 @@ export async function handleLabelForm(
     if (new TextEncoder().encode(text).length > 4096) throw new Error('Invalid form');
     const form = new URLSearchParams(text);
     for (const key of form.keys()) if (form.getAll(key).length !== 1) throw new Error('Duplicate form field');
-    const input = validateLabelInput({
-      ...Object.fromEntries(form),
-      revision: Number(form.get('library_label_revision')),
-    });
+    // Preserve bounded raw operands for field feedback when native-name validation refuses them.
+    const input = readLabelInput(
+      { ...Object.fromEntries(form), revision: Number(form.get('library_label_revision')) },
+      false,
+    );
     feedback = labelFeedback(input, await submitLabel(client, request, env, input));
     const capturedRevision = Number(form.get('undoRevision'));
     const captured =

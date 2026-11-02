@@ -21,6 +21,7 @@ import type { ManagementGuard } from './management-current-origin';
 import type { GatedOperation } from '../kernel/exposure';
 import { hasUnsentLabelName, useLabelDraftNavigation } from './label-draft-navigation';
 import { LabelNameReader } from './label-name-reader';
+import { libraryLabelNameIssue, type LibraryLabelNameIssue } from './subject-label-name';
 
 /** A catalogue label opens its complete personal shelf. */
 export function LabelShelfLink({ label, locale }: { label: LibraryLabelSummary; locale: string }) {
@@ -133,6 +134,11 @@ export function LabelsPageView({
   const [createName, setCreateName] = useState(() =>
     initial.feedback?.operation === 'create' && !initial.feedback.ok ? (initial.feedback.name ?? '') : '',
   );
+  const [nameError, setNameError] = useState<{
+    operation: 'create' | 'rename';
+    id?: string;
+    issue: LibraryLabelNameIssue;
+  } | null>(null);
   const createField = useRef<HTMLInputElement>(null);
   const renameField = useRef<HTMLInputElement>(null);
   const locked = useRef<{ current: () => boolean } | null>(null);
@@ -235,8 +241,10 @@ export function LabelsPageView({
         alive() &&
         !locked.current &&
         (!originating || originating.isCurrent(`library_label.${next?.operation ?? action?.operation ?? 'rename'}`))
-      )
+      ) {
+        setNameError((error) => (error?.operation === 'rename' ? null : error));
         setAction(next);
+      }
     });
   }
   async function submit(supplied: LabelInput) {
@@ -260,6 +268,15 @@ export function LabelsPageView({
                 ? crypto.randomUUID()
                 : supplied.idempotencyKey,
           };
+    // An uncertain attempt still owns its original operands, even if the draft is now invalid.
+    if (!previous?.unresolved && (input.operation === 'create' || input.operation === 'rename')) {
+      const issue = libraryLabelNameIssue(input.name ?? '');
+      if (issue) {
+        setNameError({ operation: input.operation, ...(input.id ? { id: input.id } : {}), issue });
+        (input.operation === 'create' ? createField : renameField).current?.focus();
+        return;
+      }
+    }
     const headers = originating
       ? originating.headers(operationOf(input))
       : { 'X-CSRF-Token': latestPage.current.csrfToken };
@@ -441,11 +458,13 @@ export function LabelsPageView({
     ...(cursor !== undefined ? { cursor } : {}),
   });
   const mutationPath = search.size ? `${path}?${search}` : path;
+  const fieldIssue = (operation: string, id?: string) =>
+    nameError?.operation === operation && nameError.id === id ? nameError.issue : undefined;
   const fieldError = (operation: string, id?: string) =>
-    feedback && !feedback.ok && feedback.operation === operation && feedback.id === id;
-  const error = (id: string) => (
+    !!fieldIssue(operation, id) || (feedback && !feedback.ok && feedback.operation === operation && feedback.id === id);
+  const error = (id: string, issue?: LibraryLabelNameIssue) => (
     <p id={id} role="alert" className="break-words [overflow-wrap:anywhere] text-sm text-destructive">
-      {labelError(feedback!)}
+      {issue ? labelNameError(issue) : labelError(feedback!)}
     </p>
   );
   function actionForm(selected: LabelAction, fallback = false) {
@@ -455,8 +474,9 @@ export function LabelsPageView({
       failed?.operation === operation && failed.label.id === selected.label.id ? failed.label : selected.label;
     const invalid = fieldError(operation, label.id);
     const errorId = `${operation}-error-${label.id}`;
+    const helpId = `rename-help-${label.id}`;
     return (
-      <form method="post" action={mutationPath} onSubmit={onSubmit} className="min-w-0 space-y-4" aria-busy={busy}>
+      <form method="post" action={mutationPath} onSubmit={onSubmit} noValidate className="min-w-0 space-y-4" aria-busy={busy}>
         {hidden(operation, operation === 'rename' ? label.renameKey : label.deleteKey, label.id, label.revision)}
         {operation === 'rename' ? (
           <Field>
@@ -478,18 +498,21 @@ export function LabelsPageView({
                         alive() &&
                         (!originating || originating.isCurrent(`library_label.${selected.operation}`)) &&
                         !locked.current
-                      )
+                      ) {
+                        setNameError((error) => (error?.operation === 'rename' ? null : error));
                         setAction({ ...selected, name: event.target.value });
+                      }
                     },
                   })}
               aria-invalid={invalid || undefined}
-              aria-describedby={invalid ? errorId : undefined}
+              aria-describedby={`${helpId}${invalid ? ` ${errorId}` : ''}`}
             />
+            <p id={helpId} className="text-sm text-muted-foreground">{m.library_label_name_input_help()}</p>
           </Field>
         ) : (
           <input type="hidden" name="name" value={label.name} />
         )}
-        {invalid ? error(errorId) : null}
+        {invalid ? error(errorId, fieldIssue(operation, label.id)) : null}
         <div className="flex flex-wrap justify-end gap-2">
           {fallback ? (
             <a
@@ -640,7 +663,7 @@ export function LabelsPageView({
         ) : null}
       </form>
       <LabelExposure current={hydrated ? originating?.isCurrent : undefined} page={page} operation="create">
-        <form key={page.createKey} method="post" action={mutationPath} onSubmit={onSubmit} className="space-y-2">
+        <form key={page.createKey} method="post" action={mutationPath} onSubmit={onSubmit} noValidate className="space-y-2">
           {hidden('create', page.createKey)}
           <Field>
             <FieldLabel htmlFor="new-label">{m.library_label_name()}</FieldLabel>
@@ -654,17 +677,20 @@ export function LabelsPageView({
                 className={`${fieldClass} flex-1 basis-48`}
                 value={createName}
                 onChange={(event) => {
-                  if (alive() && (!originating || originating.isCurrent('library_label.create')))
+                  if (alive() && (!originating || originating.isCurrent('library_label.create'))) {
+                    setNameError((error) => (error?.operation === 'create' ? null : error));
                     setCreateName(event.target.value);
+                  }
                 }}
                 aria-invalid={fieldError('create') || undefined}
-                aria-describedby={fieldError('create') ? 'create-error' : undefined}
+                aria-describedby={`create-name-help${fieldError('create') ? ' create-error' : ''}`}
               />
               <Button type="submit" variant="default" size="lg" className={actionClass} disabled={busy}>
                 {m.library_label_create()}
               </Button>
             </div>
-            {fieldError('create') ? error('create-error') : null}
+            <p id="create-name-help" className="text-sm text-muted-foreground">{m.library_label_name_input_help()}</p>
+            {fieldError('create') ? error('create-error', fieldIssue('create')) : null}
           </Field>
         </form>
       </LabelExposure>
@@ -849,8 +875,22 @@ export function LabelsPageView({
     </article>
   );
 }
+function labelNameError(issue: LibraryLabelNameIssue): string {
+  if (issue === 'empty') return m.library_label_name_input_empty();
+  if (issue === 'controls') return m.library_label_name_input_controls();
+  if (issue === 'surrogates') return m.library_label_name_input_surrogates();
+  return m.library_label_name_input_too_long();
+}
 function labelError(feedback: LabelFeedback): string {
   const reason = feedback.reason;
+  if (
+    reason === 'invalid_request' &&
+    (feedback.operation === 'create' || feedback.operation === 'rename') &&
+    feedback.name !== undefined
+  ) {
+    const issue = libraryLabelNameIssue(feedback.name);
+    if (issue) return labelNameError(issue);
+  }
   if (reason === 'library_label_restore_stale') return m.library_label_restore_stale();
   if (reason === 'library_label_restore_expired') return m.library_label_restore_expired();
   if (reason === 'library_label_restore_occupied') return m.library_label_restore_occupied();
