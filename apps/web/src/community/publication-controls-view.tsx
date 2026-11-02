@@ -9,7 +9,7 @@ import {
   useSyncExternalStore,
   type MouseEvent,
 } from 'react';
-import { EntityPicker, type EntityPickerSearch } from '@rezics/ui/entity-picker';
+import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { Cover } from '@rezics/ui/cover';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { ListRowControl } from '@rezics/ui/list-row';
@@ -214,13 +214,83 @@ export function PublicationControls({
   const locale = getLocale();
   const searchSubjects = useMemo(() => search ?? publicationSubjectSearch(locale), [search, locale]);
   const selected = control.target;
+  const opener = useRef<HTMLButtonElement>(null);
+  const picker = useRef<HTMLDivElement>(null);
+  const summary = useRef<HTMLDivElement>(null);
+  const mounted = useRef(false);
+  const focusRequest = useRef<{
+    scope: string;
+    targetId: string | null;
+    destination: 'summary' | 'picker';
+    origin: HTMLElement;
+  } | null>(null);
+  const rendered = useRef({ scope: control.scope, targetId: selected?.id ?? null, open });
+  rendered.current = { scope: control.scope, targetId: selected?.id ?? null, open };
+
+  usePublicationLayoutEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      focusRequest.current = null;
+    };
+  }, []);
+  usePublicationLayoutEffect(() => {
+    const request = focusRequest.current;
+    if (!request) return;
+    focusRequest.current = null;
+    if (
+      !mounted.current ||
+      !rendered.current.open ||
+      rendered.current.scope !== request.scope ||
+      rendered.current.targetId !== request.targetId ||
+      (document.activeElement !== request.origin && document.activeElement !== document.body)
+    )
+      return;
+    const destination =
+      request.destination === 'summary'
+        ? summary.current?.querySelector<HTMLElement>('[data-content-item-slot="title"]')
+        : picker.current?.querySelector<HTMLInputElement>('input');
+    if (destination?.isConnected) destination.focus();
+  });
+
+  const choose = (subject: EntityPickerSubject | undefined) => {
+    const scope = control.scope;
+    const current = rendered.current;
+    if (!mounted.current || !current.open || current.scope !== scope || current.targetId !== (selected?.id ?? null))
+      return;
+    const active = document.activeElement;
+    if (subject && active instanceof HTMLElement && picker.current?.contains(active)) {
+      focusRequest.current = { scope, targetId: subject.id, destination: 'summary', origin: active };
+    }
+    control.choose(
+      subject
+        ? {
+            id: subject.id,
+            title: subject.title,
+            labels: { [locale]: subject.title },
+            label: subject.title,
+            types: [...subject.types],
+            typeName: subject.typeLabel,
+            cover: subject.cover,
+          }
+        : null,
+    );
+  };
+
   return (
     <div className="min-w-0 space-y-3 [overflow-wrap:anywhere]">
       <Button
+        ref={opener}
         className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
         variant="outline"
         aria-expanded={open}
-        onClick={() => setOpen(!open)}
+        onClick={() => {
+          if (open) {
+            focusRequest.current = null;
+            opener.current?.focus();
+          }
+          setOpen(!open);
+        }}
       >
         {m.realm_publication_curate()}
       </Button>
@@ -247,8 +317,12 @@ export function PublicationControls({
                     decorative
                   />
                 </div>
-                <div className="min-w-0 flex-1 space-y-1">
-                  <ContentItemHeading level={4} className="text-[17px] leading-snug font-semibold sm:text-lg">
+                <div ref={summary} className="min-w-0 flex-1 space-y-1">
+                  <ContentItemHeading
+                    level={4}
+                    tabIndex={-1}
+                    className="text-[17px] leading-snug font-semibold sm:text-lg"
+                  >
                     {selected.title}
                   </ContentItemHeading>
                   {selected.typeName ? (
@@ -264,37 +338,42 @@ export function PublicationControls({
                   <Button
                     className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
                     variant="ghost"
-                    onClick={() => control.choose(null)}
+                    onClick={(event) => {
+                      const scope = control.scope;
+                      const current = rendered.current;
+                      if (
+                        mounted.current &&
+                        current.open &&
+                        current.scope === scope &&
+                        current.targetId === selected.id &&
+                        document.activeElement === event.currentTarget
+                      ) {
+                        focusRequest.current = {
+                          scope,
+                          targetId: null,
+                          destination: 'picker',
+                          origin: event.currentTarget,
+                        };
+                      }
+                      control.choose(null);
+                    }}
                   >
                     {m.realm_publication_clear()}
                   </Button>
                 </ListRowControl>
               </ContentItemFrame>
             ) : (
-              <EntityPicker
-                key={control.scope}
-                disabled={control.locked}
-                label={m.realm_publication_choose()}
-                value={[]}
-                search={searchSubjects}
-                src={coverSrc}
-                onValueChange={(items) => {
-                  const subject = items[0];
-                  control.choose(
-                    subject
-                      ? {
-                          id: subject.id,
-                          title: subject.title,
-                          labels: { [locale]: subject.title },
-                          label: subject.title,
-                          types: [...subject.types],
-                          typeName: subject.typeLabel,
-                          cover: subject.cover,
-                        }
-                      : null,
-                  );
-                }}
-              />
+              <div ref={picker}>
+                <EntityPicker
+                  key={control.scope}
+                  disabled={control.locked}
+                  label={m.realm_publication_choose()}
+                  value={[]}
+                  search={searchSubjects}
+                  src={coverSrc}
+                  onValueChange={(items) => choose(items[0])}
+                />
+              </div>
             )}
             <ListRowControl data-content-item-slot="actions">
               <Button
