@@ -452,7 +452,11 @@ function AuthoredFieldLive({
       return result;
     },
   };
-  if (!visible) return null;
+  // Keep the private navigation holder mounted when the public reading retires.
+  const navigation = (
+    <AuthoredFieldNavigation drafts={drafts} pending={!!command || (busy && !reading)} confirmed={!!proposed} />
+  );
+  if (!visible) return <article>{navigation}</article>;
   const selectedContent = current?.selected && (
     <>
       <Body body={current.body} locale={locale} includeProvenance={false} />
@@ -484,7 +488,7 @@ function AuthoredFieldLive({
 
   return (
     <article className="mx-auto min-w-0 w-full max-w-4xl space-y-6 p-4 [overflow-wrap:anywhere] sm:p-6">
-      <AuthoredFieldNavigation drafts={drafts} pending={!!command || (busy && !reading)} confirmed={!!proposed} />
+      {navigation}
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold">{m.authored_title({}, o)}</h1>
         {current && (

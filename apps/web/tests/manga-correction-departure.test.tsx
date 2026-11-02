@@ -24,6 +24,8 @@ test('Manga departure retains private siblings and exact retries through recover
   const { CandidateReaderBoundary } = await import('../src/subject/candidate-lifetime');
   const { MangaProfileEditor } = await import('../src/features/catalogue/manga-profile-view');
   const { RelationEditorNavigation } = await import('../src/features/catalogue/relation-editor-navigation');
+  const { AuthoredFieldNavigation } = await import('../src/features/catalogue/authored-field-navigation');
+  const { fromPlainText } = await import('@rezics/document');
   const { useCurrentReadingVisible } = await import('../src/features/catalogue/editor-lifetime');
   const { mangaFixture, mangaVolumeId } = await import('../src/kernel/fake/catalogue-manga-profile');
   const { readMangaProfile } = await import('../src/features/catalogue/manga-profile');
@@ -53,6 +55,13 @@ test('Manga departure retains private siblings and exact retries through recover
     return (
       <>
         <RelationEditorNavigation dirty={!!value} pending={false} isCurrent={() => true} />
+        <AuthoredFieldNavigation
+          drafts={{
+            text: { document: fromPlainText(value), citation: value, language: '', licence: '', original: false },
+          }}
+          pending={false}
+          confirmed={false}
+        />
         {visible && (
           <input aria-label="Relation sibling" value={value} onChange={(event) => change(event.target.value)} />
         )}

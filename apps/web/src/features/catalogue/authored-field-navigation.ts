@@ -12,6 +12,7 @@ import {
   AlertDialogTitle,
 } from '@rezics/ui/shadcn/alert-dialog';
 import { m } from '../../paraglide/messages.js';
+import { useAuthoringDeparture } from '../../threads/authoring-departure';
 import type { AuthoredDraft } from './authored-field-state';
 
 export function authoredFieldNavigationState(
@@ -40,18 +41,19 @@ export function AuthoredFieldNavigation({
   confirmed: boolean;
 }) {
   const { dirty, protect } = authoredFieldNavigationState(drafts, pending, confirmed);
+  const { hasOwner } = useAuthoringDeparture(protect, pending, JSON.stringify([drafts, pending, confirmed]));
   const router = useRouter({ warn: false });
   useEffect(() => {
-    if (!protect) return;
+    if (!protect || hasOwner) return;
     const beforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = '';
     };
     window.addEventListener('beforeunload', beforeUnload);
     return () => window.removeEventListener('beforeunload', beforeUnload);
-  }, [protect]);
+  }, [protect, hasOwner]);
 
-  return router ? createElement(RouterAuthoredDeparture, { dirty, pending, protect }) : null;
+  return !hasOwner && router ? createElement(RouterAuthoredDeparture, { dirty, pending, protect }) : null;
 }
 
 function RouterAuthoredDeparture({ dirty, pending, protect }: { dirty: boolean; pending: boolean; protect: boolean }) {
