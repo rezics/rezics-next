@@ -112,7 +112,10 @@ export async function collectionBulkView(tx: CommandTransaction, key: Collection
   const counts: BulkCounters = { scannedCandidates: operation.targetCount, selectedSubjects: operation.targetCount,
     scannedOccurrences: 0, capturedOccurrences: 0, targets: operation.targetCount, pending: 0, reconciling: 0,
     applied: 0, no_effect: 0, conflict: 0, denied: 0, failed: 0, cancelled: 0 };
-  for (const row of rows.rows) if (Object.hasOwn(counts, row.state)) (counts as unknown as Record<string, number>)[row.state] += row.n;
+  for (const row of rows.rows) if (Object.hasOwn(counts, row.state)) {
+    const totals = counts as unknown as Record<string, number>;
+    totals[row.state] = (totals[row.state] ?? 0) + row.n;
+  }
   const stopReason = rows.rows.find(row => row.reason === 'authority_lost' || row.reason === 'cancel_requested' || row.reason === 'execution_expired')?.reason;
   const cancelled = operation.phase === 'completed' && (counts.pending > 0 || counts.cancelled > 0);
   return { operation: { id: key.operationId, route: key.route, action: operation.request.action,

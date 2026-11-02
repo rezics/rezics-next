@@ -88,16 +88,14 @@ its existing 100-row budget; it remains the erasure authority.
 The explicit status path installs native commands, routes, worker delivery and lifecycle cleanup. Further action
 owners supply the existing Collection add/remove and Library removal executor seams; Web owns its consumer journey.
 
-Mount native preview, confirmation, operation and outcome routes with the ordinary Access catalogue and command
-receipts. Capture the native durable initiator and install its reader. Emit and consume one registered Core outbox
-confirmation event through the existing Library WorkModule and queue. Use the source's documented direct or
-ready-result interface for filtered capture and the existing Members preparation implementation where needed.
+Further actions extend the installed preview, confirmation and result API only when their native executors are
+available. Use the source's documented direct or ready-result interface for filtered capture and the existing
+Members preparation implementation where needed.
 
 Native executors must retain the real entry/occurrence CAS, live authorization, native domain events and exact
 remote receipt reconciliation. Reuse the delivered occurrence removal/Undo journey. Expose durable operation URLs
 for Web preview, explicit confirmation and per-target results; navigation and retry must recover the same operation.
-Compose retention and erasure with Accounts 27af and the existing Library cleanup, including the new header's
-owner/expiry indexes. Do not expose the internal store before this composition lands.
+Retain the installed indexed cleanup and Accounts erasure composition when adding action-specific private state.
 
 ## Personal Library removal executor
 
