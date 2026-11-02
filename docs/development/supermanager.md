@@ -5,6 +5,12 @@ maintainer, the allowance runway, critical grants and deadlocks between owners. 
 themselves when the supermanager is unreachable ([delivery](delivery.md)). A token-free watchdog supervises the
 supermanager and raises the alarm when it is stuck.
 
+## Environment incidents
+
+When the same failure line ends three or more tasks within 20 minutes, it is one shared incident. The supermanager is
+alerted with the line, the count, example tasks and the source location, and the Telegram group is told. Fix the cause
+or hand it to its owner within 15 minutes, then retry the affected tasks.
+
 ## Questions for the maintainer
 
 Never ask a blocking question: no dialog, prompt or tool call that waits for an answer while the Goal runs. The work
