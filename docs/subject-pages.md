@@ -693,6 +693,7 @@ slot at an admitted selected rank confirms public selection. A committed adoptio
 stays pending. The canonical reader is refreshed and linked after confirmation; private proposal JSON never replaces
 its data. The editor's page stories use the shared shell and locale/theme/viewport globals.
 
+Work Parts explicit keyboard opening focuses the admitted private editor heading, including an already open draft; pointer opening, moved focus and retired opening intent stay silent.
 Work Parts lets contributors close one opened correction or staged addition while other private drafts stay mounted.
 Cancel preserves picker summaries, statement, citation and focus; confirmed close returns focus to its source action,
 and reopening starts a fresh editor from the admitted reading. A changed correction requires confirmation; an

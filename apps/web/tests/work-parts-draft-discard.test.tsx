@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
-test('Work Parts closes only the chosen unsent draft and preserves sealed command recovery', async () => {
+test('Work Parts orients only current keyboard openings, closes independent drafts and preserves sealed commands', async () => {
   const require = createRequire(import.meta.url);
   const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
   const window = new Window({ url: 'https://site.test/en/subjects/book/title' });
@@ -99,7 +99,19 @@ test('Work Parts closes only the chosen unsent draft and preserves sealed comman
     const source = [...rows[0]!.querySelectorAll('button')].find(
       (item) => item.textContent?.trim() === m.work_parts_correct(),
     )!;
-    for (const row of rows) await click(m.work_parts_correct(), row);
+    const sources = rows.map((row) => [...row.querySelectorAll<HTMLButtonElement>('button')]
+      .find((item) => item.textContent?.trim() === m.work_parts_correct())!);
+    const activate = (opener: HTMLButtonElement, detail = 0) => act(async () => {
+      opener.focus();
+      opener.dispatchEvent(new window.MouseEvent('click', { bubbles: true, detail }));
+    });
+    await activate(source, 1);
+    expect(host.ownerDocument.activeElement).toBe(source);
+    await activate(sources[1]!);
+    expect(host.ownerDocument.activeElement).toBe(editors()[1]!.querySelector('h2'));
+    await activate(source);
+    expect(host.ownerDocument.activeElement).toBe(editors()[0]!.querySelector('h2'));
+    expect(fixture.calls).toHaveLength(0);
     const [firstEditor, sibling] = editors() as [HTMLElement, HTMLElement];
     for (const editor of [firstEditor, sibling]) {
       await click(m.relation_open(), editor);
@@ -111,6 +123,22 @@ test('Work Parts closes only the chosen unsent draft and preserves sealed comman
     const admittedPosition = firstPosition!.value;
     await input(firstPosition!, '41');
     await input(siblingPosition!, '55');
+    const readCount = fixture.calls.length;
+    await activate(source);
+    expect(editors()[0]).toBe(firstEditor);
+    expect(firstPosition!.value).toBe('41');
+    expect(host.ownerDocument.activeElement).toBe(firstEditor.querySelector('h2'));
+    expect(fixture.calls).toHaveLength(readCount);
+    const propsKey = Object.keys(source).find((key) => key.startsWith('__reactProps$'))!;
+    const queuedOpen = Reflect.get(source, propsKey).onClick;
+    await act(async () => {
+      source.focus();
+      queuedOpen({ currentTarget: source, detail: 0 });
+      sources[1]!.focus();
+      source.focus();
+    });
+    expect(host.ownerDocument.activeElement).toBe(source);
+    expect(editors()[0]).toBe(firstEditor);
 
     const close = await click(m.work_parts_draft_close(), firstEditor);
     await click(m.candidate_cancel(), firstEditor);
@@ -156,6 +184,50 @@ test('Work Parts closes only the chosen unsent draft and preserves sealed comman
     expect(posts()[1]).toMatchObject({ authorization: sealed.authorization, key: sealed.key, body: sealed.body });
     expect(host.contains(reopened)).toBe(true);
     expect(editors()).toHaveLength(2);
+
+    for (const title of ['Volume Two', 'The Traveller']) {
+      const picker = host.querySelector<HTMLInputElement>(`input[aria-label="${m.work_parts_pick()}"]`)!;
+      await input(picker, title);
+      await until(() => !!window.document.querySelector('[role="option"]'));
+      const option = [...window.document.querySelectorAll<HTMLElement>('[role="option"]')]
+        .find((item) => item.textContent?.includes(title))!;
+      await act(async () => option.click());
+      const add = [...host.querySelectorAll<HTMLButtonElement>('button')]
+        .find((item) => item.textContent?.trim() === m.work_parts_draft())!;
+      await activate(add);
+      const addition = editors().at(-1)!;
+      expect(host.ownerDocument.activeElement).toBe(addition.querySelector('h2'));
+      const count = fixture.calls.length;
+      await activate(add);
+      expect(editors().at(-1)).toBe(addition);
+      expect(host.ownerDocument.activeElement).toBe(addition.querySelector('h2'));
+      expect(fixture.calls).toHaveLength(count);
+    }
+    expect(editors()).toHaveLength(4);
+    const { CatalogueCurrentReading } = await import('../src/features/catalogue/editor-lifetime');
+    const renderReading = (revision: string, locale = 'en', id = fixture.id) => root.render(
+      h(QueryClientProvider, { client }, h(CatalogueCurrentReading,
+        { visible: true, ready: true, revision, children: h(WorkPartsPage,
+          { id, locale, initial, search: fixture.search, transport: fixture.transport }) })),
+    );
+    for (const retirement of ['reading', 'locale', 'route']) {
+      await act(async () => renderReading('current'));
+      const opener = [...host.querySelectorAll<HTMLButtonElement>('button')]
+        .find((item) => item.textContent?.trim() === m.work_parts_correct())!;
+      const key = Object.keys(opener).find((item) => item.startsWith('__reactProps$'))!;
+      const retiredOpen = Reflect.get(opener, key).onClick;
+      source.focus();
+      await act(async () => {
+        opener.focus();
+        retiredOpen({ currentTarget: opener, detail: 0 });
+        renderReading('replacement', retirement === 'locale' ? 'fr' : 'en', retirement === 'route' ? 'replacement' : fixture.id);
+      });
+      expect(host.ownerDocument.activeElement?.tagName).not.toBe('H2');
+      const count = fixture.calls.length;
+      await act(async () => retiredOpen({ currentTarget: opener, detail: 0 }));
+      expect(fixture.calls).toHaveLength(count);
+      expect(host.ownerDocument.activeElement?.tagName).not.toBe('H2');
+    }
   } finally {
     await act(async () => root.unmount());
     client.clear();

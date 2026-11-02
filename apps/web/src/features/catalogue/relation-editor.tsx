@@ -68,6 +68,7 @@ function RelationEditorLive({
   initial,
   onSelected,
   onClose,
+  onOpeningFocus,
   requireCloseConfirmation = false,
   composition,
   embedded = false,
@@ -80,6 +81,8 @@ function RelationEditorLive({
   initial?: RelationRead;
   onSelected?: () => void | Promise<void>;
   onClose?: () => void;
+  /** An explicit containing-page opening may orient to this admitted editor. */
+  onOpeningFocus?: (heading: HTMLHeadingElement) => void;
   requireCloseConfirmation?: boolean;
   embedded?: boolean;
   /** A containing profile can compose the existing dirty/pending state into one decision. */
@@ -94,6 +97,10 @@ function RelationEditorLive({
 }) {
   const mount = useEditorLifetime();
   const visible = useCurrentReadingVisible();
+  const openingHeading = useRef<HTMLHeadingElement>(null);
+  useLayoutEffect(() => {
+    if (visible && mount.active() && openingHeading.current) onOpeningFocus?.(openingHeading.current);
+  }, [onOpeningFocus, visible, mount]);
   const draftRevision = useRef(0);
   const options = { locale: locale as never };
   const formId = useId();
@@ -459,9 +466,14 @@ function RelationEditorLive({
     <section aria-label={m.relation_title({}, options)} className={relationSurface} aria-busy={busy}>
       <header className="space-y-2">
         {composition ? (
-          <ContentItemHeading level={2} className="font-sans text-2xl font-semibold">
+          <h2
+            ref={openingHeading}
+            tabIndex={onOpeningFocus ? -1 : undefined}
+            data-content-item-slot="title"
+            className="font-sans text-2xl font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
             {m.relation_title({}, options)}
-          </ContentItemHeading>
+          </h2>
         ) : (
           <>{!embedded && <h1 className="text-2xl font-semibold">{m.relation_title({}, options)}</h1>}</>
         )}
