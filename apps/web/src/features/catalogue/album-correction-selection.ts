@@ -5,13 +5,16 @@ type SelectionChange =
   | { kind: 'revise'; draft: FactDraft }
   | { kind: 'remove'; property: string; target?: FactDraft };
 
-const identities = new WeakMap<FactDraft, number>();
+// Enumerable symbols survive the ordinary FactField and command/result spreads,
+// while staying out of JSON and native statement payloads.
+const incarnation = Symbol('album-correction');
+type AlbumDraft = FactDraft & { [incarnation]?: number };
 const touched = new WeakSet<FactDraft>();
 let nextIdentity = 0;
 /** Revisions retain the local row; staging the same property again creates a new target. */
 export function albumDraftIdentity(draft: FactDraft): number {
-  if (!identities.has(draft)) identities.set(draft, ++nextIdentity);
-  return identities.get(draft)!;
+  const holder = draft as AlbumDraft;
+  return (holder[incarnation] ??= ++nextIdentity);
 }
 
 export function albumDraftPopulated(draft: FactDraft): boolean {
@@ -41,6 +44,7 @@ export function changeAlbumSelection(drafts: FactDraft[], change: SelectionChang
     case 'stage': {
       if (current || drafts.length >= factLimit) return drafts;
       const draft = stageFact(change.read, property, change.source);
+      if (draft) albumDraftIdentity(draft);
       return draft ? [...drafts, draft] : drafts;
     }
     case 'remove':
@@ -49,8 +53,13 @@ export function changeAlbumSelection(drafts: FactDraft[], change: SelectionChang
         : drafts;
     case 'revise':
       // A delayed control event must not unseal a command whose delivery is now uncertain.
-      if (!current || factLocked(current) || current.source !== change.draft.source) return drafts;
-      identities.set(change.draft, albumDraftIdentity(current));
+      if (
+        !current ||
+        factLocked(current) ||
+        current.source !== change.draft.source ||
+        albumDraftIdentity(current) !== albumDraftIdentity(change.draft)
+      )
+        return drafts;
       if (touched.has(current) || current.statement !== change.draft.statement) touched.add(change.draft);
       return drafts.map((draft) => (draft === current ? change.draft : draft));
   }

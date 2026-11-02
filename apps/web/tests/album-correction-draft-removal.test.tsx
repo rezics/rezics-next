@@ -35,6 +35,7 @@ test('Album removal targets a local draft across revisions, never its replacemen
   const replacement = stage();
   expect(albumDraftIdentity(replacement[0]!)).not.toBe(albumDraftIdentity(original));
   expect(change(replacement, { kind: 'remove', property, target: revised })).toBe(replacement);
+  expect(change(replacement, { kind: 'revise', draft: revised })).toBe(replacement);
   const uncertain = [{ ...drafts[0]!, result: { ok: false as const, reason: 'uncertain' as const } }];
   expect(change(uncertain, { kind: 'remove', property })).toBe(uncertain);
 });
@@ -95,6 +96,13 @@ test('Album draft Cancel preserves mounted assertions; local confirmation keeps 
   const field = (id: string) => within(host).getByRole('region', { name: fixture.release.properties[id]!.labels.en! });
   const row = (id: string) => field(id).parentElement!;
   const remove = (id: string) => m.album_remove_draft({ field: fixture.release.properties[id]!.labels.en! });
+  const inputChange = (node: Element) =>
+    (
+      Reflect.get(
+        node,
+        Object.keys(node).find((key) => key.startsWith('__reactProps$'))!,
+      ) as { onChange: (event: { target: { value: string } }) => void }
+    ).onChange;
   try {
     await act(async () =>
       root.render(
@@ -129,6 +137,8 @@ test('Album draft Cancel preserves mounted assertions; local confirmation keeps 
     await click(field(sibling), m.facts_edit_field());
     const value = within(field(sibling)).getByRole('textbox', { name: m.correction_value() }) as HTMLInputElement;
     await act(async () => user.type(value, 'fr'));
+    const discardedChange = inputChange(year);
+    const retiredChange = inputChange(value);
     await click(row(property), remove(property));
     await click(row(property), m.candidate_cancel());
     expect(window.document.activeElement).toBe(within(row(property)).getByRole('button', { name: remove(property) }));
@@ -148,6 +158,25 @@ test('Album draft Cancel preserves mounted assertions; local confirmation keeps 
     expect(value.value).toBe('fr');
     expect(commands).toHaveLength(0);
     expect(fixture.publicRead.subject.statements).toEqual(selected);
+    await click(field(property), m.facts_edit_field()); // Same property and selected source, new incarnation.
+    const replacementYear = within(field(property)).getByRole('textbox', {
+      name: m.correction_year(),
+    }) as HTMLInputElement;
+    const replacementRemove = within(row(property)).getByRole('button', { name: remove(property) });
+    await act(async () => {
+      await user.clear(replacementYear);
+      await user.type(replacementYear, '2027');
+    });
+    expect(within(row(property)).getByRole('button', { name: remove(property) })).toBe(replacementRemove);
+    const feedback = field(property).textContent;
+    await act(async () => discardedChange({ target: { value: '1900' } }));
+    expect(within(field(property)).getByRole('textbox', { name: m.correction_year() })).toBe(replacementYear);
+    expect(replacementYear.value).toBe('2027');
+    expect(field(property).textContent).toBe(feedback);
+    expect(within(row(property)).getByRole('button', { name: remove(property) })).toBe(replacementRemove);
+    expect(value.value).toBe('fr');
+    await click(row(property), remove(property));
+    await click(row(property), remove(property));
     await click(row(sibling), remove(sibling));
     next = { ok: false, reason: 'concealed' };
     await click(host, m.correction_reload());
@@ -156,14 +185,24 @@ test('Album draft Cancel preserves mounted assertions; local confirmation keeps 
     ).toBeNull();
     next = await fixture.editors.facts.read();
     await click(host, m.correction_reload());
+    await act(async () => retiredChange({ target: { value: 'Retired read' } }));
     expect(
       (within(field(sibling)).getByRole('textbox', { name: m.correction_value() }) as HTMLInputElement).value,
     ).toBe('fr');
+    const currentChange = inputChange(within(field(sibling)).getByRole('textbox', { name: m.correction_value() }));
     await click(row(sibling), remove(sibling));
     await click(host, m.facts_submit()); // Sealing retires even an already-open confirmation.
+    await act(async () => currentChange({ target: { value: 'Pending overwrite' } }));
+    expect(
+      (within(field(sibling)).getByRole('textbox', { name: m.correction_value() }) as HTMLInputElement).value,
+    ).toBe('fr');
     expect(commands).toHaveLength(1);
     expect(within(row(sibling)).queryByRole('button', { name: remove(sibling) })).toBeNull();
     await act(async () => finish({ ok: false, reason: 'uncertain' }));
+    await act(async () => currentChange({ target: { value: 'Uncertain overwrite' } }));
+    expect(
+      (within(field(sibling)).getByRole('textbox', { name: m.correction_value() }) as HTMLInputElement).value,
+    ).toBe('fr');
     expect(within(row(sibling)).queryByRole('button', { name: remove(sibling) })).toBeNull();
     expect(commands[0]!.statement.value).toEqual({ type: 'value', content: 'fr' });
     // Named state: the scalar command may have applied before its property leaves admission.
