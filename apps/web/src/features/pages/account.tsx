@@ -420,7 +420,7 @@ export function AccountPosts(props: Record<string, unknown>) {
             <ContentItem
               key={typeof post.id === 'string' ? post.id : index}
               title={title}
-              href={href}
+              {...(href === undefined ? {} : { href })}
               headingLevel={3}
               metadata={when ? <Quiet>{when}</Quiet> : null}
               preview={<Excerpt body={post.body} value={value} />}
