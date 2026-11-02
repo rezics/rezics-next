@@ -136,7 +136,10 @@ export async function loadInventory<V extends InventoryView>(
   try {
     return await privateAuthRead(
       async (readSignal) =>
-        (await readInventory({ data: { view, ...(cursor ? { cursor } : {}) }, signal: readSignal })) as InventoryPage<V>,
+        (await readInventory({
+          data: { view, ...(cursor ? { cursor } : {}) },
+          signal: readSignal,
+        })) as InventoryPage<V>,
       signal,
     );
   } catch {

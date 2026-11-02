@@ -2,10 +2,7 @@
  * Race cancellation as well as forwarding it: a stalled transport may ignore abort.
  * Callers map rejection to their existing unavailable state; this never retries.
  */
-export async function privateAuthRead<T>(
-  read: (signal: AbortSignal) => Promise<T>,
-  caller?: AbortSignal,
-): Promise<T> {
+export async function privateAuthRead<T>(read: (signal: AbortSignal) => Promise<T>, caller?: AbortSignal): Promise<T> {
   const controller = new AbortController();
   const cancel = () => controller.abort(caller?.reason);
   if (caller?.aborted) cancel();
