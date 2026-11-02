@@ -149,7 +149,13 @@ export async function loadPresentationPreview(client: KernelClient, value: unkno
       return { ok: false, reason: 'unavailable' };
     const { account: _account, ...native } = raw;
     const page: SubjectPageData = { ...native, subject: native.subject ?? null };
-    if ('subject' in input.target ? !page.subject : page.subject !== null) return { ok: false, reason: 'unavailable' };
+    // Bind the aggregate to the requested address before planning reads or consulting presentation controls.
+    // A self-consistent subject body alone cannot establish which subject was requested.
+    if ('subject' in input.target) {
+      if (page.subject !== input.target.subject) return { ok: false, reason: 'unavailable' };
+    } else if (page.subject !== null) {
+      return { ok: false, reason: 'unavailable' };
+    }
     const plan = planReads(platformRegistry, page.document as CompositionDocument, {
       subject: page.subject,
       ...(page.context ? { context: page.context } : {}),
@@ -160,11 +166,12 @@ export async function loadPresentationPreview(client: KernelClient, value: unkno
       if (!read || read.status !== 200) return failure(read?.status ?? 503);
     }
     if ('subject' in input.target) {
-      const entry = Object.entries(plan.reads).find(([, read]) => read.kind === 'subject' && read.id === page.subject);
+      const requestedSubject = input.target.subject;
+      const entry = Object.entries(plan.reads).find(([, read]) => read.kind === 'subject' && read.id === requestedSubject);
       // Native pages.read already probes the target even when its configured template needs no subject body.
       if (entry) {
         const body: unknown = page.reads[entry[0]]?.body;
-        if (!record(body) || !record(body.subject) || body.subject.id !== page.subject || !record(body.related))
+        if (!record(body) || !record(body.subject) || body.subject.id !== requestedSubject || !record(body.related))
           return { ok: false, reason: 'unavailable' };
         // Preserve the native body (including original/terminal source selection and metadata) unchanged.
         const subject = body.subject as SubjectRead['subject'];

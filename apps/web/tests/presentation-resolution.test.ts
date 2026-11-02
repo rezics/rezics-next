@@ -141,6 +141,21 @@ test('the existing curation workflow inspects native active resolution and the a
   expect(html).not.toContain('subject-purchase');
 });
 
+test.each([document, routeDocument])('subject preview stays attached to its requested address %#', async (document) => {
+  const published = { ...profile, generic: document, bases: [], types: [] };
+  const aggregate = {
+    ...page({ scope: 'generic', key: null }),
+    profile: profileDigest(published),
+    document,
+    reads: document === routeDocument ? {} : page().reads,
+  };
+  expect((await loadPresentationPreview(kernel(aggregate, { published }).client, input)).ok).toBe(true);
+  const { client, seen } = kernel(aggregate, { published });
+  const target = { subject: '00000000-0000-4000-8000-000000000099' };
+  expect(await loadPresentationPreview(client, { ...input, target })).toEqual({ ok: false, reason: 'unavailable' });
+  expect(seen.map(({ path }) => path)).toEqual(['/v1/pages:read']);
+});
+
 test('anonymous mode strips ambient credentials and a client session token on every request', async () => {
   const observed: Request[] = [];
   const client = createKernelClient('https://kernel.invalid', {
