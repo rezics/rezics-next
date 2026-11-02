@@ -7,9 +7,12 @@ import { clientDeclarationCacheDirectory, clientDeclarations, withOrderReconcile
 const repository = resolve(import.meta.dir, '../../..');
 
 const reconcileOrder = (client: KernelClient) =>
-  client.orders({ orderId: 'order-id' }).$reconcile.post({}, {
-    headers: { authorization: 'Bearer session', 'idempotency-key': 'reconciliation-key' },
-  });
+  client.orders({ orderId: 'order-id' }).$reconcile.post(
+    {},
+    {
+      headers: { authorization: 'Bearer session', 'idempotency-key': 'reconciliation-key' },
+    },
+  );
 
 test('generated KernelClient exposes typed order reconciliation', () => {
   type ReconciliationResponse = Awaited<ReturnType<typeof reconcileOrder>>;
