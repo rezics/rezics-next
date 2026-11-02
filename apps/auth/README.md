@@ -278,7 +278,11 @@ Rename review belongs to the mounted page and its native source; replacing the s
 and departure prevents unfinished browser stages from changing storage or starting reauthentication.
 Unsent attempts stop after an outstanding read or approval; submitted attempts retain their original key and command
 and finish reconciliation without changing a replacement review. An uncertain mutation requires explicit recovery,
-with current-account readback establishing success. The profile and step-up composition ports remain in `account-rename.ts`.
+with current-account readback establishing success. `nativeRenameSource` reads the current initiating account through
+Auth's cookie-authenticated `POST /account-management/profile`, backed by the native exact-ID editable-profile reader
+and its `account:update` permission formula. Only account ID, actor kind and nullable handle reach the page; unavailable
+reads offer Retry and never permit mutation. The selected management profile is exactly `account:update`.
+Step-up uses the shared management continuation and returns to a new explicit confirmation with the original command/key.
 
 ## Operated session opening
 

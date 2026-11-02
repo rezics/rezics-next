@@ -1031,6 +1031,17 @@ only `organization:membership`, and transfer/transfer acceptance only `account:m
 Native authentication materializes current consent; registration and navigation grant
 no permissions. The fixed organization/delete client and ordinary login are unchanged.
 
+`POST /account-management/profile` accepts only `{ accountId }` as a selection of the current initiating human.
+The default host binds `trustedAccess.readRenameAccountProfile` from Kernel's `createNativeAccountBindings`;
+the producer-owned private seam in `access/account-profile-source.ts` reuses `readEditableAccountProfile`, the same
+source and actual native permission formula as `GET /v1/accounts/{accountId}/profile`. Auth signs the live proof for
+native Access authentication; account equality and the exact management rename profile alone never authorize reading.
+The response allowlist is `{ profile: { id, kind: 'actor', handle: string | null } }`, including handleless accounts.
+The route requires same-issuer Origin, JSON, no query or bearer header and a current native human cookie session;
+it revalidates that same proof after the source read. Every response is `private, no-store`. Missing bindings, failed
+authority or malformed reads disclose no profile and remain recoverable unavailable in the page.
+Decision: profile review accepts a current, possibly stale rename-profile session; approval retains fresh authentication.
+
 `apps/auth/src/management-operations.ts` exports the closed `ManagementOperation`,
 `loadManagementSession()`, `managementOperationProfile(kind)` and
 `executeManagementOperation({ operationKey, operation, accountId })`. Here `accountId`

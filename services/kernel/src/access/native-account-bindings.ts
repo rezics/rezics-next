@@ -1,4 +1,5 @@
 import { createAutomatedOperatorAccess, type AutomatedOperatorAccess } from './automated-operator-source.ts';
+import { createAccountProfileAccess, type AccountProfileAccess } from './account-profile-source.ts';
 import { readOriginalLifecycleResult } from './native-lifecycle-results.ts';
 import { createManagementMembershipAccess, type ManagementMembershipAccess } from './management-membership-source.ts';
 import { createAuthHistoryProofBindings } from './shared-history-auth.ts';
@@ -253,7 +254,15 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
   const boundary = () => ({ pool, deadline: deadlineFor(COMMITTED_CONTINUATION_RESUME_BUDGET_MS) });
   const creationContext: NonNullable<TrustedAccessPorts['readNativeCreationContext']> = (input) =>
     readNativeCreationContext({ pool, access, approvals }, input, boundary());
-  const trustedAccess: TrustedAccessPorts & ManagementMembershipAccess & AutomatedOperatorAccess = {
+  const trustedAccess: TrustedAccessPorts &
+    ManagementMembershipAccess &
+    AutomatedOperatorAccess &
+    AccountProfileAccess = {
+    ...createAccountProfileAccess({
+      pool,
+      access,
+      accessTokenForProof: (proof) => config.auth().internal.accessTokenForProof(proof),
+    }),
     readNativeCreationContext: creationContext,
     readOriginalLifecycleResult: (input) =>
       readOriginalLifecycleResult({ pool, referenceKeys, source: workflow }, input),

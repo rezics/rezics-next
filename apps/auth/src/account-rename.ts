@@ -1,15 +1,11 @@
+import { managementOperationProfile } from '@rezics/auth-contract';
 import { authPost } from './api';
 import { loadAccountSession } from './account-operations';
 import { createSignupKey, normalizeSignupHandle } from './signup';
+import { managementOperationStepUpUrl, storePendingManagementOperationStepUp } from './management-operation-step-up';
 
 export const RENAME_ROUTE = '/account/rename';
-// Local consumer contract until the management-operation owner exports it.
-// The organization/delete client must retain its existing ceiling.
-export const RENAME_PROFILE = { client_id: 'rezics-auth-account-management', scope: ['account:update'] } as const;
-export const RENAME_MISSING_PORTS = {
-  profile: 'Authenticated issuer adapter to GET /v1/accounts/{accountId}/profile using the current Auth session',
-  stepUp: 'Management-client registration and shared /step-up rename continuation with exact account:update profile',
-} as const;
+export const RENAME_PROFILE = managementOperationProfile('rename');
 
 export type RenameOperation = Readonly<{
   kind: 'rename';
@@ -40,10 +36,18 @@ export function parseRenameProfile(body: unknown, accountId: string): { handle: 
   return { handle: profile.handle };
 }
 
-export async function loadRenameTarget(readProfile?: RenameProfileReader): Promise<RenameRead> {
+async function readNativeRenameProfile(accountId: string): Promise<unknown> {
+  const result = await authPost('/account-management/profile', { accountId });
+  if (!result.ok) throw new Error('Account profile unavailable');
+  return result.body;
+}
+
+export async function loadRenameTarget(
+  readProfile: RenameProfileReader = readNativeRenameProfile,
+): Promise<RenameRead> {
   const session = await loadAccountSession();
   if (session.kind === 'signed-out') return { kind: 'signed-out' };
-  if (session.kind !== 'ready' || !readProfile) return { kind: 'unavailable' };
+  if (session.kind !== 'ready') return { kind: 'unavailable' };
   try {
     const profile = parseRenameProfile(await readProfile(session.accountId), session.accountId);
     if (!profile) return { kind: 'unavailable' };
@@ -232,7 +236,9 @@ export const nativeRenameSource: RenameSource = {
   readCurrent: () => loadRenameTarget(),
   run: (attempt, isCurrent) => runRenameAttempt(attempt, nativeRenameSource.readCurrent, isCurrent),
   stepUp: async (attempt, isCurrent = () => true) => {
-    if (isCurrent()) saveRenameContinuation(attempt);
-    return false;
+    if (!isCurrent() || !saveRenameContinuation(attempt) || !storePendingManagementOperationStepUp(attempt))
+      return false;
+    window.location.assign(managementOperationStepUpUrl('rename'));
+    return true;
   },
 };

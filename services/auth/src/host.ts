@@ -1,4 +1,5 @@
 import { automatedOperatorTransport, type AutomatedOperatorAccess } from './automated-operator-transport.ts';
+import { accountProfileReadTransport, type AccountProfileAccess } from './account-profile-read-transport.ts';
 import {
   accountManagementMembershipTransport,
   type ManagementMembershipAccess,
@@ -295,7 +296,14 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
             service,
             automatedOperatorTransport(
               service,
-              credentialEffectTransport(service, workflows.handler, options),
+              accountProfileReadTransport(
+                service,
+                credentialEffectTransport(service, workflows.handler, options),
+                (options.trustedAccess as typeof options.trustedAccess & Partial<AccountProfileAccess>)
+                  .readRenameAccountProfile
+                  ? (options.trustedAccess as typeof options.trustedAccess & AccountProfileAccess)
+                  : undefined,
+              ),
               (options.trustedAccess as typeof options.trustedAccess & Partial<AutomatedOperatorAccess>)
                 .readAutomatedCreationOperator
                 ? (options.trustedAccess as typeof options.trustedAccess & AutomatedOperatorAccess)
