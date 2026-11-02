@@ -76,9 +76,11 @@ export const NativeDenial: Story = {
   play: async (context) => {
     const canvas = await enterReason(context);
     await userEvent.click(canvas.getByRole('button', { name: m.container_lifecycle_confirm() }));
-    await expect(await canvas.findByRole('alert')).toHaveTextContent(
-      m.container_lifecycle_refused({ status: '404', code: 'not_found' }),
-    );
+    await expect(await canvas.findByRole('alert')).toHaveTextContent(m.container_lifecycle_refused());
+    const details = canvas.getByText(m.community_management_details_problem_summary());
+    await userEvent.click(details);
+    await expect(canvas.getByText('404')).toBeVisible();
+    await expect(canvas.getByText('not_found')).toBeVisible();
     await expect(canvas.queryByRole('button', { name: m.container_lifecycle_remove() })).toBeNull();
     await expect(canvas.getByRole('textbox', { name: m.container_lifecycle_reason() })).toHaveValue(
       'Repeated disruption',

@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useState, useSyncExternalStore } from 'react';
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
@@ -112,127 +113,149 @@ function LifecycleControlsView({
   const locked = state.busy || state.intent !== null;
   if (!visible || !caller.ready || !caller.lifetime.current()) return null;
   return (
-    <section aria-labelledby={`${id}-heading`} className="space-y-4 rounded-2xl border bg-card p-5 sm:p-6">
-      <header className="space-y-1">
-        <h2 id={`${id}-heading`} className="text-lg font-semibold">
-          {target.kind === 'realm' ? m.container_lifecycle_realm() : m.container_lifecycle_space()}
-        </h2>
-        <p className="font-medium break-words">{title}</p>
-        <p role="status" className="text-sm text-muted-foreground">
-          {readMessage(state)}
-        </p>
-      </header>
-      {readOnly ? <p className="text-sm text-muted-foreground">{m.container_lifecycle_read_only()}</p> : null}
-      {actions.includes('remove') || state.reason || state.intent?.action === 'remove' ? (
-        <Field>
-          <FieldLabel htmlFor={`${id}-reason`}>{m.container_lifecycle_reason()}</FieldLabel>
-          <Textarea
-            id={`${id}-reason`}
-            value={state.reason}
-            readOnly={locked}
-            aria-describedby={`${id}-reason-help`}
-            onChange={(event) => control.setReason(event.target.value)}
-          />
-          <p id={`${id}-reason-help`} className="text-sm text-muted-foreground">
-            {m.container_lifecycle_reason_help()}
+    <section aria-labelledby={`${id}-heading`}>
+      <ContentItemFrame as="div" data-slot="content-item-frame" className="w-full min-w-0 space-y-4 p-5 sm:p-6">
+        <header className="min-w-0 space-y-1">
+          <ContentItemHeading level={2} id={`${id}-heading`} className="text-lg font-semibold">
+            {target.kind === 'realm' ? m.container_lifecycle_realm() : m.container_lifecycle_space()}
+          </ContentItemHeading>
+          <p className="min-w-0 font-medium [overflow-wrap:anywhere]">{title}</p>
+          <p role="status" className="text-sm text-muted-foreground">
+            {readMessage(state)}
           </p>
-        </Field>
-      ) : null}
-      {state.outcome === 'confirmed' ? (
-        <div role="status" className="space-y-2 rounded-xl bg-muted p-4 text-sm">
-          <p>
-            {state.intent?.action === 'remove' ? m.container_lifecycle_removed() : m.container_lifecycle_restored()}
-          </p>
-          {state.intent?.action === 'restore' ? (
-            state.destination ? (
-              <a href={state.destination} className="font-medium underline underline-offset-4">
-                {m.container_lifecycle_open()}
-              </a>
-            ) : (
-              <p>{m.container_lifecycle_link_unavailable()}</p>
-            )
-          ) : null}
-        </div>
-      ) : null}
-      {state.outcome === 'uncertain' ? (
-        <p role="alert" className="text-sm">
-          {m.container_lifecycle_uncertain()}
-        </p>
-      ) : null}
-      {state.outcome === 'conflict' ? (
-        <p role="alert" className="text-sm">
-          {m.container_lifecycle_conflict()}
-        </p>
-      ) : null}
-      {problem ? (
-        <div role="alert" className="space-y-1 text-sm">
-          <p>{m.container_lifecycle_refused({ status: String(problem.status), code: problem.code })}</p>
-          {problem.detail ? <p className="whitespace-pre-wrap break-words">{problem.detail}</p> : null}
-        </div>
-      ) : null}
-      <div className="flex flex-wrap gap-2">
-        {actions.map((action) => (
-          <Button
-            key={action}
-            variant={action === 'remove' ? 'destructive' : 'default'}
-            disabled={action === 'remove' && !state.reason.trim()}
-            onClick={() => setConfirmation(action)}
-          >
-            {action === 'remove' ? m.container_lifecycle_remove() : m.container_lifecycle_restore()}
-          </Button>
-        ))}
-        {mayRetryLifecycle(state) ? (
-          <Button onClick={() => void control.retry()}>{m.container_lifecycle_retry()}</Button>
+        </header>
+        {readOnly ? <p className="text-sm text-muted-foreground">{m.container_lifecycle_read_only()}</p> : null}
+        {actions.includes('remove') || state.reason || state.intent?.action === 'remove' ? (
+          <Field>
+            <FieldLabel htmlFor={`${id}-reason`}>{m.container_lifecycle_reason()}</FieldLabel>
+            <Textarea
+              id={`${id}-reason`}
+              value={state.reason}
+              readOnly={locked}
+              aria-describedby={`${id}-reason-help`}
+              onChange={(event) => control.setReason(event.target.value)}
+            />
+            <p id={`${id}-reason-help`} className="text-sm text-muted-foreground">
+              {m.container_lifecycle_reason_help()}
+            </p>
+          </Field>
         ) : null}
-        {!state.busy &&
-        state.reviewed &&
-        state.read.kind === 'ready' &&
-        (state.outcome === 'refused' || state.outcome === 'conflict' || state.outcome === 'confirmed') ? (
-          <Button
-            variant="outline"
-            onClick={() => {
-              setConfirmation(null);
-              control.review();
-            }}
-          >
-            {m.container_lifecycle_review()}
-          </Button>
+        {state.outcome === 'confirmed' ? (
+          <div role="status" className="space-y-2 rounded-xl bg-muted p-4 text-sm">
+            <p>
+              {state.intent?.action === 'remove' ? m.container_lifecycle_removed() : m.container_lifecycle_restored()}
+            </p>
+            {state.intent?.action === 'restore' ? (
+              state.destination ? (
+                <a href={state.destination} className="font-medium underline underline-offset-4">
+                  {m.container_lifecycle_open()}
+                </a>
+              ) : (
+                <p>{m.container_lifecycle_link_unavailable()}</p>
+              )
+            ) : null}
+          </div>
         ) : null}
-        <Button
-          variant="outline"
-          disabled={state.busy}
-          onClick={() => {
-            setConfirmation(null);
-            void control.refresh();
-          }}
-        >
-          {state.busy ? m.container_lifecycle_working() : m.container_lifecycle_refresh()}
-        </Button>
-      </div>
-      {confirmation && actions.includes(confirmation) ? (
-        <div role="group" aria-labelledby={`${id}-confirm`} className="space-y-3 rounded-xl bg-muted p-4">
-          <p id={`${id}-confirm`} className="text-sm">
-            {confirmation === 'remove'
-              ? m.container_lifecycle_confirm_remove({ title })
-              : m.container_lifecycle_confirm_restore({ title })}
+        {state.outcome === 'uncertain' ? (
+          <p role="alert" className="text-sm">
+            {m.container_lifecycle_uncertain()}
           </p>
-          <div className="flex flex-wrap gap-2">
+        ) : null}
+        {state.outcome === 'conflict' ? (
+          <p role="alert" className="text-sm">
+            {m.container_lifecycle_conflict()}
+          </p>
+        ) : null}
+        {problem ? (
+          <div className="space-y-2 text-sm">
+            {state.outcome !== 'conflict' ? <p role="alert">{m.container_lifecycle_refused()}</p> : null}
+            <details className="min-w-0">
+              <summary className="min-h-11 cursor-pointer py-2 font-medium underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                {m.community_management_details_problem_summary()}
+              </summary>
+              <dl className="grid min-w-0 gap-2 pt-2 sm:grid-cols-2">
+                <div className="min-w-0 space-y-1">
+                  <dt className="text-muted-foreground">{m.community_management_details_status()}</dt>
+                  <dd className="select-all font-mono">{problem.status}</dd>
+                </div>
+                <div className="min-w-0 space-y-1">
+                  <dt className="text-muted-foreground">{m.community_management_details_code()}</dt>
+                  <dd className="select-all break-all font-mono">{problem.code}</dd>
+                </div>
+                {problem.detail ? (
+                  <div className="min-w-0 space-y-1 sm:col-span-2">
+                    <dt className="text-muted-foreground">{m.community_management_details_explanation()}</dt>
+                    <dd className="whitespace-pre-wrap [overflow-wrap:anywhere]">{problem.detail}</dd>
+                  </div>
+                ) : null}
+              </dl>
+            </details>
+          </div>
+        ) : null}
+        <div className="flex flex-wrap gap-2">
+          {actions.map((action) => (
             <Button
-              variant={confirmation === 'remove' ? 'destructive' : 'default'}
+              key={action}
+              variant={action === 'remove' ? 'destructive' : 'default'}
+              disabled={action === 'remove' && !state.reason.trim()}
+              onClick={() => setConfirmation(action)}
+            >
+              {action === 'remove' ? m.container_lifecycle_remove() : m.container_lifecycle_restore()}
+            </Button>
+          ))}
+          {mayRetryLifecycle(state) ? (
+            <Button onClick={() => void control.retry()}>{m.container_lifecycle_retry()}</Button>
+          ) : null}
+          {!state.busy &&
+          state.reviewed &&
+          state.read.kind === 'ready' &&
+          (state.outcome === 'refused' || state.outcome === 'conflict' || state.outcome === 'confirmed') ? (
+            <Button
+              variant="outline"
               onClick={() => {
-                const action = confirmation;
                 setConfirmation(null);
-                void control.submit(action);
+                control.review();
               }}
             >
-              {m.container_lifecycle_confirm()}
+              {m.container_lifecycle_review()}
             </Button>
-            <Button variant="outline" onClick={() => setConfirmation(null)}>
-              {m.container_lifecycle_cancel()}
-            </Button>
-          </div>
+          ) : null}
+          <Button
+            variant="outline"
+            disabled={state.busy}
+            onClick={() => {
+              setConfirmation(null);
+              void control.refresh();
+            }}
+          >
+            {state.busy ? m.container_lifecycle_working() : m.container_lifecycle_refresh()}
+          </Button>
         </div>
-      ) : null}
+        {confirmation && actions.includes(confirmation) ? (
+          <div role="group" aria-labelledby={`${id}-confirm`} className="space-y-3 rounded-xl bg-muted p-4">
+            <p id={`${id}-confirm`} className="text-sm">
+              {confirmation === 'remove'
+                ? m.container_lifecycle_confirm_remove({ title })
+                : m.container_lifecycle_confirm_restore({ title })}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant={confirmation === 'remove' ? 'destructive' : 'default'}
+                onClick={() => {
+                  const action = confirmation;
+                  setConfirmation(null);
+                  void control.submit(action);
+                }}
+              >
+                {m.container_lifecycle_confirm()}
+              </Button>
+              <Button variant="outline" onClick={() => setConfirmation(null)}>
+                {m.container_lifecycle_cancel()}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </ContentItemFrame>
     </section>
   );
 }
