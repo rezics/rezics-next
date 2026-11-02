@@ -46,11 +46,12 @@ test('selection refresh retains drafts, switches retire targets, and created rea
       return fixture.transport.load(address);
     },
   };
-  const settle = async (action: () => void) =>
-    act(async () => {
-      action();
+  const settle = async (action: () => void) => {
+    act(action);
+    await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 20));
     });
+  };
   const button = (text: string) => [...host.querySelectorAll('button')].find((node) => node.textContent === text)!;
   const visible = (selector: string) =>
     [...host.querySelectorAll(selector)].filter((node) => !node.closest('[hidden]'));
