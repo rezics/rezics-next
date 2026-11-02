@@ -15,7 +15,13 @@ test('malformed native reaction count pages are unavailable', async () => {
     { counts: [null], watermark: null },
     { counts: [{ kind: 'like', count: 0 }], watermark: null },
     { counts: [{ kind: 'unknown', count: 2 }], watermark: null },
-    { counts: [{ kind: 'like', count: 1 }, { kind: 'like', count: 2 }], watermark: null },
+    {
+      counts: [
+        { kind: 'like', count: 1 },
+        { kind: 'like', count: 2 },
+      ],
+      watermark: null,
+    },
     { counts: [], watermark: { epoch: 1, position: '0' } },
   ])
     expect(await read(page)).toBeNull();
@@ -24,7 +30,10 @@ test('malformed native reaction count pages are unavailable', async () => {
 test('sparse native totals preserve displayed counts and omit known hidden kinds', async () => {
   expect(
     await read({
-      counts: [{ kind: 'like', count: 3 }, { kind: 'upvote', count: 8 }],
+      counts: [
+        { kind: 'like', count: 3 },
+        { kind: 'upvote', count: 8 },
+      ],
       watermark: { epoch: 1, position: '1' },
     }),
   ).toEqual({ counts: { like: 3 }, value: null });
