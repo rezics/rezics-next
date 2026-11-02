@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
-import { act, useState, type ReactNode } from 'react';
+import { act, useState } from 'react';
 import type { CreateResult } from '../src/features/catalogue/create-subject';
 import * as start from '../.storybook/react-start';
 
@@ -41,16 +41,6 @@ test('specialist language choices preserve stable drafts, focus, corrections and
   const { MangaProfile } = await import('../src/features/catalogue/manga-profile-view');
   const { RecipeEditor } = await import('../src/features/catalogue/recipe-editor-view');
   const { CatalogueCurrentReading } = await import('../src/features/catalogue/editor-lifetime');
-  let setReading!: (ready: boolean) => void;
-  function Reading({ children }: { children: ReactNode }) {
-    const [ready, update] = useState(true);
-    setReading = update;
-    return (
-      <CatalogueCurrentReading visible={ready} ready={ready} revision={String(ready)}>
-        {children}
-      </CatalogueCurrentReading>
-    );
-  }
   const { albumFixture } = await import('../src/kernel/fake/catalogue-album-profile');
   const { mangaFixture } = await import('../src/kernel/fake/catalogue-manga-profile');
   const { recipeFixture } = await import('../src/kernel/fake/recipe-editor');
@@ -94,6 +84,16 @@ test('specialist language choices preserve stable drafts, focus, corrections and
         },
       };
       const props = { locale: 'en', transport, search: async () => [] };
+      let setReading!: (ready: boolean) => void;
+      function RecipeReading() {
+        const [ready, update] = useState(true);
+        setReading = update;
+        return (
+          <CatalogueCurrentReading visible={ready} ready={ready} revision={String(ready)}>
+            <RecipeEditor {...props} session="signed-in" />
+          </CatalogueCurrentReading>
+        );
+      }
       await act(async () =>
         root.render(
           <QueryClientProvider client={client}>
@@ -113,9 +113,7 @@ test('specialist language choices preserve stable drafts, focus, corrections and
               ) : family === 'Manga' ? (
                 <MangaProfile {...props} session="signed-in" />
               ) : (
-                <Reading>
-                  <RecipeEditor {...props} session="signed-in" />
-                </Reading>
+                <RecipeReading />
               )}
             </CandidateReaderBoundary>
           </QueryClientProvider>,
@@ -153,7 +151,6 @@ test('specialist language choices preserve stable drafts, focus, corrections and
         if (family === 'Recipe') {
           const key = Object.keys(add).find((key) => key.startsWith('__reactProps$'))!;
           const queued = (Reflect.get(add, key) as { onClick: (event: unknown) => void }).onClick;
-          const count = canvas.getAllByRole('textbox', { name: m.catalogue_create_language() }).length;
           await act(async () => {
             queued({ currentTarget: add, detail: 0 });
             setReading(false);
@@ -161,7 +158,7 @@ test('specialist language choices preserve stable drafts, focus, corrections and
           expect(document.activeElement).toBe(add);
           await act(async () => setReading(true));
           await act(async () => queued({ currentTarget: add, detail: 0 }));
-          expect(canvas.getAllByRole('textbox', { name: m.catalogue_create_language() })).toHaveLength(count + 1);
+          expect(canvas.getAllByRole('textbox', { name: m.catalogue_create_language() })).toHaveLength(5);
           expect(document.activeElement).toBe(add);
         }
         if (family === 'Album') {
