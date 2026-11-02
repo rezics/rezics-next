@@ -18,12 +18,14 @@ export async function assertRealmBanTarget(
   input: { resource: Resource; accountId: string; at: AuthoritativeTime },
 ): Promise<void> {
   if (
-    (await readRole.run(tx, {
-      route: input.resource.route,
-      realm_id: input.resource.id,
-      account_id: input.accountId,
-      at: authoritativeTimeValue(input.at),
-    }))?.protected
+    (
+      await readRole.run(tx, {
+        route: input.resource.route,
+        realm_id: input.resource.id,
+        account_id: input.accountId,
+        at: authoritativeTimeValue(input.at),
+      })
+    )?.protected
   )
     throw new RealmBanRoleError();
 }
