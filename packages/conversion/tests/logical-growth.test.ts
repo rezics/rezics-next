@@ -34,7 +34,7 @@ function vndbSeed(size: number, key: number): ConversionInput {
     },
   };
 }
-function wikidataSeed(size: number, key: number): ConversionInput {
+function wikidataSeed(size: number, key: number, aliasCount = 60): ConversionInput {
   const id = `Q${key}`;
   return {
     external_id: id,
@@ -45,7 +45,7 @@ function wikidataSeed(size: number, key: number): ConversionInput {
       lastrevid: 7,
       labels: { en: { language: 'en', value: 'Mapo tofu' } },
       aliases: {
-        en: Array.from({ length: 60 }, (_, i) => ({ language: 'en', value: `${i}-${'é'.repeat(size)}` })),
+        en: Array.from({ length: aliasCount }, (_, i) => ({ language: 'en', value: `${i}-${'é'.repeat(size)}` })),
       },
       descriptions: {},
       claims: {
@@ -252,7 +252,7 @@ test('growth seeds retain VNDB native aliases and Wikidata dish classification',
     ]),
   );
 
-  const wikidata = convertWikidata(wikidataSeed(1, 1000), {}, { converterRevision: wikidataRevision });
+  const wikidata = convertWikidata(wikidataSeed(1, 1000, 1), {}, { converterRevision: wikidataRevision });
   expect(wikidata.converter_revision).toBe('wikidata-5');
   expect(wikidata.proposals[0]).toMatchObject({ op: 'create', subject: { type: 'schema:Recipe' } });
 });
