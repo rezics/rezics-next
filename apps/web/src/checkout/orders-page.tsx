@@ -1,4 +1,6 @@
 import { ContentItem } from '@rezics/ui/content-item';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import type { BuyerOrder, BuyerOrderPage } from './orders';
@@ -25,7 +27,15 @@ function entitlementLabel(order: BuyerOrder): string {
   return m.orders_entitlement_none();
 }
 
-export function OrdersPage({ page, locale }: { page: BuyerOrderPage; locale: string }) {
+export function OrdersPage({
+  page,
+  locale,
+  continuation = false,
+}: {
+  page: BuyerOrderPage;
+  locale: string;
+  continuation?: boolean;
+}) {
   return (
     <section className="max-w-4xl min-w-0 space-y-6 text-foreground" aria-labelledby="orders-heading">
       <PageHeading id="orders-heading" className="text-foreground">
@@ -40,10 +50,12 @@ export function OrdersPage({ page, locale }: { page: BuyerOrderPage; locale: str
         </a>
       </p>
       {page.orders.length === 0 ? (
-        <div className="rounded-xl border border-border bg-card p-5 text-card-foreground sm:p-6">
-          <p className="font-medium">{m.orders_empty()}</p>
-          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{m.orders_empty_hint()}</p>
-        </div>
+        <Empty className="border border-border">
+          <EmptyHeader>
+            <EmptyTitle>{continuation || page.next ? m.orders_page_empty() : m.orders_empty()}</EmptyTitle>
+            <EmptyDescription>{m.orders_empty_hint()}</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       ) : (
         <ul className="divide-y rounded-xl border border-border bg-card text-card-foreground">
           {page.orders.map((order) => (
@@ -84,14 +96,24 @@ export function OrdersPage({ page, locale }: { page: BuyerOrderPage; locale: str
           ))}
         </ul>
       )}
-      {page.next ? (
-        <nav aria-label={m.orders_pagination()}>
-          <a
-            href={`/${locale}/orders?cursor=${encodeURIComponent(page.next)}`}
-            className="inline-flex min-h-11 items-center rounded-lg border border-border px-4 font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-          >
-            {m.orders_next()}
-          </a>
+      {continuation || page.next ? (
+        <nav aria-label={m.orders_pagination()} className="flex flex-wrap gap-3">
+          {continuation ? (
+            <a
+              href={`/${locale}/orders`}
+              className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
+            >
+              {m.entitlements_restart()}
+            </a>
+          ) : null}
+          {page.next ? (
+            <a
+              href={`/${locale}/orders?cursor=${encodeURIComponent(page.next)}`}
+              className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
+            >
+              {m.orders_next()}
+            </a>
+          ) : null}
         </nav>
       ) : null}
     </section>

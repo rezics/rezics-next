@@ -785,6 +785,7 @@
   "order_refresh": "Actualizar",
   "order_still_processing": "El pago todavía se está procesando.",
   "orders_empty": "Todavía no has comprado nada.",
+  "orders_page_empty": "No hay pedidos en esta página",
   "orders_empty_hint": "Los pedidos aparecerán aquí después del pago.",
   "orders_entitlement_recorded": "Acceso registrado",
   "orders_entitlement_pending": "Aún no hay acceso",

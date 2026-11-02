@@ -785,6 +785,7 @@
   "order_refresh": "重新整理",
   "order_still_processing": "付款仍在處理中。",
   "orders_empty": "你還沒有購買任何內容。",
+  "orders_page_empty": "此頁沒有訂單",
   "orders_empty_hint": "完成結帳後，訂單會顯示在這裡。",
   "orders_entitlement_recorded": "權益已記錄",
   "orders_entitlement_pending": "尚無權益",

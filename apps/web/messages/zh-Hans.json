@@ -786,6 +786,7 @@
   "order_refresh": "刷新",
   "order_still_processing": "付款仍在处理中。",
   "orders_empty": "你还没有购买任何内容。",
+  "orders_page_empty": "此页没有订单",
   "orders_empty_hint": "完成结账后，订单会显示在这里。",
   "orders_entitlement_recorded": "权益已记录",
   "orders_entitlement_pending": "暂无权益",

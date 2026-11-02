@@ -127,14 +127,24 @@ export function EntitlementsPage({
           })}
         </ul>
       )}
-      {page.kind === 'ready' && page.data.next ? (
-        <nav aria-label={m.entitlements_pagination()}>
-          <a
-            href={`/${locale}/entitlements?cursor=${encodeURIComponent(page.data.next)}`}
-            className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
-          >
-            {m.entitlements_next()}
-          </a>
+      {page.kind === 'ready' && (continuation || page.data.next) ? (
+        <nav aria-label={m.entitlements_pagination()} className="flex flex-wrap gap-3">
+          {continuation ? (
+            <a
+              href={`/${locale}/entitlements`}
+              className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
+            >
+              {m.entitlements_restart()}
+            </a>
+          ) : null}
+          {page.data.next ? (
+            <a
+              href={`/${locale}/entitlements?cursor=${encodeURIComponent(page.data.next)}`}
+              className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
+            >
+              {m.entitlements_next()}
+            </a>
+          ) : null}
         </nav>
       ) : null}
     </section>

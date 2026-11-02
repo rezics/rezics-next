@@ -798,6 +798,7 @@
   "order_refresh": "Refresh",
   "order_still_processing": "Your payment is still processing.",
   "orders_empty": "You haven't bought anything yet.",
+  "orders_page_empty": "No orders on this page",
   "orders_empty_hint": "Orders from Checkout will appear here.",
   "orders_entitlement_recorded": "Entitlement recorded",
   "orders_entitlement_pending": "No entitlement yet",

@@ -104,5 +104,5 @@ function CurrentOrdersRead({
       />
     );
   if (!matches(query.data, subject, address)) return <PendingPage />;
-  return <OrdersPage page={query.data.page} locale={address.locale} />;
+  return <OrdersPage page={query.data.page} locale={address.locale} continuation={address.cursor !== null} />;
 }

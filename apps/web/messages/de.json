@@ -785,6 +785,7 @@
   "order_refresh": "Aktualisieren",
   "order_still_processing": "Ihre Zahlung wird noch verarbeitet.",
   "orders_empty": "Du hast noch nichts gekauft.",
+  "orders_page_empty": "Keine Bestellungen auf dieser Seite",
   "orders_empty_hint": "Bestellungen aus dem Bezahlvorgang erscheinen hier.",
   "orders_entitlement_recorded": "Berechtigung erfasst",
   "orders_entitlement_pending": "Noch keine Berechtigung",

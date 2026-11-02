@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
+import { EntitlementsPage } from '../checkout/entitlements-page';
 import {
   activeEntitlement,
   setEntitlementStoryMode,
@@ -25,9 +26,15 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-function EntitlementsStory({ mode }: { mode: EntitlementStoryMode | MappedEntitlementStoryMode }) {
+function EntitlementsStory({
+  mode,
+  path = '/entitlements',
+}: {
+  mode: EntitlementStoryMode | MappedEntitlementStoryMode;
+  path?: string;
+}) {
   setEntitlementStoryMode(mode);
-  return <PageStory visitor="Signed In" path="/entitlements" />;
+  return <PageStory visitor="Signed In" path={path} />;
 }
 const ready = async ({ canvasElement }: { canvasElement: HTMLElement }) => {
   await within(canvasElement).findByRole('heading', { level: 1, name: m.entitlements_heading() });
@@ -79,6 +86,49 @@ export const Retry: Story = {
 export const Preparing: Story = { render: () => <EntitlementsStory mode="preparing" />, play: ready };
 export const StaleCursor: Story = { render: () => <EntitlementsStory mode="cursor-error" />, play: ready };
 export const LongTitles: Story = { render: () => <EntitlementsStory mode="long" />, play: ready };
+// UNRUN: later-page recovery uses the existing bounded route fixture; visual/native proof is deferred.
+export const LaterPageEmpty: Story = {
+  render: () => <EntitlementsStory mode="empty" path="/entitlements?cursor=story-signed-current" />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText(m.entitlements_page_empty())).toBeVisible();
+    await expect(canvas.queryByText(m.entitlements_empty())).toBeNull();
+    await expect(canvas.getByRole('link', { name: m.entitlements_restart() })).toHaveAttribute(
+      'href',
+      `/${getLocale()}/entitlements`,
+    );
+    await expect(canvas.queryByRole('link', { name: m.entitlements_next() })).toBeNull();
+  },
+};
+export const LaterPageEmptyWithNext: Story = {
+  // Explicit contract-shaped sparse response, rather than invented additional native history.
+  render: () => (
+    <main className="min-h-screen min-w-0 bg-background p-4 sm:p-8">
+      <EntitlementsPage
+        page={{ kind: 'ready', data: { entitlements: [], next: 'story-signed/+?=next' } }}
+        locale={getLocale()}
+        continuation
+      />
+    </main>
+  ),
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText(m.entitlements_page_empty())).toBeVisible();
+    await expect(canvas.getByRole('link', { name: m.entitlements_restart() })).toHaveAttribute(
+      'href',
+      `/${getLocale()}/entitlements`,
+    );
+    await expect(canvas.getByRole('link', { name: m.entitlements_next() })).toHaveAttribute(
+      'href',
+      `/${getLocale()}/entitlements?cursor=${encodeURIComponent('story-signed/+?=next')}`,
+    );
+  },
+};
+export const LongTitlesNarrow: Story = {
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  render: () => <EntitlementsStory mode="long" path="/entitlements?cursor=story-signed-current" />,
+  play: ready,
+};
 export const MappedFixedEdition: Story = {
   render: () => <EntitlementsStory mode="mapped" />,
   async play(context) {

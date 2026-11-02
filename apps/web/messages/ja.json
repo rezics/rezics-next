@@ -785,6 +785,7 @@
   "order_refresh": "再読み込み",
   "order_still_processing": "お支払いはまだ処理中です。",
   "orders_empty": "購入したものはまだありません。",
+  "orders_page_empty": "このページに注文はありません",
   "orders_empty_hint": "チェックアウト後、注文がここに表示されます。",
   "orders_entitlement_recorded": "利用権を記録しました",
   "orders_entitlement_pending": "利用権はまだありません",
