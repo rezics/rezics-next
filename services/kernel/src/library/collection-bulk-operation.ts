@@ -328,7 +328,12 @@ export function createCollectionBulkOperations(deps: CollectionBulkDependencies)
                 const resolved = await resolveLibraryRemovalSubjects(deps, owner, parsed, attempt.time, context);
                 return { capture, resolved, action: parsed.action };
               } catch (error) {
-                return { capture, resolved: [] as { subjectId: string; requestedSubjectId: string | null }[], action: parsed.action, error };
+                return {
+                  capture,
+                  resolved: [] as { subjectId: string; requestedSubjectId: string | null }[],
+                  action: parsed.action,
+                  error,
+                };
               }
             }
             const resolved: { subjectId: string; requestedSubjectId: string | null }[] = [];

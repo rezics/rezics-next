@@ -64,8 +64,7 @@ export async function captureLibraryRemovalTargets(
       [route, owner.accountId],
     )
   ).rows[0]?.sequence;
-  if (counter === undefined || !/^(0|[1-9][0-9]*)$/.test(counter))
-    throw new ProblemError('dependency_unavailable');
+  if (counter === undefined || !/^(0|[1-9][0-9]*)$/.test(counter)) throw new ProblemError('dependency_unavailable');
 
   const rows = await tx.query<{
     subjectId: string;
@@ -88,11 +87,7 @@ export async function captureLibraryRemovalTargets(
         expected: { kind: 'absent', slotGeneration: counter },
       };
     }
-    if (
-      !entry.incarnation ||
-      entry.ownerWriteSeq === null ||
-      !/^(0|[1-9][0-9]*)$/.test(entry.ownerWriteSeq)
-    )
+    if (!entry.incarnation || entry.ownerWriteSeq === null || !/^(0|[1-9][0-9]*)$/.test(entry.ownerWriteSeq))
       throw new ProblemError('dependency_unavailable');
     return {
       kind: 'subject',

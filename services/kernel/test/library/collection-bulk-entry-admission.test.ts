@@ -91,7 +91,13 @@ test('confirmation skips edited, recreated and owner-written absent targets indi
     { state: 'planned', revision: edited.revision, incarnationId: edited.incarnationId! },
     entryKey(),
   );
-  await f.commands.deleteEntry(f.owner.actor, recreated.subjectId, recreated.revision, entryKey(), recreated.incarnationId!);
+  await f.commands.deleteEntry(
+    f.owner.actor,
+    recreated.subjectId,
+    recreated.revision,
+    entryKey(),
+    recreated.incarnationId!,
+  );
   const replacement = (await f.commands.putEntry(f.owner.actor, recreated.subjectId, { state: 'playing' }, entryKey()))
     .value.entry;
 
