@@ -10,7 +10,7 @@ import { AuthPage } from '../frame';
 import { createSignupKey, explainSignIn, normalizeSignupHandle, submitSignup } from '../signup';
 import { signInTarget } from '../sign-in';
 import { readTurnstileConfig } from '../turnstile.ts';
-import { TurnstileWidget, type TurnstileHandle } from '../turnstile.tsx';
+import { TurnstileWidget, type TurnstileHandle, type TurnstileStatus } from '../turnstile.tsx';
 import { ErrorAlert } from '../alert';
 
 const handleId = 'signup-handle';
@@ -37,7 +37,15 @@ function SignupPage() {
   const [handle, setHandle] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [token, setToken] = useState<string | null>(null);
+  const [challengeStatus, setChallengeStatus] = useState<TurnstileStatus>('loading');
+  const mounted = useRef(false);
+
+  useLayoutEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const [pending, setPending] = useState(false);
   const [handleError, setHandleError] = useState('');
   const [emailError, setEmailError] = useState('');
@@ -76,6 +84,8 @@ function SignupPage() {
     setEmailError(invalidEmail ? (email.trim() ? m.auth_form_email_invalid() : m.auth_form_required()) : '');
     setPasswordError(invalidPassword ? (password ? m.auth_signup_password_invalid() : m.auth_form_required()) : '');
     if (invalidHandle || invalidEmail || invalidPassword) return;
+    const challenge = turnstile.current;
+    const token = challenge?.getToken();
     if (!token) {
       setTurnstileError(m.auth_signup_turnstile_required());
       return;
@@ -89,6 +99,7 @@ function SignupPage() {
       password,
       turnstile_token: token,
     });
+    if (!mounted.current) return;
     if (submission.ok) {
       if (submission.signIn.ok) {
         window.location.assign(signInTarget(query, window.location.origin));
@@ -106,8 +117,7 @@ function SignupPage() {
       document.getElementById(passwordId)?.focus();
       return;
     }
-    setToken(null);
-    turnstile.current?.reset();
+    challenge?.reset();
     if (submission.failure.field === 'handle') {
       setHandleError(submission.failure.message);
       document.getElementById(handleId)?.focus();
@@ -175,19 +185,35 @@ function SignupPage() {
           />
           {passwordError ? <FieldError id={passwordErrorId}>{passwordError}</FieldError> : null}
         </Field>
-        <Field data-invalid={Boolean(turnstileError)}>
+        <Field data-invalid={Boolean(turnstileError) || challengeStatus === 'failed'}>
           <div id="signup-turnstile" tabIndex={-1} aria-describedby={turnstileError ? turnstileErrorId : undefined}>
             <TurnstileWidget
               ref={turnstile}
               siteKey={siteKey}
               scriptUrl={scriptUrl}
               language={getLocale()}
+              onStatus={setChallengeStatus}
               onToken={(value) => {
-                setToken(value);
                 if (value) setTurnstileError('');
               }}
             />
           </div>
+          {challengeStatus === 'loading' ? <p role="status">{m.auth_signup_turnstile_loading()}</p> : null}
+          {challengeStatus === 'failed' ? (
+            <div>
+              <FieldError role="alert">{m.auth_signup_turnstile_failed()}</FieldError>
+              <Button
+                type="button"
+                disabled={pending}
+                onClick={() => {
+                  setTurnstileError('');
+                  turnstile.current?.retry();
+                }}
+              >
+                {m.auth_signup_turnstile_retry()}
+              </Button>
+            </div>
+          ) : null}
           {turnstileError ? <FieldError id={turnstileErrorId}>{turnstileError}</FieldError> : null}
         </Field>
         {message ? (
