@@ -71,7 +71,9 @@ test('Shared label items preserve shelf navigation progressive phone forms and i
     expect(heading.textContent).toBe(label.name);
     expect(heading.closest('[aria-hidden="true"], .sr-only')).toBeNull();
     expect(primary.getAttribute('href')).toBe(`/fr/library?label=${label.id}`);
-    expect(primary.querySelector('.sr-only')?.textContent).toBe(label.name);
+    expect(heading.querySelector('a')).toBe(primary);
+    expect(primary.textContent).toBe(label.name);
+    expect(primary.querySelector('.sr-only')).toBeNull();
     expect(row.querySelectorAll('[data-library-label-link]')).toHaveLength(1);
     expect(primary.querySelector('form, button, input, summary, a')).toBeNull();
     expect(
