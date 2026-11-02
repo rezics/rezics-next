@@ -7,12 +7,27 @@ const { Window } = require(
 export const dom = new Window({ url: 'https://auth.test/organizations/new' });
 const previous = new Map<string, PropertyDescriptor | undefined>();
 const globals = Object.fromEntries(
-  ['window', 'document', 'navigator', 'HTMLElement', 'Event', 'HTMLInputElement', 'Element', 'Node'].map((key) => [
-    key,
-    (dom as unknown as Record<string, unknown>)[key],
-  ]),
+  [
+    'window',
+    'document',
+    'navigator',
+    'HTMLElement',
+    'Event',
+    'HTMLInputElement',
+    'Element',
+    'Node',
+    'NodeFilter',
+    'MutationObserver',
+    'ResizeObserver',
+  ].map((key) => [key, (dom as unknown as Record<string, unknown>)[key]]),
 );
-Object.assign(globals, { IS_REACT_ACT_ENVIRONMENT: true, fetch: globalThis.fetch });
+Object.assign(globals, {
+  IS_REACT_ACT_ENVIRONMENT: true,
+  fetch: globalThis.fetch,
+  requestAnimationFrame: dom.requestAnimationFrame.bind(dom),
+  cancelAnimationFrame: dom.cancelAnimationFrame.bind(dom),
+  getComputedStyle: dom.getComputedStyle.bind(dom),
+});
 for (const [key, value] of Object.entries(globals)) {
   previous.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
   Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
