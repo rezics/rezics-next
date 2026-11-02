@@ -113,6 +113,8 @@ Decision: present `admissionSequence` is native `entry.owner_write_seq`; absent 
 `owner_write_counter.seq`, conservatively conflicting on any intervening owner state write, including create/clear ABA.
 Missing native sequence evidence conflicts rather than being replaced with a synthetic value.
 
+Decision: explicit Library removal previews retain absent canonical subjects as no-effect candidates only while the captured owner-write counter remains unchanged.
+
 The internal source-bound recovery path verifies the exact persisted manifest, initiating record and original
 native receipt against terminal evidence. It may return private accounting after revocation; callers must still
 authorize every public result read. It neither acknowledges another home's outcome nor authorizes another effect.
