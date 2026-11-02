@@ -324,7 +324,7 @@ function FactField({
   const sourceIndex = draft?.source ? selected.findIndex((item) => item.id === draft.source) : -1;
   const locked = !!draft && factLocked(draft);
   const row = useRef<HTMLElement>(null);
-  const privateHeading = useRef<HTMLHeadingElement>(null);
+  const privateHeadingId = useId();
   const latestOpening = useRef({ read, property, locale, href, editorHref, draft, visible });
   latestOpening.current = { read, property, locale, href, editorHref, draft, visible };
   function stage(event: MouseEvent<HTMLButtonElement>, source: string | null) {
@@ -372,7 +372,8 @@ function FactField({
       (focused && focused !== document.body && focused !== document.documentElement)
     )
       return;
-    privateHeading.current?.focus();
+    const heading = document.getElementById(privateHeadingId);
+    if (heading?.isConnected && originalRow.contains(heading) && !heading.closest('[hidden]')) heading.focus();
   }
   if (!visible) return null;
   return (
@@ -453,7 +454,7 @@ function FactField({
           </div>
         ) : (
           <div className="min-w-0 space-y-4 border-t border-border pt-4">
-            <ContentItemHeading ref={privateHeading} tabIndex={-1} level={4} className="text-base font-semibold">
+            <ContentItemHeading id={privateHeadingId} tabIndex={-1} level={4} className="text-base font-semibold">
               {m.facts_private({}, o)}
               {draft.source && (
                 <>
