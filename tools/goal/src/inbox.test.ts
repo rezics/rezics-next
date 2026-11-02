@@ -241,3 +241,15 @@ test('a worker info message is read at the next wake but never wakes the manager
     t.close();
   }
 });
+
+test('a multi-line summary is delivered folded onto one line', () => {
+  const s = setup();
+  try {
+    s.inbox.deliver({ managerId: 'manager', kind: 'instruction', summary: 'Worker result:\n  first part\r\nsecond part' });
+    expect(s.inbox.pending('manager')).toMatchObject([
+      { event: { summary: 'Worker result: first part second part' } },
+    ]);
+  } finally {
+    s.close();
+  }
+});
