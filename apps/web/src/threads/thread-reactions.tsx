@@ -220,6 +220,8 @@ function ReactionCaller({
   const retrying = useRef(false);
   const epoch = useRef(0);
   const generation = epoch.current;
+  const controlled = useRef({ counts, value });
+  controlled.current = { counts, value };
   const [resolved, setResolved] = useState<{
     snapshot: ReactionSnapshot;
     sourceCounts: typeof counts;
@@ -304,7 +306,7 @@ function ReactionCaller({
       flushSync(() => {
         setRecovery(null);
         setFailed(null);
-        setResolved({ snapshot, sourceCounts: counts, sourceValue: value });
+        setResolved({ snapshot, sourceCounts: controlled.current.counts, sourceValue: controlled.current.value });
       });
       await onMutation?.(snapshot.value);
       return;

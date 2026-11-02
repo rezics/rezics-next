@@ -121,6 +121,7 @@ for (const clear of [false, true])
     await settle(reads[0]!, { ok: false, reason: 'unavailable' });
     await click(m.editorial_retry());
     expect(writes).toHaveLength(2);
+    await paint({ counts: { like: 50, love: 60 }, value: 'love' });
     await settle(reads[1]!, { ok: true, counts: { like: 7, love: 9 }, value: 'like' });
     expect(button(m.reaction_like()).textContent).toBe(`${m.reaction_like()}7`);
     expect(button(m.reaction_like()).getAttribute('aria-pressed')).toBe('true');
