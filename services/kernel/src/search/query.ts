@@ -400,6 +400,26 @@ export type KindSnapshot = {
     witnesses?: ReadonlyMap<string, number>,
   ) => { values: KindValue[]; after: string | null };
 };
+/** Four live entries, covering the three-generation admission cap. Eviction drops cache ownership only. */
+export const CURRENT_METADATA_RETENTION = 4;
+
+export function retainCurrent<K, V>(cache: Map<K, V>, key: K, create: () => V): V {
+  const hit = cache.get(key);
+  if (hit !== undefined) {
+    cache.delete(key);
+    cache.set(key, hit);
+    return hit;
+  }
+  const created = create();
+  cache.set(key, created);
+  while (cache.size > CURRENT_METADATA_RETENTION) {
+    const oldest = cache.keys().next().value;
+    if (oldest === undefined) break;
+    cache.delete(oldest);
+  }
+  return created;
+}
+
 const snapshots = new Map<string, KindSnapshot>();
 
 /** Mutable injected releases have no identity authority. Native callers supply the immutable release digest. */
@@ -409,37 +429,35 @@ export function kindDigest(release: FilterRelease): string {
 
 /** Own every row and label map; request work is one direct lookup plus at most eight rows. */
 export function compileKinds(release: FilterRelease, digest: string): KindSnapshot {
-  const cached = snapshots.get(digest);
-  if (cached) return cached;
-  const rows: Row[] = Object.entries(release.types).map(([value, raw]) => {
-    const definition = raw as typeof raw & { labels?: Record<string, string>; icon?: string };
-    return Object.freeze({ value, labels: Object.freeze({ ...definition.labels }), icon: definition.icon ?? null });
+  return retainCurrent(snapshots, digest, () => {
+    const rows: Row[] = Object.entries(release.types).map(([value, raw]) => {
+      const definition = raw as typeof raw & { labels?: Record<string, string>; icon?: string };
+      return Object.freeze({ value, labels: Object.freeze({ ...definition.labels }), icon: definition.icon ?? null });
+    });
+    const positions = new Map(rows.map((row, index) => [row.value, index]));
+    const labels = (row: Row | undefined, kind: string, languages: readonly string[]) =>
+      chooseLabel(row?.labels ?? {}, languages) ?? { value: kind, language: 'und' };
+    return Object.freeze({
+      digest,
+      label(kind, languages) {
+        return labels(rows[positions.get(kind) ?? -1], kind, languages);
+      },
+      page(after, languages, witnesses) {
+        const start = after === undefined ? 0 : (positions.get(after) ?? rows.length) + 1;
+        const selected = rows.slice(start, start + 8);
+        return {
+          values: selected.map((row) => {
+            const value = witnesses?.get(row.value);
+            return {
+              value: row.value,
+              label: labels(row, row.value, languages),
+              icon: row.icon,
+              ...(value && value > 0 ? { count: { value, exact: false as const } } : {}),
+            };
+          }),
+          after: start + selected.length < rows.length ? selected.at(-1)!.value : null,
+        };
+      },
+    });
   });
-  const positions = new Map(rows.map((row, index) => [row.value, index]));
-  const labels = (row: Row | undefined, kind: string, languages: readonly string[]) =>
-    chooseLabel(row?.labels ?? {}, languages) ?? { value: kind, language: 'und' };
-  const snapshot: KindSnapshot = Object.freeze({
-    digest,
-    label(kind, languages) {
-      return labels(rows[positions.get(kind) ?? -1], kind, languages);
-    },
-    page(after, languages, witnesses) {
-      const start = after === undefined ? 0 : (positions.get(after) ?? rows.length) + 1;
-      const selected = rows.slice(start, start + 8);
-      return {
-        values: selected.map((row) => {
-          const value = witnesses?.get(row.value);
-          return {
-            value: row.value,
-            label: labels(row, row.value, languages),
-            icon: row.icon,
-            ...(value && value > 0 ? { count: { value, exact: false as const } } : {}),
-          };
-        }),
-        after: start + selected.length < rows.length ? selected.at(-1)!.value : null,
-      };
-    },
-  });
-  snapshots.set(digest, snapshot);
-  return snapshot;
 }

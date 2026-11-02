@@ -11,7 +11,7 @@ import { systemClock, type KernelClock } from '../clock.ts';
 import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
 import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
 import { ProblemError, type FieldErrorCode } from '../http/problem.ts';
-import { compileKinds, kindDigest, type KindSnapshot } from './query.ts';
+import { compileKinds, kindDigest, retainCurrent, type KindSnapshot } from './query.ts';
 import { activeRelease } from '../semantic/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import {
@@ -354,11 +354,9 @@ export function createSearchService({
   }
 
   async function asOf(generation: number): Promise<string> {
-    let reader = freshness.get(generation);
-    if (!reader) {
-      reader = createFreshness(pool, subjectConsumer(prefix, generation));
-      freshness.set(generation, reader);
-    }
+    const reader = retainCurrent(freshness, generation, () =>
+      createFreshness(pool, subjectConsumer(prefix, generation)),
+    );
     const observed = await reader.current();
     if (publicFilters && observed.behind > 0 && Date.now() - observed.asOf.getTime() > 300_000) throw indexNotReady();
     return observed.asOf.toISOString();
