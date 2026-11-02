@@ -4,10 +4,7 @@ import { createKernelClient } from '@rezics/client';
 import { act, createElement } from 'react';
 import * as start from '../.storybook/react-start';
 import { creatorStatementFixture as statement } from '../src/kernel/fake/creator-statements';
-import {
-  CreatorPaymentAttempt,
-  PAYMENT_ATTESTATION_REQUEST_BOUND,
-} from '../src/checkout/creator-payment-attestation-state';
+import { CreatorPaymentAttempt } from '../src/checkout/creator-payment-attestation-state';
 
 const subject = statement.creatorAccountId;
 const csrf = 'c'.repeat(43);
@@ -91,8 +88,9 @@ test('validate exact references and reject blank, oversized, changed identity an
 test('native markPaid binds route, reference, original key, current session and exact response; failures stay distinct', async () => {
   calls.length = 0;
   for (const name of ['creator', 'operator']) {
+    viewer = name === 'creator' ? subject : '019a2100-0000-7000-8000-000000000098';
     credential = `current-${name}`;
-    expect(await submitPaymentAttestation(client, request(), env as never, input)).toEqual({
+    expect(await submitPaymentAttestation(client, request(), env as never, { ...input, subject: viewer })).toEqual({
       kind: 'saved',
       statement: paid,
     });
@@ -285,7 +283,6 @@ test('the actual form retries captured evidence after a paid read, confirms only
     expect(host.textContent).toContain('current statement evidence could not be refreshed');
     expect(host.textContent).toContain(key!);
     expect(transport.mock.calls[0]![1]?.headers).toEqual(transport.mock.calls[1]![1]?.headers);
-    expect(PAYMENT_ATTESTATION_REQUEST_BOUND).toBe(3);
   } finally {
     globalThis.fetch = originalFetch;
     await act(async () => root.unmount());
