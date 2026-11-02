@@ -1,4 +1,5 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import {
@@ -14,10 +15,10 @@ import {
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { PageHeading } from '../../shell/page-heading';
-import { useSession } from '../../session/query';
+import { sessionQuery, useSession } from '../../session/query';
+import { normalizeSessionObservation } from '../../session/browser-state';
 import { ProfileCard } from '../../settings/profile';
 import { PublicViewsCard } from '../../settings/public-views';
-import { csrfHeaders } from '../../threads/composer';
 import { readAccountProfile, saveAccountProfile } from './actions';
 import { AccountProfileEditor } from './editor';
 import type { ProfilePage } from './data';
@@ -27,12 +28,17 @@ export function accountProfileHref(accountId: string, locale = getLocale()) {
 }
 export function AccountProfilePage({ accountId }: { accountId: string }) {
   const session = useSession();
+  const client = useQueryClient();
+  const record = client.getQueryCache().find({ queryKey: sessionQuery.queryKey, exact: true });
+  const revision = record?.state.dataUpdateCount;
+  // A new committed session observation or provider starts a fresh draft lifetime.
+  const observation = useMemo(() => crypto.randomUUID(), [client, record, revision]);
   return (
     <article className="mx-auto w-full max-w-2xl space-y-6 pb-8">
       <PageHeading>{m.account_profile_title()}</PageHeading>
       {session.state === 'signed-in' && session.subject && session.csrfToken ? (
         <BoundProfile
-          key={`${accountId}:${session.subject}:${session.csrfToken}`}
+          key={`${accountId}:${observation}:${session.subject}:${session.csrfToken}`}
           accountId={accountId}
           viewerId={session.subject}
           csrfToken={session.csrfToken}
@@ -46,44 +52,81 @@ export function AccountProfilePage({ accountId }: { accountId: string }) {
   );
 }
 function BoundProfile({ accountId, viewerId, csrfToken }: { accountId: string; viewerId: string; csrfToken: string }) {
+  const client = useQueryClient();
   const [page, setPage] = useState<ProfilePage | null>(null);
-  const [editor] = useState(
-    () =>
-      new AccountProfileEditor({
-        read: async () => {
-          let current: ProfilePage;
-          try {
-            current = await readAccountProfile({ data: { accountId, viewerId } });
-          } catch {
-            current = { state: 'unavailable' };
-          }
-          // Never seed an editor from another target or viewer, including a late server response.
-          if (current.state === 'ready' && (current.viewerId !== viewerId || current.profile.accountId !== accountId))
-            current = { state: 'unavailable' };
-          setPage(current);
-          if (current.state !== 'ready') throw new Error(current.state);
-          return current.profile;
-        },
-        save: async (attempt) => {
-          if (attempt.before.accountId !== accountId || attempt.after.accountId !== accountId)
-            throw new Error('Profile selection changed');
-          // Capture this binding's CSRF identity rather than the mutable global session token.
-          const result = await saveAccountProfile({
-            data: {
-              accountId,
-              viewerId,
-              patch: attempt.patch,
-              idempotencyKey: attempt.idempotencyKey,
-              confirmed: true,
-            },
-            headers: { ...csrfHeaders(), 'X-CSRF-Token': csrfToken },
+  const [binding] = useState(() => {
+    const record = client.getQueryCache().find({ queryKey: sessionQuery.queryKey, exact: true });
+    const revision = record?.state.dataUpdateCount;
+    let attachments = 0;
+    const current = () => {
+      const latest = client.getQueryCache().find({ queryKey: sessionQuery.queryKey, exact: true });
+      if (!attachments || !record || latest !== record || latest.state.status !== 'success') return false;
+      const session = normalizeSessionObservation(latest.state.data);
+      return (
+        latest.state.dataUpdateCount === revision &&
+        session.state === 'signed-in' &&
+        session.subject === viewerId &&
+        session.csrfToken === csrfToken
+      );
+    };
+    const editor = new AccountProfileEditor({
+      isCurrent: current,
+      read: async () => {
+        if (!current()) throw new Error('Profile selection changed');
+        let next: ProfilePage;
+        try {
+          next = await readAccountProfile({ data: { accountId, viewerId } });
+        } catch {
+          next = { state: 'unavailable' };
+        }
+        // A detached request may complete, but cannot seed or replace any live draft.
+        if (!current()) throw new Error('Profile selection changed');
+        if (next.state === 'ready' && (next.viewerId !== viewerId || next.profile.accountId !== accountId))
+          next = { state: 'unavailable' };
+        setPage(next);
+        if (next.state !== 'ready') throw new Error(next.state);
+        return next.profile;
+      },
+      save: async (attempt) => {
+        if (!current() || attempt.before.accountId !== accountId || attempt.after.accountId !== accountId)
+          throw new Error('Profile selection changed');
+        const result = await saveAccountProfile({
+          data: {
+            accountId,
+            viewerId,
+            patch: attempt.patch,
+            idempotencyKey: attempt.idempotencyKey,
+            confirmed: true,
+          },
+          headers: { 'X-CSRF-Token': csrfToken },
+        });
+        if (current() && !result.ok && [401, 403, 404].includes(result.status))
+          setPage({ state: result.status === 404 ? 'missing' : result.status === 401 ? 'signed-out' : 'denied' });
+        return result;
+      },
+    });
+    return {
+      editor,
+      attach: () => {
+        attachments++;
+        if (!current()) editor.retire();
+        // Cache notifications revoke callbacks before React renders the replacement session.
+        const unsubscribe = client.getQueryCache().subscribe(() => {
+          if (!current()) editor.retire();
+        });
+        return () => {
+          attachments--;
+          unsubscribe();
+          // StrictMode can reconnect within the same turn. No command is current while detached.
+          queueMicrotask(() => {
+            if (!attachments) editor.retire();
           });
-          if (!result.ok && [401, 403, 404].includes(result.status))
-            setPage({ state: result.status === 404 ? 'missing' : result.status === 401 ? 'signed-out' : 'denied' });
-          return result;
-        },
-      }),
-  );
+        };
+      },
+    };
+  });
+  const { editor } = binding;
+  useLayoutEffect(() => binding.attach(), [binding]);
   useEffect(() => {
     void editor.reload();
   }, [editor]);

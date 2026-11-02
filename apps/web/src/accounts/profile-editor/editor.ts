@@ -28,6 +28,7 @@ export class AccountProfileEditor extends ProfileEditor {
     if (!this.confirmation) super.edit(patch);
   }
   override async submit(scope: ProfileScope) {
+    if (!this.canWrite()) return;
     const { known, draft, attempt, phase } = this.snapshot();
     if (!known || !draft || attempt || this.confirmation || ['saving', 'reloading', 'unavailable'].includes(phase))
       return;
@@ -54,8 +55,20 @@ export class AccountProfileEditor extends ProfileEditor {
   async confirm() {
     const scope = this.confirmation;
     if (!scope) return;
+    // Create the immutable command while the reviewed draft is still locked. Clearing
+    // confirmation first would let a subscriber replace it before submit captures it.
+    const pending = super.submit(scope);
     this.announce(null);
-    await super.submit(scope);
+    await pending;
+  }
+  override retire() {
+    super.retire();
+    this.cancelConfirmation();
+    this.approvals.clear();
+  }
+  override receive(current: ProfileValues) {
+    this.cancelConfirmation();
+    super.receive(current);
   }
   override async reload() {
     this.cancelConfirmation();
