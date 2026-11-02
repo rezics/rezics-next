@@ -37,6 +37,7 @@ export function SearchSort({
   // The selector also supports static form rendering outside the connected application.
   const router = useRouter({ warn: false });
   const sortId = useId();
+  const messageLocale = { locale: locale as never };
   return (
     <form
       method="get"
@@ -45,7 +46,7 @@ export function SearchSort({
     >
       <Field orientation="horizontal" className="w-auto flex-wrap justify-end gap-2">
         <FieldLabel htmlFor={sortId} className="text-sm text-muted-foreground">
-          {m.search_sort_label()}
+          {m.search_sort_label({}, messageLocale)}
         </FieldLabel>
         <NativeSelect
           id={sortId}
@@ -63,15 +64,15 @@ export function SearchSort({
             });
           }}
         >
-          <NativeSelectOption value="">{m.search_sort_relevance()}</NativeSelectOption>
-          <NativeSelectOption value="rating">{m.search_sort_rating()}</NativeSelectOption>
+          <NativeSelectOption value="">{m.search_sort_relevance({}, messageLocale)}</NativeSelectOption>
+          <NativeSelectOption value="rating">{m.search_sort_rating({}, messageLocale)}</NativeSelectOption>
         </NativeSelect>
       </Field>
       <details className="min-w-0 max-w-full text-sm text-muted-foreground">
         <summary className="min-h-10 cursor-pointer content-center rounded-lg px-2 hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring">
-          {m.search_reader_rating_help_title({}, { locale: locale as never })}
+          {m.search_reader_rating_help_title({}, messageLocale)}
         </summary>
-        <p className="mt-1 px-2 text-muted-foreground">{m.rating_public_ordering({}, { locale: locale as never })}</p>
+        <p className="mt-1 px-2 text-muted-foreground">{m.rating_public_ordering({}, messageLocale)}</p>
       </details>
       {disabled && sort === 'rating' && <input type="hidden" name="sort" value="rating" />}
       {state &&
@@ -96,7 +97,7 @@ export function SearchSort({
         disabled={disabled}
         className="h-9 shrink-0 rounded-md border border-input bg-background px-3 text-sm font-medium hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50"
       >
-        {m.search_sort_submit_button()}
+        {m.search_sort_submit_button({}, messageLocale)}
       </button>
     </form>
   );

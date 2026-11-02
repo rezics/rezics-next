@@ -24,18 +24,27 @@ export function ResultKindNavigation({
 }) {
   const router = useRouter({ warn: false });
   const selected = state.kinds ?? [];
+  const messageLocale = { locale: locale as never };
   const choices = new Map((kinds?.values ?? []).map((kind) => [kind.id, kind.labels]));
   // Missing metadata is unknown: retain exact selections, without inventing labels or catalogue membership.
   for (const id of selected) if (!choices.has(id)) choices.set(id, {});
   const destinations = [
-    { id: undefined, text: m.search_kind_navigation_all(), lang: locale, current: selected.length === 0 },
+    {
+      id: undefined,
+      text: m.search_kind_navigation_all({}, messageLocale),
+      lang: locale,
+      current: selected.length === 0,
+    },
     ...[...choices].map(([id, labels]) => {
       const label = localizedLabel(labels, locale);
       return { id, text: label.text || id, lang: label.lang, current: selected.length === 1 && selected[0] === id };
     }),
   ];
   return (
-    <NavigationMenu aria-label={m.search_result_kinds()} className="w-full max-w-full flex-col items-start gap-2">
+    <NavigationMenu
+      aria-label={m.search_result_kinds({}, messageLocale)}
+      className="w-full max-w-full flex-col items-start gap-2"
+    >
       <NavigationMenuList className="max-w-full flex-wrap justify-start gap-1">
         {destinations.map(({ id, text, lang, current }) => (
           <NavigationMenuItem key={id === undefined ? 'all' : `kind:${id}`} className="max-w-full">
@@ -68,12 +77,13 @@ export function ResultKindNavigation({
       </NavigationMenuList>
       {selected.length > 1 && (
         <p className="text-sm text-muted-foreground">
-          {m.search_kind_navigation_selected({
-            kinds: selected.map((id) => localizedLabel(choices.get(id) ?? {}, locale).text || id).join(', '),
-          })}
+          {m.search_kind_navigation_selected(
+            { kinds: selected.map((id) => localizedLabel(choices.get(id) ?? {}, locale).text || id).join(', ') },
+            messageLocale,
+          )}
         </p>
       )}
-      <p className="text-sm text-muted-foreground">{m.search_kind_navigation_more()}</p>
+      <p className="text-sm text-muted-foreground">{m.search_kind_navigation_more({}, messageLocale)}</p>
     </NavigationMenu>
   );
 }
