@@ -208,6 +208,10 @@ Source kinds lacking declarations or final physical authority retain their typed
 
 ### First preparation admission and duplicate
 
+Native result retirement uses the retained subject primary key. Its local declaration covers up to 100 key
+reads and deletes, primary lookups, all four result indexes, the bounded prefix seek and failed/empty paths,
+within the existing Members body allowance; it does not borrow a foreign child or add a payer.
+
 - Touches: existing ready lookup/direct prepare decision and its released snapshot; then Core time, all Access
   preparation/finalization, SERIALIZABLE partition/account fences, owner control/LRU/uniqueness, retained intent and
   both DBOS enqueue statements on actual backends. No source input key is read by reservation.

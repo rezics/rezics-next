@@ -161,12 +161,14 @@ export const MEMBERS_PREPARATION_LOCAL_COST = Object.freeze({
     "statements": 1,
     "bytes": 1024
   },
+  // At most 100 key reads and deletes; primary lookups plus all four retained result indexes.
+  // The finite ceiling also covers the prefix seek and empty/failed dispatches.
   "resultDrain": {
     "candidateKeys": 100,
-    "nativeRows": 100,
+    "nativeRows": 201,
     "identityMetadataRows": 0,
-    "emptySeeks": 201,
-    "nativePoints": 201,
+    "emptySeeks": 512,
+    "nativePoints": 512,
     "witnessKeys": 0,
     "statements": 1,
     "bytes": 16384
