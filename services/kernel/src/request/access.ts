@@ -241,7 +241,7 @@ export interface Access {
    */
   readonly kindAudience?: KindAudienceAccess;
   /** Authentication has no authorization-time input; preserve its native request contract. */
-  authenticate(token: string, context: AccessContext): Promise<AccountActor>;
+  authenticate(token: string, context: { pool: Pool; deadline: number }): Promise<AccountActor>;
   prepareReadDecisions?(input: PrepareReadDecisionsInput): Promise<ReadDecisions>;
   prepare?(actor: Actor, action: string, resource: Resource, context: AccessContext): Promise<unknown>;
   preparePage?(actor: Actor, action: string, page: ResourcePage, context: AccessContext): Promise<unknown>;

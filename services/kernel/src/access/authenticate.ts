@@ -424,14 +424,15 @@ export function createAuthenticator(configuration?: AuthenticationConfig, clock:
       if (!context.work) verified = await within(context.deadline, verify);
       else {
         const invocation = calls.getStore();
+        if (!invocation) return context.work.unavailable('Auth ES256 verification invocation binding');
         if (
-          !invocation ||
           invocation.token !== token ||
           invocation.pool !== context.pool ||
           invocation.deadline !== context.deadline ||
           invocation.work !== context.work
         )
-          context.work.unavailable('Auth ES256 verification invocation binding');
+          return context.work.unavailable('Auth ES256 verification invocation binding');
+        const metrics = invocation.metrics;
         const outcome = await context.work.run(
           'access.authentication.jose-verify',
           authenticationVerificationWorkBound(token),
@@ -447,14 +448,14 @@ export function createAuthenticator(configuration?: AuthenticationConfig, clock:
             result.state === 'verified' || result.state === 'invalid'
               ? addAccessWork(
                   {
-                    keys: invocation.metrics.scannedKeys,
+                    keys: metrics.scannedKeys,
                     points: 1,
                     witnesses: 0,
                     rows: 0,
                     bytes: Buffer.byteLength(token, 'utf8'),
                     emptySeeks: 0,
                   },
-                  invocation.metrics.jwksUsage,
+                  metrics.jwksUsage,
                 )
               : undefined,
           'owner',

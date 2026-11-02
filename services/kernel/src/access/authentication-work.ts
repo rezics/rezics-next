@@ -95,7 +95,10 @@ function producer(): AuthenticationWorkProducer {
     actual(_input, usage) {
       return usage;
     },
-    async invoke<T>(input, dispatch) {
+    async invoke<T>(
+      input: OriginalAuthenticationInvocation,
+      dispatch: () => Promise<T>,
+    ): Promise<Readonly<{ value: T; usage: AccessWork }>> {
       const bound = value.bound(input);
       if (!bound) return input.work.unavailable('Auth bearer authentication frame/deadline mismatch');
       const receipt = await input.work.invocation('access.authenticate', bound, dispatch, input.deadline);
