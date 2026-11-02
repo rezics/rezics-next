@@ -337,13 +337,20 @@ import { VerificationRecovery, verificationQueryKey } from '../src/settings/veri
 import type { AgentVerificationRequest, VerificationCommandResult } from '../src/settings/verification-core';
 
 test('a receipt waits for current readback and older requests or revisions cannot replace it', async () => {
-  const pending = { ...request, id: 'new-request', createdAt: '2026-02-01T00:00:00Z', updatedAt: '2026-02-01T00:00:00Z' };
+  const pending = {
+    ...request,
+    id: 'new-request',
+    createdAt: '2026-02-01T00:00:00Z',
+    updatedAt: '2026-02-01T00:00:00Z',
+  };
   const approved = { ...pending, state: 'approved' as const, updatedAt: '2026-02-02T00:00:00Z' };
   let current: AgentVerificationRequest | null = null;
   const controller = new VerificationRecovery('alice', {
     read: async () => ({ accountId: 'alice', verificationRequest: current, subjectTitle: 'Agent' }),
     request: async () => ({ ok: true, verificationRequest: pending }),
-    withdraw: async () => { throw new Error('Unexpected withdrawal'); },
+    withdraw: async () => {
+      throw new Error('Unexpected withdrawal');
+    },
   });
   await controller.reload();
   await controller.submit(input);
@@ -356,7 +363,11 @@ test('a receipt waits for current readback and older requests or revisions canno
   expect(controller.snapshot().attempt).toBe(attempt);
   current = approved;
   await controller.reload();
-  expect(controller.snapshot()).toMatchObject({ phase: 'review', attempt: null, current: { verificationRequest: approved } });
+  expect(controller.snapshot()).toMatchObject({
+    phase: 'review',
+    attempt: null,
+    current: { verificationRequest: approved },
+  });
   current = pending;
   await controller.reload();
   expect(controller.snapshot()).toMatchObject({ phase: 'unavailable', current: null });

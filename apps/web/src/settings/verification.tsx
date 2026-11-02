@@ -66,7 +66,9 @@ function diagnosticRetryAfter(value: string | undefined) {
   if (!value) return undefined;
   // DOM attributes are disclosed too. Keep only the two standard header forms.
   return /^\d{1,10}$/.test(value) ||
-    /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{2} (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4} \d{2}:\d{2}:\d{2} GMT$/.test(value)
+    /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{2} (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4} \d{2}:\d{2}:\d{2} GMT$/.test(
+      value,
+    )
     ? value
     : undefined;
 }

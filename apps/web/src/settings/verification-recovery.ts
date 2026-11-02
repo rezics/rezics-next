@@ -122,8 +122,7 @@ export class VerificationRecovery {
   }
   private older(request: AgentVerificationRequest) {
     if (!this.latest) return false;
-    if (request.id === this.latest.id)
-      return Date.parse(request.updatedAt) < Date.parse(this.latest.updatedAt);
+    if (request.id === this.latest.id) return Date.parse(request.updatedAt) < Date.parse(this.latest.updatedAt);
     // A different identity must be newer, even when an earlier request reused the same evidence.
     return Date.parse(request.createdAt) < Date.parse(this.latest.createdAt);
   }
