@@ -118,14 +118,12 @@ test('Zone draft navigation stays with the exact edits, allows a deliberate leav
       page.dispatchEvent(new window.Event('change', { bubbles: true }));
     });
     expect(host.textContent).not.toContain(m.zone_editor_leave());
-    let pending: Promise<void> | undefined;
     await act(async () => {
-      pending = router.navigate({ to: '/away' });
+      void router.navigate({ to: '/away' });
     });
     expect(host.textContent).toContain(m.zone_editor_leave());
     expect(router.state.location.pathname).toBe('/edit');
     await act(async () => button(host, m.zone_editor_stay()).click());
-    await pending;
     expect(session.snapshot().draft).toBe(retained);
     expect(arrivals).toBe(0);
     await act(async () => session.save());
@@ -137,11 +135,10 @@ test('Zone draft navigation stays with the exact edits, allows a deliberate leav
     discarded.configuration.labels.en = 'Discard this edit';
     await act(async () => session.edit(discarded));
     await act(async () => {
-      pending = router.navigate({ to: '/away' });
+      void router.navigate({ to: '/away' });
     });
     expect(host.textContent).toContain(m.zone_editor_leave());
     await act(async () => button(host, m.zone_editor_discard()).click());
-    await pending;
     expect(router.state.location.pathname).toBe('/away');
     expect(arrivals).toBe(2);
   } finally {
