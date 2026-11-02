@@ -1,10 +1,13 @@
 import { QueryClientContext, type QueryClient } from '@tanstack/react-query';
+import { Button } from '@rezics/ui/shadcn/button';
 import { ContentActions } from '@rezics/ui/content-actions';
+import { Input } from '@rezics/ui/shadcn/input';
 import type { ReportDialogLabels, ReportSubmission } from '@rezics/ui/report-dialog';
 import {
   useCallback,
   useContext,
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -134,6 +137,7 @@ function refusalText(result: Extract<ReportResult, { ok: false }>): string {
 }
 
 type OwnerToken = { key: string; value: object };
+type CopyResult = { kind: 'copied' } | { kind: 'manual'; url: string; isCurrent: () => boolean };
 
 /** The overflow menu of a thread, post or subject the viewer did not write: copy its link or report it. */
 export function PostActions({
@@ -198,6 +202,7 @@ function ReportActionsVisit({
   const [reportOpen, setReportOpen] = useState(false);
   // A new open also retires retained shared form handlers from the previous ceremony.
   const [ceremony, setCeremony] = useState(0);
+  const ceremonyRef = useRef(0);
   const reportOpenRef = useRef(false);
   const openIncarnation = useRef(0);
   // Equal token bytes from a later vendor callback do not re-admit an older submit closure.
@@ -208,6 +213,12 @@ function ReportActionsVisit({
   const [reportId, setReportId] = useState<string | null>(null);
   const reset = useRef<(() => void) | null>(null);
   const mounted = useRef(false);
+  const copyTrigger = useRef<HTMLButtonElement>(null);
+  const copyField = useRef<HTMLInputElement>(null);
+  const copyAttempt = useRef(0);
+  const copyFieldId = useId();
+  const copyStatusId = useId();
+  const [copyResult, setCopyResult] = useState<CopyResult | null>(null);
   const ownerTarget = { kind: target.kind, id: target.id };
 
   useClientLayoutEffect(() => {
@@ -219,6 +230,7 @@ function ReportActionsVisit({
       tokenRevision.current += 1;
       tokenRef.current = '';
       idempotencyKey.current = '';
+      copyAttempt.current += 1;
     };
   }, []);
 
@@ -236,6 +248,21 @@ function ReportActionsVisit({
   const currentAuthority = observation.read();
   const canReport = Boolean(reportCredential(currentAuthority)) && currentAuthority.fingerprint === admittedFingerprint;
   const renderIncarnation = openIncarnation.current;
+
+  useEffect(() => {
+    if (copyResult?.kind !== 'manual') return;
+    const frame = requestAnimationFrame(() => {
+      if (!copyResult.isCurrent()) return;
+      copyField.current?.focus();
+      copyField.current?.select();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [copyResult]);
+
+  const retireCopyResult = useCallback(() => {
+    copyAttempt.current += 1;
+    setCopyResult(null);
+  }, []);
 
   const updateToken = useCallback(
     (next: string) => {
@@ -257,8 +284,10 @@ function ReportActionsVisit({
       if (!currentOwner() || renderIncarnation !== openIncarnation.current) return;
       if (next) {
         if (reportOpenRef.current) return;
+        retireCopyResult();
         reportOpenRef.current = true;
         openIncarnation.current += 1;
+        ceremonyRef.current += 1;
         tokenRevision.current += 1;
         tokenRef.current = '';
         idempotencyKey.current = crypto.randomUUID();
@@ -271,6 +300,7 @@ function ReportActionsVisit({
       }
 
       if (renderIncarnation !== openIncarnation.current || !reportOpenRef.current) return;
+      retireCopyResult();
       reportOpenRef.current = false;
       openIncarnation.current += 1;
       tokenRevision.current += 1;
@@ -280,7 +310,7 @@ function ReportActionsVisit({
       setToken({ value: '', revision: tokenRevision.current });
       setReportOpen(false);
     },
-    [currentOwner, renderIncarnation],
+    [currentOwner, renderIncarnation, retireCopyResult],
   );
 
   const report = useCallback(
@@ -343,10 +373,31 @@ function ReportActionsVisit({
     ],
   );
 
-  const copyLink = () =>
-    navigator.clipboard.writeText(
-      `${location.origin}${location.pathname}${target.kind === 'subject' ? '' : `#${target.kind}-${target.id}`}`,
-    );
+  const copyLink = async () => {
+    const url = `${location.origin}${location.pathname}${target.kind === 'subject' ? '' : `#${target.kind}-${target.id}`}`;
+    const attempt = ++copyAttempt.current;
+    const admittedCeremony = ceremony;
+    const admittedRender = renderIncarnation;
+    const isCurrent = () =>
+      copyAttempt.current === attempt &&
+      ceremonyRef.current === admittedCeremony &&
+      openIncarnation.current === admittedRender &&
+      currentOwner();
+    if (!isCurrent()) return;
+    setCopyResult(null);
+    try {
+      await navigator.clipboard.writeText(url);
+      if (isCurrent()) setCopyResult({ kind: 'copied' });
+    } catch {
+      if (isCurrent()) setCopyResult({ kind: 'manual', url, isCurrent });
+    }
+  };
+
+  const closeCopyRecovery = () => {
+    const returnFocus = copyResult?.kind === 'manual' && copyResult.isCurrent();
+    retireCopyResult();
+    if (returnFocus && copyTrigger.current?.isConnected) copyTrigger.current.focus();
+  };
 
   return (
     <>
@@ -354,6 +405,7 @@ function ReportActionsVisit({
         key={ceremony}
         ownsContent={false}
         onCopyLink={copyLink}
+        triggerRef={copyTrigger}
         onReport={report}
         onReportOpenChange={changeReportOpen}
         reportOpen={reportOpen}
@@ -371,6 +423,40 @@ function ReportActionsVisit({
           />
         }
       />
+      {/* Keep the selected URL and its deliberate Close action together in the content action flow. */}
+      {copyResult ? (
+        <div className="min-w-0 max-w-full space-y-2 text-sm">
+          <p id={copyStatusId} role="status">
+            {copyResult.kind === 'copied' ? m.report_copy_success() : m.report_copy_recovery_description()}
+          </p>
+          {copyResult.kind === 'manual' ? (
+            <>
+              <label htmlFor={copyFieldId} className="block">
+                {m.report_copy_recovery_link_label()}
+              </label>
+              <Input
+                ref={copyField}
+                id={copyFieldId}
+                aria-describedby={copyStatusId}
+                type="text"
+                dir="ltr"
+                readOnly
+                spellCheck={false}
+                value={copyResult.url}
+                onFocus={(event) => event.currentTarget.select()}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Escape') return;
+                  event.preventDefault();
+                  closeCopyRecovery();
+                }}
+              />
+              <Button type="button" variant="outline" onClick={closeCopyRecovery}>
+                {m.report_copy_recovery_close()}
+              </Button>
+            </>
+          ) : null}
+        </div>
+      ) : null}
       {reportId && currentAuthority.session?.state === 'signed-in' && currentAuthority.session.subject ? (
         <a className="text-sm underline underline-offset-4" href={localizeHref(`/moderation/reports/${reportId}`)}>
           {m.reporter_status_view()}
