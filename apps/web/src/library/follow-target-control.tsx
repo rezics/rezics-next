@@ -12,6 +12,7 @@ import {
 import { readCurrentFollowState, readFollowState, setFollow } from './follow-actions';
 import { FollowControl } from './follow-control';
 import type { FollowState } from './follow-records';
+import { refreshFollowing } from './mine-following-refresh';
 
 type FollowLifetime = {
   key: string;
@@ -65,6 +66,7 @@ export function FollowTargetControl({
   idempotencyKey,
   menuTitle,
   onRemoved,
+  disabled = false,
   origin: parent,
 }: {
   targetId: string;
@@ -72,6 +74,8 @@ export function FollowTargetControl({
   idempotencyKey?: string;
   menuTitle?: string;
   onRemoved?: () => void;
+  /** Retained rows can show recovery while their list read is unavailable. */
+  disabled?: boolean;
   /** Supplied owner rows retain their actual reader and mounted address. */
   origin?: HistoryOrigin;
 }) {
@@ -135,8 +139,7 @@ export function FollowTargetControl({
     queryClient.getQueryState(options.queryKey)?.status === 'success' &&
     queryClient.getQueryData(options.queryKey) === readLifetime.data;
   const isCurrent = (next: boolean) =>
-    address.isCurrent() && origin.current(next ? 1 : 2) && (following !== undefined || acceptedRead());
-  const acceptedOrigin = following !== undefined || (!read.isFetching && acceptedRead());
+    address.isCurrent() && origin.current(next ? 1 : 2) && (following !== undefined || !next || acceptedRead());
   return (
     <span hidden={!canFollow && !canRemove}>
       <FollowControl
@@ -147,7 +150,7 @@ export function FollowTargetControl({
         isCurrent={isCurrent}
         canFollow={origin.retained[1] === true && !onRemoved}
         canRemove={origin.retained[2] === true}
-        ready={origin.allowed[1] === true || origin.allowed[2] === true}
+        ready={!disabled && (origin.allowed[1] === true || origin.allowed[2] === true)}
         {...(idempotencyKey ? { idempotencyKey } : {})}
         {...(menuTitle ? { menuTitle } : {})}
         {...(following === undefined && canRead && origin.allowed[0]
@@ -166,13 +169,21 @@ export function FollowTargetControl({
         onAccepted={(next, input) => {
           if (!isCurrent(input.following)) return false;
           // A write retains its originating read. Read retirement alone does not cancel an admitted DELETE.
-          const reconcile = acceptedOrigin && (following !== undefined || readLifetime?.isCurrent() === true);
+          // The command itself supplies the own-edge result when GET failed. A
+          // replacement read or revoked read admission still cannot inherit it.
+          const reconcile = following !== undefined || readLifetime.isCurrent();
           if (readLifetime?.isCurrent()) {
             void queryClient.cancelQueries({ queryKey: options.queryKey, exact: true });
             if (!isCurrent(input.following)) return false;
-            queryClient.setQueryData<FollowState>(options.queryKey, (): FollowState =>
+            const data = queryClient.setQueryData<FollowState>(options.queryKey, (): FollowState =>
               reconcile ? { state: 'ready', following: next } : { state: 'unavailable' },
             );
+            // Query structural sharing can preserve an existing object. Keep the actual
+            // cache identity so our own successful write does not revoke its reader.
+            if (data) {
+              readLifetime.data = data;
+              readLifetime.accepted = reconcile;
+            }
           }
           if (reconcile && isCurrent(input.following)) {
             queryClient.setQueryData<FollowState>(followStateQuery(viewer, targetId).queryKey, (): FollowState => ({
@@ -181,6 +192,7 @@ export function FollowTargetControl({
             }));
           }
           if (!next && isCurrent(input.following)) onRemoved?.();
+          if (viewer && isCurrent(input.following)) refreshFollowing(queryClient, viewer, !!onRemoved);
           return reconcile;
         }}
       />

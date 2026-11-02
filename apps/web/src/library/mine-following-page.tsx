@@ -49,7 +49,7 @@ export const mineFollowingQuery = (
     },
     gcTime: 0,
     staleTime: Infinity,
-    refetchOnMount: false,
+    refetchOnMount: true,
     retry: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
@@ -109,7 +109,6 @@ export function CurrentViewerMineFollowingPage({
     if (current()) void read.refetch();
   }, [initial, read.refetch, origin.lifetime(0)]);
   const page =
-    !read.isError &&
     read.data &&
     origin.subject &&
     origin.retained[0] === true &&
@@ -122,7 +121,7 @@ export function CurrentViewerMineFollowingPage({
     isCurrent: () => current() && readCurrent(),
   };
   const status =
-    origin.subject && origin.allowed[0] === true && !page.signedIn
+    origin.subject && origin.allowed[0] === true && (read.isError || !page.signedIn)
       ? read.isError || read.data
         ? 'unavailable'
         : 'preparing'
@@ -298,6 +297,7 @@ function MineFollowingPageState({
                               origin={origin}
                               targetId={follow.targetId}
                               following
+                              disabled={!!status}
                               idempotencyKey={follow.idempotencyKey}
                               menuTitle={m.library_follow_more_actions({ title: title.text })}
                               onRemoved={() => {

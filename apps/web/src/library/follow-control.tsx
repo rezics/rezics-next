@@ -4,6 +4,7 @@ import { EllipsisIcon } from 'lucide-react';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { m } from '../paraglide/messages.js';
 import type { FollowState, FollowWriteInput, FollowWriteResult } from './follow-records';
+import { createFollowIntent } from './mine-following-intent';
 
 /** Removal is independent of create and of the ability to read the target or the own edge. */
 export function followAction(state: FollowState, canFollow: boolean, canRemove: boolean): 'follow' | 'remove' | null {
@@ -101,7 +102,7 @@ function FollowControlState({
   const [pendingState, setPending] = useState(false);
   const [failure, setFailure] = useState<Exclude<FollowWriteResult, { ok: true }>['reason'] | null>(null);
   const [removed, setRemoved] = useState(false);
-  const attempt = useRef<FollowWriteInput | null>(null);
+  const intent = useRef(createFollowIntent()).current;
   const conflict = useRef(false);
   const inFlight = useRef<{
     input: FollowWriteInput;
@@ -159,8 +160,8 @@ function FollowControlState({
   const pending = pendingState && inFlight.current !== null;
   const action = signedOut
     ? null
-    : attempt.current
-      ? attempt.current.following
+    : intent.current
+      ? intent.current.following
         ? canFollow
           ? 'follow'
           : null
@@ -172,17 +173,14 @@ function FollowControlState({
   async function submit() {
     const live = committed.current;
     if (!live?.ready || disabled || conflict.current || inFlight.current || !action) return;
-    const input = attempt.current ?? {
-      targetId,
-      following: action === 'follow',
-      idempotencyKey: idempotencyKey ?? crypto.randomUUID(),
-    };
+    const next = intent.current?.following ?? action === 'follow';
     if (
-      !(input.following ? live.canFollow : live.canRemove) ||
-      (isCurrent && !isCurrent(input.following)) ||
-      (live.isCurrent && !live.isCurrent(input.following))
+      !(next ? live.canFollow : live.canRemove) ||
+      (isCurrent && !isCurrent(next)) ||
+      (live.isCurrent && !live.isCurrent(next))
     )
       return;
+    const input = intent.begin(targetId, next, idempotencyKey);
     const running = {
       input,
       isCurrent: live.isCurrent,
@@ -191,7 +189,6 @@ function FollowControlState({
       onChange: live.onChange,
     };
     inFlight.current = running;
-    attempt.current = input;
     setPending(true);
     setFailure(null);
     if (current.state === 'pending') setCurrent({ state: 'unavailable' });
@@ -204,7 +201,7 @@ function FollowControlState({
     if (inFlight.current !== running || (running.isCurrent && !running.isCurrent(input.following))) return;
     try {
       if (result.ok) {
-        attempt.current = null;
+        intent.confirm(input);
         const accepted = running.onAccepted?.(result.following, input) ?? true;
         if (running.isCurrent && !running.isCurrent(input.following)) return;
         if (accepted && committed.current?.readLifetime === running.readLifetime) {
