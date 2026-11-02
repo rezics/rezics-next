@@ -20,9 +20,9 @@ test('Members retry provenance binds the exact filter along with Collection and 
   const input = { id, cursor: 'opaque+cursor', filter: { type: { in: ['schema:Book'] } } };
   const request = collectionRequestVariant(input, 'members');
   expect(collectionRequestVariant(structuredClone(input), 'members')).toBe(request);
-  expect(
-    collectionRequestVariant({ ...input, filter: { type: { in: ['schema:Movie'] } } }, 'members'),
-  ).not.toBe(request);
+  expect(collectionRequestVariant({ ...input, filter: { type: { in: ['schema:Movie'] } } }, 'members')).not.toBe(
+    request,
+  );
   expect(collectionRequestVariant({ ...input, cursor: 'another-cursor' }, 'members')).not.toBe(request);
 });
 
