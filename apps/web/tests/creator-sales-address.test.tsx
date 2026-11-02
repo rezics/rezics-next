@@ -4,9 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { CreatorSalesAddress } from '../src/checkout/creator-sales-address';
 
 test('malformed saved cursor stays editable and correction or restart stays on the creator sales route', () => {
-  const html = renderToStaticMarkup(
-    createElement(CreatorSalesAddress, { locale: 'en', cursor: 'bad<&"' }),
-  );
+  const html = renderToStaticMarkup(createElement(CreatorSalesAddress, { locale: 'en', cursor: 'bad<&"' }));
 
   expect(html).toContain('method="get"');
   expect(html).toContain('action="/en/creator/sales"');

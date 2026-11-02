@@ -24,7 +24,9 @@ export const Route = createFileRoute('/creator/sales/')({
     const initial = Route.useLoaderData();
     const locale = getLocale();
     if ('kind' in search)
-      return <CreatorSalesAddress locale={locale} {...(search.cursor === undefined ? {} : { cursor: search.cursor })} />;
+      return (
+        <CreatorSalesAddress locale={locale} {...(search.cursor === undefined ? {} : { cursor: search.cursor })} />
+      );
     if (!initial) return <CreatorSalesPage page={{ kind: 'unavailable' }} locale={locale} {...search} />;
     return <CreatorSalesCurrent initial={initial} locale={locale} {...search} />;
   },

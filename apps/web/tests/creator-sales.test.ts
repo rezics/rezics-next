@@ -17,8 +17,7 @@ const {
   creatorSalesSearch,
   parseCreatorSalesPage,
   unavailableCreatorSalesCaller,
-} =
-  await import('../src/checkout/creator-sales');
+} = await import('../src/checkout/creator-sales');
 const { CreatorSalesPage, creatorSalesHref } = await import('../src/checkout/creator-sales-page');
 const { isSignedInPath } = await import('../src/session/guard');
 const { operationIsAdmitted } = await import('../src/kernel/exposure');
