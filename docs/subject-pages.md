@@ -63,6 +63,7 @@ With a supplied work, creation retains the credit context and offers the exact r
 People creation keeps editable private terms, facts and citations through failed metadata recovery, hides retired work references, admits only fresh reads of the original work, and blocks new commands until recovery while preserving exact unresolved retries within the original viewer and CSRF session.
 
 Screen creation resolves submitted assertion indices to stable row and nested-part identities, links only supported value, qualifier and citation controls with human field labels, and preserves sibling assertions and citation groups when correcting; a blank citation remains editable until explicitly removed, unknown addresses remain technical details and uncertain commands stay sealed across metadata recovery.
+Screen creation confirms removal of an unsent initial fact containing a value, meaningful qualifier or citation content; Cancel restores trigger focus and preserves the complete row, while removal focuses the next usable control or a preceding survivor and obeys the current draft lock.
 
 ## Create and correct a recipe
 
