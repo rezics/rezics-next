@@ -87,6 +87,9 @@ uses the native PATCH command documented below. A menu link establishes neither 
 actual routes for navigation and the existing terms page for explicit denied/unavailable samples. Native acceptance,
 interaction execution and phone/desktop visual review remain integration work.
 
+Recipe departure reuses the localized authoring prompt; uncertain retries preserve the exact command while bypassing
+local definition checks and still reaching current native authorization.
+
 ## Browser flow: fictional character identity and credits
 
 The catalogue creation entry, a fictional character's header and a work's Characters view offer **Character identity

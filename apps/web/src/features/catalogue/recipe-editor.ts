@@ -21,8 +21,8 @@ export type RecipeRead =
   | { ok: true; release: Release; public: SubjectRead | null; fields: string[] };
 export type RecipeTransport = {
   load: () => Promise<RecipeRead>;
-  create: (command: RecipeCommand) => Promise<CreateResult>;
-  propose: (command: ProposalCommand) => Promise<ProposalResult>;
+  create: (command: RecipeCommand, replay?: boolean) => Promise<CreateResult>;
+  propose: (command: ProposalCommand, replay?: boolean) => Promise<ProposalResult>;
   read: (id: string) => Promise<CreatedReader>;
 };
 export const recipeUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -113,11 +113,14 @@ export async function createRecipe(
   command: RecipeCommand,
   locale: string,
   preparedAuthorization?: string,
+  replay = false,
 ): Promise<CreateResult> {
-  const read = await readRecipeEditor(client, locale);
-  if (!read.ok) return { ok: false, reason: 'unavailable' };
-  const errors = validateRecipe(read.release, command.item, locale);
-  if (errors.length) return { ok: false, reason: 'invalid', errors, refreshDefinitions: true };
+  if (!replay) {
+    const read = await readRecipeEditor(client, locale);
+    if (!read.ok) return { ok: false, reason: 'unavailable' };
+    const errors = validateRecipe(read.release, command.item, locale);
+    if (errors.length) return { ok: false, reason: 'invalid', errors, refreshDefinitions: true };
+  }
   return createSubjectRecord(client, request, sessionEnv, command, locale, preparedAuthorization);
 }
 export async function proposeRecipe(
@@ -125,7 +128,9 @@ export async function proposeRecipe(
   authorization: string,
   command: ProposalCommand,
   locale: string,
+  replay = false,
 ): Promise<ProposalResult> {
+  if (replay) return proposeStatement(client, authorization, command);
   const read = await readRecipeEditor(client, locale, command.id);
   if (!read.ok) return { ok: false, reason: read.reason === 'invalid' ? 'invalid' : 'unavailable' };
   if (!read.fields.includes(command.statement.property.id))

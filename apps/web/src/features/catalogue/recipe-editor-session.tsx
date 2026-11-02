@@ -30,8 +30,16 @@ function RecipeEditorSessionLive({ id, locale }: { id?: string; locale: string }
       search={search}
       transport={{
         load: () => loadRecipeEditor({ data: id }),
-        create: (data) => createCatalogueRecipe({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
-        propose: (data) => submitRecipeCorrection({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
+        create: (data, replay) =>
+          createCatalogueRecipe({
+            data: editorRequest(replay ? { ...data, replay: true } : data, editorWork),
+            headers: csrfHeaders(),
+          }),
+        propose: (data, replay) =>
+          submitRecipeCorrection({
+            data: editorRequest(replay ? { ...data, replay: true } : data, editorWork),
+            headers: csrfHeaders(),
+          }),
         read: (data) => readCreatedCatalogueSubject({ data }),
       }}
       review={(property, slot, initialSession) => {

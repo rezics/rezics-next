@@ -6,7 +6,7 @@ import { env } from 'cloudflare:workers';
 import { kernelClient, requestLocale } from '../../kernel/client';
 import type { SessionEnv } from '../../session/client';
 import { MediaProblem } from '../../media/kernel';
-import { proposalInput, type ProposalResult } from './statement-editor';
+import { proposalInput, type ProposalCommand, type ProposalResult } from './statement-editor';
 import {
   createRecipe,
   proposeRecipe,
@@ -120,36 +120,67 @@ export const loadRecipeEditor = createServerFn({ method: 'GET', strict: false })
     setResponseHeader('cache-control', 'private, no-store');
     return readRecipeEditor(kernelClient(), requestLocale() ?? 'en', data);
   });
+type RecipeCreateRequest = RecipeCommand & { replay?: boolean };
+type RecipeProposalRequest = ProposalCommand & { replay?: boolean };
+type RecipeProposalSubmission = { command: ProposalCommand; replay: boolean } | { invalid: true };
+
+function recipeProposalRequest(input: RecipeProposalRequest): RecipeProposalSubmission {
+  if (
+    !input ||
+    typeof input !== 'object' ||
+    Array.isArray(input) ||
+    (input.replay !== undefined && typeof input.replay !== 'boolean')
+  )
+    return { invalid: true };
+  const { replay, ...proposal } = input;
+  const command = proposalInput(proposal);
+  return 'invalid' in command ? command : { command, replay: replay === true };
+}
+
 export const createCatalogueRecipe = createServerFn({ method: 'POST', strict: false })
   .validator(
-    originalReaderInput((input: RecipeCommand): RecipeCommand => {
-      if (!input || !recipeUuid.test(input.key) || !input.item || input.item.type !== 'schema:Recipe')
+    originalReaderInput((input: RecipeCreateRequest): RecipeCreateRequest => {
+      if (
+        !input ||
+        !recipeUuid.test(input.key) ||
+        !input.item ||
+        input.item.type !== 'schema:Recipe' ||
+        (input.replay !== undefined && typeof input.replay !== 'boolean')
+      )
         throw new Error('Invalid recipe request');
-      return { key: input.key, item: input.item };
+      return { key: input.key, item: input.item, ...(input.replay === true ? { replay: true } : {}) };
     }),
   )
   .handler(async ({ data }): Promise<CreateResult> => {
     const authorization = await candidateAuthorization(data.expectedReader);
     if (!authorization) return { ok: false, reason: 'denied' };
     setResponseHeader('cache-control', 'private, no-store');
+    const command = { key: data.key, item: data.item };
     return createRecipe(
       kernelClient(),
       getRequest(),
       env as Partial<SessionEnv>,
-      data,
+      command,
       requestLocale() ?? 'en',
       authorization,
+      data.replay === true,
     );
   });
 export const submitRecipeCorrection = createServerFn({ method: 'POST', strict: false })
-  .validator(originalReaderInput(proposalInput))
+  .validator(originalReaderInput(recipeProposalRequest))
   .handler(async ({ data }): Promise<ProposalResult> => {
     setResponseHeader('cache-control', 'private, no-store');
     if ('invalid' in data) return { ok: false, reason: 'invalid' };
     try {
       const authorization = await candidateAuthorization(data.expectedReader);
       if (!authorization) return { ok: false, reason: 'denied' };
-      return await proposeRecipe(kernelClient(), authorization, data, requestLocale() ?? 'en');
+      return await proposeRecipe(
+        kernelClient(),
+        authorization,
+        data.command,
+        requestLocale() ?? 'en',
+        data.replay,
+      );
     } catch (error) {
       return {
         ok: false,

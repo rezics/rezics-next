@@ -1,6 +1,7 @@
 import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { hasDocumentContent } from '@rezics/document';
 import { useQuery } from '@tanstack/react-query';
+import { useBlocker, useRouter } from '@tanstack/react-router';
 import { pickText } from '@rezics/composition';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { RichTextEditor } from '@rezics/ui/rich-text-editor';
@@ -11,7 +12,17 @@ import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@rezics/ui/shadcn/alert-dialog';
 import { coverSrc } from '../../media/cover-src';
 import { m } from '../../paraglide/messages.js';
 import { CreateSubjectLanguageRemove } from './create-subject-language-remove';
@@ -33,6 +44,7 @@ import {
   type RecipeRead,
 } from './recipe-editor';
 import { statementInput, type ProposalCommand, type ProposalResult, type StatementInput } from './statement-editor';
+import { statementDraftChanged } from './statement-editor-navigation';
 import { EditorFailure, ScalarControl } from './statement-editor-view';
 import {
   focusRecipeCorrection,
@@ -155,6 +167,25 @@ function RecipeEditorLive({
   const pendingUncertain = useRef(false);
   const running = useRef(false);
   const locked = busy || !!pending.current || failure?.refreshDefinitions === true;
+  const draftDirty =
+    !created &&
+    ((!id &&
+      (terms.length !== 1 ||
+        terms.some(
+          (term, index) =>
+            (index === 0 && term.language !== locale) ||
+            !!term.label ||
+            !!term.description ||
+            !!term.aliases,
+        ))) ||
+      rows.some((row) =>
+        row.result?.ok
+          ? false
+          : row.source
+            ? statementDraftChanged(statementInput(row.source), row.statement) || row.original === true
+            : true,
+      ));
+  const pendingWrite = (pending.current !== null && pendingUncertain.current) || rows.some((row) => row.uncertain);
   const name = (id: string) => pickText(read?.release.properties[id]?.labels ?? {}, locale).text || id;
   const currentFields = read?.public
     ? [
@@ -279,7 +310,7 @@ function RecipeEditorLive({
     setFailure(undefined);
     setCorrections([]);
     try {
-      const result = await transport.create(pending.current);
+      const result = await transport.create(pending.current, wasUncertain);
       if (!lifetime.active()) return;
       if (result.ok) {
         setCreated(result);
@@ -694,6 +725,7 @@ function RecipeEditorLive({
           </Workspace>
         )
       )}
+      <RecipeNavigationGuard active={lifetime.active()} dirty={draftDirty} pending={pendingWrite} />
     </article>
   );
 }
@@ -775,8 +807,8 @@ function RecipeFieldLive({
       : undefined;
   async function submit() {
     if (!lifetime.active()) return;
-    if (!read.public || running.current || reviewRequired) return;
-    const wasUncertain = row.uncertain === true;
+    const wasUncertain = !!command && row.uncertain === true;
+    if (!read.public || running.current || (reviewRequired && !wasUncertain)) return;
     const pending = command ?? {
       id: read.public.subject.id,
       statement: structuredClone(row.statement),
@@ -786,7 +818,7 @@ function RecipeFieldLive({
     running.current = true;
     setBusy(true);
     try {
-      const next = await transport.propose(pending);
+      const next = await transport.propose(pending, wasUncertain);
       if (!lifetime.active()) return;
       onState({
         command: next.ok ? undefined : pending,
@@ -1063,11 +1095,11 @@ function RecipeFieldLive({
                 disabled={
                   disabled ||
                   busy ||
-                  reviewRequired ||
-                  (result && !result.ok && result.refreshDefinitions === true) ||
+                  (reviewRequired && !wasUncertain) ||
+                  (result && !result.ok && result.refreshDefinitions === true && !wasUncertain) ||
                   (definition.datatype === 'document' &&
                     (!authored || !row.original || !hasDocumentContent(authored.document))) ||
-                  (result && !result.ok && result.reason === 'stale')
+                  (result && !result.ok && result.reason === 'stale' && !wasUncertain)
                 }
                 onClick={() => void submit()}
               >
@@ -1078,5 +1110,89 @@ function RecipeFieldLive({
         )}
       </ContentItemFrame>
     </section>
+  );
+}
+
+function RecipeNavigationGuard({ active, dirty, pending }: { active: boolean; dirty: boolean; pending: boolean }) {
+  const protect = active && (dirty || pending);
+  const router = useRouter({ warn: false });
+  useEffect(() => {
+    if (!protect) return;
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', beforeUnload);
+    return () => window.removeEventListener('beforeunload', beforeUnload);
+  }, [protect]);
+
+  return router ? <RecipeRouterDepartureGuard protect={protect} pending={pending} /> : null;
+}
+
+function RecipeRouterDepartureGuard({ protect, pending }: { protect: boolean; pending: boolean }) {
+  const returnFocus = useRef<HTMLElement | null>(null);
+  const stayButton = useRef<HTMLButtonElement>(null);
+  const resolved = useRef(false);
+  const leaving = useRef(false);
+  const shouldBlockFn = useCallback(() => {
+    if (!protect) return false;
+    returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    resolved.current = false;
+    leaving.current = false;
+    return true;
+  }, [protect]);
+  const blocker = useBlocker({
+    shouldBlockFn,
+    disabled: !protect,
+    enableBeforeUnload: false,
+    withResolver: true,
+  });
+  const blockerRef = useRef(blocker);
+  blockerRef.current = blocker;
+  useLayoutEffect(
+    () => () => {
+      const current = blockerRef.current;
+      if (current.status === 'blocked' && !resolved.current) {
+        resolved.current = true;
+        current.reset();
+      }
+    },
+    [],
+  );
+  useEffect(() => {
+    if (!protect && blocker.status === 'blocked' && !resolved.current) {
+      resolved.current = true;
+      blocker.reset();
+    }
+  }, [protect, blocker]);
+
+  function resolve(leave: boolean) {
+    if (blocker.status !== 'blocked' || resolved.current) return;
+    resolved.current = true;
+    leaving.current = leave;
+    if (leave) blocker.proceed();
+    else blocker.reset();
+  }
+
+  return (
+    <AlertDialog open={blocker.status === 'blocked'} onOpenChange={(open) => !open && resolve(false)}>
+      <AlertDialogContent
+        initialFocus={stayButton}
+        finalFocus={() => (leaving.current ? false : returnFocus.current?.isConnected ? returnFocus.current : false)}
+      >
+        <AlertDialogHeader>
+          <AlertDialogTitle>{m.thread_authoring_discard_title()}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {pending ? m.thread_authoring_discard_pending() : m.thread_authoring_discard_unsaved()}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel ref={stayButton}>{m.thread_authoring_stay()}</AlertDialogCancel>
+          <AlertDialogAction variant="destructive" onClick={() => resolve(true)}>
+            {m.thread_authoring_discard()}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }

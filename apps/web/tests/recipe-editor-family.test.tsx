@@ -150,6 +150,7 @@ test('Recipe creation and current correction share complete frames with independ
     const loadCreation = creation.transport.load;
     const createCreation = creation.transport.create;
     const creationCommands: Parameters<typeof creation.transport.create>[0][] = [];
+    const creationReplays: boolean[] = [];
     let refuseCreation = true;
     let failCreationRead = false;
     const currentIngredientLabel = 'Ingredient after rereading the current release';
@@ -160,15 +161,19 @@ test('Recipe creation and current correction share complete frames with independ
       }
       return loadCreation();
     };
-    creation.transport.create = async (command) => {
+    creation.transport.create = async (command, replay) => {
       creationCommands.push(structuredClone(command));
+      creationReplays.push(replay === true);
       if (refuseCreation) {
         refuseCreation = false;
         failCreationRead = true;
         creation.release.properties['schema:recipeIngredient']!.labels.en = currentIngredientLabel;
         return { ok: false, reason: 'invalid', refreshDefinitions: true };
       }
-      return createCreation(command);
+      const result = await createCreation(command, replay);
+      if (!result.ok && result.reason === 'unavailable')
+        creation.release.properties['schema:recipeIngredient']!.datatype = 'string';
+      return result;
     };
     const item = recipeExample();
     item.statements['schema:recipeIngredient']![0]!.value = {
@@ -209,6 +214,19 @@ test('Recipe creation and current correction share complete frames with independ
     await show(pair());
     await until(() => host.querySelectorAll('select').length === 2);
     const [a, b] = articles() as [HTMLElement, HTMLElement];
+    const cleanDeparture = new window.Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(cleanDeparture);
+    expect(cleanDeparture.defaultPrevented).toBe(false);
+    const recipeLabel = input(a, m.catalogue_create_label());
+    await replace(recipeLabel, 'A retained draft');
+    const dirtyDeparture = new window.Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(dirtyDeparture);
+    expect(dirtyDeparture.defaultPrevented).toBe(true);
+    expect(recipeLabel.value).toBe('A retained draft');
+    await replace(recipeLabel, '');
+    const revertedDeparture = new window.Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(revertedDeparture);
+    expect(revertedDeparture.defaultPrevented).toBe(false);
     expect(a.querySelector('form')).not.toBeNull();
     expect(b.querySelector('form')).toBeNull();
     const baseline = structuredClone(correction.calls);
@@ -277,6 +295,7 @@ test('Recipe creation and current correction share complete frames with independ
     const independentFirst = posts(correction, '/candidates').find(
       (call) => (call.body as { statement: { property: { id: string } } }).statement.property.id === cookTime,
     )!;
+    correction.release.properties[cookTime]!.datatype = 'string';
 
     correction.setScenario('conflict');
     await act(async () => {
@@ -418,6 +437,7 @@ test('Recipe creation and current correction share complete frames with independ
     expect(creationCommands).toHaveLength(2);
     expect(creationCommands[0]!.key).not.toBe(creationCommands[1]!.key);
     expect(creationCommands[0]!.item).toEqual(creationCommands[1]!.item);
+    expect(creationCommands[1]).toEqual(creationCommands[2]);
     const createWrite = structuredClone(posts(creation, '/subjects')[0]!);
     expect(createWrite.authorization).toBe('Bearer fixture');
     expect(createWrite.body).toMatchObject({
@@ -430,6 +450,8 @@ test('Recipe creation and current correction share complete frames with independ
     creation.setScenario('reader-unavailable');
     await click(a, m.correction_retry());
     await until(() => a.textContent!.includes(m.catalogue_create_reader_unavailable()));
+    expect(creationCommands[1]).toEqual(creationCommands[2]);
+    expect(creationReplays).toEqual([false, false, true]);
     expect(posts(creation, '/subjects')).toHaveLength(2);
     expect(posts(creation, '/subjects')[1]).toEqual(createWrite);
     const createdCount = creation.calls.length;

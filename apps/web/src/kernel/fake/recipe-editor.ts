@@ -237,15 +237,17 @@ export function recipeFixture(scenario: RecipeScenario = 'ready', locale = 'en')
   if (scenario === 'empty') delete release.types['schema:Recipe'];
   const transport: RecipeTransport = {
     load: () => readRecipeEditor(client, locale),
-    create: (command) =>
+    create: (command, replay) =>
       createRecipe(
         client,
         new Request('https://site.invalid/api', { method: 'POST', headers: { authorization: 'Bearer fixture' } }),
         {},
         command,
         locale,
+        undefined,
+        replay,
       ),
-    propose: (command) => proposeRecipe(client, 'Bearer fixture', command, locale),
+    propose: (command, replay) => proposeRecipe(client, 'Bearer fixture', command, locale, replay),
     read: (id) => readCreatedSubject(client, id, locale),
   };
   const review = (property: string): CandidateTransport => ({
