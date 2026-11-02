@@ -7,7 +7,14 @@ import type { ProgressDetailOrigin } from './progress-session';
 import { m } from '../paraglide/messages.js';
 import { csrfHeaders } from '../threads/composer';
 import { publishProgressLog } from './logs-server';
-import type { PublishedLogPage, PublishedLogWriteResult } from './logs-read';
+import type { PublishedLogPage } from './logs-read';
+import {
+  beginPublication,
+  editPublication,
+  publicationDraft,
+  settlePublication,
+  type PublicationDraft,
+} from './logs-publication';
 import type { ProgressSessionPage } from './progress-reads';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -39,30 +46,13 @@ export function RelativeTime({ value }: { value: string }) {
   );
 }
 
-type PublicationIntent = { sessionId: string; note?: string; idempotencyKey: string };
-type PublicationLifetime = {
-  sessionId: string;
-  note: string;
-  key: string;
-  intent?: PublicationIntent;
-  flight?: object;
-  success?: Extract<PublishedLogWriteResult, { ok: true }>;
-  error: string | null;
-  listeners: Set<() => void>;
-};
 // Private same-owner intent survives a retired read/operation view. This is never authority.
-const publications = new WeakMap<object, PublicationLifetime>();
-function publicationLifetime(sessionId: string, originating?: ProgressDetailOrigin): PublicationLifetime {
+const publications = new WeakMap<object, PublicationDraft>();
+function publicationLifetime(sessionId: string, originating?: ProgressDetailOrigin): PublicationDraft {
   const key = originating?.lifetime ?? originating;
   const retained = key ? publications.get(key) : undefined;
   if (retained?.sessionId === sessionId) return retained;
-  const value: PublicationLifetime = {
-    sessionId,
-    note: '',
-    key: crypto.randomUUID(),
-    error: null,
-    listeners: new Set(),
-  };
+  const value = publicationDraft(sessionId);
   if (key) publications.set(key, value);
   return value;
 }
@@ -76,7 +66,7 @@ function PublishLog({
 }) {
   const router = useRouter();
   const [, render] = useState(0);
-  const owner = useRef<{ page: typeof page; originating: typeof originating; value: PublicationLifetime } | null>(null);
+  const owner = useRef<{ page: typeof page; originating: typeof originating; value: PublicationDraft } | null>(null);
   if (!owner.current || owner.current.originating !== originating || (!originating && owner.current.page !== page))
     owner.current = { page, originating, value: publicationLifetime(page.session.id, originating) };
   const lifetime = owner.current.value;
@@ -105,58 +95,36 @@ function PublishLog({
       lifetime.listeners.delete(notify);
     };
   }, [lifetime]);
-  function notify() {
-    lifetime.listeners.forEach((listener) => listener());
-  }
   function navigate(id: string) {
-    if (isCurrent()) window.location.assign(router.buildLocation({ to: '/logs/$id', params: { id } }).href);
+    if (!isCurrent()) return;
+    try {
+      window.location.assign(router.buildLocation({ to: '/logs/$id', params: { id } }).href);
+    } catch {
+      // A failed navigation is recovered by the retained Read log link. It is never
+      // reported as a failed publication or recovered by another mutation.
+    }
   }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canHandle() || lifetime.flight) return;
-    const headers = guard ? guard.headers() : csrfHeaders();
-    if (!headers) return;
     // A success observed during an authority pause remains a success. Explicitly
     // resuming it may navigate, but must never publish the same intent with a fresh key.
-    if (lifetime.success) {
-      navigate(lifetime.success.id);
+    if (lifetime.publishedId) {
+      navigate(lifetime.publishedId);
       return;
     }
-    const cleanNote = lifetime.note.trim();
-    lifetime.intent ??= {
-      sessionId: lifetime.sessionId,
-      ...(cleanNote ? { note: cleanNote } : {}),
-      idempotencyKey: lifetime.key,
-    };
-    const intent = lifetime.intent;
-    const flight = {};
-    lifetime.flight = flight;
-    lifetime.error = null;
-    notify();
-    const currentAttempt = () => lifetime.flight === flight && isCurrent();
+    const headers = guard ? guard.headers() : csrfHeaders();
+    if (!headers) return;
+    const attempt = beginPublication(lifetime);
+    if (!attempt) return;
     try {
-      const result = await publishProgressLog({ data: intent, headers });
+      const result = await publishProgressLog({ data: attempt.intent, headers });
       // Record the actual native outcome privately, even when this view has retired.
       // No replacement viewer can acquire this lifetime or its result.
-      if (result.ok && lifetime.flight === flight) lifetime.success = result;
-      if (!currentAttempt()) return;
-      if (!result.ok) {
-        lifetime.error = result.reason === 'closed' ? m.platform_closed_message() : m.library_logs_write_failed();
-        notify();
-        return;
-      }
-      navigate(result.id);
+      settlePublication(lifetime, attempt, result);
+      if (result.ok) navigate(result.id);
     } catch {
-      if (!currentAttempt()) return;
-      lifetime.error = m.library_logs_write_failed();
-      notify();
-    } finally {
-      // Authority is not the owner of physical completion. This cannot release a
-      // different lifetime's or a newer request's latch, and never retries a write.
-      if (lifetime.flight === flight) {
-        delete lifetime.flight;
-        notify();
-      }
+      settlePublication(lifetime, attempt, { ok: false, reason: 'unavailable' });
     }
   }
 
@@ -166,31 +134,50 @@ function PublishLog({
         {m.library_logs_publish_heading()}
       </h2>
       <p>{m.library_logs_description()}</p>
-      <Exposure operation="published_log.create">
-        <form className="space-y-3" onSubmit={(event) => void submit(event)}>
-          <label className="block space-y-1">
-            <span className="text-sm font-medium">{m.library_logs_publish_note()}</span>
-            <Textarea
-              aria-label={m.library_logs_publish_note()}
-              maxLength={1000}
-              value={lifetime.note}
-              onChange={(event) => {
-                if (!canHandle()) return;
-                lifetime.note = event.target.value;
-                notify();
-              }}
-            />
-          </label>
-          {lifetime.error ? (
-            <p role="alert" className="rounded-lg border border-border bg-card p-3">
-              {lifetime.error}
-            </p>
-          ) : null}
-          <Button type="submit" disabled={!!lifetime.flight}>
-            {m.library_logs_publish()}
-          </Button>
-        </form>
-      </Exposure>
+      {lifetime.publishedId ? (
+        <p role="status">
+          <Link
+            to="/logs/$id"
+            params={{ id: lifetime.publishedId }}
+            className={buttonClass}
+            onClick={(event) => {
+              if (!canHandle()) event.preventDefault();
+            }}
+          >
+            {m.library_logs_open()}
+          </Link>
+        </p>
+      ) : (
+        <Exposure operation="published_log.create">
+          <form className="space-y-3" onSubmit={(event) => void submit(event)}>
+            <label className="block space-y-1">
+              <span className="text-sm font-medium">{m.library_logs_publish_note()}</span>
+              <Textarea
+                aria-label={m.library_logs_publish_note()}
+                maxLength={1000}
+                readOnly={Boolean(lifetime.intent)}
+                value={lifetime.note}
+                onChange={(event) => {
+                  if (!canHandle()) return;
+                  editPublication(lifetime, event.target.value);
+                }}
+              />
+            </label>
+            {lifetime.failure ? (
+              <p role="alert" className="rounded-lg border border-border bg-card p-3">
+                {lifetime.failure === 'closed'
+                  ? m.platform_closed_message()
+                  : lifetime.failure === 'unavailable'
+                    ? m.library_publication_unknown()
+                    : m.library_logs_write_failed()}
+              </p>
+            ) : null}
+            <Button type="submit" disabled={!!lifetime.flight}>
+              {m.library_logs_publish()}
+            </Button>
+          </form>
+        </Exposure>
+      )}
     </section>
   );
 }
