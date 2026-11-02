@@ -433,6 +433,51 @@ test('JSON-RPC errors propagate and an exiting app-server rejects pending reques
   }
 });
 
+test('an idle active Goal waits while the host starts another manager, then inbox wakes the same thread', async () => {
+  const s = await setup();
+  try {
+    const manager = await s.managers.start(s.spec);
+    await s.notify({
+      method: 'turn/completed',
+      params: { threadId: manager.threadId, turn: { id: manager.activeTurnId, status: 'completed' } },
+    });
+    await s.notify({
+      method: 'thread/tokenUsage/updated',
+      params: { threadId: manager.threadId, tokenUsage: { total: { totalTokens: 500 } } },
+    });
+    expect(s.managers.get(manager.id)).toMatchObject({
+      status: 'running',
+      activeTurnId: null,
+      usage: { total: { totalTokens: 500 } },
+      goalState: { status: 'active', objective: s.spec.objective, tokenBudget: s.spec.budget },
+    });
+    await s.managers.start({ ...s.spec, id: 'second' });
+    expect(s.managers.get('second')).toMatchObject({ status: 'running', threadId: 'thread-2' });
+    expect(s.requests().filter((r) => r.method === 'turn/start' && r.params.threadId === manager.threadId)).toHaveLength(
+      1,
+    );
+    expect(
+      s.requests().some((r) =>
+        ['thread/fork', 'thread/goal/clear', 'thread/settings/update', 'turn/interrupt'].includes(r.method),
+      ),
+    ).toBe(false);
+    expect(s.requests().some((r) => r.method === 'thread/goal/set' && r.params.status === 'paused')).toBe(false);
+    s.inbox.deliver({ managerId: manager.id, kind: 'instruction', summary: 'Choose the next brief' });
+    await s.managers.wake(manager.id);
+    const wakes = s.requests().filter((r) => r.method === 'turn/start' && r.params.threadId === manager.threadId);
+    expect(wakes).toHaveLength(2);
+    expect(wakes[1].params.input).toEqual([{ type: 'text', text: 'Choose the next brief', text_elements: [] }]);
+    expect(s.managers.get(manager.id)).toMatchObject({
+      threadId: manager.threadId,
+      status: 'running',
+      usage: { total: { totalTokens: 500 } },
+      goalState: { status: 'active', objective: s.spec.objective, tokenBudget: s.spec.budget },
+    });
+  } finally {
+    await s.close();
+  }
+});
+
 test('controller inbox recovery wakes the same active Goal once without changing its lifecycle', async () => {
   const s = await setup();
   let recovered: ManagerSessions | undefined;
@@ -444,15 +489,27 @@ test('controller inbox recovery wakes the same active Goal once without changing
       method: 'turn/completed',
       params: { threadId: state.threadId, turn: { id: state.activeTurnId, status: 'completed' } },
     });
+    await s.notify({
+      method: 'thread/tokenUsage/updated',
+      params: { threadId: state.threadId, tokenUsage: { total: { totalTokens: 900 } } },
+    });
     expect(s.managers.get(state.id)).toMatchObject({
       status: 'running',
       activeTurnId: null,
+      usage: { total: { totalTokens: 900 } },
       goalState: { status: 'active', objective: s.spec.objective, tokenBudget: s.spec.budget },
     });
     expect(s.requests().filter((r) => r.method === 'turn/start')).toHaveLength(1);
+    s.inbox.deliver({ managerId: state.id, kind: 'instruction', summary: 'Decide before the host stops' });
+    await s.managers.wake(state.id);
+    expect(s.requests().filter((r) => r.method === 'turn/start')).toHaveLength(2);
+    await s.notify({
+      method: 'turn/completed',
+      params: { threadId: state.threadId, turn: { id: 'turn-2', status: 'completed' } },
+    });
     s.inbox.record(state.id, { kind: 'merged' });
     await s.managers.wake(state.id);
-    expect(s.requests().filter((r) => r.method === 'turn/start')).toHaveLength(1);
+    expect(s.requests().filter((r) => r.method === 'turn/start')).toHaveLength(2);
     // The managed daemon survives a host disconnect; retain that fake transport across the handoff.
     s.client.close = () => {};
     await s.managers.close();
@@ -463,12 +520,17 @@ test('controller inbox recovery wakes the same active Goal once without changing
     expect(recovered.get(state.id)).toMatchObject({
       threadId: state.threadId,
       status: 'running',
-      activeTurnId: 'turn-2',
+      activeTurnId: 'turn-3',
+      usage: { total: { totalTokens: 900 } },
       goalState: { status: 'active', objective: s.spec.objective, tokenBudget: s.spec.budget },
     });
     const wakeTurns = s.requests().filter((r) => r.method === 'turn/start');
-    expect(wakeTurns).toHaveLength(2);
+    expect(wakeTurns).toHaveLength(3);
     expect(wakeTurns[1].params).toMatchObject({
+      threadId: state.threadId,
+      input: [{ text: 'Decide before the host stops' }],
+    });
+    expect(wakeTurns[2].params).toMatchObject({
       threadId: state.threadId,
       input: [{ text: 'Committed while the host was down' }],
     });
@@ -481,12 +543,13 @@ test('controller inbox recovery wakes the same active Goal once without changing
     expect(s.inbox.notifications(state.id)).toHaveLength(0);
     await recovered.recover();
     await recovered.flush();
-    expect(s.requests().filter((r) => r.method === 'turn/start')).toHaveLength(2);
+    expect(s.requests().filter((r) => r.method === 'turn/start')).toHaveLength(3);
     expect(s.requests().filter((r) => r.method === 'turn/steer')).toHaveLength(0);
     expect(s.requests().filter((r) => r.method === 'thread/goal/set')).toHaveLength(1);
     expect(s.requests().some((r) => ['thread/fork', 'thread/goal/clear', 'turn/interrupt'].includes(r.method))).toBe(
       false,
     );
+    expect(recovered.get(state.id).usage).toEqual({ total: { totalTokens: 900 } });
   } finally {
     await recovered?.close();
     closeTransport();

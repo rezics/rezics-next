@@ -1624,7 +1624,9 @@ control-plane command already does.
 This controller behavior does not disable native Goal continuation. The installed `codex-cli 0.164.0` experimental
 bindings, generated with `codex app-server generate-ts --experimental`, expose no persistent idle-continuation setting
 in `ThreadGoalSetParams` or `ThreadSettingsUpdateParams`. `ThreadForkParams.deferGoalContinuation`
-only delays the fork's first continuation; automatic continuation resumes after the next explicit turn. The provider
+only delays the fork's first continuation; automatic continuation resumes after the next explicit turn. Regenerating
+those bindings from this installed CLI still yields only `threadId`, `origin`, `objective`, `status` and `tokenBudget`
+on `ThreadGoalSetParams`, and no continuation field on `ThreadSettingsUpdateParams`. The provider
 must add a persistent policy that keeps an active Goal and its budget tracked while waiting for an explicit controller
 turn. That policy must survive thread resume and explicit inbox turns without changing the objective, budget, usage,
 thread or worker sessions; it must leave autonomous controller work running. Integration requires a provider API that
