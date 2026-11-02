@@ -454,8 +454,11 @@ The workspace reuses the scalar editor's native value, qualifier and grouped-cit
 Invalid scalar feedback reuses the single-statement correction guidance and stable control associations; editing clears the
 submitted violations, and unresolved nested targets link to their matching section fallback.
 Existing unsupported parts stay intact. Names and descriptions use the separate actual terms PATCH editor;
-relations/credits use their exact-slot editor. Types with document fields link to the existing
-[authored composer](#original-authored-catalogue-text) at `/authored` for a new original-text candidate.
+relations/credits use their exact-slot editor. Relation qualifier selection only stages a choice; explicit Add
+rechecks the current field, datatype, composition position availability and sixteen-part limit, then keyboard Add
+focuses the exact new part. Decision: changed field or metadata observations clear the choice and require current
+re-selection; pointer use, refusal, moved focus and retired editing stay quiet. Types with document fields link to the
+existing [authored composer](#original-authored-catalogue-text) at `/authored` for a new original-text candidate.
 
 A contributor explicitly includes changed fields and submits at most twelve fields per workspace. Unchanged or
 excluded fields issue no request. Blank or incomplete values produce invalid drafts, never deletion or clearing.

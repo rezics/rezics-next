@@ -1,6 +1,6 @@
 import { catalogueEditor, useEditorLifetime, useCurrentReadingVisible } from './editor-lifetime';
 import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type MouseEvent } from 'react';
 import { useId } from 'react';
 import type { SubjectRead } from '@rezics/client';
 import { pickText } from '@rezics/composition';
@@ -32,6 +32,7 @@ import {
   type RelationProposal,
   type RelationTransport,
   type RelationQualifier,
+  type RelationField,
 } from '../../subject/relation-candidates';
 
 // Presentation only: native actions keep their own targets and focus, with no stretched row action.
@@ -111,6 +112,26 @@ function RelationEditorLive({
   const [candidate, setCandidate] = useState<Candidate>();
   const [rank, setRank] = useState<'normal' | 'preferred'>('normal');
   const [citation, setCitation] = useState('');
+  const [qualifierChoice, setQualifierChoice] = useState<{
+    field: RelationField;
+    definition: RelationQualifier;
+  }>();
+  const [qualifierHandoff, setQualifierHandoff] = useState(false);
+  const qualifierAdmission = useRef<object | null>(null);
+  const admission = {};
+  qualifierAdmission.current = admission;
+  const qualifierFocus = useRef<{
+    snak: Snak;
+    field: RelationField;
+    origin: HTMLButtonElement;
+    active: () => boolean;
+    target?: HTMLDivElement;
+    dispose: () => void;
+  } | null>(null);
+  const cancelQualifierFocus = () => {
+    qualifierFocus.current?.dispose();
+    qualifierFocus.current = null;
+  };
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<CandidateFailure | undefined>(initial && !initial.ok ? initial : undefined);
   const [confirmation, setConfirmation] = useState<'propose' | 'accept' | 'reject' | 'adopt'>();
@@ -183,6 +204,47 @@ function RelationEditorLive({
   };
   const current = read?.ok ? read : undefined;
   const field = current?.fields.find((field) => field.id === draft.property.id);
+  const qualifierAvailable = (definition: RelationQualifier) =>
+    ['string', 'external-id', 'url', 'wikibase-item'].includes(definition.datatype) &&
+    draft.qualifiers.length < 16 &&
+    (!composition ||
+      (composition.positionEditable &&
+        definition.id === 'schema:position' &&
+        !draft.qualifiers.some((part) => part.property.id === 'schema:position')));
+  const qualifierDefinition =
+    qualifierChoice && qualifierChoice.field === field
+      ? field?.qualifiers.find(
+          (item) =>
+            item.id === qualifierChoice.definition.id &&
+            item.datatype === qualifierChoice.definition.datatype &&
+            qualifierAvailable(item),
+        )
+      : undefined;
+  useLayoutEffect(() => {
+    if (qualifierChoice && (!qualifierDefinition || !visible)) setQualifierChoice(undefined);
+  }, [qualifierChoice, qualifierDefinition, visible]);
+  useLayoutEffect(() => {
+    const intent = qualifierFocus.current;
+    cancelQualifierFocus();
+    if (qualifierHandoff) setQualifierHandoff(false);
+    if (
+      !intent ||
+      !visible ||
+      !intent.active() ||
+      !lifetime.active() ||
+      intent.field !== field ||
+      !draft.qualifiers.includes(intent.snak) ||
+      !intent.origin.isConnected ||
+      intent.origin.ownerDocument.activeElement !== intent.origin ||
+      !intent.target?.isConnected
+    )
+      return;
+    const control = intent.target.querySelector<HTMLElement>(
+      'input:not(:disabled):not([readonly]):not([type="hidden"]), select:not(:disabled), button:not(:disabled)',
+    );
+    (control ?? intent.target).focus();
+  });
+  useLayoutEffect(() => cancelQualifierFocus, []);
   const publicRead = result?.public ?? current?.public;
   const concealed = failure?.reason === 'denied';
   const uncertain = failure?.reason === 'unavailable' && !!request.current;
@@ -254,6 +316,35 @@ function RelationEditorLive({
 
   function editable() {
     return lifetime.active() && !running.current && !request.current && !frozen;
+  }
+  function addQualifier(event: MouseEvent<HTMLButtonElement>) {
+    cancelQualifierFocus();
+    if (
+      qualifierAdmission.current !== admission ||
+      !visible ||
+      !editable() ||
+      !field ||
+      !qualifierDefinition ||
+      !qualifierAvailable(qualifierDefinition)
+    )
+      return;
+    const snak: Snak = {
+      property: { id: qualifierDefinition.id, data_type: qualifierDefinition.datatype },
+      value: { type: 'value', content: '' },
+    };
+    edit({ ...draft, qualifiers: [...draft.qualifiers, snak] });
+    setQualifierChoice(undefined);
+    const origin = event.currentTarget;
+    if (event.detail !== 0 || origin.ownerDocument.activeElement !== origin) return;
+    setQualifierHandoff(true);
+    origin.addEventListener('focusout', cancelQualifierFocus);
+    qualifierFocus.current = {
+      snak,
+      field,
+      origin,
+      active: mount.active,
+      dispose: () => origin.removeEventListener('focusout', cancelQualifierFocus),
+    };
   }
   function draftSlot(next = draft): RelationSlot | undefined {
     if (!field || !next.property.id) return;
@@ -647,7 +738,16 @@ function RelationEditorLive({
                         )}
                         <div className="space-y-3">
                           {draft.qualifiers.map((snak, index) => (
-                            <div key={`${snak.property.id}:${index}`} className="flex min-w-0 items-end gap-2">
+                            <div
+                              key={`${snak.property.id}:${index}`}
+                              ref={(node) => {
+                                if (node && qualifierFocus.current?.snak === snak) qualifierFocus.current.target = node;
+                              }}
+                              role="group"
+                              aria-label={name(snak.property.id)}
+                              tabIndex={-1}
+                              className="flex min-w-0 items-end gap-2 focus-visible:outline-2 focus-visible:outline-ring"
+                            >
                               <div className="min-w-0 flex-1">
                                 <fieldset
                                   disabled={
@@ -696,40 +796,31 @@ function RelationEditorLive({
                             </FieldLabel>
                             <NativeSelect
                               id={`${formId}-add-qualifier`}
-                              disabled={
-                                !!composition &&
-                                (!composition.positionEditable ||
-                                  draft.qualifiers.some((part) => part.property.id === 'schema:position'))
-                              }
-                              value=""
+                              disabled={!field.qualifiers.some(qualifierAvailable)}
+                              value={qualifierDefinition?.id ?? ''}
                               onChange={(event) => {
-                                if (!editable()) return;
-                                const definition = field.qualifiers.find((item) => item.id === event.target.value);
-                                if (definition)
-                                  edit({
-                                    ...draft,
-                                    qualifiers: [
-                                      ...draft.qualifiers,
-                                      {
-                                        property: { id: definition.id, data_type: definition.datatype },
-                                        value: { type: 'value', content: '' },
-                                      },
-                                    ],
-                                  });
+                                if (qualifierAdmission.current !== admission || !visible || !editable()) return;
+                                const definition = field.qualifiers.find(
+                                  (item) => item.id === event.target.value && qualifierAvailable(item),
+                                );
+                                setQualifierChoice(definition ? { field, definition } : undefined);
                               }}
                             >
                               <NativeSelectOption value="">{m.relation_add_qualifier({}, options)}</NativeSelectOption>
-                              {field.qualifiers
-                                .filter((item) => !composition || item.id === 'schema:position')
-                                .filter((item) =>
-                                  ['string', 'external-id', 'url', 'wikibase-item'].includes(item.datatype),
-                                )
-                                .map((item) => (
-                                  <NativeSelectOption key={item.id} value={item.id}>
-                                    {item.label}
-                                  </NativeSelectOption>
-                                ))}
+                              {field.qualifiers.filter(qualifierAvailable).map((item) => (
+                                <NativeSelectOption key={item.id} value={item.id}>
+                                  {item.label}
+                                </NativeSelectOption>
+                              ))}
                             </NativeSelect>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              disabled={!qualifierDefinition && !qualifierHandoff}
+                              onClick={addQualifier}
+                            >
+                              {m.relation_add_qualifier({}, options)}
+                            </Button>
                           </Field>
                         </div>
                         {!!draft.references.length && (

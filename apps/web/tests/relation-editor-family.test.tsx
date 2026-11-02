@@ -950,3 +950,129 @@ test('Relation draft revisions retire retained input callbacks while current mou
     await ui.close();
   }
 });
+
+test('Relation qualifier choice stages without draft mutation; only a current explicit Add admits and orients', async () => {
+  const ui = await mounted();
+  const {
+    window,
+    host,
+    user,
+    within,
+    render,
+    click,
+    select,
+    region,
+    RelationEditor,
+    relationFixture,
+    relationProperty,
+    m,
+  } = ui;
+  try {
+    const fixture = relationFixture();
+    const initial = await fixture.transport.read();
+    let dirty = false;
+    const editor = (positionEditable = true) =>
+      h(RelationEditor, {
+        id: fixture.id,
+        locale: 'en',
+        initial,
+        transport: fixture.transport,
+        search: async () => [],
+        composition: { statement: fixture.draft, slot: fixture.slot, positionEditable },
+        navigation: (state) => {
+          dirty = state.dirty;
+          return null;
+        },
+      });
+    await render(editor());
+    const chooser = within(region()).getByRole('combobox', { name: m.relation_qualifier() }) as HTMLSelectElement;
+    const add = () => within(region()).getByRole('button', { name: m.relation_add_qualifier() }) as HTMLButtonElement;
+    chooser.focus();
+    // A native keyboard selection emits change; happy-dom does not implement select arrow defaults.
+    await act(async () => {
+      await user.keyboard('{ArrowDown}');
+      chooser.value = 'schema:position';
+      chooser.dispatchEvent(new window.Event('change', { bubbles: true }));
+    });
+    expect(chooser.value).toBe('schema:position');
+    expect(dirty).toBe(false);
+    expect(region().querySelector('input[id$="qualifier-2"]')).toBeNull();
+    expect(fixture.calls).toHaveLength(1);
+    await act(async () => {
+      add().focus();
+      await user.keyboard('{Enter}');
+    });
+    const position = region().querySelector('input[id$="qualifier-2"]') as HTMLInputElement;
+    expect(position).not.toBeNull();
+    expect(window.document.activeElement).toBe(position);
+    expect(dirty).toBe(true);
+    expect(chooser.value).toBe('');
+    expect(add().disabled).toBe(true);
+    expect(region().querySelectorAll('input[id*="-qualifier-"]')).toHaveLength(2);
+    expect((region().querySelector('input[id$="qualifier-1"]') as HTMLInputElement).value).toBe('Original credit');
+    expect(within(region()).getByRole('link', { name: 'https://example.org/credits' })).toBeTruthy();
+    expect(fixture.calls).toHaveLength(1);
+
+    // A choice withdrawn by a composition restriction cannot add when that restriction returns.
+    await render(null);
+    await render(editor());
+    await select(region(), m.relation_qualifier(), 'schema:position');
+    await render(editor(false));
+    await render(editor());
+    expect((within(region()).getByRole('combobox', { name: m.relation_qualifier() }) as HTMLSelectElement).value).toBe(
+      '',
+    );
+    await click(region(), m.relation_add_qualifier());
+    expect(region().querySelector('input[id$="qualifier-2"]')).toBeNull();
+    expect(dirty).toBe(false);
+
+    // Moving away and back before the admission commits cancels keyboard orientation.
+    await select(region(), m.relation_qualifier(), 'schema:position');
+    const origin = add();
+    const moveFocus = () => {
+      (within(region()).getByRole('textbox', { name: m.relation_citation() }) as HTMLElement).focus();
+      origin.focus();
+    };
+    host.addEventListener('click', moveFocus, { once: true });
+    await act(async () => {
+      origin.focus();
+      origin.click();
+    });
+    expect(region().querySelector('input[id$="qualifier-2"]')).not.toBeNull();
+    expect(window.document.activeElement).not.toBe(region().querySelector('input[id$="qualifier-2"]'));
+
+    // Two current fields may admit the same qualifier, but a field change never carries the choice over.
+    await render(null);
+    if (!initial.ok) throw new Error('Expected fixture read');
+    const fields = [
+      ...initial.fields,
+      { ...initial.fields.find((field) => field.id === relationProperty)!, id: 'test:other' },
+    ];
+    await render(
+      h(RelationEditor, {
+        id: fixture.id,
+        locale: 'en',
+        initial: { ...initial, fields },
+        transport: fixture.transport,
+        search: async () => [],
+      }),
+    );
+    await select(region(), m.relation_property(), relationProperty);
+    await select(region(), m.relation_qualifier(), 'wdt:P1932');
+    await select(region(), m.relation_property(), 'test:other');
+    const currentChooser = within(region()).getByRole('combobox', {
+      name: m.relation_qualifier(),
+    }) as HTMLSelectElement;
+    expect(currentChooser.value).toBe('');
+    await click(region(), m.relation_add_qualifier());
+    expect(region().querySelector('input[id$="qualifier-0"]')).toBeNull();
+    await select(region(), m.relation_qualifier(), 'wdt:P1932');
+    await click(region(), m.relation_add_qualifier());
+    expect(region().querySelector('input[id$="qualifier-0"]')).not.toBeNull();
+    expect(window.document.activeElement).not.toBe(region().querySelector('input[id$="qualifier-0"]'));
+    expect(currentChooser.value).toBe('');
+    expect(host.querySelectorAll('input[id*="-qualifier-"]')).toHaveLength(1);
+  } finally {
+    await ui.close();
+  }
+});
