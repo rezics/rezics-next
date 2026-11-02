@@ -43,7 +43,7 @@ import { evidenceBundle } from './evidence.ts';
 import { consult } from './consult.ts';
 import { makeRecord, readMeasurement, readLogTail, reportedApproaches, CHECK_HOST_TRANSPORT } from './records.ts';
 import { readRouting } from './routing.ts';
-import { settle } from './settle.ts';
+import { isSqliteContention, settle, SETTLEMENT_CONTENTION_BACKOFF_MS } from './settle.ts';
 import { firstFailure } from './merge.ts';
 import {
   canonicalConflictPaths,
@@ -861,6 +861,25 @@ export class WorkerJob implements GateOutcomeSink {
     reportToSupermanager = false,
   ): Promise<void> {
     if (error instanceof StaleAttemptError) return;
+    if (isSqliteContention(error)) {
+      // Another process held the store's lock through every settlement try. The worker's exit and work are intact, so
+      // this is not its failure: release the attempt to the host's orphan sweep, which settles it again.
+      console.error(
+        `Settlement of ${ref.taskId} attempt ${ref.attempt} deferred by store contention: ${String(error)}`,
+      );
+      for (const pause of [0, ...SETTLEMENT_CONTENTION_BACKOFF_MS]) {
+        await Bun.sleep(pause);
+        try {
+          this.tasks.store.updateAttempt(ref, (value) => {
+            value.driver = null;
+          });
+          return;
+        } catch (clearing) {
+          if (!isSqliteContention(clearing)) throw clearing;
+        }
+      }
+      return;
+    }
     const lease = leaseHeld
       ? undefined
       : await acquireDirectoryLeaseWaiting(join(this.tasks.settings.stateDirectory, 'leases', ref.taskId));

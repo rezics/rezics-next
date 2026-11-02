@@ -14,7 +14,23 @@ import { git } from './tasks.ts';
 import { completeWorkerSourceBaseline } from './conflict-progress.ts';
 import { harvestContinuations } from './continuation.ts';
 
-/** Await the worker's exit notification. No model, interval, or sleep loop participates in settlement. */
+const SQLITE_CONTENTION = /SQLITE_(?:BUSY|LOCKED)|database (?:table )?is locked/i;
+/** Another process held the store's write lock longer than the busy timeout. */
+export function isSqliteContention(error: unknown): boolean {
+  const code = (error as { code?: unknown } | null)?.code;
+  return (
+    (typeof code === 'string' && SQLITE_CONTENTION.test(code)) ||
+    (error instanceof Error && SQLITE_CONTENTION.test(error.message))
+  );
+}
+/** Pauses between settlement write tries; each try already waits the store's busy timeout. */
+export const SETTLEMENT_CONTENTION_BACKOFF_MS = [500, 1_000, 2_000, 4_000, 8_000];
+
+/**
+ * Await the worker's exit notification. No model, interval, or sleep loop participates in settlement. Git and other
+ * child processes run outside the store's write transactions, so settlement never holds the lock while they run, and
+ * a write that meets another process's lock is retried: contention is not a worker failure.
+ */
 export async function settle(
   tasks: WorkerTasks,
   worker: Pick<RunningWorker, 'attempt' | 'exited' | 'logStartOffset' | 'resuming'>,
@@ -29,6 +45,16 @@ export async function settle(
     code = -1;
   }
   const store = tasks.store;
+  const write = async (action: () => void): Promise<void> => {
+    for (let index = 0; ; index++) {
+      try {
+        return store.write(ref, action);
+      } catch (error) {
+        if (!isSqliteContention(error) || index >= SETTLEMENT_CONTENTION_BACKOFF_MS.length) throw error;
+        await Bun.sleep(SETTLEMENT_CONTENTION_BACKOFF_MS[index]!);
+      }
+    }
+  };
   const runEvent = store
     .events(ref.taskId, ref.attempt)
     .filter((event) => event.kind === 'worker-run-started')
@@ -75,7 +101,17 @@ export async function settle(
     let queued = false;
     let finished = false;
     let exited = false;
-    store.write(ref, () => {
+    let bundle = false;
+    // Whether the branch has commits matters only for a nonzero exit without a session.
+    let committed = false;
+    if (code !== null && code !== 0)
+      try {
+        const task = store.task(ref.taskId);
+        committed = /^[1-9]\d*$/.test(git(task.worktree, ['rev-list', '--count', `${task.base}..HEAD`]).trim());
+      } catch {
+        /* An unreadable branch counts as having no commits. */
+      }
+    await write(() => {
       if (
         store.events(ref.taskId).some((event) => event.attempt === ref.attempt && event.kind === 'landing-requested')
       ) {
@@ -183,15 +219,7 @@ export async function settle(
         }
       // A CLI can fail before opening a session, so there is no structured event in its JSONL log.
       // Preserve that launch failure on the attempt and keep it out of the landing queue.
-      if (
-        !finalMeasurement.session &&
-        code !== null &&
-        code !== 0 &&
-        !finalMeasurement.failureKind &&
-        !git(task.worktree, ['rev-list', '--count', `${task.base}..HEAD`])
-          .trim()
-          .match(/^[1-9]\d*$/)
-      ) {
+      if (!finalMeasurement.session && code !== null && code !== 0 && !finalMeasurement.failureKind && !committed) {
         let stderr = '';
         try {
           stderr = readFileSync(`${attempt.logPath}.err`, 'utf8').trim();
@@ -222,7 +250,7 @@ export async function settle(
         a.approaches.push(...reportedApproaches(finalMeasurement.result, agentAdapter(attempt.profile.cli)));
       });
       store.putRecord(makeRecord(task, attempt, finalMeasurement));
-      evidenceBundle(task, store.attempt(ref));
+      bundle = true;
       if (finalMeasurement.failureKind && !proofTask) return;
       if (proofTask && proofObservation) {
         const run = task.proofRun;
@@ -264,9 +292,13 @@ export async function settle(
         });
         return;
       }
-      tasks.commitFinishedWork(task, ref.attempt);
       finished = true;
     });
+    if (bundle) evidenceBundle(store.task(ref.taskId), store.attempt(ref));
+    if (finished) {
+      store.assertCurrent(ref);
+      tasks.commitFinishedWork(store.task(ref.taskId), ref.attempt);
+    }
     // Continuation briefs move to the Goal backlog when the attempt ends, whatever its result.
     if (exited)
       try {
@@ -289,8 +321,8 @@ export async function settle(
           /* A malformed or legacy source baseline cannot establish historical worker progress. */
         }
       }
-      store.write(ref, () => {
-        evidenceBundle(task, store.attempt(ref));
+      evidenceBundle(task, store.attempt(ref));
+      await write(() => {
         store.updateTask(ref, (t) => {
           t.state = 'landing';
         });

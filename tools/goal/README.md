@@ -932,6 +932,12 @@ newer target, changed paths or a new worker commit remains retryable.
 
 Attempts persist the driver process identity alongside the worker identity. Orphan recovery waits for the worker group to exit, then settles its run log under the task lifecycle lease; unexpected driver exceptions are recorded as environment failures and delivered to the manager.
 
+Settlement runs Git (commit of leftover work, evidence bundles, branch checks) outside the store's write
+transactions, so it never holds the SQLite lock while a child process runs. A settlement write that meets another
+process's lock beyond the busy timeout is retried after 0.5, 1, 2, 4 and 8 seconds; a successful exit then lands once,
+as if there had been no contention. If the lock outlasts every try, the attempt is not classified as a worker failure:
+its driver is released and the host's orphan sweep settles the same exit again.
+
 Process cleanup verifies the leader's PID, start time, boot and detached group before sending signals. A reused
 leader PID may settle only when the original group has no live members and the kernel confirms it is absent with
 signal zero. The replacement incarnation receives no termination signal. A vanished leader with surviving original
