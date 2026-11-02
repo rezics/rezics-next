@@ -1,14 +1,173 @@
-import { afterAll, expect, test } from 'bun:test';
+import { afterAll, expect, test as bunTest } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
+import { cleanupAll, ownNodeProcess, withCleanup, type ProcessCustody } from './support/server-custody.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
-import { chromium, type Browser, type Locator, type Page } from 'playwright';
+import { chromium, type Browser, type BrowserContext, type BrowserContextOptions, type Locator, type Page } from 'playwright';
 import fixtures from '../src/kernel/fixtures.json';
 import { createFakeKernelFetch } from '../src/kernel/fake.ts';
 
 const app = join(import.meta.dir, '..');
+let child: ChildProcess | undefined;
+let serverCustody: ProcessCustody | undefined;
+let started: Promise<string> | undefined;
+let browser: Browser | undefined;
+let browserLaunch: Promise<Browser> | undefined;
+let browserClosing: Promise<void> | undefined;
+let teardownStarted = false;
+let cleanupPromise: Promise<void> | undefined;
+const ownedContexts = new Set<BrowserContext>();
+const pendingContextSetups = new Set<Promise<unknown>>();
+const contextClosures = new WeakMap<BrowserContext, Promise<void>>();
+const failedContextSetups = new WeakSet<BrowserContext>();
+
+type LifetimeTestOperation = () => unknown | PromiseLike<unknown>;
+
+function test(name: string, operation: LifetimeTestOperation, timeoutMs?: number) {
+  return bunTest(
+    name,
+    async () => {
+      const contextsBefore = new Set(ownedContexts);
+      let primary: unknown;
+      let failed = false;
+      try {
+        await operation();
+      } catch (error) {
+        primary = error;
+        failed = true;
+      }
+      const contexts = [...ownedContexts].filter(
+        (context) => !contextsBefore.has(context) && !failedContextSetups.has(context),
+      );
+      const results = await Promise.allSettled(contexts.map(closeContextAttempt));
+      const cleanupErrors = results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
+      if (failed && cleanupErrors.length > 0)
+        throw new AggregateError([primary, ...cleanupErrors], `${name} and browser context cleanup both failed`, {
+          cause: primary,
+        });
+      if (failed) throw primary;
+      if (cleanupErrors.length > 0)
+        throw new AggregateError(cleanupErrors, `${name} browser context cleanup failed`);
+    },
+    timeoutMs,
+  );
+}
+
+function closeContextAttempt(context: BrowserContext): Promise<void> {
+  let closing = contextClosures.get(context);
+  if (!closing) {
+    closing = cleanupAll([
+      { label: 'browser context', run: () => context.close(), timeoutMs: 5000 },
+    ]);
+    contextClosures.set(context, closing);
+    void closing.catch(() => {});
+  }
+  return closing;
+}
+
+async function closeContext(context: BrowserContext): Promise<void> {
+  // The owning test wrapper reports this cached failure together with its primary assertion failure.
+  await closeContextAttempt(context).catch(() => {});
+}
+
+function closeBrowserHandle(instance: Browser): Promise<void> {
+  browserClosing ??= cleanupAll([
+    { label: 'Playwright browser', run: () => instance.close(), timeoutMs: 5000 },
+  ]);
+  void browserClosing.catch(() => {});
+  return browserClosing;
+}
+
+function launchBrowser(): Promise<Browser> {
+  if (teardownStarted) return Promise.reject(new Error('Browser launch requested after suite teardown began'));
+  browserLaunch ??= chromium.launch().then(async (instance) => {
+    browser = instance;
+    if (teardownStarted) {
+      await closeBrowserHandle(instance);
+      throw new Error('Browser launch completed after suite teardown began');
+    }
+    return instance;
+  });
+  void browserLaunch.catch(() => {});
+  return browserLaunch;
+}
+
+async function withBrowserContext<T>(
+  options: BrowserContextOptions,
+  prepare: (context: BrowserContext) => Promise<T>,
+): Promise<{ context: BrowserContext; value: T }> {
+  let context: BrowserContext | undefined;
+  let complete = false;
+  const operation = withCleanup(
+    async () => {
+      const instance = await launchBrowser();
+      context = await instance.newContext(options);
+      ownedContexts.add(context);
+      if (teardownStarted) throw new Error('Browser context opened after suite teardown began');
+      const value = await prepare(context);
+      if (teardownStarted) throw new Error('Browser context setup completed after suite teardown began');
+      complete = true;
+      return { context, value };
+    },
+    [
+      {
+        label: 'partial browser context setup',
+        run: () => (complete || !context ? undefined : closeContextAttempt(context)),
+        timeoutMs: 6000,
+      },
+    ],
+  );
+  pendingContextSetups.add(operation);
+  try {
+    return await operation;
+  } catch (error) {
+    if (context) failedContextSetups.add(context);
+    throw error;
+  } finally {
+    pendingContextSetups.delete(operation);
+  }
+}
+
+async function closeBrowser(): Promise<void> {
+  let instance = browser;
+  if (!instance && browserLaunch) {
+    try {
+      instance = await browserLaunch;
+    } catch {
+      instance = browser;
+    }
+  }
+  if (instance) await closeBrowserHandle(instance);
+}
+
+function cleanupSuite(): Promise<void> {
+  return (cleanupPromise ??= (async () => {
+    teardownStarted = true;
+    const contextActions = [...ownedContexts].map((context, index) => ({
+      label: `browser context ${index + 1}`,
+      run: () => closeContextAttempt(context),
+      timeoutMs: 6000,
+    }));
+    const setupActions = [...pendingContextSetups].map((setup, index) => ({
+      label: `pending browser context setup ${index + 1}`,
+      run: async () => {
+        await setup.catch(() => {});
+      },
+      timeoutMs: 7000,
+    }));
+    await withCleanup(
+      () => cleanupAll([...contextActions, ...setupActions]),
+      [
+        { label: 'Playwright browser', run: closeBrowser, timeoutMs: 7000 },
+        { label: 'fake API listener', run: () => fake.stop(true), timeoutMs: 7000 },
+        { label: 'Vite process group', run: () => serverCustody?.close(), timeoutMs: 8000 },
+      ],
+    );
+  })());
+}
+
 const timeout = 300_000;
 const clientId = 'rezics-website';
 const session = '__Host-rezics_session';
@@ -311,18 +470,17 @@ function freePort(): Promise<number> {
     probe.once('error', reject);
     probe.listen(0, '127.0.0.1', () => {
       const port = (probe.address() as { port: number }).port;
-      probe.close(() => resolve(port));
+      probe.close((error) => (error ? reject(error) : resolve(port)));
     });
   });
 }
-let child: ChildProcess | undefined;
-let started: Promise<string> | undefined;
 function site(): Promise<string> {
   started ??= (async () => {
     const port = await freePort();
+    const origin = `http://127.0.0.1:${port}`;
     let output = '';
-    const keep = (chunk: Buffer) => {
-      output = (output + chunk.toString()).slice(-8000);
+    const keep = (chunk: Uint8Array) => {
+      output = (output + Buffer.from(chunk).toString()).slice(-8000);
     };
     child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
       cwd: app,
@@ -338,20 +496,39 @@ function site(): Promise<string> {
         WEBSITE_SCOPES: scopes.join(' '),
       },
     });
-    child.stdout!.on('data', keep);
-    child.stderr!.on('data', keep);
-    const origin = `http://127.0.0.1:${port}`;
+    serverCustody = ownNodeProcess(child, {
+      label: 'Vite dev server',
+      outputLimit: 8000,
+      onOutput: keep,
+    });
+    let spawnError: Error | undefined;
+    child.once('error', (error) => {
+      spawnError = error;
+    });
     const deadline = Date.now() + 150_000;
-    for (;;) {
-      if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
-      try {
-        const response = await fetch(`${origin}/en`, { redirect: 'manual', signal: AbortSignal.timeout(60_000) });
-        if (response.status < 500) return origin;
-      } catch {
-        /* wait for Vite */
+    try {
+      for (;;) {
+        if (spawnError) throw new Error(`dev server spawn failed: ${spawnError.message}\n${output}`, { cause: spawnError });
+        if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
+        try {
+          const response = await fetch(`${origin}/en`, {
+            redirect: 'manual',
+            signal: AbortSignal.timeout(60_000),
+          });
+          if (response.status < 500) return origin;
+        } catch {
+          // The dev server is still starting.
+        }
+        if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${output}`);
+        await Bun.sleep(500);
       }
-      if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${output}`);
-      await Bun.sleep(500);
+    } catch (error) {
+      return await withCleanup(
+        () => {
+          throw error;
+        },
+        [{ label: 'Vite startup process group', run: () => serverCustody!.close(), timeoutMs: 8000 }],
+      );
     }
   })();
   return started;
@@ -384,51 +561,54 @@ async function signIn(returnTo = `/en/subjects/${subjectId}`) {
   expect([302, 303]).toContain(answer.status);
   return cookieValue(answer, session)!;
 }
-let browser: Browser | undefined;
 async function open(path: string, signedIn = true): Promise<{ page: Page; origin: string }> {
   const sessionCookie = signedIn ? await signIn(path) : undefined;
   const origin = await site();
-  browser ??= await chromium.launch();
-  const context = await browser.newContext({
-    viewport: { width: 1280, height: 860 },
-    reducedMotion: 'reduce',
-    javaScriptEnabled: true,
-  });
-  if (sessionCookie)
-    await context.addCookies([
-      {
-        name: session,
-        value: sessionCookie,
-        domain: '127.0.0.1',
-        path: '/',
-        httpOnly: true,
-        secure: true,
-        sameSite: 'Lax',
-      },
-    ]);
-  const page = await context.newPage();
-  const browserErrors: string[] = [];
-  page.on('pageerror', (error) => browserErrors.push(error.message));
-  page.on('console', (message) => {
-    if (message.type() === 'error') browserErrors.push(message.text());
-  });
-  page.on('requestfailed', (request) =>
-    browserErrors.push(`${request.url()}: ${request.failure()?.errorText ?? 'failed'}`),
+  const { value } = await withBrowserContext(
+    {
+      viewport: { width: 1280, height: 860 },
+      reducedMotion: 'reduce',
+      javaScriptEnabled: true,
+    },
+    async (context) => {
+      if (sessionCookie)
+        await context.addCookies([
+          {
+            name: session,
+            value: sessionCookie,
+            domain: '127.0.0.1',
+            path: '/',
+            httpOnly: true,
+            secure: true,
+            sameSite: 'Lax',
+          },
+        ]);
+      const page = await context.newPage();
+      const browserErrors: string[] = [];
+      page.on('pageerror', (error) => browserErrors.push(error.message));
+      page.on('console', (message) => {
+        if (message.type() === 'error') browserErrors.push(message.text());
+      });
+      page.on('requestfailed', (request) =>
+        browserErrors.push(`${request.url()}: ${request.failure()?.errorText ?? 'failed'}`),
+      );
+      page.setDefaultTimeout(5_000);
+      page.setDefaultNavigationTimeout(120_000);
+      await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
+      try {
+        await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
+        await page
+          .locator(signedIn ? '#account-menu-button' : '[data-session-slot] a[href^="/auth/sign-in"]')
+          .waitFor({ timeout: 120_000 });
+      } catch (error) {
+        throw new Error(
+          `${String(error)}; page=${await page.locator('body').innerText()}; browser=${browserErrors.join(' | ')}`,
+        );
+      }
+      return { page, origin };
+    },
   );
-  page.setDefaultTimeout(5_000);
-  page.setDefaultNavigationTimeout(120_000);
-  await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
-  try {
-    await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
-    await page
-      .locator(signedIn ? '#account-menu-button' : '[data-session-slot] a[href^="/auth/sign-in"]')
-      .waitFor({ timeout: 120_000 });
-  } catch (error) {
-    throw new Error(
-      `${String(error)}; page=${await page.locator('body').innerText()}; browser=${browserErrors.join(' | ')}`,
-    );
-  }
-  return { page, origin };
+  return value;
 }
 async function eventually(check: () => boolean | Promise<boolean>) {
   const deadline = Date.now() + 10_000;
@@ -446,14 +626,7 @@ async function pick(page: Page, select: Locator, name: string) {
   await page.getByRole('option', { name, exact: true }).click();
 }
 afterAll(async () => {
-  await browser?.close();
-  fake.stop(true);
-  if (child?.pid)
-    try {
-      process.kill(-child.pid, 'SIGTERM');
-    } catch {
-      /* dev server already exited */
-    }
+  await cleanupSuite();
 });
 
 test(
@@ -501,7 +674,7 @@ test(
       expect(calls.filter((call) => call.method === 'PUT')).toHaveLength(1);
     } finally {
       releaseWrite?.();
-      await page.context().close();
+      await closeContext(page.context());
     }
   },
   timeout,
@@ -577,7 +750,7 @@ test(
       expect(remove.key).toMatch(/^[0-9a-f-]{36}$/i);
       expect(remove.query).toContain('revision=8');
     } finally {
-      await page.context().close();
+      await closeContext(page.context());
     }
   },
   timeout,
@@ -602,7 +775,7 @@ test(
       await menu.getByRole('button', { name: /full shelf/i }).click();
       await eventually(async () => /5,?000/.test(await page.getByRole('alert').innerText()));
     } finally {
-      await page.context().close();
+      await closeContext(page.context());
     }
   },
   timeout,
@@ -626,7 +799,7 @@ test(
       expect(new URLSearchParams(read.query).get('view')).toBe('FULL');
       expect(new URLSearchParams(read.query).get('limit')).toBe('100');
     } finally {
-      await page.context().close();
+      await closeContext(page.context());
     }
   },
   timeout,
@@ -648,7 +821,7 @@ test(
       );
       expect(new URL(page.url()).origin).toBe(origin);
     } finally {
-      await page.context().close();
+      await closeContext(page.context());
     }
   },
   timeout,
@@ -667,7 +840,7 @@ test(
       const publicRead = calls.find((call) => call.path === `/v1/subjects/${subjectId}/collections`)!;
       expect(publicRead.authorization).toBeNull();
     } finally {
-      await page.context().close();
+      await closeContext(page.context());
     }
   },
   timeout,

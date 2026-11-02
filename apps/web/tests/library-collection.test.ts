@@ -1,4 +1,5 @@
 import { afterAll, expect, test } from 'bun:test';
+import { cleanupAll, ownNodeProcess, withCleanup, type ProcessCustody } from './support/server-custody.ts';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
@@ -335,21 +336,30 @@ function freePort(): Promise<number> {
     probe.once('error', reject);
     probe.listen(0, '127.0.0.1', () => {
       const { port } = probe.address() as { port: number };
-      probe.close(() => resolve(port));
+      probe.close((error) => (error ? reject(error) : resolve(port)));
     });
   });
 }
 
 let child: ChildProcess | undefined;
+let serverCustody: ProcessCustody | undefined;
 let started: Promise<string> | undefined;
+let cleanupPromise: Promise<void> | undefined;
 
-// The documented command, pointed at the fake through the environment it reads in development.
+function cleanupSuite(): Promise<void> {
+  return (cleanupPromise ??= cleanupAll([
+    { label: 'fake API listener', run: () => fake.stop(true), timeoutMs: 7000 },
+    { label: 'Vite process group', run: () => serverCustody?.close(), timeoutMs: 8000 },
+  ]));
+}
+
 function site(): Promise<string> {
   started ??= (async () => {
     const port = await freePort();
+    const origin = `http://127.0.0.1:${port}`;
     let output = '';
-    const keep = (chunk: Buffer) => {
-      output = (output + chunk.toString()).slice(-8000);
+    const keep = (chunk: Uint8Array) => {
+      output = (output + Buffer.from(chunk).toString()).slice(-8000);
     };
     child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
       cwd: app,
@@ -365,20 +375,39 @@ function site(): Promise<string> {
         WEBSITE_SCOPES: scopes.join(' '),
       },
     });
-    child.stdout!.on('data', keep);
-    child.stderr!.on('data', keep);
-    const origin = `http://127.0.0.1:${port}`;
+    serverCustody = ownNodeProcess(child, {
+      label: 'Vite dev server',
+      outputLimit: 8000,
+      onOutput: keep,
+    });
+    let spawnError: Error | undefined;
+    child.once('error', (error) => {
+      spawnError = error;
+    });
     const deadline = Date.now() + 150_000;
-    for (;;) {
-      if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
-      try {
-        const response = await fetch(`${origin}/en`, { redirect: 'manual', signal: AbortSignal.timeout(60_000) });
-        if (response.status < 500) return origin;
-      } catch {
-        // The dev server is still starting.
+    try {
+      for (;;) {
+        if (spawnError) throw new Error(`dev server spawn failed: ${spawnError.message}\n${output}`, { cause: spawnError });
+        if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
+        try {
+          const response = await fetch(`${origin}/en`, {
+            redirect: 'manual',
+            signal: AbortSignal.timeout(60_000),
+          });
+          if (response.status < 500) return origin;
+        } catch {
+          // The dev server is still starting.
+        }
+        if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${output}`);
+        await Bun.sleep(500);
       }
-      if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${output}`);
-      await Bun.sleep(500);
+    } catch (error) {
+      return await withCleanup(
+        () => {
+          throw error;
+        },
+        [{ label: 'Vite startup process group', run: () => serverCustody!.close(), timeoutMs: 8000 }],
+      );
     }
   })();
   return started;
@@ -445,14 +474,8 @@ function links(html: string) {
   }
   return found;
 }
-afterAll(() => {
-  fake.stop(true);
-  if (child?.pid)
-    try {
-      process.kill(-child.pid, 'SIGTERM');
-    } catch {
-      // The dev server has already exited.
-    }
+afterAll(async () => {
+  await cleanupSuite();
 });
 
 test(
