@@ -265,6 +265,18 @@ export async function purgeOwnedGraphPage(pool: Pool, input: OwnedGraphInput): P
         if (!(kind in ownedQueries)) throw new TypeError('Invalid graph namespace');
         // All fixed owner statements have exactly the same typed integer/uuid input.
         removed = (await ownedQueries[kind as keyof typeof ownedQueries].run(tx, args)).length;
+        if (kind === 'bulk_target' && removed < 100) {
+          // Keep the installed Accounts phase and its 100-row budget, disposing empty roots too.
+          const roots = await tx.query(`WITH keys AS MATERIALIZED (
+            SELECT operation_id FROM library.bulk_operation WHERE route=$1 AND account_id=$2
+              ORDER BY operation_id LIMIT $3)
+            DELETE FROM library.bulk_operation AS operation USING keys WHERE operation.route=$1
+              AND operation.account_id=$2 AND operation.operation_id=keys.operation_id
+              AND NOT EXISTS (SELECT 1 FROM library.bulk_target WHERE route=$1
+                AND operation_id=operation.operation_id ORDER BY ordinal LIMIT 1)`,
+            [route, accountId, 100 - removed]);
+          removed += roots.rowCount ?? 0;
+        }
         // The final writer barrier itself advances the native account fence. Dispose controls AFTER it.
         if (kind === 'fact_source_head') {
           const controls = (await nativeFences.run(tx, args)).length;

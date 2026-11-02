@@ -1,6 +1,9 @@
-/** Bulk integration ports; installed actions delegate to their native executors. */
+/** Common bulk wire and executor contracts; native composition lives in collection-bulk-* modules. */
 import { executeCollectionRemoveTarget as removeCapturedOccurrence } from './collection-bulk-remove.ts';
 import type { Pool } from 'pg';
+import { createCollectionBulkOperations } from './collection-bulk-operation.ts';
+import { executeCollectionBulkStatus, reconcileCollectionBulkStatus } from './collection-bulk-status.ts';
+import { registerCollectionBulkWork } from './collection-bulk-work.ts';
 import type { KernelClock } from '../clock.ts';
 import type { AuthoritativeTime, CommandOutcome, CommandTransaction } from '../command/command.ts';
 import type {
@@ -38,6 +41,7 @@ export type BulkAdmission =
   | { action: 'remove_from_collection'; collectionId: string; selection: SubjectSelection | OccurrenceSelection }
   | { action: 'remove_from_library'; selection: SubjectSelection };
 export type BulkPhase =
+  | 'preview'
   | 'queued'
   | 'discovering'
   | 'expanding'
@@ -82,6 +86,7 @@ export type BulkCounters = Readonly<{
 export type BulkSummary = Readonly<{ changed: number; unchanged: number; failed: number }>;
 export type OperationView = Readonly<{
   id: string;
+  route: number;
   action: BulkAdmission['action'];
   selectionKind: BulkAdmission['selection']['kind'];
   state: EntryState | null;
@@ -240,9 +245,11 @@ export type BulkDependencies = Readonly<{
   clock: KernelClock;
   initiators: InitiatorRestorer;
   readInitiator: DurableInitiatorReader;
-  spendChunk: SpendBulkChunk;
+  spendChunk?: SpendBulkChunk;
 }>;
 export type BulkOperations = Readonly<{
+  preview(actor: Actor, input: BulkAdmission, idempotencyKey: string): Promise<CommandOutcome<OperationResult>>;
+  confirm(actor: Actor, operationId: string, idempotencyKey: string): Promise<CommandOutcome<OperationResult>>;
   admit(actor: Actor, input: BulkAdmission, idempotencyKey: string): Promise<CommandOutcome<OperationResult>>;
   get(actor: Actor, operationId: string): Promise<OperationResult>;
   outcomes(actor: Actor, operationId: string, query: OutcomeQuery): Promise<OutcomePage>;
@@ -317,7 +324,8 @@ export async function expireBulkPage(
 }
 
 export function createBulkOperations(_dependencies: BulkDependencies): BulkOperations {
-  throw new Error('Library bulk operations are not implemented');
+  const native = createCollectionBulkOperations(_dependencies);
+  return { ...native, admit: native.preview };
 }
 /** Source command captures original identity using captureDurableInitiator during
  * CommandAuthorization.prepare, then commits source/operation/creation commitment.
@@ -328,7 +336,7 @@ export async function admitBulkOperation(
   _input: BulkAdmission,
   _key: string,
 ): Promise<CommandOutcome<OperationResult>> {
-  throw new Error('Library bulk admission is not implemented');
+  return createCollectionBulkOperations(_dependencies).preview(_actor, _input, _key);
 }
 /** Raw keyset C<=100, including nonmatches; no effects before both seals. */
 export async function discoverBulkPage(_dependencies: BulkDependencies, _input: SegmentInput): Promise<Checkpoint> {
@@ -361,7 +369,7 @@ export async function executeStatusTarget(
   _dependencies: BulkDependencies,
   _command: TargetCommand,
 ): Promise<AttemptResult> {
-  throw new Error('Library bulk status is not implemented');
+  return executeCollectionBulkStatus(_dependencies, _command);
 }
 export { executeLibraryRemovalTarget } from './collection-bulk-library-removal.ts';
 export async function executeCollectionAddTarget(
@@ -383,7 +391,7 @@ export async function reconcileBulkTarget(
   _dependencies: BulkDependencies,
   _command: TargetCommand,
 ): Promise<AttemptResult> {
-  throw new Error('Library bulk reconciliation is not implemented');
+  return (await reconcileCollectionBulkStatus(_dependencies, _command)) ?? { kind: 'stop', reason: 'evidence_missing' };
 }
 export async function acknowledgeBulkOutcome(
   _dependencies: BulkDependencies,
@@ -399,6 +407,6 @@ export async function runBulkSegment(_dependencies: BulkDependencies, _input: Se
   throw new Error('Library bulk workflow segment is not implemented');
 }
 /** Extends the existing library WorkModule; never launches a worker. */
-export function registerLibraryBulkWork(_context: WorkContext, _dependencies: BulkDependencies): void {
-  throw new Error('Library bulk work registration is not implemented');
+export async function registerLibraryBulkWork(_context: WorkContext, _dependencies: BulkDependencies): Promise<void> {
+  await registerCollectionBulkWork(_context);
 }

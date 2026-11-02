@@ -58,13 +58,35 @@ accounting result grants neither another effect nor public disclosure. Missing o
 already terminal target fails closed. The operation owner still installs its durable source reader/restorer and
 owns lifecycle, result authorization, retention and Accounts erasure composition.
 
-The other factories in `bulk-contract.ts` remain unimplemented scaffolding, rather than a mounted API. Their
-funding/cut descriptions are superseded by this contract. The store seam does not make those factories functional.
+The mounted native API is `POST /v1/libraryOperations` (preview), `POST /v1/libraryOperations/:id:confirm`,
+`GET /v1/libraryOperations/:id`, `GET /v1/libraryOperations/:id/outcomes` and
+`POST /v1/libraryOperations/:id:cancel`. Creation returns a `preview` phase and a stable operation ID; only
+confirmation emits the Core execution intent. Reads require current `library_entry:list`; commands and restored
+status effects require current `library_entry:update`, the personal-library gate and native account lifecycle.
+The wire preview advertises only `set_status`; query capture returns `dependency_unavailable` until the complete
+Members reader is installed. Other action executor exports remain integration seams, never successful fallbacks.
 
-## Remaining native composition
+Decision: explicit status changes existing tracked entries only; a missing entry is individually skipped with
+`conflict/missing_target`, and no preview or status operation creates an entry. Present targets bind the actual
+native incarnation and revision; the historical discovery sequence is zero for this explicit path and grants no
+creation authority. Unstamped legacy entries refuse preview until native incarnation cutover supplies the stamp.
+Canonical duplicates collapse to one target in first-selection order; empty selections refuse as invalid.
 
-The separate integration delivery owns native commands/routes, outbox and worker delivery, lifecycle/erasure
-composition and the recoverable Web journey. This storage increment supplies only the internal transaction seam.
+The existing Library WorkModule consumes the registered confirmation outbox event with a deterministic operation
+workflow ID. Each step attempts at most 100 stored targets, and each segment at most ten pages. Ordinary native
+command admission applies; no funding or chunk ledger is added. Status effects, entry events, per-target command
+receipts and terminal evidence commit on the account home in one transaction. Private reconciliation verifies
+the exact committed receipt and its write basis without restoring authority or exposing results.
+A completed header with pending rows is an irreversible stop marker under the same lock as effects; pending
+outcomes drain in pages of 100. Cancellation never rolls back a completed effect. Expired execution cancels the
+remaining targets; result reads close at 48 hours. The indexed expiry workflow removes at most 100 manifest rows
+and one root per command. Accounts' existing `bulk_target` erasure phase also drains empty operation roots using
+its existing 100-row budget; it remains the erasure authority.
+
+## Further action composition
+
+The explicit status path installs native commands, routes, worker delivery and lifecycle cleanup. Further action
+owners supply the existing Collection add/remove and Library removal executor seams; Web owns its consumer journey.
 
 Mount native preview, confirmation, operation and outcome routes with the ordinary Access catalogue and command
 receipts. Capture the native durable initiator and install its reader. Emit and consume one registered Core outbox

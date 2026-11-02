@@ -35,6 +35,8 @@ export const libraryWorkModule: WorkModule = {
     await registerOwnerIndexWork(context);
     const { registerCollectionSourceWork } = await import('./collection-source-work.ts');
     await registerCollectionSourceWork(context);
+    const { registerCollectionBulkWork } = await import('./collection-bulk-work.ts');
+    await registerCollectionBulkWork(context);
   },
 };
 

@@ -8,13 +8,7 @@ const id = t.String({ format: 'uuid' });
 const nullableId = t.Union([id, t.Null()]);
 const nullableString = t.Union([t.String(), t.Null()]);
 const count = t.Integer({ minimum: 0 });
-const entryState = t.Union([
-  t.Literal('planned'),
-  t.Literal('in_progress'),
-  t.Literal('completed'),
-  t.Literal('paused'),
-  t.Literal('dropped'),
-]);
+const entryState = t.String({ pattern: '^[a-z][a-z0-9_.-]{0,63}$' });
 const action = t.Union([
   t.Literal('set_status'),
   t.Literal('add_to_collection'),
@@ -61,7 +55,10 @@ export const bulkAdmissionSchema = t.Union([
   t.Object({ action: t.Literal('remove_from_library'), selection: subjectSelection }, closed),
 ]);
 
+export const bulkPreviewSchema = t.Object({ action: t.Literal('set_status'), state: entryState, selection: subjectSelection }, closed);
+
 const phase = t.Union([
+  t.Literal('preview'),
   t.Literal('queued'),
   t.Literal('discovering'),
   t.Literal('expanding'),
@@ -120,6 +117,7 @@ const summary = t.Object({ changed: count, unchanged: count, failed: count }, cl
 const operation = t.Object(
   {
     id,
+    route: t.Integer({ minimum: 0, maximum: 65535 }),
     action,
     selectionKind,
     state: t.Union([entryState, t.Null()]),

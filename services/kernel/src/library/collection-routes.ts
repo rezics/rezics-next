@@ -26,6 +26,7 @@ import {
   collectionPublishQueryRequestSchema,
 } from './collection-publication-http.ts';
 import { collectionPresentation } from './collection-presentation.ts';
+import { collectionBulkRoutes } from './collection-bulk-routes.ts';
 import { listSitemapCollections } from './sitemap.ts';
 
 import { basicQuery, curatorFields, embedded, fullMembers, fullView, subjectFields, viewQuery } from './views.ts';
@@ -395,7 +396,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
     return view;
   }
   const sitemapQuery = strict(SitemapQuerySchema);
-  return app
+  return collectionBulkRoutes(app, dependencies)
     .post(
       customMethod('/v1/collections/:collectionId', 'publish'),
       {

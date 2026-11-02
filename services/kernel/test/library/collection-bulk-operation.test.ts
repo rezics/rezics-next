@@ -14,7 +14,7 @@ beforeAll(async () => {
 });
 afterAll(async () => { await f?.close(); });
 const dependencies = () => ({
-  pool: f.pool, access: f.access, clock,
+  pool: f.pool, access: f.access, tokens: f.tokens, clock,
   // Auth is an independently injected port; native Accounts/Access and receipts remain installed.
   readConsent: async () => ({ actorAccountId: f.owner.actor.accountId,
     clientId: f.owner.actor.clientId, scopes: f.owner.actor.scopes }),

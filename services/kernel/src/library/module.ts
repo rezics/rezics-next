@@ -43,3 +43,5 @@ export function createLibraryIdentityNativePlanner({ pool }: { pool: Pool }): Li
   });
 }
 export { libraryIdentityFootprint } from './identity-native-planner-work.ts';
+
+export { createCollectionBulkOperations } from './collection-bulk-operation.ts';
