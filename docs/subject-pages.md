@@ -771,10 +771,12 @@ Cancel preserves picker summaries, statement, citation and focus; confirmed clos
 and reopening starts a fresh editor from the admitted reading. A changed correction requires confirmation; an
 untouched staged addition also confirms because its selected target is authored input, while an untouched correction
 closes directly. A submitted, uncertain or stale command and an already proposed relation cannot be discarded here.
-Work Parts More, Restart and Reload orient only a still-current focused keyboard intent: preserve a surviving meaningful opener, otherwise focus the current slice (including empty/no-stream) or failure boundary. Movement away and back, pointer or Tab interaction, window blur, replacement reads and retirement cancel the handoff; independent corrections and exact unresolved commands remain intact.
-Decision: another read action attempted while busy cancels pending orientation without starting duplicate transport.
 Composition Close and Cancel settle only the current question for its original draft holder; cancellation, confirmation, draft replacement and reading replacement retire that question synchronously, and stale callbacks neither close a draft nor dismiss a later question.
-After More, Restart and explicit read retry, focus the count-bearing current slice status. Focus the visible alert on failure; retired reads stay silent.
+Work Parts More, Restart, Reload and explicit read retry orient only a still-current focused keyboard intent: preserve a
+surviving meaningful opener; otherwise focus the count-bearing current slice (including empty/no-stream) or the visible
+failure alert. Movement away and back, pointer or Tab interaction, window blur, replacement reads and retirement cancel
+orientation permanently; independent corrections and exact unresolved commands remain intact. A read action attempted
+while busy cancels pending orientation without starting duplicate transport; retired reads stay silent.
 
 ## Statement consent
 
