@@ -95,6 +95,10 @@ function OfferCommands({
   guard: CreatorOfferGuard;
 }) {
   const memory = useCreatorIntent<ChangeIntent>(guard, offer.id);
+  const sender = useCreatorIntent<(data: CreatorOfferMutation) => Promise<CreatorOfferResult>>(
+    guard,
+    `${offer.id}-sender`,
+  );
   const [resume] = useState(memory.value);
   const { retain, release, confirmOffer } = useContext(OfferJourney);
   // Keep the observed row and original command stable while a write's outcome is uncertain.
@@ -176,6 +180,8 @@ function OfferCommands({
         operation === 'delist'
           ? { operation, offerId: observed.id, idempotencyKey: key }
           : { operation, offerId: observed.id, idempotencyKey: key, unitAmountMinor: amount! };
+      const execute = manageCreatorOffer;
+      sender.value = (data) => execute({ data, headers: { 'X-CSRF-Token': csrfToken } });
     }
     keepDraft({ observed, text, pending: pending.current, keys: keys.current, rule, result: { kind: 'retry' } });
     locked.current = true;
@@ -184,7 +190,7 @@ function OfferCommands({
     setBusy(true);
     let saved = false;
     try {
-      const next = await manageCreatorOffer({ data: pending.current, headers: { 'X-CSRF-Token': csrfToken } });
+      const next = await sender.value!(pending.current);
       if (!owns()) return;
       saved = next.kind === 'saved';
       setResult(next);

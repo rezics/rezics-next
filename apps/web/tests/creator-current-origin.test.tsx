@@ -9,6 +9,8 @@ import type {
   CreatorOfferResult,
 } from '../src/checkout/creator-offers';
 import type { CreatorStatementCurrentRead, CreatorStatementsCurrentRead } from '../src/checkout/creator-statements';
+import type { CreatorSalesCurrentRead } from '../src/checkout/creator-sales';
+import { creatorSaleFixture } from '../src/kernel/fake/creator-sales';
 import { configuredPriceExample, creatorOfferFixture } from '../src/kernel/fake/creator-offers';
 import { creatorLineFixture, paidCreatorStatementFixture } from '../src/kernel/fake/creator-statements';
 
@@ -67,6 +69,8 @@ const { viewerExposureLifetime, viewerExposureQuery } = await import('../src/ker
 const { sessionQuery } = await import('../src/session/query');
 const offers = await import('../src/checkout/creator-offers');
 const statements = await import('../src/checkout/creator-statements');
+const sales = await import('../src/checkout/creator-sales');
+const { CreatorSalesCurrent } = await import('../src/checkout/creator-sales-current');
 const { CreatorOfferEditor } = await import('../src/checkout/creator-offer-editor');
 const { CreatorOffersPage } = await import('../src/checkout/creator-offers-page');
 const { CreatorOffersCurrent, CreatorOfferEditorCurrent } = await import('../src/checkout/creator-offers-current');
@@ -173,6 +177,19 @@ function detail(subject = A, cursor: string | null = null): CreatorStatementCurr
     },
   };
 }
+function sale(): CreatorSalesCurrentRead {
+  return {
+    sessionSubject: A,
+    requested: { cursor: null },
+    selling: true,
+    page: {
+      kind: 'ready',
+      sales: [{ ...creatorSaleFixture, title: 'Private sale' }],
+      next: null,
+      projectionState: 'ready',
+    },
+  };
+}
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (error: Error) => void;
@@ -231,7 +248,13 @@ async function mount() {
     csrf: string | null;
     work: ReturnType<typeof deferred<CreatorOfferResult>>;
   }[] = [];
+  const salesReads: ReturnType<typeof deferred<CreatorSalesCurrentRead>>[] = [];
   const spies = [
+    spyOn(sales, 'readCreatorSalesCurrent').mockImplementation(() => {
+      const work = deferred<CreatorSalesCurrentRead>();
+      salesReads.push(work);
+      return work.promise;
+    }),
     spyOn(offers, 'readCreatorOffersCurrent').mockImplementation(() => {
       const work = deferred<CreatorOffersCurrentRead>();
       listReads.push(work);
@@ -258,7 +281,7 @@ async function mount() {
       return work.promise;
     }),
   ];
-  let mode: 'offers' | 'editor' | 'statements' | 'detail' = 'offers';
+  let mode: 'offers' | 'editor' | 'statements' | 'detail' | 'sales' = 'offers';
   let cursor: string | undefined;
   let locale = 'en';
   let initialOffers = list();
@@ -267,7 +290,9 @@ async function mount() {
     <StrictMode>
       <QueryClientProvider client={client}>
         <RouterContextProvider router={router}>
-          {mode === 'offers' ? (
+          {mode === 'sales' ? (
+            <CreatorSalesCurrent initial={sale()} locale={locale} />
+          ) : mode === 'offers' ? (
             <CreatorOffersCurrent initial={initialOffers} locale={locale} cursor={cursor} />
           ) : mode === 'editor' ? (
             <CreatorOfferEditorCurrent initial={initialEditor} locale={locale} contentEditionId={editionId} />
@@ -365,6 +390,7 @@ async function mount() {
     listReads,
     editorReads,
     statementReads,
+    salesReads,
     writes,
     refreshOffers: (value: CreatorOffersCurrentRead) => {
       initialOffers = value;
@@ -381,6 +407,105 @@ async function mount() {
     },
   };
 }
+
+test('authorized offers, Sales and statement readers refresh without CSRF and retire late replies across same-subject renewal', async () => {
+  for (const mode of ['offers', 'editor', 'sales', 'statements', 'detail'] as const) {
+    await workspace(async (p) => {
+      await act(async () => {
+        p.session(A, null);
+        p.admit();
+      });
+      await p.show(mode);
+      const marker =
+        mode === 'offers'
+          ? `Private offer ${A}`
+          : mode === 'editor'
+            ? 'a'.repeat(64)
+            : mode === 'sales'
+              ? 'Private sale'
+              : `Private payment ${A}`;
+      const visible = () =>
+        mode === 'statements'
+          ? p.host.querySelector(`a[href*="${paidCreatorStatementFixture.id}"]`) !== null
+          : p.host.textContent!.includes(marker);
+      expect(visible()).toBe(true);
+      if (mode === 'offers' || mode === 'editor') {
+        expect(p.host.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(true);
+        await p.submit();
+        expect(p.writes).toHaveLength(0);
+      }
+      const prefix =
+        mode === 'sales'
+          ? 'creator-sales-current'
+          : mode === 'offers' || mode === 'editor'
+            ? 'creator-offers-current'
+            : 'creator-statements-current';
+      const oldRead = p.queryCallback(prefix);
+      const pending = oldRead();
+      const work =
+        mode === 'sales'
+          ? p.salesReads.at(-1)!
+          : mode === 'offers'
+            ? p.listReads.at(-1)!
+            : mode === 'editor'
+              ? p.editorReads.at(-1)!
+              : p.statementReads.at(-1)!.work;
+      await act(async () => {
+        p.session(A, 'temporary');
+        p.admit();
+        p.session(A, null); // same subject and token, different session epoch
+        expect(await oldRead()).toBeNull();
+      });
+      await p.tick();
+      expect(visible()).toBe(false);
+      await p.settle(
+        work,
+        mode === 'sales'
+          ? sale()
+          : mode === 'offers'
+            ? list()
+            : mode === 'editor'
+              ? editor()
+              : mode === 'detail'
+                ? detail()
+                : statementList(),
+      );
+      expect(await pending).toBeNull();
+      expect(visible()).toBe(false);
+      await act(async () => p.admit());
+      await p.tick();
+      // A healthy renewal can retain an accepted same-viewer read, but never its delayed reply.
+      expect(visible()).toBe(true);
+      await act(async () => {
+        p.admit([]);
+        p.admit();
+      });
+      await p.tick();
+      expect(visible()).toBe(false);
+      const fresh =
+        mode === 'sales'
+          ? p.salesReads.at(-1)!
+          : mode === 'offers'
+            ? p.listReads.at(-1)!
+            : mode === 'editor'
+              ? p.editorReads.at(-1)!
+              : p.statementReads.at(-1)!.work;
+      await p.settle(
+        fresh,
+        mode === 'sales'
+          ? sale()
+          : mode === 'offers'
+            ? list()
+            : mode === 'editor'
+              ? editor()
+              : mode === 'detail'
+                ? detail()
+                : statementList(),
+      );
+      expect(visible()).toBe(true);
+    });
+  }
+});
 
 describe('Creator workspace retires observed stale read and command origins before React commit including ABA while preserving exact uncertain offer operations', () => {
   test('retained reprice/delist callbacks cannot borrow replacement credentials; B stays usable while A is unresolved', async () =>
@@ -422,7 +547,7 @@ describe('Creator workspace retires observed stale read and command origins befo
       expect(p.listReads).toHaveLength(1);
       await p.click(m.creator_retry());
       expect(p.writes[2]!.data).toEqual(captured);
-      expect(p.writes[2]!.csrf).toBe('csrf-rotated');
+      expect(p.writes[2]!.csrf).toBe('csrf-B');
       const retired = p.submitCallback();
       await act(async () => {
         p.admit([]);
@@ -468,7 +593,7 @@ describe('Creator workspace retires observed stale read and command origins befo
       await p.show();
       await p.submit();
       expect(p.writes[1]!.data).toEqual(p.writes[0]!.data);
-      expect(p.writes[1]!.csrf).toBe('csrf-rotated');
+      expect(p.writes[1]!.csrf).toBe('csrf-A');
       expect(p.writes[1]!.data).toMatchObject({
         operation: 'create',
         idempotencyKey: id(13),
@@ -523,6 +648,17 @@ describe('Creator workspace retires observed stale read and command origins befo
       });
       await p.tick();
       expect(p.host.querySelector('input')).toBeNull();
+      await act(async () => p.admit());
+      await p.tick();
+      expect(p.host.textContent).toContain(`Private offer ${A}`);
+      expect(p.button(m.creator_retry()).disabled).toBe(true);
+      const count = p.writes.length;
+      await p.click(m.creator_retry());
+      expect(p.writes).toHaveLength(count);
+      const refresh = p.queryCallback('creator-offers-current')();
+      await p.settle(p.listReads.at(-1)!, list());
+      await refresh;
+      expect(p.host.textContent).toContain(m.creator_uncertain());
       await act(async () => {
         p.session(A, 'csrf-restored');
         p.admit(['selling']);
@@ -532,7 +668,7 @@ describe('Creator workspace retires observed stale read and command origins befo
       expect(p.host.querySelector(`a[href="/en/offers/${creatorOfferFixture.id}"]`)).toBeNull();
       await p.click(m.creator_retry());
       expect(p.writes.at(-1)!.data).toEqual(reprice.data);
-      expect(p.writes.at(-1)!.csrf).toBe('csrf-restored');
+      expect(p.writes.at(-1)!.csrf).toBe(reprice.csrf);
       expect(reprice.data).toMatchObject({ operation: 'reprice', unitAmountMinor: 1299, idempotencyKey: id(11) });
     }));
 

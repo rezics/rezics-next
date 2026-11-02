@@ -885,8 +885,9 @@ on a statement; it sends no Stripe transfer and does not prove payability or ext
 
 The Web statement inspector records only the existing `paidReference` through native `markPaid`; native authorization
 decides whether the current creator or operator may attest. It captures the exact non-blank reference (at most 256
-characters), statement ID, submitting session subject and UUID command key before sending. Replays use the current
-credential and CSRF token with those same operands; a different session subject cannot execute the old original.
+characters), statement ID, submitting session subject and UUID command key before sending. Web replays retain the original
+sender and CSRF token with those same operands; native replay reauthorizes the current session, and a different session
+subject cannot execute the old original.
 The form shares the statement reader's viewer/address lifetime and retains its captured original in that workspace.
 
 Decision: once submitted, keep the reference and command identity locked; uncertainty and restored authority offer an

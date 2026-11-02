@@ -13,6 +13,7 @@ type Observation = {
   csrfToken: string | null;
   admission: 'preparing' | 'admitted' | 'closed' | 'unavailable';
   observation: number | null;
+  exposure: number | null;
 };
 type Slot<T> = { value?: T };
 type Workspace = {
@@ -33,6 +34,7 @@ const closed: Observation = {
   csrfToken: null,
   admission: 'preparing',
   observation: null,
+  exposure: null,
 };
 
 function observe(client: QueryClient | undefined, operation: Operation): Observation {
@@ -46,10 +48,14 @@ function observe(client: QueryClient | undefined, operation: Operation): Observa
     lifetime.state === 'signed-in' && lifetime.observation.subject === subject ? lifetime.observation : undefined;
   const exposure = observation ? client.getQueryState(viewerExposureQuery(observation).queryKey) : undefined;
   return {
-    state: session?.status === 'error' ? 'unavailable' : (data?.state ?? 'unknown'),
+    state:
+      session?.status === 'error' || (data?.state === 'signed-in' && !subject)
+        ? 'unavailable'
+        : (data?.state ?? 'unknown'),
     subject,
     csrfToken: subject && typeof data?.csrfToken === 'string' && data.csrfToken.trim() ? data.csrfToken : null,
     observation: observation?.id ?? null,
+    exposure: exposure?.dataUpdateCount ?? null,
     admission:
       exposure?.status === 'error'
         ? 'unavailable'
@@ -62,7 +68,7 @@ function observe(client: QueryClient | undefined, operation: Operation): Observa
 }
 
 const identity = (value: Observation) =>
-  JSON.stringify([value.state, value.subject, !!value.csrfToken, value.admission, value.observation]);
+  JSON.stringify([value.state, value.subject, value.admission, value.observation, value.exposure]);
 
 /** An episode can retire from cache notifications, without waiting for a React render or commit. */
 class CreatorCurrentOrigin implements CreatorOfferGuard {
@@ -88,7 +94,7 @@ class CreatorCurrentOrigin implements CreatorOfferGuard {
     if (
       next.state !== 'signed-in' ||
       next.subject !== this.workspace.subject ||
-      !next.csrfToken ||
+      (next.observation === this.observed.observation && next.exposure !== this.observed.exposure) ||
       next.admission === 'closed' ||
       next.admission === 'unavailable'
     )
@@ -101,7 +107,6 @@ class CreatorCurrentOrigin implements CreatorOfferGuard {
         next.state === 'signed-out' ||
         next.state === 'unavailable' ||
         (this.observed.subject && next.subject !== this.observed.subject) ||
-        (this.observed.csrfToken && !next.csrfToken) ||
         next.admission === 'closed' ||
         next.admission === 'unavailable'
       )
@@ -118,7 +123,6 @@ class CreatorCurrentOrigin implements CreatorOfferGuard {
       !!this.client &&
       actual.state === 'signed-in' &&
       !!actual.subject &&
-      !!actual.csrfToken &&
       actual.admission === 'admitted' &&
       (!this.expected || actual.subject === this.expected)
     );

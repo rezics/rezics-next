@@ -215,6 +215,7 @@ function CreatorOfferForm({
   guard: CreatorOfferGuard;
 }) {
   const memory = useCreatorIntent<CreateIntent>(guard, 'create');
+  const sender = useCreatorIntent<(data: CreatorOfferMutation) => Promise<CreatorOfferResult>>(guard, 'create-sender');
   const [resume] = useState(memory.value);
   const [intent, setIntent] = useState<CreatorPriceIntent>(resume?.intent ?? { currency: '', text: '' });
   const { currency, text } = intent;
@@ -288,6 +289,8 @@ function CreatorOfferForm({
         taxCode,
       };
       submittedRules.current = rules;
+      const execute = manageCreatorOffer;
+      sender.value = (data) => execute({ data, headers: { 'X-CSRF-Token': csrfToken } });
     }
     setDraftEditor(editor);
     memory.value = {
@@ -304,7 +307,7 @@ function CreatorOfferForm({
     setBusy(true);
     let saved = false;
     try {
-      const next = await manageCreatorOffer({ data: pending.current, headers: { 'X-CSRF-Token': csrfToken } });
+      const next = await sender.value!(pending.current);
       if (!current.active || !guard.isCurrent()) return;
       saved = next.kind === 'saved';
       setResult(next);

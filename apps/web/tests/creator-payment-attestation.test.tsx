@@ -229,11 +229,12 @@ test('the actual form retries captured evidence after a paid read, confirms only
   });
   const originalFetch = globalThis.fetch;
   globalThis.fetch = transport as unknown as typeof fetch;
+  let token: string | null = csrf;
   const props = {
     statement,
     subject,
     locale: 'en',
-    guard: { isCurrent: () => true, csrfToken: () => csrf },
+    guard: { isCurrent: () => true, csrfToken: () => token },
     refresh: async () => {
       refreshes++;
       return false;
@@ -261,6 +262,16 @@ test('the actual form retries captured evidence after a paid read, confirms only
     expect(refreshes).toBe(0);
     expect(field.disabled).toBe(true);
     const key = host.querySelector('dl')!.textContent;
+    token = null;
+    await act(async () => root.render(createElement(CreatorPaymentAttestation, props)));
+    expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(true);
+    await submit();
+    expect(writes).toBe(1);
+    const refresh = [...host.querySelectorAll('button')].find((button) => button.type === 'button')!;
+    expect(refresh.disabled).toBe(false);
+    await act(async () => refresh.click());
+    expect(refreshes).toBe(1);
+    token = 'replacement-token';
     await act(async () => {
       root.render(
         createElement(CreatorPaymentAttestation, {
@@ -272,7 +283,7 @@ test('the actual form retries captured evidence after a paid read, confirms only
     expect(host.textContent).toContain('The response is unknown');
     await submit();
     expect(writes).toBe(2);
-    expect(refreshes).toBe(1);
+    expect(refreshes).toBe(2);
     expect(host.textContent).toContain('The external payment reference was recorded');
     expect(host.textContent).toContain('current statement evidence could not be refreshed');
     expect(host.textContent).toContain(key!);

@@ -8,7 +8,12 @@ import type { CreatorOfferGuard } from './creator-offers';
 import type { CreatorStatement } from './creator-statements';
 import { StatementPayment, StatementTime } from './creator-statements-page';
 import { attestCreatorPayment } from './creator-payment-attestation';
-import { CreatorPaymentAttempt, validPaymentReference } from './creator-payment-attestation-state';
+import {
+  CreatorPaymentAttempt,
+  validPaymentReference,
+  type PaymentAttestationInput,
+  type PaymentAttestationResult,
+} from './creator-payment-attestation-state';
 
 /** This region shares the statement reader's current origin; it starts no parallel reader. */
 export function CreatorPaymentAttestation({
@@ -25,6 +30,10 @@ export function CreatorPaymentAttestation({
   refresh(): Promise<boolean>;
 }) {
   const memory = useCreatorIntent<CreatorPaymentAttempt>(guard, 'payment-attestation');
+  const sender = useCreatorIntent<(data: PaymentAttestationInput) => Promise<PaymentAttestationResult>>(
+    guard,
+    'payment-attestation-sender',
+  );
   const [attempt] = useState(() => memory.value ?? new CreatorPaymentAttempt(statement.id, subject));
   memory.value = attempt;
   const [reference, setReference] = useState(attempt.request?.paidReference ?? '');
@@ -62,11 +71,11 @@ export function CreatorPaymentAttestation({
   async function submit() {
     const csrfToken = guard.csrfToken();
     if (!current() || !csrfToken || (!attempt.request && statement.state !== 'open')) return;
-    const pending = attempt.submit(
-      reference,
-      (data) => attestCreatorPayment({ data, headers: { 'X-CSRF-Token': csrfToken } }),
-      current,
-    );
+    if (!attempt.request) {
+      const execute = attestCreatorPayment;
+      sender.value = (data) => execute({ data, headers: { 'X-CSRF-Token': csrfToken } });
+    }
+    const pending = attempt.submit(reference, sender.value!, current);
     await pending;
     if (!current()) return;
     if (attempt.result?.kind === 'saved') await refreshEvidence();
@@ -164,7 +173,7 @@ export function CreatorPaymentAttestation({
               type="button"
               variant="outline"
               className="min-h-11"
-              disabled={!admitted || refreshing}
+              disabled={!guard.isCurrent() || refreshing}
               onClick={() => void refreshEvidence()}
             >
               {m.statements_refresh()}

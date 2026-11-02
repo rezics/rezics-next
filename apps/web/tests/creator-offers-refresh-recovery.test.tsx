@@ -395,7 +395,7 @@ describe('Creator offer editing recovery retains real drafts without extending p
         unitAmountMinor: 1299,
         idempotencyKey: id(11),
       });
-      expect(p.writes[1]!.csrf).toBe('csrf-rotated');
+      expect(p.writes[1]!.csrf).toBe('csrf-A');
       await p.settle(p.writes[1]!.work, { kind: 'rejected' });
       expect(p.host.textContent).toContain(m.creator_rejected());
       await p.click(m.creator_delist());
