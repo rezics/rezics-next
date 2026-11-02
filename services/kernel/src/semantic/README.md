@@ -1435,7 +1435,7 @@ receiving custody and unrelated/history growth still require the actual shared o
 ### Definition activate
 
 - Touches: `activateRelease`: read 0/1 release body via `definition_release_pkey`; activation SQL reads latest head through backward `definition_activation_pkey(route, head)` then inserts 0/1 activation with expected-head conflict protection and release FK probe. Grow D; fix body size, H and authorization evidence.
-- Bound: Rows O(1), blocks O(log D + C), two body statements, ten including command; stale head writes no activation and rolls back.
+- Bound: The original pointer change is two body statements, ten including command, plus one completion point and the bounded derived-index installation in [Type directory read and lifecycle cost](#type-directory-read-and-lifecycle-cost). Indexed rows and statements are independent of D for a fixed capped Release; stale head rolls back all changes.
 - Growth check: `test/semantic/growth-definitions.test.ts`: `Definition activate stays within its bound as D grows`, scales `[1, 4, 16]`.
 
 ### Definition read
@@ -1453,7 +1453,7 @@ receiving custody and unrelated/history growth still require the actual shared o
 ### Definition bootstrap
 
 - Touches: `bootstrapRelease`: outer latest-head probe; when absent, command repeats probe, publishes 0/1 release, inserts first activation and emits 2 events, no receipt/basis. Uses definition PKs and fence indexes above. Grow D and H; fix body size, including already-active fast path.
-- Bound: Rows O(1), blocks O(log D + C), one statement if active, otherwise eleven including command; race recovery may add one head lookup after rollback.
+- Bound: One statement if active, otherwise the original eleven command statements plus the bounded directory installation in [Type directory read and lifecycle cost](#type-directory-read-and-lifecycle-cost); race recovery may add one head lookup after rollback. Work stays independent of D and H for a fixed capped Release.
 - Growth check: `test/semantic/growth-definitions.test.ts`: `Definition bootstrap stays within its bound as D grows`, scales `[1, 4, 16]`.
 
 ### Context term resolution
@@ -1986,3 +1986,86 @@ enrollment fencing and literal eight-axis composition. Unknown enrolled receiver
 Subject inverse removal remain precisely refusing and retained. Generic registered public Source capture remains a separate variant.
 The authored production-composition regression is `test/semantic/identity-public-output-capture.test.ts`;
 acceptance/native/browser execution is deferred to controller integration.
+
+## Current Type directory
+
+`GET /v1/definitionTypes` accepts a literal case-sensitive label-prefix `query`, or
+an exact `typeId`, `locale` (default `en`), `limit` (1–20, default 20), and `cursor`.
+It returns `{types,next}`. Each Type identifies `typeId`, `releaseDigest`, the selected
+`label`/`language`, direct `parents`, and `description`/`descriptionLanguage` (null
+when absent). Ordering is exact JavaScript label order followed by exact Type ID.
+`GET /v1/definitionTypes/{typeId}` returns that summary, the immutable released
+`definition`, and its effective `properties` dictionary, including value schemas,
+facets and presentation hints. Unknown exact Types return the ordinary 404.
+Both operations use the same Global resource, Definitions read action and eligibility
+as `definitions.read_active`; each read checks authority and metadata in one RR snapshot.
+Feed/discovery Kind choices continue using Search's existing directory.
+
+Decision: materialize the eight reader locales (`en`, `de`, `es`, `fr`, `ja`, `ko`,
+`zh-Hans`, `zh-Hant`), applying the existing `pickText` fallback independently to
+labels and descriptions; other reader locales are invalid requests, while released
+label languages remain unrestricted. Adding a reader locale requires rebuilding
+this derived index. The active immutable native catalogue supplies its entire Release
+set. Before a native catalogue is active, the original Release1 head supplies the
+bounded directory. If a Type occurs in several member Releases, identical shared
+Type/property identities retain their meaning and the smallest Release digest is
+its deterministic descriptor pin. The original whole-release APIs, release head,
+activation history and stored pins keep their existing semantics.
+
+A signed, 15-minute cursor binds operation, prefix/exact ID, locale, page size and
+catalogue source/head. Changed query bindings and tampering return `invalid_cursor`;
+a replaced/retired head or expired cursor returns `stale_cursor`, never a mixed page.
+Directory data and the head are read in the same snapshot. Empty prefix pages use the
+same index as searches; exact ID search and descriptors use digest-keyed points.
+
+The derived index has immutable catalogue-leading entries and fixed-width radix
+edges with ordinary PostgreSQL B-tree indexes. A three-byte, terminated UTF-16
+encoding preserves literal label and ID ordering, including nulls, prefix IDs and
+IDs exceeding PostgreSQL's B-tree tuple limit. Hash-only ordering would change ties;
+indexing entire IDs would reject originally admitted Releases. Each parent/edge key
+is bounded (128-byte edge), and the unique node key rejects hash collisions rather
+than silently combining paths. No complete-registry scan or sort is used by reads.
+
+The existing authorized native build has a final directory phase, seeking at most
+65 Type member rows and committing at most 64 entries, their locale paths and its
+checkpoint together. Interrupted steps replay from that checkpoint. Its ordinary
+Work continuation and authorized `:step` run the same phase; activation waits for
+completion. A ready catalogue from before this migration is resumed by the existing
+publish-authorized `POST /v1/definitions/catalogues` and `:step` operations. Its Kind
+indexes remain readable throughout. Original Release1 activation/bootstrap installs
+its single capped Release's directory in the same transaction as the head. Existing
+Release1 heads can be prepared by authorized reactivation. Until preparation finishes,
+directory operations return `semantic_not_ready`, never half-installed entries.
+Historical oversized exemptions remain readable/activatable; they do not bypass
+new directory admission. Building or retiring another root never rewrites the
+current or historical roots' directory entries.
+
+### Type directory read and lifecycle cost
+
+- Anchors: Global authority, one native head (or one backward Release1 head probe),
+  one completion point, catalogue/locale parent-edge ranges and Type/property points.
+- Let `q = limit + 1 ≤ 21`, `B = 4,194,304`, and
+  `L = ceil(3 × (B + 512 + 2) / 128) = 98,317`. A label has at most 256 code points
+  (512 UTF-16 units); any original Type ID fits in the capped canonical Release.
+  This deliberately conservative depth covers the full admitted identifier domain.
+  A successor traversal visits at most `V = (q + 2)(L + 1)` edges: output paths,
+  the previous boundary path and the prefix boundary. It makes at most `2V + 1`
+  indexed seeks, each examining at most `q` candidate edges, with no catalogue-wide
+  filtering or sort. Ordinary short label/ID tuples occupy one edge, so a page
+  uses one range seek. Body fill uses at most 20 entry points; the cursor adds one.
+  Exact reads use one entry point and at most 64 property points, independent of
+  total Releases, Types and history. Transferred bodies are at most `(21 + 64)B`
+  for these conservative composed bounds; summaries contain no property bodies.
+- Native directory continuation: one progress lock, one 65-row member range,
+  at most 64 entry upserts and `64 × 8 × L` edge insert attempts, one checkpoint.
+  Body decoding is at most `65B`; edge batches are bounded per Type. Total work
+  follows the finite catalogue population. A Release1 activation adds at most
+  1,024 entry upserts, `1,024 × 8 × L` edge insert attempts, 4,096 property points
+  and one completion write, all from one bounded Release. Shared edges use conflict
+  insertion; no head switch or retirement enumerates catalogue entries. Native
+  publisher status counters retain their original member/Kind meaning; these
+  derived directory writes are accounted by this static bound, not runtime funding.
+- Growth check: `definition-type-directory.test.ts` exercises mounted pages across
+  two and three Releases, noninitial exact descriptors, locale fallback, literal
+  ties, large IDs, interrupted preparation, stale/tampered cursors, immutable
+  Release1 reads, and the actual bounded edge range plans at both catalogue sizes.

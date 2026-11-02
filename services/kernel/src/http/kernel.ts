@@ -413,6 +413,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     access: () => resolveAccess({ actions: actionCatalogue(batched), realmRoleReader }),
   });
   const app = definitionRoutes(batched as unknown as ReturnType<typeof subjectRoutes>, {
+    tokens,
     catalogue: () =>
       createNativeDefinitionCatalogue({
         pool: dependencies.pool,

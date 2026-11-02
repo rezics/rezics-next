@@ -16,6 +16,7 @@ import exists from './definitions-exists.sql';
 import publish from './definitions-publish.sql';
 import read from './definitions-read.sql';
 import { readComposedRelease } from './extensions.ts';
+import { stageReleaseTypeDirectory } from './definition-type-directory.ts';
 
 export const GLOBAL_CONTEXT = '00000000-0000-8000-8000-000000000000';
 const resource = Object.freeze({ route: 0, id: GLOBAL_CONTEXT });
@@ -189,8 +190,9 @@ export async function activateRelease(
     async (tx, { transactionId }) => {
       const digest = options.releaseDigest;
       // This runs after command authorization and receipt lookup, even for a malformed digest.
-      if (DIGEST.exec(digest)?.[0] !== digest || !(await read.run(tx, { route: resource.route, digest })))
-        throw new DefinitionNotFoundError();
+      const stored = DIGEST.exec(digest)?.[0] === digest ? await read.run(tx, { route: resource.route, digest }) : null;
+      if (!stored) throw new DefinitionNotFoundError();
+      await stageReleaseTypeDirectory(tx, digest, stored.body as Release);
       const rows = await activate.run(tx, {
         route: resource.route,
         digest,
@@ -246,6 +248,7 @@ export async function bootstrapRelease(pool: Pool, release: Release, clock: () =
         body,
         transaction_id: transactionId,
       });
+      await stageReleaseTypeDirectory(tx, digest, body);
       const rows = await activate.run(tx, {
         route: resource.route,
         digest,

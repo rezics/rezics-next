@@ -1,3 +1,5 @@
+import { createTypeDirectory, TYPE_DIRECTORY_LOCALES } from '../definition-type-directory.ts';
+import type { KeyRing } from '../../tokens/seal.ts';
 import { CatalogueArtifactError, type KindDeclarationV1 } from '@rezics/definitions';
 import {
   cataloguePin,
@@ -159,11 +161,69 @@ export function definitionRoutes(
     access,
     clock,
     catalogue,
-  }: { pool: Pool; access?: Access | AccessFactory; clock: () => Date; catalogue: () => NativeDefinitionCatalogue },
+    tokens,
+  }: {
+    pool: Pool;
+    access?: Access | AccessFactory;
+    clock: () => Date;
+    catalogue: () => NativeDefinitionCatalogue;
+    tokens: KeyRing;
+  },
 ) {
   // A direct Access override without prepare owns its full decision and cannot evaluate domain floors.
   const includeEligibility = !access || typeof access === 'function' || typeof access.prepare === 'function';
+  const types = createTypeDirectory({ pool, tokens, clock });
+  const typeLocale = t.Optional(t.Union(TYPE_DIRECTORY_LOCALES.map((locale) => t.Literal(locale))));
+  const typeReadResponses = {
+    401: unauthorized,
+    404: problemSchema('not_found'),
+    400: problemSchema('invalid_request', 'invalid_cursor'),
+    409: problemSchema('stale_cursor'),
+    503: problemSchema('semantic_not_ready', 'overloaded', 'deadline_exceeded'),
+  };
   return app
+    .get(
+      '/v1/definitionTypes',
+      {
+        query: t.Object({
+          query: t.Optional(t.String({ maxLength: 512 })),
+          typeId: t.Optional(t.String({ maxLength: 4194304 })),
+          locale: typeLocale,
+          limit: t.Optional(t.Integer({ minimum: 1, maximum: 20 })),
+          cursor: t.Optional(t.String({ maxLength: 4096 })),
+        }),
+        response: {
+          200: t.Object({ types: t.Array(releaseObject, { maxItems: 20 }), next: t.Union([t.String(), t.Null()]) }),
+          ...typeReadResponses,
+        },
+        detail: catalogueReadDetail('definitionTypes.list'),
+      },
+      async ({ query, authorize, admission, job }) => {
+        const check = await authorize({
+          ...resource,
+          ...(includeEligibility ? { eligibility: globalReadEligibility('definitions:read') } : {}),
+        });
+        return admission.run('normal', job, () => types.list(query, (client) => check(client), job.deadline));
+      },
+    )
+    .get(
+      '/v1/definitionTypes/:typeId',
+      {
+        params: t.Object({ typeId: t.String({ maxLength: 4194304 }) }),
+        query: t.Object({ locale: typeLocale }),
+        response: { 200: releaseObject, ...typeReadResponses },
+        detail: catalogueReadDetail('definitionTypes.read'),
+      },
+      async ({ params, query, authorize, admission, job }) => {
+        const check = await authorize({
+          ...resource,
+          ...(includeEligibility ? { eligibility: globalReadEligibility('definitions:read') } : {}),
+        });
+        return admission.run('normal', job, () =>
+          types.exact(params.typeId, query.locale, (client) => check(client), job.deadline),
+        );
+      },
+    )
     .post(
       '/v1/definitions/catalogue/artifacts',
       {

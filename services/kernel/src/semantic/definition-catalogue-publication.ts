@@ -1,5 +1,6 @@
 import { catalogueCheckpoint } from './definition-catalogue-checkpoint.ts';
 import type { Pool } from 'pg';
+import { stageTypeDirectory, typeDirectoryReady } from './definition-type-directory.ts';
 import {
   cataloguePublisherInvocation,
   cataloguePublisherQuery,
@@ -210,7 +211,11 @@ export async function readCatalogueBuild(
   tx: CommandTransaction,
   pin: KindCataloguePin,
 ): Promise<CatalogueBuildStatus | null> {
-  return (await cataloguePublisherQuery<CatalogueBuildStatus>(tx, 'buildStatus', [pin.rootDigest])).rows[0] ?? null;
+  const status =
+    (await cataloguePublisherQuery<CatalogueBuildStatus>(tx, 'buildStatus', [pin.rootDigest])).rows[0] ?? null;
+  if (status?.state === 'ready' && !(await typeDirectoryReady(tx, pin.rootDigest)))
+    return { ...status, state: 'building' };
+  return status;
 }
 async function identity(tx: CommandTransaction, root: string, name: string, body: unknown) {
   const digest = await cataloguePublisherControl(tx, 'memberIdentity', async () =>
@@ -362,6 +367,7 @@ export async function advanceCatalogueBuild(
   if (!build) throw new DefinitionNotFoundError();
   if (build.state === 'ready' || build.state === 'refused') {
     const { next_node, ...status } = build;
+    if (build.state === 'ready' && !(await stageTypeDirectory(tx, root))) return { ...status, state: 'building' };
     return status;
   }
   await cataloguePublisherQuery(tx, 'stepSavepoint');
@@ -401,7 +407,13 @@ export async function advanceCatalogueBuild(
             ? await releaseStep(tx, root, task)
             : await declarationStep(tx, root, task);
     }
-    await cataloguePublisherQuery(tx, 'buildProgress', [root, task ? 'building' : 'ready', rows, examined]);
+    const directoryComplete = !task && (await stageTypeDirectory(tx, root));
+    await cataloguePublisherQuery(tx, 'buildProgress', [
+      root,
+      directoryComplete ? 'ready' : 'building',
+      rows,
+      examined,
+    ]);
     await cataloguePublisherQuery(tx, 'stepRelease');
   } catch (error) {
     if (!(error instanceof CatalogueArtifactError)) throw error;

@@ -1589,3 +1589,30 @@ do not attest native readiness, native Source authority or consumer currentness.
 - Touches: one pinned root, bounded addressed directory paths, one selected declaration and at most two exact complete Release/profile closures. Missing IDs read only their addressed directory path. No unrelated declaration or Release artifact is read, hashed or sorted.
 - Bound: O(H * 256 KiB + selected bounded artifacts), with H the directory height. For 200,000 Kinds and 196 bounded Release members, keys of at most 256 UTF-8 bytes fit count-based packing: 200,196 entries need 783 leaves, four parent nodes and one directory root, totaling 788 nodes and height three. Selected lookup needs at most three such paths (declaration and two releases); one shared release uses two paths. Longer keys reduce per-node occupancy within the same byte bound, without a total-node ceiling. This is a source-level derivation, not a benchmark or runtime/native proof.
 - Growth check: the same authored journey selects the noninitial `scale:T1151`, records reader requests, bounds path reads and refuses reads of unrelated releases. Native indexed lookup, activation, authority, config/currentness fencing, automatic voting, consumer integration and original whole-Goal acceptance remain the native owners' obligations.
+
+### Current Type directory consumption
+
+Contributors use Kernel's `GET /v1/definitionTypes` (literal label prefix or exact
+Type ID, at most 20 results) and `GET /v1/definitionTypes/{typeId}` for the selected
+released descriptor. They do not download the catalogue or its Releases. Results
+carry the immutable Release digest, selected label/language, parents and short
+localized guidance; descriptors retain released property value forms, facets and
+presentation. The 1,024-Type/4 MiB Release caps remain unchanged. Feed/discovery
+Kind selection keeps Search's existing directory.
+
+Decision: the derived directory materializes the eight UI reader locales with
+shared `pickText` fallback; publication continues accepting its original label
+languages. A shared Type chooses the smallest member Release digest as its stable
+current descriptor pin. Locale additions rebuild the derived index, not Releases.
+
+#### Current Type directory cost
+
+Publication does not enlarge the Release contract. Kernel stages immutable,
+root-keyed directory entries in resumable pages of at most 64 Type members, reading
+at most 65, then switches the head after completion. Label-prefix reads use bounded
+128-byte radix-edge B-tree ranges (21-key lookahead); exact descriptors use one
+Type point and at most 64 property points. The full admitted-ID depth and composed
+read/write ceilings are derived in [Semantic's directory Cost section](../../services/kernel/src/semantic/README.md#type-directory-read-and-lifecycle-cost).
+Neither read enumerates Release membership or transfers whole Releases; a lifecycle
+step never rewrites the entire catalogue. Historical Releases and stored pins retain
+their original meaning.
