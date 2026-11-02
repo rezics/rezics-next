@@ -1,5 +1,5 @@
 import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ContentItemFrame } from '@rezics/ui/content-item';
 import { EntityPicker, type EntityPickerSearch } from '@rezics/ui/entity-picker';
@@ -18,7 +18,7 @@ import { SubjectTermsEntry } from './subject-terms-entry';
 import { AuthoredFieldEntry } from './authored-field-entry';
 import { RelationEditor } from './relation-editor';
 import { FictionalReferenceDetails, FictionalWorkReference } from './fictional-work-reference';
-import { AuthoringDepartureBoundary } from '../../threads/authoring-departure';
+import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../../threads/authoring-departure';
 import { CatalogueCurrentReading } from './editor-lifetime';
 import type { CreateResult } from './create-subject';
 import { CharacterProfileCreate } from './character-profile-create';
@@ -218,34 +218,40 @@ function CharacterProfileLive({
                 )}
               </ContentItemFrame>
             ) : (
-              <div hidden={session !== 'signed-in'}>
-                <EntityPicker
-                  label={m.character_choose_existing({}, o)}
-                  value={[]}
-                  src={coverSrc}
-                  search={async (text, signal) =>
-                    (await search(text, signal)).filter((entry) => entry.types.includes(characterType))
-                  }
-                  onValueChange={(items) => {
-                    if (items[0]) setId(items[0].id);
-                    if (!lifetime.active()) return;
-                  }}
-                />
-                <CharacterProfileCreate
-                  release={current.release}
-                  locale={locale}
-                  transport={transport}
-                  onCreated={setCreated}
-                  onRefreshDefinitions={async () => {
-                    // Refresh creation metadata independently of the public current-reading query.
-                    // Its failure must leave the entered private draft available for correction.
-                    const next = await transport.load({});
-                    if (!isCurrentCharacterRead(next, { isSuccess: true, isFetching: false }, {}))
-                      throw new Error('Character creation definitions unavailable');
-                    return next.release;
-                  }}
-                />
-              </div>
+              <AuthoringDepartureBoundary>
+                <CharacterSelection key={id ?? 'creation'} onSelect={setId}>
+                  {(select) => (
+                    <div hidden={session !== 'signed-in'}>
+                      <EntityPicker
+                        label={m.character_choose_existing({}, o)}
+                        value={[]}
+                        src={coverSrc}
+                        search={async (text, signal) =>
+                          (await search(text, signal)).filter((entry) => entry.types.includes(characterType))
+                        }
+                        onValueChange={(items) => {
+                          const destination = items[0]?.id;
+                          if (destination) select(destination);
+                        }}
+                      />
+                      <CharacterProfileCreate
+                        release={current.release}
+                        locale={locale}
+                        transport={transport}
+                        onCreated={setCreated}
+                        onRefreshDefinitions={async () => {
+                          // Refresh creation metadata independently of the public current-reading query.
+                          // Its failure must leave the entered private draft available for correction.
+                          const next = await transport.load({});
+                          if (!isCurrentCharacterRead(next, { isSuccess: true, isFetching: false }, {}))
+                            throw new Error('Character creation definitions unavailable');
+                          return next.release;
+                        }}
+                      />
+                    </div>
+                  )}
+                </CharacterSelection>
+              </AuthoringDepartureBoundary>
             )}
             <FictionalReferenceDetails type={characterType} locale={locale} />
           </section>
@@ -347,60 +353,90 @@ function CharacterProfileLive({
               </div>
             </>
           )}
-          <section className="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6">
-            <h2 className="text-xl font-semibold">{m.character_credits({}, o)}</h2>
-            <p>{m.character_work_help({}, o)}</p>
-            {!(
-              current.work
-                ? characterWorkFields(current.release, current.work.subject.type)
-                : Object.keys(current.release.types).flatMap((type) => characterWorkFields(current.release, type))
-            ).some((id) => id !== 'schema:character' && id !== 'wdt:P725') && (
-              <p role="status" className="text-sm text-muted-foreground">
-                {m.character_actor_gap({}, o)}
-              </p>
-            )}
-            {current.work ? (
-              <>
-                {currentRead && (
-                  <FictionalWorkReference
-                    subject={current.work.subject}
-                    locale={locale}
-                    onChooseAnother={session === 'signed-in' ? () => setWork(undefined) : undefined}
-                  />
-                )}
-                <div hidden={session !== 'signed-in'}>
-                  <RelationEditor
-                    key={current.work.subject.id}
-                    id={current.work.subject.id}
-                    locale={locale}
-                    search={search}
-                    transport={{
-                      ...relations(current.work.subject.id),
-                      read: async (...args) =>
-                        characterRelations(await relations(current.work!.subject.id).read(...args), current.release),
-                    }}
-                  />
-                </div>
-              </>
-            ) : (
-              <EntityPicker
-                label={m.character_choose_work({}, o)}
-                value={[]}
-                src={coverSrc}
-                search={async (text, signal) =>
-                  (await search(text, signal)).filter((entry) =>
-                    entry.types.some((type) => characterWork(current.release, type)),
-                  )
-                }
-                onValueChange={(items) => {
-                  if (items[0]) setWork(items[0].id);
-                  if (!lifetime.active()) return;
-                }}
-              />
-            )}
-          </section>
+          <AuthoringDepartureBoundary>
+            <CharacterSelection key={work ?? 'work-picker'} onSelect={setWork}>
+              {(select) => (
+                <section className="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6">
+                  <h2 className="text-xl font-semibold">{m.character_credits({}, o)}</h2>
+                  <p>{m.character_work_help({}, o)}</p>
+                  {!(
+                    current.work
+                      ? characterWorkFields(current.release, current.work.subject.type)
+                      : Object.keys(current.release.types).flatMap((type) => characterWorkFields(current.release, type))
+                  ).some((id) => id !== 'schema:character' && id !== 'wdt:P725') && (
+                    <p role="status" className="text-sm text-muted-foreground">
+                      {m.character_actor_gap({}, o)}
+                    </p>
+                  )}
+                  {current.work ? (
+                    <>
+                      {currentRead && (
+                        <FictionalWorkReference
+                          subject={current.work.subject}
+                          locale={locale}
+                          onChooseAnother={session === 'signed-in' ? () => select(undefined) : undefined}
+                        />
+                      )}
+                      <div hidden={session !== 'signed-in'}>
+                        <RelationEditor
+                          key={current.work.subject.id}
+                          id={current.work.subject.id}
+                          locale={locale}
+                          search={search}
+                          transport={{
+                            ...relations(current.work.subject.id),
+                            read: async (...args) =>
+                              characterRelations(
+                                await relations(current.work!.subject.id).read(...args),
+                                current.release,
+                              ),
+                          }}
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <EntityPicker
+                      label={m.character_choose_work({}, o)}
+                      value={[]}
+                      src={coverSrc}
+                      search={async (text, signal) =>
+                        (await search(text, signal)).filter((entry) =>
+                          entry.types.some((type) => characterWork(current.release, type)),
+                        )
+                      }
+                      onValueChange={(items) => {
+                        const destination = items[0]?.id;
+                        if (destination) select(destination);
+                      }}
+                    />
+                  )}
+                </section>
+              )}
+            </CharacterSelection>
+          </AuthoringDepartureBoundary>
         </div>
       )}
     </article>
   );
 }
+
+/** Each local selector includes only the holder it replaces in the existing departure decision. */
+const CharacterSelection = catalogueEditor(function CharacterSelection({
+  onSelect,
+  children,
+}: {
+  onSelect: (destination: string | undefined) => void;
+  children: (select: (destination: string | undefined) => void) => ReactNode;
+}) {
+  const lifetime = useEditorLifetime();
+  const { requestNavigation } = useAuthoringDeparture(false, false, 'character-selection');
+  return children((destination) => {
+    if (!lifetime.active()) return;
+    requestNavigation(() => {
+      if (!lifetime.active()) return;
+      onSelect(destination);
+      // Retire descendants immediately, before the selected reading replaces their mounted workspace.
+      lifetime.retire();
+    });
+  });
+});

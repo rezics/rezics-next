@@ -51,6 +51,8 @@ Character creation guards router and unload departure while a language row or in
 term is edited, or a create is unresolved; Stay retains local controls and exact retry intent, while Leave retires
 local recovery without cancelling a sent native operation.
 
+Choosing an existing Character or another credited work uses the replaced holder’s departure decision: Stay retains its draft, selection and exact unresolved request; Leave retires that local holder and its callbacks, and the first reviewed destination stays fixed. Classification keeps its separate boundary.
+
 Character creation refreshes rejected metadata independently of the public current reading, retaining editable terms,
 facts and correction links on refresh failure with a metadata retry.
 An explicit successful required refresh revalidates retained input before new commands; retired facts stay private
