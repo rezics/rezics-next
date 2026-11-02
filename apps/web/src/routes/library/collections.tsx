@@ -21,7 +21,7 @@ export const Route = createFileRoute('/library/collections')({
       <MineCollectionsCurrentViewer
         initial={initial}
         layout={search.layout}
-        addressError={search.addressError}
+        {...(search.addressError ? { addressError: search.addressError } : {})}
         {...(search.cursor ? { cursor: search.cursor } : {})}
       />
     );
