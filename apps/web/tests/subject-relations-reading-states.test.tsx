@@ -295,3 +295,159 @@ test('The mounted standalone Subject Relations page distinguishes failed, empty 
     await window.happyDOM.close();
   }
 }, 30_000);
+
+test('Relations loading stays distinct and unavailable pages offer an independent native restart without retaining the cursor', async () => {
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
+  const window = new Window({ url: 'https://site.test/en/subjects/reading/relations', width: 320 });
+  const requests: string[] = [];
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    Element: window.Element,
+    Node: window.Node,
+    Document: window.Document,
+    DocumentFragment: window.DocumentFragment,
+    MutationObserver: window.MutationObserver,
+    getComputedStyle: window.getComputedStyle.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    IS_REACT_ACT_ENVIRONMENT: true,
+    fetch: (async (input: RequestInfo | URL) => {
+      requests.push(String(input));
+      throw new Error('Reading state presentation must not request another page');
+    }) as typeof fetch,
+  };
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const { createRoot } = await import('react-dom/client');
+  const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+  const { AnonymousSessionContext, sessionQuery } = await import('../src/session/query');
+  const { RelationsView } = await import('../src/features/pages/relations-view');
+  const { PendingPage } = await import('../src/shell/pending');
+  const { slug } = await import('@rezics/definitions/slug');
+  const { SubjectFrame, subjectFrame } = await import('../src/features/pages/subject-frame');
+  const { viewTabLabels } = await import('../src/features/pages/route-support');
+  const { subjectTabs } = await import('../src/features/pages/views');
+  const { PlainLink } = await import('../src/features/pages/shared');
+  const { defaultReader } = await import('../src/subject/reader');
+  const { m } = await import('../src/paraglide/messages.js');
+  const { getLocale, setLocale } = await import('../src/paraglide/runtime.js');
+  const require = createRequire(import.meta.url);
+  const storybook = createRequire(require.resolve('storybook/test'));
+  const { within } = await import(storybook.resolve('@testing-library/dom'));
+  const { default: userEvent } = await import(storybook.resolve('@testing-library/user-event'));
+  const user = userEvent.setup({ document: window.document });
+  const previousLocale = getLocale();
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null });
+  const overview = pageRecording as unknown as SubjectPageData;
+  const host = window.document.createElement('main') as unknown as HTMLElement;
+  window.document.body.append(host);
+  const root = createRoot(host);
+  const navigations: string[] = [];
+  host.addEventListener('click', (event) => {
+    const anchor = (event.target as Element).closest('a');
+    if (!anchor) return;
+    event.preventDefault();
+    navigations.push(anchor.getAttribute('href')!);
+  });
+  const cursor = 'opaque:/+?=&% 日本語#';
+  const show = async (locale: string, data?: RelationsViewData) => {
+    setLocale(locale, { reload: false });
+    const frame = subjectFrame(overview, locale)!;
+    const options = { locale: locale as never };
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={client}>
+          <AnonymousSessionContext.Provider value>
+            {data ? (
+              <RelationsView
+                locale={locale}
+                subject={{ id: frame.id, label: frame.title.text }}
+                frame={
+                  <SubjectFrame
+                    frame={frame}
+                    locale={locale}
+                    link={PlainLink}
+                    reader={defaultReader}
+                    unlabelled={m.subject_value_unlabelled({}, options)}
+                    tabs={subjectTabs(overview)}
+                    tabLabels={viewTabLabels()}
+                    view="relations"
+                  />
+                }
+                data={data}
+                relations={{ 'wdt:P155': { label: 'Sequel', group: 'order', symmetric: false } }}
+                value={{
+                  locale,
+                  link: PlainLink,
+                  reader: defaultReader,
+                  unlabelled: m.subject_value_unlabelled({}, options),
+                  spoilerShow: m.subject_spoiler_show({}, options),
+                }}
+              />
+            ) : (
+              <PendingPage />
+            )}
+          </AnonymousSessionContext.Provider>
+        </QueryClientProvider>,
+      ),
+    );
+    return frame;
+  };
+  try {
+    await show('en');
+    const view = within(host);
+    expect(view.getByRole('region', { name: m.candidate_loading() }).getAttribute('aria-busy')).toBe('true');
+    expect(view.queryByRole('alert')).toBeNull();
+    expect(view.queryByText(m.subject_relation_empty_page())).toBeNull();
+    expect(host.querySelector('a')).toBeNull();
+
+    for (const locale of ['en', 'de', 'zh-Hant', 'ja']) {
+      for (const property of [null, 'wdt:P155']) {
+        const frame = await show(locale, { body: { links: null, next: cursor }, property });
+        const options = { locale: locale as never };
+        expect(view.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+        expect(view.getByRole('alert').textContent).toContain(m.subject_section_failed({}, options));
+        expect(view.queryByRole('region', { name: m.candidate_loading({}, options) })).toBeNull();
+        expect(view.queryByText(m.subject_relation_empty_page({}, options))).toBeNull();
+        const restart = view.getByRole('link', { name: m.subject_relation_restart({}, options) });
+        const base = `/${locale}/subjects/${frame.id}/${slug(frame.title.text)}/relations`;
+        const query = property ? `?property=${encodeURIComponent(property)}` : '';
+        expect(restart.getAttribute('href')).toBe(`${base}${query}`);
+        const next = host.querySelector<HTMLAnchorElement>('[data-slot="next-page"]')!;
+        const params = new URLSearchParams();
+        if (property) params.set('property', property);
+        params.set('cursor', cursor);
+        expect(next.getAttribute('href')).toBe(`${base}?${params}`);
+        restart.focus();
+        await act(async () => user.keyboard('{Enter}'));
+        expect(navigations.at(-1)).toBe(`${base}${query}`);
+        await act(async () => user.tab());
+        expect(window.document.activeElement).toBe(next);
+        await act(async () => user.keyboard('{Enter}'));
+        expect(navigations.at(-1)).toBe(`${base}?${params}`);
+      }
+    }
+    await show('en', { body: { links: [], next: null }, property: null });
+    expect(view.getByRole('status').textContent).toBe(m.subject_relation_empty_page());
+    expect(view.queryByRole('link', { name: m.subject_relation_restart() })).toBeNull();
+    expect(view.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(requests).toEqual([]);
+  } finally {
+    await act(async () => root.unmount());
+    client.clear();
+    host.remove();
+    setLocale(previousLocale, { reload: false });
+    for (const [key, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+    await window.happyDOM.close();
+  }
+}, 30_000);

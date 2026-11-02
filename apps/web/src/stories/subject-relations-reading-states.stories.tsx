@@ -13,6 +13,7 @@ import { qualifiedStatement } from '../kernel/fake/qualified-relations';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { AppShell } from '../shell/shell';
+import { PendingPage } from '../shell/pending';
 import { defaultReader } from '../subject/reader';
 import type { RelationDefinition } from '../subject/relations';
 import { PatternStory } from './page';
@@ -35,7 +36,16 @@ const credit = {
   ]),
   related: { [role.id]: { id: role.id, label: { value: role.label, language: 'en' } } },
 };
-type State = 'grouped' | 'property' | 'empty' | 'sparse' | 'withheld' | 'failed' | 'credit';
+type State =
+  | 'grouped'
+  | 'property'
+  | 'empty'
+  | 'sparse'
+  | 'withheld'
+  | 'failed'
+  | 'failed-property'
+  | 'loading'
+  | 'credit';
 type Props = { state: State; longLabels: boolean; direction: 'ltr' | 'rtl'; enlargedText: boolean };
 
 /** Supplied native-shaped pages mount the same compact frame and exported RelationsView as the standalone route. */
@@ -44,6 +54,7 @@ function ReadingContent({ state, longLabels, direction, enlargedText }: Props) {
   const options = { locale };
   const frame = subjectFrame(overview, locale)!;
   const subject = { id: frame.id, label: frame.title.text };
+  const failed = state === 'failed' || state === 'failed-property';
   const region = useRef<HTMLDivElement>(null);
   const relations: Record<string, RelationDefinition> = {
     'wdt:P155': { label: 'Sequel', group: 'order', symmetric: false },
@@ -51,35 +62,35 @@ function ReadingContent({ state, longLabels, direction, enlargedText }: Props) {
     'rezics:sameSetting': { label: 'Same setting', group: 'world', symmetric: true },
   };
   const data: RelationsViewData = {
-    property: state === 'property' ? 'wdt:P155' : null,
-    body:
-      state === 'failed'
-        ? {}
-        : {
-            links:
-              state === 'empty' || state === 'sparse'
-                ? []
-                : state === 'withheld'
-                  ? [{ subject: withheld, label: 'Withheld title', summary: null }]
-                  : state === 'credit'
-                    ? [{ ...credit, label: longLabels ? longTitle : credit.label }]
-                    : linksRecording.links
-                        .filter((link) => state !== 'property' || link.property === 'wdt:P155')
-                        .map((link, index) => ({ ...link, label: longLabels && index === 0 ? longTitle : link.label })),
-            count: { value: state === 'empty' ? 0 : 37, exact: state === 'empty' || state === 'grouped' },
-            next: state === 'empty' ? null : cursor,
-          },
+    property: state === 'property' || state === 'failed-property' ? 'wdt:P155' : null,
+    body: failed
+      ? {}
+      : {
+          links:
+            state === 'empty' || state === 'sparse'
+              ? []
+              : state === 'withheld'
+                ? [{ subject: withheld, label: 'Withheld title', summary: null }]
+                : state === 'credit'
+                  ? [{ ...credit, label: longLabels ? longTitle : credit.label }]
+                  : linksRecording.links
+                      .filter((link) => state !== 'property' || link.property === 'wdt:P155')
+                      .map((link, index) => ({ ...link, label: longLabels && index === 0 ? longTitle : link.label })),
+          count: { value: state === 'empty' ? 0 : 37, exact: state === 'empty' || state === 'grouped' },
+          next: state === 'empty' ? null : cursor,
+        },
   };
   // Presentation-only stress of the actual production anchor, with no alternate control or locale catalogue edit.
   useLayoutEffect(() => {
-    const anchor = region.current?.querySelector('[data-slot="next-page"]');
+    const anchor = region.current?.querySelector('[data-slot="next-page"], [data-slot="restart-page"]');
     if (!longLabels || !anchor) return;
     const original = anchor.textContent;
-    anchor.textContent = `${m.subject_relations_more({}, options)} / 次の関係 / ${'WeitereBeziehungen'.repeat(16)}`;
+    const label = failed ? m.subject_relation_restart({}, options) : m.subject_relations_more({}, options);
+    anchor.textContent = `${label} / 次の関係 / ${'WeitereBeziehungen'.repeat(16)}`;
     return () => {
       anchor.textContent = original;
     };
-  }, [longLabels, locale, state]);
+  }, [longLabels, locale, state, failed]);
   useLayoutEffect(() => {
     if (!enlargedText) return;
     const root = document.documentElement;
@@ -91,41 +102,45 @@ function ReadingContent({ state, longLabels, direction, enlargedText }: Props) {
   }, [enlargedText]);
   return (
     <div ref={region} data-slot="relations-reading-example" lang={locale} dir={direction}>
-      <RelationsView
-        locale={locale}
-        subject={subject}
-        frame={
-          <SubjectFrame
-            frame={frame}
-            locale={locale}
-            link={SubjectLink}
-            reader={defaultReader}
-            unlabelled={m.subject_value_unlabelled({}, options)}
-            tabs={subjectTabs(overview)}
-            tabLabels={viewTabLabels()}
-            view="relations"
-          />
-        }
-        data={data}
-        relations={relations}
-        value={{
-          locale,
-          link: SubjectLink,
-          reader: defaultReader,
-          unlabelled: m.subject_value_unlabelled({}, options),
-          spoilerShow: m.subject_spoiler_show({}, options),
-          labels: {
+      {state === 'loading' ? (
+        <PendingPage />
+      ) : (
+        <RelationsView
+          locale={locale}
+          subject={subject}
+          frame={
+            <SubjectFrame
+              frame={frame}
+              locale={locale}
+              link={SubjectLink}
+              reader={defaultReader}
+              unlabelled={m.subject_value_unlabelled({}, options)}
+              tabs={subjectTabs(overview)}
+              tabLabels={viewTabLabels()}
+              view="relations"
+            />
+          }
+          data={data}
+          relations={relations}
+          value={{
+            locale,
+            link: SubjectLink,
+            reader: defaultReader,
+            unlabelled: m.subject_value_unlabelled({}, options),
             spoilerShow: m.subject_spoiler_show({}, options),
-            documentSpoiler: m.thread_reveal_spoiler({}, options),
-            cover: {
-              withheld: m.subject_cover_withheld({}, options),
-              reveal: m.subject_cover_reveal({}, options),
-              credit: m.subject_cover_credit({}, options),
-              via: m.subject_cover_via({}, options),
+            labels: {
+              spoilerShow: m.subject_spoiler_show({}, options),
+              documentSpoiler: m.thread_reveal_spoiler({}, options),
+              cover: {
+                withheld: m.subject_cover_withheld({}, options),
+                reveal: m.subject_cover_reveal({}, options),
+                credit: m.subject_cover_credit({}, options),
+                via: m.subject_cover_via({}, options),
+              },
             },
-          },
-        }}
-      />
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -162,13 +177,25 @@ const meta = {
   args: { state: 'grouped', longLabels: false, direction: 'ltr', enlargedText: false },
   globals: { locale: 'en', viewport: { value: 'desktop1280' } },
   play: async ({ canvasElement, args }) => {
+    if (args.state === 'loading') {
+      const view = within(canvasElement);
+      const pending = await view.findByRole('region', { name: m.candidate_loading() });
+      await expect(pending).toHaveAttribute('aria-busy', 'true');
+      await expect(view.queryByRole('alert')).toBeNull();
+      await expect(view.queryByText(m.subject_relation_empty_page())).toBeNull();
+      await expect(pending.querySelector('a, button')).toBeNull();
+      return;
+    }
     const heading = await within(canvasElement).findByRole('heading', { level: 1 });
     const region = heading.closest<HTMLElement>('[data-slot="relations-reading-example"]')!;
     const view = within(region);
     const locale = getLocale();
     const options = { locale };
     const frame = subjectFrame(overview, locale)!;
-    await expect(heading).toHaveTextContent(args.state === 'property' ? 'Sequel' : m.subject_relations({}, options));
+    await expect(view.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    await expect(heading).toHaveTextContent(
+      args.state === 'property' || args.state === 'failed-property' ? 'Sequel' : m.subject_relations({}, options),
+    );
     await expect(region.querySelector('[data-slot="subject-frame"]')).toBeVisible();
     await expect(region.querySelector('[data-slot="view-tabs"] [aria-current="page"]')).toHaveAttribute(
       'data-view',
@@ -176,11 +203,53 @@ const meta = {
     );
     const count = region.querySelector('[data-slot="view-heading"] [data-slot="count"]');
     const next = region.querySelector<HTMLAnchorElement>('[data-slot="next-page"]');
-    if (args.state === 'failed') {
+    if (args.state === 'failed' || args.state === 'failed-property') {
       await expect(view.getByRole('alert')).toHaveTextContent(m.subject_section_failed({}, options));
       await expect(view.queryByText(m.subject_relation_empty_page({}, options))).toBeNull();
       await expect(count).toBeNull();
       await expect(next).toBeNull();
+      const restart = region.querySelector<HTMLAnchorElement>('[data-slot="restart-page"]')!;
+      const query = args.state === 'failed-property' ? '?property=wdt%3AP155' : '';
+      const expected = `/${locale}/subjects/${frame.id}/${slug(frame.title.text)}/relations${query}`;
+      await expect(restart).toHaveAttribute('href', expected);
+      await expect(restart).toHaveTextContent(m.subject_relation_restart({}, options));
+      await expect(restart).toBeVisible();
+      await expect(restart.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+      await expect(restart.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
+      const style = getComputedStyle(restart);
+      await expect(style.whiteSpace).toBe('normal');
+      await expect(style.overflowWrap).toBe('anywhere');
+      await expect(restart.scrollWidth).toBeLessThanOrEqual(restart.clientWidth + 1);
+      await expect(restart.scrollHeight).toBeLessThanOrEqual(restart.clientHeight + 1);
+      await expect(restart.getBoundingClientRect().left).toBeGreaterThanOrEqual(
+        region.getBoundingClientRect().left - 1,
+      );
+      await expect(restart.getBoundingClientRect().right).toBeLessThanOrEqual(region.getBoundingClientRect().right + 1);
+      if (args.longLabels) {
+        await expect(restart).toHaveTextContent('WeitereBeziehungen'.repeat(16));
+        await expect(style.overflow).not.toBe('hidden');
+        await expect(style.textOverflow).not.toBe('ellipsis');
+        await expect(restart.getBoundingClientRect().height).toBeGreaterThan(parseFloat(style.lineHeight) * 2);
+      }
+      heading.focus();
+      for (let step = 0; step < 80 && document.activeElement !== restart; step += 1) await userEvent.tab();
+      await expect(restart).toHaveFocus();
+      await expect(parseFloat(getComputedStyle(restart).outlineWidth)).toBeGreaterThanOrEqual(2);
+      await expect(getComputedStyle(restart).outlineStyle).not.toBe('none');
+      const destinations: string[] = [];
+      const observe = (event: MouseEvent) => {
+        event.preventDefault();
+        destinations.push(restart.getAttribute('href')!);
+      };
+      restart.addEventListener('click', observe);
+      try {
+        await userEvent.keyboard('{Enter}');
+      } finally {
+        restart.removeEventListener('click', observe);
+      }
+      await expect(destinations).toEqual([expected]);
+      if (args.enlargedText)
+        await expect(parseFloat(getComputedStyle(document.documentElement).fontSize)).toBeGreaterThanOrEqual(32);
       return;
     }
     await expect(view.queryByRole('alert')).toBeNull();
@@ -278,11 +347,16 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Grouped: Story = {};
+export const Loading: Story = { args: { state: 'loading' }, globals: { viewport: { value: 'phone320' } } };
 export const PropertyOnly: Story = { args: { state: 'property' } };
 export const TerminalEmpty: Story = { args: { state: 'empty' }, globals: { viewport: { value: 'phone320' } } };
 export const SparseEmptyWithNext: Story = { args: { state: 'sparse' }, globals: { viewport: { value: 'phone320' } } };
 export const WithheldCurrentPage: Story = { args: { state: 'withheld' } };
 export const Unavailable: Story = { args: { state: 'failed' }, globals: { viewport: { value: 'phone320' } } };
+export const LongPropertyRecoveryPhone: Story = {
+  args: { state: 'failed-property', longLabels: true, direction: 'rtl', enlargedText: true },
+  globals: { locale: 'de', viewport: { value: 'phone320' } },
+};
 export const QualifiedCredit: Story = { args: { state: 'credit' } };
 export const LongMultilingualPhone: Story = {
   args: { longLabels: true },

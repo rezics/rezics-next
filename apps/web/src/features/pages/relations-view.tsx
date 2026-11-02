@@ -21,6 +21,8 @@ export type RelationsViewData = {
 };
 
 const PAGE_LIMIT = 100;
+const actionClass =
+  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] px-4 py-3 text-center focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 /**
  * The reads of the Relations view: the subject's overview page, which carries the subject for the frame and the
@@ -102,11 +104,20 @@ export function RelationsView({
         }
       />
       {!listed ? (
-        <Empty className="border" role="alert" data-state="failed">
-          <EmptyHeader>
-            <EmptyTitle className="text-base font-normal">{m.subject_section_failed({}, options)}</EmptyTitle>
-          </EmptyHeader>
-        </Empty>
+        <>
+          <Empty className="border" role="alert" data-state="failed">
+            <EmptyHeader>
+              <EmptyTitle className="text-base font-normal">{m.subject_section_failed({}, options)}</EmptyTitle>
+            </EmptyHeader>
+          </Empty>
+          <a
+            data-slot="restart-page"
+            href={viewHref(locale, subject, data.property)}
+            className={cn(buttonVariants({ variant: 'outline' }), actionClass)}
+          >
+            {m.subject_relation_restart({}, options)}
+          </a>
+        </>
       ) : items.length === 0 ? (
         <Empty className="border" role="status" data-state="empty">
           <EmptyHeader>
@@ -127,10 +138,7 @@ export function RelationsView({
         <a
           data-slot="next-page"
           href={viewHref(locale, subject, data.property, next)}
-          className={cn(
-            buttonVariants({ variant: 'outline' }),
-            'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] px-4 py-3 text-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
-          )}
+          className={cn(buttonVariants({ variant: 'outline' }), actionClass)}
         >
           {m.subject_relations_more({}, options)}
         </a>
