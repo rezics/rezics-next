@@ -264,7 +264,7 @@ function PeopleCreate({
             const fields = drafts[type] ?? {};
             return (
               profile && (
-                <section className="min-w-0 space-y-4">
+                <section className="min-w-0 space-y-4 [overflow-wrap:anywhere]">
                   <h2 className="text-xl font-semibold">{m.people_profile_initial({}, o)}</h2>
                   <p className="text-sm text-muted-foreground">{m.people_profile_initial_help({}, o)}</p>
                   <p lang={profile.descriptionLang ?? undefined}>{profile.description}</p>
@@ -299,6 +299,7 @@ function PeopleCreate({
                   </div>
                   {Object.entries(fields).map(([property, statement]) => {
                     const name = definitionText(read.release.properties[property]?.labels, locale);
+                    const description = definitionText(read.release.properties[property]?.descriptions, locale);
                     const supported = profile.fields.includes(property);
                     const citation = statement.references[0]?.parts[0]?.value;
                     const pointer = `/statements/${property.replaceAll('~', '~0').replaceAll('/', '~1')}`;
@@ -310,57 +311,73 @@ function PeopleCreate({
                         key={property}
                         id={`people-fact-${property}`}
                         disabled={disabled}
-                        className="min-w-0 space-y-3 rounded-xl border border-border bg-card p-4"
+                        className="min-w-0 max-w-full"
                       >
-                        <legend className="px-1 font-medium" lang={name.lang ?? undefined}>
-                          {name.text || m.candidate_value_unavailable({}, o)}
+                        <legend className="min-w-0 max-w-full" lang={name.lang ?? undefined}>
+                          <ContentItemHeading
+                            level={3}
+                            className="min-w-0 text-lg leading-snug font-semibold [overflow-wrap:anywhere]"
+                          >
+                            {name.text || m.candidate_value_unavailable({}, o)}
+                          </ContentItemHeading>
                         </legend>
-                        {supported ? (
-                          <ScalarControl
-                            part={statement}
-                            definition={read.release.properties[property]}
-                            read={{ release: read.release, public: { related: {} } }}
-                            locale={locale}
-                            onChange={(value) => update(type, property, { ...statement, value })}
-                          />
-                        ) : (
-                          <EditorFailure reason="stale" locale={locale} />
-                        )}
-                        <Field>
-                          <FieldLabel htmlFor={`people-citation-${property}`}>{m.relation_citation({}, o)}</FieldLabel>
-                          <Input
-                            id={`people-citation-${property}`}
-                            className={peopleInputTarget}
-                            type="url"
-                            value={citation?.type === 'value' ? String(citation.content) : ''}
-                            onChange={(event) =>
-                              update(type, property, {
-                                ...statement,
-                                references: event.target.value.trim()
-                                  ? [
-                                      {
-                                        parts: [
-                                          {
-                                            property: { id: 'schema:url' },
-                                            value: { type: 'value', content: event.target.value },
-                                          },
-                                        ],
-                                      },
-                                    ]
-                                  : [],
-                              })
-                            }
-                          />
-                        </Field>
-                        {invalid && <FieldError>{m.catalogue_create_invalid_field({}, o)}</FieldError>}
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          className={peopleActionTarget}
-                          onClick={() => update(type, property)}
+                        <ContentItemFrame
+                          as="div"
+                          data-slot="people-initial-fact"
+                          className="flex min-w-0 flex-col gap-3 py-3 sm:py-4 [&_label]:min-w-0 [&_label]:max-w-full [&_label]:flex-wrap [&_label]:whitespace-normal [&_label]:[overflow-wrap:anywhere]"
                         >
-                          {m.people_profile_remove_fact({}, o)}
-                        </Button>
+                          {description.text && (
+                            <p className="min-w-0 text-sm text-muted-foreground" lang={description.lang ?? undefined}>
+                              {description.text}
+                            </p>
+                          )}
+                          {supported ? (
+                            <ScalarControl
+                              part={statement}
+                              definition={read.release.properties[property]}
+                              read={{ release: read.release, public: { related: {} } }}
+                              locale={locale}
+                              onChange={(value) => update(type, property, { ...statement, value })}
+                            />
+                          ) : (
+                            <EditorFailure reason="stale" locale={locale} />
+                          )}
+                          <Field>
+                            <FieldLabel htmlFor={`people-citation-${property}`}>{m.relation_citation({}, o)}</FieldLabel>
+                            <Input
+                              id={`people-citation-${property}`}
+                              className={peopleInputTarget}
+                              type="url"
+                              value={citation?.type === 'value' ? String(citation.content) : ''}
+                              onChange={(event) =>
+                                update(type, property, {
+                                  ...statement,
+                                  references: event.target.value.trim()
+                                    ? [
+                                        {
+                                          parts: [
+                                            {
+                                              property: { id: 'schema:url' },
+                                              value: { type: 'value', content: event.target.value },
+                                            },
+                                          ],
+                                        },
+                                      ]
+                                    : [],
+                                })
+                              }
+                            />
+                          </Field>
+                          {invalid && <FieldError>{m.catalogue_create_invalid_field({}, o)}</FieldError>}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            className={peopleActionTarget + ' self-start'}
+                            onClick={() => update(type, property)}
+                          >
+                            {m.people_profile_remove_fact({}, o)}
+                          </Button>
+                        </ContentItemFrame>
                       </fieldset>
                     );
                   })}
