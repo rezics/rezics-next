@@ -240,7 +240,7 @@ test('whole Person and Organization creation families retain exact facts, indepe
               };
             } else await value(fixture, property, String(content));
             const cite = local.getByRole('textbox', { name: m.relation_citation() });
-            expect(cite.id).toBe(`people-citation-${property}`);
+            expect(cite.id).toMatch(/-people-\d+-citation$/);
             expect(cite.getAttribute('type')).toBe('url');
             await act(async () => user.type(cite, citation));
             expect((cite as HTMLInputElement).value).toBe(citation);
@@ -370,7 +370,7 @@ test('whole Person and Organization creation families retain exact facts, indepe
     expect(stateItem.statements!['schema:deathDate']![0]!.value).toEqual({ type: 'novalue' });
     expect(Object.values(stateItem.statements!).map((rows) => rows[0]!.references)).toEqual([[], []]);
 
-    // Invalid is anchored to the original native fieldset, with human naming and genuine focus movement.
+    // Invalid scalar values name and focus the rejected input.
     const invalid = peopleProfileFixture();
     await render(editor(invalid));
     await choose('schema:Person');
@@ -378,12 +378,77 @@ test('whole Person and Organization creation families retain exact facts, indepe
     await add(invalid, 'wdt:P648');
     await value(invalid, 'wdt:P648', 'invalid-identifier');
     await submit();
-    const correction = await waitFor(() => canvas().getByRole('link', { name: name(invalid, 'wdt:P648') }));
-    expect(correction.getAttribute('href')).toBe(`#${encodeURIComponent('people-fact-wdt:P648')}`);
+    const correction = await waitFor(() => canvas().getByRole('link', { name: new RegExp(name(invalid, 'wdt:P648')) }));
+    const rejectedInput = within(group('wdt:P648')).getByRole('textbox', { name: m.correction_value() });
+    expect(correction.getAttribute('href')).toBe(`#${encodeURIComponent(rejectedInput.id)}`);
     await act(async () => user.click(correction));
-    expect(window.document.activeElement).toBe(group('wdt:P648').querySelector('select'));
+    expect(window.document.activeElement).toBe(rejectedInput);
     expect(invalid.calls.some((call) => call.method === 'POST')).toBe(false);
-    expect(group('wdt:P648').textContent).toContain(m.catalogue_create_invalid_field());
+    expect(rejectedInput.getAttribute('aria-invalid')).toBe('true');
+
+    for (const type of ['schema:Person', 'schema:Organization']) {
+      const fixture = peopleProfileFixture();
+      const supplied = await fixture.transport.load();
+      if (!supplied.ok) throw new Error('Expected People metadata');
+      let loads = 0;
+      const commands: PeopleCommand[] = [];
+      const readIds: string[] = [];
+      const bad = '/statements/schema:url/0/references/0/parts/0/value/content';
+      const unknown = ['/statements/schema:url/1/value/content', '/statements/schema:url/0/qualifiers/0/value/content', '/statements/schema:url/0/references/1/parts/0/value/content'];
+      const transport: PeopleTransport = {
+        load: async () => ++loads === 2 ? { ok: false, reason: 'unavailable' } : supplied,
+        create: async (command) => {
+          commands.push(structuredClone(command));
+          if (commands.length === 1) return { ok: false, reason: 'invalid', refreshDefinitions: true,
+            errors: [bad, ...unknown].map((pointer) => ({ pointer, code: 'invalid_format' })) };
+          const result = await fixture.transport.create(command);
+          return result.ok ? { ...result, reader: { state: 'unavailable' } } : result;
+        },
+        read: async (id) => { readIds.push(id); return fixture.transport.read(id); },
+      };
+      await render(editor(fixture, transport));
+      await choose(type);
+      await terms('Cited person or organization');
+      await act(async () => user.click(canvas().getByRole('button', { name: m.catalogue_create_add_language() })));
+      await act(async () => {
+        await user.type(host.querySelector('#create-language-1')!, 'ja');
+        await user.type(host.querySelector('#create-label-1')!, '保持する名前');
+      });
+      await add(fixture, 'schema:url');
+      await value(fixture, 'schema:url', 'https://example.org/person');
+      await add(fixture, 'schema:sameAs');
+      await value(fixture, 'schema:sameAs', 'https://example.org/sibling');
+      const cite = within(group('schema:url')).getByRole('textbox', { name: m.relation_citation() });
+      await act(async () => user.type(cite, 'https://example.org/rejected'));
+      await submit();
+      await waitFor(() => expect(host.textContent).toContain(m.catalogue_create_unavailable()));
+      expect(canvas().getByRole('button', { name: m.catalogue_create_submit() }).hasAttribute('disabled')).toBe(true);
+      const link = canvas().getByRole('link', { name: `${name(fixture, 'schema:url')} · ${m.relation_citation()}` });
+      expect(link.getAttribute('href')).toBe(`#${encodeURIComponent(cite.id)}`);
+      for (const pointer of unknown) {
+        const details = Array.from(host.querySelectorAll('details')).find((node) => node.textContent?.includes(pointer))!;
+        expect(details.closest('li')!.querySelector('a')).toBeNull();
+      }
+      await act(async () => user.click(link));
+      expect(window.document.activeElement).toBe(cite);
+      expect(cite.getAttribute('aria-invalid')).toBe('true');
+      await act(async () => { await user.clear(cite); await user.type(cite, 'https://example.org/corrected'); });
+      await act(async () => user.click(canvas().getByRole('button', { name: m.catalogue_create_retry() })));
+      await submit();
+      await waitFor(() => expect(host.textContent).toContain(m.catalogue_create_reader_unavailable()));
+      expect(commands[1]!.key).not.toBe(commands[0]!.key);
+      const expected = structuredClone(commands[0]!.item);
+      expected.statements!['schema:url']![0]!.references[0]!.parts[0]!.value = { type: 'value', content: 'https://example.org/corrected' };
+      expect(commands[1]!.item).toEqual(expected);
+      expect(expected.labels).toEqual({ en: 'Cited person or organization', ja: '保持する名前' });
+      await act(async () => user.click(canvas().getByRole('button', { name: m.catalogue_create_retry() })));
+      await waitFor(() => expect(canvas().getByRole('link', { name: m.catalogue_create_open() })).toBeDefined());
+      expect(readIds).toEqual([peopleCreatedId]);
+      expect(commands).toHaveLength(2);
+      expect(canvas().getByRole('link', { name: m.catalogue_create_open() }).getAttribute('href')).toBe(
+        (await fixture.transport.read(peopleCreatedId) as { state: 'ready'; href: string }).href,
+      );
+    }
 
     // Refresh removes a definition without erasing its draft, citation, visible stale meaning or Remove.
     const removed = peopleProfileFixture();
@@ -391,6 +456,7 @@ test('whole Person and Organization creation families retain exact facts, indepe
     if (!supplied.ok) throw new Error('Expected supplied creation metadata');
     const next = structuredClone(supplied);
     delete next.release.properties['schema:url'];
+    delete next.release.types['schema:Organization'];
     next.profiles = peopleProfiles(next.release, 'en');
     let loads = 0;
     const commands: PeopleCommand[] = [];
@@ -425,6 +491,9 @@ test('whole Person and Organization creation families retain exact facts, indepe
     expect(commands).toHaveLength(1);
     expect(commands[0]!.item.statements!['schema:url']![0]!.value).toEqual({ type: 'value', content: url });
     expect(loads).toBe(2);
+    await submit();
+    expect(commands).toHaveLength(1); // Retired metadata cannot authorize a fresh command.
+    expect((host.querySelector('#create-label-0') as HTMLInputElement).value).toBe('Removed metadata');
     await act(async () =>
       user.click(within(group('schema:url')).getByRole('button', { name: m.people_profile_remove_fact() })),
     );

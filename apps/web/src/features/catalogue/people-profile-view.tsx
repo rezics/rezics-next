@@ -1,6 +1,6 @@
 import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState, type ReactNode } from 'react';
+import { useId, useRef, useState, type ReactNode } from 'react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Field, FieldError, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -16,6 +16,8 @@ import type { StatementInput } from './statement-editor';
 import { SubjectFacts } from './subject-facts-view';
 import type { FactsTransport } from './subject-facts';
 import type { CreateFailure } from './create-subject';
+import { presentStatementViolations, type PresentedViolation } from './statement-validation-presentation';
+import type { Violation } from '@rezics/definitions/validate';
 import {
   peopleInitialItem,
   peopleProfiles,
@@ -201,7 +203,50 @@ function PeopleCreate({
   const [drafts, setDrafts] = useState<Record<string, Record<string, StatementInput>>>({});
   const [failure, setFailure] = useState<CreateFailure>();
   const [created, setCreated] = useState<string>();
+  const scope = useId();
+  const rowIds = useRef(new Map<string, string>());
+  const sequence = useRef(0);
+  function rowId(type: string, property: string) {
+    const key = JSON.stringify([type, property]);
+    let id = rowIds.current.get(key);
+    if (!id) {
+      id = `${scope}-people-${sequence.current++}`;
+      rowIds.current.set(key, id);
+    }
+    return id;
+  }
+  // Resolve only this producer's single assertion and editable scalar/citation parts.
+  // Capture these IDs at rejection so a removed/re-added fact cannot inherit an old error link.
+  function corrections(type: string, errors: readonly Violation[]) {
+    const results = new Map<string, PresentedViolation>();
+    for (const error of errors) {
+      const match = /^\/statements\/((?:[^/~]|~[01])+)\/0(\/.*)?$/.exec(error.pointer);
+      if (!match) continue;
+      const property = match[1]!.replaceAll('~1', '/').replaceAll('~0', '~');
+      const statement = drafts[type]?.[property];
+      const profile = read.profiles.find((entry) => entry.id === type);
+      if (!statement || !profile?.fields.includes(property)) continue;
+      const id = rowId(type, property);
+      const path = match[2] ?? '';
+      const [presented] = presentStatementViolations(
+        [{ ...error, pointer: `/statement${path}` }], statement, read.release, locale, id,
+      );
+      if (!presented) continue;
+      if (path === '/references' || path === '/references/0/parts/0/value/content') {
+        // A required missing citation is editable too; arbitrary reference indices are not.
+        if (path !== '/references' && !statement.references[0]?.parts[0]) continue;
+        presented.target = `${id}-citation`;
+        presented.label = m.relation_citation({}, o);
+      } else if (!presented.target.startsWith(`${id}-fact-`)) continue;
+      const name = definitionText(read.release.properties[property]?.labels, locale).text;
+      presented.label = [name, presented.label].filter(Boolean).join(' · ');
+      presented.id = `${id}-error-${results.size}`;
+      results.set(error.pointer, presented);
+    }
+    return results;
+  }
   function update(type: string, property: string, statement?: StatementInput) {
+    if (!statement) rowIds.current.delete(JSON.stringify([type, property]));
     setDrafts((previous) => {
       const fields = { ...previous[type] };
       if (statement) fields[property] = statement;
@@ -248,10 +293,9 @@ function PeopleCreate({
           labelLanguage: (type) => read.profiles.find((profile) => profile.id === type)?.lang ?? undefined,
           descriptionLanguage: (type) =>
             read.profiles.find((profile) => profile.id === type)?.descriptionLang ?? undefined,
-          control: (pointer) => {
-            if (!pointer.startsWith('/statements/')) return undefined;
-            const property = pointer.split('/')[2]?.replaceAll('~1', '/').replaceAll('~0', '~');
-            return property ? `people-fact-${property}` : undefined;
+          control: (pointer, type) => {
+            const error = corrections(type, [{ pointer, code: 'invalid_format' }]).get(pointer);
+            return error ? { id: error.target, label: error.label } : undefined;
           },
           prepare: (initial) => {
             const item = peopleInitialItem(initial, drafts[initial.type] ?? {});
@@ -262,14 +306,15 @@ function PeopleCreate({
           fields: (type, disabled) => {
             const profile = read.profiles.find((entry) => entry.id === type);
             const fields = drafts[type] ?? {};
+            const feedback = [...corrections(type, failure?.errors ?? []).values()];
             return (
-              profile && (
+              (profile || Object.keys(fields).length > 0) && (
                 <section className="min-w-0 space-y-4 [overflow-wrap:anywhere]">
                   <h2 className="text-xl font-semibold">{m.people_profile_initial({}, o)}</h2>
                   <p className="text-sm text-muted-foreground">{m.people_profile_initial_help({}, o)}</p>
-                  <p lang={profile.descriptionLang ?? undefined}>{profile.description}</p>
+                  <p lang={profile?.descriptionLang ?? undefined}>{profile?.description}</p>
                   <div className="flex flex-wrap gap-2">
-                    {profile.fields
+                    {(profile?.fields ?? [])
                       .filter((id) => !fields[id])
                       .map((id) => {
                         const name = definitionText(read.release.properties[id]?.labels, locale);
@@ -300,12 +345,11 @@ function PeopleCreate({
                   {Object.entries(fields).map(([property, statement]) => {
                     const name = definitionText(read.release.properties[property]?.labels, locale);
                     const description = definitionText(read.release.properties[property]?.descriptions, locale);
-                    const supported = profile.fields.includes(property);
+                    const supported = profile?.fields.includes(property);
                     const citation = statement.references[0]?.parts[0]?.value;
-                    const pointer = `/statements/${property.replaceAll('~', '~0').replaceAll('/', '~1')}`;
-                    const invalid = failure?.errors?.some(
-                      (error) => error.pointer === pointer || error.pointer.startsWith(`${pointer}/`),
-                    );
+                    const id = rowId(type, property);
+                    const errors = feedback.filter((error) => error.id.startsWith(`${id}-error-`));
+                    const citationErrors = errors.filter((error) => error.target === `${id}-citation`);
                     return (
                       <fieldset
                         key={property}
@@ -337,17 +381,20 @@ function PeopleCreate({
                               definition={read.release.properties[property]}
                               read={{ release: read.release, public: { related: {} } }}
                               locale={locale}
+                              feedback={{ id, address: 'fact', errors }}
                               onChange={(value) => update(type, property, { ...statement, value })}
                             />
                           ) : (
                             <EditorFailure reason="stale" locale={locale} />
                           )}
                           <Field>
-                            <FieldLabel htmlFor={`people-citation-${property}`}>
+                            <FieldLabel htmlFor={`${id}-citation`}>
                               {m.relation_citation({}, o)}
                             </FieldLabel>
                             <Input
-                              id={`people-citation-${property}`}
+                              id={`${id}-citation`}
+                              aria-invalid={citationErrors.length ? true : undefined}
+                              aria-describedby={citationErrors.map((error) => error.id).join(' ') || undefined}
                               className={peopleInputTarget}
                               type="url"
                               value={citation?.type === 'value' ? String(citation.content) : ''}
@@ -370,7 +417,9 @@ function PeopleCreate({
                               }
                             />
                           </Field>
-                          {invalid && <FieldError>{m.catalogue_create_invalid_field({}, o)}</FieldError>}
+                          {errors.map((error) => (
+                            <FieldError key={error.id} id={error.id}>{error.instruction}</FieldError>
+                          ))}
                           <Button
                             type="button"
                             variant="ghost"
@@ -383,7 +432,7 @@ function PeopleCreate({
                       </fieldset>
                     );
                   })}
-                  {!!profile.unsupported.length && (
+                  {!!profile?.unsupported.length && (
                     <p className="text-sm text-muted-foreground">
                       {m.people_profile_unsupported({}, o)}{' '}
                       {profile.unsupported.map((id) => {
