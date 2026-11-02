@@ -159,9 +159,7 @@ export async function pageBulkOutcomes(
     page_limit: limit + 1,
   };
   const rows =
-    state === null
-      ? await outcomePage.run(client, parameters)
-      : await statePage.run(client, { ...parameters, state });
+    state === null ? await outcomePage.run(client, parameters) : await statePage.run(client, { ...parameters, state });
   let previous = BigInt(after ?? '-1');
   for (const row of rows) {
     if (typeof row.ordinal !== 'string' || !decimal.test(row.ordinal) || BigInt(row.ordinal) <= previous)
