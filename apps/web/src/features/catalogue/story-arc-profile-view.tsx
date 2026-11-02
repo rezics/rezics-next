@@ -133,7 +133,7 @@ function StoryArcProfileLive({
     observation.current = { readable, selection, token: {} };
   const token = observation.current.token;
   const { requestNavigation } = useAuthoringDeparture(false, false, selection);
-  const choose = (destination: { id?: string | undefined } | { work?: string | undefined }) => {
+  const choose = (destination: { id: string | undefined } | { work: string | undefined }) => {
     if (!lifetime.active() || observation.current.token !== token) return;
     if ('id' in destination ? destination.id === id : destination.work === work) return;
     requestNavigation(() => {

@@ -1,5 +1,7 @@
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
+import { createRequire } from 'node:module';
+import type { RelationTransport, RelationResult } from '../src/subject/relation-candidates';
 import { act } from 'react';
 import type { FactsTransport, FactResult } from '../src/features/catalogue/subject-facts';
 import type { StoryArcRead } from '../src/features/catalogue/story-arc-profile';
@@ -31,6 +33,20 @@ test('refused readings retire markup and callbacks, recovery retains sealed draf
     await import('../src/kernel/fake/catalogue-story-arc-profile');
   const { m } = await import('../src/paraglide/messages.js');
   const fixture = storyArcProfileFixture('reader-unavailable');
+  const testing = createRequire(require.resolve('storybook/test'));
+  const { within } = await import(testing.resolve('@testing-library/dom'));
+  const { default: userEvent } = await import(testing.resolve('@testing-library/user-event'));
+  const user = userEvent.setup({ document: window.document });
+  const relationCommands: Parameters<RelationTransport['propose']>[0][] = [];
+  let finishRelation!: (result: RelationResult) => void;
+  const relations = (id: string) => ({
+    ...fixture.props.relations(id),
+    propose: async (command: Parameters<RelationTransport['propose']>[0]): Promise<RelationResult> => {
+      relationCommands.push(command);
+      if (relationCommands.length === 1) return { ok: false, reason: 'unavailable' };
+      return new Promise((resolve) => { finishRelation = resolve; });
+    },
+  });
   const client = new QueryClient();
   const host = window.document.createElement('main');
   window.document.body.append(host);
@@ -83,6 +99,8 @@ test('refused readings retire markup and callbacks, recovery retains sealed draf
     });
   };
   const button = (text: string) => [...host.querySelectorAll('button')].find((node) => node.textContent === text)!;
+  const dialog = () => within(window.document.body as unknown as HTMLElement).getByRole('alertdialog');
+  const decide = (label: string) => act(async () => user.click(within(dialog()).getByRole('button', { name: label })));
   const visible = (selector: string) =>
     [...host.querySelectorAll(selector)].filter((node) => !node.closest('[hidden]'));
   try {
@@ -96,11 +114,33 @@ test('refused readings retire markup and callbacks, recovery retains sealed draf
             work={fixture.work.id}
             transport={transport}
             facts={facts}
+            relations={relations}
           />
         </QueryClientProvider>,
       ),
     );
     await settle(() => button(m.relation_open()).click());
+    await act(async () => user.selectOptions(within(host).getByRole('combobox', { name: m.relation_property() }), 'rezics:storyArc'));
+    await settle(() => [...host.querySelectorAll('button')].find((node) => node.textContent === m.relation_edit_existing())!.click());
+    await settle(() => button(m.relation_propose()).click());
+    const confirmRelation = () => [...host.querySelectorAll('button')].filter((node) => node.textContent === m.relation_propose()).at(-1)!;
+    await settle(() => confirmRelation().click());
+    expect(relationCommands).toHaveLength(1);
+    const exactRelation = structuredClone(relationCommands[0]);
+    const opener = button(m.fictional_work_choose_another());
+    opener.focus();
+    await settle(() => opener.click());
+    expect(dialog().textContent).toContain(m.thread_authoring_leave_pending());
+    const beforeStay = loads.length;
+    await settle(() => button(m.story_arc_choose_existing()).click()); // The first destination wins.
+    expect(window.document.querySelectorAll('[role="alertdialog"]')).toHaveLength(1);
+    await decide(m.thread_authoring_stay());
+    expect(loads).toHaveLength(beforeStay);
+    expect(window.document.activeElement).toBe(opener);
+    await settle(() => confirmRelation().click());
+    expect(relationCommands[1]).toBe(relationCommands[0]);
+    expect(relationCommands[1]).toEqual(exactRelation);
+    const retiredRelationSubmit = Reflect.get(confirmRelation(), Object.keys(confirmRelation()).find((key) => key.startsWith('__reactProps'))!).onClick;
     const url = [...host.querySelectorAll('section')].find(
       (node) => node.getAttribute('aria-label') === fixture.release.properties['schema:url']!.labels.en,
     )!;
@@ -122,6 +162,9 @@ test('refused readings retire markup and callbacks, recovery retains sealed draf
     const propsKey = Object.keys(form).find((key) => key.startsWith('__reactProps'))!;
     const savedSubmit = Reflect.get(form, propsKey).onSubmit;
     const oldIdentity = [storyArcProfileId, fixture.work.id, 'The journey arc', 'The actual parent series'];
+    await settle(() => button(m.story_arc_choose_existing()).click());
+    await decide(m.thread_authoring_stay());
+    expect(host.querySelector<HTMLInputElement>('input[type="url"]')).toBe(draft);
     failure = 'unavailable';
     await settle(() => button(m.correction_reload()).click());
     expect(visible('input').includes(draft!)).toBe(false);
@@ -164,6 +207,13 @@ test('refused readings retire markup and callbacks, recovery retains sealed draf
       lateRead = resolve;
     });
     await settle(() => button(m.fictional_work_choose_another()).click());
+    await decide(m.thread_authoring_leave());
+    await settle(() => {
+      retiredRelationSubmit();
+      finishRelation({ ok: true, kind: 'proposed', candidate: 'retired-work-result', revision: 1 });
+    });
+    expect(relationCommands).toHaveLength(2);
+    expect(host.innerHTML).not.toContain('retired-work-result');
     expect(visible('[data-slot="fictional-work-reference"]')).toHaveLength(0);
     expect(visible('input').includes(draft!)).toBe(false);
     held = undefined;
@@ -176,6 +226,15 @@ test('refused readings retire markup and callbacks, recovery retains sealed draf
       Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, 'A real arc');
       input.dispatchEvent(new window.Event('input', { bubbles: true }));
     });
+    const picker = within(host).getByRole('combobox', { name: m.story_arc_choose_existing() });
+    await act(async () => {
+      await user.type(picker, 'journey');
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    });
+    await act(async () => user.click(within(window.document.body as unknown as HTMLElement).getByRole('option', { name: /The journey arc/ })));
+    await decide(m.thread_authoring_stay());
+    expect((input as HTMLInputElement).value).toBe('A real arc');
+    expect(loads.at(-1)?.id).toBeUndefined();
     await settle(() => button(m.catalogue_create_submit()).click());
     const posts = () => fixture.creation.calls.filter((call) => call.method === 'POST').length;
     expect(posts()).toBe(1);
