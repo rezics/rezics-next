@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { changeAlbumSelection as change } from '../src/features/catalogue/album-correction-selection';
 import { factLimit, sealFacts, sendFacts, type FactDraft } from '../src/features/catalogue/subject-facts';
-import { albumFixture, albumId } from '../src/kernel/fake/catalogue-album-profile';
+import { albumExample, albumFixture, albumId } from '../src/kernel/fake/catalogue-album-profile';
 
 test('Album selection at limit releases only the removed draft slot and keeps revisions private', async () => {
   const fixture = albumFixture();
@@ -43,6 +43,7 @@ test('Partially resolved Album submission keeps exact unresolved commands and sk
       type: 'value',
       content: property === 'schema:inLanguage' ? 'en' : '9781234567897',
     };
+    drafts.at(-1)!.statement.references = albumExample().statements['schema:datePublished']![0]!.references;
   }
   drafts = sealFacts(albumId, read.release, drafts);
   for (const draft of drafts) draft.command!.session = 'original-session';
