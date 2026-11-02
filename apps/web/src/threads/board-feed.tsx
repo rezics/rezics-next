@@ -129,11 +129,12 @@ export function BoardFeed({
   const router = useRouter();
   useLayoutEffect(() => {
     const state = location.state;
+    const continuationState = state as unknown as Record<string, unknown>;
     const currentIndex = state.__TSR_index;
     const previousIndex = lastObservedHistoryIndex;
     lastObservedHistoryIndex = currentIndex;
     if (
-      state.__boardNextPage !== true ||
+      continuationState.__boardNextPage !== true ||
       previousIndex === null ||
       currentIndex <= previousIndex ||
       consumedContinuationStates.has(state)
