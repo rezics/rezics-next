@@ -132,9 +132,11 @@ const readPublicSummaryDocument = createServerFn({ method: 'GET' })
   })
   .handler(async ({ data }) => {
     try {
-      const result = await kernelClient(data.locale).documents({ id: data.documentId }).get({
-        fetch: { redirect: 'manual' },
-      });
+      const result = await kernelClient(data.locale)
+        .documents({ id: data.documentId })
+        .get({
+          fetch: { redirect: 'manual' },
+        });
       if (result.status !== 200 || !result.data) return { kind: 'failed' as const };
       const document = result.data.document;
       return {
@@ -1169,7 +1171,8 @@ function SummaryContent({
           [baseCandidate.statement.id]: activeRetry.document,
         }
       : read.documents;
-  const selected = activeRetry?.status === 'read' ? selectedSummary(read.subject, value.locale, documents) : baseCandidate;
+  const selected =
+    activeRetry?.status === 'read' ? selectedSummary(read.subject, value.locale, documents) : baseCandidate;
   const chosen = selected?.document ? { ...selected, document: selected.document } : undefined;
   const onRetry = target
     ? (event: MouseEvent<HTMLAnchorElement>) => {

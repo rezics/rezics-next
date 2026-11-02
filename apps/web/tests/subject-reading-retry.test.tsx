@@ -47,8 +47,6 @@ test('retry allows one read per visit and rejects a late result after the visit 
 });
 
 test('failed text keeps a real document navigation fallback', () => {
-  const markup = renderToStaticMarkup(
-    <SubjectReadingState locale="en" href="/en/subjects/example/details" />,
-  );
+  const markup = renderToStaticMarkup(<SubjectReadingState locale="en" href="/en/subjects/example/details" />);
   expect(markup).toContain('href="/en/subjects/example/details"');
 });
