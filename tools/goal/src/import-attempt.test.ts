@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from '
 import { join } from 'node:path';
 import { importAttempt, importRunDirectory } from './import-attempt.ts';
 import { CLASSIFIER_VERSION } from './records.ts';
-import { harness } from './test-support.ts';
+import { brief, harness } from './test-support.ts';
 
 const fixture = join(import.meta.dir, 'fixtures/resumed.jsonl');
 const profile = { cli: 'codex', model: 'gpt-6-luna', effort: 'max', poolClass: 'codex' } as const;
@@ -16,6 +16,14 @@ function options(taskId: string) {
     profile,
     pool: 'fixture',
   };
+}
+
+function seedTask(h: ReturnType<typeof harness>) {
+  return h.store.createTask(
+    brief(),
+    { briefPath: h.briefFile, worktree: h.root, branch: '', base: '' },
+    'implementation',
+  );
 }
 
 function writeCapture(directory: string, events: string) {
@@ -41,7 +49,7 @@ function writeCapture(directory: string, events: string) {
 test('unreadable captures and injected staging failures preserve original source and previous usable state without a half-import', () => {
   const h = harness();
   try {
-    const task = h.tasks.dispatch(h.briefFile);
+    const task = seedTask(h);
     const previous = importAttempt(h.tasks, fixture, options(task.id));
     const usable = {
       task: h.store.task(task.id),
@@ -99,7 +107,7 @@ test('unreadable captures and injected staging failures preserve original source
 test('successful imports retain matching log, record and terminal metadata', () => {
   const h = harness();
   try {
-    const task = h.tasks.dispatch(h.briefFile);
+    const task = seedTask(h);
     const record = importAttempt(h.tasks, fixture, { ...options(task.id), outcome: 'stopped' });
     const attempt = h.store.attempt({ taskId: task.id, attempt: 1 });
     expect(readFileSync(attempt.logPath)).toEqual(readFileSync(fixture));
