@@ -268,6 +268,16 @@ export function withStabilizeTarget(markdown: string): string {
  * (2026-10-29). Briefs link evidence files instead of pasting them.
  */
 export const MAX_BRIEF_BYTES = 64 * 1024;
+export const BRIEF_KINDS: readonly TaskKind[] = [
+  'implementation',
+  'interface',
+  'bulk-text',
+  'claim',
+  'specification',
+  'research',
+  'verification',
+  'mechanical',
+];
 export function parseBrief(markdown: string, ownership: RiskOwnership): Brief {
   const bytes = Buffer.byteLength(markdown, 'utf8');
   if (bytes > MAX_BRIEF_BYTES)
@@ -277,17 +287,7 @@ export function parseBrief(markdown: string, ownership: RiskOwnership): Brief {
   const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(markdown);
   if (!match) throw new Error('brief needs Markdown front matter');
   const raw = object(Bun.YAML.parse(match[1]!), 'front matter');
-  const kinds: TaskKind[] = [
-    'implementation',
-    'interface',
-    'bulk-text',
-    'claim',
-    'specification',
-    'research',
-    'verification',
-    'mechanical',
-  ];
-  if (!kinds.includes(raw.kind as TaskKind)) throw new Error('unsupported brief kind');
+  if (!BRIEF_KINDS.includes(raw.kind as TaskKind)) throw new Error('unsupported brief kind');
   const acceptance = object(raw.acceptance, 'acceptance');
   const placement = acceptance.placement;
   if (placement !== undefined && placement !== 'local' && placement !== 'default')
