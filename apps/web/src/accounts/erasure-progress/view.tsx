@@ -1,5 +1,6 @@
 import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@rezics/ui/shadcn/card';
+import { useId, useRef } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { getLocale, locales } from '../../paraglide/runtime.js';
 import { PageHeading } from '../../shell/page-heading';
@@ -71,14 +72,47 @@ export function ErasureProgressView({
   returnTo?: string | undefined;
   sessionRecovery?: boolean;
 }) {
+  // An instance owns its targets even when another view shows the same account.
+  // IDs describe UI relationships only; they never supply account authority.
+  const id = useId();
+  const progress = useRef<HTMLElement>(null);
+  const progressId = `${id}-progress`;
+  const titleId = `${id}-title`;
+  const introId = `${id}-intro`;
+  const statusId = `${id}-status`;
+  const participantsId = `${id}-participants`;
+  const retainedId = `${id}-retained`;
+  const remainingId = `${id}-remaining`;
   const value = page.status === 'ready' ? page.value : null;
   return (
     <article className="mx-auto flex w-full min-w-0 max-w-2xl flex-col gap-6 pb-8 [overflow-wrap:anywhere]">
       <header className="flex flex-col gap-3">
-        <PageHeading>{m.erasure_title()}</PageHeading>
-        <p className="text-muted-foreground">{m.erasure_intro()}</p>
+        <PageHeading id={titleId}>{m.erasure_title()}</PageHeading>
+        <p id={introId} className="text-muted-foreground">
+          {m.erasure_intro()}
+        </p>
+        {page.status !== 'signed-out' ? (
+          <a
+            className="inline-flex min-h-11 self-start items-center py-2 text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+            href={`#${progressId}`}
+            aria-controls={progressId}
+            aria-describedby={introId}
+            onClick={() => progress.current?.focus({ preventScroll: true })}
+          >
+            {m.author_erasure_view_progress()}
+          </a>
+        ) : null}
       </header>
-      <section aria-live="polite" aria-busy={page.status === 'loading'} className="flex flex-col gap-4">
+      <section
+        ref={progress}
+        id={progressId}
+        tabIndex={-1}
+        aria-labelledby={titleId}
+        aria-describedby={introId}
+        aria-live="polite"
+        aria-busy={page.status === 'loading'}
+        className="flex scroll-mt-6 flex-col gap-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+      >
         {value ? (
           <Card>
             <CardHeader>
@@ -92,7 +126,7 @@ export function ErasureProgressView({
                       : m.erasure_pending()}
                 </h2>
               </CardTitle>
-              <CardDescription>
+              <CardDescription id={statusId}>
                 {value.state === 'retention-outstanding'
                   ? m.erasure_retention_help()
                   : value.state === 'complete'
@@ -112,8 +146,8 @@ export function ErasureProgressView({
                   <dd>{value.completedAt ? date(value.completedAt) : m.erasure_not_reported()}</dd>
                 </div>
               </dl>
-              <section aria-labelledby="erasure-participants" className="flex flex-col gap-2">
-                <h3 id="erasure-participants" className="font-medium">
+              <section aria-labelledby={participantsId} className="flex flex-col gap-2">
+                <h3 id={participantsId} className="font-medium">
                   {m.erasure_participants()}
                 </h3>
                 {value.pendingParticipants.length ? (
@@ -126,14 +160,14 @@ export function ErasureProgressView({
                   <p>{m.erasure_no_pending_names()}</p>
                 )}
               </section>
-              <section aria-labelledby="erasure-retained" className="flex flex-col gap-2">
-                <h3 id="erasure-retained" className="font-medium">
+              <section aria-labelledby={retainedId} className="flex flex-col gap-2">
+                <h3 id={retainedId} className="font-medium">
                   {m.erasure_retained_heading()}
                 </h3>
                 <p>{value.retentionOutstanding ? m.erasure_retained_yes() : m.erasure_retained_no()}</p>
               </section>
-              <section aria-labelledby="erasure-remaining" className="flex flex-col gap-2">
-                <h3 id="erasure-remaining" className="font-medium">
+              <section aria-labelledby={remainingId} className="flex flex-col gap-2">
+                <h3 id={remainingId} className="font-medium">
                   {m.erasure_remaining_work()}
                 </h3>
                 <ul className="flex list-inside list-disc flex-col gap-2">
@@ -186,7 +220,7 @@ export function ErasureProgressView({
             </CardContent>
           </Card>
         ) : (
-          <p role="status">
+          <p id={statusId} role="status">
             {sessionRecovery && page.status === 'unavailable'
               ? m.erasure_session_unavailable()
               : statusText(page.status)}
@@ -206,6 +240,8 @@ export function ErasureProgressView({
           className="h-auto min-h-11 max-w-full self-start whitespace-normal py-3"
           variant="outline"
           disabled={page.status === 'loading'}
+          aria-controls={progressId}
+          aria-describedby={statusId}
           onClick={reload}
         >
           {sessionRecovery ? m.erasure_retry_session() : m.erasure_reload()}
