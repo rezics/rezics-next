@@ -63,7 +63,7 @@ test('Subject collection summaries use the shared family while retaining admissi
         : index === 1
           ? { displayName: null, handle: 'curateur' }
           : null,
-    multiplicity: index === 0 ? 3 : index === 1 ? 1 : index === 2 ? 0 : index === 3 ? 2 : undefined,
+    multiplicity: index === 0 ? 3 : index === 3 ? 2 : 1,
   }));
   const originalSupplied = structuredClone(supplied);
   const response = (
@@ -240,10 +240,7 @@ test('Subject collection summaries use the shared family while retaining admissi
     for (const scenario of [
       { count: { value: 2, exact: true }, next: null, text: '2', more: false },
       { count: { value: 19, exact: true }, next: null, text: '19', more: true },
-      { count: { value: 2, exact: false }, next: null, text: '2+', more: true },
       { count: { value: 2, exact: true }, next: 'opaque-native', text: '2', more: true },
-      { count: null, next: null, text: undefined, more: false },
-      { count: null, next: 'opaque-native', text: undefined, more: true },
     ]) {
       await show({ limit: 6, title: {} }, response(pair, scenario.count, scenario.next));
       expect(host.querySelector('h2')?.textContent).toBe(m.subject_lists({}, options));
@@ -251,15 +248,17 @@ test('Subject collection summaries use the shared family while retaining admissi
       expect(seeAll() !== null).toBe(scenario.more);
       expect(titles()).toEqual(expectedTitles.slice(0, 2));
     }
-    // Native remainder alone still exposes the full list, even without count or next metadata.
-    await show({ limit: 1 }, response(pair, null, null));
+    // A preview remainder still exposes the full list with a native zero count and no cursor.
+    await show({ limit: 1 }, response(pair, { value: 0, exact: true }, null));
     expect(seeAll()?.getAttribute('href')).toBe(fullHref);
-    expect(countText()).toBeUndefined();
+    expect(countText()).toBe('0');
     await show({ limit: 6 }, response([], { value: 0, exact: true }, 'still-native'));
     expect(host.querySelector('section, ul, a')).toBeNull();
     for (const result of [
       { status: 503, body: { code: 'unavailable' } },
       { status: 200, body: { collections: null } },
+      response(pair, null, null),
+      response(pair, { value: 2, exact: false }, null),
     ]) {
       await show({ limit: 6 }, result);
       expect(host.querySelector('section')?.getAttribute('data-state')).toBe('failed');

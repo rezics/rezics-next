@@ -36,6 +36,7 @@ import { RelationStream } from './relation-stream';
 import { qualifiedNotes, type QualifiedNote } from './qualified-relations';
 import { relationPreviewCount } from './subject-relations-preview';
 import { relationItemRows } from './relation-item-identity';
+import { collectionListValue } from './collection-list-value';
 import {
   bestRank,
   ExternalValue,
@@ -838,19 +839,15 @@ export function CollectionList(props: Record<string, unknown>) {
   const id = String(props.id);
   const title = pageText(props.title, value.locale);
   const heading = title.text || m.subject_lists({}, { locale: value.locale as never });
-  if (!section?.ok || section.read.kind !== 'collections' || !Array.isArray(section.body.collections))
+  const page = section?.ok && section.read.kind === 'collections' ? collectionListValue(section.body) : undefined;
+  if (!page)
     return <Failed slot="collection-list" id={id} title={heading} titleLang={title.lang} locale={value.locale} />;
-  const allCollections = section.body.collections.filter(isRecord);
+  const allCollections = page.collections;
   const collections = props.paged === true ? allCollections : allCollections.slice(0, limitOf(props));
   if (collections.length === 0) return null;
-  const counted = isRecord(section.body.count) && typeof section.body.count.value === 'number';
-  const count = counted
-    ? countFromLinks(section.body.count as { value: number; exact: boolean }, collections.length)
-    : undefined;
+  const count = countFromLinks(page.count, collections.length);
   const more =
-    typeof section.body.next === 'string' ||
-    allCollections.length > collections.length ||
-    hasMore(count, collections.length);
+    typeof page.next === 'string' || allCollections.length > collections.length || hasMore(count, collections.length);
   const Link = value.link;
   return (
     <Preview
@@ -864,23 +861,17 @@ export function CollectionList(props: Record<string, unknown>) {
       locale={value.locale}
     >
       <ul className="space-y-2">
-        {collections.map((collection, index) => {
-          const curator = isRecord(collection.curator) ? collection.curator : undefined;
-          const name =
-            typeof curator?.displayName === 'string' && curator.displayName
-              ? curator.displayName
-              : typeof curator?.handle === 'string' && curator.handle
-                ? `@${curator.handle}`
-                : '';
+        {collections.map((collection) => {
+          const curator = collection.curator;
+          const name = curator?.displayName ? curator.displayName : curator?.handle ? `@${curator.handle}` : '';
           const options = { locale: value.locale as never };
-          const collectionTitle =
-            typeof collection.title === 'string' && collection.title ? collection.title : value.unlabelled;
+          const collectionTitle = collection.title || value.unlabelled;
           const multiplicity =
-            typeof collection.multiplicity === 'number' && collection.multiplicity > 1
+            collection.multiplicity > 1
               ? m.library_subject_multiplicity({ count: collection.multiplicity }, options)
               : null;
           return (
-            <li key={typeof collection.id === 'string' ? collection.id : index}>
+            <li key={collection.id}>
               <ContentItemFrame as="div" className={`min-w-0 py-3 sm:py-4${readable ? '' : ' before:hidden'}`}>
                 <ContentItemHeading
                   level={3}
@@ -890,7 +881,7 @@ export function CollectionList(props: Record<string, unknown>) {
                     <ContentItemTitleLink
                       as={Link}
                       className={`block min-h-11 content-center rounded-sm ${linkClass} ${linkColor} focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`}
-                      href={`/${encodeURIComponent(value.locale)}/collections/${encodeURIComponent(String(collection.id))}`}
+                      href={`/${encodeURIComponent(value.locale)}/collections/${encodeURIComponent(collection.id)}`}
                     >
                       {collectionTitle}
                     </ContentItemTitleLink>
