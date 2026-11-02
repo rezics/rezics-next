@@ -337,8 +337,8 @@ test('independent Terms forms retain stable associations, multilingual drafts an
 
     // Explicit read recovery retains its own credentials, command and keyboard intent.
     const { CatalogueCurrentReading } = await import('../src/features/catalogue/editor-lifetime');
-    const initial = await catalogueTermsFixture().transport.read(termsSubjectId);
-    if (initial.state !== 'ready') throw new Error('Expected initial Terms');
+    const recoveryInitial = await catalogueTermsFixture().transport.read(termsSubjectId);
+    if (recoveryInitial.state !== 'ready') throw new Error('Expected initial Terms');
     const outside = document.createElement('button');
     document.body.append(outside);
     for (const mode of [
@@ -369,7 +369,7 @@ test('independent Terms forms retain stable associations, multilingual drafts an
       const transport: import('../src/features/catalogue/subject-terms').TermsTransport = {
         read: async (id, session) => {
           reads.push([id, session]);
-          return reads.length === 1 ? initial : delayed;
+          return reads.length === 1 ? recoveryInitial : delayed;
         },
         submit: async (command) => {
           commands.push(structuredClone(command));
@@ -414,7 +414,9 @@ test('independent Terms forms retain stable associations, multilingual drafts an
       else await act(async () => user.keyboard('{Enter}'));
       expect(opener.disabled).toBe(true);
       expect(reads[1]).toEqual(
-        mode === 'comparison' ? [termsSubjectId, initial.snapshot.session] : ['confirmed-subject', 'confirmed-session'],
+        mode === 'comparison'
+          ? [termsSubjectId, recoveryInitial.snapshot.session]
+          : ['confirmed-subject', 'confirmed-session'],
       );
       if (mode === 'moved' || mode === 'returned') outside.focus();
       if (mode === 'returned') opener.focus();
@@ -429,7 +431,7 @@ test('independent Terms forms retain stable associations, multilingual drafts an
       const before = document.activeElement;
       await act(async () => {
         if (mode === 'failure') reject(new Error('Read failed'));
-        else finish(mode === 'denied' || mode === 'concealed' ? { state: mode } : initial);
+        else finish(mode === 'denied' || mode === 'concealed' ? { state: mode } : recoveryInitial);
       });
       if (mode === 'ready') {
         expect(document.activeElement).toBe(page.querySelector('[role="status"]'));
