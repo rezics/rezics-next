@@ -1,5 +1,6 @@
 import type { CalibrationCheck, CalibrationRunPoint } from './growth-calibration.ts';
 import type { GrowthModelBound } from './growth-model.ts';
+import { admitGrowthProfileInput, growthProfileLines } from './growth-profile-input.ts';
 
 export const GROWTH_PROFILE_METRICS = ['rows', 'blocks', 'statements'] as const;
 export type GrowthProfileMetric = (typeof GROWTH_PROFILE_METRICS)[number];
@@ -169,12 +170,12 @@ function parseRun(source: GrowthProfileRunSource): GrowthProfileEntry[] {
   if (!source.name) throw new TypeError('Each profile run requires a name');
   const entries: GrowthProfileEntry[] = [];
   const occurrences = new Map<string, number>();
-  for (const [index, line] of source.text.split(/\r?\n/).entries()) {
-    if (!line.trim()) continue;
-    const description = `${source.name}:${index + 1}`;
+  for (const { line, text } of growthProfileLines(source)) {
+    if (!text.trim()) continue;
+    const description = `${source.name}:${line}`;
     let decoded: unknown;
     try {
-      decoded = JSON.parse(line);
+      decoded = JSON.parse(text);
     } catch (error) {
       throw new TypeError(
         `${description} is not valid JSON: ${error instanceof Error ? error.message : String(error)}`,
@@ -220,6 +221,7 @@ function nonGrowingRelations(entries: readonly GrowthProfileEntry[]): NonGrowing
 
 /** Parse JSONL collected from repeated unchanged-code runs and build calibration inputs by file/check and metric. */
 export function readGrowthProfiles(sources: readonly GrowthProfileRunSource[]): GrowthProfileRead {
+  admitGrowthProfileInput(sources);
   const runNames = new Set<string>();
   for (const source of sources) {
     if (runNames.has(source.name)) throw new TypeError(`Profile run names must be unique: ${source.name}`);

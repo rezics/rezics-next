@@ -592,6 +592,8 @@ Set `GROWTH_PROFILE` to a file inside the workspace to collect profiles on local
 runs forward its workspace-relative path and return the file with the result; earlier local lines are retained when the
 returned profile is merged. The `GROWTH_PROFILE` JSON line includes `statements`, with each scale's complete statement list and median rows,
 blocks and count across measured repetitions.
+The reader admits at most 64 MiB of total UTF-8 input, 250,000 physical lines, and 50,000 nonblank records per read;
+each physical line is limited to 2 MiB. It rejects excess input and reports the source and line where a limit is crossed.
 Calibration combines a file/check/occurrence only when every run declares the same growth bounds and scales; omitted
 checks with differing bounds report each run and its declaration.
 
