@@ -1,9 +1,11 @@
-import { afterEach, expect, test } from 'bun:test';
+import { afterAll, afterEach, expect, test } from 'bun:test';
 import { creationFixture, dom, flush, open } from './creation-page-fixture';
 import type { SecurityActionResult } from '../src/security-reconciliation';
 import type { SecuritySource } from '../src/security-reconciliation';
 
 creationFixture();
+const previousScrollTo = Object.getOwnPropertyDescriptor(globalThis, 'scrollTo');
+Object.defineProperty(globalThis, 'scrollTo', { value: () => {}, configurable: true, writable: true });
 const { createBrowserHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } =
   await import('@tanstack/react-router');
 const { SecurityPage } = await import('../src/routes/security');
@@ -13,6 +15,10 @@ let destroyHistory: (() => void) | undefined;
 afterEach(() => {
   destroyHistory?.();
   destroyHistory = undefined;
+});
+afterAll(() => {
+  if (previousScrollTo) Object.defineProperty(globalThis, 'scrollTo', previousScrollTo);
+  else Reflect.deleteProperty(globalThis, 'scrollTo');
 });
 
 const tick = () => flush(() => new Promise((resolve) => setTimeout(resolve, 0)));
