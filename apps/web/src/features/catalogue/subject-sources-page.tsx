@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useId, type Ref } from 'react';
 import { ContextNavigation, contextHref } from '../pages/context-navigation';
 import { Button } from '@rezics/ui/shadcn/button';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
@@ -11,7 +11,13 @@ import { defaultReader } from '../../subject/reader';
 import { m } from '../../paraglide/messages.js';
 import type { SourcePart, SourcesPageData, SourcesResult } from './subject-sources';
 
-type Props = { result: SourcesResult | { kind: 'loading' }; locale: string; onRetry?: () => void; busy?: boolean };
+type Props = {
+  result: SourcesResult | { kind: 'loading' };
+  locale: string;
+  onRetry?: () => void;
+  busy?: boolean;
+  headingRef?: Ref<HTMLHeadingElement>;
+};
 const linkClassName =
   'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
@@ -39,13 +45,18 @@ function CitationPart({
 }
 
 /** The detailed public reader shares the subject frame, value renderer and original Sources presentation. */
-export function SubjectSourcesPage({ result, locale, onRetry, busy = false }: Props) {
+export function SubjectSourcesPage({ result, locale, onRetry, busy = false, headingRef }: Props) {
   const headingId = useId();
   const o = { locale: locale as never };
   if (result.kind !== 'ready')
     return (
       <article className="space-y-4" aria-busy={busy || result.kind === 'loading'}>
-        <ViewHeading label={m.subject_sources({}, o)} headingClassName="font-sans" />
+        <ViewHeading
+          label={m.subject_sources({}, o)}
+          headingClassName="font-sans focus-visible:outline-2 focus-visible:outline-ring"
+          headingRef={headingRef}
+          headingTabIndex={-1}
+        />
         <p role={result.kind === 'loading' ? 'status' : 'alert'}>
           {result.kind === 'loading'
             ? m.sources_loading({}, o)
@@ -64,7 +75,7 @@ export function SubjectSourcesPage({ result, locale, onRetry, busy = false }: Pr
             variant="outline"
             className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere]"
             disabled={busy}
-            onClick={onRetry}
+            onClick={() => onRetry()}
           >
             {m.sources_retry({}, o)}
           </Button>
@@ -127,7 +138,12 @@ export function SubjectSourcesPage({ result, locale, onRetry, busy = false }: Pr
         locale={locale}
       />
       <div className="space-y-2">
-        <ViewHeading label={m.subject_sources({}, o)} headingClassName="font-sans" />
+        <ViewHeading
+          label={m.subject_sources({}, o)}
+          headingClassName="font-sans focus-visible:outline-2 focus-visible:outline-ring"
+          headingRef={headingRef}
+          headingTabIndex={-1}
+        />
         <p className="text-sm text-muted-foreground">{m.sources_intro({}, o)}</p>
       </div>
       <section aria-labelledby={`${headingId}-selected-facts-title`} className="min-w-0 space-y-5">

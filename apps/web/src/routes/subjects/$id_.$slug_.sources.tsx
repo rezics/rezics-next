@@ -2,9 +2,11 @@ import { validatePageRealm } from '../../features/pages/view-cursor';
 import { subjectRequestReader } from '../../features/pages/subject-queries';
 import { subjectReaderPartition, useSubjectReaderRefresh } from '../../features/pages/context-reader';
 import { useSession } from '../../session/query';
-import { createFileRoute, notFound, redirect, useRouter, useRouterState } from '@tanstack/react-router';
+import { createFileRoute, notFound, redirect } from '@tanstack/react-router';
 import { loadSubjectSources } from '../../features/catalogue/subject-sources-actions';
 import { SubjectSourcesPage } from '../../features/catalogue/subject-sources-page';
+import { useSourcesRetry } from '../../features/catalogue/subject-sources-retry';
+import type { SourcesResult } from '../../features/catalogue/subject-sources';
 import { getLocale } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
 import { canonicalRedirect, subjectHref } from '../../subject/subject-href';
@@ -37,7 +39,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/sources')({
       { name: 'robots', content: 'noindex,follow' },
     ],
   }),
-  pendingComponent: () => <SubjectSourcesPage result={{ kind: 'loading' }} locale={getLocale()} />,
+  pendingComponent: () => <SourcesPresentation result={{ kind: 'loading' }} />,
   errorComponent: SourcesError,
   component: SourcesRoute,
 });
@@ -46,21 +48,30 @@ function SourcesRoute() {
   const { result, reader } = Route.useLoaderData();
   const { realm } = Route.useSearch();
   const currentReader = useSubjectReaderRefresh(reader, subjectReaderPartition(realm, reader, useSession()));
-  const router = useRouter();
-  const busy = useRouterState({ select: (state) => state.isLoading });
-  if (!currentReader) return <SubjectSourcesPage result={{ kind: 'loading' }} locale={getLocale()} />;
-  return (
-    <SubjectSourcesPage
-      result={result}
-      locale={getLocale()}
-      busy={busy}
-      onRetry={() => {
-        void router.invalidate();
-      }}
-    />
-  );
+  return <SourcesPresentation result={currentReader ? result : { kind: 'loading' }} reader={reader} />;
 }
 
 function SourcesError({ reset }: { reset: () => void }) {
-  return <SubjectSourcesPage result={{ kind: 'unavailable' }} locale={getLocale()} onRetry={reset} />;
+  return <SourcesPresentation result={{ kind: 'unavailable' }} reset={reset} />;
+}
+
+function SourcesPresentation({
+  result,
+  reader = null,
+  reset,
+}: {
+  result: SourcesResult | { kind: 'loading' };
+  reader?: string | null;
+  reset?: () => void;
+}) {
+  const { realm } = Route.useSearch();
+  const locale = getLocale();
+  const retry = useSourcesRetry({
+    realm,
+    reader,
+    locale,
+    loading: result.kind === 'loading',
+    ...(reset ? { reset } : {}),
+  });
+  return <SubjectSourcesPage result={result} locale={locale} {...retry} />;
 }
