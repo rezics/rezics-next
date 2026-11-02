@@ -260,37 +260,67 @@ test('Work Parts keeps independent streams, full supplied composition, deliberat
       [seed.stream!.key, undefined, seed.session],
     ]);
 
-    for (const interaction of ['pointer activation', 'away/back', 'pointer', 'Tab', 'blur', 'replacement', 'empty', 'no-stream', 'throw']) {
+    for (const interaction of [
+      'pointer activation',
+      'away/back',
+      'pointer',
+      'Tab',
+      'blur',
+      'replacement',
+      'empty',
+      'no-stream',
+      'throw',
+    ]) {
       let finish!: (value: WorkPartsRead) => void;
       let reject!: () => void;
       await show(recovery, seed, 'en', {
         ...recovery.transport,
-        read: () => new Promise((resolve, fail) => { finish = resolve; reject = () => fail(new Error('read failed')); }),
+        read: () =>
+          new Promise((resolve, fail) => {
+            finish = resolve;
+            reject = () => fail(new Error('read failed'));
+          }),
       });
       const opener = button(m.work_parts_more());
       opener.focus();
       await act(async () => {
-        opener.dispatchEvent(new window.MouseEvent('click', {
-          bubbles: true, detail: interaction === 'pointer activation' ? 1 : 0,
-        }));
+        opener.dispatchEvent(
+          new window.MouseEvent('click', {
+            bubbles: true,
+            detail: interaction === 'pointer activation' ? 1 : 0,
+          }),
+        );
         // Move away and back before React disables the requesting control.
-        if (interaction === 'away/back') { host.querySelector<HTMLAnchorElement>('a')!.focus(); opener.focus(); }
+        if (interaction === 'away/back') {
+          host.querySelector<HTMLAnchorElement>('a')!.focus();
+          opener.focus();
+        }
       });
       const document = host.ownerDocument;
       await act(async () => {
         if (interaction === 'pointer') document.dispatchEvent(new window.Event('pointerdown', { bubbles: true }));
-        if (interaction === 'Tab') document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+        if (interaction === 'Tab')
+          document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
         if (interaction === 'blur') window.dispatchEvent(new window.Event('blur'));
         if (interaction === 'replacement') queuedClick(button(m.candidate_reload()))();
       });
       const focused = document.activeElement;
-      await act(async () => interaction === 'throw' ? reject() : finish({
-        ...seed, rows: [], next: null,
-        ...(interaction === 'no-stream' ? { streams: [], stream: undefined } : {}),
-      }));
+      await act(async () =>
+        interaction === 'throw'
+          ? reject()
+          : finish({
+              ...seed,
+              rows: [],
+              next: null,
+              ...(interaction === 'no-stream' ? { streams: [], stream: undefined } : {}),
+            }),
+      );
       expect(document.activeElement).toBe(
-        interaction === 'throw' ? host.querySelector('[role="alert"]') :
-        interaction === 'empty' || interaction === 'no-stream' ? host.querySelector('p[role="status"]') : focused,
+        interaction === 'throw'
+          ? host.querySelector('[role="alert"]')
+          : interaction === 'empty' || interaction === 'no-stream'
+            ? host.querySelector('p[role="status"]')
+            : focused,
       );
     }
 

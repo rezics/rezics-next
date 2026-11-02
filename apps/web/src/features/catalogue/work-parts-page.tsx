@@ -125,9 +125,7 @@ function WorkPartsPageLive({
       () => lifetime.active() && readSequence.current === sequence && sliceRevision.current === revision,
       () => {
         const survives =
-          opener?.isConnected &&
-          !opener.disabled &&
-          !opener.closest('[hidden], [inert], [aria-hidden="true"]');
+          opener?.isConnected && !opener.disabled && !opener.closest('[hidden], [inert], [aria-hidden="true"]');
         if (survives) return opener;
         const boundary = outcome === 'slice' ? sliceStatus.current : readFailure.current;
         return boundary?.closest('[hidden]') ? null : boundary;

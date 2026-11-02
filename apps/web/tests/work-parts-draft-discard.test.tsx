@@ -190,7 +190,9 @@ test('Work Parts orients only current keyboard openings, closes independent draf
     const sealed = posts()[0]!;
     expect(sealed.authorization).toBe('Bearer contributor');
     let finishRead!: (value: WorkPartsRead) => void;
-    pendingRead = new Promise((resolve) => { finishRead = resolve; });
+    pendingRead = new Promise((resolve) => {
+      finishRead = resolve;
+    });
     const reload = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
       (item) => item.textContent?.trim() === m.candidate_reload(),
     )!;
