@@ -1,6 +1,6 @@
 import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
-import { useId, useRef, useState } from 'react';
+import { useId, useLayoutEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { pickText } from '@rezics/composition';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -29,6 +29,11 @@ type Correction = {
   slot?: RelationSlot;
   positionEditable: boolean;
   session?: string | undefined;
+};
+type OpenDraft = Correction & {
+  instance: number;
+  returnFocus: HTMLElement;
+  confirmClose: boolean;
 };
 
 const actionClassName =
@@ -70,11 +75,19 @@ function WorkPartsPageLive({
   const [page, setPage] = useState<Extract<WorkPartsRead, { ok: true }>>();
   const [failure, setFailure] = useState<Extract<WorkPartsRead, { ok: false }>>();
   const [busy, setBusy] = useState(false);
-  const [drafts, setDrafts] = useState<Correction[]>([]);
+  const [drafts, setDrafts] = useState<OpenDraft[]>([]);
+  const nextDraftInstance = useRef(0);
+  const focusAfterClose = useRef<HTMLElement | undefined>(undefined);
   const [part, setPart] = useState<EntityPickerSubject[]>([]);
   const running = useRef(false);
   const session = useRef<string | undefined>(undefined);
   const cursor = useRef<string | undefined>(undefined);
+  useLayoutEffect(() => {
+    const target = focusAfterClose.current;
+    if (!target) return;
+    focusAfterClose.current = undefined;
+    if (target.isConnected) target.focus();
+  }, [drafts]);
   const read = page ?? (query.data?.ok ? query.data : undefined);
   const error = failure ?? (!page && query.data && !query.data.ok ? query.data : undefined);
   const concealed = !!error || (!page && query.isError);
@@ -117,23 +130,25 @@ function WorkPartsPageLive({
       setBusy(false);
     }
   }
-  function open(row: PartRow, selected: PartStream) {
+  function open(row: PartRow, selected: PartStream, returnFocus: HTMLElement) {
     if (!slice.active()) return;
     const correction = partCorrection(row, selected);
     if (!correction) return;
     const key = `${row.holder}:${row.statementId}`;
+    const instance = ++nextDraftInstance.current;
     setDrafts((previous) =>
       previous.some((draft) => draft.key === key)
         ? previous
-        : [...previous, { ...correction, key, session: read?.session }],
+        : [...previous, { ...correction, key, session: read?.session, instance, returnFocus, confirmClose: false }],
     );
   }
-  function add() {
+  function add(returnFocus: HTMLElement) {
     if (!slice.active()) return;
     if (!stream || !part[0]) return;
     const holder = stream.direction === 'forward' ? id : part[0].id;
     const target = stream.direction === 'forward' ? part[0].id : id;
     const key = `${holder}:${stream.property}:${target}`;
+    const instance = ++nextDraftInstance.current;
     setDrafts((previous) =>
       previous.some((draft) => draft.key === key)
         ? previous
@@ -150,9 +165,20 @@ function WorkPartsPageLive({
                 qualifiers: [],
                 references: [],
               },
+              instance,
+              returnFocus,
+              confirmClose: true,
             },
           ],
     );
+  }
+  function closeDraft(instance: number) {
+    setDrafts((previous) => {
+      const closing = previous.find((draft) => draft.instance === instance);
+      if (!closing) return previous;
+      focusAfterClose.current = closing.returnFocus;
+      return previous.filter((draft) => draft.instance !== instance);
+    });
   }
   const failed =
     error?.reason === 'denied'
@@ -297,7 +323,11 @@ function WorkPartsPageLive({
                                 )}
                               </section>
                               {partCorrection(row, stream) && (
-                                <Button className={actionClassName} variant="outline" onClick={() => open(row, stream)}>
+                                <Button
+                                  className={actionClassName}
+                                  variant="outline"
+                                  onClick={(event) => open(row, stream, event.currentTarget)}
+                                >
                                   {m.work_parts_correct({}, o)}
                                 </Button>
                               )}
@@ -361,7 +391,12 @@ function WorkPartsPageLive({
                     value={part}
                     onValueChange={(items) => slice.active() && setPart(items)}
                   />
-                  <Button className={actionClassName} variant="outline" disabled={!part.length} onClick={add}>
+                  <Button
+                    className={actionClassName}
+                    variant="outline"
+                    disabled={!part.length}
+                    onClick={(event) => add(event.currentTarget)}
+                  >
                     {m.work_parts_draft({}, o)}
                   </Button>
                 </section>
@@ -389,7 +424,7 @@ function WorkPartsPageLive({
           </>
         )}
         {drafts.map((draft) => (
-          <section key={draft.key} className="space-y-3 border-t border-border pt-6">
+          <section key={draft.instance} className="space-y-3 border-t border-border pt-6">
             <details className="text-sm">
               <summary className={summaryClassName}>{m.catalogue_technical_details({}, o)}</summary>
               <p className="mt-3 break-all">
@@ -402,6 +437,8 @@ function WorkPartsPageLive({
               transport={transport.relation(draft.id)}
               search={search}
               composition={draft}
+              requireCloseConfirmation={draft.confirmClose}
+              onClose={() => closeDraft(draft.instance)}
               onSelected={() => load(stream?.key, cursor.current)}
             />
           </section>

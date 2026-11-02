@@ -1,6 +1,6 @@
 import { catalogueEditor, useEditorLifetime, useCurrentReadingVisible } from './editor-lifetime';
 import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useId } from 'react';
 import type { SubjectRead } from '@rezics/client';
 import { pickText } from '@rezics/composition';
@@ -67,6 +67,8 @@ function RelationEditorLive({
   search,
   initial,
   onSelected,
+  onClose,
+  requireCloseConfirmation = false,
   composition,
   embedded = false,
 }: {
@@ -76,6 +78,8 @@ function RelationEditorLive({
   search: EntityPickerSearch;
   initial?: RelationRead;
   onSelected?: () => void | Promise<void>;
+  onClose?: () => void;
+  requireCloseConfirmation?: boolean;
   embedded?: boolean;
   /** A composition correction keeps every non-order qualifier and native slot key intact. */
   composition?: {
@@ -100,6 +104,9 @@ function RelationEditorLive({
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<CandidateFailure | undefined>(initial && !initial.ok ? initial : undefined);
   const [confirmation, setConfirmation] = useState<'propose' | 'accept' | 'reject' | 'adopt'>();
+  const [closeConfirmation, setCloseConfirmation] = useState(false);
+  const closeButton = useRef<HTMLButtonElement>(null);
+  const restoreCloseFocus = useRef(false);
   const [result, setResult] = useState<Extract<RelationResult, { ok: true }>>();
   const [proposed, setProposed] = useState(false);
   const [proposedId, setProposedId] = useState<string>();
@@ -186,6 +193,31 @@ function RelationEditorLive({
         statement.id === candidate.id && statement.rank !== 'deprecated' && relationSlotMatches(statement, slot, field),
     );
   const dirty = !proposed && JSON.stringify([draft, citation]) !== initialProposal.current;
+
+  function compositionCloseLocked() {
+    return !lifetime.active() || !visible || !!request.current || proposed || !!result || failure?.reason === 'stale';
+  }
+  function requestCompositionClose() {
+    if (!composition || !onClose || compositionCloseLocked()) return;
+    if (dirty || requireCloseConfirmation) setCloseConfirmation(true);
+    else onClose();
+  }
+  function confirmCompositionClose() {
+    if (!composition || !onClose || compositionCloseLocked()) return;
+    setCloseConfirmation(false);
+    onClose();
+  }
+  function cancelCompositionClose() {
+    if (!lifetime.active()) return;
+    restoreCloseFocus.current = true;
+    setCloseConfirmation(false);
+  }
+  useLayoutEffect(() => {
+    if (!restoreCloseFocus.current) return;
+    restoreCloseFocus.current = false;
+    closeButton.current?.focus();
+  }, [closeConfirmation]);
+  const closeLocked = compositionCloseLocked();
 
   function editable() {
     return lifetime.active() && !running.current && !request.current && !frozen;
@@ -393,7 +425,34 @@ function RelationEditorLive({
           <>{!embedded && <h1 className="text-2xl font-semibold">{m.relation_title({}, options)}</h1>}</>
         )}
         <p className="text-sm text-muted-foreground">{m.relation_intro({}, options)}</p>
+        {composition && onClose && (
+          <Button ref={closeButton} variant="outline" disabled={closeLocked} onClick={requestCompositionClose}>
+            {m.work_parts_draft_close({}, options)}
+          </Button>
+        )}
       </header>
+      {closeConfirmation && composition && onClose && (
+        <ContentItemFrame
+          as="div"
+          role="group"
+          aria-labelledby={`${formId}-close-title`}
+          className="min-w-0 space-y-3 rounded-xl bg-card p-4 sm:p-5"
+        >
+          <ContentItemHeading id={`${formId}-close-title`} level={2} className="font-semibold">
+            {m.candidate_confirm_title({ action: m.work_parts_draft_discard({}, options) }, options)}
+          </ContentItemHeading>
+          <p>{m.work_parts_draft_discard_confirmation({}, options)}</p>
+          {closeLocked && <p role="status">{m.work_parts_draft_discard_locked({}, options)}</p>}
+          <div className="flex flex-wrap gap-2">
+            <Button disabled={closeLocked} onClick={confirmCompositionClose}>
+              {m.work_parts_draft_discard({}, options)}
+            </Button>
+            <Button variant="outline" onClick={cancelCompositionClose}>
+              {m.candidate_cancel({}, options)}
+            </Button>
+          </div>
+        </ContentItemFrame>
+      )}
       {consentEntry && (
         <StatementConsentLink
           address={consentEntry}
