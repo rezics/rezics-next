@@ -70,10 +70,6 @@ test('Screen refresh keeps corrections and exact uncertain requests; refusal ret
       await user.click(button(name, region));
       await new Promise((resolve) => setTimeout(resolve, 20));
     });
-  const clickNow = async (name: string) =>
-    act(async () => {
-      await user.click(button(name));
-    });
   const reading = () => host.querySelector('section[aria-label]')!;
   const mount = async () => {
     await act(async () => {
@@ -136,7 +132,7 @@ test('Screen refresh keeps corrections and exact uncertain requests; refusal ret
     pending = new Promise((resolve) => {
       finishRefresh = resolve;
     });
-    await clickNow(m.candidate_reload());
+    await click(m.candidate_reload());
     retired();
     finishRefresh({ ok: false, reason: 'unavailable' });
     pending = undefined;
