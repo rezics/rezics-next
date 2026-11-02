@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { createRequire } from 'node:module';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement, useState, type Dispatch, type SetStateAction } from 'react';
 import type { RecentItem } from '../src/search/recent';
 
@@ -51,13 +52,22 @@ test('history removals and clear keep focus useful, announce completion, and lea
   const { setLocale } = await import('../src/paraglide/runtime.js');
   const { m } = await import('../src/paraglide/messages.js');
   const { RecentHistoryView } = await import('../src/search/recent');
+  const { useRecentHistory } = await import('../src/search/recent-history-hook');
   setLocale('en', { reload: false });
   const host = window.document.createElement('main');
   window.document.body.append(host);
   let update!: Dispatch<SetStateAction<RecentItem[]>>;
   let external: HTMLButtonElement | null = null;
-  let preserveFocus = false;
+  let preserveFocus = false,
+    pending = false,
+    bucket = 'account:A';
+  const client = new QueryClient();
+  const session = (subject: string) =>
+    client.setQueryData(['session'], { state: 'signed-in', subject, csrfToken: null });
+  const adapter = { sync: async () => {} };
+  session('A');
   function Harness() {
+    const { owner } = useRecentHistory(bucket, adapter);
     const [entries, setEntries] = useState([entry('a', 'Alpha'), entry('b', 'Beta'), entry('c', 'Gamma')]);
     update = setEntries;
     return createElement(
@@ -66,13 +76,17 @@ test('history removals and clear keep focus useful, announce completion, and lea
       createElement('button', { ref: (node: HTMLButtonElement | null) => (external = node) }, 'Outside'),
       createElement(RecentHistoryView, {
         entries,
+        owner,
         status: 'ready',
         history: true,
         onRemove(id: string) {
+          if (pending) return;
           if (preserveFocus) external?.focus();
           setEntries((current) => current.filter((item) => item.id !== id));
         },
-        onClear: () => setEntries([]),
+        onClear: () => {
+          if (!pending) setEntries([]);
+        },
       }),
     );
   }
@@ -85,7 +99,7 @@ test('history removals and clear keep focus useful, announce completion, and lea
   const status = () => host.querySelector('[aria-live="polite"]')?.textContent;
 
   try {
-    await act(async () => root.render(createElement(Harness)));
+    await act(async () => root.render(createElement(QueryClientProvider, { client }, createElement(Harness))));
     await act(async () => {
       remove('Beta').focus();
       remove('Beta').click();
@@ -126,8 +140,40 @@ test('history removals and clear keep focus useful, announce completion, and lea
     external!.focus();
     await act(async () => update((current) => current.filter((item) => item.id !== 'a')));
     expect(active()).toBe(external);
+
+    pending = true;
+    for (const kind of ['remove', 'clear'])
+      for (const change of ['account', 'session', 'return', 'batched-return']) {
+        await act(async () => {
+          bucket = 'account:A';
+          session('A');
+          update([entry('a', 'Alpha')]);
+        });
+        const source = kind === 'remove' ? remove('Alpha') : clear;
+        await act(async () => {
+          source.focus();
+          source.click();
+        });
+        expect(status()).toBe('');
+        expect(active()).toBe(source);
+        await act(async () => {
+          session(change === 'session' ? 'A' : 'B');
+          if (change === 'batched-return') session('A');
+          bucket = change === 'session' || change === 'batched-return' ? 'account:A' : 'account:B';
+          update(change === 'return' ? [entry('a', 'Alpha')] : []);
+        });
+        if (change === 'return')
+          await act(async () => {
+            bucket = 'account:A';
+            session('A');
+            update([]);
+          });
+        expect(status()).toBe('');
+        expect(active()).not.toBe(host.querySelector('section'));
+      }
   } finally {
     await act(async () => root.unmount());
+    client.clear();
     host.remove();
     for (const [key, descriptor] of saved) {
       if (descriptor) Object.defineProperty(globalThis, key, descriptor);

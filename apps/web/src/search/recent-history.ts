@@ -5,7 +5,10 @@ export type RecentEntry = { id: string; query: string; languages?: string[]; sco
 export type RecentStorage = Pick<Storage, 'getItem' | 'setItem'>;
 /** Own-account transport; local history remains the sole producer and store. */
 export type RecentSyncAdapter = { sync(entries: readonly RecentEntry[], signal: AbortSignal): Promise<void> };
+/** Opaque mounted observation; no account details or session credentials leave the helper. */
+export type RecentHistoryOwner = () => boolean;
 export type RecentHistory = {
+  owner?: RecentHistoryOwner;
   entries: readonly RecentEntry[];
   persistence: 'local' | 'memory' | 'unavailable';
   sync: 'local-only' | 'pending' | 'synced';

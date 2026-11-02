@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { sessionStateSnapshot } from '../session/browser-state';
 import {
   readRecentDocument,
   rememberRecent,
@@ -35,6 +37,17 @@ export function useRecentHistory(bucket: string | null, supplied?: RecentSyncAda
     window.dispatchEvent(new CustomEvent(changedEvent, { detail: { bucket, entries, dirty, origin: origin.current } }));
   }, []);
   const native = useRecentSearchSyncAdapter(bucket, publish, storage);
+  const client = useQueryClient();
+  const installedSession = sessionStateSnapshot(client);
+  const owner = useMemo(() => {
+    let retired = false;
+    return () => {
+      // Compare the installed observation, even if a session changed and returned before rendering.
+      // Retirement is permanent; matching the account again cannot revive management feedback.
+      if (currentBucket.current !== bucket || sessionStateSnapshot(client) !== installedSession) retired = true;
+      return !retired;
+    };
+  }, [bucket, client, installedSession]);
   const adapter = native ? (supplied ?? native) : undefined;
   useEffect(() => {
     const read = () => {
@@ -124,6 +137,7 @@ export function useRecentHistory(bucket: string | null, supplied?: RecentSyncAda
     publish(document.entries, true);
   };
   return {
+    owner,
     entries: snapshot.bucket === bucket ? snapshot.entries : [],
     persistence: !bucket ? 'unavailable' : persistent ? 'local' : 'memory',
     sync: adapter ? sync : 'local-only',

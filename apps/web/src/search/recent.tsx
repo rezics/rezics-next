@@ -11,6 +11,7 @@ import {
   recentSearchQuery,
   type RecentEntry as HistoryEntry,
   type RecentHistory,
+  type RecentHistoryOwner,
 } from './recent-history';
 import { useRecentHistory } from './recent-history-hook';
 import { useHistoryRemovalFocus } from './history-removal-focus';
@@ -260,6 +261,7 @@ function historyItem(entry: HistoryEntry): RecentItem {
   };
 }
 type NativeViewProps = {
+  owner?: RecentHistoryOwner;
   entries: RecentItem[];
   status: RecentState;
   onRemove(id: string): void;
@@ -286,7 +288,7 @@ export function RecentHistoryView(props: NativeViewProps | (RecentHistory & { hi
   const [announcement, setAnnouncement] = useState('');
   const announce = useCallback((message: string) => setAnnouncement(message), []);
   const visibleEntries = entries.slice(0, history ? 100 : 5);
-  const focus = useHistoryRemovalFocus(entries, visibleEntries, announce);
+  const focus = useHistoryRemovalFocus(entries, visibleEntries, announce, props.owner);
   return (
     <section
       ref={focus.regionRef}
