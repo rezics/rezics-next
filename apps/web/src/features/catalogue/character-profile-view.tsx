@@ -97,7 +97,8 @@ function CharacterProfileLive({
         label={m.character_title({}, o)}
         headingClassName="font-sans"
         actions={
-          currentRead && href && (
+          currentRead &&
+          href && (
             <a href={href} className={buttonVariants({ variant: 'outline' })}>
               {m.candidate_view_public({}, o)}
             </a>

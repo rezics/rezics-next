@@ -26,7 +26,11 @@ test('retained Character reads are disclosed only for a settled successful exact
   expect(isCurrentCharacterRead(read, { isSuccess: false, isFetching: false }, { id: characterProfileId })).toBe(false);
   expect(isCurrentCharacterRead(read, { isSuccess: true, isFetching: false }, { id: characterCreatedId })).toBe(false);
   expect(
-    isCurrentCharacterRead(read, { isSuccess: true, isFetching: false }, { id: characterProfileId, work: characterCreatedId }),
+    isCurrentCharacterRead(
+      read,
+      { isSuccess: true, isFetching: false },
+      { id: characterProfileId, work: characterCreatedId },
+    ),
   ).toBe(false);
 });
 
