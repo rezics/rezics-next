@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { useRouter } from '@tanstack/react-router';
 import { NativeCheckbox } from '@rezics/ui/native-checkbox';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
@@ -28,6 +28,25 @@ export type RefinementData = {
   initial?: FacetState;
 };
 type Load = (facets: RequestedFacet[], signal: AbortSignal) => Promise<FacetState>;
+type BoundFocus = {
+  id: number;
+  source: HTMLElement;
+  property: string;
+  action: 'more' | 'load';
+  identity: string;
+  settled: boolean;
+};
+
+function isUsableControl(element: HTMLElement | null | undefined): element is HTMLElement {
+  if (!element?.isConnected) return false;
+  if ((element as HTMLButtonElement).disabled) return false;
+  if (element.getAttribute('aria-disabled') === 'true') return false;
+  return !element.closest('fieldset')?.disabled;
+}
+
+function isDocumentFallback(element: Element | null) {
+  return element === null || element === document.body || element === document.documentElement;
+}
 type RefinementProps = {
   data: RefinementData;
   conditions: RefinementConditions;
@@ -103,8 +122,58 @@ function RefinementInstance({
   const continuations = useRef(new FacetContinuationLedger(queryIdentity));
   continuations.current.retain(shown);
   const lastRead = useRef<{ facets: RequestedFacet[]; more?: string | undefined } | undefined>(undefined);
+  const boundFocus = useRef<BoundFocus | null>(null);
+  const focusSeq = useRef(0);
+  const propertyRegions = useRef(new Map<string, HTMLElement>());
+  const moreControls = useRef(new Map<string, HTMLElement>());
+  const loadControls = useRef(new Map<string, HTMLElement>());
+  const statusRegion = useRef<HTMLElement | null>(null);
+  const recoveryAction = useRef<HTMLElement | null>(null);
   const waiting = useSearchRetryWait(state && state.status !== 'ready' ? state.retryAt : undefined);
-  useEffect(() => () => active.current?.abort(), []);
+  useEffect(
+    () => () => {
+      active.current?.abort();
+      boundFocus.current = null;
+    },
+    [],
+  );
+
+  function bindFocus(source: HTMLElement, property: string, action: BoundFocus['action']) {
+    const id = ++focusSeq.current;
+    boundFocus.current = { id, source, property, action, identity: queryIdentity, settled: false };
+    return id;
+  }
+
+  function settleFocus(id: number | undefined) {
+    const bound = boundFocus.current;
+    if (id === undefined || !bound || bound.settled || bound.id !== id) return;
+    bound.settled = true;
+  }
+
+  useLayoutEffect(() => {
+    const bound = boundFocus.current;
+    if (!bound?.settled) return;
+    boundFocus.current = null;
+    if (bound.identity !== queryIdentity || !isCurrent()) return;
+    const activeElement = document.activeElement;
+    if (activeElement !== bound.source && !isDocumentFallback(activeElement)) return;
+    if (isDocumentFallback(activeElement) && isUsableControl(bound.source)) return;
+    const initiating = (bound.action === 'load' ? loadControls : moreControls).current.get(bound.property);
+    if (isUsableControl(initiating)) {
+      if (activeElement !== initiating) initiating.focus();
+      return;
+    }
+    if (isUsableControl(recoveryAction.current)) {
+      recoveryAction.current.focus();
+      return;
+    }
+    const region = propertyRegions.current.get(bound.property);
+    if (isUsableControl(region)) {
+      region.focus();
+      return;
+    }
+    statusRegion.current?.focus();
+  }, [pages, state, busy, shown, queryIdentity]);
   const href = (next: RefinementConditions) => refinementHref(locale, query, next, sort);
   const label = (labels: Record<string, string>) => localizedLabel(labels, locale).text;
   const options = { locale: locale as never };
@@ -119,7 +188,7 @@ function RefinementInstance({
     state?.status === 'restart' ||
     state?.status === 'preparing';
 
-  async function read(properties: string[], more?: string) {
+  async function read(properties: string[], more?: string, focusId?: number) {
     const facets = properties
       .filter((property) =>
         data.properties.some(
@@ -130,8 +199,11 @@ function RefinementInstance({
         const cursor = more === property ? pages.find((entry) => entry.property === property)?.next : undefined;
         return { property, size: 10, ...(cursor === undefined || cursor === null ? {} : { cursor }) };
       });
-    if (!facets.length) return;
-    return readRequested(facets, more);
+    if (!facets.length) {
+      settleFocus(focusId);
+      return;
+    }
+    return readRequested(facets, more, focusId);
   }
 
   function stopContinuation(property: string, code = 'repeated_facet_continuation') {
@@ -140,13 +212,19 @@ function RefinementInstance({
     setState({ status: 'restart', code });
   }
 
-  async function readRequested(facets: RequestedFacet[], more?: string) {
-    if (!isCurrent()) return;
+  async function readRequested(facets: RequestedFacet[], more?: string, focusId?: number) {
+    if (!isCurrent()) {
+      if (boundFocus.current?.id === focusId) boundFocus.current = null;
+      return;
+    }
+    const bound = boundFocus.current;
+    if (bound && !bound.settled && bound.id !== focusId) boundFocus.current = null;
     const repeatedRequest = facets.find(
       (facet) => facet.cursor !== undefined && continuations.current.has(facet.property, facet.cursor),
     );
     if (repeatedRequest) {
       stopContinuation(repeatedRequest.property);
+      settleFocus(focusId);
       return;
     }
     const exhaustedRequest = facets.find(
@@ -154,6 +232,7 @@ function RefinementInstance({
     );
     if (exhaustedRequest) {
       stopContinuation(exhaustedRequest.property, 'facet_window_limit');
+      settleFocus(focusId);
       return;
     }
     lastRead.current = { facets, more };
@@ -172,6 +251,7 @@ function RefinementInstance({
         });
         if (repeated) {
           stopContinuation(repeated.property);
+          settleFocus(focusId);
           return;
         }
         const next = pages.filter((page) => shownRef.current.includes(page.property));
@@ -184,6 +264,7 @@ function RefinementInstance({
             facet.values.some((entry) => previous.values.some((old) => old.value === entry.value))
           ) {
             setState({ status: 'unavailable', code: 'invalid_facet_response' });
+            settleFocus(focusId);
             return;
           }
           if (index >= 0) next[index] = facet;
@@ -200,15 +281,19 @@ function RefinementInstance({
           setPages(next.map((page) => (page.property === exhausted.property ? { ...page, next: null } : page)));
           lastRead.current = undefined;
           setState({ status: 'restart', code: 'facet_window_limit' });
+          settleFocus(focusId);
           return;
         }
         setPages(next);
         lastRead.current = undefined;
       }
       setState(result);
+      settleFocus(focusId);
     } catch (error) {
-      if (!controller.signal.aborted && isCurrent())
+      if (!controller.signal.aborted && isCurrent()) {
         setState({ status: 'unavailable', code: error instanceof Error ? error.name : 'transport_error' });
+        settleFocus(focusId);
+      }
     } finally {
       if (!controller.signal.aborted && isCurrent()) setBusy(false);
     }
@@ -321,7 +406,9 @@ function RefinementInstance({
       />
       {failed && (
         <div
+          ref={statusRegion}
           role={state.status === 'preparing' ? 'status' : 'alert'}
+          tabIndex={-1}
           className="space-y-2 text-sm text-muted-foreground"
         >
           <p>
@@ -335,19 +422,27 @@ function RefinementInstance({
           </p>
           {waiting && state.status !== 'refused' && <p>{m.search_recovery_wait({}, options)}</p>}
           {state.status === 'restart' ? (
-            <a href={href(conditions)} className={buttonVariants({ variant: 'link', size: 'sm' })}>
+            <a
+              ref={recoveryAction}
+              href={href(conditions)}
+              className={buttonVariants({ variant: 'link', size: 'sm' })}
+            >
               {m.search_facet_retry({}, options)}
             </a>
           ) : (
             state.status !== 'refused' && (
               <Button
+                ref={recoveryAction}
                 type="button"
                 variant="outline"
                 size="sm"
                 disabled={busy || waiting}
-                onClick={() => {
+                onClick={(event) => {
                   const attempt = lastRead.current;
-                  void (attempt ? readRequested(attempt.facets, attempt.more) : read(shown));
+                  const property = attempt?.more ?? attempt?.facets[0]?.property ?? shown[0];
+                  if (!property) return;
+                  const id = bindFocus(event.currentTarget, property, attempt?.more ? 'more' : 'load');
+                  void (attempt ? readRequested(attempt.facets, attempt.more, id) : read(shown, undefined, id));
                 }}
               >
                 {m.search_facet_retry({}, options)}
@@ -374,6 +469,11 @@ function RefinementInstance({
         return (
           <FieldSet
             key={property}
+            ref={(node) => {
+              if (node) propertyRegions.current.set(property, node);
+              else propertyRegions.current.delete(property);
+            }}
+            tabIndex={-1}
             className="min-w-0 gap-2 border-t border-border/60 pt-4"
             disabled={
               busy ||
@@ -446,17 +546,35 @@ function RefinementInstance({
                 )}
                 {page?.next && (
                   <Button
+                    ref={(node) => {
+                      if (node) moreControls.current.set(property, node);
+                      else moreControls.current.delete(property);
+                    }}
                     type="button"
                     variant="outline"
                     size="sm"
                     disabled={disabled}
-                    onClick={() => void read([property], property)}
+                    onClick={(event) => {
+                      void read([property], property, bindFocus(event.currentTarget, property, 'more'));
+                    }}
                   >
                     {m.refinement_more_values({}, options)}
                   </Button>
                 )}
                 {!page && !failed && (
-                  <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void read(shown)}>
+                  <Button
+                    ref={(node) => {
+                      if (node) loadControls.current.set(property, node);
+                      else loadControls.current.delete(property);
+                    }}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={busy}
+                    onClick={(event) => {
+                      void read(shown, undefined, bindFocus(event.currentTarget, property, 'load'));
+                    }}
+                  >
                     {m.refinement_load_values({}, options)}
                   </Button>
                 )}

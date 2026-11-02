@@ -55,7 +55,9 @@ identifiers; options with colliding names include their property IDs.
 
 Facet More replaces the visible ten-value window while pending and failed reads retain the accepted window. Refinement
 keeps windows and cursor progress only for the eight shown properties, then offers a restart after 64 successful
-continuations for one property.
+continuations for one property. Explicit Load, More and Retry keep focus on a surviving usable control; a removed
+control or a disabled fieldset recovers to Retry or that property or status region, and never steals focus if the
+reader moved away.
 
 Native GET sort submission uses an empty `sort` value for Relevance, parsed as the default; `rating` is the only
 explicit sort value.
