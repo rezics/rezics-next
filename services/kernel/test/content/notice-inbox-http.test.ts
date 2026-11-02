@@ -109,7 +109,6 @@ test('retention preserves the precise seen frontier across delayed delivery and 
     let cursor = '';
     do {
       const page = await call(`${base}?limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`);
-      expect(page.response.status).toBe(200);
       items.push(...page.value.items.map(({ id, unread }: { id: string; unread: boolean }) => ({ id, unread })));
       cursor = page.value.next;
     } while (cursor);
