@@ -248,6 +248,8 @@ function PublicationEditorLive({
   const [language, setLanguage] = useState(locale);
   const [label, setLabel] = useState('');
   const [facts, setFacts] = useState<Record<string, SnakInput['value']>>({});
+  // One identity per added row; removing and readding a property retires its old controls.
+  const factHolders = useRef(new Map<string, object>());
   const [publisher, setPublisher] = useState<EntityPickerSubject[]>([]);
   const [field, setField] = useState('');
   const [citation, setCitation] = useState('');
@@ -260,6 +262,15 @@ function PublicationEditorLive({
   const uncertain = failure?.reason === 'unavailable' && command.current !== null;
   const locked = busy || uncertain || (failure?.reason === 'conflict' && !reviewDefinitions);
   const disabled = locked || session !== 'signed-in' || !read || refreshRequiredRef.current;
+  const admission = useRef({ disabled, created, field });
+  admission.current = { disabled, created, field };
+  const editable = () =>
+    lifetime.active() &&
+    renderedReadingGeneration === readingGeneration.current &&
+    !refreshRequiredRef.current &&
+    !running.current &&
+    !admission.current.disabled &&
+    !admission.current.created;
   const name = (id: string) =>
     pickText(displayRelease?.properties[id]?.labels ?? {}, locale).text || draftNames[id] || '';
   const title = read ? pickText(read.public.subject.labels, locale).text : '';
@@ -325,9 +336,8 @@ function PublicationEditorLive({
     }
   }
 
-  function edit(change: () => void) {
-    if (!lifetime.active() || renderedReadingGeneration !== readingGeneration.current || refreshRequiredRef.current)
-      return;
+  function edit(change: () => void, current: () => boolean = () => true) {
+    if (!editable() || !current()) return;
     change();
     localDraft.current = true;
     // Only an explicit edit after a definite refusal starts a different request. Uncertain drafts stay frozen.
@@ -594,10 +604,12 @@ function PublicationEditorLive({
       const result = await transport.submit(command.current);
       if (!lifetime.active() || renderedReadingGeneration !== readingGeneration.current) return;
       if (result.ok) {
+        admission.current.created = result;
         localDraft.current = false;
         setCreated(result);
         if (result.reader.state === 'ready') onNavigate(result.reader.href);
       } else {
+        if (result.reason === 'unavailable' || result.reason === 'conflict') admission.current.disabled = true;
         setFailure(result);
         // Uncertain commands retain their exact original body/key, even if a response asks for new metadata.
         if (result.refreshDefinitions && result.reason !== 'unavailable') {
@@ -608,6 +620,7 @@ function PublicationEditorLive({
       }
     } catch {
       if (!lifetime.active()) return;
+      admission.current.disabled = true;
       setFailure({ ok: false, reason: 'unavailable' });
     } finally {
       if (!lifetime.active()) return;
@@ -918,89 +931,100 @@ function PublicationEditorLive({
                   </Field>
                 </FieldSet>
               </ContentItemFrame>
-              {Object.entries(facts).map(([property, value]) => (
-                <ContentItemFrame as="div" key={property} className="min-w-0 p-4 sm:p-6">
-                  <FieldSet
-                    id={`${id}-fact-${encodeURIComponent(property)}`}
-                    disabled={disabled}
-                    tabIndex={-1}
-                    aria-describedby={controlErrorId(`${id}-fact-${encodeURIComponent(property)}`)}
-                    aria-invalid={hasControlError(`${id}-fact-${encodeURIComponent(property)}`) || undefined}
-                    className="min-w-0 gap-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                  >
-                    <FieldLegend className="max-w-full">
-                      <ContentItemHeading level={3} className="text-base font-semibold [overflow-wrap:anywhere]">
-                        {name(property) || m.correction_preserved({}, o)}
-                      </ContentItemHeading>
-                    </FieldLegend>
-                    {factNeedsReview(property) && (
-                      <>
-                        <FieldError>{m.publication_choice_review({}, o)}</FieldError>
-                        {property === 'schema:publisher' && <p>{publisher.map((item) => item.title).join(', ')}</p>}
-                        <details>
-                          <summary className={linkClassName}>{m.publication_staged_value({}, o)}</summary>
-                          <pre className="whitespace-pre-wrap [overflow-wrap:anywhere]">
-                            {JSON.stringify({ property, value }, null, 2)}
-                          </pre>
-                        </details>
-                      </>
-                    )}
-                    {unsupportedFact(property) ? null : property === 'schema:publisher' ? (
-                      <EntityPicker
-                        label={name(property)}
-                        value={publisher}
-                        search={async (text, signal) => {
-                          const results = await search(text, signal);
-                          if (
-                            !read ||
-                            renderedReadingGeneration !== readingGeneration.current ||
-                            refreshRequiredRef.current
-                          )
-                            return [];
-                          return results.filter((item) =>
-                            item.types.some((type) => publicationTarget(read.release, type, property)),
-                          );
-                        }}
-                        src={coverSrc}
+              {Object.entries(facts).map(([property, value]) => {
+                const holder = factHolders.current.get(property);
+                const current = () => holder !== undefined && factHolders.current.get(property) === holder;
+                return (
+                  <ContentItemFrame as="div" key={property} className="min-w-0 p-4 sm:p-6">
+                    <FieldSet
+                      id={`${id}-fact-${encodeURIComponent(property)}`}
+                      disabled={disabled}
+                      tabIndex={-1}
+                      aria-describedby={controlErrorId(`${id}-fact-${encodeURIComponent(property)}`)}
+                      aria-invalid={hasControlError(`${id}-fact-${encodeURIComponent(property)}`) || undefined}
+                      className="min-w-0 gap-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                    >
+                      <FieldLegend className="max-w-full">
+                        <ContentItemHeading level={3} className="text-base font-semibold [overflow-wrap:anywhere]">
+                          {name(property) || m.correction_preserved({}, o)}
+                        </ContentItemHeading>
+                      </FieldLegend>
+                      {factNeedsReview(property) && (
+                        <>
+                          <FieldError>{m.publication_choice_review({}, o)}</FieldError>
+                          {property === 'schema:publisher' && <p>{publisher.map((item) => item.title).join(', ')}</p>}
+                          <details>
+                            <summary className={linkClassName}>{m.publication_staged_value({}, o)}</summary>
+                            <pre className="whitespace-pre-wrap [overflow-wrap:anywhere]">
+                              {JSON.stringify({ property, value }, null, 2)}
+                            </pre>
+                          </details>
+                        </>
+                      )}
+                      {unsupportedFact(property) ? null : property === 'schema:publisher' ? (
+                        <EntityPicker
+                          label={name(property)}
+                          value={publisher}
+                          search={async (text, signal) => {
+                            const results = await search(text, signal);
+                            if (
+                              !read ||
+                              renderedReadingGeneration !== readingGeneration.current ||
+                              refreshRequiredRef.current
+                            )
+                              return [];
+                            return results.filter((item) =>
+                              item.types.some((type) => publicationTarget(read.release, type, property)),
+                            );
+                          }}
+                          src={coverSrc}
+                          disabled={disabled}
+                          onValueChange={(items) =>
+                            edit(() => {
+                              setPublisher(items);
+                              setFacts((facts) => ({
+                                ...facts,
+                                [property]: { type: 'value', content: items[0]?.id ?? '' },
+                              }));
+                            }, current)
+                          }
+                        />
+                      ) : (
+                        <ScalarControl
+                          part={{ property: { id: property }, value }}
+                          definition={controlRead?.release.properties[property]}
+                          read={controlRead!}
+                          locale={locale}
+                          feedback={scalarFeedback(property).feedback}
+                          onChange={(next) =>
+                            edit(() => setFacts((facts) => ({ ...facts, [property]: next })), current)
+                          }
+                        />
+                      )}
+                      <PublicationFactRemoval
+                        property={property}
+                        locale={locale}
+                        populated={
+                          value.type !== 'value' ||
+                          hasFactContent(value.content) ||
+                          (property === 'schema:publisher' && publisher.length > 0)
+                        }
                         disabled={disabled}
-                        onValueChange={(items) =>
+                        editable={() => editable() && current()}
+                        onRemove={() =>
                           edit(() => {
-                            setPublisher(items);
-                            if (!lifetime.active()) return;
-                            setFacts({ ...facts, [property]: { type: 'value', content: items[0]?.id ?? '' } });
-                          })
+                            factHolders.current.delete(property);
+                            setFacts((facts) =>
+                              Object.fromEntries(Object.entries(facts).filter(([id]) => id !== property)),
+                            );
+                            if (property === 'schema:publisher') setPublisher([]);
+                          }, current)
                         }
                       />
-                    ) : (
-                      <ScalarControl
-                        part={{ property: { id: property }, value }}
-                        definition={controlRead?.release.properties[property]}
-                        read={controlRead!}
-                        locale={locale}
-                        feedback={scalarFeedback(property).feedback}
-                        onChange={(next) => edit(() => setFacts({ ...facts, [property]: next }))}
-                      />
-                    )}
-                    <PublicationFactRemoval
-                      property={property}
-                      locale={locale}
-                      populated={
-                        value.type !== 'value' ||
-                        hasFactContent(value.content) ||
-                        (property === 'schema:publisher' && publisher.length > 0)
-                      }
-                      disabled={disabled}
-                      editable={() => lifetime.active() && !running.current && !disabled && !created}
-                      onRemove={() =>
-                        edit(() => {
-                          setFacts(Object.fromEntries(Object.entries(facts).filter(([id]) => id !== property)));
-                          if (property === 'schema:publisher') setPublisher([]);
-                        })
-                      }
-                    />
-                  </FieldSet>
-                </ContentItemFrame>
-              ))}
+                    </FieldSet>
+                  </ContentItemFrame>
+                );
+              })}
               <ContentItemFrame as="div" className="min-w-0 p-4 sm:p-6">
                 <FieldSet disabled={disabled} className="min-w-0 flex-row flex-wrap items-end gap-3">
                   <FieldLegend className="sr-only">{m.publication_field({}, o)}</FieldLegend>
@@ -1040,18 +1064,25 @@ function PublicationEditorLive({
                       disabled || !field || !currentProfile?.fields.includes(field) || Object.hasOwn(facts, field)
                     }
                     onClick={() =>
-                      edit(() => {
-                        const datatype = read?.release.properties[field]?.datatype;
-                        if (!datatype) return;
-                        setFacts({
-                          ...facts,
-                          [field]: {
-                            type: 'value',
-                            content: datatype === 'time' || datatype === 'quantity' ? {} : '',
-                          },
-                        });
-                        setField('');
-                      })
+                      edit(
+                        () => {
+                          const datatype = read?.release.properties[field]?.datatype;
+                          if (!datatype) return;
+                          factHolders.current.set(field, {});
+                          setFacts((facts) => ({
+                            ...facts,
+                            [field]: {
+                              type: 'value',
+                              content: datatype === 'time' || datatype === 'quantity' ? {} : '',
+                            },
+                          }));
+                          setField('');
+                        },
+                        () =>
+                          admission.current.field === field &&
+                          !factHolders.current.has(field) &&
+                          !!currentProfile?.fields.includes(field),
+                      )
                     }
                   >
                     {m.correction_add({}, o)}

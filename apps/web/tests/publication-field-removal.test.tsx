@@ -3,6 +3,7 @@ import { dirname } from 'node:path';
 import { act } from 'react';
 import type { CreateResult } from '../src/features/catalogue/create-subject';
 import type { PublicationCommand } from '../src/features/catalogue/publication-editor';
+import type { SnakInput } from '../src/features/catalogue/statement-editor';
 
 test('publication fact confirmation preserves drafts, property targets and the original locked command', async () => {
   const { Window } = await import(
@@ -95,6 +96,20 @@ test('publication fact confirmation preserves drafts, property targets and the o
   const remove = (property: string) => within(region(property)).getByRole('button', { name: m.relation_remove() });
   const snapshot = () =>
     [...host.querySelectorAll<HTMLInputElement>('input, select')].map((node) => [node.id, node.value, node.checked]);
+  // Retain the actual mounted control's caller, including its original render closure.
+  const retained = <T,>(element: HTMLElement, name: 'onChange' | 'onValueChange') => {
+    type Fiber = { memoizedProps: Record<string, unknown>; return?: Fiber };
+    const key = Object.keys(element).find((key) => key.startsWith('__reactFiber$'))!;
+    let fiber = Reflect.get(element, key) as Fiber | undefined;
+    while (fiber) {
+      const props = fiber.memoizedProps;
+      if (typeof props[name] === 'function' && (name === 'onChange' ? props.part : props.search))
+        return props[name] as (value: T) => void;
+      fiber = fiber.return;
+    }
+    throw new Error(`Missing mounted ${name}`);
+  };
+  const isbn = { type: 'value', content: '978-0-140-44430-8' } as const;
   try {
     await act(async () =>
       root.render(
@@ -109,6 +124,7 @@ test('publication fact confirmation preserves drafts, property targets and the o
     await type(input(m.relation_citation()), 'https://example.org/source');
     await add('schema:isbn');
     await type(input(m.correction_value()), '978-0-140-44430-8');
+    const oldScalar = retained<SnakInput['value']>(input(m.correction_value()), 'onChange');
     await add('schema:publisher');
     await type(canvas.getByRole('combobox', { name: 'publisher' }), 'Press');
     await click(
@@ -116,6 +132,13 @@ test('publication fact confirmation preserves drafts, property targets and the o
     );
     const sibling = region('schema:publisher'),
       stableId = sibling.id;
+    const oldPublisher = retained<(typeof publisher)[]>(
+      canvas.getByRole('combobox', { name: 'publisher' }),
+      'onValueChange',
+    );
+    await act(async () => oldScalar(isbn));
+    expect(region('schema:publisher')).toBe(sibling);
+    expect(sibling.textContent).toContain('Selected press');
     await click(button(m.publication_submit()));
     const correction = await canvas.findByRole('link', { name: 'publisher' });
     expect(decodeURIComponent(correction.getAttribute('href')!.slice(1))).toBe(stableId);
@@ -135,6 +158,10 @@ test('publication fact confirmation preserves drafts, property targets and the o
     await click(remove('schema:isbn'));
     await click(remove('schema:isbn'));
     expect(region('schema:isbn')).toBeNull();
+    await act(async () => oldScalar(isbn));
+    expect(region('schema:isbn')).toBeNull();
+    await act(async () => oldPublisher([publisher]));
+    expect(region('schema:isbn')).toBeNull();
     expect(region('schema:publisher')).toBe(sibling);
     expect(sibling.id).toBe(stableId);
     expect(sibling.contains(window.document.activeElement as unknown as Node)).toBe(true);
@@ -143,18 +170,43 @@ test('publication fact confirmation preserves drafts, property targets and the o
     await click(remove('schema:publisher'));
     expect(window.document.activeElement).toBe(canvas.getByRole('combobox', { name: m.publication_field() }));
     await add('schema:publisher');
+    await act(async () => oldPublisher([publisher]));
     expect(canvas.queryByText('Selected press')).toBeNull();
     await click(remove('schema:publisher'));
     expect(region('schema:publisher')).toBeNull();
     expect(canvas.queryByRole('button', { name: m.candidate_cancel() })).toBeNull();
     await add('schema:isbn');
+    await act(async () => oldScalar(isbn));
+    expect(input(m.correction_value()).value).toBe('');
     await type(input(m.correction_value()), '978-0-140-44430-8');
+    const currentScalar = retained<SnakInput['value']>(input(m.correction_value()), 'onChange');
+    await add('schema:publisher');
+    const currentPublisher = retained<(typeof publisher)[]>(
+      canvas.getByRole('combobox', { name: 'publisher' }),
+      'onValueChange',
+    );
+    await act(async () => currentPublisher([publisher]));
+    // A retained publisher edit must preserve a newer scalar sibling value.
+    await act(async () => currentScalar(isbn));
+    expect(region('schema:publisher').textContent).toContain('Selected press');
     await click(remove('schema:isbn'));
     await click(button(m.publication_submit()));
+    const locked = snapshot();
+    const lateEdits = () => {
+      currentScalar({ type: 'value', content: 'late scalar' });
+      currentPublisher([{ ...publisher, title: 'Late press', id: fixture.work.subject.id }]);
+    };
+    await act(async () => lateEdits());
+    expect(snapshot()).toEqual(locked);
+    expect(region('schema:publisher').textContent).toContain('Selected press');
+    expect(canvas.queryByText('Late press')).toBeNull();
     expect((remove('schema:isbn') as HTMLButtonElement).disabled).toBe(true);
     await click(remove('schema:isbn'));
     await act(async () => finish({ ok: false, reason: 'unavailable' }));
     await canvas.findByRole('heading', { name: m.catalogue_create_uncertain() });
+    await act(async () => lateEdits());
+    expect(snapshot()).toEqual(locked);
+    expect(canvas.getByRole('heading', { name: m.catalogue_create_uncertain() })).toBeDefined();
     await click(remove('schema:isbn'));
     expect(input(m.correction_value()).value).toBe('978-0-140-44430-8');
     await click(button(m.catalogue_create_retry()));
@@ -164,6 +216,22 @@ test('publication fact confirmation preserves drafts, property targets and the o
       type: 'value',
       content: fixture.work.subject.id,
     });
+    await act(async () => finish({ ok: false, reason: 'invalid' }));
+    await act(async () => currentScalar({ type: 'value', content: '978-0-140-44431-5' }));
+    await click(button(m.publication_submit()));
+    expect(commands[3]!.key).not.toBe(commands[2]!.key);
+    expect(commands[3]!.item.statements['schema:isbn']![0]!.value).toEqual({
+      type: 'value',
+      content: '978-0-140-44431-5',
+    });
+    expect(commands[3]!.item.statements['schema:publisher']).toEqual(commands[2]!.item.statements['schema:publisher']);
+    await act(async () => finish({ ok: true, id: fixture.work.subject.id, reader: { state: 'concealed' } }));
+    await act(async () => lateEdits());
+    expect(canvas.getByText(m.catalogue_create_created())).toBeDefined();
+    expect(commands).toHaveLength(4);
+    await act(async () => root.unmount());
+    await act(async () => lateEdits());
+    expect(host.textContent).toBe('');
   } finally {
     await act(async () => root.unmount());
     client.clear();
