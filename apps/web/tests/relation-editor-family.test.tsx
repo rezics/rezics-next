@@ -843,26 +843,54 @@ test('Relation page completion belongs only to its initiating current keyboard r
       const [action, mode] = scenario.split(':');
       const calls: unknown[][] = [];
       let finish!: (read: Awaited<ReturnType<RelationTransport['read']>>) => void;
-      const transport: RelationTransport = { ...fixture.transport, read: (...args) => {
-        calls.push(structuredClone(args));
-        return new Promise((resolve) => { finish = resolve; });
-      } };
-      const editor = (key: string) => h(RelationEditor, { key, id: fixture.id, locale: 'en', initial: page,
-        transport, search: async () => [], composition: {
-          statement: fixture.draft, slot: fixture.slot, positionEditable: true, session: 'original-token',
-        } });
+      const transport: RelationTransport = {
+        ...fixture.transport,
+        read: (...args) => {
+          calls.push(structuredClone(args));
+          return new Promise((resolve) => {
+            finish = resolve;
+          });
+        },
+      };
+      const editor = (key: string) =>
+        h(RelationEditor, {
+          key,
+          id: fixture.id,
+          locale: 'en',
+          initial: page,
+          transport,
+          search: async () => [],
+          composition: {
+            statement: fixture.draft,
+            slot: fixture.slot,
+            positionEditable: true,
+            session: 'original-token',
+          },
+        });
       outside.focus();
       await render(editor(scenario));
+      if (action === 'restart') {
+        await ui.click(region(), m.candidate_reload());
+        await act(async () => finish(page));
+        calls.length = 0;
+      }
       if (action === 'retry') {
         await ui.click(region(), m.candidate_more());
         await act(async () => finish({ ok: false, reason: 'unavailable' }));
       }
-      const label = action === 'more' ? m.candidate_more() : action === 'retry'
-        ? m.statement_consent_retry_page() : action === 'restart' ? m.statement_consent_restart() : m.candidate_reload();
+      const label =
+        action === 'more'
+          ? m.candidate_more()
+          : action === 'retry'
+            ? m.statement_consent_retry_page()
+            : action === 'restart'
+              ? m.statement_consent_restart()
+              : m.candidate_reload();
       const opener = within(region()).getByRole('button', { name: label });
       if (mode !== 'background') opener.focus();
-      await act(async () => mode === 'pointer' ? user.click(opener) : mode === 'background'
-        ? opener.click() : user.keyboard('{Enter}'));
+      await act(async () =>
+        mode === 'pointer' ? user.click(opener) : mode === 'background' ? opener.click() : user.keyboard('{Enter}'),
+      );
       if (mode === 'moved' || mode === 'return') outside.focus();
       if (mode === 'return') opener.focus();
       if (mode === 'lost') opener.blur(); // Native disabling can leave focus on the document.
@@ -873,13 +901,25 @@ test('Relation page completion belongs only to its initiating current keyboard r
         outside.focus();
       }
       const before = window.document.activeElement;
-      await act(async () => finish(mode === 'failed' ? { ok: false, reason: 'unavailable' }
-        : mode === 'empty' ? { ...page, page: { ...page.page, candidates: [] } } : page));
+      await act(async () =>
+        finish(
+          mode === 'failed'
+            ? { ok: false, reason: 'unavailable' }
+            : mode === 'empty'
+              ? { ...page, page: { ...page.page, candidates: [] } }
+              : page,
+        ),
+      );
       expect(calls).toHaveLength(action === 'retry' ? 2 : 1);
-      expect(calls.at(-1)).toEqual([fixture.slot, action === 'more' || action === 'retry'
-        ? 'next-page' : undefined, 'original-token']);
+      expect(calls.at(-1)).toEqual([
+        fixture.slot,
+        action === 'more' || action === 'retry' ? 'next-page' : undefined,
+        'original-token',
+      ]);
       if (mode === 'page' || mode === 'lost')
-        expect(window.document.activeElement).toBe(within(region()).getByRole('region', { name: m.relation_review_slot() }));
+        expect(window.document.activeElement).toBe(
+          within(region()).getByRole('region', { name: m.relation_review_slot() }),
+        );
       else if (mode === 'empty') expect(window.document.activeElement?.textContent).toBe(m.candidate_empty());
       else if (mode === 'failed' && action === 'more')
         expect(window.document.activeElement).toBe(within(region()).getByRole('alert'));

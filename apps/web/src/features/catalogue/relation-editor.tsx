@@ -151,12 +151,15 @@ function RelationEditorLive({
       }
     | undefined
   >(undefined);
-  const candidateReadFocus = useRef<{
-    opener: HTMLButtonElement;
-    active: () => boolean;
-    generation: number;
-    outcome?: 'boundary' | 'failure';
-  } | undefined>(undefined);
+  const candidateReadFocus = useRef<
+    | {
+        opener: HTMLButtonElement;
+        active: () => boolean;
+        generation: number;
+        outcome: 'boundary' | 'failure' | undefined;
+      }
+    | undefined
+  >(undefined);
   const [result, setResult] = useState<Extract<RelationResult, { ok: true }>>();
   const [proposed, setProposed] = useState(false);
   const [proposedId, setProposedId] = useState<string>();
@@ -497,7 +500,12 @@ function RelationEditorLive({
     const generation = ++readGeneration.current;
     const intent =
       event?.detail === 0 && event.currentTarget === document.activeElement
-        ? { opener: event.currentTarget, active: mount.active, generation, outcome: undefined as 'boundary' | 'failure' | undefined }
+        ? {
+            opener: event.currentTarget,
+            active: mount.active,
+            generation,
+            outcome: undefined as 'boundary' | 'failure' | undefined,
+          }
         : undefined;
     candidateReadFocus.current = intent;
     const orient = (outcome: 'boundary' | 'failure') => {
@@ -533,7 +541,12 @@ function RelationEditorLive({
       }
     }
   }
-  async function load(address = slot, cursor?: string, session = nativeSession.current, event?: MouseEvent<HTMLButtonElement>) {
+  async function load(
+    address = slot,
+    cursor?: string,
+    session = nativeSession.current,
+    event?: MouseEvent<HTMLButtonElement>,
+  ) {
     if (!lifetime.active() || running.current || uncertain) return;
     running.current = true;
     setBusy(true);
@@ -552,12 +565,7 @@ function RelationEditorLive({
   }
   function reload(event?: MouseEvent<HTMLButtonElement>) {
     const destination = reading.current;
-    void load(
-      destination?.slot ?? slot,
-      destination?.cursor,
-      destination?.session ?? nativeSession.current,
-      event,
-    );
+    void load(destination?.slot ?? slot, destination?.cursor, destination?.session ?? nativeSession.current, event);
   }
   async function confirm() {
     if (!lifetime.active()) return;
@@ -1308,7 +1316,11 @@ function RelationEditorLive({
             {failure && reading.current ? m.statement_consent_retry_page({}, options) : m.candidate_reload({}, options)}
           </Button>
           {reading.current?.slot && (
-            <Button variant="outline" disabled={busy} onClick={(event) => load(slot, undefined, nativeSession.current, event)}>
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={(event) => load(slot, undefined, nativeSession.current, event)}
+            >
               {m.statement_consent_restart({}, options)}
             </Button>
           )}
