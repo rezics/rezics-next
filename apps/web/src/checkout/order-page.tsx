@@ -10,6 +10,7 @@ import { PageHeading } from '../shell/page-heading';
 import { SubjectCover } from './subject-cover';
 import { useBuyerCurrentOrigin, type BuyerCurrentOrigin } from './buyer-current-origin';
 import { BenefitDetails } from './benefit-details';
+import { OrderAccessRecovery } from './order-access-recovery';
 import { formatMinorAmount } from './money';
 import {
   createReconciliationRequest,
@@ -106,6 +107,7 @@ function OrderReceipt(
     <OrderLifetime
       key={session.origin.id}
       {...props}
+      locale={locale}
       order={order}
       setOrder={setOrder}
       gaveUp={gaveUp}
@@ -126,6 +128,7 @@ function OrderReceipt(
 
 function OrderLifetime({
   order: initial,
+  locale,
   setOrder,
   gaveUp,
   setGaveUp,
@@ -143,6 +146,7 @@ function OrderLifetime({
   enqueue,
   command,
 }: OrderPageProps & {
+  locale: string;
   setOrder: Dispatch<SetStateAction<OrderPageData>>;
   gaveUp: boolean;
   setGaveUp: Dispatch<SetStateAction<boolean>>;
@@ -396,6 +400,17 @@ function OrderLifetime({
           </a>
         </p>
       ) : null}
+      {order.settlement === 'paid' && order.entitlement.kind === 'unavailable' && (
+        <OrderAccessRecovery
+          key={`${origin.id}:${benefitOrigin?.id ?? 'retired'}`}
+          order={order}
+          locale={locale}
+          origin={origin}
+          benefitOrigin={benefitOrigin}
+          enabled={hydrated && canReadOrder && signedIn}
+          setOrder={setOrder}
+        />
+      )}
       {initial.canReconcile && signedIn && canReadOrder && (
         <section className="space-y-3" aria-label={m.order_reconcile_action()}>
           <Button
