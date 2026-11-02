@@ -14,7 +14,8 @@ export type RatingAggregateValue = {
 type RatingFreshness = { asOf: string | null; updating: boolean };
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const dateTime = /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/;
+const dateTime =
+  /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/;
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -33,7 +34,10 @@ function safeInteger(value: unknown, minimum: number): value is number {
 
 function ratingFreshness(value: unknown): RatingFreshness | null {
   if (!record(value) || !exactKeys(value, ['asOf', 'updating']) || typeof value.updating !== 'boolean') return null;
-  if (value.asOf !== null && (typeof value.asOf !== 'string' || !dateTime.test(value.asOf) || !Number.isFinite(Date.parse(value.asOf))))
+  if (
+    value.asOf !== null &&
+    (typeof value.asOf !== 'string' || !dateTime.test(value.asOf) || !Number.isFinite(Date.parse(value.asOf)))
+  )
     return null;
   return { asOf: value.asOf, updating: value.updating };
 }

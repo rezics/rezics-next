@@ -29,13 +29,25 @@ test('admits coherent native rating population responses', async () => {
   const result = await readRatingPopulations(clientFor(aggregate), new Request('https://web.test'), {}, input);
   expect(result.result).toEqual({
     kind: 'ready',
-    value: { items: [{ id: population, name: 'Realm', figure: { kind: 'ready', value: figure } }], next: null, incomplete: false },
+    value: {
+      items: [{ id: population, name: 'Realm', figure: { kind: 'ready', value: figure } }],
+      next: null,
+      incomplete: false,
+    },
   });
 });
 
 test('rejects malformed population pages and aggregate figures', async () => {
   expect(admitRatingPopulationPage({ populations: [{ population, count: 0 }], next: null })).toBeNull();
-  expect(admitRatingPopulationPage({ populations: [{ population, count: 1 }, { population, count: 2 }], next: null })).toBeNull();
+  expect(
+    admitRatingPopulationPage({
+      populations: [
+        { population, count: 1 },
+        { population, count: 2 },
+      ],
+      next: null,
+    }),
+  ).toBeNull();
   expect(admitRatingPopulationPage({ populations: [], next: { cursor: 'opaque' } })).toBeNull();
 
   const malformed = [
@@ -45,11 +57,20 @@ test('rejects malformed population pages and aggregate figures', async () => {
     { ...aggregate, figures: [{ ...figure, population: subject }] },
     { ...aggregate, figures: [{ ...figure, privatePayload: 'must not reach cache' }] },
   ];
-  for (const value of malformed) expect(admitRatingAggregate(value, { subject, question, populations: [population] })).toBeNull();
+  for (const value of malformed)
+    expect(admitRatingAggregate(value, { subject, question, populations: [population] })).toBeNull();
   expect(
-    admitRatingAggregate({ ...aggregate, figures: [figure, figure] }, { subject, question, populations: [population, otherPopulation] }),
+    admitRatingAggregate(
+      { ...aggregate, figures: [figure, figure] },
+      { subject, question, populations: [population, otherPopulation] },
+    ),
   ).toBeNull();
 
-  const result = await readRatingPopulations(clientFor({ ...aggregate, question: subject }), new Request('https://web.test'), {}, input);
+  const result = await readRatingPopulations(
+    clientFor({ ...aggregate, question: subject }),
+    new Request('https://web.test'),
+    {},
+    input,
+  );
   expect(result.result).toEqual({ kind: 'failed' });
 });
