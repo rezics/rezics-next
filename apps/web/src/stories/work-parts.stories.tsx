@@ -426,17 +426,26 @@ export const IndependentMounts: Story = {
     const initial = familyMount.initial[0]!;
     if (!initial.ok) throw new Error('Expected supplied streams');
     const alternative = initial.streams.find((stream) => stream.direction === 'inverse' && stream.key !== original)!;
-    await userEvent.selectOptions(controls[0]!, alternative.key);
+    await userEvent.selectOptions(
+      within(articles[0]!).getByRole('combobox', { name: m.work_parts_relation() }),
+      alternative.key,
+    );
     await waitFor(() => expect(controls[0]!).not.toBeDisabled());
     expect(controls[0]!.value).toBe(alternative.key);
     expect(controls[1]!.value).toBe(original);
     expect(fixtures[1]!.calls).toHaveLength(0);
     expect(fixtures[0]!.calls).toHaveLength(2);
-    await userEvent.selectOptions(controls[1]!, alternative.key);
+    await userEvent.selectOptions(
+      within(articles[1]!).getByRole('combobox', { name: m.work_parts_relation() }),
+      alternative.key,
+    );
     await waitFor(() => expect(controls[1]!).not.toBeDisabled());
     expect(fixtures[0]!.calls).toHaveLength(2);
     expect(fixtures[1]!.calls).toHaveLength(2);
-    await userEvent.selectOptions(controls[0]!, original);
+    await userEvent.selectOptions(
+      within(articles[0]!).getByRole('combobox', { name: m.work_parts_relation() }),
+      original,
+    );
     await waitFor(() =>
       expect(within(articles[0]!).getByRole('button', { name: m.work_parts_correct() })).toBeVisible(),
     );
