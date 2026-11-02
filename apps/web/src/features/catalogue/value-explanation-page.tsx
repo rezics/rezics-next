@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { CandidateValue } from '../pages/data';
 import { ViewHeading } from '../pages/subject-frame';
@@ -11,7 +12,7 @@ import { ChangeExplanation } from './subject-changes-page';
 function Part({ snak, page, locale }: { snak: Snak; page: ValuePage; locale: string }) {
   const label = page.labels[snak.property.id];
   return (
-    <div className="min-w-0 space-y-1 break-words">
+    <div className="min-w-0 max-w-full space-y-1 whitespace-normal [overflow-wrap:anywhere]">
       <p lang={label?.lang} className="text-sm text-muted-foreground">
         {label?.text || m.subject_value_unlabelled({}, { locale: locale as never })}
       </p>
@@ -34,6 +35,7 @@ export function ValueExplanationPage({
   onMore?: (cursor: string) => void;
   onReload?: () => void;
 }) {
+  const headingId = useId();
   const o = { locale: locale as never };
   const page = result?.kind === 'ready' ? result.page : undefined;
   const statement = page?.statement;
@@ -41,7 +43,7 @@ export function ValueExplanationPage({
   const change = page?.change;
   return (
     <article
-      className="mx-auto flex w-full min-w-0 max-w-3xl flex-col gap-6 [overflow-wrap:anywhere]"
+      className="mx-auto flex w-full min-w-0 max-w-3xl flex-col gap-6 whitespace-normal [overflow-wrap:anywhere] [&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:items-center [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring [&_pre]:max-w-full [&_pre]:whitespace-pre-wrap"
       aria-busy={busy}
       data-slot="value-explanation"
     >
@@ -88,43 +90,51 @@ export function ValueExplanationPage({
           </nav>
           {statement ? (
             <>
-              <section className="space-y-3" aria-labelledby="value-selected">
-                <h2 id="value-selected" lang={page.propertyLabel.lang} className="text-xl font-semibold">
-                  {page.propertyLabel.text || m.subject_value_unlabelled({}, o)}
-                </h2>
-                <div className="min-w-0 break-words rounded-xl bg-muted/50 p-4 text-lg">
-                  <CandidateValue
-                    snak={statement}
-                    related={page.related}
-                    subject={page.id}
-                    documents={page.documents}
-                    locale={locale}
-                  />
-                </div>
-                {!!statement.qualifiers.length && (
-                  <dl className="space-y-3">
-                    <dt className="font-medium">{m.value_qualifiers({}, o)}</dt>
-                    <dd className="space-y-3">
-                      {statement.qualifiers.map((part, index) => (
-                        <Part key={index} snak={part} page={page} locale={locale} />
-                      ))}
-                    </dd>
-                  </dl>
-                )}
+              <section className="min-w-0" aria-labelledby={`${headingId}-selected`}>
+                <ContentItemFrame as="div" className="min-w-0 space-y-4 p-4 sm:p-5">
+                  <ContentItemHeading
+                    id={`${headingId}-selected`}
+                    lang={page.propertyLabel.lang}
+                    className="text-xl leading-snug font-semibold"
+                  >
+                    {page.propertyLabel.text || m.subject_value_unlabelled({}, o)}
+                  </ContentItemHeading>
+                  <div data-content-item-slot="preview" className="min-w-0 text-lg leading-relaxed">
+                    <CandidateValue
+                      snak={statement}
+                      related={page.related}
+                      subject={page.id}
+                      documents={page.documents}
+                      locale={locale}
+                    />
+                  </div>
+                  {!!statement.qualifiers.length && (
+                    <dl className="space-y-3">
+                      <dt className="font-medium">{m.value_qualifiers({}, o)}</dt>
+                      <dd className="space-y-3">
+                        {statement.qualifiers.map((part, index) => (
+                          <Part key={index} snak={part} page={page} locale={locale} />
+                        ))}
+                      </dd>
+                    </dl>
+                  )}
+                </ContentItemFrame>
               </section>
-              <section className="space-y-3" aria-labelledby="value-citations">
-                <h2 id="value-citations" className="text-xl font-semibold">
+              <section className="min-w-0 space-y-4" aria-labelledby={`${headingId}-citations`}>
+                <ContentItemHeading id={`${headingId}-citations`} className="text-xl leading-snug font-semibold">
                   {m.sources_citations({}, o)}
-                </h2>
+                </ContentItemHeading>
                 {statement.references.length ? (
-                  <ol className="list-decimal space-y-4 ps-5">
+                  <ol className="min-w-0 list-decimal space-y-4 ps-5">
                     {statement.references.map((reference, index) => (
-                      <li key={index} className="space-y-2">
-                        {reference.parts.length
-                          ? reference.parts.map((part, partIndex) => (
-                              <Part key={partIndex} snak={part} page={page} locale={locale} />
-                            ))
-                          : m.value_reference_unavailable({}, o)}
+                      <li key={index} className="min-w-0 ps-1">
+                        <ContentItemFrame as="div" className="min-w-0 space-y-3 p-3 sm:p-4">
+                          {reference.parts.length
+                            ? reference.parts.map((part, partIndex) => (
+                                <Part key={partIndex} snak={part} page={page} locale={locale} />
+                              ))
+                            : m.value_reference_unavailable({}, o)}
+                        </ContentItemFrame>
                       </li>
                     ))}
                   </ol>
@@ -133,66 +143,68 @@ export function ValueExplanationPage({
                 )}
                 <p className="text-sm text-muted-foreground">{m.value_citation_scope({}, o)}</p>
               </section>
-              <section className="space-y-3 border-t border-border pt-5" aria-labelledby="value-decision">
-                <h2 id="value-decision" className="text-xl font-semibold">
-                  {m.value_decision({}, o)}
-                </h2>
-                <p>
-                  {competition?.kind === 'returned'
-                    ? competition.decision === 'accepted'
-                      ? m.value_accepted({}, o)
-                      : competition.decision === 'rejected'
-                        ? m.candidate_rejected_state({}, o)
-                        : m.candidate_unresolved({}, o)
-                    : competition?.kind === 'denied'
-                      ? m.value_metadata_denied({}, o)
-                      : competition?.kind === 'not-returned'
-                        ? m.value_not_returned({}, o)
-                        : m.value_metadata_unavailable({}, o)}
-                </p>
-                <dl className="space-y-3 text-sm">
-                  <div>
-                    <dt className="text-muted-foreground">{m.context_title({}, o)}</dt>
-                    <dd>{page.context === candidateContext ? m.context_global({}, o) : m.context_unnamed({}, o)}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-muted-foreground">{m.candidate_rank({}, o)}</dt>
-                    <dd>
-                      {statement.rank === 'preferred'
-                        ? m.candidate_rank_preferred({}, o)
-                        : m.candidate_rank_normal({}, o)}
-                    </dd>
-                  </div>
-                </dl>
-                {competition?.kind === 'returned' && (
+              <section className="min-w-0 border-t border-border pt-5" aria-labelledby={`${headingId}-decision`}>
+                <ContentItemFrame as="div" className="min-w-0 space-y-4 p-4 sm:p-5">
+                  <ContentItemHeading id={`${headingId}-decision`} className="text-xl leading-snug font-semibold">
+                    {m.value_decision({}, o)}
+                  </ContentItemHeading>
                   <p>
-                    {competition.adoption === 'inherit'
-                      ? m.context_inherited({}, o)
-                      : competition.adoption === 'replace'
-                        ? m.context_replaced({}, o)
-                        : competition.adoption === 'suppress'
-                          ? m.context_suppressed({}, o)
-                          : m.value_adoption_unavailable({}, o)}
+                    {competition?.kind === 'returned'
+                      ? competition.decision === 'accepted'
+                        ? m.value_accepted({}, o)
+                        : competition.decision === 'rejected'
+                          ? m.candidate_rejected_state({}, o)
+                          : m.candidate_unresolved({}, o)
+                      : competition?.kind === 'denied'
+                        ? m.value_metadata_denied({}, o)
+                        : competition?.kind === 'not-returned'
+                          ? m.value_not_returned({}, o)
+                          : m.value_metadata_unavailable({}, o)}
                   </p>
-                )}
-                {competition?.kind === 'not-returned' && (
-                  <p className="text-sm text-muted-foreground">{m.value_page_bound({}, o)}</p>
-                )}
-                {competition?.kind === 'not-returned' && competition.next !== null && onMore && (
-                  <Button
-                    variant="outline"
-                    className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere]"
-                    disabled={busy}
-                    onClick={() => onMore(competition.next!)}
-                  >
-                    {m.value_more({}, o)}
-                  </Button>
-                )}
+                  <dl className="space-y-3 text-sm">
+                    <div>
+                      <dt className="text-muted-foreground">{m.context_title({}, o)}</dt>
+                      <dd>{page.context === candidateContext ? m.context_global({}, o) : m.context_unnamed({}, o)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted-foreground">{m.candidate_rank({}, o)}</dt>
+                      <dd>
+                        {statement.rank === 'preferred'
+                          ? m.candidate_rank_preferred({}, o)
+                          : m.candidate_rank_normal({}, o)}
+                      </dd>
+                    </div>
+                  </dl>
+                  {competition?.kind === 'returned' && (
+                    <p>
+                      {competition.adoption === 'inherit'
+                        ? m.context_inherited({}, o)
+                        : competition.adoption === 'replace'
+                          ? m.context_replaced({}, o)
+                          : competition.adoption === 'suppress'
+                            ? m.context_suppressed({}, o)
+                            : m.value_adoption_unavailable({}, o)}
+                    </p>
+                  )}
+                  {competition?.kind === 'not-returned' && (
+                    <p className="text-sm text-muted-foreground">{m.value_page_bound({}, o)}</p>
+                  )}
+                  {competition?.kind === 'not-returned' && competition.next !== null && onMore && (
+                    <Button
+                      variant="outline"
+                      className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere]"
+                      disabled={busy}
+                      onClick={() => onMore(competition.next!)}
+                    >
+                      {m.value_more({}, o)}
+                    </Button>
+                  )}
+                </ContentItemFrame>
               </section>
-              <section className="space-y-2" aria-labelledby="value-change">
-                <h2 id="value-change" className="text-xl font-semibold">
+              <section className="min-w-0 space-y-3" aria-labelledby={`${headingId}-change`}>
+                <ContentItemHeading id={`${headingId}-change`} className="text-xl leading-snug font-semibold">
                   {m.value_change({}, o)}
-                </h2>
+                </ContentItemHeading>
                 {change?.kind === 'ready' ? (
                   <ChangeExplanation detail={change.detail} locale={locale} />
                 ) : (

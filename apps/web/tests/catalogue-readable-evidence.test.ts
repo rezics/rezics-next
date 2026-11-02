@@ -80,10 +80,17 @@ test('A contributor reads the selected value and composition evidence before tec
     if (result.kind !== 'ready') throw new Error('Expected the current selected value');
     await render('pages-catalogue-why-this-value--selected', h(ValueExplanationPage, { result, locale: 'en' }));
     const technical = detailsFor(container, value.selected.rezics.release);
-    const selected = container.querySelector('#value-selected')!;
-    const citations = container.querySelector('section[aria-labelledby="value-citations"]')!;
+    const selected = [...container.querySelectorAll('h2')].find(
+      (heading) => heading.textContent === result.page.propertyLabel.text,
+    )!;
+    const citations = container.querySelector(
+      `section[aria-labelledby="${[...container.querySelectorAll('h2')].find((heading) => heading.textContent === m.sources_citations())!.id}"]`,
+    )!;
     precedes(selected, citations);
-    precedes(citations, container.querySelector('#value-decision')!);
+    precedes(
+      citations,
+      [...container.querySelectorAll('h2')].find((heading) => heading.textContent === m.value_decision())!,
+    );
     precedes(citations, technical);
     expect(mainText(container)).toContain('9780156012195');
     expect(mainText(container)).toContain('Édition originale');
