@@ -453,6 +453,9 @@ describe('Creator offer editing recovery retains real drafts without extending p
         } else {
           expect(p.input('price').disabled).toBe(false);
           await p.fill('price', '14.00');
+          await act(async () => { p.session(A, 'renewed-after-confirmation'); p.admit(); });
+          await p.tick();
+          expect(p.input('price').value).toBe('14.00');
           await p.submit(true);
           expect(p.writes).toHaveLength(3);
           expect(p.writes[2]!.data.idempotencyKey).toBe(id(80));
