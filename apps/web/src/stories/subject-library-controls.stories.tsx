@@ -142,13 +142,13 @@ export const LabelPickerAndAssignment: Story = {
     const slot = await controlsReady(context);
     const input = await openPicker(slot);
     await userEvent.type(input, 'Empty');
-    const existing = await within(picker(slot)).findByRole('button', { name: 'Empty label', exact: true });
+    const existing = await within(picker(slot)).findByRole('button', { name: 'Empty label' });
     const cancel = within(picker(slot)).getByRole('button', { name: m.library_collection_cancel() });
     const submit = picker(slot).querySelector<HTMLButtonElement>('button[type="submit"]')!;
     await targetsFit([input, existing, cancel, submit]);
     await keyboardReach(existing);
     await userEvent.keyboard('{Enter}');
-    await within(slot).findByRole('link', { name: 'Empty label', exact: true });
+    await within(slot).findByRole('link', { name: 'Empty label' });
     await targetsFit(shelfTargets(slot));
     const nextInput = await openPicker(slot);
     await userEvent.type(nextInput, 'Family reading');
@@ -158,7 +158,7 @@ export const LabelPickerAndAssignment: Story = {
     await targetsFit([nextInput, create]);
     await keyboardReach(create);
     await userEvent.keyboard('{Enter}');
-    await within(slot).findByRole('link', { name: 'Family reading', exact: true });
+    await within(slot).findByRole('link', { name: 'Family reading' });
     await targetsFit(shelfTargets(slot));
     await openPicker(slot);
     const close = within(picker(slot)).getByRole('button', { name: m.library_collection_cancel() });
@@ -169,7 +169,7 @@ export const LabelPickerAndAssignment: Story = {
     // Leave the real picker open for the connected visual review.
     const finalInput = await openPicker(slot);
     await userEvent.type(finalInput, 'Empty');
-    const finalChoice = await within(picker(slot)).findByRole('button', { name: 'Empty label', exact: true });
+    const finalChoice = await within(picker(slot)).findByRole('button', { name: 'Empty label' });
     await targetsFit([finalInput, finalChoice, ...shelfTargets(slot)]);
   },
 };
@@ -179,7 +179,7 @@ export const LabelRemoveAndUndo: Story = {
   render: () => <SubjectControlsStory />,
   play: async (context) => {
     const slot = await controlsReady(context);
-    const shelf = await within(slot).findByRole('link', { name: 'Reading list', exact: true });
+    const shelf = await within(slot).findByRole('link', { name: 'Reading list' });
     const remove = within(slot).getByRole('button', { name: m.library_subject_label_remove({ name: 'Reading list' }) });
     await expect(shelf.contains(remove)).toBe(false);
     await expect(remove.closest('form')).toHaveAttribute('method', 'post');
@@ -194,11 +194,11 @@ export const LabelRemoveAndUndo: Story = {
       await within(slot).findByRole('button', { name: m.library_subject_label_undo() });
     }
     const inlineUndo = slot.querySelector<HTMLButtonElement>('[data-label-undo] button')!;
-    await expect(within(slot).queryByRole('link', { name: 'Reading list', exact: true })).toBeNull();
+    await expect(within(slot).queryByRole('link', { name: 'Reading list' })).toBeNull();
     await targetsFit([inlineUndo, ...shelfTargets(slot)]);
     await keyboardReach(inlineUndo);
     await userEvent.keyboard('{Enter}');
-    await within(slot).findByRole('link', { name: 'Reading list', exact: true });
+    await within(slot).findByRole('link', { name: 'Reading list' });
     await expect(slot.querySelector('[data-label-undo]')).toBeNull();
     await targetsFit(shelfTargets(slot));
     // Retain an actual Undo state for phone/desktop visual inspection after exercising restore.
