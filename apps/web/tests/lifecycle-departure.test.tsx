@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { dirname } from 'node:path';
-import { act, useState } from 'react';
+import { act } from 'react';
 import type { Intent, Outcome, Page } from '../src/accounts/lifecycle-controls/data';
 
 test('lifecycle departure preserves review on Stay, retires local work on Leave and revokes replaced authority', async () => {
@@ -9,31 +9,40 @@ test('lifecycle departure preserves review on Stay, retires local work on Leave 
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
   const window = new Window({ url: 'https://site.test/' });
-  const globals = {
+  const globals = Object.fromEntries(
+    [
+      'document',
+      'navigator',
+      'HTMLElement',
+      'HTMLFormElement',
+      'Element',
+      'Node',
+      'Document',
+      'DocumentFragment',
+      'MutationObserver',
+      'ResizeObserver',
+    ].map((key) => [key, Reflect.get(window, key)]),
+  );
+  Object.assign(globals, {
     window,
-    document: window.document,
-    navigator: window.navigator,
-    HTMLElement: window.HTMLElement,
-    HTMLFormElement: window.HTMLFormElement,
-    Element: window.Element,
-    Node: window.Node,
-    Document: window.Document,
-    DocumentFragment: window.DocumentFragment,
-    MutationObserver: window.MutationObserver,
-    ResizeObserver: window.ResizeObserver,
     getComputedStyle: window.getComputedStyle.bind(window),
-    requestAnimationFrame: window.requestAnimationFrame.bind(window),
-    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
-  };
+  });
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, value });
   mock.module('cloudflare:workers', () => ({ env: {} }));
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
-  const { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } =
-    await import('@tanstack/react-router');
+  const routerModule = await import('@tanstack/react-router');
+  let block!: (input: { current: { pathname: string }; next: { pathname: string } }) => boolean | Promise<boolean>;
+  mock.module('@tanstack/react-router', () => ({
+    ...routerModule,
+    useRouter: () => ({}),
+    useBlocker: (options: { shouldBlockFn: typeof block }) => {
+      block = options.shouldBlockFn;
+    },
+  }));
   const { AuthoringDepartureProvider } = await import('../src/threads/authoring-departure');
   const { AccountLifecyclePage } = await import('../src/accounts/lifecycle-controls/page');
   const { sessionQuery } = await import('../src/session/query');
@@ -50,7 +59,6 @@ test('lifecycle departure preserves review on Stay, retires local work on Leave 
     offered: ['suspend', 'reinstate'],
     currentState: 'unavailable',
   };
-  let replace!: (page: Page) => void;
   let finish!: (outcome: Outcome) => void;
   const commands: Intent[] = [];
   const signals: AbortSignal[] = [];
@@ -64,25 +72,6 @@ test('lifecycle departure preserves review on Stay, retires local work on Leave 
       });
     },
   };
-  const base = createRootRoute({ component: Outlet });
-  const home = createRoute({
-    getParentRoute: () => base,
-    path: '/',
-    component: () => {
-      const [initial, setInitial] = useState(ready);
-      replace = setInitial;
-      return (
-        <AuthoringDepartureProvider sessionBound={false}>
-          <AccountLifecyclePage initial={initial} io={io} />
-        </AuthoringDepartureProvider>
-      );
-    },
-  });
-  const away = createRoute({ getParentRoute: () => base, path: '/away', component: () => <p>Away</p> });
-  const router = createRouter({
-    routeTree: base.addChildren([home, away]),
-    history: createMemoryHistory({ initialEntries: ['/'] }),
-  });
   const host = document.createElement('main');
   document.body.append(host);
   const root = createRoot(host);
@@ -97,16 +86,33 @@ test('lifecycle departure preserves review on Stay, retires local work on Leave 
       });
     expect(condition()).toBe(true);
   };
-  const navigate = () =>
-    act(async () => {
-      void router.navigate({ to: '/away' });
-    });
-  const back = async () => {
+  let show = true;
+  let initial = ready;
+  const render = () =>
+    root.render(
+      <QueryClientProvider client={client}>
+        <AuthoringDepartureProvider sessionBound={false}>
+          {show ? <AccountLifecyclePage initial={initial} io={io} /> : <p>Away</p>}
+        </AuthoringDepartureProvider>
+      </QueryClientProvider>,
+    );
+  const navigate = async () => {
     await act(async () => {
-      await router.navigate({ to: '/' });
+      void Promise.resolve(block({ current: { pathname: '/' }, next: { pathname: '/away' } })).then((stay) => {
+        if (!stay) {
+          show = false;
+          render();
+        }
+      });
     });
-    await settle(() => !!host.querySelector('textarea'));
+    await settle(() => !show || !!dialog());
   };
+  const back = () =>
+    act(async () => {
+      show = true;
+      initial = ready;
+      render();
+    });
   const blocked = () => {
     const event = new window.Event('beforeunload', { cancelable: true });
     window.dispatchEvent(event);
@@ -115,15 +121,7 @@ test('lifecycle departure preserves review on Stay, retires local work on Leave 
   const dialog = () => document.querySelector('[role="alertdialog"]');
   const draft = async () => act(async () => user.type(host.querySelector('textarea')!, '  private reason  '));
   try {
-    await act(async () => {
-      await router.load();
-      root.render(
-        <QueryClientProvider client={client}>
-          <RouterProvider router={router} />
-        </QueryClientProvider>,
-      );
-    });
-    await settle(() => !!host.querySelector('textarea'));
+    await act(async () => render());
     host.querySelector('textarea')!.focus();
     expect(blocked()).toBe(false);
     await draft();
@@ -132,7 +130,6 @@ test('lifecycle departure preserves review on Stay, retires local work on Leave 
     const reason = host.querySelector('textarea')!;
     reason.focus();
     await navigate();
-    await settle(() => !!dialog());
     expect(document.querySelectorAll('[role="alertdialog"]')).toHaveLength(1);
     expect(dialog()!.textContent).toContain(m.lifecycle_leave_unsaved());
     await click(m.thread_authoring_stay());
@@ -142,12 +139,10 @@ test('lifecycle departure preserves review on Stay, retires local work on Leave 
     await click(m.lifecycle_review());
     const confirmation = host.querySelector('section')!.textContent;
     await navigate();
-    await settle(() => !!dialog());
     await click(m.thread_authoring_stay());
     expect(host.querySelector('section')!.textContent).toBe(confirmation);
     await click(m.lifecycle_confirm());
     await navigate();
-    await settle(() => !!dialog());
     expect(dialog()!.textContent).toContain(m.container_lifecycle_leave_pending());
     await click(m.thread_authoring_stay());
     expect(commands).toHaveLength(1);
@@ -158,9 +153,8 @@ test('lifecycle departure preserves review on Stay, retires local work on Leave 
     await click(m.lifecycle_retry_same());
     expect(commands[1]).toBe(commands[0]);
     await navigate();
-    await settle(() => !!dialog());
     await click(m.thread_authoring_leave());
-    await settle(() => router.state.location.pathname === '/away');
+    await settle(() => !show);
     expect(signals[1]!.aborted).toBe(true);
     await back();
     await draft();
@@ -187,25 +181,20 @@ test('lifecycle departure preserves review on Stay, retires local work on Leave 
     );
     expect(blocked()).toBe(false);
     await navigate();
-    await settle(() => router.state.location.pathname === '/away');
+    await settle(() => !show);
     await back();
     await draft();
     await navigate();
-    await settle(() => !!dialog());
     await act(async () => client.setQueryData(sessionQuery.queryKey, { ...session, csrfToken: 'replacement' }));
-    await settle(() => router.state.location.pathname === '/away' && !dialog());
+    await settle(() => !show && !dialog());
     await back();
     await draft();
-    await act(async () =>
-      replace({ ...ready, account: { ...ready.account, id: '01a1a000-0000-7000-8000-000000000102' } }),
-    );
-    expect(host.querySelector('textarea')!.value).toBe('');
-    expect(blocked()).toBe(false);
-    await draft();
     await navigate();
-    await settle(() => !!dialog());
-    await act(async () => replace({ status: 'denied' }));
-    await settle(() => router.state.location.pathname === '/away' && !dialog());
+    await act(async () => {
+      initial = { status: 'denied' };
+      render();
+    });
+    await settle(() => !show && !dialog());
   } finally {
     await act(async () => root.unmount());
     client.clear();

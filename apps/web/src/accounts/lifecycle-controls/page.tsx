@@ -104,7 +104,8 @@ function useReviewCaller() {
   return { current, session };
 }
 
-const authorityLost = (page: Page) => ['denied', 'signed-out', 'missing'].includes(page.status);
+const authorityLost = (page: { status: string }): page is { status: 'denied' | 'signed-out' | 'missing' } =>
+  ['denied', 'signed-out', 'missing'].includes(page.status);
 
 function LifecycleReview({ initial, io }: { initial: Page; io: IO }) {
   const id = useId();
@@ -244,6 +245,11 @@ function LifecycleReview({ initial, io }: { initial: Page; io: IO }) {
       result = { status: 'uncertain', current: { status: 'unavailable' } };
     }
     if (!current()) return;
+    if (authorityLost(result)) {
+      // Revoking local authority makes no claim about an earlier native effect.
+      updatePage({ status: result.status });
+      return;
+    }
     if (['recorded', 'uncertain', 'pending'].includes(result.status)) ambiguous.current = true;
     // A later denial before receipt access cannot settle an earlier lost response.
     if (ambiguous.current && !['recorded', 'uncertain', 'pending'].includes(result.status))
