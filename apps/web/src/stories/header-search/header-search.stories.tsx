@@ -22,8 +22,8 @@ import { discoveryRealm } from '../patterns/realm-discovery/fixtures';
 // Illustrative component recordings, not evidence of native qualification or availability.
 const trending: TrendingPage = {
   trendingSearches: [
-    { query: 'Dune', display: 'Dune' },
-    { query: 'Earthsea', display: 'Earthsea' },
+    { query: '"Dune"', display: 'Dune' },
+    { query: '"Earthsea"', display: 'Earthsea' },
   ],
   next: null,
 };

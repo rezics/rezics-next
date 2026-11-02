@@ -146,6 +146,8 @@ export function useTrendingSearches(
     identity === null ? { status: 'unavailable' } : snapshot?.key === key ? snapshot.state : { status: 'loading' };
   return { state, retry: () => start(true), isCurrent: () => identity !== null && currentKey.current === key };
 }
+const utf8 = new TextEncoder();
+
 export function validTrendingPage(value: unknown): value is TrendingPage {
   if (!value || typeof value !== 'object') return false;
   const body = value as TrendingPage;
@@ -153,14 +155,15 @@ export function validTrendingPage(value: unknown): value is TrendingPage {
     body.next === null &&
     Array.isArray(body.trendingSearches) &&
     body.trendingSearches.length <= 10 &&
+    Object.keys(body).every((key) => key === 'next' || key === 'trendingSearches') &&
     body.trendingSearches.every(
       (term) =>
         term &&
         typeof term.query === 'string' &&
         typeof term.display === 'string' &&
-        term.query.length <= 1024 &&
         term.display.length > 0 &&
-        term.display.length <= 256 &&
+        utf8.encode(term.display).byteLength <= 256 &&
+        term.query === `"${term.display.replace(/[\\"]/g, '\\$&')}"` &&
         Object.keys(term).every((key) => key === 'query' || key === 'display'),
     )
   );

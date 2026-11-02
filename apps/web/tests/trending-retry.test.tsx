@@ -17,7 +17,7 @@ const { m } = await import('../src/paraglide/messages.js');
 const viewer = (csrfToken = 'first') => ({ state: 'signed-in', subject: 'reader', csrfToken });
 const page = (display: string, count = 1) => ({
   next: null,
-  trendingSearches: Array.from({ length: count }, (_, i) => ({ query: `query-${i}`, display })),
+  trendingSearches: Array.from({ length: count }, () => ({ query: `"${display}"`, display })),
 });
 
 test('mounted Search retries manually, respects delays and fences session/locale responses', async () => {
@@ -96,7 +96,7 @@ test('mounted Search retries manually, respects delays and fences session/locale
     await settle(page('Current term', 10));
     expect(region().querySelectorAll('li')).toHaveLength(10);
     await act(async () => click(region().querySelector('li button')!));
-    expect(selected).toEqual(['query-0']);
+    expect(selected).toEqual(['"Current term"']);
     // Retire a displayed term before React flushes a batched A-B-A transition.
     const oldButton = region().querySelector('li button')!;
     await act(async () => {
@@ -104,7 +104,7 @@ test('mounted Search retries manually, respects delays and fences session/locale
       client.setQueryData(['session'], viewer());
       click(oldButton);
     });
-    expect(selected).toEqual(['query-0']);
+    expect(selected).toEqual(['"Current term"']);
     expect(region().textContent).not.toContain('Current term');
     for (const session of [
       viewer('rotated'),
