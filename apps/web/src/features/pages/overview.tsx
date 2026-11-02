@@ -200,7 +200,9 @@ export function useOverview(id: unknown): { value: OverviewValue; section: Secti
 function subjectRead(section: Section | undefined): SubjectRead | undefined {
   if (!section?.ok || section.read.kind !== 'subject') return;
   const { body } = section;
-  return isRecord(body.subject) && isRecord(body.related) ? (body as unknown as SubjectRead) : undefined;
+  return isRecord(body.subject) && body.subject.id === section.read.id && isRecord(body.related)
+    ? (body as unknown as SubjectRead)
+    : undefined;
 }
 
 export function viewHref(value: OverviewValue, view: string, property?: string): string | null {
