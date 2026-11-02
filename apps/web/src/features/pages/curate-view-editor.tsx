@@ -74,7 +74,13 @@ import { type CurationAdmissionLease, CurationReaderAdmission } from './curation
 import { CurationFailureNotice, CurationPublicationRecovery } from './curation-publish-view';
 import { CurationNavigationGuard } from './curation-navigation-guard';
 import { presentationMessageOptions } from './curate-view-editor-messages';
-import { removeKeyedTemplate, type KeyedTemplate } from './curation-template-removal';
+import {
+  confirmKeyedTemplateRemoval,
+  keyedTemplateRemovalApplies,
+  reviewKeyedTemplateRemoval,
+  type KeyedTemplate,
+  type KeyedTemplateRemoval,
+} from './curation-template-removal';
 import { CurationCompanionViews } from './curation-companion-views';
 
 const PageEditor = lazy(() => import('./editor').then((module) => ({ default: module.PageEditor })));
@@ -560,7 +566,7 @@ function AdmittedPresentationViewEditor({
   const inFlight = useRef(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [confirm, setConfirm] = useState<'discard' | 'reload' | null>(null);
-  const [removeConfirm, setRemoveConfirm] = useState<KeyedTemplate | null>(null);
+  const [removeConfirm, setRemoveConfirm] = useState<KeyedTemplateRemoval | null>(null);
   const [generation, setGeneration] = useState(0);
   const [scope, setScope] = useState<'base' | 'type' | 'route'>('type');
   const [key, setKey] = useState('');
@@ -848,6 +854,10 @@ function AdmittedPresentationViewEditor({
     if (isCurrent() && currentVisit.isCurrent() && confirmation) published(confirmation);
   }
 
+  const activeRemoval =
+    removeConfirm && isCurrent() && draft && keyedTemplateRemovalApplies(draft, removeConfirm) ? removeConfirm : null;
+  if (removeConfirm !== null && activeRemoval === null) setRemoveConfirm(null);
+
   if (!draft)
     return (
       <div className="space-y-4">
@@ -1005,7 +1015,11 @@ function AdmittedPresentationViewEditor({
                 <Button
                   className={editorControlClass}
                   variant="outline"
-                  onClick={() => isCurrent() && setOwned(setRemoveConfirm, { ...removableTemplate })}
+                  onClick={() => {
+                    if (!isCurrent() || !visit || !removableTemplate) return;
+                    const intention = reviewKeyedTemplateRemoval(draft, removableTemplate, visit);
+                    if (intention) setOwned(setRemoveConfirm, intention);
+                  }}
                 >
                   {m.curation_remove({}, options)}
                 </Button>
@@ -1154,16 +1168,16 @@ function AdmittedPresentationViewEditor({
         </form>
       </fieldset>
       <AlertDialog
-        open={removeConfirm !== null}
+        open={activeRemoval !== null}
         onOpenChange={(open) => {
-          if (!open && isCurrent()) setOwned(setRemoveConfirm, null);
+          if (!open) setRemoveConfirm(null);
         }}
       >
-        {removeConfirm && (
+        {activeRemoval && (
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>
-                {m.curation_remove_title({ template: templateLabel(removeConfirm) }, options)}
+                {m.curation_remove_title({ template: templateLabel(activeRemoval.template) }, options)}
               </AlertDialogTitle>
               <AlertDialogDescription>{m.curation_remove_warning({}, options)}</AlertDialogDescription>
             </AlertDialogHeader>
@@ -1172,12 +1186,13 @@ function AdmittedPresentationViewEditor({
               <AlertDialogAction
                 className={editorControlClass}
                 onClick={() => {
-                  const template = removeConfirm;
-                  if (!isCurrent() || !template) return;
-                  setOwned(setDraft, (value) => value && removeKeyedTemplate(value, template));
-                  setOwned(setCorrection, null);
-                  setOwned(setFailure, null);
-                  setOwned(setRemoveConfirm, null);
+                  const intention = activeRemoval;
+                  if (isCurrent() && intention) {
+                    setOwned(setDraft, (value) => value && confirmKeyedTemplateRemoval(value, intention));
+                    setOwned(setCorrection, null);
+                    setOwned(setFailure, null);
+                  }
+                  setRemoveConfirm(null);
                 }}
               >
                 {m.curation_remove({}, options)}

@@ -40,6 +40,9 @@ Undecodable localized Subject paths stay as plain links to their original addres
 Account share metadata uses the largest supported published variant (WebP on ties) via the shared public-image helper; missing or unusable source dimensions fall through to the Subject cover or shared card.
 An Integer editor default is the lowest effective value when bounded below, zero when valid, or the highest effective
 value when only an upper bound below zero is present.
+Keyed-template removal confirmation binds to the reviewed keyed entry and its editor content; replacement, disappearance
+or reader/visit retirement retires it, while equivalent rerenders and unrelated sibling changes keep a still-valid
+intention.
 
 ## Ownership
 
