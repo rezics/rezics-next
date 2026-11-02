@@ -95,7 +95,7 @@ export async function readCatalogueReports(
 
 /** Current Subject content comes from its ordinary exact read; redirects and refusals stay unavailable. */
 export type CatalogueSubjectResult =
-  | { state: 'loaded'; subject: { id: string; title: string; type: string }; report?: CatalogueReport | null }
+  | { state: 'loaded'; subject: { id: string; label: string; description: string | null; type: string }; report?: CatalogueReport | null }
   | { state: 'unavailable' | 'error' };
 export type CatalogueSubjectRead = PrivateReaderRead & {
   subjectId: string;
@@ -142,7 +142,12 @@ export async function readCatalogueSubject(
         readerOrigin,
         result: {
           state: 'loaded',
-          subject: { id: subject.id, title: subject.title, type: subject.type },
+          subject: {
+            id: subject.id,
+            label: subject.labels.en ?? Object.values(subject.labels)[0] ?? subject.id,
+            description: subject.descriptions.en ?? Object.values(subject.descriptions)[0] ?? null,
+            type: subject.type,
+          },
           report: selectedReport
             ? {
                 id: selectedReport.id,

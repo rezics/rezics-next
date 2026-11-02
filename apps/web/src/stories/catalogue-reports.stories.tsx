@@ -38,7 +38,7 @@ const loaded: CatalogueReportsPageState = {
   reports,
   next: 'native-catalogue-cursor-next',
   selectedId: reports[0]!.id,
-  subject: { state: 'loaded', subject: { id: subjectId, title: 'Reported catalogue entry', type: 'schema:Thing' } },
+  subject: { state: 'loaded', subject: { id: subjectId, label: 'Reported catalogue entry', description: 'A current catalogue description.', type: 'schema:Thing' } },
   reason: '',
   action: { state: 'idle' },
 };
@@ -58,7 +58,7 @@ function LoadedStory({ args }: { args: CatalogueReportsViewProps }) {
             : {
                 ...previous,
                 selectedId,
-                subject: { state: 'loaded', subject: { id: report.target.id, title: 'Selected current Subject', type: 'schema:Thing' } },
+                subject: { state: 'loaded', subject: { id: report.target.id, label: 'Selected current Subject', description: null, type: 'schema:Thing' } },
                 action: { state: 'idle' },
               },
         );
@@ -69,7 +69,8 @@ function LoadedStory({ args }: { args: CatalogueReportsViewProps }) {
       }}
       onAct={(action) => {
         args.onAct(action);
-        const report = page.reports.find((item) => item.id === page.selectedId)!;
+        const report = page.state === 'loaded' ? page.reports.find((item) => item.id === page.selectedId) : null;
+        if (!report) return;
         setPage((previous) =>
           previous.state !== 'loaded'
             ? previous

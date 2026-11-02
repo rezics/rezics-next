@@ -186,7 +186,7 @@ test('catalogue and current Subject reads use native response shapes, exact cont
     if (url.pathname === '/v1/catalogue/reports') return Response.json({ reports: [report], next: 'next-native-cursor' });
     if (url.pathname === `/v1/subjects/${subjectId}/reports`) return Response.json({ reports: [report], next: null });
     if (url.pathname === `/v1/subjects/${subjectId}`)
-      return Response.json({ subject: { id: subjectId, title: 'Current entry', type: 'schema:Thing' }, account: null, summary: {}, related: {} });
+      return Response.json({ subject: { id: subjectId, type: 'schema:Thing', labels: { en: 'Current entry' }, descriptions: { en: 'Current Subject description.' }, aliases: {}, statements: {}, sourceRecords: [], revision: 1, release: 'released', context: 'global', resolution: {}, relationCounts: {} }, account: null, summary: {}, related: {} });
     return Response.json({}, { status: 404 });
   });
   const origin = { subject: moderatorId, csrfFingerprint: 'current-reader-fingerprint' };
@@ -196,7 +196,7 @@ test('catalogue and current Subject reads use native response shapes, exact cont
   expect(JSON.stringify(page)).not.toContain(reporterId);
   expect(requests[0]!.url.searchParams.get('limit')).toBe('50');
   expect(requests[0]!.url.searchParams.get('cursor')).toBe(cursor);
-  expect(current.result).toMatchObject({ state: 'loaded', subject: { id: subjectId, title: 'Current entry', type: 'schema:Thing' }, report: { id: reportId, outcome: null } });
+  expect(current.result).toMatchObject({ state: 'loaded', subject: { id: subjectId, label: 'Current entry', description: 'Current Subject description.', type: 'schema:Thing' }, report: { id: reportId, outcome: null } });
   expect(requests.find((request) => request.url.pathname === `/v1/subjects/${subjectId}`)?.url.pathname).toBe(`/v1/subjects/${subjectId}`);
   const subjectReports = requests.find((request) => request.url.pathname === `/v1/subjects/${subjectId}/reports`)!;
   expect(subjectReports.url.searchParams.get('limit')).toBe('50');
@@ -247,7 +247,7 @@ test('mounted queue forwards the exact next cursor and retries an uncertain dism
   };
   let continued = '';
   const mounted = await mountCurrent(cache, initial, {
-    readSubject: async (id) => ({ subjectId: id, readerOrigin: origin, result: { state: 'loaded', subject: { id, title: 'Readable Subject', type: 'schema:Thing' } } }),
+    readSubject: async (id) => ({ subjectId: id, readerOrigin: origin, result: { state: 'loaded', subject: { id, label: 'Readable Subject', description: null, type: 'schema:Thing' } } }),
     action,
     next: (cursor) => (continued = cursor),
   });
@@ -275,7 +275,7 @@ test('viewer retirement clears mounted evidence and rejects a late target read o
     return { ok: true as const, result: { kind: 'dismissed' as const, reportId, outcome: 'dismissed' as const } };
   };
   const mounted = await mountCurrent(cache, initial, {
-    readSubject: async (id) => ({ subjectId: id, readerOrigin: origin, result: { state: 'loaded', subject: { id, title: 'Current Subject', type: 'schema:Thing' } } }),
+    readSubject: async (id) => ({ subjectId: id, readerOrigin: origin, result: { state: 'loaded', subject: { id, label: 'Current Subject', description: null, type: 'schema:Thing' } } }),
     action: staleButtonAction,
   });
   const oldDismissButton = button(mounted.host, m.moderation_dismiss());
@@ -315,7 +315,7 @@ test('a late current Subject response cannot restore evidence after viewer repla
       held.resolve({
         subjectId,
         readerOrigin: origin,
-        result: { state: 'loaded', subject: { id: subjectId, title: 'Late private Subject', type: 'schema:Thing' } },
+        result: { state: 'loaded', subject: { id: subjectId, label: 'Late private Subject', description: null, type: 'schema:Thing' } },
       });
       await Promise.resolve();
     });

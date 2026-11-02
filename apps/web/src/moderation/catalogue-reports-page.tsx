@@ -178,7 +178,8 @@ export function CatalogueReportsView({
                   </p>
                 ) : page.subject.state === 'loaded' ? (
                   <div className="mt-2 break-words text-sm">
-                    <p className="font-medium">{page.subject.subject.title}</p>
+                    <p className="font-medium">{page.subject.subject.label}</p>
+                    {page.subject.subject.description ? <p className="mt-1 whitespace-pre-wrap">{page.subject.subject.description}</p> : null}
                     <p className="text-muted-foreground">{page.subject.subject.type}</p>
                     <p className="break-all text-muted-foreground">{page.subject.subject.id}</p>
                   </div>

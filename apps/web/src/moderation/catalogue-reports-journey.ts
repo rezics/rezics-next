@@ -28,7 +28,7 @@ export type CatalogueReportsPageState =
     };
 export type CatalogueSubjectState =
   | { state: 'idle' | 'loading' | 'unavailable' | 'error' }
-  | { state: 'loaded'; subject: { id: string; title: string; type: string } }
+  | { state: 'loaded'; subject: { id: string; label: string; description: string | null; type: string } }
   | { state: 'changed'; visibility: 'visible' | 'hidden' | 'taken_down' };
 export type CatalogueReportsActionState =
   | { state: 'idle' | 'sending' | 'invalid' }
