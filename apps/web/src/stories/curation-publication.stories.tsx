@@ -7,6 +7,7 @@ import { PresentationViewEditor } from '../features/pages/curate-view-editor';
 import { publishProfile } from '../features/pages/curate';
 import type { PublicationTransport } from '../features/pages/curation-publish';
 import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime';
 import { PatternStory } from './page';
 
 type Scenario = 'unknown-publish' | 'partial-activation' | 'current-head-conflict' | 'revoked-replay';
@@ -157,5 +158,175 @@ export const RevokedReplay: Story = {
     await expect(await canvas.findByText(m.curation_forbidden())).toBeVisible();
     await expect(canvas.getByRole('button', { name: m.curation_retry_original() })).toBeEnabled();
     await expect(canvas.queryByText(m.presentation_editor_published())).toBeNull();
+  },
+};
+
+const reviewOriginal: PresentationProfile = {
+  format: PROFILE_FORMAT,
+  generic: {
+    views: {
+      overview: {
+        root: {
+          props: {
+            appearance: { density: 'compact', surface: 'cards', radius: 'lg', cover: 'portrait', headingScale: 'lg' },
+          },
+        },
+        content: [
+          {
+            type: 'Stack',
+            props: {
+              id: 'reading',
+              gap: 'md',
+              children: [
+                {
+                  type: 'Heading',
+                  props: {
+                    id: 'heading',
+                    level: 2,
+                    text: {
+                      en: 'Reading together',
+                      ja: '一緒に読む',
+                      de: 'Gemeinsam lesen und neue Geschichten entdecken',
+                    },
+                  },
+                },
+                {
+                  type: 'Text',
+                  props: {
+                    id: 'intro',
+                    text: {
+                      en: 'Notes, editions and conversations for every reader.',
+                      fr: 'Notes, éditions et conversations pour toutes les personnes qui lisent.',
+                    },
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+      details: {
+        root: { props: {} },
+        content: [{ type: 'Statements', props: { id: 'facts', properties: ['schema:name'] } }],
+      },
+    },
+  },
+  bases: [],
+  types: [
+    { type: 'schema:Book', document: { root: { props: {} }, content: [{ type: 'Cover', props: { id: 'cover' } }] } },
+  ],
+  routes: [],
+};
+const reviewSaved: PresentationProfile = {
+  ...reviewOriginal,
+  generic: {
+    root: {
+      props: {
+        appearance: { density: 'comfortable', surface: 'flat', radius: 'lg', cover: 'portrait', headingScale: 'lg' },
+      },
+    },
+    content: [
+      {
+        type: 'Stack',
+        props: {
+          id: 'reading',
+          gap: 'md',
+          children: [
+            {
+              type: 'Heading',
+              props: {
+                id: 'heading',
+                level: 2,
+                text: { en: 'Your reading room', ja: '読書の部屋', de: 'Dein persönlicher Ort zum Lesen' },
+              },
+            },
+            {
+              type: 'Text',
+              props: {
+                id: 'intro',
+                text: {
+                  en: 'Notes, editions and conversations for every reader.',
+                  fr: 'Notes, éditions et conversations pour toutes les personnes qui lisent.',
+                },
+              },
+            },
+          ],
+        },
+      },
+    ],
+  },
+};
+
+function ReviewScenarioStory({ scenario }: { scenario: 'stale' | 'read-failure' | 'invalid' }) {
+  const transport = useMemo((): PublicationTransport => {
+    let attempt = 0;
+    return {
+      publish: async (input) => {
+        attempt++;
+        if (scenario === 'stale') return { ok: false, reason: 'stale' };
+        if (scenario === 'read-failure') return { ok: false, reason: 'unavailable', outcome: 'unknown' };
+        if (attempt === 1)
+          return {
+            ok: false,
+            reason: 'invalid',
+            errors: [{ pointer: '/generic/views/overview/content/0/props/children/0/props/text/en', code: 'invalid' }],
+          };
+        return { ok: true, digest: profileDigest(input.profile), head: input.expectedHead + 1 };
+      },
+      read: async () =>
+        scenario === 'read-failure'
+          ? { ok: false, reason: 'unavailable' }
+          : { ok: true, reader, head: 9, digest: profileDigest(reviewSaved), profile: reviewSaved },
+    };
+  }, [scenario]);
+  return (
+    <div className="mx-auto max-w-6xl p-4 sm:p-8">
+      <PresentationViewEditor
+        initial={{ ok: true, reader, profile: reviewOriginal, head: 7, digest: profileDigest(reviewOriginal) }}
+        observedSession={{ state: 'signed-in', subject: reader }}
+        locale={getLocale()}
+        transport={transport}
+      />
+    </div>
+  );
+}
+
+/** Illustrative production composition; authored plays and visual/native verification remain UNRUN. */
+export const ReadableComparison: Story = {
+  args: { scenario: 'current-head-conflict' },
+  render: () => <ReviewScenarioStory scenario="stale" />,
+  play: async ({ canvasElement }) => {
+    const canvas = await submit(canvasElement);
+    await expect(await canvas.findByRole('region', { name: m.curation_compare() })).toBeVisible();
+    await expect(canvas.getByText('Reading together')).toBeVisible();
+    await expect(canvas.getByText('Your reading room')).toBeVisible();
+    await expect(canvas.getByText(m.curation_review_discard_help())).toBeVisible();
+    await expect(canvas.getByRole('button', { name: m.curation_reconcile() })).toBeEnabled();
+    await expect(canvas.getByRole('button', { name: m.curation_discard() })).toBeEnabled();
+  },
+};
+export const InspectionReadFailure: Story = {
+  args: { scenario: 'unknown-publish' },
+  render: () => <ReviewScenarioStory scenario="read-failure" />,
+  play: async ({ canvasElement }) => {
+    const canvas = await submit(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: m.curation_reload_head() }));
+    await expect(await canvas.findByText(m.curation_review_read_failed())).toBeVisible();
+    await expect(canvas.getByText(m.curation_unknown())).toBeVisible();
+    await expect(canvas.getByText(m.curation_review_no_active())).toBeVisible();
+    await expect(canvas.queryByRole('region', { name: m.curation_compare() })).toBeNull();
+    await expect(canvas.queryByRole('button', { name: m.curation_discard() })).toBeNull();
+  },
+};
+export const InvalidReplacement: Story = {
+  args: { scenario: 'unknown-publish' },
+  render: () => <ReviewScenarioStory scenario="invalid" />,
+  play: async ({ canvasElement }) => {
+    const canvas = await submit(canvasElement);
+    await expect(await canvas.findByText(m.curation_invalid())).toBeVisible();
+    await expect(canvas.getByText(m.curation_review_replace_help())).toBeVisible();
+    await expect(canvas.getByRole('button', { name: m.curation_new_intent() })).toBeDisabled();
+    await expect(canvas.queryByRole('button', { name: m.curation_retry_original() })).toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: m.curation_correct() }));
   },
 };

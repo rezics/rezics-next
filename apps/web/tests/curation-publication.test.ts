@@ -267,3 +267,270 @@ test('a pending request cannot be duplicated, and a malformed success cannot dis
   expect(publication.getSnapshot().intent?.expectedHead).toBe(7);
   expect(publication.getSnapshot().result).toMatchObject({ ok: false, outcome: 'unknown' });
 });
+
+// Authored production presentation regressions. Execution is deferred by the delivery contract.
+function readableProfile(): PresentationProfile {
+  const page = (id: string, text: string) => ({
+    root: {
+      props: {
+        appearance: { density: 'comfortable', radius: 'md', surface: 'flat', cover: 'portrait', headingScale: 'lg' },
+      },
+    },
+    content: [
+      {
+        type: 'Stack',
+        props: {
+          id,
+          gap: 'md',
+          children: [
+            { type: 'Heading', props: { id: `${id}-heading`, text: { en: text, ja: '読書ノート' }, level: 2 } },
+            {
+              type: 'Text',
+              props: {
+                id: `${id}-text`,
+                text: { en: 'Unchanged reading introduction', fr: 'Introduction à la lecture' },
+              },
+            },
+          ],
+        },
+      },
+    ],
+  });
+  return {
+    format: PROFILE_FORMAT,
+    generic: { views: { overview: page('generic', 'Saved heading'), details: page('details', 'Saved details') } },
+    bases: [{ base: 'schema:CreativeWork', document: page('base', 'Base heading') }],
+    types: [
+      {
+        type: 'schema:Book',
+        views: { overview: page('book', 'Book heading'), details: page('book-details', 'Book details') },
+      },
+    ],
+    routes: [{ route: '/books', document: page('books', 'Books heading') }],
+  };
+}
+
+test('production comparison names actual scoped appearance and nested multilingual values while separating unchanged fields and missing views', async () => {
+  const { createElement } = await import('react');
+  const { renderToStaticMarkup } = await import('react-dom/server');
+  const { platformRegistry, validateProfile } = await import('@rezics/composition');
+  const { CurationProfileComparison } = await import('../src/features/pages/curation-publish-view');
+  const { m } = await import('../src/paraglide/messages.js');
+  const active = readableProfile();
+  active.types[0]!.views!.details = { root: { props: {} }, content: [] };
+  const draft = structuredClone(active);
+  if (!('views' in draft.generic)) throw new Error('Expected the actual multi-view fixture');
+  draft.generic.views.overview.root.props.appearance = {
+    density: 'compact',
+    radius: 'md',
+    surface: 'flat',
+    cover: 'portrait',
+    headingScale: 'lg',
+  };
+  const children = draft.generic.views.overview.content[0]!.props.children as { props: Record<string, unknown> }[];
+  children[0]!.props.text = { en: 'New heading', ja: '新しい読書ノート' };
+  delete draft.types[0]!.views!.details;
+  draft.routes.push({ route: '/notes', document: { root: { props: {} }, content: [] } });
+  expect(validateProfile(platformRegistry, active)).toEqual([]);
+  expect(validateProfile(platformRegistry, draft)).toEqual([]);
+  const html = renderToStaticMarkup(createElement(CurationProfileComparison, { draft, active }));
+  const differences = html.slice(0, html.indexOf('<details'));
+  expect(differences).toContain(m.curation_review_density());
+  expect(differences).toContain(m.curation_review_compact());
+  expect(differences).toContain(m.curation_review_comfortable());
+  expect(differences).toContain('New heading');
+  expect(differences).toContain('Saved heading');
+  expect(differences).toContain('新しい読書ノート');
+  expect(differences).toContain('読書ノート');
+  expect(differences).toContain('schema:Book');
+  expect(differences).toContain('/notes');
+  expect(differences).toContain(m.curation_review_absent());
+  expect(differences).not.toContain('Unchanged reading introduction');
+  expect(html).toContain('Unchanged reading introduction');
+  expect(html).toContain('schema:CreativeWork');
+  expect(html).toContain(m.curation_review_radius());
+  expect(html).not.toContain('<pre');
+  expect(html).not.toContain('<details open');
+});
+
+test('production comparison treats equal structured values and overview shorthand honestly and retains unknown fields and tokens', async () => {
+  const { createElement } = await import('react');
+  const { renderToStaticMarkup } = await import('react-dom/server');
+  const { CurationProfileComparison } = await import('../src/features/pages/curation-publish-view');
+  const { m } = await import('../src/paraglide/messages.js');
+  const active = readableProfile();
+  const equal = structuredClone(active);
+  if (!('views' in equal.generic)) throw new Error('Expected multi-view generic');
+  equal.generic.views.overview.root.props.appearance = {
+    headingScale: 'lg',
+    cover: 'portrait',
+    surface: 'flat',
+    radius: 'md',
+    density: 'comfortable',
+  };
+  const html = renderToStaticMarkup(createElement(CurationProfileComparison, { draft: equal, active }));
+  expect(html).toContain(m.curation_review_same());
+  const shorthand = profile();
+  expect(
+    renderToStaticMarkup(
+      createElement(CurationProfileComparison, {
+        draft: {
+          ...shorthand,
+          generic: { views: { overview: shorthand.generic as import('@rezics/composition').CompositionDocument } },
+        },
+        active: shorthand,
+      }),
+    ),
+  ).toContain(m.curation_review_same());
+  const unknown = structuredClone(active);
+  if (!('views' in unknown.generic)) throw new Error('Expected multi-view generic');
+  unknown.generic.views.overview.root.props.appearance = { density: 'future-density', futureTone: 'violet' };
+  unknown.generic.views.overview.content.push({
+    type: 'FutureWidget',
+    props: { id: 'future', futureSetting: 'kept exactly' },
+  });
+  (unknown as unknown as Record<string, unknown>).futureEnvelope = 'extra value';
+  const future = renderToStaticMarkup(createElement(CurationProfileComparison, { draft: unknown, active }));
+  expect(future).toContain(m.curation_review_unknown_value({ value: 'future-density' }));
+  expect(future).toContain(m.curation_review_unknown_field({ field: 'futureTone' }));
+  expect(future).toContain(m.curation_review_unknown_component({ type: 'FutureWidget' }));
+  expect(future).toContain(m.curation_review_unknown_field({ field: 'futureSetting' }));
+  expect(future).toContain(m.curation_review_unknown_field({ field: 'futureEnvelope' }));
+  expect(future).toContain('kept exactly');
+  expect(future).not.toContain(m.curation_review_same());
+  const empty = structuredClone(unknown);
+  (unknown as unknown as Record<string, unknown>).futureEnvelope = {};
+  (empty as unknown as Record<string, unknown>).futureEnvelope = m.curation_review_empty();
+  const emptyComparison = renderToStaticMarkup(
+    createElement(CurationProfileComparison, { draft: empty, active: unknown }),
+  );
+  expect(emptyComparison).not.toContain(m.curation_review_same());
+  expect(emptyComparison).toContain(m.curation_review_empty_object());
+});
+
+test('production recovery distinguishes refused, unknown, inspected matching and failed-read states with closed exact snapshots', async () => {
+  const { createElement } = await import('react');
+  const { renderToStaticMarkup } = await import('react-dom/server');
+  const { CurationPublicationRecovery } = await import('../src/features/pages/curation-publish-view');
+  const { m } = await import('../src/paraglide/messages.js');
+  const original = readableProfile();
+  const current = changed(original);
+  const render = (publication: CurationPublication) =>
+    renderToStaticMarkup(
+      createElement(CurationPublicationRecovery, {
+        publication,
+        profile: current,
+        head: 7,
+        onPublished: () => {},
+        onReviewed: () => {},
+      }),
+    );
+  const refused = new CurationPublication(reader, {
+    publish: async () => ({ ok: false, reason: 'unavailable' }),
+    read: async () => ({ ok: false, reason: 'unavailable' }),
+  });
+  await refused.start(original, 7);
+  const notApplied = render(refused);
+  expect(notApplied).toContain(m.curation_unavailable());
+  expect(notApplied).not.toContain(m.curation_unknown());
+  expect(notApplied).not.toContain(m.curation_partial());
+  expect(notApplied).toContain(m.curation_review_no_active());
+  expect(notApplied).toContain(m.curation_retry_original());
+  let readFails = false;
+  const unknown = new CurationPublication(reader, {
+    publish: async () => ({ ok: false, reason: 'unavailable', outcome: 'unknown', phase: 'activate' }),
+    read: async () =>
+      readFails
+        ? { ok: false, reason: 'unavailable' }
+        : { ok: true, reader, head: 8, digest: profileDigest(original), profile: original },
+  });
+  await unknown.start(original, 7);
+  let html = render(unknown);
+  expect(html).toContain(m.curation_unknown());
+  expect(html).toContain(m.curation_partial());
+  expect(html).toContain(m.curation_review_no_active());
+  expect(html).not.toContain(`aria-label="${m.curation_compare()}"`);
+  expect(html).toContain(m.curation_review_later());
+  expect(html).toContain(m.curation_review_retry_help());
+  expect(html).not.toContain('<details open');
+  await unknown.inspect();
+  html = render(unknown);
+  expect(html).toContain(m.curation_compare());
+  expect(html).toContain(m.curation_resolve_first());
+  expect(html).not.toContain(m.curation_reconcile());
+  expect(html).not.toContain(m.presentation_editor_published());
+  expect(unknown.getSnapshot().result).toMatchObject({ ok: false, outcome: 'unknown' });
+  readFails = true;
+  await unknown.inspect();
+  html = render(unknown);
+  expect(html).toContain(m.curation_review_read_failed());
+  expect(html).toContain(m.curation_review_no_active());
+  expect(html).not.toContain(`aria-label="${m.curation_compare()}"`);
+  const stale = new CurationPublication(reader, {
+    publish: async () => ({ ok: false, reason: 'stale' }),
+    read: async () => ({ ok: true, reader, head: 9, digest: profileDigest(original), profile: original }),
+  });
+  await stale.start(original, 7);
+  html = render(stale);
+  expect(html).toContain(m.curation_stale());
+  expect(html).toContain(m.curation_review_help());
+  expect(html).toContain(m.curation_review_discard_help());
+  expect(html.indexOf(m.curation_reconcile())).toBeLessThan(html.indexOf(m.curation_retry_original()));
+  // All three objects remain distinct in the rendered technical disclosures.
+  const { Window } = await import(
+    Bun.resolveSync(
+      'happy-dom',
+      (await import('node:path')).dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)),
+    )
+  );
+  const window = new Window();
+  try {
+    window.document.body.innerHTML = html;
+    const snapshots = [...window.document.querySelectorAll('pre')].map((node) => JSON.parse(node.textContent!));
+    expect(snapshots).toEqual([original, original, current]);
+    expect([...window.document.querySelectorAll('details')].every((details) => !details.open)).toBe(true);
+    for (const pre of window.document.querySelectorAll('pre')) expect(pre.tabIndex).toBe(0);
+  } finally {
+    await window.happyDOM.close();
+  }
+});
+
+test('production comparison bounds long localized values in every launch locale without mutating their exact originals', async () => {
+  const { createElement } = await import('react');
+  const { renderToStaticMarkup } = await import('react-dom/server');
+  const { CurationProfileComparison } = await import('../src/features/pages/curation-publish-view');
+  const { m } = await import('../src/paraglide/messages.js');
+  const { getLocale, setLocale } = await import('../src/paraglide/runtime.js');
+  const before = getLocale();
+  const active = readableProfile();
+  const draft = structuredClone(active);
+  const long = '長い見出しと説明文'.repeat(160);
+  const longRoute = `/${'long'.repeat(60)}`;
+  draft.routes.push({
+    route: longRoute,
+    document: {
+      root: { props: {} },
+      content: [
+        { type: 'Text', props: { id: 'long', text: { en: long, fr: 'Une description détaillée '.repeat(60) } } },
+      ],
+    },
+  });
+  try {
+    for (const locale of ['en', 'zh-Hans', 'zh-Hant', 'ja', 'ko', 'de', 'fr', 'es'] as const) {
+      setLocale(locale, { reload: false });
+      const html = renderToStaticMarkup(createElement(CurationProfileComparison, { draft, active }));
+      expect(html).toContain(m.curation_compare());
+      expect(html).toContain(m.curation_review_scope());
+      expect(html).toContain(longRoute);
+      expect(html).toContain(`${long.slice(0, 180)}…`);
+      expect(html).not.toContain(long);
+      expect(html).toContain('min-w-0');
+      expect(html).toContain('overflow-wrap:anywhere');
+      expect(html).toContain('sm:grid-cols-2');
+      expect(html.length).toBeLessThan(90000);
+    }
+    expect((draft.routes.at(-1)!.document!.content[0]!.props.text as Record<string, string>).en).toBe(long);
+  } finally {
+    setLocale(before, { reload: false });
+  }
+});

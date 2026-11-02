@@ -216,3 +216,262 @@ test('default presentation editor takes a native invalid publication to its actu
     }
   }
 }, 15000);
+
+// Authored against the actual recovery composition; intentionally UNRUN in this delivery.
+test('recovery controls preserve exact original retries, deliberate review choices, valid replacements and mounted visit ownership', async () => {
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
+  const window = new Window({ url: 'https://site.test/en/curate/presentation', width: 390, height: 844 });
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    Element: window.Element,
+    Node: window.Node,
+    MutationObserver: window.MutationObserver,
+    getComputedStyle: window.getComputedStyle.bind(window),
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const { createRoot } = await import('react-dom/client');
+  const { CurationPublication } = await import('../src/features/pages/curation-publish');
+  const { CurationPublicationRecovery } = await import('../src/features/pages/curation-publish-view');
+  const { m } = await import('../src/paraglide/messages.js');
+  const original: PresentationProfile = {
+    format: PROFILE_FORMAT,
+    generic: {
+      root: { props: { appearance: { density: 'comfortable' } } },
+      content: [{ type: 'Text', props: { id: 'intro', text: { en: 'Original proposal', ja: '元の提案' } } }],
+    },
+    bases: [],
+    types: [],
+    routes: [],
+  };
+  const later: PresentationProfile = {
+    ...original,
+    routes: [
+      {
+        route: '/later',
+        document: {
+          root: { props: {} },
+          content: [{ type: 'Text', props: { id: 'later', text: { en: 'Later draft only' } } }],
+        },
+      },
+    ],
+  };
+  const active = {
+    ok: true as const,
+    reader: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10',
+    head: 9,
+    digest: profileDigest(original),
+    profile: original,
+  };
+  const host = window.document.createElement('div');
+  window.document.body.append(host);
+  const root = createRoot(host as unknown as HTMLElement);
+  let unmounted = false;
+  const confirmations: import('../src/features/pages/curation-publish').PublicationConfirmation[] = [];
+  const reviews: {
+    active: import('../src/features/pages/curation-publish').ActiveCuration;
+    choice: 'keep' | 'discard';
+  }[] = [];
+  const corrected: string[] = [];
+  const button = (label: string) => {
+    const result = [...host.querySelectorAll('button')].find((node) => node.textContent === label);
+    expect(result, label).toBeDefined();
+    return result!;
+  };
+  const click = async (label: string) => {
+    await act(async () => button(label).click());
+  };
+  const handler = (node: Element) => {
+    const key = Object.keys(node).find((name) => name.startsWith('__reactProps$'))!;
+    return (node as unknown as Record<string, { onClick(): void }>)[key]!.onClick;
+  };
+  async function render(
+    publication: InstanceType<typeof CurationPublication>,
+    visit: import('../src/features/pages/curation-publish').CurationPublicationVisit,
+    profile = later,
+    head = 7,
+  ) {
+    await act(async () =>
+      root.render(
+        createElement(CurationPublicationRecovery, {
+          publication,
+          visit,
+          profile,
+          head,
+          onPublished: (confirmation) => confirmations.push(confirmation),
+          onReviewed: (active, choice) => reviews.push({ active, choice }),
+          correction: {
+            describe: () => 'Reading introduction · English',
+            correct: (pointer) => corrected.push(pointer),
+          },
+        }),
+      ),
+    );
+  }
+  try {
+    const inputs: PublishInput[] = [];
+    let finish!: (value: import('../src/features/pages/curate').PublishResult) => void;
+    const transport = {
+      publish: async (input: PublishInput): Promise<import('../src/features/pages/curate').PublishResult> => {
+        inputs.push(input);
+        if (inputs.length === 1) return { ok: false, reason: 'unavailable', outcome: 'unknown' };
+        return new Promise((resolve) => {
+          finish = resolve;
+        });
+      },
+      read: async () => ({ ...active, head: 8 }),
+    };
+    const publication = new CurationPublication(active.reader, transport);
+    const visit = publication.activate(transport);
+    await visit.start(original, 7);
+    const retained = publication.getSnapshot().intent!;
+    await render(publication, visit);
+    expect(host.textContent).toContain(m.curation_review_no_active());
+    expect(reviews).toEqual([]);
+    expect(confirmations).toEqual([]);
+    await click(m.curation_reload_head());
+    expect(host.textContent).toContain(m.curation_compare());
+    expect(host.textContent).toContain(m.curation_unknown());
+    expect([...host.querySelectorAll('button')].some((node) => node.textContent === m.curation_reconcile())).toBe(
+      false,
+    );
+    expect([...host.querySelectorAll('button')].some((node) => node.textContent === m.curation_discard())).toBe(false);
+    expect(publication.getSnapshot().intent).toBe(retained);
+    const retry = handler(button(m.curation_retry_original()) as unknown as Element);
+    await click(m.curation_retry_original());
+    expect(host.textContent).toContain(m.curation_review_working());
+    expect([...host.querySelectorAll('button')].every((node) => node.disabled)).toBe(true);
+    await act(async () => retry());
+    expect(inputs).toHaveLength(2);
+    expect(inputs[1]!.profile).toBe(retained.profile);
+    expect(inputs[1]!.keys).toBe(retained.keys);
+    expect(inputs[1]!.expectedHead).toBe(7);
+    await act(async () => finish({ ok: true, head: 8, digest: profileDigest(original) }));
+    expect(confirmations).toHaveLength(1);
+    expect(host.textContent).toContain(m.presentation_editor_published());
+    expect(host.querySelector('details')!.open).toBe(false);
+    expect(later.routes[0]!.route).toBe('/later');
+
+    for (const choice of ['keep', 'discard'] as const) {
+      let failed = true;
+      const staleTransport = {
+        publish: async () => ({ ok: false as const, reason: 'stale' as const }),
+        read: async () => (failed ? { ok: false as const, reason: 'unavailable' as const } : active),
+      };
+      const stale = new CurationPublication(active.reader, staleTransport);
+      const currentVisit = stale.activate(staleTransport);
+      await currentVisit.start(original, 7);
+      await render(stale, currentVisit);
+      expect(host.textContent).toContain(m.curation_review_read_failed());
+      expect(host.querySelector(`[aria-label="${m.curation_compare()}"]`)).toBeNull();
+      expect([...host.querySelectorAll('button')].some((node) => node.textContent === m.curation_discard())).toBe(
+        false,
+      );
+      failed = false;
+      await click(m.curation_reload_head());
+      expect(host.textContent).toContain(m.curation_review_discard_help());
+      expect(host.textContent).toContain(m.curation_review_help());
+      await click(choice === 'keep' ? m.curation_reconcile() : m.curation_discard());
+      expect(reviews.at(-1)).toEqual({ active: { ...active, profile: choice === 'keep' ? later : original }, choice });
+      expect(stale.getSnapshot().intent).toBeNull();
+      expect(confirmations).toHaveLength(1);
+    }
+
+    const revisedInputs: PublishInput[] = [];
+    const invalidTransport = {
+      publish: async (input: PublishInput) => {
+        revisedInputs.push(input);
+        return revisedInputs.length === 1
+          ? {
+              ok: false as const,
+              reason: 'invalid' as const,
+              errors: [{ pointer: '/generic/content/0/props/text/en', code: 'invalid' }],
+            }
+          : { ok: true as const, head: input.expectedHead + 1, digest: profileDigest(input.profile) };
+      },
+      read: async () => active,
+    };
+    const invalid = new CurationPublication(active.reader, invalidTransport);
+    const invalidVisit = invalid.activate(invalidTransport);
+    await invalidVisit.start(original, 7);
+    await render(invalid, invalidVisit, original);
+    expect(button(m.curation_new_intent()).disabled).toBe(true);
+    expect(host.textContent).toContain(m.curation_review_revision_required());
+    expect([...host.querySelectorAll('button')].some((node) => node.textContent === m.curation_retry_original())).toBe(
+      false,
+    );
+    expect(host.querySelector('code')!.textContent).toBe('/generic/content/0/props/text/en — invalid');
+    expect(host.querySelector('code')!.closest('details')!.open).toBe(false);
+    await click(m.curation_correct());
+    expect(corrected).toEqual(['/generic/content/0/props/text/en']);
+    const invalidDraft = structuredClone(later);
+    invalidDraft.routes[0]!.document!.content[0]!.props.text = 'x'.repeat(2001);
+    await render(invalid, invalidVisit, invalidDraft, 11);
+    expect(button(m.curation_new_intent()).disabled).toBe(true);
+    await render(invalid, invalidVisit, later, 11);
+    expect(button(m.curation_new_intent()).disabled).toBe(false);
+    expect(host.textContent).toContain(m.curation_review_replace_help());
+    await click(m.curation_new_intent());
+    expect(revisedInputs).toHaveLength(2);
+    expect(revisedInputs[1]!.expectedHead).toBe(11);
+    expect(revisedInputs[1]!.profile).toEqual(later);
+    expect(revisedInputs[1]!.keys.publish).not.toBe(revisedInputs[0]!.keys.publish);
+    expect(revisedInputs[1]!.keys.activate).not.toBe(revisedInputs[0]!.keys.activate);
+
+    const retired = new CurationPublication(active.reader, transport);
+    const retiredVisit = retired.activate(transport);
+    // A definite refused publication is still retained and may be retried only by the current visit.
+    const refusedTransport = {
+      ...transport,
+      publish: async () => ({ ok: false as const, reason: 'forbidden' as const }),
+    };
+    retired.setTransport(refusedTransport);
+    await retiredVisit.start(original, 7);
+    await render(retired, retiredVisit);
+    const obsolete = handler(button(m.curation_retry_original()) as unknown as Element);
+    await act(async () => retired.retire(retiredVisit));
+    const count = inputs.length;
+    await act(async () => obsolete());
+    expect(inputs).toHaveLength(count);
+    expect(retired.getSnapshot().intent!.profile).toEqual(original);
+
+    let finalCalls = 0;
+    let completeFinal!: (value: import('../src/features/pages/curate').PublishResult) => void;
+    const finalTransport = {
+      read: async () => active,
+      publish: async (): Promise<import('../src/features/pages/curate').PublishResult> => {
+        if (++finalCalls === 1) return { ok: false, reason: 'unavailable', outcome: 'unknown' };
+        return new Promise((resolve) => {
+          completeFinal = resolve;
+        });
+      },
+    };
+    const final = new CurationPublication(active.reader, finalTransport);
+    const finalVisit = final.activate(finalTransport);
+    await finalVisit.start(original, 7);
+    await render(final, finalVisit);
+    await click(m.curation_retry_original());
+    const beforeUnmount = confirmations.length;
+    await act(async () => {
+      root.unmount();
+      unmounted = true;
+    });
+    await act(async () => completeFinal({ ok: true, head: 8, digest: profileDigest(original) }));
+    expect(final.getSnapshot().result).toMatchObject({ ok: true, head: 8 });
+    expect(confirmations).toHaveLength(beforeUnmount);
+  } finally {
+    if (!unmounted) await act(async () => root.unmount());
+    await window.happyDOM.close();
+    for (const [key, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+  }
+});
