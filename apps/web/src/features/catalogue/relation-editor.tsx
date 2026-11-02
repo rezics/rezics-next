@@ -673,8 +673,7 @@ function RelationEditorLive({
   }
 
   useLayoutEffect(() => {
-    if (draftDecision && !decisionIsCurrent(draftDecision))
-      finishDraftDecision(draftDecision, { kind: 'property' });
+    if (draftDecision && !decisionIsCurrent(draftDecision)) finishDraftDecision(draftDecision, { kind: 'property' });
     if (draftDecision || !draftFocusIntent.current) return;
     const intent = draftFocusIntent.current;
     draftFocusIntent.current = undefined;
@@ -686,8 +685,7 @@ function RelationEditorLive({
     if (intent.target.kind === 'trigger') target = intent.trigger.isConnected ? intent.trigger : null;
     else if (intent.target.kind === 'qualifier')
       target = qualifierRemoveButtons.current.get(intent.target.identity) ?? null;
-    else if (intent.target.kind === 'add-qualifier')
-      target = document.getElementById(`${formId}-add-qualifier`);
+    else if (intent.target.kind === 'add-qualifier') target = document.getElementById(`${formId}-add-qualifier`);
     else target = document.getElementById(`${formId}-property`);
     (target ?? document.getElementById(`${formId}-property`))?.focus();
   }, [draftDecision, draft, read, field, visible, nativeFrozen, mount, formId]);
@@ -948,11 +946,7 @@ function RelationEditorLive({
               <>
                 <p>{name(draftDecision.qualifier.property.id)}</p>
                 {current && (
-                  <CandidateValue
-                    snak={draftDecision.qualifier}
-                    related={current.public.related}
-                    locale={locale}
-                  />
+                  <CandidateValue snak={draftDecision.qualifier} related={current.public.related} locale={locale} />
                 )}
               </>
             ) : (
@@ -979,11 +973,7 @@ function RelationEditorLive({
               >
                 {draftDecisionAction}
               </Button>
-              <Button
-                variant="outline"
-                disabled={nativeFrozen}
-                onClick={() => cancelDraftDecision(draftDecision)}
-              >
+              <Button variant="outline" disabled={nativeFrozen} onClick={() => cancelDraftDecision(draftDecision)}>
                 {m.candidate_cancel({}, options)}
               </Button>
             </div>

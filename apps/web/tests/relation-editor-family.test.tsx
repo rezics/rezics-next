@@ -769,19 +769,8 @@ test('initial Relation Open orients only admitted keyboard results after its ope
 
 test('Relation Editor confirms populated local changes and retires stale decisions', async () => {
   const ui = await mounted();
-  const {
-    window,
-    user,
-    within,
-    render,
-    click,
-    select,
-    region,
-    RelationEditor,
-    relationFixture,
-    relationProperty,
-    m,
-  } = ui;
+  const { window, user, within, render, click, select, region, RelationEditor, relationFixture, relationProperty, m } =
+    ui;
   try {
     const fixture = relationFixture();
     const initial = await fixture.transport.read();
