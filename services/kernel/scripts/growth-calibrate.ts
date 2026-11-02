@@ -73,10 +73,12 @@ function markdownCell(value: string): string {
 }
 
 function mapCalibrations(read: GrowthProfileRead): Map<GrowthProfileMetric, CalibrationByCoverage> {
+  const missingMetrics = GROWTH_PROFILE_METRICS.filter((metric) => read.series[metric].length === 0);
+  if (missingMetrics.length > 0) throw incompleteCalibrationError(read, missingMetrics);
+
   const result = new Map<GrowthProfileMetric, CalibrationByCoverage>();
   for (const metric of GROWTH_PROFILE_METRICS) {
     const series = read.series[metric];
-    if (series.length === 0) throw new Error(`No complete unchanged-code checks are available for ${metric}`);
     const byCoverage = {} as Record<(typeof COVERAGES)[number], CalibratedUncertainty>;
     for (const coverage of COVERAGES) byCoverage[coverage] = calibrateUncertainty(series, { coverage });
     result.set(metric, byCoverage);
@@ -365,6 +367,31 @@ function omittedTable(read: GrowthProfileRead): string[] {
     }
   }
   return rows;
+}
+
+function incompleteCalibrationError(read: GrowthProfileRead, metrics: readonly GrowthProfileMetric[]): Error {
+  const rows = [
+    '| File | Check | Problem | Missing runs | Scales by run |',
+    '| --- | --- | --- | --- | --- |',
+  ];
+  for (const item of read.omitted) {
+    const scaleSets = new Set(item.scalesByRun.map(({ scales }) => JSON.stringify(scales)));
+    const problems = [
+      ...(item.missingRuns.length > 0 ? ['missing runs'] : []),
+      ...(scaleSets.size > 1 ? ['mismatched scales'] : []),
+    ].join(', ');
+    rows.push(
+      `| ${markdownCell(item.file)} | ${markdownCell(checkLabel(item.check, item.occurrence))} | ${problems} | ${item.missingRuns.length ? item.missingRuns.map(markdownCell).join(', ') : '—'} | ${markdownCell(item.scalesByRun.map(({ run, scales }) => `${run}: ${scales.join(', ')}`).join('; '))} |`,
+    );
+  }
+  return new Error(
+    [
+      `No complete unchanged-code checks are available for ${metrics.join(', ')}.`,
+      '',
+      'Checks omitted from calibration:',
+      ...rows,
+    ].join('\n'),
+  );
 }
 
 function methodTable(

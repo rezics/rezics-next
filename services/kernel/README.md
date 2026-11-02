@@ -452,6 +452,9 @@ shadow verdict use calibrated uncertainty from `docs/research/growth-uncertainty
 of the median), blocks max(9, 3%), and statements are exact. `slack` applies only to the step rule; byte metrics keep
 their existing slack handling.
 
+When any metric lacks complete unchanged-code calibration checks, `scripts/growth-calibrate.ts` prints named omitted checks,
+missing runs and mismatched scales to stderr, then exits nonzero without reporting fitted uncertainty, coverage or classifications.
+
 For a logarithmic or linear blocks bound, `indexProbes` may declare the positive number of index descents one run
 makes into growing relations. The blocks series may then include a non-decreasing staircase from zero, gaining at
 most `indexProbes` blocks between consecutive scales. This models a depth transition for a fixed set of indexed
