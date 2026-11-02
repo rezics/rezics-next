@@ -950,7 +950,7 @@ export async function openGrowthDatabase(url = process.env.DATABASE_URL): Promis
         cause: error,
       });
     }
-    await disableAutovacuum(database);
+    await settle(database, { relations: [] });
     return database;
   });
 }
