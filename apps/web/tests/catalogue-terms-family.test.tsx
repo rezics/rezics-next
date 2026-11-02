@@ -342,8 +342,21 @@ test('independent Terms forms retain stable associations, multilingual drafts an
     const outside = document.createElement('button');
     document.body.append(outside);
     for (const mode of [
-      'denied', 'concealed', 'failure', 'ready', 'moved', 'returned', 'pointer', 'pointed', 'tab',
-      'session', 'transport', 'locale', 'route', 'workspace', 'comparison',
+      'denied',
+      'concealed',
+      'failure',
+      'ready',
+      'moved',
+      'returned',
+      'pointer',
+      'pointed',
+      'tab',
+      'session',
+      'transport',
+      'locale',
+      'route',
+      'workspace',
+      'comparison',
     ]) {
       const reads: [string, string | undefined][] = [];
       const commands: import('../src/features/catalogue/subject-terms').TermsCommand[] = [];
@@ -362,18 +375,25 @@ test('independent Terms forms retain stable associations, multilingual drafts an
           commands.push(structuredClone(command));
           return mode === 'comparison'
             ? { ok: false, reason: 'stale' }
-            : { ok: true, id: 'confirmed-subject', revision: 8, session: 'confirmed-session', reader: { state: 'unavailable' } };
+            : {
+                ok: true,
+                id: 'confirmed-subject',
+                revision: 8,
+                session: 'confirmed-session',
+                reader: { state: 'unavailable' },
+              };
         },
       };
       let visit = { id: termsSubjectId, locale: 'en', session: 'signed-in' as 'signed-in' | 'signed-out', transport };
       let admitted = true;
-      const showRecovery = () => root.render(
-        <QueryClientProvider client={client}>
-          <CatalogueCurrentReading visible={admitted} ready={admitted} revision={String(admitted)}>
-            <SubjectTermsPage key={mode} {...visit} />
-          </CatalogueCurrentReading>
-        </QueryClientProvider>,
-      );
+      const showRecovery = () =>
+        root.render(
+          <QueryClientProvider client={client}>
+            <CatalogueCurrentReading visible={admitted} ready={admitted} revision={String(admitted)}>
+              <SubjectTermsPage key={mode} {...visit} />
+            </CatalogueCurrentReading>
+          </QueryClientProvider>,
+        );
       await act(async () => showRecovery());
       await settle(() => !!host.querySelector('fieldset'));
       const page = host.querySelector('article')!;
@@ -385,14 +405,17 @@ test('independent Terms forms retain stable associations, multilingual drafts an
       expect(commands).toHaveLength(1);
       expect(document.activeElement).not.toBe(page.querySelector('[role="status"]'));
       const command = structuredClone(commands[0]);
-      const opener = button(page, mode === 'comparison' ? m.catalogue_terms_compare() : m.catalogue_retry_loading_result());
+      const opener = button(
+        page,
+        mode === 'comparison' ? m.catalogue_terms_compare() : m.catalogue_retry_loading_result(),
+      );
       opener.focus();
       if (mode === 'pointer') await act(async () => user.click(opener));
       else await act(async () => user.keyboard('{Enter}'));
       expect(opener.disabled).toBe(true);
-      expect(reads[1]).toEqual(mode === 'comparison'
-        ? [termsSubjectId, initial.snapshot.session]
-        : ['confirmed-subject', 'confirmed-session']);
+      expect(reads[1]).toEqual(
+        mode === 'comparison' ? [termsSubjectId, initial.snapshot.session] : ['confirmed-subject', 'confirmed-session'],
+      );
       if (mode === 'moved' || mode === 'returned') outside.focus();
       if (mode === 'returned') opener.focus();
       if (mode === 'pointed') outside.dispatchEvent(new window.PointerEvent('pointerdown', { bubbles: true }));
@@ -414,9 +437,15 @@ test('independent Terms forms retain stable associations, multilingual drafts an
       } else if (['denied', 'concealed', 'failure', 'comparison'].includes(mode)) {
         expect(document.activeElement).toBe(opener);
         expect(opener.disabled).toBe(false);
-        expect(page.textContent).toContain(mode === 'denied' ? m.catalogue_result_read_denied()
-          : mode === 'concealed' ? m.catalogue_create_concealed()
-            : mode === 'failure' ? m.catalogue_terms_reader_unavailable() : m.catalogue_terms_confirm_help());
+        expect(page.textContent).toContain(
+          mode === 'denied'
+            ? m.catalogue_result_read_denied()
+            : mode === 'concealed'
+              ? m.catalogue_create_concealed()
+              : mode === 'failure'
+                ? m.catalogue_terms_reader_unavailable()
+                : m.catalogue_terms_confirm_help(),
+        );
       } else {
         expect(document.activeElement).not.toBe(host.querySelector('[role="status"]'));
         if (mode === 'moved') expect(document.activeElement).toBe(before);
