@@ -8,6 +8,7 @@ import { m } from '../paraglide/messages.js';
 import { AuthPage } from '../frame';
 import { authPost, failureMessage, RECOVERY_COMPLETE_NOTICE_KEY } from '../api';
 import { ErrorAlert } from '../alert';
+import { RecoveryAttempt, useRecoveryAttempt } from '../recovery-attempt';
 
 const emailId = 'recovery-email';
 const emailErrorId = 'recovery-email-error';
@@ -20,6 +21,15 @@ export const Route = createFileRoute('/recovery')({
 });
 
 function RecoveryPage() {
+  const journey = useRecoveryAttempt();
+  return journey ? (
+    <RecoveryForm key={journey.key} attempt={journey.attempt} />
+  ) : (
+    <AuthPage heading={m.auth_recovery_heading()} />
+  );
+}
+
+function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
   const [hasFragment, setHasFragment] = useState<boolean | null>(null);
   const [credentials, setCredentials] = useState<{ accountId: string; token: string } | null>(null);
   const [email, setEmail] = useState('');
@@ -29,16 +39,18 @@ function RecoveryPage() {
   const [message, setMessage] = useState('');
   const [emailError, setEmailError] = useState('');
   const [passwordFieldError, setPasswordFieldError] = useState('');
-  const submitting = useRef(false);
+  const initialized = useRef(false);
   const alert = useRef<HTMLDivElement>(null);
   const emailInput = useRef<HTMLInputElement>(null);
 
   useLayoutEffect(() => {
+    if (initialized.current) return;
+    initialized.current = true;
     const fragment = window.location.hash;
     if (fragment) {
       const parameters = new URLSearchParams(fragment.slice(1));
       const recovered = { accountId: parameters.get('account_id'), token: parameters.get('token') };
-      window.history.replaceState(window.history.state, '', window.location.pathname + window.location.search);
+      attempt.removeFragment();
       if (recovered.accountId && recovered.token) {
         setCredentials({ accountId: recovered.accountId, token: recovered.token });
       } else {
@@ -48,7 +60,7 @@ function RecoveryPage() {
     } else {
       setHasFragment(false);
     }
-  }, []);
+  }, [attempt]);
 
   useLayoutEffect(() => {
     if (emailError) emailInput.current?.focus();
@@ -58,7 +70,7 @@ function RecoveryPage() {
 
   async function submitStart(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (submitting.current || pending) return;
+    if (!attempt.available) return;
     const invalidEmail = !email.trim() || Boolean(emailInput.current?.validity.typeMismatch);
     if (invalidEmail) {
       setNotice('');
@@ -66,12 +78,13 @@ function RecoveryPage() {
       return;
     }
     setEmailError('');
-    submitting.current = true;
+    const finish = attempt.begin();
+    if (!finish) return;
     setPending(true);
     setNotice('');
     setMessage('');
     const result = await authPost('/recovery/start', { email: email.trim() });
-    submitting.current = false;
+    if (!finish()) return;
     setPending(false);
     if (result.ok) {
       setNotice(m.auth_recovery_start_success());
@@ -82,7 +95,7 @@ function RecoveryPage() {
 
   async function submitComplete(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (submitting.current || pending) return;
+    if (!attempt.available) return;
     const passwordLength = Array.from(password).length;
     if (passwordLength < 8 || passwordLength > 128) {
       const error = password ? m.auth_recovery_password_invalid() : m.auth_form_required();
@@ -95,7 +108,8 @@ function RecoveryPage() {
       setMessage(failureMessage(401, 'invalid_recovery', null));
       return;
     }
-    submitting.current = true;
+    const finish = attempt.begin();
+    if (!finish) return;
     setPending(true);
     setMessage('');
     const result = await authPost('/recovery/complete', {
@@ -103,7 +117,7 @@ function RecoveryPage() {
       token: credentials.token,
       new_password: password,
     });
-    submitting.current = false;
+    if (!finish()) return;
     setPending(false);
     if (result.ok) {
       try {

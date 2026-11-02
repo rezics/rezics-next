@@ -57,6 +57,9 @@ Successful completion revokes the account's sessions and sends the person to `/l
 An invalid or expired link offers a new recovery link. Rate limits show a valid `Retry-After` duration, and outages
 ask the person to try again later.
 
+Leaving or replacing the recovery journey discards its browser results and private inputs; returning from a cached
+document starts a fresh form without retrying a mutation. Departure cannot undo a completed native password change.
+
 ## Sign-up
 
 The sign-up page keeps the query it was opened with. Its sign-in link keeps that same query. The form has a handle,
