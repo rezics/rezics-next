@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { dirname } from 'node:path';
 import { queryOptions } from '@tanstack/react-query';
 import { act } from 'react';
+import * as start from '../.storybook/react-start';
 import { discoveryExample } from '../src/kernel/fake/search-discovery';
 import type { SearchPageData } from '../src/search/search';
 import type { SearchLoaderDeps } from '../src/search/search-params';
@@ -10,6 +11,8 @@ import { searchUnavailablePage } from '../src/search/search-recovery';
 import type { BrowserSession } from '../src/session/browser-state';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
+mock.module('@tanstack/react-start', () => start);
+mock.module('@tanstack/react-start/server', () => start);
 
 const reads: { resolve: (value: SearchPageData) => void }[] = [];
 mock.module('../src/search/search-queries', () => ({
@@ -32,11 +35,13 @@ const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
 );
 const window = new Window({ url: 'https://search.test/search?q=Mira' });
+window.scrollTo = () => undefined;
 const globals = {
   window,
   document: window.document,
   HTMLElement: window.HTMLElement,
   Node: window.Node,
+  scrollTo: window.scrollTo,
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -77,6 +82,10 @@ const host = document.createElement('main');
 document.body.append(host);
 let root: ReturnType<typeof createRoot>;
 
+function focusedResults() {
+  return document.activeElement?.hasAttribute('data-search-results') === true;
+}
+
 async function settle(page: SearchPageData) {
   await act(async () => {
     reads.at(-1)!.resolve(page);
@@ -88,7 +97,12 @@ async function show(session: BrowserSession) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(sessionQuery.queryKey, session);
   const parent = createRootRouteWithContext<{ queryClient: QueryClient }>()({ component: Outlet });
-  Route.update({ id: '/search', path: '/search', getParentRoute: () => parent } as never);
+  Route.update({
+    id: '/search',
+    path: '/search',
+    getParentRoute: () => parent,
+    head: () => ({}),
+  } as never);
   const router = createRouter({
     routeTree: parent.addChildren([Route]),
     context: { queryClient: client },
@@ -144,7 +158,7 @@ test('the Search route retires pending Retry focus when the observed session cha
     client.setQueryData(sessionQuery.queryKey, viewer('two'));
   });
   await settle(ready);
-  expect(document.activeElement).not.toBe(host.querySelector('[data-search-results]'));
+  expect(focusedResults()).toBe(false);
 });
 
 test('stable session observation still recovers current Retry focus', async () => {
@@ -155,10 +169,13 @@ test('stable session observation still recovers current Retry focus', async () =
     client.setQueryData(sessionQuery.queryKey, viewer('one', 'rotated'));
   });
   await settle(ready);
-  expect(document.activeElement).toBe(host.querySelector('[data-search-results]'));
+  expect(focusedResults()).toBe(true);
 
+  await act(async () => root.unmount());
+  root = undefined!;
+  host.replaceChildren();
   await show(viewer());
   await retryCurrent();
   await settle(ready);
-  expect(document.activeElement).toBe(host.querySelector('[data-search-results]'));
+  expect(focusedResults()).toBe(true);
 });
