@@ -72,7 +72,9 @@ function relationMatches(
     return matchesRequest ? [{ key, cost, ...(identity === undefined ? {} : { identity }) }] : [];
   });
   if (matches.length > 1) {
-    const candidates = matches.map(({ identity }) => (identity === undefined ? '<unknown identity>' : formatRelationIdentity(identity)));
+    const candidates = matches.map(({ identity }) =>
+      identity === undefined ? '<unknown identity>' : formatRelationIdentity(identity),
+    );
     invalidEvidence(
       name,
       sampleIndex,

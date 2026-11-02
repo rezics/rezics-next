@@ -1043,7 +1043,9 @@ export function medianCost(costs: readonly Cost[]): Cost {
                         rows: lowerMedian(costs.map((cost) => cost.backgroundCosts?.[statement]?.rows ?? 0)),
                         blocks: lowerMedian(costs.map((cost) => cost.backgroundCosts?.[statement]?.blocks ?? 0)),
                         bounded: costs.some((cost) => cost.backgroundCosts?.[statement]?.bounded ?? false),
-                        ...(relationIdentities.size === 0 ? {} : { relationIdentities: [...relationIdentities.values()] }),
+                        ...(relationIdentities.size === 0
+                          ? {}
+                          : { relationIdentities: [...relationIdentities.values()] }),
                       },
                     ];
                   }),

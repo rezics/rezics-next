@@ -52,22 +52,16 @@ test('relation and index costs retain database and schema provenance', () => {
     .map(({ identity }) => identity)
     .filter((identity): identity is RelationIdentity => identity?.kind === 'index');
 
-  assert.deepEqual(
-    tableIdentities.map(({ database, schema, name }) => [database, schema, name]).sort(),
-    [
-      ['auth', 'content', 'report'],
-      ['kernel', 'archive', 'report'],
-      ['kernel', 'content', 'report'],
-    ],
-  );
-  assert.deepEqual(
-    indexIdentities.map(({ database, schema, name }) => [database, schema, name]).sort(),
-    [
-      ['auth', 'content', 'report_idx'],
-      ['kernel', 'archive', 'report_idx'],
-      ['kernel', 'content', 'report_idx'],
-    ],
-  );
+  assert.deepEqual(tableIdentities.map(({ database, schema, name }) => [database, schema, name]).sort(), [
+    ['auth', 'content', 'report'],
+    ['kernel', 'archive', 'report'],
+    ['kernel', 'content', 'report'],
+  ]);
+  assert.deepEqual(indexIdentities.map(({ database, schema, name }) => [database, schema, name]).sort(), [
+    ['auth', 'content', 'report_idx'],
+    ['kernel', 'archive', 'report_idx'],
+    ['kernel', 'content', 'report_idx'],
+  ]);
   assert.equal(statementAttributions(capture)[0]?.relationIdentities?.length, 6);
 });
 

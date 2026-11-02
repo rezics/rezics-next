@@ -844,7 +844,8 @@ function sizesForMeasuredRelations(
     relations: Object.fromEntries(
       [...relationsByCost[index]!.entries()].map(([identityKey, relation]) => {
         const key = relationKeys.get(identityKey);
-        if (key === undefined) throw new Error(`Missing report key for measured relation ${relationIdentityLabel(relation.identity!)}`);
+        if (key === undefined)
+          throw new Error(`Missing report key for measured relation ${relationIdentityLabel(relation.identity!)}`);
         return [key, relation];
       }),
     ),
