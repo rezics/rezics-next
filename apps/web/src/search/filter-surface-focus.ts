@@ -62,11 +62,7 @@ export function createFilterSurfaceFocus() {
     const alreadyMoved =
       input.kind === 'close' &&
       Boolean(
-        lastOpener &&
-          active &&
-          !occupies(lastOpener, active) &&
-          !isDocumentRoot(input.document, active) &&
-          !inSurface,
+        lastOpener && active && !occupies(lastOpener, active) && !isDocumentRoot(input.document, active) && !inSurface,
       );
     const request: Request = {
       id: ++nextId,
@@ -84,9 +80,7 @@ export function createFilterSurfaceFocus() {
         request.moved = true;
       },
       ...(input.surface ? { surface: input.surface } : {}),
-      ...(input.kind === 'open' && input.resolveDestination
-        ? { resolveDestination: input.resolveDestination }
-        : {}),
+      ...(input.kind === 'open' && input.resolveDestination ? { resolveDestination: input.resolveDestination } : {}),
     };
     request.document.addEventListener('focusin', request.onFocusIn, true);
     pending = request;
