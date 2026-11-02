@@ -99,17 +99,14 @@ function ImagePreview({
             onError={() => settle('failed')}
           />
         ) : null}
-        {fallback ? (
-          <span aria-hidden="true">{title.trim().slice(0, 2).toLocaleUpperCase()}</span>
-        ) : null}
+        {fallback ? <span aria-hidden="true">{title.trim().slice(0, 2).toLocaleUpperCase()}</span> : null}
       </div>
       {pending ? (
         <p className="text-sm text-muted-foreground">{pending}</p>
-      ) :
-      image.state === 'unavailable' ||
-      attempt.state === 'failed' ||
-      attempt.state === 'recovering' ||
-      (image.state === 'available' && !src) ? (
+      ) : image.state === 'unavailable' ||
+        attempt.state === 'failed' ||
+        attempt.state === 'recovering' ||
+        (image.state === 'available' && !src) ? (
         <p className="text-sm text-muted-foreground">{m.realm_appearance_image_unavailable()}</p>
       ) : image.state === 'none' ? (
         <p className="text-sm text-muted-foreground">{m.realm_appearance_no_image()}</p>
@@ -701,8 +698,17 @@ export function RealmAppearanceSettings({
               <details className="space-y-3">
                 <summary>{m.realm_appearance_current()}</summary>
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <ImagePreview key={realmImageSource(snapshot.avatar) ?? 'none'} image={snapshot.avatar} title={snapshot.title} />
-                  <ImagePreview key={realmImageSource(snapshot.banner) ?? 'none'} image={snapshot.banner} title={snapshot.title} banner />
+                  <ImagePreview
+                    key={realmImageSource(snapshot.avatar) ?? 'none'}
+                    image={snapshot.avatar}
+                    title={snapshot.title}
+                  />
+                  <ImagePreview
+                    key={realmImageSource(snapshot.banner) ?? 'none'}
+                    image={snapshot.banner}
+                    title={snapshot.title}
+                    banner
+                  />
                 </div>
                 <p>
                   {snapshot.rules.state === 'available'
