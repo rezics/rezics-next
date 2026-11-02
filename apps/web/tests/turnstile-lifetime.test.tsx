@@ -308,3 +308,125 @@ test('a failed script clears only its current token and a later explicit mount c
   expect(scriptsLoaded).toHaveLength(1);
   await unmountRoot(second.root);
 });
+
+test('a successor sharing the reset ref owns token publication and cleanup even while the prior widget is mounted', async () => {
+  const tokens: string[] = [];
+  const reset = { current: null } as RefObject<(() => void) | null>;
+  const config = { sitekey: 'shared-handle-key', scriptUrl: 'https://turnstile.test/shared-handle.js' };
+  const firstNode = window.document.createElement('section') as unknown as HTMLElement;
+  const secondNode = window.document.createElement('section') as unknown as HTMLElement;
+  host.append(firstNode, secondNode);
+  mountedNodes.push(firstNode, secondNode);
+  const first = createRoot(firstNode);
+  const second = createRoot(secondNode);
+  roots.push(first, second);
+  await act(async () => {
+    first.render(<Verification {...props(config, (token) => tokens.push(`first:${token}`), () => {}, reset)} />);
+  });
+  const api = fakeApi('shared-handle');
+  await deliver(scriptList()[0]!, api);
+  const firstWidget = [...api.widgets.values()][0]!;
+  const resetFirst = reset.current!;
+  await act(async () => {
+    second.render(<Verification {...props(config, (token) => tokens.push(`second:${token}`), () => {}, reset)} />);
+    await tick();
+  });
+  const secondWidget = [...api.widgets.values()].at(-1)!;
+  expect(secondWidget.id).not.toBe(firstWidget.id);
+  secondWidget.options.callback('current-token');
+  expect(tokens.at(-1)).toBe('second:current-token');
+  const tokenCount = tokens.length;
+  const resetSecond = reset.current;
+  resetFirst();
+  firstWidget.options.callback('retained-first-token');
+  firstWidget.options['expired-callback']();
+  firstWidget.options['error-callback']();
+  await unmountRoot(first);
+  expect(tokens).toHaveLength(tokenCount);
+  expect(reset.current).toBe(resetSecond);
+  expect(api.resets).toEqual([]);
+  expect(api.removals).toEqual([firstWidget.id]);
+  reset.current!();
+  expect(api.resets).toEqual([secondWidget.id]);
+  expect(tokens.at(-1)).toBe('second:');
+});
+
+test('equal callback/config allocation never clears a healthy token or starts another challenge', async () => {
+  const tokens: string[] = [];
+  let starts = 0;
+  const config = { sitekey: 'stable-live-key', scriptUrl: 'https://turnstile.test/stable-live.js' };
+  const mounted = await mount(config, { onToken: (token) => tokens.push(token), onStart: () => starts++ }, true);
+  const api = fakeApi('stable-live');
+  await deliver(scriptList()[0]!, api);
+  const widget = [...api.widgets.values()][0]!;
+  widget.options.callback('healthy-token');
+  const tokenCount = tokens.length;
+  const startCount = starts;
+  const resetBefore = mounted.reset.current;
+  for (let index = 0; index < 3; index++) {
+    await mounted.paint({ ...config }, { onToken: (token) => tokens.push(token), onStart: () => starts++ });
+  }
+  expect(tokens).toHaveLength(tokenCount);
+  expect(tokens.at(-1)).toBe('healthy-token');
+  expect(starts).toBe(startCount);
+  expect(mounted.reset.current).toBe(resetBefore);
+  expect(api.removals).toEqual([]);
+  expect(api.widgets.size).toBe(1);
+  expect(scriptsLoaded).toEqual([config.scriptUrl]);
+});
+
+test('sitekey replacement on the same URL uses the captured API and retires every old vendor callback and reset', async () => {
+  const tokens: string[] = [];
+  const config = { sitekey: 'key-before', scriptUrl: 'https://turnstile.test/sitekey-only.js' };
+  const mounted = await mount(config, { onToken: (token) => tokens.push(token) });
+  const api = fakeApi('captured');
+  await deliver(scriptList()[0]!, api);
+  const oldWidget = [...api.widgets.values()][0]!;
+  const oldReset = mounted.reset.current!;
+  const unrelatedApi = fakeApi('unrelated-global');
+  Object.defineProperty(window, 'turnstile', { configurable: true, writable: true, value: unrelatedApi.api });
+  await mounted.paint({ ...config, sitekey: 'key-after' });
+  const currentWidget = [...api.widgets.values()][0]!;
+  expect(currentWidget.options.sitekey).toBe('key-after');
+  expect(currentWidget.id).not.toBe(oldWidget.id);
+  currentWidget.options.callback('new-sitekey-token');
+  const tokenCount = tokens.length;
+  oldReset();
+  oldWidget.options.callback('old-sitekey-token');
+  oldWidget.options['expired-callback']();
+  oldWidget.options['error-callback']();
+  expect(tokens).toHaveLength(tokenCount);
+  expect(api.resets).toEqual([]);
+  expect(api.removals).toEqual([oldWidget.id]);
+  expect(unrelatedApi.widgets.size).toBe(0);
+  expect(scriptsLoaded).toEqual([config.scriptUrl]);
+});
+
+test('unmount before script arrival retires the original load handler and reset without creating a widget', async () => {
+  const tokens: string[] = [];
+  const mounted = await mount(
+    { sitekey: 'unmounted-loading', scriptUrl: 'https://turnstile.test/unmounted-loading.js' },
+    { onToken: (token) => tokens.push(token) },
+    true,
+  );
+  const script = scriptList()[0]!;
+  const retainedLoad = script.onload!;
+  const retainedError = script.onerror!;
+  const retainedReset = mounted.reset.current!;
+  await unmountRoot(mounted.root);
+  const count = tokens.length;
+  const api = fakeApi('too-late');
+  Object.defineProperty(window, 'turnstile', { configurable: true, writable: true, value: api.api });
+  await act(async () => {
+    retainedReset();
+    retainedLoad.call(script, new window.Event('load') as unknown as Event);
+    retainedError.call(script, new window.Event('error') as unknown as Event);
+    await tick();
+  });
+  expect(api.widgets.size).toBe(0);
+  expect(api.resets).toEqual([]);
+  expect(api.removals).toEqual([]);
+  expect(mounted.reset.current).toBeNull();
+  expect(tokens).toHaveLength(count);
+  expect(scriptList()).toHaveLength(0);
+});

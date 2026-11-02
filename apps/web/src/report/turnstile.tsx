@@ -66,6 +66,7 @@ function acquireScript(url: string): ScriptLease {
     entry = { url, element, promise, resolve, reject, consumers: 0, settled: false, cancelQueued: false };
     inFlight.set(url, entry);
     element.onload = () => {
+      if (inFlight.get(url) !== entry || entry!.settled) return;
       const api = (window as Window & { turnstile?: Turnstile }).turnstile;
       if (!api) {
         entry!.settled = true;
@@ -79,6 +80,7 @@ function acquireScript(url: string): ScriptLease {
       if (entry!.consumers === 0) removeEntry(entry!);
     };
     element.onerror = () => {
+      if (inFlight.get(url) !== entry || entry!.settled) return;
       entry!.settled = true;
       entry!.reject(new Error('Verification unavailable'));
       if (entry!.consumers === 0) removeEntry(entry!);
@@ -151,7 +153,8 @@ export function Verification({
     let api: Turnstile | undefined;
     let widgetId: string | undefined;
     const lease = acquireScript(config.scriptUrl);
-    const current = () => live && activeWidget.current === widget && latestConfigKey.current === configKey;
+    const current = () =>
+      live && activeWidget.current === widget && latestConfigKey.current === configKey && reset.current === resetWidget;
     const publishToken = (next: string) => {
       if (current()) callbacks.current.onToken(next);
     };
@@ -161,9 +164,9 @@ export function Verification({
       api.reset(widgetId);
     };
 
+    reset.current = resetWidget;
     callbacks.current.onStart();
     publishToken('');
-    reset.current = resetWidget;
 
     void lease.promise
       .then((loadedApi) => {
@@ -187,8 +190,10 @@ export function Verification({
       live = false;
       if (owned) {
         activeWidget.current = null;
-        if (reset.current === resetWidget) reset.current = null;
-        callbacks.current.onToken('');
+        if (reset.current === resetWidget) {
+          reset.current = null;
+          callbacks.current.onToken('');
+        }
       }
       if (api && widgetId) api.remove(widgetId);
       lease.release();

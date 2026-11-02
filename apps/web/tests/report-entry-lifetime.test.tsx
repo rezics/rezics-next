@@ -718,3 +718,290 @@ test('independent report dialogs share one script while each retains only its ow
   expect(calls[0]!.data.target).toEqual({ kind: 'thread', id: 'thread-two' });
   await settle(0, { ok: true, reportId: 'second-dialog-report' });
 });
+
+// Capture the installed handlers on mounted React elements; no controller or shared component is replaced.
+function retainedFormSubmit() {
+  const form = dialog().querySelector('form')!;
+  const key = Object.keys(form).find((candidate) => candidate.startsWith('__reactProps$'));
+  expect(key).toBeDefined();
+  const props = (form as unknown as Record<string, unknown>)[key!] as {
+    onSubmit: (event: { preventDefault(): void }) => Promise<void>;
+  };
+  return () => props.onSubmit({ preventDefault() {} });
+}
+
+async function retainedVerificationHandlers() {
+  const { Verification } = await import('../src/report/turnstile');
+  const container = dialog().querySelector('[data-slot="report-verification"] > div')!;
+  const key = Object.keys(container).find((candidate) => candidate.startsWith('__reactFiber$'));
+  expect(key).toBeDefined();
+  type Fiber = { type: unknown; return: Fiber | null; memoizedProps: unknown };
+  let fiber = (container as unknown as Record<string, unknown>)[key!] as Fiber | null;
+  while (fiber && fiber.type !== Verification) fiber = fiber.return;
+  expect(fiber?.type).toBe(Verification);
+  const props = fiber!.memoizedProps as ComponentProps<typeof Verification>;
+  return { onToken: props.onToken, onStart: props.onStart, reset: props.reset.current! };
+}
+
+test('retained installed submit, start, token and reset handlers cannot touch a reopened ceremony', async () => {
+  await openReport();
+  const api = makeTurnstile();
+  await loadLatestScript(api);
+  const oldWidget = activeWidget(api);
+  await click(radio(m.report_other()));
+  await fillDetails('Private prior ceremony');
+  await verify(oldWidget);
+  const submitOld = retainedFormSubmit();
+  const old = await retainedVerificationHandlers();
+  await click(button(m.report_cancel(), dialog()));
+  await openReport();
+  const freshWidget = activeWidget(api);
+  expect(freshWidget.id).not.toBe(oldWidget.id);
+  expect(detailField().value).toBe('');
+  expect(api.removals).toContain(oldWidget.id);
+  await click(radio(m.report_spam()));
+  await verify(freshWidget);
+  const focused = window.document.activeElement;
+
+  await act(async () => {
+    old.onStart();
+    old.onToken('retained-token');
+    old.reset();
+    await submitOld();
+    await tick();
+  });
+  expect(calls).toHaveLength(0);
+  expect(api.resets).toEqual([]);
+  expect(window.document.activeElement).toBe(focused);
+  expect(window.document.querySelector('[role="alert"]')).toBeNull();
+  expect(statusLink()).toBeNull();
+  expect(button(m.report_submit(), dialog()).hasAttribute('disabled')).toBe(false);
+  await click(button(m.report_submit(), dialog()));
+  expect(calls).toHaveLength(1);
+  expect(calls[0]!.data.botToken).not.toBe('retained-token');
+  expect(calls[0]!.data.evidence).toBeUndefined();
+  await settle(0, { ok: true, reportId: 'reopened-current' });
+});
+
+test('equal fresh target/config allocation preserves the draft and token while expiry with equal token bytes retires old submission', async () => {
+  await openReport();
+  const api = makeTurnstile();
+  await loadLatestScript(api);
+  const widget = activeWidget(api);
+  await click(radio(m.report_other()));
+  await fillDetails('Retain through equivalent renders');
+  await act(async () => widget.options.callback('equal-token-bytes'));
+  const submitOldToken = retainedFormSubmit();
+  const before = await retainedVerificationHandlers();
+
+  await paint({ target: { ...props.target }, verification: { ...props.verification } });
+  expect(activeWidget(api)).toBe(widget);
+  expect(detailField().value).toBe('Retain through equivalent renders');
+  expect(button(m.report_submit(), dialog()).hasAttribute('disabled')).toBe(false);
+  expect((await retainedVerificationHandlers()).reset).toBe(before.reset);
+  expect(api.removals).toEqual([]);
+
+  await act(async () => {
+    widget.options['expired-callback']();
+    await tick();
+    widget.options.callback('equal-token-bytes');
+    await tick();
+    await submitOldToken();
+  });
+  expect(calls).toHaveLength(0);
+  expect(api.resets).toEqual([]);
+  expect(button(m.report_submit(), dialog()).hasAttribute('disabled')).toBe(false);
+  await click(button(m.report_submit(), dialog()));
+  expect(calls).toHaveLength(1);
+  expect(calls[0]!.data).toMatchObject({ evidence: 'Retain through equivalent renders', botToken: 'equal-token-bytes' });
+  await settle(0, { ok: true, reportId: 'equal-allocation-report' });
+});
+
+for (const event of ['equal-success', 'account-away-back', 'remove', 'clear'] as const) {
+  test(`${event} synchronously fences an installed submit before React processes the cache notification`, async () => {
+    await openReport();
+    const api = makeTurnstile();
+    await loadLatestScript(api);
+    await click(radio(m.report_spam()));
+    await verify();
+    const retained = retainedFormSubmit();
+    const handlers = await retainedVerificationHandlers();
+    const timestamp = client.getQueryState(sessionQuery.queryKey)!.dataUpdatedAt;
+    const same = client.getQueryData(sessionQuery.queryKey);
+    await act(async () => {
+      if (event === 'equal-success') client.setQueryData(sessionQuery.queryKey, same, { updatedAt: timestamp });
+      if (event === 'account-away-back') {
+        client.setQueryData(sessionQuery.queryKey, visitor('reader-two', 'csrf-two'));
+        client.setQueryData(sessionQuery.queryKey, same, { updatedAt: timestamp });
+      }
+      if (event === 'remove') client.removeQueries({ queryKey: sessionQuery.queryKey, exact: true });
+      if (event === 'clear') client.clear();
+      handlers.onStart();
+      handlers.onToken('late-token-before-render');
+      await retained();
+      await tick();
+    });
+    expect(calls).toHaveLength(0);
+    expect(statusLink()).toBeNull();
+    expect(window.document.querySelector('[data-slot="dialog-content"]')).toBeNull();
+    await act(async () => client.setQueryData(sessionQuery.queryKey, visitor()));
+    await openReport();
+    await click(radio(m.report_spam()));
+    await verify();
+    await click(button(m.report_submit(), dialog()));
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.headers.get('x-csrf-token')).toBe('csrf-one');
+    expect(calls[0]!.data.botToken).not.toBe('late-token-before-render');
+    await settle(0, { ok: true, reportId: `fresh-synchronous-${event}` });
+  });
+}
+
+for (const state of ['unknown', 'unavailable', 'signed-out'] as const) {
+  test(`${state} retires private success and old handlers before a later signed-in session can be used`, async () => {
+    await openReport();
+    const api = makeTurnstile();
+    await loadLatestScript(api);
+    await click(radio(m.report_spam()));
+    await verify();
+    const retained = retainedFormSubmit();
+    await click(button(m.report_submit(), dialog()));
+    await settle(0, { ok: true, reportId: 'prior-private-report' });
+    expect(statusLink()).not.toBeNull();
+    await act(async () => client.setQueryData(sessionQuery.queryKey, { state, subject: null, csrfToken: null }));
+    expect(statusLink()).toBeNull();
+    await act(async () => {
+      client.setQueryData(sessionQuery.queryKey, visitor('reader-two', 'csrf-two'));
+      await retained();
+    });
+    expect(calls).toHaveLength(1);
+    await openReport();
+    expect(detailField().value).toBe('');
+    await click(radio(m.report_spam()));
+    await verify();
+    await click(button(m.report_submit(), dialog()));
+    expect(calls).toHaveLength(2);
+    expect(calls[1]!.headers.get('x-csrf-token')).toBe('csrf-two');
+    await settle(1, { ok: true, reportId: `current-after-${state}` });
+  });
+}
+
+for (const [result, message] of [
+  [{ ok: false, reason: 'closed' }, () => m.platform_closed_message()],
+  [{ ok: false, reason: 'invalid' }, () => m.report_invalid()],
+  [{ ok: false, reason: 'rate-limited', retryAfter: 3 }, () => m.report_rate_limited({ seconds: 3 })],
+  [{ ok: false, reason: 'unavailable' }, () => m.report_unavailable()],
+  [new Error('UNTRUSTED TRANSPORT TEXT'), () => m.report_unavailable()],
+] satisfies [ReportResult | Error, () => string][]) {
+  test(`the installed form preserves the original command key after ${result instanceof Error ? 'a lost response' : result.ok ? 'success' : result.reason}`, async () => {
+    await openReport();
+    const api = makeTurnstile();
+    await loadLatestScript(api);
+    const widget = activeWidget(api);
+    await click(radio(m.report_illegal()));
+    await verify(widget);
+    expect(button(m.report_submit(), dialog()).hasAttribute('disabled')).toBe(true);
+    await fillDetails('   ');
+    expect(button(m.report_submit(), dialog()).hasAttribute('disabled')).toBe(true);
+    await fillDetails('x'.repeat(4096));
+    expect(button(m.report_submit(), dialog()).hasAttribute('disabled')).toBe(false);
+    await click(button(m.report_submit(), dialog()));
+    const original = calls[0]!;
+    await settle(0, result);
+    expect(window.document.querySelector('[role="alert"]')?.textContent).toBe(message());
+    expect(dialog().textContent).not.toContain('UNTRUSTED');
+    expect(detailField().value).toBe('x'.repeat(4096));
+    expect(radio(m.report_illegal()).getAttribute('aria-checked')).toBe('true');
+    expect(button(m.report_submit(), dialog()).hasAttribute('disabled')).toBe(true);
+    await paint({ target: { ...props.target }, verification: { ...props.verification } });
+    await verify(widget);
+    await click(button(m.report_submit(), dialog()));
+    expect(calls).toHaveLength(2);
+    expect(calls[1]!.data).toEqual({ ...original.data, botToken: calls[1]!.data.botToken });
+    expect(calls[1]!.data.botToken).not.toBe(original.data.botToken);
+    expect(calls[1]!.headers.get('x-csrf-token')).toBe('csrf-one');
+    expect(api.resets).toEqual([widget.id]);
+    expect(api.widgets.size).toBe(1);
+    await settle(1, { ok: true, reportId: 'retried-original-command' });
+  });
+}
+
+for (const outcome of ['success', 'refusal', 'rejection'] as const) {
+  test(`an old ${outcome} cannot unlock, reset, close or focus a fresh pending report`, async () => {
+    await openReport();
+    const api = makeTurnstile();
+    await loadLatestScript(api);
+    const old = await retainedVerificationHandlers();
+    await click(radio(m.report_spam()));
+    await verify();
+    await click(button(m.report_submit(), dialog()));
+    await paint({ target: { kind: 'subject', id: 'fresh-subject' }, revisionId: 'fresh-revision' });
+    await openReport();
+    await click(radio(m.report_other()));
+    await fillDetails('Fresh pending draft');
+    await verify();
+    await click(button(m.report_submit(), dialog()));
+    const focus = window.document.activeElement;
+    expect(calls).toHaveLength(2);
+    expect(calls[1]!.data.target).toEqual({ kind: 'subject', id: 'fresh-subject' });
+    expect(calls[1]!.data.revisionId).toBe('fresh-revision');
+    expect(calls[1]!.data.idempotencyKey).not.toBe(calls[0]!.data.idempotencyKey);
+    old.onStart();
+    old.onToken('retained-before-old-settlement');
+    old.reset();
+    await settle(0, outcome === 'success'
+      ? { ok: true, reportId: 'stale-report' }
+      : outcome === 'refusal'
+        ? { ok: false, reason: 'forbidden' }
+        : new Error('UNTRUSTED OLD REJECTION'));
+    expect(button(m.report_submit(), dialog()).hasAttribute('disabled')).toBe(true);
+    expect(detailField().value).toBe('Fresh pending draft');
+    expect(window.document.activeElement).toBe(focus);
+    expect(window.document.querySelector('[role="alert"]')).toBeNull();
+    expect(api.resets).toEqual([]);
+    expect(statusLink()).toBeNull();
+    expect(calls).toHaveLength(2);
+    await settle(1, { ok: true, reportId: 'fresh-pending-report' });
+    expect(statusLink()?.getAttribute('href')).toContain('/moderation/reports/fresh-pending-report');
+  });
+}
+
+test('a held script and actual retained start/token/reset callbacks cannot survive target replacement or unmount', async () => {
+  await openReport();
+  const script = window.document.querySelector<HTMLScriptElement>('script[src]')!;
+  const retainedLoad = script.onload!;
+  const old = await retainedVerificationHandlers();
+  await paint({ target: { kind: 'thread', id: 'replacement-before-load' } });
+  await openReport();
+  const currentScript = window.document.querySelector<HTMLScriptElement>('script[src]')!;
+  expect(currentScript).not.toBe(script);
+  const api = makeTurnstile();
+  Object.defineProperty(window, 'turnstile', { configurable: true, writable: true, value: api.api });
+  await act(async () => {
+    retainedLoad.call(script, new window.Event('load') as unknown as Event);
+    old.onStart();
+    old.onToken('old-loading-token');
+    old.reset();
+    await tick();
+  });
+  expect(api.widgets.size).toBe(0);
+  expect(calls).toHaveLength(0);
+  await loadLatestScript(api);
+  expect(api.widgets.size).toBe(1);
+  await click(radio(m.report_spam()));
+  await verify();
+  const retainedSubmit = retainedFormSubmit();
+  const current = await retainedVerificationHandlers();
+  await unmount();
+  const removals = [...api.removals];
+  await act(async () => {
+    current.onStart();
+    current.onToken('after-unmount');
+    current.reset();
+    await retainedSubmit();
+    await tick();
+  });
+  expect(api.removals).toEqual(removals);
+  expect(api.widgets.size).toBe(0);
+  expect(api.resets).toEqual([]);
+  expect(calls).toHaveLength(0);
+});

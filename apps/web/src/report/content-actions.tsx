@@ -201,9 +201,12 @@ function ReportActionsVisit({
   verification: VerificationConfig;
 }) {
   const [reportOpen, setReportOpen] = useState(false);
+  // A new open also retires retained shared form handlers from the previous ceremony.
+  const [ceremony, setCeremony] = useState(0);
   const reportOpenRef = useRef(false);
   const openIncarnation = useRef(0);
-  const [token, setToken] = useState('');
+  // Equal token bytes from a later vendor callback do not re-admit an older submit closure.
+  const [token, setToken] = useState({ value: '', revision: 0 });
   const tokenRef = useRef('');
   const tokenRevision = useRef(0);
   const idempotencyKey = useRef('');
@@ -245,7 +248,7 @@ function ReportActionsVisit({
       if (!currentOpen(renderIncarnation)) return;
       tokenRevision.current += 1;
       tokenRef.current = next;
-      setToken(next);
+      setToken({ value: next, revision: tokenRevision.current });
     },
     [currentOpen, renderIncarnation],
   );
@@ -257,7 +260,7 @@ function ReportActionsVisit({
 
   const changeReportOpen = useCallback(
     (next: boolean) => {
-      if (!currentOwner()) return;
+      if (!currentOwner() || renderIncarnation !== openIncarnation.current) return;
       if (next) {
         if (reportOpenRef.current) return;
         reportOpenRef.current = true;
@@ -266,7 +269,8 @@ function ReportActionsVisit({
         tokenRef.current = '';
         idempotencyKey.current = crypto.randomUUID();
         reset.current = null;
-        setToken('');
+        setToken({ value: '', revision: tokenRevision.current });
+        setCeremony(openIncarnation.current);
         setReportId(null);
         setReportOpen(true);
         return;
@@ -279,7 +283,7 @@ function ReportActionsVisit({
       tokenRef.current = '';
       idempotencyKey.current = '';
       reset.current = null;
-      setToken('');
+      setToken({ value: '', revision: tokenRevision.current });
       setReportOpen(false);
     },
     [currentOwner, renderIncarnation],
@@ -288,8 +292,8 @@ function ReportActionsVisit({
   const report = useCallback(
     async ({ reason, details }: ReportSubmission) => {
       const incarnation = renderIncarnation;
-      const submittedToken = token;
-      const submittedTokenRevision = tokenRevision.current;
+      const submittedToken = token.value;
+      const submittedTokenRevision = token.revision;
       const submittedKey = idempotencyKey.current;
       const submittedReset = reset.current;
       const admittedTarget = { kind: ownerTarget.kind, id: ownerTarget.id };
@@ -356,6 +360,7 @@ function ReportActionsVisit({
   return (
     <>
       <ContentActions
+        key={ceremony}
         ownsContent={false}
         onCopyLink={copyLink}
         onReport={report}
@@ -364,7 +369,7 @@ function ReportActionsVisit({
         labels={{ moreActions: m.report_more(), copyLink: m.report_copy(), report: m.report_action() }}
         reportLabels={labels()}
         maxDetails={4096}
-        verified={canReport && Boolean(token)}
+        verified={canReport && Boolean(token.value)}
         verification={
           <Verification config={verification} locale={getLocale()} onToken={updateToken} reset={reset} onStart={startChallenge} />
         }
