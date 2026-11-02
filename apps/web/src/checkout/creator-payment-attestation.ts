@@ -80,10 +80,11 @@ export async function submitPaymentAttestation(
     const authorization = viewerCredential(request);
     // A delayed old form must not execute with a different signed-in person's credential.
     if (!authorization || sessionSubject(request) !== input.subject) return { kind: 'denied' };
+    const headers = { authorization, 'idempotency-key': input.idempotencyKey };
     const result = await client.payoutStatements({ statementId: input.statementId }).$markPaid.post(
       { paidReference: input.paidReference },
       {
-        headers: { authorization, 'idempotency-key': input.idempotencyKey },
+        headers,
         fetch: { cache: 'no-store', redirect: 'manual' },
       },
     );
