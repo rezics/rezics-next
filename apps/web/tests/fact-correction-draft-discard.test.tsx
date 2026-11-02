@@ -9,37 +9,19 @@ test('Generic and Manga discard retains cancelled assertions and siblings, relea
   const require = createRequire(import.meta.url);
   const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
   const window = new Window({ url: 'https://site.invalid/en' });
-  const keys = [
-    'window',
-    'document',
-    'navigator',
-    'HTMLElement',
-    'HTMLInputElement',
-    'HTMLSelectElement',
-    'Element',
-    'Node',
-    'DocumentFragment',
-    'MutationObserver',
-    'ResizeObserver',
-    'getComputedStyle',
-    'requestAnimationFrame',
-    'cancelAnimationFrame',
-    'IS_REACT_ACT_ENVIRONMENT',
-  ];
+  const keys =
+    'window document navigator HTMLElement HTMLInputElement HTMLSelectElement Element Node DocumentFragment MutationObserver ResizeObserver getComputedStyle requestAnimationFrame cancelAnimationFrame IS_REACT_ACT_ENVIRONMENT'.split(
+      ' ',
+    );
   const saved = new Map(keys.map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-  for (const key of keys)
+  for (const key of keys) {
+    const value = key === 'IS_REACT_ACT_ENVIRONMENT' ? true : window[key];
     Object.defineProperty(globalThis, key, {
       configurable: true,
       writable: true,
-      value:
-        key === 'window'
-          ? window
-          : key === 'IS_REACT_ACT_ENVIRONMENT'
-            ? true
-            : ['getComputedStyle', 'requestAnimationFrame', 'cancelAnimationFrame'].includes(key)
-              ? window[key].bind(window)
-              : window[key],
+      value: typeof value === 'function' && key[0] === key[0]!.toLowerCase() ? value.bind(window) : value,
     });
+  }
   const { createRoot } = await import('react-dom/client');
   const { SubjectFacts, FactField } = await import('../src/features/catalogue/subject-facts-view');
   const { MangaCorrections } = await import('../src/features/catalogue/manga-profile-corrections');
@@ -50,16 +32,23 @@ test('Generic and Manga discard retains cancelled assertions and siblings, relea
   const host = window.document.createElement('main') as HTMLElement;
   window.document.body.append(host);
   const root = createRoot(host);
-  const render = async (node: ReactNode) => {
-    await act(async () => root.render(node));
-  };
-  const click = async (node: HTMLElement) => {
-    await act(async () => node.click());
-  };
+  const render = (node: ReactNode) => act(async () => root.render(node));
+  const click = (node: HTMLElement) => act(async () => node.click());
   const button = (scope: ParentNode, text: string) =>
     [...scope.querySelectorAll<HTMLButtonElement>('button')].find(
       (node) => !node.hidden && node.textContent?.trim() === text,
     )!;
+  const choose = (select: HTMLSelectElement, value: string) =>
+    act(async () => {
+      select.value = value;
+      select.dispatchEvent(new window.Event('change', { bubbles: true }));
+    });
+  const enter = (row: HTMLElement, value: string) =>
+    act(async () => {
+      const input = row.querySelector<HTMLInputElement>('input')!;
+      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+      input.dispatchEvent(new window.Event('input', { bubbles: true }));
+    });
   const field = (property: string) =>
     [...host.querySelectorAll<HTMLElement>('section[aria-label]')].find(
       (node) => node.getAttribute('aria-label') === property,
@@ -109,17 +98,9 @@ test('Generic and Manga discard retains cancelled assertions and siblings, relea
         : h(SubjectFacts, { initial: read, locale: 'en', transport: facts, review });
       await render(h('div', { key: String(manga) }, node));
       const row = field(property);
-      const chooser = row.querySelector('select')!;
-      await act(async () => {
-        chooser.value = source.id;
-        chooser.dispatchEvent(new window.Event('change', { bubbles: true }));
-      });
+      await choose(row.querySelector('select')!, source.id);
       await click(button(row, 'Edit this field'));
-      const input = row.querySelector<HTMLInputElement>('input')!;
-      await act(async () => {
-        Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, '+240');
-        input.dispatchEvent(new window.Event('input', { bubbles: true }));
-      });
+      await enter(row, '+240');
       for (const id of properties.slice(1, manga ? 2 : 12)) await click(button(field(id), 'Edit this field'));
       const sibling = values(field(properties[1]!));
       const entered = values(row);
@@ -132,12 +113,9 @@ test('Generic and Manga discard retains cancelled assertions and siblings, relea
       expect(window.document.activeElement).toBe(button(row, action));
       await click(button(row, action));
       await act(async () =>
-        row
-          .querySelector('[role="group"][aria-label^="Confirm"]')
-          ?.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
+        button(row, 'Cancel').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
       );
-      // Cancel and Escape leave all copied qualifier and citation controls intact.
-      if (button(row, 'Cancel')) await click(button(row, 'Cancel'));
+      expect(button(row, 'Cancel')).toBeUndefined();
       expect(values(row)).toEqual(entered);
       await click(button(row, action));
       await click(button(row, action));
@@ -146,18 +124,10 @@ test('Generic and Manga discard retains cancelled assertions and siblings, relea
       expect(values(field(properties[1]!))).toEqual(sibling);
       expect(requests).toBe(0);
       if (!manga) expect(button(field(properties[12]!), 'Edit this field').disabled).toBe(false);
-      const nextChooser = row.querySelector('select')!;
-      await act(async () => {
-        nextChooser.value = second.id;
-        nextChooser.dispatchEvent(new window.Event('change', { bubbles: true }));
-      });
+      await choose(row.querySelector('select')!, second.id);
       await click(button(row, 'Edit this field'));
       expect(row.textContent).toContain('Selected value 2');
-      const nextInput = row.querySelector<HTMLInputElement>('input')!;
-      await act(async () => {
-        Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(nextInput, '+241');
-        nextInput.dispatchEvent(new window.Event('input', { bubbles: true }));
-      });
+      await enter(row, '+241');
       await click(button(row, action));
       await act(async () =>
         host.querySelector('form')!.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })),
@@ -172,24 +142,21 @@ test('Generic and Manga discard retains cancelled assertions and siblings, relea
     const property = 'schema:isbn';
     const draft = stageFact(read, property, read.public.subject.statements[property]![0]!.id)!;
     let removed = 0;
-    const show = (draft: FactDraft, busy = false) =>
-      render(
-        h(FactField, {
-          property,
-          read,
-          locale: 'en',
-          draft,
-          busy,
-          canStage: true,
-          href: '/',
-          onStage: () => {},
-          onChange: () => {},
-          onReview: () => {},
-          onDiscard: () => {
-            removed++;
-          },
-        }),
-      );
+    const noop = () => {};
+    const common = {
+      property,
+      read,
+      locale: 'en',
+      canStage: true,
+      href: '/',
+      onStage: noop,
+      onChange: noop,
+      onReview: noop,
+      onDiscard: () => {
+        removed++;
+      },
+    };
+    const show = (draft: FactDraft, busy = false) => render(h(FactField, { ...common, draft, busy }));
     await show(draft);
     const action = `Remove draft for ${read.release.properties[property]!.labels.en}`;
     await click(button(host, action));

@@ -204,7 +204,7 @@ function FactField({
     if (confirming && !busy) cancel.current?.focus();
   }, [confirming, busy]);
   function cancelDiscard() {
-    setPending(null);
+    flushSync(() => setPending(null));
     discardTrigger.current?.focus();
   }
   function discard() {
