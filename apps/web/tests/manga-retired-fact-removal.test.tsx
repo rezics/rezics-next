@@ -15,7 +15,11 @@ test('retired Manga snapshots preserve the assertion and omit cached target labe
       references: [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: url } }] }],
       rank: 'normal',
     },
-    targets: { 'schema:author': [{ id: '00000000-0000-4000-8000-00000000a001', title: 'Cached target label', types: ['schema:Person'] }] },
+    targets: {
+      'schema:author': [
+        { id: '00000000-0000-4000-8000-00000000a001', title: 'Cached target label', types: ['schema:Person'] },
+      ],
+    },
   };
   try {
     const snapshot = mangaRetiredAssertionSnapshot(row);
