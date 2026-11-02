@@ -86,7 +86,7 @@ test('native alias lines remain undetermined alternate names with source citatio
   const native = input('', '港の物語', 'Harbor Watch\nSentinel Watch');
   const bootstrap = convertVndb(native);
   const resolved = convertVndb(native, { subjectId });
-  expect(bootstrap.normalizedRecord.vn.aliases).toEqual(['Harbor Watch', 'Sentinel Watch']);
+  expect(bootstrap.normalizedRecord.vn.alias).toBe('Harbor Watch\nSentinel Watch');
   expect(bootstrap.proposals[0]).toMatchObject({ op: 'create', subject: { labels: { ja: '港の物語' }, aliases: { und: ['Harbor Watch', 'Sentinel Watch'] } } });
   const alternate = resolved.proposals.find((command) => command.op === 'propose' && command.statement.property.id === 'schema:alternateName');
   expect(alternate).toMatchObject({

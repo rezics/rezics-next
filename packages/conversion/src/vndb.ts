@@ -31,7 +31,7 @@ export const vndbLimits = Object.freeze({
 
 type Title = { id: string; lang: string; official: boolean; title: string; latin: string | null };
 type NormalizedRecord = {
-  vn: { id: string; olang?: string; c_votecount?: number; c_average?: number | null; aliases?: string[] };
+  vn: { id: string; olang?: string; c_votecount?: number; c_average?: number | null; alias?: string };
   entry_meta: { id: string; revision: number; lastmod?: string };
   vn_titles: Title[];
   vn_extlinks: { id: string; link: number }[];
@@ -180,7 +180,7 @@ function project(input: ConversionInput): NormalizedRecord {
   const projectedVn: NormalizedRecord['vn'] = { id };
   if (olangValue !== undefined) projectedVn.olang = text(olangValue, '/vn/olang');
   const nativeAliases = aliasLines(field(vn, 'alias', '/vn/alias'), '/vn/alias');
-  if (nativeAliases.length) projectedVn.aliases = nativeAliases;
+  if (nativeAliases.length) projectedVn.alias = nativeAliases.join('\n');
   const voteCount = field(vn, 'c_votecount', '/vn/c_votecount');
   const average = field(vn, 'c_average', '/vn/c_average');
   if ((voteCount === undefined) !== (average === undefined))
@@ -338,15 +338,16 @@ export function convertVndb(
     for (const title of uniqueTitles.values()) {
       if (labels[title.language] !== title.text) (aliases[title.language] ??= []).push(title.text);
     }
-    if (normalizedRecord.vn.aliases?.length) {
+    const nativeAliases = aliasLines(normalizedRecord.vn.alias, '/vn/alias');
+    if (nativeAliases.length) {
       const undetermined = new Set(aliases.und ?? []);
-      for (const alias of normalizedRecord.vn.aliases) undetermined.add(alias);
+      for (const alias of nativeAliases) undetermined.add(alias);
       aliases.und = Array.from(undetermined);
     }
     const statements = [
       statement('wdt:P3180', id),
       ...Array.from(uniqueTitles.values(), (title) => statement('schema:name', title)),
-      ...(normalizedRecord.vn.aliases ?? []).map((alias) =>
+      ...nativeAliases.map((alias) =>
         statement('schema:alternateName', { language: 'und', text: alias }),
       ),
     ];
