@@ -16,6 +16,7 @@ import { devVerificationState } from './dev-verifier.ts';
 import { retryWait } from './watchdog.ts';
 import { authenticatedCallingManager } from './integration-cli.ts';
 import { authenticatedManager } from './priority-authority.ts';
+import { submitOwnerDecision } from './owner-decisions.ts';
 import { listOpenToolIncidents, toolIncidentForRetry } from './tool-incidents.ts';
 import { parseWorkerCommandArguments, type ParsedWorkerCommandArguments } from './command-arguments.ts';
 
@@ -328,11 +329,13 @@ export async function runWorkerCommand(
       else if (parsedArguments.command === 'cancel') await tasks.cancel(parsedArguments.taskId);
       else await job.consultTask(parsedArguments.taskId);
     } else if (parsedArguments.command === 'event') {
-      store.event(
-        { taskId: parsedArguments.taskId, attempt: parsedArguments.attempt },
-        parsedArguments.kind,
-        parsedArguments.body,
-      );
+      const { taskId, attempt, kind, body } = parsedArguments;
+      if (kind === 'owner-contract-decision') submitOwnerDecision(store, { taskId, attempt }, body, env);
+      else {
+        if (kind === 'owner-contract-decision-accepted' || kind === 'owner-contract-decision-delivery')
+          throw new Error('owner decision acceptance and delivery events are controller-owned');
+        store.event({ taskId, attempt }, kind, body);
+      }
     } else if (parsedArguments.command === 'import-attempt') {
       if (parsedArguments.captureDirectory) {
         const { path } = parsedArguments;

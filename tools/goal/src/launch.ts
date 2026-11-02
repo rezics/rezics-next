@@ -44,6 +44,7 @@ import { devProductBrief } from './briefs.ts';
 import { workerTestCommands } from './affected-tests.ts';
 import { branchHead } from './attempt-progress.ts';
 import { CONTINUATION_DIRECTORY, continuesItself } from './continuation.ts';
+import { prepareOwnerDecisionPrompt } from './owner-decisions.ts';
 
 export type LaunchOptions = {
   profile: Profile;
@@ -741,6 +742,7 @@ export async function launch(
   const resuming = Boolean(resumeSession);
   // The branch head at this prompt; the first prompt's head tells whether the attempt made a new commit.
   const startHead = branchHead(task);
+  const ownerDecisionPrompt = prepareOwnerDecisionPrompt(store, task, attempt, prompt);
   const logStartOffset = resuming ? (statSync(attempt.logPath, { throwIfNoEntry: false })?.size ?? 0) : 0;
   const out = openSync(attempt.logPath, resumeSession ? 'a' : 'w'),
     err = openSync(`${attempt.logPath}.err`, 'w');
@@ -748,7 +750,7 @@ export async function launch(
     profile: attempt.profile,
     pool,
     worktree: task.worktree,
-    prompt,
+    prompt: ownerDecisionPrompt.prompt,
     mcpServers: storybookServers(task.worktree, task.brief),
     ...(resumeSession ? { resumeSession } : {}),
     logPath: attempt.logPath,
@@ -809,6 +811,7 @@ export async function launch(
       store.updateTask(attempt, (current) => {
         current.state = 'running';
       });
+      if (ownerDecisionPrompt.delivery) store.recordOwnerDecisionDelivery(attempt, ownerDecisionPrompt.delivery);
     });
   } catch (error) {
     if (unrecordedFixtureWorker) {

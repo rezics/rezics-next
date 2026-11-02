@@ -40,6 +40,7 @@ export const SWEEP_FREE_COMMANDS = new Set([
   'backlog',
   'publication',
   'amend',
+  'event',
   ...READ_ONLY_WORKER_COMMANDS,
 ]);
 

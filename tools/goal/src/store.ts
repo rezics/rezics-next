@@ -138,6 +138,14 @@ function attemptPageOptions(taskId: string, options: AttemptPageOptions): Requir
   return { afterAttempt, limit: options.limit };
 }
 
+export type WorkerEvent = {
+  sequence: number;
+  task_id: string;
+  attempt: number;
+  kind: string;
+  at: string;
+  body: string;
+};
 export class WorkerStore implements AttemptFence {
   readonly checkResults: CheckResults;
   private readVersion = -1;
@@ -1655,10 +1663,22 @@ export class WorkerStore implements AttemptFence {
         });
     });
   }
+  ownerDecisionEvents(ref: AttemptRef): WorkerEvent[] {
+    return this.db
+      .query(
+        `SELECT sequence, task_id, attempt, kind, at, body FROM worker_events
+         WHERE task_id=? AND attempt=? AND kind IN ('owner-contract-decision-accepted', 'owner-contract-decision-delivery')
+         ORDER BY sequence`,
+      )
+      .all(ref.taskId, ref.attempt) as WorkerEvent[];
+  }
+  recordOwnerDecisionDelivery(ref: AttemptRef, receipt: unknown): void {
+    this.event(ref, 'owner-contract-decision-delivery', receipt);
+  }
   events(
     taskId?: string,
     attempt?: number,
-  ): { sequence: number; task_id: string; attempt: number; kind: string; at: string; body: string }[] {
+  ): WorkerEvent[] {
     return (
       taskId && attempt !== undefined
         ? this.db

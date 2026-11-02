@@ -1169,6 +1169,33 @@ migration where those values were already present, but their missing arrival tim
 filters and age thresholds cannot classify a row whose creation time is unknown, and missing Goal/document metadata
 stays unknown rather than being inferred from summary text, read time or row id.
 
+#### Owner decisions at worker prompt boundaries
+
+From the owning manager's live persisted provider session, submit:
+
+```sh
+bun tools/goal/src/cli.ts event <task> <current-attempt> owner-contract-decision \
+  '{"decisionId":"composition-rule","summary":"Use the clarified composition rule.","documentRefs":[{"path":"docs/composition.md","change":"Clarified contributor ownership."}]}'
+```
+
+The JSON schema requires a nonempty `decisionId` (at most 128 characters) and `summary` (within the manager message
+limit); `documentRefs` is optional, with repository-relative `path` and optional `change` per reference. No other
+top-level fields are accepted. The command authenticates the persisted manager session using `CODEX_THREAD_ID` or
+`CLAUDE_CODE_SESSION_ID`; `GOAL_MANAGER` alone grants no authority. Owner and current attempt are checked in the same
+transaction as persistence. Authentication, task identity and decision time come from the controller, never the body.
+Decision: accepted decisions use a reserved controller event; old unverified events remain pending until the owner resubmits through this command.
+
+The controller reads `owner-contract-decision-accepted` events for the task's current attempt when it builds a normal worker
+prompt. It carries the newest authenticated decision from the task's manager and its repository-relative document
+references into that same worker session. A successful launch records `owner-contract-decision-delivery`; a referenced
+document unavailable in the worker worktree remains pending and is named in the prompt. Replayed decision identities
+and decisions from earlier attempts cannot supersede a later current-attempt decision. Recording a decision does not
+start or replace an attempt; delivery waits for the next normal prompt boundary.
+The event command does not sweep or resume workers. Acceptance and delivery events cannot be submitted directly.
+The decision shares the existing 20,000-character total prompt limit and process input byte limit with the ordinary
+prompt. References that do not fit remain pending; if the summary itself cannot fit, launch refuses the oversized
+prompt without recording delivery. Only a successful launch records delivery against the accepted event sequence.
+
 #### Native Storybook publication
 
 `goal publication` is the single supported native ingress for the ordinary hourly Storybook publication. It is available
