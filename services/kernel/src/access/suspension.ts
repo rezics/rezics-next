@@ -28,6 +28,17 @@ export type SuspensionValue = {
   continuationOperationKey?: string;
 };
 
+export const suspensionDeclaration = Object.freeze({ action: 'account:suspend', operationId: 'account.suspend' } as const);
+
+/** The private reader shares the complete native digest, including a supplied continuation binding. */
+export function suspensionRequestDigest(actor: Extract<Actor, { kind: 'account' }>, input: SuspensionInput): Buffer {
+  const basis = { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy };
+  return createHash('sha256').update(canonicalize([
+    routeOf(input.accountId), input.accountId, basis, input.reason ?? null,
+    continuationCommandBinding(input.continuation),
+  ])!).digest();
+}
+
 /** Active accounts only. A lifecycle coordination row, including an operator
  * responsibility, does not block this safety transition.
  * Authorization uses the Global Context, then releases it before target checkout.
@@ -61,21 +72,11 @@ export function createSuspensionCommands(config: { pool: Pool; access: Access; c
       if (input.continuation) validateContinuationBinding(input.continuation);
       const partition = partitionOf(route);
       const basis = { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy };
-      const digest = createHash('sha256')
-        .update(
-          canonicalize([
-            route,
-            input.accountId,
-            basis,
-            input.reason ?? null,
-            continuationCommandBinding(input.continuation),
-          ])!,
-        )
-        .digest();
+      const digest = suspensionRequestDigest(actor, input);
       const authorization = resourceAuthorization({
         access: config.access,
         actor,
-        action: 'account:suspend',
+        action: suspensionDeclaration.action,
         anchor: {
           resource: PLATFORM_RESOURCE,
           async validate(client) {

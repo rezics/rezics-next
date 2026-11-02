@@ -5,12 +5,13 @@ permission. The page uses the existing signed-in session and shared Origin/CSRF 
 private, no-store. No bearer, reason or command intent is put in a URL or browser storage. No account scan, handle
 lookup, scope change, Auth writer or grant page is added.
 
-The production-configured kernel client reads the exact existing account management endpoint and native
-`POST /v1/viewerActions` for that target. Identity and role data never confer permission. Only an exact
-`account:suspend` / `account.suspend` or `account:reinstate` / `account.reinstate` advertisement enables confirmation.
-The command uses the generated `$suspend.post` or `$reinstate.post` binding, which sends the actual native colon
-method, an optional exact reason and the original idempotency header. Native current authorization remains decisive
-before receipt replay. Development fixtures never stand in for this capability.
+The production-configured generated client calls the real private
+`POST /v1/accounts/{accountId}/lifecycleReview` (`account.lifecycleReview`) with an empty body for selection.
+Only its exact `account:suspend` / `account.suspend` or `account:reinstate` / `account.reinstate` pair enables
+confirmation. The adapter exposes native current state/floor/fence separately from original outcome. Management
+and generic viewerActions never authorize lifecycle controls. Healthy authenticated BFF reads retain their existing
+null-CSRF support; the native read is a private bearer request. The deliberate write still uses the generated
+`$suspend.post` or `$reinstate.post` colon method, exact reason, credential and original idempotency header.
 
 The target and confirmation lead with the current display name and handle, or a localized name-unavailable label.
 The exact account ID is selectable in optional account details beside the identity. Review captures a display-only
@@ -25,27 +26,33 @@ is reported only as recorded; it never proves current state, Auth cleanup or ope
 stay locked after recorded or uncertain responses. Native explicit `not_applied` responses are distinguished from
 unknown outcomes. The page performs no automatic effect retry or polling loop.
 
-## Required Accounts ports
+## Native readback and remaining proof limits
 
-These are requests to the existing native owners, not guessed endpoints or new authority:
+Before a deliberate command, the data adapter calls the same private port with the immutable original
+`{operationId,key,reason?}` in its body and exact original credential. Native current exact-action authorization
+precedes receipt access. An already recorded original is returned without executing another command, even when the
+current target state makes that action inapplicable. Otherwise only the exact current applicable advertisement
+permits that deliberate request. After the one native command, one bounded readback resolves a lost native response;
+there is no effect retry or polling. A received command result remains recorded if the current read fails. Keys and
+reasons never appear in URLs, browser persistence, response echoes or logging added by this adapter.
 
-- Extend current private account management reading, or publish an explicitly authorized exact-ID private lifecycle
-  read, for a governance-authorized target including suspended targets. Return current state, monotonic floor/fence
-  observation and native pending effect status. Keep suspension reasons absent. Current
-  `GET /v1/accounts/{accountId}/management` only admits active, unfenced self/organization/operator-related targets;
-  it returns identity and relationships, not lifecycle state. Its 404 must not be interpreted as suspended or deleted.
-- Advertise the existing exact suspension/reinstatement operations through current native viewerActions using their
-  actual installed authority source. Current lifecycle route declarations have no resource-type binding, and the
-  default viewerActions registry has no readable Global Context entry. Reinstatement authorizes the Global Context;
-  do not simulate it with a target role or a guessed Global resource type. Preserve the full actor, scopes, consent,
-  delegated principal, assignment/floor, denials and gate formula before receipt access.
-- Provide genuine bounded current command/effect readback for the same immutable intent, authorized under current
-  authority, so the page can release its new-effect lock only when the original outcome is established. The existing
-  command responses allowlist accountId, state, minimumAuthnEpoch and receiptId; they omit effect progress. Neither
-  receipt presence, a queued effect nor disappearance from a public read establishes completion.
+Original status, current snapshot and effect observation are independent. The native reader checks complete original
+principal/client/delegation/operand digest and source currentness; an unknown/missing receipt never proves non-application.
+Operator reads corroborate actual continuation/page/completion and business receipts. Multi-page or unavailable
+operands remain pending/unknown; Auth session cleanup has no installed terminal operand and remains unknown for
+suspension. Access session-step authorization is reported separately and never substitutes for Auth completion.
+Semantic account-agent synchronization also remains explicitly unknown for both operations. The port supports an
+explicit bounded native operator page-key read; the adapter does not traverse it.
+The existing page receives native facts and recorded outcomes through its unchanged data consumer. Its captured
+identity, consequence/recovery wording, details, immutable intent, synchronous exclusion and conservative new-effect
+lock stay intact, including its existing unavailable-state prose. No page, style, story or locale is redesigned.
+A later BFF response loss remains uncertain until a supported explicit original replay/read can return a result;
+a current selection read alone carries no original key and cannot resolve that result. Refresh loses the in-memory
+intent. No automatic retry, custody proof or whole-feature completion is claimed.
 
-Until these ports are installed, the real page explicitly shows unavailable private lifecycle state and unavailable
-exact actions. The typed real command path is implemented, with no fake fallback. Existing management inventory and
-resource grants remain their owners' pages. Illustrative review/recovery stories do not prove native capability.
-Native acceptance, stories from recorded outcomes, visual review and operator fanout proof remain later integration
-work; this delivery makes no deployment or native completion claim.
+The private route's complete call graph, exact primary-key/index bounds, SQL row/byte/statement limits and original
+deadline are documented in Access's private lifecycle review section. Checked-in native client declarations include
+this real mounted route and its shared projection contract; there is no fixture endpoint or generic public fallback.
+The native transport/presentation fixture preserves human identity and exact intent assertions while replacing only
+obsolete management/viewerActions expectations. Native acceptance and that fixture remain UNRUN; Web typing is
+UNVERIFIED in this delivery.

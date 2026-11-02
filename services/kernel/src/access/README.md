@@ -567,6 +567,91 @@ page first checks that the operator is still active and that this is its latest 
 that reversal.
 Page and subject receipts make crash recovery and replay idempotent.
 
+### Private exact-target lifecycle review
+
+`POST /v1/accounts/{accountId}/lifecycleReview` (`account.lifecycleReview`) is a bearer-authenticated,
+private/no-store read on the real account route composition. Its empty body reviews exactly one selected account,
+including a suspended account. It does not use management relationships, public account eligibility or generic
+`viewerActions`. The mounted `account:read` label describes HTTP read accounting/error semantics; it supplies no
+authority. The handler requires either actual `account:suspend` or `account:reinstate` through installed Access on
+`PLATFORM_RESOURCE`. The returned action/operation pairs share the native mounted command declarations; suspension
+applies to active accounts, reinstatement to suspended, fenced accounts with a native fence receipt. They are advisory.
+Commands retain their existing Global reauthorization before receipt lookup, digest, principal, reason limits,
+floor/fence transitions and response allowlist. No registry, public audience, scope, floor or grant is widened.
+
+Body `original: {operationId, key, reason?}` asks for the original command readback. The exact original target is the
+path selector; keys and reasons are only private body data. The authenticated actor/client/requestedBy tuple is the
+original principal basis. The same digest helpers used by the commands include the exact reason (including whitespace)
+and the suspension continuation binding, which is null on the mounted HTTP command. A different client, delegated
+principal, key, operation, target or body cannot read another result. This port deliberately cannot read a direct
+internal suspension supplied with a different continuation binding. It uses `nativeReceiptKeyCandidates` and the
+native receipt primary key, stored digest, transaction, epoch/position and present payload. Absent, minimized,
+oversized or mismatched receipt evidence returns `original: {status: 'unknown'}`, never `not_applied`. The normal
+command problem mapper remains the sole source of explicit non-application; this reader executes no command.
+
+The response allowlists identity, current state/floor/fence, exact applicable actions and optional original status.
+It never returns a reason, digest, command key, private response payload, session material or operated account identity.
+The current snapshot and original recorded result are independent. Deleted targets have null display labels. A receipt
+proves only a recorded original result. Event zero, bound by the same partition/epoch/position and native event type,
+proves whether that command committed an operator continuation; event absence proves nothing. A continuation must
+match its complete immutable native snapshot digest, barrier transaction/receipt, floor and original command digest.
+
+Operator observation reads one immutable page (at most 100 subjects and one next-page entry), then exact completion
+keys and actual internal lifecycle business receipts. It recreates the existing internal executor's digest and
+principal/key framing, including each reservation, page cursor and child operands. Both fence/unfence success and
+their native recorded false/no-op results terminate that exact liability. A page receipt alone, authorization-only
+completion, missing page/completion, queue registration, supersession, current account state or elapsed time does not.
+The optional body `operatorPageKey` (64 lowercase hexadecimal characters, requires `original`) selects another page through the native
+root's exact derived-entry key. `operatorPage` reports only that page's proof and the next native page key;
+it exposes no subject list or internal work cursor. The stored native cursor supplies the original business digest; the page key must match its hash. No automatic traversal occurs. Whole operator completion is asserted only for an
+attested first-and-last page or the immutable no-fanout event. Multi-page observations retain the original lock even
+when the selected page is terminal: this port does not aggregate caller-held observations into a terminal certificate.
+All owned page/child reads are available without a history/account/operator enumeration or a new effect.
+
+There is no authenticated terminal Auth session-revocation operand installed on this suspension path. Its
+`sessionRevocation` is explicitly `unknown`; neither an Access continuation authorization nor a session queue is
+an Auth ACK. The exact owned session-step completion and its corroborating native
+`cleanup-continuation.recorded` business receipt are projected separately as `sessionRevocationAuthorization`;
+even `recorded` proves only Access authorization before Auth's deletion call. Reinstatement creates no new session revocation liability (`not_required`) and does not revive old
+credentials. Both events also feed the native `account_agent` effect; Semantic synchronization has no original-bound
+terminal delivery operand on this path, so `accountAgentSynchronization` remains `unknown`. Neither operation claims
+whole-effect completion, even when its owned operator effects are terminal.
+Foreign home failure refuses the dependent effect claim as `unknown`, while a recorded original remains recorded.
+No physical custody, retention completion, original funding or generic receipt engine extension is introduced.
+
+Call graph: real route -> normal admission -> `readLifecycleReview` -> live native read time -> installed
+`accessCheck` preparation (released actor/principal/membership/Realm anchors, client scopes/consent, assignment,
+roles, denials and gates) -> exact current actor/floor/home -> canonical Global existence/home and native formula ->
+exact target/home -> for original readback, repeat authority BEFORE native receipt -> event/root -> optional immutable
+page/completion/child receipt homes -> repeat authority -> final exact target/home comparison -> allowlisted response.
+Preparation and all foreign-home reads run after releasing the prior connection, including with pool maximum one.
+Each authority phase mints current native T and releases it after use; every phase retains the original job deadline,
+including PostgreSQL statement/acquisition limits. No retry, new deadline, coordinator advance or effect is hidden here.
+The final snapshot must preserve target transaction/state/floor/fence/identity and source node/epoch/currentness.
+
+Literal owned SQL statement and returned-row bounds, excluding the reused installed Access preparation/formula and ordinary HTTP authentication:
+review is at most 22 statements/rows plus four native Access evaluations. Original readback is at most 36 statements/rows
+plus six evaluations before effect observation. One operator page adds at most 509 statements/rows (two for optional
+exact derived membership, two for the page, five per page/child business proof, at most 101 proofs). Thus the maximum
+is 549 owned statements/rows plus six evaluations, including at most four exact native session-authorization
+proof statements/rows. At most 103 receipt reads add at most 412 unsuccessful native key candidates
+beyond those returned rows. Every statement is an existing leading full primary-key seek:
+`core.partition(partition_no)`, `access.account(route,account_id)`, canonical Context,
+`core.receipt(partition_no,principal_kind,principal_id,command_kind,idempotency_key)` (at most five native candidates,
+LIMIT 1; each receipt statement examines at most five primary-key candidates), `core.outbox(partition_no,position,event_seq)`, continuation root/page/entry/completion primary keys.
+Each nested allowlist is capped at four root entries or 101 page entries. Receipts/events are limited to 2048 UTF-8
+bytes, root allowlist to 4096, page allowlist to 65536, each cursor to 8192 and each home label to 1024; oversized
+native operands refuse the dependent claim. Identity labels are limited to 1024/64 bytes. These guards cap owned
+returned SQL data at 2,500,000 bytes per request, including metadata, using 4096 per scalar row plus the one 81920-byte
+page allowance. Response identity/progress, including an optional next page key, is below 16384 bytes. Reused Access work
+keeps its existing finite/accounting contracts: at most 1000 memberships per actor/principal (two principals), bounded
+role candidates and the one native permission formula per evaluation, with its existing foreign-home refusal.
+There is no new ledger or guessed foreign zero. This HTTP path supplies no new work accounting authority.
+
+`test/access/lifecycle-review.test.ts` authors real current-authority, suspended-target, privacy, principal/digest,
+revoked replay, lost response, native pending/terminal evidence and source-home regressions. They are UNRUN in this
+source delivery; generated transport/consumer regression is also UNRUN. Typing does not prove native acceptance.
+
 ### Account agent verification
 
 `POST /v1/accounts/{accountId}:requestVerification` accepts `{ subject, statement, links }`. A fresh human session may

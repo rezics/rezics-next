@@ -34,6 +34,15 @@ function fenceCleared(result: unknown): boolean {
   return Array.isArray(result) ? result.length > 0 : result != null;
 }
 
+export const reinstatementDeclaration = Object.freeze({ action: 'account:reinstate', operationId: 'account.reinstate' } as const);
+
+export function reinstatementRequestDigest(actor: Extract<Actor, { kind: 'account' }>, input: ReinstatementInput): Buffer {
+  const basis = { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy };
+  return createHash('sha256').update(canonicalize([
+    routeOf(input.accountId), input.accountId, basis, input.reason ?? null,
+  ])!).digest();
+}
+
 /** Suspended accounts only. Authorization uses the Global Context, then releases
  * it before target checkout. Every attempt, including receipt replay, admits the
  * current actor and checks the same action before reading the subject partition's
@@ -73,13 +82,11 @@ export function createReinstatementCommands(config: { pool: Pool; access: Access
         throw new GrantDeniedError();
       const partition = partitionOf(route);
       const basis = { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy };
-      const digest = createHash('sha256')
-        .update(canonicalize([route, input.accountId, basis, input.reason ?? null])!)
-        .digest();
+      const digest = reinstatementRequestDigest(actor, input);
       const authorization = resourceAuthorization({
         access: config.access,
         actor,
-        action: 'account:reinstate',
+        action: reinstatementDeclaration.action,
         anchor: {
           resource: PLATFORM_RESOURCE,
           async validate(client) {

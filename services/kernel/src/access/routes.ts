@@ -1,3 +1,5 @@
+import { readLifecycleReview } from './lifecycle-review.ts';
+import type { LifecycleReview } from './lifecycle-review-contract.ts';
 import { createManagementRead, managedAccountsSchema, accountManagementSchema } from './account-management.ts';
 import { createHash } from 'node:crypto';
 import { withHeaders } from '@elysia/openapi';
@@ -44,8 +46,8 @@ import { RealmLastOwnerError } from './resource-access-errors.ts';
 import { readResourceGrants, type GrantReadPage } from './grant-read.ts';
 import type { ViewerActionResources } from './viewer-actions.ts';
 import { createRateTierCommands, RateTierNotAppliedError } from './rate-tier.ts';
-import { createReinstatementCommands, ReinstatementNotAppliedError } from './reinstatement.ts';
-import { createSuspensionCommands } from './suspension.ts';
+import { createReinstatementCommands, reinstatementDeclaration, ReinstatementNotAppliedError } from './reinstatement.ts';
+import { createSuspensionCommands, suspensionDeclaration } from './suspension.ts';
 import { readOrganizationSpeakers, type OrganizationSpeakersPage } from './organization-speakers.ts';
 import { readAccountRealms, type AccountRealmsPage } from './account-realms.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -1284,6 +1286,31 @@ export function accessRoutes(
       },
     )
     .post(
+      '/v1/accounts/:accountId/lifecycleReview',
+      {
+        params: strict(t.Object({ accountId: id }, closed)),
+        body: strict(t.Object({ operatorPageKey: t.Optional(t.String({ pattern: '^[0-9a-f]{64}$' })), original: t.Optional(t.Object({
+          operationId: t.Union([t.Literal(suspensionDeclaration.operationId), t.Literal(reinstatementDeclaration.operationId)]),
+          key: t.String({ minLength: 1, maxLength: 255 }),
+          reason: t.Optional(t.String({ minLength: 1, maxLength: 2000 })),
+        }, closed)) }, closed)),
+        response: { 200: t.Unsafe<LifecycleReview>(), ...failures, 404: problemSchema('not_found'),
+          503: problemSchema('dependency_unavailable', 'deadline_exceeded', 'partition_unavailable', 'overloaded') },
+        detail: {
+          operationId: 'account.lifecycleReview', 'x-exposure': 'public', 'x-action': 'account:read',
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ params, body, actor, job, admission, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        set.headers['pragma'] = 'no-cache';
+        set.headers['vary'] = 'Authorization';
+        return admission.run('normal', job, () =>
+          readLifecycleReview({ pool: dependencies.pool, access: dependencies.access(), clock: dependencies.clock },
+            actor, { accountId: params.accountId, ...body }, { deadline: job.deadline }));
+      },
+    )
+    .post(
       customMethod('/v1/accounts/:accountId', 'suspend'),
       {
         headers,
@@ -1309,7 +1336,7 @@ export function accessRoutes(
           ),
           ...failures,
         },
-        detail: { ...detail('account.suspend'), 'x-action': 'account:suspend' },
+        detail: { ...detail(suspensionDeclaration.operationId), 'x-action': suspensionDeclaration.action },
       },
       async ({ params, body, headers, actor, admission, job, session }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
@@ -1356,7 +1383,7 @@ export function accessRoutes(
           ...failures,
           409: problemSchema('conflict'),
         },
-        detail: { ...detail('account.reinstate'), 'x-action': 'account:reinstate' },
+        detail: { ...detail(reinstatementDeclaration.operationId), 'x-action': reinstatementDeclaration.action },
       },
       async ({ params, body, headers, actor, admission, job, session }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');

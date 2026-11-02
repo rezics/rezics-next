@@ -237,56 +237,115 @@ accountLifecycleFixture(
     expect(() => parseIntent({ ...intent, identity: account })).toThrow();
     expect(() => parseIntent({ ...intent, reason: 'x'.repeat(2001) })).toThrow();
     let advertised = true;
-    let response: 'recorded' | 'not_applied' | 'unknown' = 'recorded';
+    let denied = false;
+    let readFailure = false;
+    let failAfterCommand = false;
+    let response: 'recorded' | 'not_applied' | 'unknown' | 'lost' = 'recorded';
+    let recorded = false;
+    let activeIntent = intent;
+    let effectState: 'unknown' | 'pending' = 'unknown';
+    const receiptId = '01a1a000-0000-7000-8000-000000000102';
     const effects: Request[] = [];
+    const reads: Request[] = [];
     const client = createKernelClient('https://kernel.example.test', {
       fetch: (async (input, init) => {
         const request = new Request(input, init);
-        expect(request.headers.get('authorization')).toBe('Bearer fixture-only');
         const path = new URL(request.url).pathname;
-        if (path.endsWith('/management')) return Response.json({ account });
+        expect(new URL(request.url).search).toBe('');
         if (path === '/v1/viewerActions')
-          return Response.json({
-            resources: [
-              {
-                type: 'access.account',
-                id: account.id,
-                viewerActions: [
-                  { action: 'account:suspend', operations: [advertised ? 'account.suspend' : 'account.reinstate'] },
-                ],
-              },
-            ],
-          });
+          throw new Error('Generic public viewerActions cannot authorize private lifecycle commands');
+        expect(path).not.toContain('/management');
+        if (path === `/v1/accounts/${account.id}/lifecycleReview`) {
+          reads.push(request);
+          expect(request.method).toBe('POST');
+          expect(request.headers.get('cache-control')).toBe('no-store');
+          expect(request.headers.get('idempotency-key')).toBeNull();
+          expect(request.headers.get('x-csrf-token')).toBeNull(); // Healthy authenticated read needs no CSRF credential.
+          if (denied) return Response.json({ code: 'not_found' }, { status: 404 });
+          if (readFailure) return Response.json({ code: 'dependency_unavailable' }, { status: 503 });
+          const body = await request.json();
+          const original = body.original;
+          const matches = original?.operationId === 'account.suspend' && original.key === activeIntent.key &&
+            original.reason === activeIntent.reason && request.headers.get('authorization') === 'Bearer fixture-only';
+          if (original && matches) expect(original).toEqual({ operationId: 'account.suspend', key: activeIntent.key, reason });
+          return Response.json({ account,
+            current: { state: recorded ? 'suspended' : 'active', minimumAuthnEpoch: recorded ? '2' : '1', fenced: recorded },
+            actions: recorded ? [] : [{ action: 'account:suspend', operationId: advertised ? 'account.suspend' : 'account.reinstate' }],
+            ...(original ? { original: recorded && matches ? { status: 'recorded', receiptId,
+              effects: { state: effectState, operator: effectState, sessionRevocation: 'unknown', accountAgentSynchronization: 'unknown', sessionRevocationAuthorization: 'unknown', inspectedPages: 0, terminalSubjects: 0 } }
+              : { status: 'unknown' } } : {}),
+          }, { headers: { 'cache-control': 'private, no-store' } });
+        }
+        expect(request.headers.get('authorization')).toBe('Bearer fixture-only');
         expect(path).toBe(`/v1/accounts/${account.id}:suspend`);
-        expect(request.headers.get('idempotency-key')).toBe(intent.key);
+        expect(request.headers.get('idempotency-key')).toBe(activeIntent.key);
         expect(await request.clone().json()).toEqual({ reason });
         effects.push(request);
-        if (response !== 'recorded')
-          return Response.json(
-            { code: 'conflict', ...(response === 'not_applied' ? { effect_status: 'not_applied' } : {}) },
-            { status: 409 },
-          );
-        return Response.json({
-          suspension: {
-            accountId: account.id,
-            state: 'suspended',
-            minimumAuthnEpoch: '1',
-            receiptId: '01a1a000-0000-7000-8000-000000000102',
-          },
-        });
+        if (response === 'unknown' || response === 'not_applied')
+          return Response.json({ code: 'conflict', ...(response === 'not_applied' ? { effect_status: 'not_applied' } : {}) }, { status: 409 });
+        recorded = true;
+        if (failAfterCommand) readFailure = true;
+        if (response === 'lost') throw new Error('Native response lost after commit');
+        return Response.json({ suspension: { accountId: account.id, state: 'suspended', minimumAuthnEpoch: '2', receiptId } });
       }) as typeof fetch,
     });
-    expect((await commandLifecycle(client, 'Bearer fixture-only', intent)).status).toBe('recorded');
+    const { prepareSession, viewerCredential, requestCsrfToken } = await import('../src/session/request');
+    const healthyRead = new Request('https://site.example.test/en/platform/accounts/' + account.id, {
+      headers: { cookie: '__Host-rezics_session=' + 'a'.repeat(43) },
+    });
+    const sessionEnv = {
+      AUTH_ISSUER: 'https://auth.example.test', API_RESOURCE: 'https://kernel.example.test',
+      WEBSITE_SCOPES: 'account:suspend', WEBSITE_CLIENT_ID: 'web', WEBSITE_CLIENT_KEY: 'fixture-only',
+      SESSIONS: { idFromName: (id: string) => id, get: () => ({ credential: async () => ({
+        status: 'active', accessToken: 'fixture-only', subject: account.id, csrfToken: null,
+      }) }) },
+    } as unknown as import('../src/session/client').SessionEnv;
+    expect(await prepareSession(healthyRead, sessionEnv)).toBe(false);
+    expect(requestCsrfToken(healthyRead)).toBeNull();
+    expect(viewerCredential(healthyRead)).toBe('Bearer fixture-only');
+    expect(await loadLifecycle(client, viewerCredential(healthyRead)!, account.id)).toMatchObject({ status: 'ready' });
+    expect(await loadLifecycle(client, 'Bearer fixture-only', account.id)).toMatchObject({ currentState: 'active', offered: ['suspend'] });
+    expect(await loadLifecycle(client, '', account.id)).toEqual({ status: 'signed-out' });
+    expect((await commandLifecycle(client, '', activeIntent)).status).toBe('signed-out');
+    expect(effects).toHaveLength(0);
+    expect((await commandLifecycle(client, 'Bearer fixture-only', activeIntent)).status).toBe('recorded');
     expect(effects).toHaveLength(1);
+    expect(await loadLifecycle(client, 'Bearer fixture-only', account.id)).toMatchObject({ currentState: 'suspended', offered: [] });
+    for (const state of ['pending', 'unknown'] as const) {
+      effectState = state;
+      const replay = await commandLifecycle(client, 'Bearer fixture-only', activeIntent);
+      expect(replay).toMatchObject({ status: 'recorded', effects: { state } });
+      expect(effects).toHaveLength(1); // Receipt/pending/unknown reads never execute a second effect.
+    }
+    denied = true;
+    expect((await commandLifecycle(client, 'Bearer fixture-only', activeIntent)).status).toBe('missing');
+    expect(effects).toHaveLength(1); // Current exact authority is checked before native receipt disclosure.
+    denied = false;
     advertised = false;
+    recorded = false;
     expect(await loadLifecycle(client, 'Bearer fixture-only', account.id)).toMatchObject({ offered: [] });
-    expect((await commandLifecycle(client, 'Bearer fixture-only', intent)).status).toBe('unavailable');
-    expect(effects).toHaveLength(1); // A replay never bypasses current exact authority to reach a receipt.
+    expect((await commandLifecycle(client, 'Bearer fixture-only', activeIntent)).status).toBe('unavailable');
+    expect(effects).toHaveLength(1);
     advertised = true;
     response = 'unknown';
-    expect((await commandLifecycle(client, 'Bearer fixture-only', intent)).status).toBe('uncertain');
+    activeIntent = parseIntent({ ...intent, key: crypto.randomUUID() });
+    expect((await commandLifecycle(client, 'Bearer fixture-only', activeIntent)).status).toBe('uncertain');
     response = 'not_applied';
-    expect((await commandLifecycle(client, 'Bearer fixture-only', intent)).status).toBe('conflict');
+    activeIntent = parseIntent({ ...intent, key: crypto.randomUUID() });
+    expect((await commandLifecycle(client, 'Bearer fixture-only', activeIntent)).status).toBe('conflict');
     expect(effects).toHaveLength(3);
+    response = 'lost';
+    activeIntent = parseIntent({ ...intent, key: crypto.randomUUID() });
+    expect((await commandLifecycle(client, 'Bearer fixture-only', activeIntent)).status).toBe('recorded');
+    expect(effects).toHaveLength(4); // Original-intent readback is read-only, even after response loss.
+    for (const wrong of [{ ...activeIntent, reason: reason.trim() }, { ...activeIntent, key: crypto.randomUUID() }])
+      expect(await loadLifecycle(client, 'Bearer fixture-only', account.id, wrong)).toMatchObject({ original: { status: 'unknown' } });
+    expect(await loadLifecycle(client, 'Bearer another-principal', account.id, activeIntent)).toMatchObject({ original: { status: 'unknown' } });
+    expect(effects).toHaveLength(4);
+    response = 'recorded'; recorded = false; failAfterCommand = true;
+    activeIntent = parseIntent({ ...intent, key: crypto.randomUUID() });
+    expect(await commandLifecycle(client, 'Bearer fixture-only', activeIntent)).toMatchObject({ status: 'recorded', receiptId, current: { status: 'unavailable' } });
+    expect(effects).toHaveLength(5); // Current read failure never erases a received recorded outcome.
+    expect(reads.length).toBeGreaterThan(effects.length);
   },
 );
