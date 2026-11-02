@@ -274,7 +274,9 @@ test('the complete Subject history family keeps independent headings, bounded su
     listFailure = false;
     await click(a, m.changes_retry());
     expect(calls.at(-1)).toEqual({ operation: 'list', operand: changesCursor, session: 'changes-session' });
-    expect(document.activeElement?.textContent).toBe(m.subject_relation_completed_more({ label: m.changes_revisions(), count: '0' }));
+    expect(document.activeElement?.textContent).toBe(
+      m.subject_relation_completed_more({ label: m.changes_revisions(), count: '0' }),
+    );
     expect(revisions(a).querySelectorAll('li')).toHaveLength(2);
     expect(a.textContent).not.toContain(m.changes_empty());
     const afterRetry = calls.length;
@@ -285,7 +287,11 @@ test('the complete Subject history family keeps independent headings, bounded su
     await click(a, m.changes_more());
     expect(calls.at(-1)).toEqual({ operation: 'list', operand: changesLastCursor, session: 'changes-session' });
     expect(revisions(a).querySelectorAll('li')).toHaveLength(3);
-    expect(document.activeElement).toBe(button(a, m.changes_revision({ revision: '2' })).closest('li')?.querySelector('p'));
+    expect(document.activeElement).toBe(
+      button(a, m.changes_revision({ revision: '2' }))
+        .closest('li')
+        ?.querySelector('p'),
+    );
     expect([...revisions(a).querySelectorAll('button')].some((node) => node.textContent === m.changes_more())).toBe(
       false,
     );
@@ -374,18 +380,28 @@ test('the complete Subject history family keeps independent headings, bounded su
     let edgeReads = 0;
     let edgeFailure = false;
     const edgeTransport: ChangesTransport = {
-      list: async () => edgeReads++ === 0 ? initial : {
-        kind: 'ready', page: { ...initial.page, revisions: [], next: null },
-      },
-      detail: async (revision) => edgeFailure ? { kind: 'missing', scope: 'subject' } : {
-        kind: 'ready', detail: { id: initial.page.id, revision, summary: { kind: 'limited' } },
-      },
+      list: async () =>
+        edgeReads++ === 0
+          ? initial
+          : {
+              kind: 'ready',
+              page: { ...initial.page, revisions: [], next: null },
+            },
+      detail: async (revision) =>
+        edgeFailure
+          ? { kind: 'missing', scope: 'subject' }
+          : {
+              kind: 'ready',
+              detail: { id: initial.page.id, revision, summary: { kind: 'limited' } },
+            },
     };
     outside.focus();
     await render(<SubjectChanges key="empty-final" locale="en" transport={edgeTransport} />);
     expect(document.activeElement).toBe(outside);
     await click(host, m.changes_more());
-    expect(document.activeElement?.textContent).toBe(m.subject_relation_completed_end({ label: m.changes_revisions(), count: '0' }));
+    expect(document.activeElement?.textContent).toBe(
+      m.subject_relation_completed_end({ label: m.changes_revisions(), count: '0' }),
+    );
     expect(host.querySelectorAll('ol li')).toHaveLength(initial.page.revisions.length);
     await click(host, selectFive);
     expect(document.activeElement).toBe(explanation(histories()[0]!).querySelector('h2'));

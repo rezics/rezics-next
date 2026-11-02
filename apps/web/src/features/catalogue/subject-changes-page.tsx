@@ -17,7 +17,7 @@ import {
 } from './subject-changes';
 
 type FocusResult =
-  | { kind: 'batch'; revision?: number; count: number; next: string | null }
+  | { kind: 'batch'; revision?: number | undefined; count: number; next: string | null }
   | { kind: 'detail' | 'failure' };
 
 type Props = {
@@ -168,7 +168,15 @@ export function ChangeExplanation({ detail, locale }: { detail: ChangeDetail; lo
 
 /** Shared subject frame and controls; no historical payload, actor or raw identifier is rendered. */
 export function SubjectChangesPage({
-  state, locale, currentHref, onMore, onSelect, onRetry, onDetailRetry, rootRef, focusResult,
+  state,
+  locale,
+  currentHref,
+  onMore,
+  onSelect,
+  onRetry,
+  onDetailRetry,
+  rootRef,
+  focusResult,
 }: Props) {
   const explanationHeadingId = useId();
   const o = { locale: locale as never };
@@ -281,7 +289,13 @@ export function SubjectChangesPage({
           {!!page.revisions.length && (
             <section aria-labelledby={explanationHeadingId} className="min-w-0">
               <ContentItemFrame as="div" className="min-w-0 space-y-4 p-4 sm:p-5">
-                <ContentItemHeading level={2} id={explanationHeadingId} tabIndex={-1} data-changes-focus="detail" className="text-xl font-semibold">
+                <ContentItemHeading
+                  level={2}
+                  id={explanationHeadingId}
+                  tabIndex={-1}
+                  data-changes-focus="detail"
+                  className="text-xl font-semibold"
+                >
                   {state.selected
                     ? m.changes_revision({ revision: String(state.selected) }, o)
                     : m.changes_explanation({}, o)}
@@ -344,8 +358,11 @@ function SubjectChangesReader({
   const active = () => mounted.current && work.active();
   useLayoutEffect(() => {
     if (!focusResult || !active()) return;
-    const kind = state.failure ? 'failure' : state.detail && state.detail.kind !== 'ready'
-      ? 'detail-failure' : focusResult.kind;
+    const kind = state.failure
+      ? 'failure'
+      : focusResult.kind === 'detail' && state.detail && state.detail.kind !== 'ready'
+        ? 'detail-failure'
+        : focusResult.kind;
     const boundary = focusRoot.current?.querySelector<HTMLElement>(`[data-changes-focus="${kind}"]`);
     (boundary?.querySelector<HTMLButtonElement>('button:not(:disabled)') ?? boundary)?.focus();
   }, [focusResult]);
@@ -380,13 +397,19 @@ function SubjectChangesReader({
     const finish = (result: Parameters<typeof changesState>[1] & { type: 'list' }) => {
       dispatch(result);
       if (!explicit) return;
-      const admitted = result.result.kind === 'ready' &&
-        (!latest.current.page || result.result.page.id === latest.current.page.id);
-      const rows = admitted && result.result.kind === 'ready'
-        ? result.result.page.revisions.filter((row) => !previous.has(row.revision)) : [];
-      setFocusResult(admitted && result.result.kind === 'ready'
-        ? { kind: 'batch', revision: rows[0]?.revision, count: rows.length, next: result.result.page.next }
-        : { kind: 'failure' });
+      const admitted =
+        result.result.kind === 'ready' && (!latest.current.page || result.result.page.id === latest.current.page.id);
+      const rows =
+        admitted && result.result.kind === 'ready'
+          ? [...new Map(result.result.page.revisions.map((row) => [row.revision, row])).values()].filter(
+              (row) => !previous.has(row.revision),
+            )
+          : [];
+      setFocusResult(
+        admitted && result.result.kind === 'ready'
+          ? { kind: 'batch', revision: rows[0]?.revision, count: rows.length, next: result.result.page.next }
+          : { kind: 'failure' },
+      );
     };
     try {
       const result = await currentTransport.current.list(cursor, session.current);
