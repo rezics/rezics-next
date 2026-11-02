@@ -13,6 +13,7 @@ import {
   loadCatalogueSubject,
   prepareCatalogueReportsRead,
   type CatalogueReport,
+  catalogueReportsReadKey,
   type CatalogueReportsRead,
   type CatalogueReportsReader,
   type CatalogueSubjectReader,
@@ -60,48 +61,30 @@ export function CatalogueReportsView({
   onNext,
   onRestart,
 }: CatalogueReportsViewProps) {
-  if (page.state === 'loading')
+  if (page.state !== 'loaded') {
+    const content =
+      page.state === 'loading' ? (
+        <p role="status" className="mt-4 text-muted-foreground">{m.moderation_queue_loading()}</p>
+      ) : page.state === 'denied' ? (
+        <p role="status" className="mt-4 text-muted-foreground">{m.moderation_queue_read_denied()}</p>
+      ) : page.state === 'stale' ? (
+        <>
+          <p role="alert" className="mt-4 text-muted-foreground">{m.moderation_queue_stale()}</p>
+          <Button className="mt-4" onClick={onRestart}>{m.moderation_queue_restart()}</Button>
+        </>
+      ) : (
+        <>
+          <p role="alert" className="mt-4 text-muted-foreground">{m.report_unavailable()}</p>
+          <Button className="mt-4" onClick={onRetryPage}>{m.moderation_queue_retry()}</Button>
+        </>
+      );
     return (
-      <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-8 sm:py-10">
+      <main className={`mx-auto w-full ${page.state === 'loading' ? 'max-w-6xl' : 'max-w-3xl'} px-4 py-6 sm:px-8 sm:py-10`}>
         <h1 className="text-2xl font-semibold">{m.moderation_reports_heading()}</h1>
-        <p role="status" className="mt-4 text-muted-foreground">
-          {m.moderation_queue_loading()}
-        </p>
+        {content}
       </main>
     );
-  if (page.state === 'denied')
-    return (
-      <main className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-8 sm:py-10">
-        <h1 className="text-2xl font-semibold">{m.moderation_reports_heading()}</h1>
-        <p role="status" className="mt-4 text-muted-foreground">
-          {m.moderation_queue_read_denied()}
-        </p>
-      </main>
-    );
-  if (page.state === 'stale')
-    return (
-      <main className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-8 sm:py-10">
-        <h1 className="text-2xl font-semibold">{m.moderation_reports_heading()}</h1>
-        <p role="alert" className="mt-4 text-muted-foreground">
-          {m.moderation_queue_stale()}
-        </p>
-        <Button className="mt-4" onClick={onRestart}>
-          {m.moderation_queue_restart()}
-        </Button>
-      </main>
-    );
-  if (page.state === 'error')
-    return (
-      <main className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-8 sm:py-10">
-        <h1 className="text-2xl font-semibold">{m.moderation_reports_heading()}</h1>
-        <p role="alert" className="mt-4 text-muted-foreground">
-          {m.report_unavailable()}
-        </p>
-        <Button className="mt-4" onClick={onRetryPage}>
-          {m.moderation_queue_retry()}
-        </Button>
-      </main>
-    );
+  }
 
   const selected = page.reports.find((report) => report.id === page.selectedId) ?? null;
   const locked = ['sending', 'uncertain', 'confirmed', 'failed'].includes(page.action.state);

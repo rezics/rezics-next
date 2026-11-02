@@ -15,8 +15,8 @@ function CatalogueReportsRoute() {
     [navigate],
   );
   const restart = useCallback(
-    () => void navigate({ search: (previous) => ({ ...previous, cursor: undefined }) }),
+    () => void navigate({ search: () => ({}) }),
     [navigate],
   );
-  return <CatalogueReportsVisit key={cursor ?? 'first-page'} cursor={cursor} onNext={next} onRestart={restart} />;
+  return <CatalogueReportsVisit key={cursor ?? 'first-page'} {...(cursor === undefined ? {} : { cursor })} onNext={next} onRestart={restart} />;
 }

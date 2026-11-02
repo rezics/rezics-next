@@ -2,10 +2,10 @@ import type { KernelClient } from '@rezics/client';
 import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
+import { catalogueReportsClient, type SubjectReportPost } from '../moderation/catalogue-reports-client';
 
-type KernelReport = Parameters<KernelClient['reports']['post']>[0];
-export type ReportDraft = Omit<KernelReport, 'target'> & {
-  target: KernelReport['target'];
+export type ReportDraft = Omit<SubjectReportPost, 'target'> & {
+  target: SubjectReportPost['target'];
   idempotencyKey: string;
 };
 export type ReportResult =
@@ -56,7 +56,7 @@ export async function submitReport(
   const authorization = viewerCredential(request);
   const { idempotencyKey, ...body } = data;
   try {
-    const result = await client.reports.post(body, {
+    const result = await catalogueReportsClient(client).reports.post(body, {
       headers: { 'idempotency-key': JSON.stringify(idempotencyKey), ...(authorization ? { authorization } : {}) },
     });
     if (!result.error) return { ok: true, reportId: result.data.reportId };

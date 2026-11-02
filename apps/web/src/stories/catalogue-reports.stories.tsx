@@ -44,7 +44,7 @@ const loaded: CatalogueReportsPageState = {
 };
 
 function LoadedStory({ args }: { args: CatalogueReportsViewProps }) {
-  const [page, setPage] = useState(loaded);
+  const [page, setPage] = useState<CatalogueReportsPageState>(loaded);
   return (
     <CatalogueReportsView
       {...args}
@@ -52,35 +52,41 @@ function LoadedStory({ args }: { args: CatalogueReportsViewProps }) {
       onSelect={(selectedId) => {
         args.onSelect(selectedId);
         const report = reports.find((item) => item.id === selectedId)!;
-        setPage((previous) => ({
-          ...previous,
-          selectedId,
-          subject: { state: 'loaded', subject: { id: report.target.id, title: 'Selected current Subject', type: 'schema:Thing' } },
-          action: { state: 'idle' },
-        }));
+        setPage((previous) =>
+          previous.state !== 'loaded'
+            ? previous
+            : {
+                ...previous,
+                selectedId,
+                subject: { state: 'loaded', subject: { id: report.target.id, title: 'Selected current Subject', type: 'schema:Thing' } },
+                action: { state: 'idle' },
+              },
+        );
       }}
       onReason={(reason) => {
         args.onReason(reason);
-        setPage((previous) => ({ ...previous, reason }));
+        setPage((previous) => (previous.state === 'loaded' ? { ...previous, reason } : previous));
       }}
       onAct={(action) => {
         args.onAct(action);
         const report = page.reports.find((item) => item.id === page.selectedId)!;
         setPage((previous) =>
-          action === 'dismiss'
-            ? {
-                ...previous,
-                reports: previous.reports.map((item) => (item.id === report.id ? { ...item, outcome: 'dismissed' } : item)),
-                action: { state: 'confirmed', result: { kind: 'dismissed', reportId: report.id, outcome: 'dismissed' } },
-              }
-            : {
-                ...previous,
-                subject: { state: 'changed', visibility: action === 'hide' ? 'hidden' : 'visible' },
-                action: {
-                  state: 'confirmed',
-                  result: { kind: 'visibility', subjectId: report.target.id, visibility: action === 'hide' ? 'hidden' : 'visible' },
+          previous.state !== 'loaded'
+            ? previous
+            : action === 'dismiss'
+              ? {
+                  ...previous,
+                  reports: previous.reports.map((item) => (item.id === report.id ? { ...item, outcome: 'dismissed' } : item)),
+                  action: { state: 'confirmed', result: { kind: 'dismissed', reportId: report.id, outcome: 'dismissed' } },
+                }
+              : {
+                  ...previous,
+                  subject: { state: 'changed', visibility: action === 'hide' ? 'hidden' : 'visible' },
+                  action: {
+                    state: 'confirmed',
+                    result: { kind: 'visibility', subjectId: report.target.id, visibility: action === 'hide' ? 'hidden' : 'visible' },
+                  },
                 },
-              },
         );
       }}
     />

@@ -6,6 +6,7 @@ import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
+import { catalogueReportsClient } from './catalogue-reports-client';
 import { preparedPrivateReaderOrigin, type PrivateReaderOrigin } from './private-reader-origin';
 import { preparePrivateReaderRead, type PrivateReaderRead } from './private-reader-lifetime';
 
@@ -39,7 +40,7 @@ function codeOf(error: unknown): unknown {
   return error && typeof error === 'object' && 'code' in error ? error.code : undefined;
 }
 
-function pageFailure(status: number, error: unknown): CatalogueReportsResult['state'] {
+function pageFailure(status: number, error: unknown): Exclude<CatalogueReportsResult['state'], 'loaded'> {
   const code = codeOf(error);
   if ((status === 400 && code === 'invalid_cursor') || (status === 409 && code === 'stale_cursor')) return 'stale';
   if ([401, 403, 404].includes(status)) return 'denied';
@@ -60,7 +61,7 @@ export async function readCatalogueReports(
 ): Promise<CatalogueReportsRead> {
   if (!authorization || !readerOrigin) return emptyRead(input.cursor, null, 'denied');
   try {
-    const result = await client.catalogue.reports.get({
+    const result = await catalogueReportsClient(client).catalogue.reports.get({
       query: { limit: CATALOGUE_REPORTS_LIMIT, ...(input.cursor === undefined ? {} : { cursor: input.cursor }) },
       headers: { authorization },
     });
@@ -113,12 +114,13 @@ export async function readCatalogueSubject(
   if (!uuid.test(subjectId) || !uuid.test(reportId) || !authorization || !readerOrigin)
     return { subjectId, readerOrigin: null, result: { state: 'unavailable' } };
   try {
+    const catalogueClient = catalogueReportsClient(client);
     const [subjectResult, reportsResult] = await Promise.all([
-      client.subjects({ id: subjectId }).get({
+      catalogueClient.subjects({ id: subjectId }).get({
         headers: { authorization },
         fetch: { redirect: 'manual' },
       }),
-      client.subjects({ id: subjectId }).reports.get({
+      catalogueClient.subjects({ id: subjectId }).reports.get({
         query: { limit: CATALOGUE_REPORTS_LIMIT, order: 'newest', status: 'all', targetKind: 'subject' },
         headers: { authorization },
       }),

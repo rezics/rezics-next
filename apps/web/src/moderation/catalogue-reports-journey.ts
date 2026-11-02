@@ -13,7 +13,10 @@ import {
 import { createPrivateReaderLifetime } from './private-reader-lifetime';
 
 export type CatalogueReportsPageState =
-  | { state: 'loading' | 'denied' | 'error' | 'stale'; reports: []; next: null }
+  | { state: 'loading'; reports: []; next: null }
+  | { state: 'denied'; reports: []; next: null }
+  | { state: 'error'; reports: []; next: null }
+  | { state: 'stale'; reports: []; next: null }
   | {
       state: 'loaded';
       reports: CatalogueReport[];
@@ -174,14 +177,15 @@ export function createCatalogueReportsJourney({ cache, initial, readPage, readSu
     }
     if (!owner.owns(ticket) || attempt !== actionGeneration) return;
     if (outcome.ok) {
-      if (outcome.result.kind === 'dismissed' && outcome.result.reportId === input.reportId) {
+      const result = outcome.result;
+      if (result.kind === 'dismissed' && result.reportId === input.reportId) {
         reports = reports.map((report) =>
-          report.id === input.reportId ? { ...report, outcome: outcome.result.outcome } : report,
+          report.id === input.reportId ? { ...report, outcome: result.outcome } : report,
         );
-        actionState = { state: 'confirmed', result: outcome.result };
-      } else if (outcome.result.kind === 'visibility' && outcome.result.subjectId === input.subjectId) {
-        subject = { state: 'changed', visibility: outcome.result.visibility };
-        actionState = { state: 'confirmed', result: outcome.result };
+        actionState = { state: 'confirmed', result };
+      } else if (result.kind === 'visibility' && result.subjectId === input.subjectId) {
+        subject = { state: 'changed', visibility: result.visibility };
+        actionState = { state: 'confirmed', result };
       } else {
         actionState = { state: 'failed', reason: 'error' };
       }
