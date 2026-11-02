@@ -767,6 +767,8 @@ if (script.includes('/proc/loadavg')) {
   } else process.exit(result);
 } else {
   log({ kind: 'cleanup', script, slotHeld: slotHeld() });
+  const runId = script.match(/^run_id=([^\\r\\n]+)$/m)?.[1]?.replace(/^'|'$/g, '');
+  if (runId) console.log('CLEANED ' + runId);
 }
 `;
 
