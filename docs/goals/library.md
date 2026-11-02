@@ -119,7 +119,7 @@ the failed outcome instead of being classified as missing dependencies.
 
 Approved C3 assigns 16 statements to the Members body, with constant History registration (464), receiving/readback
 (429), Core/Access, transfers, executor controls, retries and cleanup prepaid by one finite parent before first I/O.
-The complete parent declaration is absent, so new admission retains the pre-episode
+The complete parent declaration is absent, so explicit runtime admission retains the pre-episode
 `whole-members-reservation-cost-unavailable` refusal. The released Source body remains gated by the missing complete Source
 child declaration (`selected-runtime-source-declaration-unavailable`); final completion separately lacks the
 producer's current Source and physical authority (`selected-runtime-final-source-physical-authority-unavailable`).
@@ -151,3 +151,5 @@ Retained Members integration preserves native immutable-release byte validation 
 Runtime integration extends the existing native Members tables; unpositioned retained candidates remain disposable and are drained by subject identity during retirement and erasure without granting completion authority.
 
 Collection command writer pools inherit the caller's trusted receipt key ring; native fixtures supply dedicated test receipt keys independently of token sealing keys.
+
+Decision: preserve native metadata reservation and immutable-definition recovery; explicit runtime admission requires the complete C3 parent and list previews stay read-only.

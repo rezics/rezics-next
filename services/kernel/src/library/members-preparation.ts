@@ -12,8 +12,19 @@ import nativeSource from './members-preparation-source.sql';
 import original from './members-preparation-original.sql';
 import completionResult from './members-preparation-completion.sql';
 import { admitSavedCollectionMemberQuery, type CollectionMemberAdmission } from './owner-filter.ts';
-import { bindOwnerFilterRead, readOwnerFilterCandidateClosure, readOwnerFilterCandidate, type OwnerFilterReadBinding } from './owner-filter-plan.ts';
-import { nativeOwnerFilterBinding, releaseNativeOwnerFilterRead, revalidateNativeOwnerFilter, withNativeOwnerFilterSource, sameOwnerFilterSource } from './owner-filter-native-binding.ts';
+import {
+  bindOwnerFilterRead,
+  readOwnerFilterCandidateClosure,
+  readOwnerFilterCandidate,
+  type OwnerFilterReadBinding,
+} from './owner-filter-plan.ts';
+import {
+  nativeOwnerFilterBinding,
+  releaseNativeOwnerFilterRead,
+  revalidateNativeOwnerFilter,
+  withNativeOwnerFilterSource,
+  sameOwnerFilterSource,
+} from './owner-filter-native-binding.ts';
 import { NativeCollectionWork } from './collection-source-work.ts';
 import { createCollectionSource, type PreparedCollectionSource } from './collection-source.ts';
 import { requireMembersReservationBudget } from './members-preparation-cost.ts';
@@ -777,28 +788,47 @@ export function createMembersPreparation(config: {
       const definition = await service.readRetainedDefinition(tx, locator);
       if (!definition) return null;
       const state = await readPreparationStep(tx, locator);
-      if (!state) return null;
-      const source = await nativeSource.run(tx, { route: locator.route,
-        owner_account_id: locator.ownerAccountId, collection_id: locator.collectionId });
-      if (!source || !source.incarnation || !source.generation || !source.receivingEpoch || !source.effectKey ||
-          !source.basisDigest || !source.identityDigest ||
-          source.incarnation !== state.incarnation || source.generation !== state.generation ||
-          (state.preparedIncarnation !== null && (state.preparedIncarnation !== source.incarnation ||
-            state.preparedGeneration !== source.generation))) throw new ProblemError('dependency_unavailable');
+      if (!state) throw new ProblemError('dependency_unavailable');
+      const source = await nativeSource.run(tx, {
+        route: locator.route,
+        owner_account_id: locator.ownerAccountId,
+        collection_id: locator.collectionId,
+      });
+      if (
+        !source ||
+        !source.incarnation ||
+        !source.generation ||
+        !source.receivingEpoch ||
+        !source.effectKey ||
+        !source.basisDigest ||
+        !source.identityDigest ||
+        source.incarnation !== state.incarnation ||
+        source.generation !== state.generation ||
+        (state.preparedIncarnation !== null &&
+          (state.preparedIncarnation !== source.incarnation || state.preparedGeneration !== source.generation))
+      )
+        throw new ProblemError('dependency_unavailable');
       const sourceIdentity = preparationSourceIdentity(locator, source);
       if (!sourceIdentity) throw new ProblemError('dependency_unavailable');
       return {
         definition,
         sourceIdentity,
         observation: {
-          route: locator.route, collectionId: locator.collectionId, incarnation: source.incarnation,
-          revision: source.revision, authority: { kind: 'curated' },
+          route: locator.route,
+          collectionId: locator.collectionId,
+          incarnation: source.incarnation,
+          revision: source.revision,
+          authority: { kind: 'curated' },
           stamp: { partition: partitionOf(locator.route), epoch: source.epoch, position: BigInt(source.position) },
-          basis: { digest: source.basisDigest, identity: { digest: source.identityDigest },
-            query: null, profilePins: source.releaseDigest ? [source.releaseDigest] : [], projection: null },
+          basis: {
+            digest: source.basisDigest,
+            identity: { digest: source.identityDigest },
+            query: null,
+            profilePins: source.releaseDigest ? [source.releaseDigest] : [],
+            projection: null,
+          },
         },
       };
-
     },
   };
   return service;
@@ -822,7 +852,10 @@ function at(tx: OperationalTransaction): string {
   return authoritativeTimeValue(time);
 }
 /** Exact native step binding; no Actor or reusable disclosure grant. */
-export async function lockPreparationStep(tx: OperationalTransaction, locator: PreparationLocator): Promise<string | null> {
+export async function lockPreparationStep(
+  tx: OperationalTransaction,
+  locator: PreparationLocator,
+): Promise<string | null> {
   return (await readPreparationStep(tx, locator))?.basis ?? null;
 }
 
@@ -830,63 +863,115 @@ export async function lockPreparationStep(tx: OperationalTransaction, locator: P
 export async function readPreparationStep(tx: OperationalTransaction, locator: PreparationLocator) {
   if (!validPreparationLocator(locator) || !hasLiveOperationalTransaction(tx)) return null;
   const resources = currentOperationalResources(tx);
-  if (resources.mode !== 'work-step' || resources.partition !== partitionOf(locator.route) ||
-      resources.accounts.length !== 1 || resources.accounts[0] !== locator.ownerAccountId) return null;
+  if (
+    resources.mode !== 'work-step' ||
+    resources.partition !== partitionOf(locator.route) ||
+    resources.accounts.length !== 1 ||
+    resources.accounts[0] !== locator.ownerAccountId
+  )
+    return null;
   const row = await step.run(tx, {
-    route: locator.route, owner_account_id: locator.ownerAccountId,
-    collection_id: locator.collectionId, episode_id: locator.episodeId, at: at(tx),
+    route: locator.route,
+    owner_account_id: locator.ownerAccountId,
+    collection_id: locator.collectionId,
+    episode_id: locator.episodeId,
+    at: at(tx),
   });
   if (!row || row.incarnation === null) return null;
   return { ...row, incarnation: row.incarnation };
 }
 
 /** Current native Scope70 metadata, read on the live admitted owner client; never an allow token. */
-export async function readPreparationScope(tx: OperationalTransaction, locator: PreparationLocator): Promise<IdentityScopeObservation | null> {
+export async function readPreparationScope(
+  tx: OperationalTransaction,
+  locator: PreparationLocator,
+): Promise<IdentityScopeObservation | null> {
   if (!(await readPreparationStep(tx, locator))) return null;
-  const row = await nativeSource.run(tx, { route: locator.route,
-    owner_account_id: locator.ownerAccountId, collection_id: locator.collectionId });
+  const row = await nativeSource.run(tx, {
+    route: locator.route,
+    owner_account_id: locator.ownerAccountId,
+    collection_id: locator.collectionId,
+  });
   if (!row?.captureId || row.committedRevision === null) return null;
   const identity = preparationSourceIdentity(locator, row);
   if (!identity) return null;
-  return { key: { source: { kind: 'library', identity }, scopeId: 'collection-source' },
-    captureId: row.captureId, committedRevision: BigInt(row.committedRevision) };
+  return {
+    key: { source: { kind: 'library', identity }, scopeId: 'collection-source' },
+    captureId: row.captureId,
+    committedRevision: BigInt(row.committedRevision),
+  };
 }
 
 /** Current native Source and complete Scope metadata on this live client, independently of selected data. */
 export async function readPreparationSource(tx: OperationalTransaction, locator: PreparationLocator) {
   const state = await readPreparationStep(tx, locator);
   if (!state) return null;
-  const row = await nativeSource.run(tx, { route: locator.route,
-    owner_account_id: locator.ownerAccountId, collection_id: locator.collectionId });
-  if (!row?.captureId || row.committedRevision === null || row.incarnation === null || !row.basisDigest || !row.identityDigest ||
-      row.incarnation !== state.incarnation || row.generation !== state.generation) return null;
+  const row = await nativeSource.run(tx, {
+    route: locator.route,
+    owner_account_id: locator.ownerAccountId,
+    collection_id: locator.collectionId,
+  });
+  if (
+    !row?.captureId ||
+    row.committedRevision === null ||
+    row.incarnation === null ||
+    !row.basisDigest ||
+    !row.identityDigest ||
+    row.incarnation !== state.incarnation ||
+    row.generation !== state.generation
+  )
+    return null;
   const identity = preparationSourceIdentity(locator, row);
   if (!identity) return null;
   const source: CollectionSourceObservation = {
-    route: locator.route, collectionId: locator.collectionId, incarnation: row.incarnation,
-    revision: row.revision, authority: { kind: 'curated' },
+    route: locator.route,
+    collectionId: locator.collectionId,
+    incarnation: row.incarnation,
+    revision: row.revision,
+    authority: { kind: 'curated' },
     stamp: { partition: partitionOf(locator.route), epoch: row.epoch, position: BigInt(row.position) },
-    basis: { digest: row.basisDigest, identity: { digest: row.identityDigest },
-      query: null, profilePins: row.releaseDigest ? [row.releaseDigest] : [], projection: null },
+    basis: {
+      digest: row.basisDigest,
+      identity: { digest: row.identityDigest },
+      query: null,
+      profilePins: row.releaseDigest ? [row.releaseDigest] : [],
+      projection: null,
+    },
   };
-  const scope: IdentityScopeObservation = { key: { source: { kind: 'library', identity }, scopeId: 'collection-source' },
-    captureId: row.captureId, committedRevision: BigInt(row.committedRevision) };
+  const scope: IdentityScopeObservation = {
+    key: { source: { kind: 'library', identity }, scopeId: 'collection-source' },
+    captureId: row.captureId,
+    committedRevision: BigInt(row.committedRevision),
+  };
   return { source, scope };
 }
 
 /** Native JSON is only a locator. Compare its full shape with the same-client current source columns. */
-function preparationSourceIdentity(locator: PreparationLocator,
-  row: NonNullable<Awaited<ReturnType<typeof nativeSource.run>>>): NativeSourceIdentity | null {
+function preparationSourceIdentity(
+  locator: PreparationLocator,
+  row: NonNullable<Awaited<ReturnType<typeof nativeSource.run>>>,
+): NativeSourceIdentity | null {
   if (!row.incarnation || !row.receivingEpoch || !row.effectKey) return null;
-  const identity = { route: locator.route, collectionId: locator.collectionId, accountId: locator.ownerAccountId,
-    incarnation: row.incarnation, generation: row.generation, scope: 'curated' as const,
-    ownerEpoch: row.epoch, receivingEpoch: row.receivingEpoch, effectKey: row.effectKey };
+  const identity = {
+    route: locator.route,
+    collectionId: locator.collectionId,
+    accountId: locator.ownerAccountId,
+    incarnation: row.incarnation,
+    generation: row.generation,
+    scope: 'curated' as const,
+    ownerEpoch: row.epoch,
+    receivingEpoch: row.receivingEpoch,
+    effectKey: row.effectKey,
+  };
   return isDeepStrictEqual(row.identity, identity) ? identity : null;
 }
 
-export async function readPreparationOwnerFence(tx: OperationalTransaction, locator: PreparationLocator,
-  definition: PreparationDefinition): Promise<string | null> {
-  if (!compileCurrentOwnerFilter(definition.filter).leaves.some(leaf => leaf.kind === 'owner')) return null;
+export async function readPreparationOwnerFence(
+  tx: OperationalTransaction,
+  locator: PreparationLocator,
+  definition: PreparationDefinition,
+): Promise<string | null> {
+  if (!compileCurrentOwnerFilter(definition.filter).leaves.some((leaf) => leaf.kind === 'owner')) return null;
   const row = await ownerFence.run(tx, { route: locator.route, account_id: locator.ownerAccountId });
   if (!row) throw new ProblemError('dependency_unavailable');
   return row.generation;
@@ -896,13 +981,22 @@ export async function readPreparationOwnerFence(tx: OperationalTransaction, loca
  * The installed selected producer still refuses final Source/physical completion after the owned body.
  */
 export async function checkMembersPreparationCompletion(
-  tx: OperationalTransaction, locator: PreparationLocator,
-): Promise<Readonly<{ status: 'obsolete' }> | Readonly<{
-  status: 'unavailable'; operand: 'selected-runtime-final-source-physical-authority-unavailable';
-}>> {
+  tx: OperationalTransaction,
+  locator: PreparationLocator,
+): Promise<
+  | Readonly<{ status: 'obsolete' }>
+  | Readonly<{
+      status: 'unavailable';
+      operand: 'selected-runtime-final-source-physical-authority-unavailable';
+    }>
+> {
   if (!(await readPreparationStep(tx, locator))) return { status: 'obsolete' };
-  const association = await original.run(tx, { route: locator.route, owner_account_id: locator.ownerAccountId,
-    collection_id: locator.collectionId, episode_id: locator.episodeId });
+  const association = await original.run(tx, {
+    route: locator.route,
+    owner_account_id: locator.ownerAccountId,
+    collection_id: locator.collectionId,
+    episode_id: locator.episodeId,
+  });
   if (!association) return { status: 'obsolete' };
   // SelectedInvocation owns the fresh, nonrenewable executor admission and native result.
   // Its finishSelectedEpisode currently refuses complete with this exact operand. Native
@@ -934,13 +1028,21 @@ type ReadInput = Readonly<{
  * The actual Search reader must capture current formula/original+terminal/excluded/order/population evidence.
  */
 async function bindPreparationRead(
-  deps: ReaderDependencies, input: ReadInput,
+  deps: ReaderDependencies,
+  input: ReadInput,
 ): Promise<Readonly<{ status: 'unavailable' }> | Readonly<{ status: 'bound'; binding: ReadBinding }>> {
-  const release = await within(input.deadline, () => readRelease(deps.pool, input.definition.release.digest, { composed: false }));
+  const release = await within(input.deadline, () =>
+    readRelease(deps.pool, input.definition.release.digest, { composed: false }),
+  );
   if (!release) return { status: 'unavailable' };
   const filter = admitFilter(parseFilter(input.definition.filter), release, { saved: true, owner: true });
-  const admission = await admitSavedCollectionMemberQuery(deps, input.actor,
-    { filter, sort: 'id', releaseDigest: input.definition.release.digest }, {}, input.deadline);
+  const admission = await admitSavedCollectionMemberQuery(
+    deps,
+    input.actor,
+    { filter, sort: 'id', releaseDigest: input.definition.release.digest },
+    {},
+    input.deadline,
+  );
   if (admission.releaseDigest !== input.definition.release.digest) return { status: 'unavailable' };
   const bound = await bindOwnerFilterRead(deps, input.actor, input.collectionId, admission, input.deadline);
   if (bound.status !== 'bound') return bound;
@@ -950,43 +1052,69 @@ async function bindPreparationRead(
     if (!saved) throw new ProblemError('dependency_unavailable');
     const work = new NativeCollectionWork(native.input.allowance, input.deadline);
     const prepared = await withNativeOwnerFilterSource(native, work, () =>
-      work.compose(allowance => createCollectionSource(deps).prepare({ ...native.input, allowance })));
-    if (!sameOwnerFilterSource(saved.observation, prepared.source.observation))
-      throw new ProblemError('stale_cursor');
-    return { status: 'bound', binding: { at: native.input.at, source: prepared.source.observation,
-      scope: native.scope, ownerFence: saved.ownerFence, native, admission, prepared: prepared.source, work } };
+      work.compose((allowance) => createCollectionSource(deps).prepare({ ...native.input, allowance })),
+    );
+    if (!sameOwnerFilterSource(saved.observation, prepared.source.observation)) throw new ProblemError('stale_cursor');
+    return {
+      status: 'bound',
+      binding: {
+        at: native.input.at,
+        source: prepared.source.observation,
+        scope: native.scope,
+        ownerFence: saved.ownerFence,
+        native,
+        admission,
+        prepared: prepared.source,
+        work,
+      },
+    };
   } catch (error) {
     releaseNativeOwnerFilterRead(native);
     throw error;
   }
 }
 async function revalidatePreparationRead(
-  deps: ReaderDependencies, input: ReadInput, binding: ReadBinding, subjects: readonly string[],
+  deps: ReaderDependencies,
+  input: ReadInput,
+  binding: ReadBinding,
+  subjects: readonly string[],
 ): Promise<Readonly<{ status: 'unavailable' }> | Readonly<{ status: 'current'; subjects: readonly string[] }>> {
   const { native, prepared, work, admission } = binding;
   return withNativeOwnerFilterSource(native, work, async () => {
     const source = createCollectionSource(deps);
     const disclosed: string[] = [];
     for (const subjectId of subjects) {
-      const membership = await work.compose(allowance => source.containsSubject({ ...native.input,
-        source: prepared, subjectId, allowance }));
+      const membership = await work.compose((allowance) =>
+        source.containsSubject({ ...native.input, source: prepared, subjectId, allowance }),
+      );
       if (!sameOwnerFilterSource(binding.source, membership.observation)) throw new ProblemError('stale_cursor');
       if (membership.result === 'not_proven') return { status: 'unavailable' };
       if (!membership.result) continue;
       const closure = await readOwnerFilterCandidateClosure(native, prepared, subjectId, work);
       if (closure.status !== 'complete') return { status: 'unavailable' };
-      const control = work.reserve({ candidateKeys: 0, nativeRows: 0, identityMetadataRows: 0,
-        emptySeeks: 0, nativePoints: 1, witnessKeys: 0, statements: 3, bytes: 256 });
+      const control = work.reserve({
+        candidateKeys: 0,
+        nativeRows: 0,
+        identityMetadataRows: 0,
+        emptySeeks: 0,
+        nativePoints: 1,
+        witnessKeys: 0,
+        statements: 3,
+        bytes: 256,
+      });
       control.dispatch();
       let match;
       try {
-        match = await withReadTransaction(deps.pool, client =>
-          readOwnerFilterCandidate(deadlineClient(client, input.deadline), admission, closure.closure, work));
-      } finally { control.settle(); }
+        match = await withReadTransaction(deps.pool, (client) =>
+          readOwnerFilterCandidate(deadlineClient(client, input.deadline), admission, closure.closure, work),
+        );
+      } finally {
+        control.settle();
+      }
       if (match === 'not_proven') return { status: 'unavailable' };
       if (match) disclosed.push(subjectId);
     }
-    const final = await work.compose(allowance => source.prepare({ ...native.input, allowance }));
+    const final = await work.compose((allowance) => source.prepare({ ...native.input, allowance }));
     if (!sameOwnerFilterSource(binding.source, final.source.observation)) throw new ProblemError('stale_cursor');
     await revalidateNativeOwnerFilter(native, work);
     return { status: 'current', subjects: disclosed };
@@ -994,9 +1122,16 @@ async function revalidatePreparationRead(
 }
 
 /** Complete observation equality includes excluded and order population. No native capability is deserialized. */
-export function preparationObservation(source: CollectionSourceObservation, scope: IdentityScopeObservation, ownerFence: string | null = null): string {
-  const value = canonicalize({ ownerFence, source: { ...source, stamp: { ...source.stamp, position: source.stamp.position.toString() } },
-    scope: { ...scope, committedRevision: scope.committedRevision.toString() } });
+export function preparationObservation(
+  source: CollectionSourceObservation,
+  scope: IdentityScopeObservation,
+  ownerFence: string | null = null,
+): string {
+  const value = canonicalize({
+    ownerFence,
+    source: { ...source, stamp: { ...source.stamp, position: source.stamp.position.toString() } },
+    scope: { ...scope, committedRevision: scope.committedRevision.toString() },
+  });
   if (typeof value !== 'string' || Buffer.byteLength(value) > 4096) throw unsupported();
   return value;
 }
@@ -1004,8 +1139,14 @@ export function preparationObservation(source: CollectionSourceObservation, scop
 export type PreparedMembersRead =
   | Readonly<{ status: 'unavailable' }>
   | Readonly<{ status: 'preparing'; locator: PreparationLocator | null }>
-  | Readonly<{ status: 'ready'; locator: PreparationLocator; subjects: readonly string[]; next: string | null;
-      revalidate(): Promise<void>; release(): void }>;
+  | Readonly<{
+      status: 'ready';
+      locator: PreparationLocator;
+      subjects: readonly string[];
+      next: string | null;
+      revalidate(): Promise<void>;
+      release(): void;
+    }>;
 
 /** Pure retained-result read. Its caller may choose ONE successful-read touch after the whole composed read.
  * Candidate rows supply order only. The native reader revalidates every authority before any complete page.
@@ -1021,9 +1162,16 @@ export async function readPreparedMembers(
   const candidateLimit = Math.min(100, 2 * limit + 2);
   const basis = preparationBasis(key.owner_account_id, input.collectionId, input.definition);
   const digest = createHash('sha256').update(basis).digest();
-  const binding: ListCursorBinding = { route: 'GET /v1/collections/{collectionId}/members',
-    viewer: key.owner_account_id, query: { collectionId: input.collectionId, preparation: digest.toString('hex'),
-      sort: input.definition.sort, limit } };
+  const binding: ListCursorBinding = {
+    route: 'GET /v1/collections/{collectionId}/members',
+    viewer: key.owner_account_id,
+    query: {
+      collectionId: input.collectionId,
+      preparation: digest.toString('hex'),
+      sort: input.definition.sort,
+      limit,
+    },
+  };
   let after = '0';
   let cursorEpisode: string | null = null;
   let cursorObservation: string | null = null;
@@ -1032,79 +1180,123 @@ export async function readPreparedMembers(
     const cursor = await decodeListCursor(deps.tokens, binding, options.cursor, (deps.clock ?? systemClock)());
     if (!cursor.ok || cursor.after.length !== 3) throw new ProblemError('invalid_cursor');
     const [episode, observation, position] = cursor.after;
-    if (typeof episode !== 'string' || routeOf(episode) !== key.route || typeof observation !== 'string' ||
-        typeof position !== 'string' || !/^[1-9][0-9]{0,18}$/.test(position) || BigInt(position) > 9223372036854775807n)
+    if (
+      typeof episode !== 'string' ||
+      routeOf(episode) !== key.route ||
+      typeof observation !== 'string' ||
+      typeof position !== 'string' ||
+      !/^[1-9][0-9]{0,18}$/.test(position) ||
+      BigInt(position) > 9223372036854775807n
+    )
       throw new ProblemError('invalid_cursor');
-    cursorEpisode = episode; cursorObservation = observation; cursorEpoch = cursor.epoch; after = position;
+    cursorEpisode = episode;
+    cursorObservation = observation;
+    cursorEpoch = cursor.epoch;
+    after = position;
   }
   const current = await bindPreparationRead(deps, input);
   if (current.status !== 'bound') return { status: 'unavailable' };
   let retainedBinding = false;
   try {
-  const { source, scope, at: time } = current.binding;
-  if (source.collectionId !== input.collectionId || source.route !== key.route || scope.key.source.kind !== 'library')
-    throw new TypeError('Foreign prepared members read');
-  const identity = scope.key.source.identity;
-  if (identity.scope !== 'curated' || identity.accountId !== key.owner_account_id || identity.collectionId !== input.collectionId ||
-      identity.route !== key.route || identity.incarnation !== source.incarnation)
-    throw new TypeError('Foreign prepared members scope');
-  if (cursorEpoch !== null && cursorEpoch !== source.stamp.epoch) throw new ProblemError('stale_cursor');
-  const observation = preparationObservation(source, scope, current.binding.ownerFence);
-  const observationDigest = createHash('sha256').update(observation).digest('hex');
-  const read = await withReadTransaction(deps.pool, async (client) => {
-    const query = deadlineClient(client, input.deadline);
-    const [header] = await readHeader.run(query, { ...key, digest, at: authoritativeTimeValue(time) });
-    if (!header) return null;
-    if (header.basis !== basis) throw unsupported();
-    if (cursorEpisode !== null && (cursorEpisode !== header.episodeId || cursorObservation !== observationDigest))
-      throw new ProblemError('stale_cursor');
-    const locator: PreparationLocator = { route: key.route, ownerAccountId: key.owner_account_id,
-      collectionId: input.collectionId, episodeId: header.episodeId };
-    if (header.observation !== observation || header.incarnation !== source.incarnation || header.generation !== identity.generation)
-      return { header, locator, rows: null };
-    // Independent native original validation in this reader's snapshot, not a stored Boolean.
-    if (!header.complete)
-      return { header, locator, rows: null };
-    if (!header.associated || !(await original.run(query, { ...key, episode_id: header.episodeId })) ||
-        !(await completionResult.run(query, { ...key, episode_id: header.episodeId })))
-      return { header, locator, rows: null, completionMissing: true };
-    const rows = await readResults.run(query, { ...key, episode_id: header.episodeId, after, limit: candidateLimit });
-    return { header, locator, rows };
-  });
-  if (!read) {
-    if (cursorEpisode !== null) throw new ProblemError('stale_cursor');
-    return { status: 'preparing', locator: null };
-  }
-  if (read.header.failure !== null) return { status: 'unavailable' };
-  if ('completionMissing' in read && read.completionMissing) return { status: 'unavailable' };
-  if (!read.header.associated || !read.header.complete) return { status: 'preparing', locator: read.locator };
-  if (!read.rows) return { status: 'preparing', locator: read.locator };
-  const disclosed = await revalidatePreparationRead(deps, input, current.binding, read.rows.map((row) => row.subjectId));
-  if (disclosed.status !== 'current') return { status: 'unavailable' };
-  // The native result is a current ordered subsequence, never a caller-side evaluator or new canonical matcher.
-  let index = 0;
-  for (const subject of disclosed.subjects) {
-    while (index < read.rows.length && read.rows[index]!.subjectId !== subject) index++;
-    if (index === read.rows.length) throw new TypeError('Foreign or unordered prepared disclosure');
-    index++;
-  }
-  const exhausted = read.header.complete && read.rows.length < candidateLimit;
-  if (disclosed.subjects.length < limit && !exhausted) return { status: 'preparing', locator: read.locator };
-  const subjects = disclosed.subjects.slice(0, limit);
-  const last = subjects.at(-1);
-  const position = last ? read.rows.find((row) => row.subjectId === last)!.position : after;
-  const next = exhausted && disclosed.subjects.length <= limit ? null : await encodeListCursor(deps.tokens, binding,
-    { epoch: source.stamp.epoch, after: [read.locator.episodeId, observationDigest, position] },
-    (deps.clock ?? systemClock)());
-  const revalidate = async () => {
-    const final = await revalidatePreparationRead(deps, input, current.binding, subjects);
-    if (final.status !== 'current' || final.subjects.length !== subjects.length ||
-        final.subjects.some((subject, index) => subject !== subjects[index]))
-      throw new ProblemError('dependency_unavailable');
-  };
-  retainedBinding = true;
-  return { status: 'ready', locator: read.locator, subjects, next, revalidate,
-    release: () => releaseNativeOwnerFilterRead(current.binding.native) };
+    const { source, scope, at: time } = current.binding;
+    if (source.collectionId !== input.collectionId || source.route !== key.route || scope.key.source.kind !== 'library')
+      throw new TypeError('Foreign prepared members read');
+    const identity = scope.key.source.identity;
+    if (
+      identity.scope !== 'curated' ||
+      identity.accountId !== key.owner_account_id ||
+      identity.collectionId !== input.collectionId ||
+      identity.route !== key.route ||
+      identity.incarnation !== source.incarnation
+    )
+      throw new TypeError('Foreign prepared members scope');
+    if (cursorEpoch !== null && cursorEpoch !== source.stamp.epoch) throw new ProblemError('stale_cursor');
+    const observation = preparationObservation(source, scope, current.binding.ownerFence);
+    const observationDigest = createHash('sha256').update(observation).digest('hex');
+    const read = await withReadTransaction(deps.pool, async (client) => {
+      const query = deadlineClient(client, input.deadline);
+      const [header] = await readHeader.run(query, { ...key, digest, at: authoritativeTimeValue(time) });
+      if (!header) return null;
+      if (header.basis !== basis) throw unsupported();
+      if (cursorEpisode !== null && (cursorEpisode !== header.episodeId || cursorObservation !== observationDigest))
+        throw new ProblemError('stale_cursor');
+      const locator: PreparationLocator = {
+        route: key.route,
+        ownerAccountId: key.owner_account_id,
+        collectionId: input.collectionId,
+        episodeId: header.episodeId,
+      };
+      if (
+        header.observation !== observation ||
+        header.incarnation !== source.incarnation ||
+        header.generation !== identity.generation
+      )
+        return { header, locator, rows: null };
+      // Independent native original validation in this reader's snapshot, not a stored Boolean.
+      if (!header.complete) return { header, locator, rows: null };
+      if (
+        !header.associated ||
+        !(await original.run(query, { ...key, episode_id: header.episodeId })) ||
+        !(await completionResult.run(query, { ...key, episode_id: header.episodeId }))
+      )
+        return { header, locator, rows: null, completionMissing: true };
+      const rows = await readResults.run(query, { ...key, episode_id: header.episodeId, after, limit: candidateLimit });
+      return { header, locator, rows };
+    });
+    if (!read) {
+      if (cursorEpisode !== null) throw new ProblemError('stale_cursor');
+      return { status: 'preparing', locator: null };
+    }
+    if (read.header.failure !== null) return { status: 'unavailable' };
+    if ('completionMissing' in read && read.completionMissing) return { status: 'unavailable' };
+    if (!read.header.associated || !read.header.complete) return { status: 'preparing', locator: read.locator };
+    if (!read.rows) return { status: 'preparing', locator: read.locator };
+    const disclosed = await revalidatePreparationRead(
+      deps,
+      input,
+      current.binding,
+      read.rows.map((row) => row.subjectId),
+    );
+    if (disclosed.status !== 'current') return { status: 'unavailable' };
+    // The native result is a current ordered subsequence, never a caller-side evaluator or new canonical matcher.
+    let index = 0;
+    for (const subject of disclosed.subjects) {
+      while (index < read.rows.length && read.rows[index]!.subjectId !== subject) index++;
+      if (index === read.rows.length) throw new TypeError('Foreign or unordered prepared disclosure');
+      index++;
+    }
+    const exhausted = read.header.complete && read.rows.length < candidateLimit;
+    if (disclosed.subjects.length < limit && !exhausted) return { status: 'preparing', locator: read.locator };
+    const subjects = disclosed.subjects.slice(0, limit);
+    const last = subjects.at(-1);
+    const position = last ? read.rows.find((row) => row.subjectId === last)!.position : after;
+    const next =
+      exhausted && disclosed.subjects.length <= limit
+        ? null
+        : await encodeListCursor(
+            deps.tokens,
+            binding,
+            { epoch: source.stamp.epoch, after: [read.locator.episodeId, observationDigest, position] },
+            (deps.clock ?? systemClock)(),
+          );
+    const revalidate = async () => {
+      const final = await revalidatePreparationRead(deps, input, current.binding, subjects);
+      if (
+        final.status !== 'current' ||
+        final.subjects.length !== subjects.length ||
+        final.subjects.some((subject, index) => subject !== subjects[index])
+      )
+        throw new ProblemError('dependency_unavailable');
+    };
+    retainedBinding = true;
+    return {
+      status: 'ready',
+      locator: read.locator,
+      subjects,
+      next,
+      revalidate,
+      release: () => releaseNativeOwnerFilterRead(current.binding.native),
+    };
   } finally {
     if (!retainedBinding) releaseNativeOwnerFilterRead(current.binding.native);
   }

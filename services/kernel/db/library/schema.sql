@@ -2732,7 +2732,6 @@ CREATE TABLE library.members_preparation (
     CONSTRAINT members_preparation_result_count_check CHECK ((result_count >= 0)),
     CONSTRAINT members_preparation_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT members_preparation_runtime_checkpoint_check CHECK ((octet_length(checkpoint) <= 4096)),
-    CONSTRAINT members_preparation_runtime_complete_check CHECK (((NOT complete) OR (observation IS NOT NULL))),
     CONSTRAINT members_preparation_runtime_failure_check CHECK ((failure_code = ANY (ARRAY['dependency_unavailable'::text, 'failed'::text]))),
     CONSTRAINT members_preparation_runtime_function_check CHECK (((selected_function_id >= 0) AND (selected_function_id <= 63))),
     CONSTRAINT members_preparation_runtime_observation_check CHECK ((octet_length(observation) <= 4096)),

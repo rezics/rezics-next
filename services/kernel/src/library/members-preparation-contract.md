@@ -283,3 +283,5 @@ Library A5 cleanup and Accounts actual-copy minimizer handoff; full Members adap
 admission and HTTP 202 behavior; shared common-page cross-resource Access composition; full owner query/index,
 logical Everything/state, Continue/Liked, publication, source eligibility, canonical identity and readiness.
 This metadata contract closes none of those followups and guesses no pending epoch vector, control partition or P.
+
+Decision: metadata-only reservation preserves its native contract; `runtime: true` requires the complete C3 parent before first I/O and does not inherit authority from a locator.

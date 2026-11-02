@@ -16,7 +16,6 @@ ALTER TABLE library.members_preparation
   ADD CONSTRAINT members_preparation_runtime_observation_check CHECK (octet_length(observation) <= 4096),
   ADD CONSTRAINT members_preparation_runtime_failure_check CHECK (failure_code IN ('dependency_unavailable', 'failed')),
   ADD CONSTRAINT members_preparation_runtime_source_check CHECK ((source_incarnation IS NULL) = (source_generation IS NULL)),
-  ADD CONSTRAINT members_preparation_runtime_complete_check CHECK (NOT complete OR observation IS NOT NULL),
   ADD CONSTRAINT members_preparation_runtime_original_check CHECK (
     (original_custody_id IS NULL AND original_transaction_id IS NULL AND original_epoch IS NULL
       AND original_generation IS NULL AND original_position IS NULL)

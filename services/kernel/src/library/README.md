@@ -2365,14 +2365,14 @@ private episodes and locator-only intents. `readRetainedDefinition` recovers the
 immutable accepted release only on the same live, fenced client; it does not establish current Source authority.
 Default `library.membersPreparation` work remains explicitly unavailable and produces no ready result or custody
 acknowledgment. Retained runtime and ordered-result bodies are installed below; useful prepared consumption and finite sparse-source completion require the full funded Source/physical binding.
-The Members runtime implements route-leading owner controls, exact-basis live uniqueness, indexed LRU/idle
-retirement and bounded child-first result cleanup. `createMembersPreparation` uses actual Core request admission
-and current `collection:read`; duplicate admission does not touch or enqueue. New reservations project the inserted
-incarnation, generation and basis from native SQL. `registerPositionedOperationalHistoryWork` registers the original
-and enqueues exactly once on that same transaction. Members associates each inserted episode with the actual native
-operational original and episode association. Private resolve/verify/receive transfers are reserved while that
-original is live and consumed only after Core returns from successful COMMIT and releases the source client. Their
-original absolute deadline and Pool survive the handoff; no transfer is serialized or reused by durable work.
+Native metadata reservations retain route-leading owner controls, exact-basis live uniqueness and indexed
+LRU/idle retirement. `createMembersPreparation` uses Core request admission and current `collection:read`;
+duplicate admission neither touches nor enqueues. An explicitly funded History child registers the actual
+reservation original and locator-only intent on the same transaction. The returned private transfers retain their
+original deadline and Pool and can be consumed only after successful COMMIT; a locator grants no transfer authority.
+Runtime admission (`runtime: true`) separately requires the complete C3 parent before first I/O. The native runtime
+association, selected apply/completion and bounded cleanup bodies are retained for that integration. Metadata-only
+reservation does not install an original association or capture current Source/physical authority.
 
 The default `library.membersPreparation` consumer registers through `SelectedRuntime.registerMembersStep`.
 Each selected invocation obtains a fresh executor-issued original with one absolute deadline. Selection commits and
@@ -2431,9 +2431,9 @@ Final completion independently remains refused by the installed producer with
 `selected-runtime-final-source-physical-authority-unavailable`. Members preserves that exact operand and never
 sets a successful complete header from exhaustion. Required foreign authority must cover the actual current Source,
 SDK inventory restoration/retirement and independent physical closure, under the selected original's real funding
-and lifetime. Local association and native version progress prove none of those facts. The missing-parent reservation
+and lifetime. Local association and native version progress prove none of those facts. The missing-parent runtime-admission
 refusal remains in place even though the selected interface is installed; its local subtotal is not a whole-parent
-quote or permission to create episodes.
+quote or permission to dispatch the runtime.
 Library A5's existing participant probes and drains added results, headers (including bases/frontiers/original
 associations and selected lookup coordinates) and owner controls in child-first order. This local inventory is not shared-history minimization,
 all-copy absence or a blanket erasure/restore acknowledgement.
