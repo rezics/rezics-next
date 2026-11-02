@@ -696,6 +696,9 @@ release. Cited assertions follow ordinary sourced review and do not offer consen
 response supplies no eligibility or disclosed flag: the page says so, separating unsourced/private review from
 presence or absence in the current public result.
 
+After deliberate continuation and its exact-page retries, focus moves to the returned assertion, truthful empty or
+terminal boundary, or failed-read recovery region; initial reads and public refreshes leave focus in place.
+
 Sharing and retraction require separate explicit confirmations through the generated native
 `POST /v1/statements/{id}/disclose` and `POST /v1/statements/{id}/retract` methods. The existing session BFF retains
 CSRF protection, current credentials, native idempotency keys and session-token continuity. Only the current native

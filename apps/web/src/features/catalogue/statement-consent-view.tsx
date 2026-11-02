@@ -98,6 +98,9 @@ function StatementConsentPageLive({
   const confirmationId = useId();
   const ownershipId = useId();
   const actionButtons = useRef<Partial<Record<ConsentCommand['operation'], HTMLButtonElement | null>>>({});
+  const readFocusTarget = useRef<HTMLElement | null>(null);
+  const continuedRead = useRef(false);
+  const pendingReadFocus = useRef(false);
   const returnFocus = useRef<ConsentCommand['operation'] | undefined>(undefined);
   const focusConfirmation = useCallback(
     (node: HTMLHeadingElement | null) => {
@@ -149,15 +152,28 @@ function StatementConsentPageLive({
       returnFocus.current = undefined;
     }
   }, [confirmation, lifetime]);
+  useEffect(() => {
+    if (busy || !pendingReadFocus.current) return;
+    const target = readFocusTarget.current;
+    if (!target) return;
+    pendingReadFocus.current = false;
+    if (lifetime.active()) target.focus();
+    if (current) continuedRead.current = false;
+  }, [busy, current, failure, terminal, lifetime]);
   function openConfirmation(operation: ConsentCommand['operation']) {
     if (!lifetime.active()) return;
     if (running.current || request.current || busy || reload || uncertain || !attempt || !assertion?.identified) return;
     setConfirmation(operation);
   }
 
-  async function load(input: { cursor?: string; session: string | undefined } = { session: session.current }) {
+  async function load(
+    input: { cursor?: string; session: string | undefined } = { session: session.current },
+    focusContinuation = false,
+  ) {
     if (!lifetime.active()) return;
     if (running.current || request.current || terminal) return;
+    continuedRead.current = focusContinuation;
+    pendingReadFocus.current = focusContinuation;
     running.current = true;
     setBusy(true);
     setFailure(undefined);
@@ -287,7 +303,12 @@ function StatementConsentPageLive({
         </Button>
       )}
       {(failure || (read && !read.ok)) && (
-        <section aria-label={recoveryLabel}>
+        <section
+          ref={readFocusTarget}
+          tabIndex={-1}
+          className="focus:outline-2 focus:outline-offset-2 focus:outline-ring"
+          aria-label={recoveryLabel}
+        >
           <ContentItemFrame as="div" data-consent-part="recovery" className="flex min-w-0 flex-col gap-3 p-4 sm:p-6">
             <ConsentError reason={(failure ?? (read && !read.ok ? read : undefined))!.reason} locale={locale} />
             {uncertain && <p>{m.statement_consent_uncertain({}, options)}</p>}
@@ -295,7 +316,7 @@ function StatementConsentPageLive({
               variant="outline"
               className="min-h-11 min-w-11 h-auto max-w-full self-start py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               disabled={busy}
-              onClick={() => void (uncertain ? change() : load(page.current))}
+              onClick={() => void (uncertain ? change() : load(page.current, continuedRead.current))}
             >
               {recoveryLabel}
             </Button>
@@ -314,13 +335,24 @@ function StatementConsentPageLive({
       )}
       {terminal ? (
         <ContentItemFrame as="div" data-consent-part="terminal" className="p-4 sm:p-6">
-          <p role="status">{m.statement_consent_terminal({}, options)}</p>
+          <p
+            ref={readFocusTarget}
+            tabIndex={-1}
+            className="focus:outline-2 focus:outline-offset-2 focus:outline-ring"
+            role="status"
+          >
+            {m.statement_consent_terminal({}, options)}
+          </p>
         </ContentItemFrame>
       ) : (
         <>
           {current && !candidate && (
             <ContentItemFrame as="div" data-consent-part="empty" className="flex min-w-0 flex-col gap-3 p-4 sm:p-6">
-              <p>
+              <p
+                ref={readFocusTarget}
+                tabIndex={-1}
+                className="focus:outline-2 focus:outline-offset-2 focus:outline-ring"
+              >
                 {current.next ? m.statement_consent_empty_page({}, options) : m.statement_consent_empty({}, options)}
               </p>
               {current.next && (
@@ -328,7 +360,7 @@ function StatementConsentPageLive({
                   variant="outline"
                   className="min-h-11 min-w-11 h-auto max-w-full self-start py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                   disabled={busy}
-                  onClick={() => void load({ cursor: current.next!, session: session.current })}
+                  onClick={() => void load({ cursor: current.next!, session: session.current }, true)}
                 >
                   {m.statement_consent_continue({}, options)}
                 </Button>
@@ -336,7 +368,12 @@ function StatementConsentPageLive({
             </ContentItemFrame>
           )}
           {candidate && current && (
-            <section aria-label={pickText(current.field, locale).text || m.subject_value_unlabelled({}, options)}>
+            <section
+              ref={readFocusTarget}
+              tabIndex={-1}
+              className="focus:outline-2 focus:outline-offset-2 focus:outline-ring"
+              aria-label={pickText(current.field, locale).text || m.subject_value_unlabelled({}, options)}
+            >
               <ContentItemFrame
                 as="div"
                 data-consent-part="assertion"

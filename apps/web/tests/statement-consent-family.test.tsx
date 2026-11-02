@@ -351,14 +351,17 @@ test('Statement consent composes the complete family with isolated confirmation,
       await click(button(host, m.statement_consent_open()));
       await until(() => !!host.querySelector('[data-consent-part="empty"]'));
       expect(pageInputs).toEqual([[undefined, undefined]]);
+      expect(window.document.activeElement).not.toBe(host.querySelector('[data-consent-part="empty"] p'));
       expect(host.textContent).toContain(m.statement_consent_empty_page());
       expect(host.textContent).not.toContain(m.statement_consent_empty());
       await click(button(host, m.statement_consent_continue()));
       await until(() => !!host.querySelector('[data-consent-part="recovery"]'));
+      expect(window.document.activeElement).toBe(host.querySelector('[data-consent-part="recovery"]'));
       expect(host.querySelector('[data-consent-part="assertion"], [data-consent-part="public"]')).toBeNull();
       expect(host.textContent).not.toContain(m.statement_consent_empty());
       await click(button(host, m.statement_consent_retry_page()));
       await until(() => !!host.querySelector('[data-consent-part="assertion"]'));
+      expect(window.document.activeElement).toBe(host.querySelector('[data-consent-part="assertion"]')?.parentElement);
       expect(pageInputs).toEqual([
         [undefined, undefined],
         ['next-page', 'consent-session'],
@@ -444,7 +447,7 @@ test('Statement consent composes the complete family with isolated confirmation,
     // Retirement covers each asynchronous path using the actual lifetime wrapper and declared fixture.
     // The held response has completed native-shaped IO; delivery after retirement must do nothing else.
     for (const stage of ['read', 'change', 'public'] as const) {
-      const fixture = consentFixture();
+      const fixture = consentFixture(stage === 'read' ? 'more' : undefined);
       const entered = deferred();
       const release = deferred();
       const hold = async <T,>(value: Promise<T>) => {
@@ -454,7 +457,8 @@ test('Statement consent composes the complete family with isolated confirmation,
         return result;
       };
       const delayed: ConsentTransport = {
-        read: (...args) => (stage === 'read' ? hold(fixture.transport.read(...args)) : fixture.transport.read(...args)),
+        read: (...args) =>
+          stage === 'read' && args[0] ? hold(fixture.transport.read(...args)) : fixture.transport.read(...args),
         change: (command) =>
           stage === 'change' ? hold(fixture.transport.change(command)) : fixture.transport.change(command),
         public: (...args) =>
@@ -469,7 +473,11 @@ test('Statement consent composes the complete family with isolated confirmation,
         </CandidateReaderBoundary>
       );
       await show(boundary('original-reader'));
-      if (stage === 'read') await click(button(host, m.statement_consent_open()));
+      if (stage === 'read') {
+        await click(button(host, m.statement_consent_open()));
+        await until(() => !!host.querySelector('[data-consent-part="empty"]'));
+        await click(button(host, m.statement_consent_continue()));
+      }
       else {
         await open();
         if (stage === 'change') await confirm('disclose');
