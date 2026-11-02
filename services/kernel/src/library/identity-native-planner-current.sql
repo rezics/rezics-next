@@ -9,7 +9,7 @@ WITH input AS NOT MATERIALIZED (
         $7::text AS incarnation,
         $8::bigint AS generation,
         $9::text AS scope,
-        $10::text AS receiving_epoch,
+        $10::bigint AS receiving_epoch,
         $11::text AS effect_key,
         $12::bigint AS collection_fence,
         $13::bigint AS account_fence,
