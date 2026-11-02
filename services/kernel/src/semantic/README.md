@@ -1058,6 +1058,10 @@ terminals may still pay the full repeated plan. Each repeat has a fresh debit in
 the same remainder. A dispatched failure burns its admitted footprint; native rows
 are never refunded from result counts. The anchor helpers suppress only duplicate
 observation of their already-reserved exact query.
+Each anchor declaration includes sixfold JSON escaping of the bounded 4096-byte
+Type field, including a projection later rejected by the contribution size cap.
+Anchor enrollment and observation pin the same lookup key/disclosure projection
+across awaits; final comparison also pins its expected row before native IO.
 
 This is a local body cost, not a delivered whole-parent quote. Checkout, original
 admission/input reads, Access/bridge work, Source/custody, identity, catalogue,

@@ -87,7 +87,10 @@ export function kindTypeAnchorFootprint(inputBytes: number): WorkDimensions {
     nativePoints: 10,
     witnessKeys: 0,
     statements: 1,
-    bytes: inputBytes + KIND_TYPE_MAX_BYTES + 2048,
+    // A bounded native text field can expand sixfold in the JSON row receipt
+    // (for example U+0001 becomes \\u0001). Pay for that projection even when
+    // the later contribution-envelope check rejects the Type.
+    bytes: inputBytes + 6 * KIND_TYPE_MAX_BYTES + 2048,
     emptySeeks: 1,
   };
 }
@@ -136,8 +139,11 @@ export async function readNativeKindTypeAnchor(
   work: NativeCollectionWork,
   deadline: number,
 ): Promise<NativeKindTypeAnchor> {
-  requireKindTypeHome(client, input, deadline);
-  const lockInput = { route: input.route, subject_id: input.subjectId };
+  // Enrollment and observation must use the same key and disclosure projection
+  // across both awaits, even if the caller mutates its lookup object meanwhile.
+  const lookup = Object.freeze({ ...input });
+  requireKindTypeHome(client, lookup, deadline);
+  const lockInput = { route: lookup.route, subject_id: lookup.subjectId };
   const lockValues = kindTypeLock.params.map((name) => lockInput[name as keyof typeof lockInput]);
   const lockBytes = Buffer.byteLength(kindTypeLock.sql) + sourceBytes(lockValues);
   const lockReservation = work.reserve(kindTypeAnchorLockFootprint(lockBytes));
@@ -149,7 +155,7 @@ export async function readNativeKindTypeAnchor(
       query_timeout: Math.max(1, deadline - Date.now()),
     };
     const locked = await lockReservation.query(() => client.query<{ version: string }>(query));
-    requireKindTypeHome(client, input, deadline);
+    requireKindTypeHome(client, lookup, deadline);
     if (locked.rows.length !== 1) throw new AccessUnavailableError('contention');
     lockReservation.settle({ bytes: lockBytes + sourceBytes(locked.rows), emptySeeks: 0 });
   } catch (error) {
@@ -158,14 +164,14 @@ export async function readNativeKindTypeAnchor(
     throw error;
   }
   const parameters = {
-    route: input.route,
-    subject_id: input.subjectId,
-    include_type: input.includeType,
+    route: lookup.route,
+    subject_id: lookup.subjectId,
+    include_type: lookup.includeType,
     max_type_bytes: KIND_TYPE_MAX_BYTES,
   };
   const values = kindTypeAnchor.params.map((name) => parameters[name as keyof typeof parameters]);
   const inputBytes = Buffer.byteLength(kindTypeAnchor.sql) + sourceBytes(values);
-  requireKindTypeHome(client, input, deadline);
+  requireKindTypeHome(client, lookup, deadline);
   const reservation = work.reserve(kindTypeAnchorFootprint(inputBytes));
   reservation.dispatch();
   try {
@@ -175,9 +181,9 @@ export async function readNativeKindTypeAnchor(
       query_timeout: Math.max(1, deadline - Date.now()),
     };
     const result = await reservation.query(() => client.query<NativeKindTypeAnchor>(query));
-    requireKindTypeHome(client, input, deadline);
+    requireKindTypeHome(client, lookup, deadline);
     const row = result.rows[0];
-    if (result.rows.length !== 1 || !row || !row.writer_enrolled || row.subject_id !== input.subjectId)
+    if (result.rows.length !== 1 || !row || !row.writer_enrolled || row.subject_id !== lookup.subjectId)
       throw new AccessUnavailableError('contention');
     // Rows always charge the full native plan, including absent and denied keys.
     reservation.settle({ bytes: inputBytes + sourceBytes(result.rows), emptySeeks: row.present ? 0 : 1 });
@@ -201,13 +207,14 @@ export async function verifyNativeKindTypeAnchor(
   work: NativeCollectionWork,
   deadline: number,
 ): Promise<boolean> {
+  const expected = structuredClone(input.expected);
   const current = await readNativeKindTypeAnchor(
     client,
-    { route: input.route, subjectId: input.expected.subject_id, includeType: input.includeType },
+    { route: input.route, subjectId: expected.subject_id, includeType: input.includeType },
     work,
     deadline,
   );
-  return current.writer_enrolled && isDeepStrictEqual(current, input.expected);
+  return current.writer_enrolled && isDeepStrictEqual(current, expected);
 }
 
 /** One ledger, including Access and every failed/discarded native operation. */

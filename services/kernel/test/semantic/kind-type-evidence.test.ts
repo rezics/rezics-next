@@ -69,6 +69,16 @@ let f: CollectionKindFixture;
 beforeAll(async () => {
   f = await createCollectionKindFixture();
 }, 120000);
+
+test('native Type anchor declaration covers JSON escaping before contribution rejection', async () => {
+  const { kindTypeAnchorFootprint, KIND_TYPE_MAX_BYTES } = await import('../../src/semantic/scope-leaf-selection.ts');
+  const anchor = { ...structuralAnchor(newId(0xc100)), type: '\u0001'.repeat(KIND_TYPE_MAX_BYTES) };
+  const inputBytes = 4096;
+  const bound = kindTypeAnchorFootprint(inputBytes);
+  expect(Buffer.byteLength(anchor.type)).toBe(KIND_TYPE_MAX_BYTES);
+  expect(Buffer.byteLength(JSON.stringify([anchor]))).toBeGreaterThan(KIND_TYPE_MAX_BYTES + 2048);
+  expect(bound.bytes).toBeGreaterThanOrEqual(inputBytes + Buffer.byteLength(JSON.stringify([anchor])));
+});
 afterAll(async () => {
   await f?.close();
 });
