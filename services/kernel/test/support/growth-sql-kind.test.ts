@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { costOf, isControlStatement, type Capture } from './growth-cost.ts';
+import { classifyGrowthSql } from './growth-sql-kind.ts';
 import { readAttemptLedger } from './growth.ts';
 
 function captured(statements: string[], errors?: (string | null)[]): Capture {
@@ -42,4 +43,23 @@ test('commented transaction boundaries preserve savepoints, costs, and retry out
   expect(readAttemptLedger(retried)).toMatchObject([
     { backend: 71, outcome: 'aborted:40001', statements: 1, occurrences: [0, 1, 2] },
   ]);
+});
+
+test('a control prefix cannot stand for a multi-command wire message', () => {
+  const hidden = captured(['BEGIN; SELECT 1', 'COMMIT']);
+  expect(() => costOf(hidden)).toThrow(/leading control keyword/);
+  expect(() => readAttemptLedger(hidden)).toThrow(/leading control keyword/);
+  expect(() => classifyGrowthSql('START TRANSACTION; SELECT 1')).toThrow(/leading control keyword/);
+  expect(() => classifyGrowthSql('ROLLBACK TO s; SELECT 1')).toThrow(/leading control keyword/);
+  expect(() => classifyGrowthSql('SET LOCAL x = 1; SELECT 1')).toThrow(/leading control keyword/);
+
+  expect(classifyGrowthSql('BEGIN;')).toBe('begin');
+  expect(classifyGrowthSql('COMMIT; -- done')).toBe('commit');
+  expect(classifyGrowthSql('ROLLBACK; /* trail */ ;')).toBe('rollback');
+  expect(isControlStatement("SET LOCAL x = 'a;b'")).toBe(true);
+  expect(isControlStatement(`SET LOCAL x = E'a\\;b'`)).toBe(true);
+  expect(isControlStatement('SET LOCAL x = $tag$a;b$tag$')).toBe(true);
+  expect(isControlStatement('SET LOCAL "x;y" = 1')).toBe(true);
+  expect(isControlStatement('BEGIN /* nested /* ; */ still */')).toBe(true);
+  expect(classifyGrowthSql('SELECT $tag$ BEGIN; SELECT 1 $tag$')).toBe('statement');
 });

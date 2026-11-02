@@ -212,6 +212,11 @@ creates no per-action governance rows. There is no account scan or cross-partiti
 
 Growth SQL control classification skips leading whitespace and nested comments, rejects empty or comment-only entries
 and unterminated comments in the command prefix, and keeps `ROLLBACK TO [WORK|TRANSACTION]` inside the current attempt.
+A control prefix cannot classify a wire message that still has further executable commands after that first statement.
+Semicolons inside quoted identifiers, ordinary or escape strings, dollar-quoted bodies and nested comments remain in
+that command, as do ordinary trailing terminators and comments. Control-prefixed batches are refused at classification,
+so statement costs and the attempt ledger cannot treat them as one control; native capture still records one wire
+occurrence. Application-only batches stay one statement. Production query APIs are unchanged.
 
 The shared 1x/8x/64x growth checks grow accounts, community contexts, same-Global unrelated grants, unrelated
 receipts, same-account receipt history and outbox history at fixed actions. Warm native attempts use 5 statements
