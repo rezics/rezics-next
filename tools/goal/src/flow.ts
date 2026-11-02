@@ -38,6 +38,11 @@ export const flowMigrations = [
     version: 3,
     sql: `CREATE TABLE flow_audit_failures (day TEXT PRIMARY KEY, failed_at TEXT NOT NULL, cause TEXT NOT NULL, reported_at TEXT);`,
   },
+  {
+    module: 'flow',
+    version: 4,
+    sql: `CREATE INDEX flow_events_at_window ON flow_events(at, sequence);`,
+  },
 ];
 export function ensureFlow(db: Database): void {
   migrate(db, flowMigrations);

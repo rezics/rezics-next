@@ -143,7 +143,7 @@ function ensureIncidentRetries(store: WorkerStore, incident: ToolIncident, since
 function deliverIncident(inbox: ManagerInbox, settings: Settings, incident: ToolIncident): void {
   const examples = incident.exampleTasks.map((example) => `${example.taskId}#${example.attempt}`).join(', ');
   const event: ManagerEvent = {
-    managerId: settings.integration.supermanager,
+    managerId: settings.integration.operationsManager ?? 'control-plane',
     kind: 'blocker',
     summary: [
       `Environment incident: ${incident.line}`,

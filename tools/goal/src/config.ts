@@ -164,6 +164,16 @@ function positiveInteger(value: unknown, label: string): number {
   if (!Number.isInteger(parsed)) throw new Error(`invalid ${label}`);
   return parsed;
 }
+function readArgvPrefix(value: unknown): string[] | undefined {
+  if (value === undefined || value === null || (Array.isArray(value) && value.length === 0)) return undefined;
+  if (
+    !Array.isArray(value) ||
+    value.length > 32 ||
+    value.some((part) => typeof part !== 'string' || !part.trim() || part.length > 4096 || part.includes('\0'))
+  )
+    throw new Error('hourlyReportNotifier must be a nonempty command array with at most 32 arguments');
+  return value as string[];
+}
 function keys(value: Record<string, unknown>, allowed: string[], label: string): void {
   for (const key of Object.keys(value)) if (!allowed.includes(key)) throw new Error(`unknown ${label}.${key}`);
 }
@@ -277,6 +287,7 @@ function settingsFromLocal(value: unknown, { env, initialMain, localFile }: Sett
       'operationsManager',
       'checkScriptReaderRoot',
       'devPrelandingTypecheck',
+      'hourlyReportNotifier',
     ],
     'integration',
   );
@@ -334,6 +345,9 @@ function settingsFromLocal(value: unknown, { env, initialMain, localFile }: Sett
     flowThresholds.attemptsPerIntegrated <= 0
   )
     throw new Error('invalid flow alarm thresholds');
+  const hourlyReportNotifier = readArgvPrefix(integration.hourlyReportNotifier);
+  const hourlyReportTimeoutMs = positiveInteger(integration.hourlyReportTimeoutMs, 'hourlyReportTimeoutMs');
+  if (hourlyReportTimeoutMs > 120_000) throw new Error('hourlyReportTimeoutMs must be at most 120000');
   return {
     version: 1,
     mainCheckout: main,
@@ -379,6 +393,8 @@ function settingsFromLocal(value: unknown, { env, initialMain, localFile }: Sett
       ...(integration.operationsManager === undefined
         ? {}
         : { operationsManager: text(integration.operationsManager, 'operationsManager') }),
+      ...(hourlyReportNotifier ? { hourlyReportNotifier } : {}),
+      hourlyReportTimeoutMs,
       ...(integration.checkScriptReaderRoot === undefined
         ? {}
         : { checkScriptReaderRoot: path(integration.checkScriptReaderRoot, '') }),
@@ -449,6 +465,7 @@ export type RuntimeOptions = {
 export const LANDING_CHECK_ENVIRONMENT = { REMOTE_CHECK_PRIORITY: 'landing' } as const;
 export function createRuntime(options: RuntimeOptions = {}): Runtime {
   const settings = options.settings ?? options.tasks?.settings ?? loadSettings();
+  const operationsManager = settings.integration.operationsManager ?? 'control-plane';
   const flowThresholds = settings.flowThresholds ?? DEFAULT_FLOW_THRESHOLDS;
   // Synthetic runtime fixtures may not contain the control-plane tree in their main checkout.
   const startedCodeVersion = existsSync(join(settings.mainCheckout, 'tools/goal'))
@@ -480,7 +497,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     enabled: settings.integration.checkResultReuse,
     alert: (summary: string) =>
       inbox.deliver({
-        managerId: settings.integration.supermanager,
+        managerId: operationsManager,
         kind: 'instruction',
         summary: `Check result reuse alert: ${summary}`,
       }),
@@ -693,6 +710,14 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     sink: job,
     managerSocket: settings.integration.managerSocket,
     supermanager: settings.integration.supermanager,
+    ...(settings.integration.hourlyReportNotifier
+      ? {
+          hourlyEfficiencyReport: {
+            enabled: true,
+            timeoutMs: settings.integration.hourlyReportTimeoutMs,
+          },
+        }
+      : {}),
     managerServices,
     landing,
     managerLand,
@@ -760,7 +785,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
       checkFlowAlarms(
         db,
         flow,
-        (summary) => flowInbox.deliver({ managerId: settings.integration.supermanager, kind: 'environment', summary }),
+        (summary) => flowInbox.deliver({ managerId: operationsManager, kind: 'environment', summary }),
         now,
         flowThresholds,
       );
@@ -772,7 +797,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
         store.tasks(),
         () => tasks.dispatch(template),
         new Date(),
-        (summary) => inbox.deliver({ managerId: settings.integration.supermanager, kind: 'environment', summary }),
+        (summary) => inbox.deliver({ managerId: operationsManager, kind: 'environment', summary }),
       );
     },
     recoverOrphans: async (options?: { adoptRunning?: boolean }) => {

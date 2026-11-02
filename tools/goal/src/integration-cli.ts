@@ -34,6 +34,7 @@ import { acquireDirectoryLease } from './lease.ts';
 import { ensureHostRunning, startHostSupervisor, recordHostLiveness } from './host-liveness.ts';
 import { sameProcess, type ProcessIdentity } from './process.ts';
 import { authenticatedManager, type AuthenticatedManager } from './priority-authority.ts';
+import { completedUtcHour } from './efficiency-report.ts';
 
 /** Composition belongs to the caller; this module never reads worker configuration or tables. */
 export type IntegrationRuntime = {
@@ -51,6 +52,7 @@ export type IntegrationRuntime = {
   handoffTrain?(): Promise<void>;
   hostCommand?: string[];
   hostSweepIntervalMs?: number;
+  hourlyEfficiencyReport?: { enabled: boolean; timeoutMs: number };
   codeIsCurrent?(): boolean;
   recoverOrphans?(options?: { adoptRunning?: boolean }): Promise<void>;
   deliverReminders?(): number;
@@ -92,6 +94,24 @@ export type HostRequest = {
   summary?: string;
   sessionId?: string;
 };
+
+/** Dispatch each completed UTC hour once in this host; the durable sender also fences restarts. */
+export function createHourlyReportScheduler(
+  publish: (bucket: string) => unknown,
+  now: () => Date | number = () => Date.now(),
+): () => void {
+  let lastBucket: string | undefined;
+  return () => {
+    const bucket = completedUtcHour(now()).start;
+    if (bucket === lastBucket) return;
+    lastBucket = bucket;
+    try {
+      const result = publish(bucket);
+      if (result && typeof (result as { then?: unknown }).then === 'function')
+        void Promise.resolve(result).catch(() => undefined);
+    } catch {}
+  };
+}
 
 /**
  * Start a child only when the previous one has exited. Work that runs Git synchronously must never run in the host,
@@ -543,6 +563,59 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
         console.error('backlog run failed to start:', error);
       }
     };
+    const publishHourlyReport = runtime.hourlyEfficiencyReport?.enabled
+      ? createHourlyReportScheduler((bucket) => {
+          const configured = runtime.hourlyEfficiencyReport!;
+          let child: ReturnType<typeof spawn>;
+          try {
+            child = spawn(
+              process.execPath,
+              [
+                join(runtime.mainCheckout, 'tools/goal/scripts/efficiency-report.ts'),
+                '--send',
+                '--scheduled',
+                '--bucket',
+                bucket,
+              ],
+              { cwd: runtime.mainCheckout, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true },
+            );
+          } catch {
+            console.error(`Hourly report ${bucket}: runner could not start; no outcome recorded.`);
+            return;
+          }
+          let output = '';
+          let finished = false;
+          let timedOut = false;
+          let killTimer: ReturnType<typeof setTimeout> | undefined;
+          const timeout = setTimeout(() => {
+            timedOut = true;
+            child.kill('SIGTERM');
+            killTimer = setTimeout(() => child.kill('SIGKILL'), 250);
+            killTimer.unref();
+          }, Math.min(150_000, configured.timeoutMs + 30_000));
+          timeout.unref();
+          const finish = (message: string, error = false) => {
+            if (finished) return;
+            finished = true;
+            clearTimeout(timeout);
+            if (killTimer) clearTimeout(killTimer);
+            (error ? console.error : console.info)(`Hourly report ${bucket}: ${message}`);
+          };
+          child.stdout?.on('data', (chunk: Buffer | string) => {
+            if (output.length < 512) output += chunk.toString().slice(0, 512 - output.length);
+          });
+          child.once('error', () => finish('runner could not start; no outcome recorded.', true));
+          child.once('close', (code, signal) => {
+            const match = /^Delivery: (disabled|sent|failed|unknown|claimed|already-sent|already-failed|already-unknown)\b/m.exec(
+              output,
+            );
+            if (timedOut) finish('runner timed out; delivery outcome unknown.', true);
+            else if (match) finish(match[1]! + '.');
+            else finish(`no outcome recorded (runner ${code ?? signal ?? 'unknown'}).`, true);
+          });
+          child.unref();
+        })
+      : undefined;
     // Containers that workers and checks leave running are removed every ten minutes, per <state>/containers.json.
     let reapedAt = 0;
     const reap = () => {
@@ -570,11 +643,13 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
     };
     scheduleWidthSweep();
     runBacklog();
+    publishHourlyReport?.();
     recoveryTimer = startOrphanRecoveryTimer(recoverOrphans, 60_000, () => {
       remind();
       reviewFlow();
       scheduleWidthSweep();
       runBacklog();
+      publishHourlyReport?.();
       promote();
       verify();
       reap();

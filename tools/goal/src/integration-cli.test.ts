@@ -7,7 +7,7 @@ import { openDb } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { WorkerStore } from './store.ts';
 import { temporaryDirectory, repository } from './test-support.ts';
-import { singleFlight } from './integration-cli.ts';
+import { createHourlyReportScheduler, singleFlight } from './integration-cli.ts';
 
 const cli = join(import.meta.dir, 'fixtures/cli-runtime.ts');
 const runtime = join(import.meta.dir, 'fixtures/cli-runtime.ts');
@@ -310,4 +310,20 @@ test('a single-flight child starts again only after the previous one has exited'
   expect(start()).toBeDefined();
   await new Promise((resolve) => starts[1]!.once('exit', resolve));
   expect(starts).toHaveLength(2);
+});
+
+test('host publishes once per completed UTC hour without waiting for the report sender', () => {
+  let now = new Date('2026-10-31T02:30:00.000Z');
+  const calls: string[] = [];
+  const neverFinishes = new Promise<void>(() => {});
+  const publish = createHourlyReportScheduler(async (bucket) => {
+    calls.push(bucket);
+    await neverFinishes;
+  }, () => now);
+
+  expect(publish()).toBeUndefined();
+  expect(publish()).toBeUndefined();
+  now = new Date('2026-10-31T03:01:00.000Z');
+  expect(publish()).toBeUndefined();
+  expect(calls).toEqual(['2026-10-31T01:00:00.000Z', '2026-10-31T02:00:00.000Z']);
 });

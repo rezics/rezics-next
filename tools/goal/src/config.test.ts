@@ -164,6 +164,38 @@ test('manager-only Claude pool configuration remains available while worker prof
   }
 });
 
+test('hourly report notifier is optional and its command and timeout are bounded', () => {
+  const h = harness();
+  try {
+    const local = JSON.parse(readFileSync(h.settings.localFile, 'utf8'));
+    const defaults = loadSettings({ cwd: h.root, env: {} });
+    expect(defaults.integration.operationsManager).toBe('control-plane');
+    expect(defaults.integration.hourlyReportNotifier).toBeUndefined();
+    expect(defaults.integration.hourlyReportTimeoutMs).toBe(20_000);
+
+    local.integration = {
+      ...local.integration,
+      hourlyReportNotifier: ['/usr/local/bin/notify-delivery', '--room', 'delivery-ops'],
+      hourlyReportTimeoutMs: 120_000,
+    };
+    writeFileSync(h.settings.localFile, JSON.stringify(local));
+    expect(loadSettings({ cwd: h.root, env: {} }).integration).toMatchObject({
+      hourlyReportNotifier: ['/usr/local/bin/notify-delivery', '--room', 'delivery-ops'],
+      hourlyReportTimeoutMs: 120_000,
+    });
+
+    local.integration.hourlyReportTimeoutMs = 120_001;
+    writeFileSync(h.settings.localFile, JSON.stringify(local));
+    expect(() => checkSettings({ cwd: h.root, env: {} })).toThrow('at most 120000');
+    local.integration.hourlyReportTimeoutMs = 20_000;
+    local.integration.hourlyReportNotifier = ['notify', ''];
+    writeFileSync(h.settings.localFile, JSON.stringify(local));
+    expect(() => checkSettings({ cwd: h.root, env: {} })).toThrow('hourlyReportNotifier');
+  } finally {
+    h.dispose();
+  }
+});
+
 test('legacy affected and integration checks migrate to post-integration verifier settings', () => {
   const h = harness();
   try {

@@ -138,6 +138,9 @@ export type Settings = {
     supermanager: string;
     /** Authenticated operations manager allowed to register original proofs for another owner. */
     operationsManager?: string;
+    /** Optional argv prefix for the nonblocking hourly report notifier. */
+    hourlyReportNotifier?: string[];
+    hourlyReportTimeoutMs: number;
     /** Clean captured integration source used only to read historical native custody data. */
     checkScriptReaderRoot?: string;
     managerLimits: { turns: number; turnsWithoutDecision: number; wallMs: number };

@@ -28,6 +28,7 @@ test('Critical escalation needs a durable supermanager grant and records setter,
     const owner = task.brief.manager;
     addManager(h.store.db, owner, 'owner-session', 'supermanager');
     addManager(h.store.db, 'supermanager', 'super-session', 'root');
+    addManager(h.store.db, 'control-plane', 'operations-session', 'root');
     const runtime = runtimeFor(h);
 
     await expect(
@@ -40,6 +41,12 @@ test('Critical escalation needs a durable supermanager grant and records setter,
       runWorkerCommand('priority', ['grant', task.id], {
         runtime,
         env: { CODEX_THREAD_ID: 'owner-session', GOAL_MANAGER: owner },
+      }),
+    ).rejects.toThrow('only configured supermanager');
+    await expect(
+      runWorkerCommand('priority', ['grant', task.id], {
+        runtime,
+        env: { CODEX_THREAD_ID: 'operations-session', GOAL_MANAGER: 'control-plane' },
       }),
     ).rejects.toThrow('only configured supermanager');
     await expect(
