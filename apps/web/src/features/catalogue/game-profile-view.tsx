@@ -104,7 +104,15 @@ function GameProfileLive({
               <>
                 {refreshFailed && <p role="status">{m.game_profile_refresh_failed({}, o)}</p>}
                 <EditorFailure
-                  reason={query.data && !query.data.ok ? query.data.reason : 'unavailable'}
+                  reason={
+                    query.isError
+                      ? 'unavailable'
+                      : query.data?.ok
+                        ? query.data.public
+                          ? 'stale'
+                          : 'denied'
+                        : (query.data?.reason ?? 'unavailable')
+                  }
                   locale={locale}
                 />
                 <Button
