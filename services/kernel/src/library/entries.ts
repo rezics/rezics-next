@@ -2,7 +2,13 @@ import type { Pool, PoolClient } from 'pg';
 import canonicalize from 'canonicalize';
 import { readAccount } from '../access/account-data.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
-import { authoritativeTimeValue, CommandUnavailableError, type CommandEvent, type CommandTransaction, type AuthoritativeTime } from '../command/command.ts';
+import {
+  authoritativeTimeValue,
+  CommandUnavailableError,
+  type CommandEvent,
+  type CommandTransaction,
+  type AuthoritativeTime,
+} from '../command/command.ts';
 import type { KernelClock } from '../clock.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
