@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { DBOS } from '@dbos-inc/dbos-sdk';
-import type { Pool, PoolClient } from 'pg';
+import type { Pool } from 'pg';
 import { Value } from 'typebox/value';
 import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
 import { runCommand, type CommandEvent, type CommandTransaction } from '../command/command.ts';
@@ -8,6 +8,8 @@ import { withConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';
 import type { CloudEvent } from '../events/log.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
+import { identityEpochStore } from '../semantic/identity-epoch-store.ts';
+import type { IdentityEpochState } from '../semantic/identity-epoch-contract.ts';
 import { SEMANTIC_EVENTS, SUBJECT_MERGED } from '../semantic/events.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
@@ -31,7 +33,22 @@ export type RatingSubjectMergePage = {
   voters: number;
 };
 
-type Queryable = Pick<Pool | PoolClient, 'query'>;
+export class RatingSubjectTargetPendingError extends Error {
+  readonly code: 'identity_epoch_pending' | 'identity_epoch_unavailable';
+  readonly targetId: string;
+
+  constructor(code: 'identity_epoch_pending' | 'identity_epoch_unavailable', targetId: string, detail: string) {
+    super(`${code}: ${detail}`);
+    this.name = 'RatingSubjectTargetPendingError';
+    this.code = code;
+    this.targetId = targetId;
+  }
+}
+
+export type RatingIdentityEpochReader = (
+  tx: CommandTransaction,
+  partition: number,
+) => Promise<IdentityEpochState>;
 type MergeMode = 'merge' | 'return';
 
 function validId(value: string): boolean {
@@ -257,10 +274,48 @@ export async function reconcileMergedSubjectVote(
   return events;
 }
 
-export async function resolveSubjectTarget(client: Queryable, targetId: string): Promise<string> {
+export async function resolveSubjectTarget(
+  client: CommandTransaction,
+  targetId: string,
+  readEpoch: RatingIdentityEpochReader = (tx, partition) => identityEpochStore.readEpoch(tx, partition),
+): Promise<string> {
   if (!validId(targetId)) throw new TypeError('Invalid rating vote target');
-  const row = await resolveTarget.run(client, { subject_id: targetId });
-  if (!row || row.subjectId === null) throw new Error('Rating subject redirect could not be resolved');
+  const [row] = await resolveTarget.run(client, { subject_id: targetId });
+  if (!row || typeof row.subjectId !== 'string')
+    throw new RatingSubjectTargetPendingError(
+      'identity_epoch_unavailable',
+      targetId,
+      'Semantic direct redirect lookup is unavailable',
+    );
+  if (row.targetRedirecting || !row.activeTerminal)
+    throw new RatingSubjectTargetPendingError(
+      'identity_epoch_pending',
+      targetId,
+      row.targetRedirecting ? 'The direct redirect target is not terminal' : 'The direct redirect target is not active',
+    );
+
+  const targetRoute = routeOf(targetId);
+  const terminalRoute = routeOf(row.subjectId);
+  if (targetRoute === null || terminalRoute === null)
+    throw new RatingSubjectTargetPendingError('identity_epoch_unavailable', targetId, 'A route is unavailable');
+  // This runs inside the voter command's serializable transaction. Pass native subject homes explicitly;
+  // Semantic's default partition zero is topology compatibility, not currentness for these identities.
+  const homes = [...new Set([partitionOf(targetRoute), partitionOf(terminalRoute)])].sort((left, right) => left - right);
+  for (const home of homes) {
+    const state = await readEpoch(client, home);
+    if (state.state === 'pending')
+      throw new RatingSubjectTargetPendingError(
+        'identity_epoch_pending',
+        targetId,
+        `Semantic identity epoch ${state.job.jobId}@${state.job.epoch} is pending at home ${home}`,
+      );
+    if (state.state === 'unavailable')
+      throw new RatingSubjectTargetPendingError(
+        'identity_epoch_unavailable',
+        targetId,
+        `Semantic identity currentness is unavailable at home ${home} (${state.reason})`,
+      );
+  }
   return row.subjectId;
 }
 

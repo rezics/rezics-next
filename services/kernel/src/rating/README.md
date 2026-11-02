@@ -360,6 +360,15 @@ input still admits the caller. The Map uses exact requested target keys and GET 
 clears and missing votes are absent, while zero remains a vote. It does not resolve redirects or select a controller,
 population or shelf membership. This internal helper adds no HTTP endpoint or scope.
 
+### Subject redirect resolution
+
+The adding segment page reads the latest redirect for its original target with one indexed lookup. It does not walk
+historical chains. A redirect resolves only to a visible terminal with no redirect of its own. Rating checks
+Semantic's `identityEpochStore.readEpoch(tx, home)` for the source and terminal homes in the same serializable voter
+command; partition zero is topology compatibility and is never used as a global lock. A pending or unavailable epoch,
+a redirecting target, or an inactive target leaves the page pending. A released mapping observation never authorizes
+vote effects.
+
 ## Voter Realm membership
 
 `rating.voter_realm` belongs to the voter's route. Membership events update it in one command in the voter's
