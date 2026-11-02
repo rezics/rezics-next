@@ -202,7 +202,7 @@ test('untargeted control-plane work lands mechanically on dev and leaves main fo
     });
 
     expect(h.head('main')).toBe(main);
-    expect(git(h.root, ['show', 'dev:tools/goal/src/dev-change.ts'])).toBe('tools/goal/src/dev-change.ts');
+    expect(git(h.root, 'show', 'dev:tools/goal/src/dev-change.ts')).toBe('tools/goal/src/dev-change.ts');
     expect(checks).toEqual([]);
     expect(h.store.task(task.id).state).toBe('integrated');
   } finally {
