@@ -18,7 +18,10 @@ function cost(relations: Cost['relations']): Cost {
   };
 }
 
-function sample(repetitions: readonly Cost[], relationSizes = { [relation]: { reltuples: 1, relpages: 9 } }): AccessPathSample {
+function sample(
+  repetitions: readonly Cost[],
+  relationSizes = { [relation]: { reltuples: 1, relpages: 9 } },
+): AccessPathSample {
   return { scale: 32, repetitions, relationSizes };
 }
 
@@ -28,9 +31,19 @@ test('empty and sparse repetition evidence is distinct from a measured index pat
   expect(() => assertGrowthAccessPaths('sparse repetition', [sample(new Array<Cost>(1))], [relation])).toThrow(
     'repetition 1, field repetitions[1]',
   );
-  expect(() => assertGrowthAccessPaths('measured index', [sample([cost({
-    [relation]: { rows: 1, blocks: 1, nodes: 1, sequentialScans: 0 },
-  })])], [relation])).not.toThrow();
+  expect(() =>
+    assertGrowthAccessPaths(
+      'measured index',
+      [
+        sample([
+          cost({
+            [relation]: { rows: 1, blocks: 1, nodes: 1, sequentialScans: 0 },
+          }),
+        ]),
+      ],
+      [relation],
+    ),
+  ).not.toThrow();
 });
 
 test('unexecuted relations need no footprint and scan counts must be integers', () => {

@@ -15,9 +15,7 @@ function invalidEvidence(
   field: string,
   detail: string,
 ): never {
-  throw new Error(
-    `${name}: sample ${sampleIndex + 1}, repetition ${repetitionIndex + 1}, field ${field}: ${detail}`,
-  );
+  throw new Error(`${name}: sample ${sampleIndex + 1}, repetition ${repetitionIndex + 1}, field ${field}: ${detail}`);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -59,7 +57,13 @@ export function assertGrowthAccessPaths(
       }
       const repetition = repetitions[repetitionIndex];
       if (!isRecord(repetition)) {
-        invalidEvidence(name, sampleIndex, repetitionIndex, `repetitions[${repetitionIndex + 1}]`, 'expected an object');
+        invalidEvidence(
+          name,
+          sampleIndex,
+          repetitionIndex,
+          `repetitions[${repetitionIndex + 1}]`,
+          'expected an object',
+        );
       }
       const costs = repetition.relations;
       if (!isRecord(costs)) {
