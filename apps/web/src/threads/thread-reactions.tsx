@@ -244,7 +244,7 @@ function ReactionCaller({
     observation.snapshot() === revision &&
     (reactionOrigin?.isCurrent() ?? true);
 
-  function retain(intent: Intent, message: string) {
+  function retain(intent: Intent, message = m.candidate_unavailable()) {
     if (!current()) return;
     unresolved.current = intent;
     epoch.current++;
@@ -273,7 +273,7 @@ function ReactionCaller({
     } catch {
       if (!current()) return;
       const message = m.reaction_unavailable();
-      retain(intent, message);
+      retain(intent);
       throw new Error(message);
     }
     if (!current()) return;
@@ -281,7 +281,8 @@ function ReactionCaller({
       if (result.reason === 'conflict') intent.phase = 'read';
       else {
         const message = refusalText(result);
-        if (replay || result.reason === 'unavailable') retain(intent, message);
+        if (replay || result.reason === 'unavailable')
+          retain(intent, result.reason === 'unavailable' ? undefined : message);
         else flushSync(() => setFailed(message));
         throw new Error(message);
       }
@@ -298,7 +299,7 @@ function ReactionCaller({
       if (!current()) return;
       if (!snapshot.ok) {
         const message = refusalText(snapshot);
-        retain(intent, message);
+        retain(intent, snapshot.reason === 'unavailable' ? undefined : message);
         throw new Error(message);
       }
       unresolved.current = null;
@@ -316,7 +317,7 @@ function ReactionCaller({
     } catch (error) {
       if (current()) {
         intent.phase = 'read';
-        retain(intent, m.reaction_unavailable());
+        retain(intent);
         throw error;
       }
     }
