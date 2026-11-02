@@ -621,7 +621,9 @@ test('Healthy current null-CSRF reads retain history and access, while every ret
       expect(h.host.textContent).toContain('Purchase A');
       expect(h.host.textContent).toContain(m.benefit_open_reader());
       expect(h.client.getQueryCache().findAll({ queryKey: ['orders-current'] }).length).toBeLessThanOrEqual(1);
-      expect(h.client.getQueryCache().findAll({ queryKey: ['buyer-entitlements-current'] }).length).toBeLessThanOrEqual(2);
+      expect(h.client.getQueryCache().findAll({ queryKey: ['buyer-entitlements-current'] }).length).toBeLessThanOrEqual(
+        2,
+      );
     }
     expect(histories).toHaveLength(4);
     expect(lists).toHaveLength(4);
@@ -714,10 +716,12 @@ test('Only a later deliberate action captures write credentials; null, rotation,
     offerCalls.push({ body: JSON.parse(String(init?.body)), token: new Headers(init?.headers).get('x-csrf-token') });
     return offerCalls.length === 1 ? purchase.promise : Response.json({}, { status: 503 });
   });
-  const reconcile = spyOn(reconciliation, 'requestOrderReconciliation').mockImplementation(async ({ data, headers }) => {
-    reconcileCalls.push({ intent: data, token: new Headers(headers).get('X-CSRF-Token') });
-    return reconcileCalls.length === 1 ? recovery.promise : { kind: 'retry' };
-  });
+  const reconcile = spyOn(reconciliation, 'requestOrderReconciliation').mockImplementation(
+    async ({ data, headers }) => {
+      reconcileCalls.push({ intent: data, token: new Headers(headers).get('X-CSRF-Token') });
+      return reconcileCalls.length === 1 ? recovery.promise : { kind: 'retry' };
+    },
+  );
   const callbacks = new Map<string, () => void>();
   const Button = buttons.Button;
   const button = spyOn(buttons, 'Button').mockImplementation((props) => {

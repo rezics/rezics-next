@@ -135,9 +135,10 @@ test('retired fetch and decoded results cannot settle or replace an uncertain or
     calls.push(input);
     if (calls.length === 1)
       return Object.assign(new Response(), {
-        json: () => new Promise((resolve) => {
-          finish = resolve;
-        }),
+        json: () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
       });
     return Response.json(acquisitionProblems.pending, { status: 409 });
   });

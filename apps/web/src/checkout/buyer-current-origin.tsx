@@ -48,8 +48,7 @@ function observe(client: QueryClient, operation: Operation, anonymous: boolean):
   };
 }
 
-const identity = (value: Observation) =>
-  JSON.stringify([value.state, value.subject, value.admitted, value.readId]);
+const identity = (value: Observation) => JSON.stringify([value.state, value.subject, value.admitted, value.readId]);
 
 /** A read episode retires synchronously, including cache ABA before React commits. */
 export class BuyerCurrentOrigin {
@@ -89,10 +88,7 @@ export class BuyerCurrentOrigin {
     return !this.retired && (!this.mounted || this.users > 0);
   };
   isCurrent = () =>
-    this.isObserved() &&
-    this.observed.state === 'signed-in' &&
-    !!this.observed.subject &&
-    this.observed.admitted;
+    this.isObserved() && this.observed.state === 'signed-in' && !!this.observed.subject && this.observed.admitted;
   isPublic = () => this.isObserved() && this.observed.state === 'signed-out' && this.observed.admitted;
   // A deliberate action may capture this value once. It is never a retry credential source.
   credential = () => (this.isCurrent() ? this.read().csrfToken : null);
