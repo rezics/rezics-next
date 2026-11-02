@@ -36,7 +36,10 @@ currently disclosed native `summary`, and typed `destination`. Destinations cont
 and titles, never external URLs. A post preserves both `threadId` and `postId` for the
 consumer's canonical thread route and post fragment. Continue also carries the original
 native Continue subject, state and session. Thread/post summaries use native current
-read fields; Collection summaries contain its current ID, title and description.
+read fields. Their optional `author` carries only the currently disclosed Accounts display name, handle and avatar;
+optional `excerpt` contains native document plain text, with whitespace collapsed, capped at 160 Unicode code points
+and cut before a grapheme would cross the cap. Empty or withheld bodies omit the excerpt; missing identities omit
+the author, with no identifier fallback. No row ratings are added. Collection summaries contain its current ID, title and description.
 
 Anonymous home invokes only the existing public DiscoverySearch producer. Following and
 Continue are `not_requested`. Authenticated responses are `private, no-store`; session
@@ -64,14 +67,18 @@ the next turn persisted. Each lane preserves its native order. Following uses de
 `(occurred_at,activity_id)`. Canonical object deduplication prefers Continue, then Following,
 then discovery for this page. Duplicate and rejected candidates consume their source
 positions. No all-follow, all-kind or partition scan runs in a request; no profile lookup
-is performed by the feed.
+is performed per row; Following resolves at most F distinct disclosed authors in one Accounts summary batch.
 
 One bounded mixed round fetches Continue's six, discovery width
 `max(1,floor((P-6)/2))`, and Following width `max(1,P-6-discoveryWidth)`.
 Following alone reads P; anonymous home gives discovery P. The feed reserves the actual
 native owners' raw-work upper bounds: discovery `6D+3`, Continue 39 and inbox F. At P=20
-the mixed bound is 91, anonymous 123, Following 20; all are below B=160. There is no
-additional refill round. Original owner readers retain their maximum three native
+the mixed candidate bound is 91, anonymous 123, Following 20; all are below B=160. There is no
+additional refill round. `feed.ts` records the producer constants and derives this ceiling.
+The author batch adds at most F identities (F≤20, below Accounts’ 100-key batch cap), each with at most
+one avatar and one verified-agent Subject, retaining the native initial/final Account and handle checks.
+This adds no feed candidates and no per-row reads. The composed candidate-plus-identity ceiling is
+98 for mixed Home, 123 anonymous and 40 Following, still within 160. Original owner readers retain their maximum three native
 continuation rounds and stricter native operation budgets. Owner point probes and
 batched semantic summary/reference reads are bounded by these candidates; merge work
 is O(B log B), and native indexed owner probes are O(B log R).

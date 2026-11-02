@@ -12,6 +12,8 @@ import { classifyUnavailability } from '../access/unavailable.ts';
 import { createContinueReads } from '../library/continue-reads.ts';
 import { createFollowActivitySource } from '../library/follow-activity.ts';
 import { createCollectionReads } from '../library/collection-reads.ts';
+import { readAccountDiscoverySummaries } from '../access/account-discovery-source.ts';
+import { feedExcerpt, feedAuthor } from './feed-summary.ts';
 import { readSubjectSummaries } from '../semantic/summaries.ts';
 import { readPublication } from '../community/publication.ts';
 import { ContentNotFoundError, discloseThreads, readBoard, readPost, type ThreadView } from './reads.ts';
@@ -30,6 +32,17 @@ export type FeedDependencies = {
   discovery?: DiscoverySearch;
   search?: SearchService;
 };
+// Native producer bounds from docs/feeds.md; one round, without refill.
+export const FEED_PAGE_LIMIT = 20;
+export const FEED_CANDIDATE_LIMIT = 160;
+export const FEED_CONTINUE_WIDTH = 6;
+export const FEED_CONTINUE_CANDIDATES = 39;
+export const FEED_DISCOVERY_CANDIDATES_PER_RESULT = 6;
+export const FEED_DISCOVERY_FIXED_CANDIDATES = 3;
+export const feedCandidateBound = (discovery: number, following: number, continued: boolean) =>
+  (discovery ? FEED_DISCOVERY_CANDIDATES_PER_RESULT * discovery + FEED_DISCOVERY_FIXED_CANDIDATES : 0) +
+  following + (continued ? FEED_CONTINUE_CANDIDATES : 0);
+
 const canonical = (item: FeedItem) => `${item.key.owner}:${item.key.id}`;
 const sourceState = (error: unknown): FeedSourceState => {
   if (classifyUnavailability(error) === 'deadline') throw new ProblemError('deadline_exceeded');
@@ -74,6 +87,7 @@ export function createFeedReads(deps: FeedDependencies) {
     deadline: number,
     summaries: Awaited<ReturnType<typeof readSubjectSummaries>>,
     threads: ReadonlyMap<string, ThreadView | null>,
+    authors: Map<string, string>,
   ): Promise<FeedItem | null> {
     const supported = async () =>
       (await (await followSource()).checkCurrentFollowSupport(actor, { targets: [activity.target] }, deadline))[0]
@@ -97,14 +111,19 @@ export function createFeedReads(deps: FeedDependencies) {
         const board = (await readBoard(content, thread.boardId, { actor, deadline })).value;
         if (!board || board.community?.spaceId !== activity.target.id) return null;
       }
+      let entry = thread.firstPost;
       let postAt = thread.createdAt;
       if (object.kind === 'post') {
         const post = (await readPost(content, object.threadId, object.id, { actor, deadline })).value;
         if (!post || post.availability !== 'available') return null;
         if (activity.target.type === 'subject' && !post.subjectIds.includes(activity.target.id)) return null;
         postAt = post.createdAt;
+        entry = post;
       }
-      const summary = { id: thread.id, kind: thread.kind, title: thread.title, createdAt: thread.createdAt };
+      // Both entries have passed native current body disclosure; never use inventory author IDs.
+      const excerpt = feedExcerpt(entry);
+      authors.set(activity.id, entry.authorId);
+      const summary = { ...(excerpt === undefined ? {} : { excerpt }), id: thread.id, kind: thread.kind, title: thread.title, createdAt: thread.createdAt };
       item =
         object.kind === 'thread'
           ? {
@@ -120,7 +139,7 @@ export function createFeedReads(deps: FeedDependencies) {
               source: 'following',
               key: { owner: 'content', kind: 'post', route: object.route, id: object.id },
               occurredAt: activity.occurredAt,
-              summary: { id: object.id, threadId: thread.id, title: thread.title, createdAt: postAt },
+              summary: { ...(excerpt === undefined ? {} : { excerpt }), id: object.id, threadId: thread.id, title: thread.title, createdAt: postAt },
               destination: { kind: 'post', id: object.id, threadId: thread.id, postId: object.id, title: thread.title },
             };
     } else if (object.owner === 'semantic') {
@@ -161,9 +180,9 @@ export function createFeedReads(deps: FeedDependencies) {
       languages: readonly string[],
     ): Promise<FeedPage> {
       const stream = query.stream ?? 'home';
-      const limit = query.limit ?? 20;
+      const limit = query.limit ?? FEED_PAGE_LIMIT;
       const kind = readFeedKind(query.kind);
-      if (!Number.isInteger(limit) || limit < 1 || limit > 20) throw new ProblemError('invalid_request');
+      if (!Number.isInteger(limit) || limit < 1 || limit > FEED_PAGE_LIMIT) throw new ProblemError('invalid_request');
       const personal = actor.kind === 'account';
       if (stream === 'following' && !personal) throw new AuthenticationError(401, 'Bearer');
       // Admission is outside lane-local recovery, including the current account lifecycle read.
@@ -235,8 +254,12 @@ export function createFeedReads(deps: FeedDependencies) {
       const next = { ...position };
       let continueFingerprint = '';
       let discoveryAsOf: string | undefined;
-      const discoveryLimit = !personal ? limit : Math.max(1, Math.floor((limit - 6) / 2));
-      const followingLimit = stream === 'following' ? limit : Math.max(1, limit - 6 - discoveryLimit);
+      const discoveryLimit = !personal ? limit : Math.max(1, Math.floor((limit - FEED_CONTINUE_WIDTH) / 2));
+      const followingLimit = stream === 'following' ? limit : Math.max(1, limit - FEED_CONTINUE_WIDTH - discoveryLimit);
+      const candidateBound = feedCandidateBound(
+        stream === 'home' ? discoveryLimit : 0, personal ? followingLimit : 0, personal && stream === 'home',
+      );
+      if (candidateBound > FEED_CANDIDATE_LIMIT) throw new RangeError('Feed native candidate bound exceeded');
       // One bounded mixed round. Reserve native raw costs, including rejected keys inside owners:
       // discovery <=6D+3, Continue <=39, inbox <=F. Mixed max91; anonymous max123.
       await Promise.all(
@@ -285,7 +308,7 @@ export function createFeedReads(deps: FeedDependencies) {
             } else if (lane === 'continue') {
               const page = await continued.list(
                 actor,
-                { limit: 6, view: 'FULL', ...(position.continue ? { cursor: position.continue } : {}) },
+                { limit: FEED_CONTINUE_WIDTH, view: 'FULL', ...(position.continue ? { cursor: position.continue } : {}) },
                 deadline,
                 languages,
               );
@@ -349,10 +372,11 @@ export function createFeedReads(deps: FeedDependencies) {
               // its original opening-post, parent-chain and body/reference final disclosure checks.
               const disclosed = await discloseThreads(content, threadIds, { actor, deadline });
               const threads = new Map(threadIds.map((id, index) => [id, disclosed[index]!.value]));
+              const authorIds = new Map<string, string>();
               lanes.following = await Promise.all(
                 page.activities.map(async (activity) => {
                   try {
-                    return { item: await hydrate(activity, actor, deadline, summaries, threads) };
+                    return { item: await hydrate(activity, actor, deadline, summaries, threads, authorIds) };
                   } catch (error) {
                     if (
                       error instanceof ContentNotFoundError ||
@@ -363,9 +387,21 @@ export function createFeedReads(deps: FeedDependencies) {
                   }
                 }),
               );
+              // One page batch (at most F distinct identities), with Accounts' own final disclosure.
+              const accounts = await readAccountDiscoverySummaries(
+                { ...deps, actor, deadline }, [...new Set(authorIds.values())], { languages },
+              );
+              for (const candidate of lanes.following) {
+                const item = candidate.item;
+                if (!item || item.key.owner !== 'content') continue;
+                const authorId = authorIds.get(item.id);
+                const author = authorId ? feedAuthor(accounts.get(authorId)) : undefined;
+                if (author) item.summary = { ...item.summary, author };
+              }
               next.following = page.next ?? false;
             }
           } catch (error) {
+            lanes[lane] = [];
             sources[lane] = sourceState(error);
             next[lane] = position[lane];
           }

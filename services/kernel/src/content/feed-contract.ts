@@ -59,9 +59,20 @@ const accountSummary = t.Unsafe<AccountDiscoverySummary>(
     closed,
   ),
 );
-const threadSummary = t.Unsafe<Pick<ThreadView, 'id' | 'kind' | 'title' | 'createdAt'>>(
+export const FeedAuthorSchema = t.Object(
+  { displayName: nullable, handle: nullable, avatar: t.Union([avatar, t.Null()]) },
+  closed,
+);
+export type FeedAuthor = Static<typeof FeedAuthorSchema>;
+export type FeedContentSummary = { author?: FeedAuthor; excerpt?: string };
+const contentSummaryFields = {
+  author: t.Optional(FeedAuthorSchema),
+  excerpt: t.Optional(t.String({ maxLength: 160 })),
+};
+const threadSummary = t.Unsafe<Pick<ThreadView, 'id' | 'kind' | 'title' | 'createdAt'> & FeedContentSummary>(
   t.Object(
     {
+      ...contentSummaryFields,
       id: uuid,
       kind: t.Union([t.Literal('discussion'), t.Literal('review')]),
       title: nullable,
@@ -70,9 +81,10 @@ const threadSummary = t.Unsafe<Pick<ThreadView, 'id' | 'kind' | 'title' | 'creat
     closed,
   ),
 );
-const postSummary = t.Unsafe<Pick<ItemView, 'id' | 'threadId' | 'createdAt'> & Pick<ThreadView, 'title'>>(
+const postSummary = t.Unsafe<Pick<ItemView, 'id' | 'threadId' | 'createdAt'> & Pick<ThreadView, 'title'> & FeedContentSummary>(
   t.Object(
     {
+      ...contentSummaryFields,
       id: uuid,
       threadId: uuid,
       createdAt: t.String(),

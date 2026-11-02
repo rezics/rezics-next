@@ -2,6 +2,18 @@
 
 Content owns boards, threads, posts, immutable documents, media state and publication, and content governance operations.
 
+## Mixed Home summaries
+
+[The feed contract](../../../../docs/feeds.md) owns selection, source limits and sparse cursors.
+Thread and post summaries add optional `author` (Accounts display name, handle and avatar) and `excerpt`.
+Projection consumes only the opening/post revision that passed native disclosure; one deduplicated page-level
+Accounts summary batch supplies at most 20 current identities with its own final checks. A missing summary
+omits `author`; withheld or empty text omits `excerpt`. No author IDs, ratings or per-row enrichment are added.
+Excerpts collapse native document whitespace and count at most 160 Unicode code points, stopping before a
+whole grapheme would exceed the cap. Home uses these fields without a second content or identity request.
+The producer constants derive at most 91 mixed candidates plus seven identities, 123 anonymous candidates,
+or 20 Following candidates plus 20 identities; all remain below the 160 ceiling.
+
 ## Worker authorization composition
 
 Default `registerContent` consumes `WorkContext.getAuthorization()` from the shared worker registry. That port

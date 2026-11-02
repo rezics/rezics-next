@@ -985,7 +985,11 @@ no server runtime enters the browser. The public loader requests only anonymous 
 Continue or follows. Personal reads prepare the existing session, verify its current subject and use
 `private, no-store`. A viewer/session change remounts the private window before rendering prior rows;
 sign-out immediately returns to the public page. Private rows and cursors never enter the shared query cache
-or hydration payload. No Home per-row reads or vocabulary enumeration occur.
+or hydration payload. No Home per-row reads or vocabulary enumeration occur. Thread/post rows render only supplied author display
+name, handle, avatar and plain-text excerpt. The handle links independently to the localized profile beside
+the primary destination; absent identity fields have no identifier fallback. Excerpts are capped by Content
+at 160 Unicode code points on a grapheme boundary. No row ratings are shown. Until dev regenerates the client,
+`home-feed-read.ts` adds only these optional summary fields to the generated response type.
 
 One ordered list preserves the producer's stable item identities, deduplication, source order and original
 signed frontier. Next replaces the current page rather than accumulating DOM or cached pages. Changing

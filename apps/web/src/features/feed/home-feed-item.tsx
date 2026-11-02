@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { accountHref } from '../../subject/subject-href';
 import { Cover } from '@rezics/ui/cover';
 import { coverSrc } from '../../media/cover-src';
 import { coverOf, coverSubject } from '../../media/summary';
@@ -47,7 +48,28 @@ export function homeFeedItemPresentation(item: FeedItem, locale: string): FeedIt
     );
   }
   const titleLang = 'label' in summary ? summary.label?.language : undefined;
-  const preview = 'description' in summary ? summary.description : undefined;
+  const preview = 'excerpt' in summary ? summary.excerpt : 'description' in summary ? summary.description : undefined;
+  const author = 'author' in summary ? summary.author : undefined;
+  const authorName = author?.displayName || (author?.handle ? `@${author.handle}` : undefined);
+  const identity = author ? (
+    <span className="inline-flex items-center gap-2">
+      {author.avatar ? (
+        <span className="block w-8 shrink-0">
+          <Cover
+            subject={{ id: item.id, title: authorName ?? '', types: [] }}
+            cover={{ ...author.avatar, variants: [...author.avatar.variants] }}
+            ratio="1:1"
+            size="fill"
+            src={coverSrc}
+            decorative
+          />
+        </span>
+      ) : null}
+      {authorName ? <span>{authorName}</span> : null}
+      {author.displayName && author.handle ? <span>@{author.handle}</span> : null}
+    </span>
+  ) : undefined;
+  const metadata = author?.handle ? <a href={accountHref(locale, author.handle)}>{identity}</a> : identity;
   return {
     'data-feed-id': item.id,
     'data-feed-source': item.source,
@@ -55,6 +77,7 @@ export function homeFeedItemPresentation(item: FeedItem, locale: string): FeedIt
     ...(href === undefined ? {} : { href }),
     ...(titleLang === undefined ? {} : { titleLang }),
     visual,
+    metadata,
     preview: preview || undefined,
     state: progress?.text,
     actions:

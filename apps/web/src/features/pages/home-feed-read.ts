@@ -2,7 +2,18 @@ import type { KernelClient } from '@rezics/client';
 import { isPlatformClosedError } from '../../kernel/platform-closed';
 
 /** Inferred from Content's mounted FeedPageSchema, never a parallel browser DTO. */
-export type FeedPage = NonNullable<Awaited<ReturnType<KernelClient['feedItems']['get']>>['data']>;
+type ClientFeedPage = NonNullable<Awaited<ReturnType<KernelClient['feedItems']['get']>>['data']>;
+type AccountSummary = Extract<ClientFeedPage['feedItems'][number], { source: 'discovery'; key: { owner: 'accounts' } }>['summary'];
+/** Additive native summary seam until the dev landing regenerates the client. */
+type WithContentSummary<Item> = Item extends { key: { owner: 'content' }; summary: infer Summary }
+  ? Omit<Item, 'summary'> & { summary: Summary & {
+      author?: Pick<AccountSummary, 'displayName' | 'handle' | 'avatar'>;
+      excerpt?: string;
+    } }
+  : Item;
+export type FeedPage = Omit<ClientFeedPage, 'feedItems'> & {
+  feedItems: WithContentSummary<ClientFeedPage['feedItems'][number]>[];
+};
 export type FeedItem = FeedPage['feedItems'][number];
 export type FeedStream = 'home' | 'following';
 export type FeedInput = {
