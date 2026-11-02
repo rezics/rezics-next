@@ -45,6 +45,15 @@ visit/controller; explicit retirement cannot reconnect. Controller connection to
 before disconnection even if its original Boolean fields subsequently return. Disconnection immediately marks the read closed to new mounts. Strict Mode may reconnect the same
 visit, while the final disconnect permanently retires it after that synchronous reconnect opportunity.
 
+Report selection, bulk review, nonempty individual reasons and sending or uncertain commands register with the
+shared authoring departure owner. Stay preserves the original loaded IDs, review phase, reason and immutable
+command/key. Leave synchronously retires every local continuation and the original reader before replacement
+callbacks or route reads. Session and admission revocation still hide private evidence immediately. Browsing and
+validated receipts require no decision; other selected or unattempted work remains protected during follow-up reads.
+Clear and Cancel remain local controls, and exact retry never schedules unattempted rows.
+Decision: local selectors and same-tab links use the shared decision, including search-only navigation; injected
+queues reuse an enclosing owner or create their own boundary without acquiring private reader authority.
+
 Cost is the existing bounded native page and deduplicated evidence, one constant-size session-cache
 observation per QueryClient shared across loader/mount, one local caller generation and O(page size)
 rendering. Mounted subscriptions disconnect on unmount. Weak retention does not store page history.

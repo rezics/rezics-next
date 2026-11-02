@@ -23,6 +23,9 @@ import { BoardReportQueue, type ReportQueueAction } from '../stories/patterns/bo
 import type { Report, ReportedRevision, ResolvedReportTarget } from './reports-read';
 import { localizeHref } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
+import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../threads/authoring-departure';
+import { useRouter } from '@tanstack/react-router';
+import { reportReviewNavigationContext } from '../stories/patterns/board-report-queue/board-report-queue';
 
 export { moderationTargetContent } from './target-content';
 export type ModerationTarget = ResolvedReportTarget;
@@ -56,6 +59,7 @@ export function ModerationReportsPage(props: {
       ? createPrivateReaderLifetime(browserClient, page, reportReadKey(page.input), original.navigation)
       : undefined;
     let retired = false;
+    let departure = false;
     let connected = true;
     let serial = 0;
     const listeners = new Set<() => void>();
@@ -73,7 +77,8 @@ export function ModerationReportsPage(props: {
     };
     const isCurrent = () => connected && !observe() && (!owner || owner.isCurrent());
     const leave = (callback: (() => void) | undefined) => {
-      if (!isCurrent()) return;
+      if (!departure && !isCurrent()) return;
+      departure = false;
       retire();
       callback?.();
     };
@@ -85,6 +90,11 @@ export function ModerationReportsPage(props: {
       action: original.onAction,
       navigation: original.navigation,
       retire,
+      depart: () => {
+        if (!isCurrent()) return;
+        departure = true;
+        retire();
+      },
       observe,
       isCurrent,
       subscribe(listener: () => void) {
@@ -188,6 +198,7 @@ export function ModerationReportsPage(props: {
         state={page.state}
         queueIdentity={page.generation}
         isCurrent={current.isCurrent}
+        onLeave={current.depart}
         onAction={current.submit}
         {...(props.onNext ? { onNext: current.next } : {})}
         {...(props.onSelection ? { onSelection: current.select } : {})}
@@ -199,27 +210,7 @@ export function ModerationReportsPage(props: {
   );
 }
 
-export function ModerationReportsView({
-  reports,
-  targets,
-  revisions = [],
-  next,
-  tab = 'reports',
-  threadId,
-  postId,
-  onNext,
-  onAction = submitReportAction,
-  boardId,
-  state = 'ready',
-  onRetry,
-  onRefresh,
-  selection = DEFAULT_REPORT_SELECTION,
-  onSelection,
-  onRestart,
-  viewerId,
-  queueIdentity,
-  isCurrent,
-}: {
+type ModerationReportsViewProps = {
   queueIdentity?: string;
   isCurrent?: () => boolean;
   boardId?: string;
@@ -239,14 +230,57 @@ export function ModerationReportsView({
   postId?: string;
   onNext?: (cursor: string) => void;
   onAction?: ReportQueueAction;
-}) {
+  onLeave?: () => void;
+};
+
+export function ModerationReportsView(props: ModerationReportsViewProps) {
+  return (
+    <AuthoringDepartureBoundary sessionBound={false} navigationContext={reportReviewNavigationContext}>
+      <ReportsView
+        key={
+          props.queueIdentity ??
+          JSON.stringify([props.boardId, props.threadId, props.postId, props.tab, props.selection])
+        }
+        {...props}
+      />
+    </AuthoringDepartureBoundary>
+  );
+}
+
+function ReportsView({
+  reports,
+  targets,
+  revisions = [],
+  next,
+  tab = 'reports',
+  threadId,
+  postId,
+  onNext,
+  onAction = submitReportAction,
+  boardId,
+  state = 'ready',
+  onRetry,
+  onRefresh,
+  selection = DEFAULT_REPORT_SELECTION,
+  onSelection,
+  onRestart,
+  viewerId,
+  queueIdentity,
+  isCurrent,
+  onLeave,
+}: ModerationReportsViewProps) {
   const session = useSession();
   const browserClient = useContext(QueryClientContext);
+  const router = useRouter({ warn: false });
+  const { requestNavigation } = useAuthoringDeparture(false, false, 'report-selectors');
   const controlsId = useId();
   const [retired, setRetired] = useState(false);
   const select = (value: ReportSelection) => {
-    setRetired(true);
-    void Promise.resolve(onSelection?.(value)).finally(() => setRetired(false));
+    if (retired || isCurrent?.() === false) return;
+    requestNavigation(() => {
+      setRetired(true);
+      void onSelection?.(value);
+    });
   };
   const evidence = [...targets, ...revisions].map((target) => moderationEvidence(target.value));
   if (
@@ -286,7 +320,32 @@ export function ModerationReportsView({
     oldest: m.moderation_filter_oldest(),
   }[selection.order];
   return (
-    <article className="mx-auto w-full min-w-0 max-w-4xl space-y-6 text-foreground [overflow-wrap:anywhere]">
+    <article
+      className="mx-auto w-full min-w-0 max-w-4xl space-y-6 text-foreground [overflow-wrap:anywhere]"
+      onClick={(event) => {
+        if (
+          retired ||
+          isCurrent?.() === false ||
+          event.defaultPrevented ||
+          event.button !== 0 ||
+          event.metaKey ||
+          event.ctrlKey ||
+          event.shiftKey ||
+          event.altKey
+        )
+          return;
+        const link = (event.target as Element).closest('a');
+        if (!link || (link.target && link.target !== '_self') || link.hasAttribute('download')) return;
+        const href = new URL(link.href, window.location.href);
+        if (href.href === window.location.href) return;
+        event.preventDefault();
+        requestNavigation(() => {
+          if (router && href.origin === window.location.origin)
+            void router.navigate({ href: href.pathname + href.search + href.hash });
+          else window.location.assign(href.href);
+        });
+      }}
+    >
       <header className="space-y-3">
         {boardId ? (
           <a
@@ -399,6 +458,7 @@ export function ModerationReportsView({
         </Button>
       </fieldset>
       <BoardReportQueue
+        {...(onLeave ? { onLeave } : {})}
         {...(isCurrent ? { isCurrent } : {})}
         bulkEnabled={tab === 'reports'}
         queueIdentity={

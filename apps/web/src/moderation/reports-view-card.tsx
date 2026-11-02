@@ -12,6 +12,8 @@ import type { Report, ReportTargetValue, ResolvedReportTarget } from './reports-
 import type { ReportQueueAction } from '../stories/patterns/board-report-queue/board-report-queue';
 import type { ReportsBulkAction } from './reports-bulk-action';
 import { moderationTargetContent } from './target-content';
+import { useAuthoringDeparture } from '../threads/authoring-departure';
+import { reportReviewDepartureMessages } from './reports-bulk-controls';
 
 type Confirmation = { action: 'dismiss' } | { action: 'take-down'; reason: string };
 const utcSuffix = /Z$/;
@@ -74,6 +76,15 @@ export function ReportReviewCard({
   const [message, setMessage] = useState('');
   const [failure, setFailure] = useState<Extract<ReportReviewResult, { ok: false }>['state'] | null>(null);
   const [confirmed, setConfirmed] = useState<Confirmation | null>(null);
+  useAuthoringDeparture(
+    () => reviewAction.unresolved || (!reviewAction.receipt && reason !== ''),
+    () => reviewAction.unresolved,
+    JSON.stringify([report.id, reason, pending, failure, confirmed]),
+    undefined,
+    reviewAction.retire,
+    undefined,
+    reportReviewDepartureMessages(),
+  );
   const confirmationRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (confirmed) confirmationRef.current?.focus();

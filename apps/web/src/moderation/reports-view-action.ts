@@ -19,10 +19,14 @@ export function createReportReviewAction(
   let last: ReportActionInput | undefined;
   let result: ReportReviewResult | undefined;
   let pending = false;
+  let sending = false;
+  let retired = false;
+  const current = () => !retired && isCurrent();
   async function send(input: ReportActionInput, action: ReportQueueAction): Promise<ReportReviewResult | undefined> {
-    if (!isCurrent()) return;
+    if (!current()) return;
     const expected = generation();
     pending = true;
+    sending = true;
     last = input;
     try {
       result = (await action(input)) ?? { ok: false, state: 'error' };
@@ -33,28 +37,38 @@ export function createReportReviewAction(
       result = { ok: false, state: lost ? 'uncertain' : 'error' };
     } finally {
       pending = false;
+      sending = false;
     }
-    return isCurrent() && generation() === expected ? result : undefined;
+    return current() && generation() === expected ? result : undefined;
   }
   return {
     changed: identity.changed,
+    retire() {
+      retired = true;
+    },
+    get receipt() {
+      return result?.ok === true;
+    },
+    get unresolved() {
+      return !retired && (sending || (result?.ok === false && result.state === 'uncertain'));
+    },
     async submit(intent: Intent, action: ReportQueueAction): Promise<ReportReviewResult | undefined> {
-      if (!isCurrent()) return;
+      if (!current()) return;
       if (pending || result) return result;
-      return send({ ...intent, idempotencyKey: identity.keyFor(intent) }, action);
+      return send(Object.freeze({ ...intent, idempotencyKey: identity.keyFor(intent) }), action);
     },
     async retry(action: ReportQueueAction): Promise<ReportReviewResult | undefined> {
-      if (!isCurrent()) return;
+      if (!current()) return;
       if (pending || !last || !result || result.ok || result.state !== 'uncertain') return result;
       return send(last, action);
     },
     async refresh(read: () => Promise<void>): Promise<void> {
-      if (!isCurrent() || pending) return;
+      if (!current() || pending) return;
       const expected = generation();
       pending = true;
       try {
         await read();
-        if (!isCurrent() || generation() !== expected) return;
+        if (!current() || generation() !== expected) return;
         identity.changed();
         last = undefined;
         result = undefined;

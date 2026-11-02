@@ -5,6 +5,12 @@ import { m } from '../paraglide/messages.js';
 import type { BulkItemState, BulkSnapshot, ReportsBulkAction } from './reports-bulk-action';
 import type { ReportQueueAction } from './reports-view-action';
 
+export const reportReviewDepartureMessages = () => ({
+  title: m.moderation_review_leave_title(),
+  unsaved: m.moderation_review_leave_unsaved(),
+  pending: m.moderation_review_leave_pending(),
+});
+
 function outcome(state: BulkItemState) {
   switch (state) {
     case 'unattempted':

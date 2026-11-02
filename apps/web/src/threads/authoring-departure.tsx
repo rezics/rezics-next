@@ -113,13 +113,31 @@ export class AuthoringDepartureState {
     if (decision?.kind !== 'navigation') return;
     this.decision = null;
     if (!stay) {
-      for (const draft of [...this.drafts.values()]) draft.leave?.();
-      this.onNavigationLeave();
+      this.retireNavigation();
     }
     this.leaving = !stay;
     this.notify();
     decision.resolve(stay);
   }
+
+  private retireNavigation() {
+    for (const draft of [...this.drafts.values()]) draft.leave?.();
+    this.onNavigationLeave();
+  }
+
+  /** Local selectors and continuation buttons share the router's single decision. */
+  requestNavigation = (proceed: () => void, focused: HTMLElement | null) => {
+    if (!this.active) return;
+    const blocked = this.block('', 'local-navigation', focused);
+    if (blocked === false) {
+      this.retireNavigation();
+      proceed();
+    } else if (blocked instanceof Promise) {
+      void blocked.then((stay) => {
+        if (!stay && this.active) proceed();
+      });
+    }
+  };
 
   register(draft: Draft) {
     const id = ++this.nextId;
@@ -405,15 +423,21 @@ export function AuthoringDepartureBoundary({
   children,
   sessionBound = true,
   navigationMessages,
+  navigationContext,
 }: {
   children: ReactNode;
   sessionBound?: boolean;
   navigationMessages?: NavigationMessages;
+  navigationContext?: NavigationContext;
 }) {
   return useContext(DepartureContext) ? (
     children
   ) : (
-    <AuthoringDepartureProvider sessionBound={sessionBound} {...(navigationMessages ? { navigationMessages } : {})}>
+    <AuthoringDepartureProvider
+      sessionBound={sessionBound}
+      {...(navigationContext ? { navigationContext } : {})}
+      {...(navigationMessages ? { navigationMessages } : {})}
+    >
       {children}
     </AuthoringDepartureProvider>
   );
@@ -481,5 +505,15 @@ export function useAuthoringDeparture(
       document.activeElement instanceof HTMLElement ? document.activeElement : null,
     );
   }, []);
-  return { release, requestDiscard };
+  const requestNavigation = useCallback(
+    (proceed: () => void) => {
+      if (!navigation) return proceed();
+      navigation.requestNavigation(
+        proceed,
+        document.activeElement instanceof HTMLElement ? document.activeElement : null,
+      );
+    },
+    [navigation],
+  );
+  return { release, requestDiscard, requestNavigation };
 }

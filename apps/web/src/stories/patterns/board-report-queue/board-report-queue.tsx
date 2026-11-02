@@ -9,11 +9,20 @@ import {
   type ReportsBulkAction,
   type BulkItem,
 } from '../../../moderation/reports-bulk-action';
-import { ReportsBulkControls, ReportsBulkRefreshFailure } from '../../../moderation/reports-bulk-controls';
+import {
+  ReportsBulkControls,
+  ReportsBulkRefreshFailure,
+  reportReviewDepartureMessages,
+} from '../../../moderation/reports-bulk-controls';
 import { m } from '../../../paraglide/messages.js';
 import type { ReportQueueAction } from '../../../moderation/reports-view-action';
 import type { ReportReadState, Report, ReportedRevision, ResolvedReportTarget } from '../../../moderation/reports-read';
 import { ReportReviewCard } from '../../../moderation/reports-view-card';
+import {
+  AuthoringDepartureBoundary,
+  useAuthoringDeparture,
+  type AuthoringLocation,
+} from '../../../threads/authoring-departure';
 
 export type { ReportQueueAction } from '../../../moderation/reports-view-action';
 export type ReportQueueProps = {
@@ -30,12 +39,25 @@ export type ReportQueueProps = {
   onRestart?: () => void;
   onRetry?: () => void;
   onRefresh?: () => Promise<void>;
+  onLeave?: () => void;
 };
 
 const emptyRevisions: ReportedRevision[] = [];
 
-/** Each data replacement or authority change retires all private intents, including sparse pages. */
+export const reportReviewNavigationContext = ({ pathname, search }: AuthoringLocation) =>
+  JSON.stringify([pathname, search]);
+
+/** Injected queues keep the same decision UI without requiring a route or private reader. */
 export function BoardReportQueue(props: ReportQueueProps) {
+  return (
+    <AuthoringDepartureBoundary sessionBound={false} navigationContext={reportReviewNavigationContext}>
+      <ReportQueue {...props} />
+    </AuthoringDepartureBoundary>
+  );
+}
+
+/** Each data replacement or authority change retires all private intents, including sparse pages. */
+function ReportQueue(props: ReportQueueProps) {
   const generation = useRef<{
     props: ReportQueueProps;
     controller: ReportsBulkAction;
@@ -94,9 +116,22 @@ function QueueGeneration({
   onRestart,
   controller,
   bulkEnabled = true,
+  onLeave,
 }: ReportQueueProps & { controller: ReportsBulkAction }) {
   const selectionId = useId();
   const snapshot = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
+  const { requestNavigation } = useAuthoringDeparture(
+    controller.needsDecision,
+    controller.unresolved,
+    JSON.stringify(snapshot),
+    undefined,
+    () => {
+      controller.leave();
+      onLeave?.();
+    },
+    undefined,
+    reportReviewDepartureMessages(),
+  );
   const [takenDown, setTakenDown] = useState<ReadonlySet<string>>(() => new Set());
   const targetByKey = new Map(targets.map((target) => [target.key, target]));
   const revisionByReport = new Map(revisions.map((revision) => [revision.reportId, revision.value]));
@@ -120,7 +155,7 @@ function QueueGeneration({
           {state === 'denied' ? m.moderation_queue_read_denied() : m.moderation_queue_stale()}
         </ContentItemHeading>
         {state === 'stale' && onRestart ? (
-          <Button variant="outline" onClick={onRestart}>
+          <Button variant="outline" onClick={() => requestNavigation(() => onRestart?.())}>
             {m.moderation_queue_restart()}
           </Button>
         ) : null}
@@ -133,7 +168,7 @@ function QueueGeneration({
           {m.moderation_queue_error()}
         </ContentItemHeading>
         {onRetry ? (
-          <Button variant="outline" className="min-h-11" onClick={onRetry}>
+          <Button variant="outline" className="min-h-11" onClick={() => requestNavigation(() => onRetry?.())}>
             {m.moderation_queue_retry()}
           </Button>
         ) : null}
@@ -201,8 +236,7 @@ function QueueGeneration({
             className="min-h-11"
             onClick={() => {
               if (!controller.isCurrent()) return;
-              controller.leave();
-              onNext?.(next);
+              requestNavigation(() => onNext?.(next));
             }}
           >
             {m.threads_next_page()}

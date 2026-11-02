@@ -63,7 +63,7 @@ export function createReportsBulkAction(reports: readonly Report[], originalIsCu
     if (!current() || busy || snapshot.refreshing || !read) return;
     active = false;
     operation++;
-    update({ hideCards: true, selected: [], retired: true, refreshing: true, stale: false });
+    update({ hideCards: true, retired: true, refreshing: true, stale: false });
     try {
       await read();
     } catch {
@@ -82,6 +82,13 @@ export function createReportsBulkAction(reports: readonly Report[], originalIsCu
       };
     },
     getSnapshot: () => snapshot,
+    needsDecision: () =>
+      current() &&
+      snapshot.selected.some(
+        (id) => !snapshot.items.some((item) => item.reportId === id && item.state === 'dismissed'),
+      ),
+    unresolved: () =>
+      current() && snapshot.items.some((item) => item.state === 'pending' || item.state === 'uncertain'),
     selectable(reportId: string) {
       return canSelect() && eligible.has(reportId) && !individual.has(reportId) && !bulkOwned.has(reportId);
     },
@@ -173,7 +180,7 @@ export function createReportsBulkAction(reports: readonly Report[], originalIsCu
       const expected = operation + 1;
       active = false;
       operation++;
-      update({ selected: [], items: [], phase: 'selecting', retired: true });
+      update({ retired: true });
       await read();
       if (current() && operation === expected) {
         active = true;

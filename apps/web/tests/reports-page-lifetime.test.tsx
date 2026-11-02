@@ -710,3 +710,30 @@ test('a new mount cannot reuse the old native read during the synchronous Strict
   await paint({ page: await fresh() });
   expect(host.textContent).toContain('Private exact reported body');
 });
+
+test('confirmed report departure retires the original reader before continuation and fences late individual success', async () => {
+  let queued!: HTMLButtonElement;
+  let replacements = 0;
+  await paint({
+    onNext: () => {
+      queued.click();
+      replacements++;
+    },
+  });
+  await review();
+  queued = button(m.moderation_dismiss(), 1);
+  await click(m.moderation_dismiss());
+  await click(m.threads_next_page());
+  const dialog = window.document.querySelector<HTMLElement>('[role="alertdialog"]')!;
+  expect(dialog.textContent).toContain(m.moderation_review_leave_pending());
+  await act(async () => {
+    [...dialog.querySelectorAll('button')].find((node) => node.textContent === m.thread_authoring_leave())!.click();
+    await tick();
+  });
+  expect(replacements).toBe(1);
+  expect(sends).toHaveLength(1);
+  hidden();
+  await settle(0);
+  expect(refreshes).toBe(0);
+  hidden();
+});

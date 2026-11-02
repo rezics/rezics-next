@@ -17,6 +17,7 @@ mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 afterAll(() => mock.restore());
 const { BoardReportQueue } = await import('../src/stories/patterns/board-report-queue/board-report-queue');
+const { ModerationReportsView } = await import('../src/moderation/reports-page');
 const reports = [...moderationQueueFixture.reports, { ...postReport, id: 'PRIVATE_THIRD_REPORT' }];
 type Props = ComponentProps<typeof ReportsBulkControls>;
 
@@ -50,6 +51,7 @@ async function withView(
     HTMLElement: window.HTMLElement,
     HTMLInputElement: window.HTMLInputElement,
     HTMLButtonElement: window.HTMLButtonElement,
+    HTMLFormElement: window.HTMLFormElement,
     Element: window.Element,
     Node: window.Node,
     Document: window.Document,
@@ -378,5 +380,178 @@ test('Failed replacement reads keep public partial receipts while queue replacem
     }
     expect(calls).toBe(2);
     expect(refreshes).toBe(1);
+  });
+});
+
+const warns = () => {
+  const event = new Event('beforeunload', { cancelable: true });
+  window.dispatchEvent(event);
+  return event.defaultPrevented;
+};
+const departure = (host: HTMLElement) => host.ownerDocument.querySelector<HTMLElement>('[role="alertdialog"]')!;
+
+test('Stay retains exact loaded selection and review; Cancel and Clear stay local; Leave fences the running bulk loop', async () => {
+  await withView(async ({ host, render, user, flush }) => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let calls = 0,
+      refreshes = 0,
+      nexts = 0;
+    await render(
+      <BoardReportQueue
+        {...moderationQueueFixture}
+        reports={reports}
+        onNext={() => {
+          nexts++;
+        }}
+        onRefresh={async () => {
+          refreshes++;
+        }}
+        onAction={async () => {
+          calls++;
+          await gate;
+          return { ok: true };
+        }}
+      />,
+    );
+    await act(async () =>
+      user.click(
+        [...host.querySelectorAll('button')].filter((node) => node.textContent === m.moderation_queue_review())[1]!,
+      ),
+    );
+    const otherReason = host.querySelectorAll('textarea')[1]!;
+    await act(async () => user.type(otherReason, 'Another local review.'));
+    const boxes = [...host.querySelectorAll<HTMLElement>('[role="checkbox"]')];
+    await act(async () => {
+      await user.click(boxes[0]!);
+      await user.click(boxes[2]!);
+    });
+    await act(async () => user.click(button(host, m.moderation_bulk_review())));
+    await act(async () => user.click(button(host, m.threads_next_page())));
+    expect(departure(host).textContent).toContain(m.moderation_review_leave_unsaved());
+    await act(async () => user.click(button(departure(host), m.thread_authoring_stay())));
+    expect(otherReason.value).toBe('Another local review.');
+    expect(boxes.map((box) => box.getAttribute('aria-checked'))).toEqual(['true', 'false', 'true']);
+    expect(host.querySelector('[role="group"]')?.textContent).toContain(m.moderation_bulk_confirmation({ count: 2 }));
+    await act(async () => user.click(button(host, m.moderation_bulk_cancel())));
+    expect(warns()).toBe(true);
+    await act(async () => user.click(button(host, m.moderation_bulk_clear())));
+    expect(warns()).toBe(true);
+    await act(async () => user.clear(otherReason));
+    expect(warns()).toBe(false);
+    await act(async () => user.click(button(host, m.moderation_bulk_select_loaded())));
+    await act(async () => user.click(button(host, m.moderation_bulk_review())));
+    await act(async () => user.click(button(host, m.moderation_bulk_confirm({ count: 3 }))));
+    await act(async () => user.click(button(host, m.threads_next_page())));
+    expect(departure(host).textContent).toContain(m.moderation_review_leave_pending());
+    await act(async () => user.click(button(departure(host), m.thread_authoring_leave())));
+    await act(async () => release());
+    await flush();
+    expect([calls, refreshes, nexts]).toEqual([1, 0, 1]);
+    expect(host.textContent).not.toContain(postReport.evidence!);
+    expect(warns()).toBe(false);
+  });
+});
+
+test('Mixed bulk results keep exact retry and unattempted work protected during the follow-up read', async () => {
+  await withView(async ({ host, render, user, flush }) => {
+    const calls: Parameters<ReportQueueAction>[0][] = [];
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let selections = 0,
+      refreshes = 0;
+    await render(
+      <ModerationReportsView
+        {...moderationQueueFixture}
+        reports={reports}
+        onSelection={() => {
+          selections++;
+        }}
+        onRefresh={async () => {
+          refreshes++;
+          await gate;
+        }}
+        onAction={async (input) => {
+          calls.push(input);
+          if (calls.length === 2) throw new TypeError('Failed to fetch');
+          return { ok: true };
+        }}
+      />,
+    );
+    await act(async () => user.click(button(host, m.moderation_bulk_select_loaded())));
+    await act(async () => user.click(button(host, m.moderation_bulk_review())));
+    await act(async () => user.click(button(host, m.moderation_bulk_confirm({ count: 3 }))));
+    await flush();
+    await act(async () => user.click(button(host, m.moderation_filter_reset())));
+    await act(async () => user.click(button(departure(host), m.thread_authoring_stay())));
+    expect(host.textContent).toContain(m.moderation_bulk_uncertain());
+    expect(host.textContent).toContain(m.moderation_bulk_unattempted());
+    await act(async () => user.click(button(host, m.moderation_bulk_retry())));
+    await flush();
+    expect(calls).toHaveLength(3);
+    expect(calls[2]).toBe(calls[1]);
+    expect(calls.some((call) => call.reportId === reports[2]!.id)).toBe(false);
+    expect(refreshes).toBe(1);
+    expect(warns()).toBe(true);
+    await act(async () => user.click(button(host, m.moderation_filter_reset())));
+    expect(departure(host).textContent).toContain(m.moderation_review_leave_unsaved());
+    await act(async () => user.click(button(departure(host), m.thread_authoring_leave())));
+    await act(async () => release());
+    await flush();
+    expect(selections).toBe(1);
+    expect(host.textContent).not.toContain(postReport.evidence!);
+  });
+});
+
+test('Individual browsing and receipts do not warn; Stay preserves the reason and exact uncertain command', async () => {
+  await withView(async ({ host, render, user, flush }) => {
+    const calls: Parameters<ReportQueueAction>[0][] = [];
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let selections = 0;
+    await render(
+      <ModerationReportsView
+        {...moderationQueueFixture}
+        reports={[postReport]}
+        onSelection={() => {
+          selections++;
+        }}
+        onRefresh={async () => gate}
+        onAction={async (input) => {
+          calls.push(input);
+          if (calls.length === 1) throw new TypeError('Failed to fetch');
+          return { ok: true };
+        }}
+      />,
+    );
+    await act(async () => user.click(button(host, m.moderation_queue_review())));
+    expect(warns()).toBe(false);
+    const reason = host.querySelector('textarea')!;
+    await act(async () => user.type(reason, 'Preserve this exact reason.'));
+    await act(async () => user.click(button(host, m.moderation_filter_reset())));
+    await act(async () => user.click(button(departure(host), m.thread_authoring_stay())));
+    expect(reason.value).toBe('Preserve this exact reason.');
+    await act(async () => user.click(button(host, m.moderation_take_down())));
+    await flush();
+    await act(async () => user.click(button(host, m.moderation_filter_reset())));
+    expect(departure(host).textContent).toContain(m.moderation_review_leave_pending());
+    await act(async () => user.click(button(departure(host), m.thread_authoring_stay())));
+    expect(reason.value).toBe('Preserve this exact reason.');
+    await act(async () => user.click(button(host, m.moderation_queue_retry_action())));
+    await flush();
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).toBe(calls[0]);
+    expect(Object.isFrozen(calls[0])).toBe(true);
+    expect(warns()).toBe(false);
+    await act(async () => user.click(button(host, m.moderation_filter_reset())));
+    expect(departure(host)).toBeNull();
+    expect(selections).toBe(1);
+    await act(async () => release());
   });
 });
