@@ -137,7 +137,10 @@ test('replacement scope retires a late keyboard page without reclaiming focus', 
     <SetupBoardPicker
       kind="scheme"
       schemeId="replacement-scope"
-      source={sourceFor({ id: 'replacement', label: 'Replacement board' }, Promise.resolve({ schemes: [], next: null }))}
+      source={sourceFor(
+        { id: 'replacement', label: 'Replacement board' },
+        Promise.resolve({ schemes: [], next: null }),
+      )}
       value={null}
       disabled={false}
       onChange={() => {}}
