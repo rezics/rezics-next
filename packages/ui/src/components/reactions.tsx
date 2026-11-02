@@ -110,9 +110,9 @@ interface QueueView {
 interface CurrentReactionProps {
   counts: Partial<Record<ReactionKind, number>>;
   value: ReactionKind | null;
-  disabled?: boolean;
-  signInHref?: string;
-  kinds?: readonly ReactionKind[];
+  disabled: boolean | undefined;
+  signInHref: string | undefined;
+  kinds: readonly ReactionKind[] | undefined;
 }
 
 interface ReactionVisit {
