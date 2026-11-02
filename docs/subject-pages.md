@@ -929,3 +929,5 @@ template and selected Context again and dispatches only that group's relation re
 returned as unrequested (204), retaining their existing client state. A continued document opened directly offers
 those groups a fresh-start link. No first-page slice or cross-group cursor represents a complete graph or total.
 The existing 16-read, 128-slot and native request bounds still apply.
+
+Publication independence uses a native checkbox button so validation links focus the visible control.

@@ -475,6 +475,8 @@ function PublicationEditorLive({
                       </Field>
                       <Field orientation="horizontal" data-invalid={invalid('/independent') || undefined}>
                         <Checkbox
+                          nativeButton
+                          render={<button type="button" />}
                           id={`${id}-independent`}
                           aria-describedby={
                             failure?.errors?.some((error) => errorControl(error.pointer).id === `${id}-independent`)

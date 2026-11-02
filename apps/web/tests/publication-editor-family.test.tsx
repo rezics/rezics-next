@@ -147,30 +147,29 @@ test('independent publication creation, local corrections, immutable recovery an
     await act(async () => user.click(scope(index).getByRole('checkbox', { name: m.publication_independent() })));
   };
   const ids = () => [...host.querySelectorAll('[id]')].map((element) => element.id);
-  const associations = (index: number) =>
-    act(async () => {
-      const current = article(index);
-      for (const label of current.querySelectorAll<HTMLLabelElement>('label[for]')) {
-        const control = window.document.getElementById(label.htmlFor);
-        expect(control).not.toBeNull();
-        expect(current.contains(control)).toBe(true);
-      }
-      for (const element of current.querySelectorAll('[aria-describedby], [aria-labelledby]')) {
-        for (const attribute of ['aria-describedby', 'aria-labelledby']) {
-          for (const id of (element.getAttribute(attribute) ?? '').split(' ').filter(Boolean)) {
-            expect(current.contains(window.document.getElementById(id))).toBe(true);
-          }
+  const associations = async (index: number) => {
+    const current = article(index);
+    for (const label of current.querySelectorAll<HTMLLabelElement>('label[for]')) {
+      const control = window.document.getElementById(label.htmlFor);
+      expect(control).not.toBeNull();
+      expect(current.contains(control)).toBe(true);
+    }
+    for (const element of current.querySelectorAll('[aria-describedby], [aria-labelledby]')) {
+      for (const attribute of ['aria-describedby', 'aria-labelledby']) {
+        for (const id of (element.getAttribute(attribute) ?? '').split(' ').filter(Boolean)) {
+          expect(current.contains(window.document.getElementById(id))).toBe(true);
         }
       }
-      for (const link of current.querySelectorAll<HTMLAnchorElement>('a[href^="#"]')) {
-        const target = window.document.getElementById(decodeURIComponent(link.hash.slice(1)))!;
-        expect(current.contains(target)).toBe(true);
-        expect(target.matches('input, select, button, [tabindex="-1"]')).toBe(true);
-        // Programmatic focusability only: browser fragment navigation is asserted only in the UNRUN stories.
-        target.focus();
-        expect(window.document.activeElement).toBe(target);
-      }
-    });
+    }
+    for (const link of current.querySelectorAll<HTMLAnchorElement>('a[href^="#"]')) {
+      const target = window.document.getElementById(decodeURIComponent(link.hash.slice(1)))!;
+      expect(current.contains(target)).toBe(true);
+      expect(target.matches('input, select, button, [tabindex="-1"]')).toBe(true);
+      // Programmatic focusability only: browser fragment navigation is asserted only in the UNRUN stories.
+      await act(async () => target.focus());
+      expect(window.document.activeElement).toBe(target);
+    }
+  };
   try {
     const first = tracked();
     const second = tracked();
