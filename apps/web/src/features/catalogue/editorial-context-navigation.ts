@@ -1,5 +1,5 @@
 import { useBlocker, useRouter } from '@tanstack/react-router';
-import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
+import { createElement, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,7 +25,7 @@ export function EditorialContextNavigation({
 }) {
   const protect = dirty || unsettled;
   const router = useRouter({ warn: false });
-  return router ? <RouterDepartureGuard locale={locale} protect={protect} unsettled={unsettled} /> : null;
+  return router ? createElement(RouterDepartureGuard, { locale, protect, unsettled }) : null;
 }
 
 function RouterDepartureGuard({
@@ -82,25 +82,35 @@ function RouterDepartureGuard({
   }
 
   const o = { locale: locale as never };
-  return (
-    <AlertDialog open={blocker.status === 'blocked'} onOpenChange={(open) => !open && resolve(false)}>
-      <AlertDialogContent
-        initialFocus={stayButton}
-        finalFocus={() => (leaving.current ? false : returnFocus.current?.isConnected ? returnFocus.current : false)}
-      >
-        <AlertDialogHeader>
-          <AlertDialogTitle>{m.zone_editor_leave({}, o)}</AlertDialogTitle>
-          <AlertDialogDescription>
-            {unsettled ? m.thread_authoring_leave_pending({}, o) : m.thread_authoring_leave_unsaved({}, o)}
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel ref={stayButton}>{m.thread_authoring_stay({}, o)}</AlertDialogCancel>
-          <AlertDialogAction variant="destructive" onClick={() => resolve(true)}>
-            {unsettled ? m.thread_authoring_leave({}, o) : m.zone_editor_discard({}, o)}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+  return createElement(
+    AlertDialog,
+    { open: blocker.status === 'blocked', onOpenChange: (open) => !open && resolve(false) },
+    createElement(
+      AlertDialogContent,
+      {
+        initialFocus: stayButton,
+        finalFocus: () => (leaving.current ? false : returnFocus.current?.isConnected ? returnFocus.current : false),
+      },
+      createElement(
+        AlertDialogHeader,
+        null,
+        createElement(AlertDialogTitle, null, m.zone_editor_leave({}, o)),
+        createElement(
+          AlertDialogDescription,
+          null,
+          unsettled ? m.thread_authoring_leave_pending({}, o) : m.thread_authoring_leave_unsaved({}, o),
+        ),
+      ),
+      createElement(
+        AlertDialogFooter,
+        null,
+        createElement(AlertDialogCancel, { ref: stayButton }, m.thread_authoring_stay({}, o)),
+        createElement(
+          AlertDialogAction,
+          { variant: 'destructive', onClick: () => resolve(true) },
+          unsettled ? m.thread_authoring_leave({}, o) : m.zone_editor_discard({}, o),
+        ),
+      ),
+    ),
   );
 }
