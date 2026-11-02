@@ -548,7 +548,9 @@ test('a cover claim is admitted under statement:propose or subject:create evalua
         return { value: null, events: [claimEvent] };
       });
       if (action === actions[2] || resource.id !== GLOBAL_CONTEXT || outside || receiptOnly) {
-        await expect(command).rejects.toThrow(outside || receiptOnly ? undefined : 'Invalid cover reference command context');
+        await expect(command).rejects.toThrow(
+          outside || receiptOnly ? undefined : 'Invalid cover reference command context',
+        );
         expect(
           (
             await db.admin.query('SELECT claimed_at FROM content.media WHERE route=$1 AND media_id=$2', [
