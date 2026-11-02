@@ -17,8 +17,17 @@ function fixture(body: unknown, status = 200) {
 
 test('missing or malformed successful own votes stay unavailable, including non-native null units', async () => {
   for (const body of [
-    undefined, null, {}, [], 1, { units: null }, { units: '8' }, { units: true },
-    { units: 1.5 }, { units: Number.MAX_SAFE_INTEGER + 1 }, { units: Infinity },
+    undefined,
+    null,
+    {},
+    [],
+    1,
+    { units: null },
+    { units: '8' },
+    { units: true },
+    { units: 1.5 },
+    { units: Number.MAX_SAFE_INTEGER + 1 },
+    { units: Infinity },
   ]) {
     const { client } = fixture(body);
     expect((await readOwnRating(client, request(), {}, 'subject')).kind).toBe('unavailable');
@@ -40,9 +49,13 @@ test('reader mismatches and missing credentials still fence personal reads befor
   const { client, calls } = fixture({ units: 17 });
   const reader = await preparedRatingReader(request(), authorization);
   for (const expectedReader of [null, 'another-reader'])
-    expect(await readOwnRating(client, request(), {}, 'subject', expectedReader)).toEqual({ reader, kind: 'unavailable' });
+    expect(await readOwnRating(client, request(), {}, 'subject', expectedReader)).toEqual({
+      reader,
+      kind: 'unavailable',
+    });
   expect(await readOwnRating(client, new Request('https://site.test'), {}, 'subject')).toEqual({
-    reader: null, kind: 'unavailable',
+    reader: null,
+    kind: 'unavailable',
   });
   expect(calls).toHaveLength(0);
 });
