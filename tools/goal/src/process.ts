@@ -308,6 +308,8 @@ export async function stopProcessesUnder(directory: string, graceMs: number, pro
         } catch (error) {
           const code = (error as NodeJS.ErrnoException).code;
           if (code === 'ENOENT' || code === 'ESRCH') return [];
+          // The kernel hides the cwd of other users' and non-dumpable processes (PID 1, sd-pam); place cannot find them.
+          if (code === 'EACCES' || code === 'EPERM') return [];
           const detail = error instanceof Error ? error.message : String(error);
           throw new Error(`Unable to inspect cwd for PID ${name}: ${detail}`, { cause: error });
         }

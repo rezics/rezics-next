@@ -76,7 +76,7 @@ test('malformed routing fails with the responsible field named', () => {
     ['experiments[0].open', (table) => (table.experiments[0].open = 'yes')],
     ['experiments[0].class', (table) => (table.experiments[0].class = 'mechanical')],
     ['consultation.cli', (table) => (table.consultation.cli = 'unknown')],
-    ['version', (table) => (table.version = 6)],
+    ['version', (table) => (table.version = 0)],
     ['experiments', (table) => (table.experiments = {})],
     ['classes.implementation.paced', (table) => (table.classes.implementation.paced = 'yes')],
   ];
@@ -85,4 +85,6 @@ test('malformed routing fails with the responsible field named', () => {
     mutate(table);
     expect(() => parseRouting(table)).toThrow(field);
   }
+  // Live routing files number their versions.
+  expect(parseRouting({ ...structuredClone(valid), version: 24 }).version).toBe('24');
 });
