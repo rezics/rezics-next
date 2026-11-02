@@ -139,7 +139,10 @@ test('shared Character and StoryArc classification keyboard openings focus only 
     await act(async () => button(first!, m.curation_view_discard()).click());
     await choose(first!.querySelector('select')!, setup.read.public.subject.statements[property]![1]!.id);
     const opener = button(first!, m.facts_edit_field());
-    const stale = Reflect.get(opener, Object.keys(opener).find((key) => key.startsWith('__reactProps'))!).onClick;
+    const stale = Reflect.get(
+      opener,
+      Object.keys(opener).find((key) => key.startsWith('__reactProps'))!,
+    ).onClick;
     opener.focus();
     await render(view(false), false);
     await act(async () => stale({ currentTarget: opener, detail: 0 }));

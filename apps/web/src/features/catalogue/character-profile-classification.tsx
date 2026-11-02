@@ -136,12 +136,15 @@ export function CharacterClassification({
   }
   const chooser = useRef<HTMLDivElement>(null);
   const editor = useRef<HTMLFieldSetElement>(null);
-  const openingFocus = useRef<{
-    draft: FactDraft;
-    opener: HTMLButtonElement;
-    active: () => boolean;
-    cancel: () => void;
-  } | undefined>(undefined);
+  const openingFocus = useRef<
+    | {
+        draft: FactDraft;
+        opener: HTMLButtonElement;
+        active: () => boolean;
+        cancel: () => void;
+      }
+    | undefined
+  >(undefined);
   const focusScope = useMemo(() => ({}), [property, locale, read.public.subject.id]);
   const latestFocusScope = useRef(focusScope);
   latestFocusScope.current = focusScope;
