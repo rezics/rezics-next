@@ -1,5 +1,5 @@
 import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState, type ComponentProps } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { pickText } from '@rezics/composition';
 import type { EntityPickerSearch } from '@rezics/ui/entity-picker';
@@ -25,7 +25,6 @@ import {
   screenFactId,
   screenGroups,
   screenInitialFacts,
-  screenName,
   type ScreenCommand,
   type ScreenRead,
   type ScreenGroup,
@@ -46,6 +45,84 @@ const screenSummaryClassName =
   'min-h-11 max-w-full cursor-pointer py-2 font-semibold [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8 md:pointer-fine:py-1';
 
 export const ScreenProfile = catalogueEditor(ScreenProfileLive);
+
+type ScreenCurrent = Extract<ScreenRead, { ok: true }> & {
+  public: NonNullable<Extract<ScreenRead, { ok: true }>['public']>;
+};
+
+// Reading includes supplied facts even when the active release no longer offers their editor.
+function readingGroups(read: ScreenCurrent) {
+  const groups = screenGroups(read.release, read.public.subject.type);
+  const offered = new Set(Object.values(groups).flat());
+  for (const [property, statements] of Object.entries(read.public.subject.statements)) {
+    if (offered.has(property) || !statements.length) continue;
+    const datatype = statements[0]!.property.data_type;
+    groups[
+      datatype === 'document'
+        ? 'authored'
+        : datatype === 'time'
+          ? 'dates'
+          : datatype === 'quantity'
+            ? 'amounts'
+            : 'text'
+    ].push(property);
+  }
+  return groups;
+}
+
+function readingName(read: ScreenCurrent, property: string, locale: string) {
+  const label = pickText(read.release.properties[property]?.labels ?? {}, locale);
+  const related = pickText(read.public.related[property]?.labels ?? {}, locale);
+  return label.text ? label : related.text ? related : { text: property, lang: null };
+}
+
+function ScreenPart({
+  part,
+  read,
+  locale,
+}: {
+  part: ComponentProps<typeof CandidateValue>['snak'];
+  read: ScreenCurrent;
+  locale: string;
+}) {
+  return (
+    <CandidateValue
+      snak={part}
+      related={read.public.related}
+      subject={read.public.subject.id}
+      documents={read.public.documents}
+      locale={locale}
+    />
+  );
+}
+
+function ScreenParts({
+  parts,
+  read,
+  locale,
+}: {
+  parts: ComponentProps<typeof CandidateValue>['snak'][];
+  read: ScreenCurrent;
+  locale: string;
+}) {
+  return (
+    <dl className="min-w-0 space-y-2">
+      {parts.map((part, index) => {
+        const name = readingName(read, part.property.id, locale);
+        return (
+          <div key={index} className="min-w-0 space-y-1">
+            <dt lang={name.lang ?? undefined} className="text-muted-foreground">
+              {name.text}
+            </dt>
+            <dd className="min-w-0">
+              <ScreenPart part={part} read={read} locale={locale} />
+            </dd>
+          </div>
+        );
+      })}
+    </dl>
+  );
+}
 
 function ScreenProfileLive({
   id,
@@ -76,8 +153,15 @@ function ScreenProfileLive({
   const [drafts, setDrafts] = useState<Record<string, ScreenRow[]>>({});
   const retained = useRef<Extract<ScreenRead, { ok: true }>>(undefined);
   if (query.data?.ok) retained.current = query.data;
+  else if (id && query.data && query.data.reason !== 'unavailable') retained.current = undefined;
   // A failed creation metadata refresh must not unmount the term/fact drafts or their frozen request.
-  const read = query.data?.ok ? query.data : !id ? retained.current : undefined;
+  // Existing readers also retain local work on transient failure; concealment retires that reading.
+  const read = query.data?.ok ? query.data : retained.current;
+  const refreshFailed = !!id && (query.isError || query.data?.ok === false);
+  const current = useMemo(
+    () => (read?.public ? { ok: true as const, release: read.release, public: read.public, source: null } : null),
+    [read],
+  );
   const subject = read?.public?.subject;
   const label = pickText(subject?.labels ?? {}, locale);
   const href = subject ? subjectHref({ id: subject.id, label: label.text }, locale).href : '';
@@ -103,7 +187,11 @@ function ScreenProfileLive({
                 reason={query.data && !query.data.ok ? query.data.reason : 'unavailable'}
               />
             )}
-            <Button className={screenActionClassName} onClick={() => void query.refetch()}>
+            <Button
+              className={screenActionClassName}
+              disabled={query.isFetching}
+              onClick={() => void query.refetch({ cancelRefetch: false })}
+            >
               {m.correction_retry({}, o)}
             </Button>
           </>
@@ -162,11 +250,22 @@ function ScreenProfileLive({
         />
       </div>
     );
-  if (!subject || !read.public) return <EditorFailure locale={locale} reason="unavailable" />;
-  const current = { ok: true as const, release: read.release, public: read.public, source: null };
+  if (!subject || !current) return <EditorFailure locale={locale} reason="unavailable" />;
+  const readingTitle = refreshFailed ? m.screen_previous_reading({}, o) : m.candidate_current({}, o);
   return (
     <article className="mx-auto w-full max-w-4xl min-w-0 space-y-6 px-4 py-8 sm:px-6 [&_h2]:font-sans [&_h3]:font-sans">
       <ViewHeadingActions label={m.screen_edit({}, o)} headingClassName="font-sans" />
+      <div className="min-w-0 space-y-2" aria-busy={query.isFetching}>
+        {refreshFailed && <p role="alert">{m.screen_refresh_failed({}, o)}</p>}
+        {query.isFetching && <p role="status">{m.candidate_loading({}, o)}</p>}
+        <Button
+          className={screenActionClassName}
+          disabled={query.isFetching}
+          onClick={() => void query.refetch({ cancelRefetch: false })}
+        >
+          {refreshFailed ? m.correction_retry({}, o) : m.candidate_reload({}, o)}
+        </Button>
+      </div>
       <header className="min-w-0 space-y-3">
         <a
           href={href}
@@ -193,9 +292,9 @@ function ScreenProfileLive({
           <PublicationEditorEntry work={id} locale={locale} />
         </nav>
       </header>
-      <section className="min-w-0 space-y-5" aria-label={m.candidate_current({}, o)}>
-        <h2 className="text-xl font-semibold">{m.candidate_current({}, o)}</h2>
-        {Object.entries(screenGroups(read.release, subject.type))
+      <section className="min-w-0 space-y-5" aria-label={readingTitle}>
+        <h2 className="text-xl font-semibold">{readingTitle}</h2>
+        {Object.entries(readingGroups(current))
           .filter(([, fields]) => fields.length)
           .map(([group, fields]) => (
             <section key={group} className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6">
@@ -206,33 +305,38 @@ function ScreenProfileLive({
                 {fields.map((property) => (
                   <div key={property} className="min-w-0 space-y-2">
                     <dt
-                      lang={screenName(read.release, property, locale).lang ?? undefined}
+                      lang={readingName(current, property, locale).lang ?? undefined}
                       className="min-w-0 max-w-full font-medium [overflow-wrap:anywhere]"
                     >
-                      {screenName(read.release, property, locale).text}
+                      {readingName(current, property, locale).text}
                     </dt>
                     <dd className="min-w-0 max-w-full space-y-3 text-sm [overflow-wrap:anywhere]">
                       {!subject.statements[property]?.length && (
                         <p className="text-muted-foreground">{m.facts_no_value({}, o)}</p>
                       )}
-                      {(subject.statements[property] ?? []).map((statement) => (
+                      {(subject.statements[property] ?? []).map((statement, index) => (
                         <div key={statement.id} className="min-w-0 space-y-2">
-                          <CandidateValue snak={statement} related={read.public!.related} locale={locale} />
-                          {statement.qualifiers.map((part, index) => (
-                            <p key={index} className="min-w-0 max-w-full [overflow-wrap:anywhere]">
-                              <span lang={screenName(read.release, part.property.id, locale).lang ?? undefined}>
-                                {screenName(read.release, part.property.id, locale).text}:{' '}
-                              </span>
-                              <CandidateValue snak={part} related={read.public!.related} locale={locale} />
-                            </p>
-                          ))}
-                          {statement.references.map((reference, index) => (
-                            <div key={index} className="min-w-0 max-w-full border-s-2 ps-3 [overflow-wrap:anywhere]">
-                              {reference.parts.map((part, at) => (
-                                <CandidateValue key={at} snak={part} related={read.public!.related} locale={locale} />
-                              ))}
-                            </div>
-                          ))}
+                          <p className="font-medium">{m.facts_selected_value({ number: index + 1 }, o)}</p>
+                          <p className="text-muted-foreground">
+                            {m.candidate_rank({}, o)}:{' '}
+                            {statement.rank === 'preferred'
+                              ? m.candidate_rank_preferred({}, o)
+                              : statement.rank === 'deprecated'
+                                ? m.changes_rank_deprecated({}, o)
+                                : m.candidate_rank_normal({}, o)}
+                          </p>
+                          <ScreenPart part={statement} read={current} locale={locale} />
+                          <ScreenParts parts={statement.qualifiers} read={current} locale={locale} />
+                          <ol className="min-w-0 space-y-2">
+                            {statement.references.map((reference, index) => (
+                              <li key={index} className="min-w-0 max-w-full border-s-2 ps-3 [overflow-wrap:anywhere]">
+                                <p className="text-muted-foreground">
+                                  {m.correction_references({}, o)} {index + 1}
+                                </p>
+                                <ScreenParts parts={reference.parts} read={current} locale={locale} />
+                              </li>
+                            ))}
+                          </ol>
                         </div>
                       ))}
                     </dd>
