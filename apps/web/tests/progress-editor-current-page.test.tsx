@@ -201,7 +201,7 @@ async function mount(initial: LoadedPage, phone = false) {
   const fill = async (label: string, value: string) =>
     act(async () => {
       await user.clear(field(label));
-      await user.type(field(label), value);
+      if (value) await user.type(field(label), value);
     });
   const key = () => dialog().querySelector<HTMLInputElement>('[name="idempotencyKey"]')!.value;
   const submit = async (kind: Kind) => {
@@ -679,5 +679,52 @@ test('clear confirms an unsupported finished session, retries its exact operands
     expect(histories[0]!.data.changes).toBe(initial.changesCursor);
   } finally {
     await h.close();
+  }
+});
+
+
+test('decimal corrections explain invalid operands before review and retain exact drafts and retries', async () => {
+  for (const mode of ['scalar_amount', 'cursor_position'] as const) {
+    const initial = page('decimal', 'record', mode);
+    initial.session.inputRules = { min: '0.25', max: '999999999999.123456', step: '0.000001', total: 'optional' };
+    const h = await mount(initial);
+    const label = mode === 'scalar_amount' ? m.library_progress_amount() : m.library_progress_position();
+    try {
+      await h.click(m.library_progress_update());
+      for (const invalid of ['1e3', '', '0.249999', '999999999999.123457', '1.1234567']) {
+        await h.fill(label, invalid);
+        await h.click(m.library_progress_record());
+        expect(commands).toHaveLength(0);
+        expect(h.body.queryByRole('button', { name: m.library_progress_confirm_correction() })).toBeNull();
+        expect(h.field(label).value).toBe(invalid);
+        expect(h.field(label).getAttribute('aria-invalid')).toBe('true');
+        expect(h.field(label).getAttribute('aria-describedby')?.split(' ').some((id) =>
+          window.document.getElementById(id)?.getAttribute('role') === 'alert')).toBe(true);
+      }
+      await h.fill(label, '999999999999.123456');
+      if (mode === 'cursor_position') {
+        for (const invalid of ['', 'x'.repeat(257)]) {
+          await h.fill(m.library_progress_locator(), invalid);
+          await h.click(m.library_progress_record());
+          expect(h.field(m.library_progress_locator()).getAttribute('aria-invalid')).toBe('true');
+          expect(h.body.queryByRole('button', { name: m.library_progress_confirm_correction() })).toBeNull();
+        }
+        await h.fill(m.library_progress_locator(), ' '); // Opaque native locator; do not trim it.
+      }
+      await h.click(m.library_progress_record());
+      expect(h.body.getByRole('region', { name: m.library_progress_review() }).textContent).toContain('999999999999.123456');
+      await h.click(m.library_progress_confirm_correction());
+      const original = commands[0]!;
+      expect(original.data).toMatchObject(mode === 'scalar_amount'
+        ? { amount: '999999999999.123456' }
+        : { locator: ' ', position: '999999999999.123456' });
+      await settle(() => original.work.resolve({ ok: false, reason: 'unavailable' }));
+      await h.fill(label, '1e3');
+      await h.submit('record');
+      expect(commands[1]!.data).toEqual(original.data);
+      await settle(() => commands[1]!.work.resolve({ ok: false, reason: 'unavailable' }));
+    } finally {
+      await h.close();
+    }
   }
 });

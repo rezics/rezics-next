@@ -543,3 +543,43 @@ test('Current row complete and abandon keep native CAS and uncertain keys, then 
     }
   }
 });
+
+
+test('start validates required fixed decimals before capture, omits empty optional totals and retries original operands', async () => {
+  for (const policy of ['required', 'optional', 'forbidden'] as const) {
+    const initial = page();
+    initial.progressChoices = [{ mode: 'scalar_amount', units: [{
+      id: 'pages', label: 'pages', total: policy, min: '0.25', max: '999999999999.123456', step: '0.000001',
+    }] }];
+    const h = await mount(initial);
+    const fill = async (value: string) => act(async () => {
+      await h.user.clear(h.total());
+      if (value) await h.user.type(h.total(), value);
+    });
+    try {
+      if (policy !== 'forbidden') {
+        for (const invalid of [...(policy === 'required' ? [''] : []), '1e3', '0.249999', '999999999999.123457']) {
+          await fill(invalid);
+          await h.submit('start');
+          expect(commands).toHaveLength(0);
+          expect(h.total().value).toBe(invalid);
+          expect(h.total().getAttribute('aria-invalid')).toBe('true');
+          expect(window.document.getElementById(h.total().getAttribute('aria-describedby')!)?.getAttribute('role')).toBe('alert');
+        }
+        await fill(policy === 'required' ? '999999999999.123456' : '');
+      }
+      await h.submit('start');
+      const original = commands[0]!;
+      if (policy === 'required') expect(original.data).toHaveProperty('total', '999999999999.123456');
+      else expect(original.data).not.toHaveProperty('total');
+      await settle(() => original.work.resolve({ ok: false, reason: 'unavailable' }));
+      if (policy !== 'forbidden') await fill('1e3');
+      await h.submit('start');
+      expect(commands[1]!.data).toEqual(original.data);
+      expect(commands[1]!.headers).toEqual(original.headers);
+      await settle(() => commands[1]!.work.resolve({ ok: false, reason: 'unavailable' }));
+    } finally {
+      await h.close();
+    }
+  }
+});
