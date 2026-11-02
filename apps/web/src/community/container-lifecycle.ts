@@ -97,6 +97,21 @@ export function mayRetryLifecycle(state: LifecycleState) {
   );
 }
 
+/** Keep an unresolved operation recoverable even when a fresh read offers no new action. */
+export function lifecycleControlsPresentation(state: LifecycleState) {
+  const snapshot = state.read.kind === 'ready' ? state.read.snapshot : null;
+  const canRetry = mayRetryLifecycle(state);
+  const visible =
+    snapshot !== null &&
+    snapshot.state !== 'orphaned' &&
+    (snapshot.actions.length > 0 || canRetry);
+  return {
+    visible,
+    readOnly: visible && snapshot !== null && snapshot.actions.length === 0 && !canRetry,
+    canRetry,
+  };
+}
+
 /** One target and one immutable request per intent. Refresh never rebases a request or claims its effect. */
 export function createContainerLifecycle(
   target: ContainerTarget,

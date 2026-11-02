@@ -8,7 +8,7 @@ import { m } from '../paraglide/messages.js';
 import { useSession } from '../session/query';
 import {
   createContainerLifecycle,
-  mayRetryLifecycle,
+  lifecycleControlsPresentation,
   offeredActions,
   type ContainerLifecycleAdapter,
   type ContainerTarget,
@@ -80,13 +80,10 @@ function LifecycleControlsView({
   );
   const state = useSyncExternalStore(control.subscribe, control.getSnapshot, control.getSnapshot);
   const [confirmation, setConfirmation] = useState<LifecycleAction | null>(null);
+  const presentation = lifecycleControlsPresentation(state);
   const visible = useCommunityManagementAdmission(
     target.kind === 'space' ? 'space-lifecycle' : 'realm-lifecycle',
-    caller.ready &&
-      caller.lifetime.current() &&
-      state.read.kind === 'ready' &&
-      state.read.snapshot.state !== 'orphaned' &&
-      state.read.snapshot.actions.length > 0,
+    caller.ready && caller.lifetime.current() && presentation.visible,
   );
   useEffect(() => {
     setConfirmation(null);
@@ -107,8 +104,7 @@ function LifecycleControlsView({
       onRestriction?.(state.read.snapshot.state);
   }, [state, onRestriction, caller.lifetime, caller.connectionRevision, caller.ready]);
   const actions = offeredActions(state);
-  const readOnly =
-    state.read.kind === 'ready' && state.read.snapshot.state !== 'orphaned' && state.read.snapshot.actions.length === 0;
+  const readOnly = presentation.readOnly;
   const problem = state.problem ?? (state.read.kind === 'refused' ? state.read : null);
   const locked = state.busy || state.intent !== null;
   if (!visible || !caller.ready || !caller.lifetime.current()) return null;
@@ -203,7 +199,7 @@ function LifecycleControlsView({
               {action === 'remove' ? m.container_lifecycle_remove() : m.container_lifecycle_restore()}
             </Button>
           ))}
-          {mayRetryLifecycle(state) ? (
+          {presentation.canRetry ? (
             <Button onClick={() => void control.retry()}>{m.container_lifecycle_retry()}</Button>
           ) : null}
           {!state.busy &&
