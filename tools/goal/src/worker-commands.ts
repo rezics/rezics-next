@@ -36,18 +36,9 @@ export async function runWorkerCommand(
   argv: string[],
   options: WorkerCommandOptions = {},
 ): Promise<number> {
-  let parsedArguments = options.parsedArguments;
-  if (!parsedArguments) {
-    try {
-      parsedArguments = parseWorkerCommandArguments(command, argv);
-    } catch (error) {
-      console.error(error instanceof Error ? `${error.name}: ${error.message}` : String(error));
-      return 1;
-    }
-  }
+  const parsedArguments = options.parsedArguments ?? parseWorkerCommandArguments(command, argv);
   if (parsedArguments.command !== command) {
-    console.error(`Error: parsed worker arguments do not match ${command}`);
-    return 1;
+    throw new Error(`parsed worker arguments do not match ${command}`);
   }
   const settings =
     options.runtime?.settings ??

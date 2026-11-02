@@ -1033,6 +1033,7 @@ the train.
 
 The CLI validates worker command arguments before runtime recovery or command recording. Invalid arguments return usage
 feedback without settling unrelated workers.
+The CLI and direct worker callers share the parsed argument contract; direct callers retain rejected usage errors.
 
 ### Roles and delegation
 
