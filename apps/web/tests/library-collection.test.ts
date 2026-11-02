@@ -1,6 +1,6 @@
 import { afterAll, expect, test } from 'bun:test';
 import { cleanupAll, ownNodeProcess, withCleanup, type ProcessCustody } from './support/server-custody.ts';
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
@@ -341,73 +341,131 @@ function freePort(): Promise<number> {
   });
 }
 
-let child: ChildProcess | undefined;
 let serverCustody: ProcessCustody | undefined;
 let started: Promise<string> | undefined;
+let teardownStarted = false;
+let serverStartupAbort: AbortController | undefined;
+const pendingServerStartups = new Set<Promise<string>>();
 let cleanupPromise: Promise<void> | undefined;
 
+function ensureSiteStartupActive(output = '', cause?: unknown): void {
+  if (teardownStarted) {
+    const message = `dev server startup retired after suite teardown began${output ? `:\n${output}` : ''}`;
+    if (cause !== undefined) throw new Error(message, { cause });
+    throw new Error(message);
+  }
+}
+
+function siteStartupRequestSignal(): { signal: AbortSignal; dispose: () => void } {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 60_000);
+  const parentSignal = serverStartupAbort?.signal;
+  const abort = () => controller.abort();
+  parentSignal?.addEventListener('abort', abort, { once: true });
+  if (parentSignal?.aborted) abort();
+  return {
+    signal: controller.signal,
+    dispose: () => {
+      clearTimeout(timeout);
+      parentSignal?.removeEventListener('abort', abort);
+    },
+  };
+}
+
 function cleanupSuite(): Promise<void> {
-  return (cleanupPromise ??= cleanupAll([
-    { label: 'fake API listener', run: () => fake.stop(true), timeoutMs: 7000 },
-    { label: 'Vite process group', run: () => serverCustody?.close(), timeoutMs: 8000 },
-  ]));
+  return (cleanupPromise ??= (async () => {
+    teardownStarted = true;
+    serverStartupAbort?.abort();
+    const startupActions = [...pendingServerStartups].map((startup, index) => ({
+      label: `pending Vite startup ${index + 1}`,
+      run: () => startup,
+      timeoutMs: 15_000,
+    }));
+    const custody = serverCustody;
+    await cleanupAll([
+      ...startupActions,
+      { label: 'fake API listener', run: () => fake.stop(true), timeoutMs: 7000 },
+      { label: 'Vite process group', run: () => custody?.close(), timeoutMs: 8000 },
+    ]);
+  })());
 }
 
 function site(): Promise<string> {
-  started ??= (async () => {
-    const port = await freePort();
-    const origin = `http://127.0.0.1:${port}`;
-    let output = '';
-    const keep = (chunk: Uint8Array) => {
-      output = (output + Buffer.from(chunk).toString()).slice(-8000);
-    };
-    child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
-      cwd: app,
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: {
-        ...process.env,
-        KERNEL_ORIGIN: fake.url.origin,
-        AUTH_ISSUER: `${fake.url.origin}/auth`,
-        WEBSITE_CLIENT_ID: clientId,
-        WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
-        API_RESOURCE: resource,
-        WEBSITE_SCOPES: scopes.join(' '),
-      },
-    });
-    serverCustody = ownNodeProcess(child, {
-      label: 'Vite dev server',
-      outputLimit: 8000,
-      onOutput: keep,
-    });
-    let spawnError: Error | undefined;
-    child.once('error', (error) => {
-      spawnError = error;
-    });
-    const deadline = Date.now() + 150_000;
-    try {
-      for (;;) {
-        if (spawnError)
-          throw new Error(`dev server spawn failed: ${spawnError.message}\n${output}`, { cause: spawnError });
-        if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
-        try {
-          const response = await fetch(`${origin}/en`, {
-            redirect: 'manual',
-            signal: AbortSignal.timeout(60_000),
-          });
-          if (response.status < 500) return origin;
-        } catch {
-          // The dev server is still starting.
+  if (teardownStarted) return Promise.reject(new Error('Site startup requested after suite teardown began'));
+  if (!started) {
+    serverStartupAbort = new AbortController();
+    const startup = Promise.resolve().then(async () => {
+      ensureSiteStartupActive();
+      const port = await freePort();
+      ensureSiteStartupActive();
+      const origin = `http://127.0.0.1:${port}`;
+      let output = '';
+      const keep = (chunk: Uint8Array) => {
+        output = (output + Buffer.from(chunk).toString()).slice(-8000);
+      };
+      const startupChild = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
+        cwd: app,
+        detached: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: {
+          ...process.env,
+          KERNEL_ORIGIN: fake.url.origin,
+          AUTH_ISSUER: `${fake.url.origin}/auth`,
+          WEBSITE_CLIENT_ID: clientId,
+          WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
+          API_RESOURCE: resource,
+          WEBSITE_SCOPES: scopes.join(' '),
+        },
+      });
+      const custody = ownNodeProcess(startupChild, {
+        label: 'Vite dev server',
+        outputLimit: 8000,
+        onOutput: keep,
+      });
+      serverCustody = custody;
+      let spawnError: Error | undefined;
+      startupChild.once('error', (error) => {
+        spawnError = error;
+      });
+      const deadline = Date.now() + 150_000;
+      try {
+        for (;;) {
+          ensureSiteStartupActive(output);
+          if (spawnError)
+            throw new Error(`dev server spawn failed: ${spawnError.message}\n${output}`, { cause: spawnError });
+          if (startupChild.exitCode !== null)
+            throw new Error(`dev server exited with ${startupChild.exitCode}:\n${output}`);
+          let response: Response | undefined;
+          const request = siteStartupRequestSignal();
+          try {
+            response = await fetch(`${origin}/en`, {
+              redirect: 'manual',
+              signal: request.signal,
+            });
+          } catch (error) {
+            ensureSiteStartupActive(output, error);
+            // The dev server is still starting.
+          } finally {
+            request.dispose();
+          }
+          ensureSiteStartupActive(output);
+          if (response && response.status < 500) return origin;
+          if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${output}`);
+          await Bun.sleep(500);
         }
-        if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${output}`);
-        await Bun.sleep(500);
+      } catch (error) {
+        return await withCleanup(() => {
+          throw error;
+        }, [{ label: 'Vite startup process group', run: () => custody.close(), timeoutMs: 8000 }]);
       }
-    } catch (error) {
-      return await withCleanup(() => {
-        throw error;
-      }, [{ label: 'Vite startup process group', run: () => serverCustody!.close(), timeoutMs: 8000 }]);
-    }
-  })();
+    });
+    started = startup;
+    pendingServerStartups.add(startup);
+    void startup.then(
+      () => pendingServerStartups.delete(startup),
+      () => pendingServerStartups.delete(startup),
+    );
+  }
   return started;
 }
 
@@ -647,3 +705,8 @@ test(
   },
   timeout,
 );
+
+test('suite teardown refuses a new Vite startup', async () => {
+  await cleanupSuite();
+  await expect(site()).rejects.toThrow('Site startup requested after suite teardown began');
+}, timeout);
