@@ -104,7 +104,7 @@ function LifecycleControlsView({
   const actionButtonRefs = useRef(new Map<LifecycleAction, HTMLButtonElement>());
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
   const resultBoundaryRef = useRef<HTMLElement>(null);
-  const readStatusRef = useRef<HTMLElement>(null);
+  const readStatusRef = useRef<HTMLParagraphElement>(null);
   const focusRequestRef = useRef<LifecycleFocusRequest | null>(null);
   const focusGenerationRef = useRef(0);
   const [settlementRevision, setSettlementRevision] = useState(0);
@@ -138,6 +138,7 @@ function LifecycleControlsView({
     target.kind === 'space' ? 'space-lifecycle' : 'realm-lifecycle',
     caller.ready && caller.lifetime.current() && presentation.visible,
   );
+  const actions = offeredActions(state);
   useEffect(() => {
     setConfirmation(null);
     if (caller.ready && caller.lifetime.current()) void control.refresh();
@@ -245,7 +246,6 @@ function LifecycleControlsView({
     else if (state.read.kind === 'ready' && state.read.snapshot.state !== 'active')
       onRestriction?.(state.read.snapshot.state);
   }, [state, onRestriction, caller.lifetime, caller.connectionRevision, caller.ready]);
-  const actions = offeredActions(state);
   const readOnly = presentation.readOnly;
   const problem = state.problem ?? (state.read.kind === 'refused' ? state.read : null);
   const locked = state.busy || state.intent !== null;
@@ -306,7 +306,7 @@ function LifecycleControlsView({
           </Field>
         ) : null}
         {state.outcome === 'confirmed' ? (
-          <div ref={resultBoundaryRef} tabIndex={-1} role="status" className="space-y-2 rounded-xl bg-muted p-4 text-sm">
+          <div ref={(element) => { resultBoundaryRef.current = element; }} tabIndex={-1} role="status" className="space-y-2 rounded-xl bg-muted p-4 text-sm">
             <p>
               {state.intent?.action === 'remove' ? m.container_lifecycle_removed() : m.container_lifecycle_restored()}
             </p>
@@ -322,17 +322,17 @@ function LifecycleControlsView({
           </div>
         ) : null}
         {state.outcome === 'uncertain' ? (
-          <p ref={resultBoundaryRef} tabIndex={-1} role="alert" className="text-sm">
+          <p ref={(element) => { resultBoundaryRef.current = element; }} tabIndex={-1} role="alert" className="text-sm">
             {m.container_lifecycle_uncertain()}
           </p>
         ) : null}
         {state.outcome === 'conflict' ? (
-          <p ref={resultBoundaryRef} tabIndex={-1} role="alert" className="text-sm">
+          <p ref={(element) => { resultBoundaryRef.current = element; }} tabIndex={-1} role="alert" className="text-sm">
             {m.container_lifecycle_conflict()}
           </p>
         ) : null}
         {problem ? (
-          <div ref={resultBoundaryRef} tabIndex={-1} className="space-y-2 text-sm">
+          <div ref={(element) => { resultBoundaryRef.current = element; }} tabIndex={-1} className="space-y-2 text-sm">
             {state.outcome !== 'conflict' ? <p role="alert">{m.container_lifecycle_refused()}</p> : null}
             <details className="min-w-0">
               <summary className="min-h-11 cursor-pointer py-2 font-medium underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
