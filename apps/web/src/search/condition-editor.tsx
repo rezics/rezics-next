@@ -437,21 +437,26 @@ function NodeEditor({
               {(['gte', 'lte'] as const).map((bound) => {
                 const label = bound === 'gte' ? m.refinement_lower() : m.refinement_upper();
                 return (
-                  <EditorField key={bound} context={context} pointer={`${pointer}/statement/range/${bound}`} label={label}>
-                  {(props) => (
-                    <ConditionRangeInput
-                      {...props}
-                      datatype={definition?.datatype === 'time' ? 'time' : 'quantity'}
-                      label={label}
-                      value={range[bound]}
-                      onValue={(number) => {
-                        const next = { ...range };
-                        if (number === undefined) delete next[bound];
-                        else next[bound] = number;
-                        replaceStatement({ range: next });
-                      }}
-                    />
-                  )}
+                  <EditorField
+                    key={bound}
+                    context={context}
+                    pointer={`${pointer}/statement/range/${bound}`}
+                    label={label}
+                  >
+                    {(props) => (
+                      <ConditionRangeInput
+                        {...props}
+                        datatype={definition?.datatype === 'time' ? 'time' : 'quantity'}
+                        label={label}
+                        value={range[bound]}
+                        onValue={(number) => {
+                          const next = { ...range };
+                          if (number === undefined) delete next[bound];
+                          else next[bound] = number;
+                          replaceStatement({ range: next });
+                        }}
+                      />
+                    )}
                   </EditorField>
                 );
               })}
@@ -675,4 +680,3 @@ function ValueFields({
     </div>
   );
 }
-

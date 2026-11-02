@@ -23,7 +23,13 @@ test('quantity exponents, safe integer years and explicit clearing follow their 
   expect(parseConditionRangeDraft('9007199254740992', 'time')).toEqual({ valid: false });
   expect(parseConditionRangeDraft('-44', 'time')).toEqual({ valid: true, value: -44 });
   let committed: number | undefined = 12;
-  const result = applyConditionRangeDraft('', 'quantity', (value) => (committed = value), () => {}, 'Invalid');
+  const result = applyConditionRangeDraft(
+    '',
+    'quantity',
+    (value) => (committed = value),
+    () => {},
+    'Invalid',
+  );
   expect(result).toEqual({ valid: true, value: undefined });
   expect(committed).toBeUndefined();
 });
