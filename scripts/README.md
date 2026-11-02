@@ -708,3 +708,114 @@ alone is not a cache key. Keep shared entries immutable and give each run a priv
 
 Fix proven infrastructure failures as reliability work; do not claim saved hours for those fixes. The run ledger is
 required for measurement, and memory outside a run slice is not counted.
+
+### Controller-bound held-child lifecycle
+
+`check-lifecycle.ts` adds one fixed operation to the existing producer. It consumes the existing
+`ControllerProofBindingV1` reservation, registration, check fence, owner attempt and physical history. It allocates
+no controller identity and has no separate authorization registry. Ordinary classification places this operation on
+a/b; `--local`, environment markers and arbitrary Bun eval do not gain local execution. If the initiating source is
+already inside a natively recognized admitted check-host run, the existing worker placement executes the child in
+that scope. That case controls its own physical filesystem directly; it does not turn an initiating workstation's
+file into a remote release.
+
+The exported interface is:
+
+```ts
+lifecycleProbeArgv(request: LifecycleProbeCommandRequest): string[];
+startLifecycleProbe(request: StartLifecycleProbeRequest): Promise<StartLifecycleProbeResult>;
+readLifecycleProbe(request: ReadLifecycleProbeRequest): Promise<LifecycleProbeResult>;
+releaseLifecycleProbe(request: ReleaseLifecycleProbeRequest): Promise<ReleaseLifecycleProbeResult>;
+waitLifecycleProbe(request: WaitLifecycleProbeRequest): Promise<LifecycleProbeResult>;
+```
+
+First call `lifecycleProbeArgv` with `{cwd, checkId, taskId, attempt, sourceCommit, sourceTree, nonce, exitCode,
+lifetimeMs}`. `nonce` is 32 random bytes encoded as 64 lowercase hex characters; the UUIDs, attempt and full source
+commit/tree are the controller's existing identities. `exitCode` is exactly `0 | 7`; `lifetimeMs` is an integer from
+100 through 120000. The helper reads the installed pinned Bun's version/revision, packageManager and the tracked
+child's SHA-256, then returns exactly `['bun', 'scripts/check-lifecycle-child.ts', '--probe', base64urlSpec]`.
+Reserve that exact original argv in the existing controller reservation before starting. The child source must be a
+canonical tracked regular file in the captured clean commit/tree. The fixed spec is a closed version-1 object with
+`checkId, taskId, attempt, sourceCommit, sourceTree, nonce, exitCode, lifetimeMs, runtime, childSha256`;
+`runtime` has `packageManager, version, revision`. No caller-supplied program or gate path is accepted.
+
+Request schemas:
+
+| Operation | Request |
+| --- | --- |
+| start | `{binding: ControllerProofBindingV1, observeMs?: number}`; default 5000, range 0..5000 |
+| read | `{binding: ControllerProofBindingV1, physicalRunId: UUID}` |
+| release | `{binding: ControllerProofBindingV1, gate: LifecycleGate, action?: 'release' \| 'cancel'}`; default release |
+| wait | read request plus `timeoutMs?: number`; default 30000, range 0..60000 |
+
+Start returns `{version:1, admission:ControllerProofStartV1, observation:LifecycleProbeResult}`. Runner-ready or
+admission alone is not a running-child observation. Start may return an unavailable observation while ordinary
+admission/preparation is pending; read the same physical identity again. An exact repeated start replays existing
+custody. A lifecycle reservation admits at most one worker physical incarnation and one remote transport incarnation;
+ordinary wait/watchdog and overload paths cannot relaunch it.
+
+`LifecycleProbeResult` contains `version, status, binding, physicalRunId, custody, physicalTerminal`, with optional
+`child, childExitCode, wrapperExitCode, record, physical, reason, failure`. `failure` is
+`{kind:'child-infrastructure'|'wrapper'|'transport'|'custody', reason:string}`. Status is `running | released | terminal |
+unavailable`; custody is `running | terminal | unknown`. Running requires a live authenticated response from the
+actual child, not a saved ready file or the wrapper. `child` is a version-1 receipt with `state` (`running`, `released`,
+`child-result`, `infrastructure-failure`), `evidence`, and optional `action, exitCode, reason`. Infrastructure never
+carries the requested child exit. Read and wait preserve unavailable evidence and do not restart, cancel or settle a
+lost run.
+
+`LifecycleGate` is `{spec, physicalRunId, host, remoteRunId, child}`. `child` is the actual child's
+`{pid,start,boot,group}`; `host` is its hostname, and `remoteRunId` is its enclosing remote run or null for execution
+inside the caller's already admitted native host scope. `spec` binds logical UUID, task attempt, source and nonce.
+Copy the entire gate from an observed running child's evidence into the release request. Release verifies the current
+owner attempt and still-reserved original controller binding. Wrong generations, PID reuse, foreign source/runtime,
+symlink receipts, reused physical gates and contradictory releases refuse. Same-action retries recover the original
+immutable acknowledgement/result. A release acknowledgement always reports `custody:'unknown'`; it cannot release
+native or controller capacity.
+
+Child evidence includes `runtime:{packageManager,version,revision,execPath,executableSha256,pinnedExecutableSha256}`,
+`source:{commit,tree,childSha256}`, `gate`, loopback `port`, `startedAt` and `expiresAt`. The actual child measures these
+fields itself, checks its full runtime revision and binary hash against the installed pinned executable, checks its
+source, and only then publishes running. Runtime/source mismatch exits 78 as infrastructure, cancellation exits 125,
+and unreleased expiry exits 124. None is application success0 or failure7. There is no timer-based application release.
+
+Gate transport uses the selected configured host and its immutable remote run from existing remote custody. The
+existing bounded SSH transport invokes only that run's installed Bun and tracked child `--control` operation; the
+child authenticates the complete gate over a bounded loopback RPC. No release path is uploaded from the caller.
+The `.temp/goal/checks/lifecycle/<physicalRunId>/` directory on the execution host holds exclusive `claim`,
+`ready.json`, `release.json` and `terminal.json` receipts. These are anti-reuse/evidence files, not authorization.
+All ancestors and receipt files reject symlinks; receipts are exclusive, fsynced and at most 16 KiB. Ordinary declared
+returns retrieve the three JSON receipts after both exit0 and exit7. Live observation never trusts a caller-local
+copy. Each child permits four simultaneous connections and at most 1024 authenticated observations; an RPC is bounded
+to two seconds, SSH control to five seconds. Wait uses bounded observations of this one identity, with no history scan.
+
+A terminal application result requires the exact child receipt, its structured foreground-log line, the wrapper's
+actual OS exit and (for a forwarded command) its matching native remote receipt. `physicalTerminal` separately requires
+positive whole-tree local and any required remote custody, recorded through the existing physical history. Merely
+reading child-result, missing PIDs, a transport failure, expiry or caller death cannot establish application completion
+or free capacity. The local admitted-host case also observes the child's detached group, since the subreaper starts
+that child in its own session. The existing identity-checked stop protocol owns bounded cleanup; read/wait only observe.
+
+The CLI uses the same request schemas in a bounded, canonical absolute JSON file:
+
+```sh
+bun scripts/check-lifecycle.ts argv /absolute/worktree/.temp/lifecycle-command.json
+bun scripts/check-lifecycle.ts start /absolute/worktree/.temp/lifecycle-start.json
+bun scripts/check-lifecycle.ts read /absolute/worktree/.temp/lifecycle-read.json
+bun scripts/check-lifecycle.ts release /absolute/worktree/.temp/lifecycle-release.json
+bun scripts/check-lifecycle.ts wait /absolute/worktree/.temp/lifecycle-wait.json
+```
+
+Each prints its typed JSON result. Foreground wait additionally prints the logical UUID, physical UUID, exit status and
+original log path, and exits the independently verified child0/7 only with terminal whole-tree proof; otherwise it exits75.
+Read/release return75 for unavailable observations/acknowledgements. Start returns its typed admission even when the
+child has not reached running; inspect both fields. Start exits0 for started/replayed admission, 1 for a positive
+never-started refusal and 75 for unavailable custody. The CLI never creates or revokes controller reservations.
+
+Lifecycle acceptance is `bun test scripts/check-lifecycle.test.ts scripts/worker-check.test.ts scripts/remote-check.test.ts
+scripts/check-custody.test.ts scripts/check-placement.test.ts`. It includes real bounded held children, actual pin
+measurement, hostile gate/refusal cases, lost callers/acknowledgements, descendant cleanup, fake-transport unit cases,
+and ordinary real a/b producer admissions for both exact exits. Missing native admission or proof fails those real
+admissions; it is not a skipped success. Minimal source delivery defers this acceptance, native validation and runtime
+release to normal control-plane validation before consumer use. `scripts/` has no workspace manifest or supported
+scripts TypeScript compiler route; the root `scripts/typecheck.ts` orchestrates application/package workspaces and
+does not typecheck these producer scripts. No scripts compiler command is implied by source delivery.

@@ -292,3 +292,19 @@ test('stack-heavy work never calls its local callback with absent hosts, c-only 
   expect(selected).toEqual(['a', 'b']);
   expect(localStarts).toBe(0);
 });
+
+test('the fixed held-child operation retains ordinary remote placement and grants no eval or local bypass', async () => {
+  const { encodeLifecycleSpec, LIFECYCLE_CHILD } = await import('./check-lifecycle-child.ts');
+  const { tmpdir } = await import('node:os');
+  const root = mkdtempSync(join(tmpdir(), 'rezics-placement-lifecycle-'));
+  try {
+    const encoded = encodeLifecycleSpec({ version: 1, checkId: randomUUID(), taskId: randomUUID(), attempt: 1,
+      sourceCommit: 'a'.repeat(40), sourceTree: 'b'.repeat(40), nonce: 'c'.repeat(64), exitCode: 0, lifetimeMs: 1_000,
+      runtime: { packageManager: 'bun@fixture', version: Bun.version, revision: Bun.revision }, childSha256: 'd'.repeat(64) });
+    const argv = ['bun', LIFECYCLE_CHILD, '--probe', encoded];
+    expect(classifyCheck(argv, root)).toEqual({ placement: 'remote', reason: 'bounded held-child lifecycle probe' });
+    expect(workerCheckNeedsStack(argv, root)).toBe(true);
+    expect(classifyCheck(['bun', '-e', 'process.exit(0)'], root).placement).toBe('remote');
+    expect(classifyCheck([...argv, '--local'], root).placement).toBe('remote');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

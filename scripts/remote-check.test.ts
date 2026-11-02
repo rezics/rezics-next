@@ -7061,3 +7061,54 @@ test('a failed returns transfer cannot erase a named lifetime failure or repeat 
   expect(fixture.events().filter((event) => event.kind === 'release')).toHaveLength(1);
   expect(fixture.events().find((event) => event.kind === 'lifetime-status')?.slotHeld).toBe(false);
 });
+
+test('lifecycle control uses the selected host run and recovers idempotently after lost transport without admitting another run', async () => {
+  const { tmpdir } = await import('node:os');
+  const { lifecycleControlScript, transportLifecycleControl } = await import('./remote-check.ts');
+  const { processIdentity } = await import('./check-custody.ts');
+  const directory = realpathSync(mkdtempSync(join(tmpdir(), 'rezics-lifecycle-transport-')));
+  const oldPath = process.env.PATH;
+  const oldRuntimeDirectory = process.env.XDG_RUNTIME_DIR;
+  try {
+    const run = randomUUID();
+    const gate = {
+      spec: { version: 1 as const, checkId: randomUUID(), taskId: randomUUID(), attempt: 1,
+        sourceCommit: 'a'.repeat(40), sourceTree: 'b'.repeat(40), nonce: 'c'.repeat(64), exitCode: 7 as const, lifetimeMs: 1_000,
+        runtime: { packageManager: 'bun@fixture', version: Bun.version, revision: Bun.revision }, childSha256: 'd'.repeat(64) },
+      physicalRunId: randomUUID(), host: 'real-hostname', remoteRunId: run, child: processIdentity()!,
+    };
+    const request = { version: 1 as const, operation: 'release' as const, gate };
+    const host = { name: 'a', address: 'root@selected.invalid', identity: '/private/key', memoryMaxGiB: 16, cpuQuotaPercent: 800, slots: 4, processorsPerSlot: 2 };
+    const trace = join(directory, 'trace');
+    const mode = join(directory, 'mode');
+    const ssh = join(directory, 'ssh');
+    writeFileSync(mode, 'lost');
+    writeFileSync(ssh, `#!${process.execPath}\nimport{appendFileSync,readFileSync}from'node:fs';
+      if(process.argv.includes('-O'))process.exit(0);
+      appendFileSync(${JSON.stringify(trace)},JSON.stringify(process.argv.slice(2))+'\\n');
+      if(readFileSync(${JSON.stringify(mode)},'utf8')==='lost')process.exit(255);
+      console.log(JSON.stringify({ack:'same-physical-release'}));\n`, { mode: 0o700 });
+    process.env.PATH = `${directory}:${oldPath}`;
+    process.env.XDG_RUNTIME_DIR = directory;
+    await expect(transportLifecycleControl(host, run, request)).rejects.toThrow('control transport exited 255');
+    expect(readFileSync(trace, 'utf8').trim().split('\n')).toHaveLength(1);
+    writeFileSync(mode, 'available');
+    expect(JSON.parse(await transportLifecycleControl(host, run, request))).toEqual({ ack: 'same-physical-release' });
+    const commands = readFileSync(trace, 'utf8').trim().split('\n').map((line) => JSON.parse(line) as string[]);
+    expect(commands).toHaveLength(2);
+    expect(commands[0]!.at(-1)).toBe(commands[1]!.at(-1));
+    expect(commands[0]!.at(-2)).toBe(host.address);
+    const script = await lifecycleControlScript(run, request);
+    expect(script).toContain(`/srv/rezics-check/runs/${run}/scripts/check-lifecycle-child.ts`);
+    expect(script).toContain('--control');
+    expect(script).not.toContain('--eval');
+    expect(script).not.toContain(directory);
+    await expect(lifecycleControlScript(randomUUID(), request)).rejects.toThrow('placement mismatch');
+    await expect(transportLifecycleControl({ ...host, name: 'foreign' }, run, request)).rejects.toThrow('unapproved');
+    expect(readFileSync(trace, 'utf8').trim().split('\n')).toHaveLength(2);
+  } finally {
+    if (oldPath === undefined) delete process.env.PATH; else process.env.PATH = oldPath;
+    if (oldRuntimeDirectory === undefined) delete process.env.XDG_RUNTIME_DIR; else process.env.XDG_RUNTIME_DIR = oldRuntimeDirectory;
+    rmSync(directory, { recursive: true, force: true });
+  }
+});

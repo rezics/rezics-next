@@ -29,6 +29,7 @@
 // Admission depends on free slots and held memory reservations, whatever the host's load average. Each run has a nested
 // slice shared with its containers; its cpu.stat and memory.peak report CPU seconds, average cores and peak memory.
 import { createHash, randomUUID } from 'node:crypto';
+import type { LifecycleHostControl } from './check-lifecycle-child.ts';
 import {
   appendFileSync,
   chmodSync,
@@ -565,6 +566,36 @@ function getPinnedBun(): { version: string; revision: string } {
   if (result.exitCode !== 0) throw new Error('Could not read pinned Bun revision; run bun install first');
   pinnedBun = { version, revision: result.stdout.toString().trim() };
   return pinnedBun;
+}
+
+/** Transport discriminator only. Source/binding admission and the child's full schema remain authoritative. */
+function fixedLifecycleExecution(command: readonly string[]): boolean {
+  return command.length === 6 && command[0] === 'bun' && command[1] === 'scripts/check-lifecycle-child.ts' &&
+    command[2] === '--probe' && /^[\w-]{1,4096}$/.test(command[3]!) && command[4] === '--physical' &&
+    /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(command[5]!);
+}
+
+/** Fixed control transport to one already-admitted physical run; this never allocates execution capacity. */
+export async function lifecycleControlScript(run: string, value: LifecycleHostControl): Promise<string> {
+  // Preserve remote-check's standalone, side-effect-free import in a checkout without installed dependencies.
+  const { LIFECYCLE_CHILD, validateLifecycleHostControl } = await import('./check-lifecycle-child.ts');
+  const request = validateLifecycleHostControl(value);
+  if (!/^[a-z0-9-]{1,64}$/.test(run) || (request.operation === 'observe' ? request.remoteRunId : request.gate.remoteRunId) !== run) throw new Error('lifecycle: remote gate placement mismatch');
+  const root = `${ROOT}/runs/${run}`;
+  const encoded = Buffer.from(JSON.stringify(request)).toString('base64url');
+  return `cd ${quote(root)} && exec ${quote(`${root}/node_modules/.bin/bun`)} ${quote(`${root}/${LIFECYCLE_CHILD}`)} --control ${quote(encoded)}`;
+}
+
+export async function transportLifecycleControl(host: Host, run: string, request: LifecycleHostControl): Promise<string> {
+  if (!(PERFORMANCE_HOST_NAMES as readonly string[]).includes(host.name)) throw new Error('lifecycle: unapproved control host');
+  const script = await lifecycleControlScript(run, request);
+  const connection = randomUUID();
+  try {
+    const result = await boundedSsh(host, connection, script, 'lifecycle control', 5_000);
+    if (result.code !== 0) throw new Error(`lifecycle: control transport exited ${result.code}: ${result.output.slice(0, 512)}`);
+    if (Buffer.byteLength(result.output) > 16_384) throw new Error('lifecycle: oversized control response');
+    return result.output;
+  } finally { await closeControlMaster(host, connection); }
 }
 const SLICE = 'rezics-check.slice';
 const SLOT_BUSY = 75;
@@ -2875,6 +2906,7 @@ host=$REMOTE_CHECK_HOST
             progress_pid=$!
             ;;
         esac
+        ${fixedLifecycleExecution(command) ? `export REZICS_LIFECYCLE_REMOTE_RUN=${quote(id)}` : ''}
         "$@" &
         command_pid=$!
         wait "$command_pid"
@@ -5522,7 +5554,7 @@ async function runWithTransportRetries(
   onAnswered?: () => void,
 ): Promise<number | null> {
   validateMemoryGiB(options.memoryGiB);
-  const maxAttempts = options.maxTransportAttempts ?? 3;
+  const maxAttempts = fixedLifecycleExecution(options.command) ? 1 : (options.maxTransportAttempts ?? 3);
   if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 3)
     throw new Error('remote-check: max transport attempts must be between one and three');
   const slots = options.slots ?? 1;

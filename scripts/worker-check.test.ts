@@ -3508,3 +3508,22 @@ test('unsupported wrapper originals and untracked wrapper sources are refused be
     });
   }
 });
+
+test('fixed lifecycle argv preserves its original binding and cannot start through an unbound producer', async () => {
+  const { tmpdir } = await import('node:os');
+  const { encodeLifecycleSpec, LIFECYCLE_CHILD } = await import('./check-lifecycle-child.ts');
+  const root = mkdtempSync(join(tmpdir(), 'rezics-worker-lifecycle-'));
+  try {
+    const fields = { version: 1 as const, token: randomUUID(), checkId: randomUUID(), goal: 'performance',
+      taskId: randomUUID(), attempt: 1, sourceCommit: 'a'.repeat(40), sourceTree: 'b'.repeat(40), cwd: root };
+    const spec = { version: 1 as const, checkId: fields.checkId, taskId: fields.taskId, attempt: fields.attempt,
+      sourceCommit: fields.sourceCommit, sourceTree: fields.sourceTree, nonce: 'c'.repeat(64), exitCode: 7 as const, lifetimeMs: 1_000,
+      runtime: { packageManager: 'bun@fixture', version: Bun.version, revision: Bun.revision }, childSha256: 'd'.repeat(64) };
+    const binding: ControllerProofBindingV1 = { ...fields, argv: ['bun', LIFECYCLE_CHILD, '--probe', encodeLifecycleSpec(spec)] };
+    expect(controllerProofExecutionArgv(binding)).toEqual(binding.argv);
+    expect(await needsStack(binding.argv, root)).toBe(true);
+    await expect(runWorkerCheck(binding.argv, root)).rejects.toThrow('controller-bound admission required');
+    expect(existsSync(join(root, '.temp/goal/checks/custody/remote'))).toBe(false);
+    expect(existsSync(join(root, '.temp/goal/checks/lifecycle'))).toBe(false);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

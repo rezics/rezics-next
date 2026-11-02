@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { spawn, spawnSync } from 'node:child_process';
+import { encodeLifecycleSpec, lifecycleDirectory, lifecycleSpecFromArgv, lifecycleSpecFromBinding, readLifecycleChildReceipt } from './check-lifecycle-child.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import {
   closeSync,
@@ -631,6 +632,14 @@ export function controllerProofExecutionArgv(binding: ControllerProofBindingV1):
 }
 
 function validateProofExecutionSource(binding: ControllerProofBindingV1): void {
+  const probe = lifecycleSpecFromArgv(binding.argv);
+  if (probe) {
+    lifecycleSpecFromBinding(binding);
+    const file = join(binding.cwd, 'scripts/check-lifecycle-child.ts');
+    if (!/^100(?:644|755) blob [0-9a-f]+\t/.test(proofGit(binding.cwd, ['ls-tree', binding.sourceTree, '--', 'scripts/check-lifecycle-child.ts'])) ||
+      !lstatSync(file).isFile() || realpathSync(file) !== file || createHash('sha256').update(readFileSync(file)).digest('hex') !== probe.childSha256)
+      throw new Error('lifecycle: child must be the captured tracked source');
+  }
   const execution = controllerProofExecutionArgv(binding);
   if (JSON.stringify(execution) === JSON.stringify(binding.argv)) return;
   // The pure derivation recognizes syntax; execution additionally requires the canonical captured files.
@@ -708,6 +717,7 @@ function addProofPhysicalIntent(record: CheckRecord): void {
   const state = readProofState(record.controllerProof, registry);
   if (
     state.phase === 'refused' ||
+    (lifecycleSpecFromArgv(record.argv) && state.physical.length !== 0) ||
     state.physical.length >= 2 ||
     !isPhysicalRunId(record.physicalRunId) ||
     state.physical.some((physical) => physical.physicalRunId === record.physicalRunId)
@@ -1236,7 +1246,22 @@ export async function runWorkerCheck(
     env.REZICS_CHECK_REMOTE_CUSTODY_FILE = remoteRunCustodyPath(root, physicalRunId);
   }
   const classification = setup(() => classifyCheck(argv, root));
+  const lifecycle = setup(() => lifecycleSpecFromArgv(argv));
+  if (lifecycle) {
+    setup(() => {
+      if (!logicalCheckId) throw new Error('lifecycle: controller-bound admission required');
+      const bound = readRecord(root, logicalCheckId);
+      if (!bound.controllerProof || bound.physicalRunId !== physicalRunId) throw new Error('lifecycle: physical admission mismatch');
+      lifecycleSpecFromBinding(bound.controllerProof);
+      validateProofRecord(bound);
+    });
+    // These are the only additional execution arguments; the reserved original stays immutable.
+    argv = [...argv, '--physical', physicalRunId];
+    returnPaths.push(...['ready.json', 'release.json', 'terminal.json'].map((name) => `${lifecycleDirectory(physicalRunId)}/${name}`));
+    allowOverloadRerun = false;
+  }
   const physicallyRemote = isCheckHostRun(root);
+  if (lifecycle && physicallyRemote) delete env.REZICS_LIFECYCLE_REMOTE_RUN;
   const needsStack = classification.placement === 'remote' && !physicallyRemote;
   const commandClass = setup(() => checkClass(argv, root));
   argv = setup(() => scopeRootTypecheck(argv, root, env, (line) => writeSync(descriptor, `${line}\n`)));
@@ -1331,8 +1356,10 @@ export async function runWorkerCheck(
     const artifactRelative = artifactRunRelativePath(physicalRunId);
     let artifactPrepared = false;
     try {
-      prepareArtifactRun(root, physicalRunId);
-      artifactPrepared = true;
+      if (!lifecycle) {
+        prepareArtifactRun(root, physicalRunId);
+        artifactPrepared = true;
+      }
     } catch (error) {
       process.stderr.write(
         `worker-check: artifact handoff unavailable: ${error instanceof Error ? error.message : error}\n`,
@@ -1351,7 +1378,7 @@ export async function runWorkerCheck(
         throw error;
       }
     }
-    const growthProfile = env.GROWTH_PROFILE;
+    const growthProfile = lifecycle ? undefined : env.GROWTH_PROFILE;
     let growthProfilePath: string | undefined;
     let growthProfileRelative: string | undefined;
     let previousGrowthProfile = '';
@@ -1458,6 +1485,7 @@ export async function runWorkerCheck(
             ...(weight < 2 ? [] : ['--memory-gib', String(weight)]),
             '--allowed-hosts',
             'a,b',
+            ...(lifecycle ? ['--max-ms', String(lifecycle.lifetimeMs + 60_000)] : []),
             ...(growthProfileRelative === undefined ? [] : ['--returns', growthProfileRelative]),
             ...(artifactPrepared ? ['--returns', artifactRelative] : []),
             ...returnPaths.flatMap((path) => ['--returns', path]),
@@ -2336,6 +2364,29 @@ export function readWorkerCheckRecord(id: string, cwd = process.cwd()): CheckRec
   return readRecord(resolve(cwd), id);
 }
 
+/** Observe an already-finished incarnation. No signal, restart, capacity release or inferred missing-PID proof. */
+export async function observeWorkerCheckTerminal(id: string, cwd: string, physicalRunId: string): Promise<CheckTerminalProof | undefined> {
+  return await withCheckFence(cwd, id, () => {
+    const head = readRecord(cwd, id);
+    const history = readPhysicalRecord(cwd, id, physicalRunId);
+    if (head.physicalRunId !== physicalRunId || head.status !== 'finished' || !history || history.status !== 'finished' ||
+      history.runnerHost !== hostname() || head.exitCode === undefined || history.exitCode !== head.exitCode) return undefined;
+    if (!detachedGroupTerminal(history.runnerIdentity)) return undefined;
+    const probe = head.controllerProof && lifecycleSpecFromArgv(head.controllerProof.argv);
+    if (probe && !history.remoteExpected) {
+      const receipt = readLifecycleChildReceipt(cwd, physicalRunId);
+      if (!receipt || encodeLifecycleSpec(receipt.evidence.gate.spec) !== encodeLifecycleSpec(probe) ||
+        receipt.evidence.gate.host !== history.runnerHost || !detachedGroupTerminal(receipt.evidence.gate.child)) return undefined;
+    }
+    const remote = history.remoteExpected ? remoteTerminalState(cwd, physicalRunId).terminal : null;
+    if (history.remoteExpected && remote !== true) return undefined;
+    const proof = history.terminalProof?.resultKnown && history.terminalProof.remote === remote ? history.terminalProof :
+      { local: true as const, remote, resultKnown: true, observedAt: new Date().toISOString() };
+    if (proof !== history.terminalProof) updatePhysicalRecord(cwd, id, physicalRunId, (record) => ({ ...record, terminalProof: proof }));
+    return proof;
+  });
+}
+
 export function readWorkerCheckHistory(
   id: string,
   physicalRunId: string,
@@ -2579,6 +2630,19 @@ async function stopWorkerCheckOwned(
     } else localTerminal = detachedGroupTerminal(expected.runnerIdentity);
   }
   localTerminal = localTerminal && detachedGroupTerminal(expected.runnerIdentity);
+  const lifecycle = history.controllerProof && lifecycleSpecFromArgv(history.controllerProof.argv);
+  if (localTerminal && lifecycle && !history.remoteExpected) {
+    try {
+      const child = readLifecycleChildReceipt(root, expected.physicalRunId);
+      if (!child || encodeLifecycleSpec(child.evidence.gate.spec) !== encodeLifecycleSpec(lifecycle) || child.evidence.gate.host !== expected.runnerHost) {
+        localTerminal = false;
+      } else {
+        // The existing subreaper uses a child session. An empty wrapper group alone cannot settle that session.
+        if (!detachedGroupTerminal(child.evidence.gate.child)) await terminateDetachedGroup(child.evidence.gate.child);
+        localTerminal = detachedGroupTerminal(child.evidence.gate.child);
+      }
+    } catch { localTerminal = false; }
+  }
 
   let remote = history.remoteExpected
     ? remoteTerminalState(root, expected.physicalRunId)
@@ -2832,6 +2896,7 @@ export async function waitWorkerCheck(
     if (lastGrowth === 0 || modifiedAt > lastGrowth) lastGrowth = modifiedAt;
     const alive = recordedRunnerAlive(record, id);
     if (alive === false) {
+      if (record.controllerProof && lifecycleSpecFromArgv(record.controllerProof.argv)) return unknownCustodyResult(record, write);
       const recoverable = await recoverablePhysicalRun(record, root, id);
       if (!recoverable) return unknownCustodyResult(record, monitor.write ?? ((text) => process.stdout.write(text)));
       return await rerunInterruptedCheck(
@@ -2844,6 +2909,7 @@ export async function waitWorkerCheck(
       );
     }
     if (Date.now() - lastGrowth >= stallMs) {
+      if (record.controllerProof && lifecycleSpecFromArgv(record.controllerProof.argv)) return unknownCustodyResult(record, write);
       const custody = record.physicalRunId ? readPhysicalRecord(root, id, record.physicalRunId) : undefined;
       if (!custody || !record.runnerIdentity || !record.runnerHost || !record.physicalRunId) {
         return unknownCustodyResult(record, write);

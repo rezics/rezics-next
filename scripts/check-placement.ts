@@ -10,6 +10,7 @@ import {
   realpathSync,
 } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { lifecycleSpecFromArgv } from './check-lifecycle-child.ts';
 
 export const PERFORMANCE_HOST_NAMES = ['a', 'b'] as const;
 export const CHECK_HOST_RUNS_ROOT = '/srv/rezics-check/runs';
@@ -556,6 +557,9 @@ function testFilesAreSmall(args: readonly string[], cwd: string, root: string): 
 
 function classifyCommand(argv: readonly string[], cwd: string, root: string, depth = 0): CheckPlacement {
   if (argv.length === 0 || depth > 4) return { placement: 'remote', reason: 'unknown command' };
+  try {
+    if (lifecycleSpecFromArgv(argv)) return { placement: 'remote', reason: 'bounded held-child lifecycle probe' };
+  } catch { return { placement: 'remote', reason: 'invalid held-child lifecycle probe' }; }
   const command = argv[0]!;
   const args = argv.slice(1);
   const name = executableName(command);
