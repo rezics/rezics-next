@@ -420,10 +420,13 @@ Admission retries races against other callers. The default probe interval is fiv
    slot.
    Omit Git metadata, `node_modules` and root `.temp` files. For Bun-backed commands, stage a native Git snapshot in
    an ignored, unique directory under root `.temp` and include its manifest and pack in the same upload. The snapshot
-   retains the checkout's real `HEAD`, reachable history and staged index tree, without transferring `.git`, its
-   mutable index, configuration, remotes, credentials, hooks, reflogs or object alternates. A reusable immutable pack
-   is accepted only when its object format, `HEAD`, index tree and manifest/pack integrity match. Snapshot staging
-   reports its artifact bytes; the per-run local staging directory is removed after transfer, including on failure.
+   Snapshot boundary: `merge-base(HEAD, dev)`, or `HEAD` without a usable `dev` merge base (affected-test selection
+   then runs unscoped). The snapshot retains the checkout's real `HEAD`, staged index tree and commit paths from
+   `HEAD` and `dev` to their merge base. It does not transfer `.git`, the mutable index, configuration, remotes,
+   credentials, hooks, reflogs or object alternates. A
+   reusable immutable pack is accepted only when its object format, `HEAD`, `dev` base, shallow boundary, index tree
+   and manifest/pack integrity match. Snapshot staging reports artifact bytes and the rsync upload reports its
+   duration and bytes sent; the per-run local staging directory is removed after transfer, including on failure.
    Uploads use zstd compression when both rsync endpoints support it, and checksum against the host's
    `/srv/rezics-check/bases/current` tree so unchanged files are copied on the host. A missing base means a full upload.
    After upload, a base older than 30 minutes is refreshed from the run tree and `current` switches atomically;

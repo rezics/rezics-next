@@ -35,10 +35,14 @@ function repository(root: string) {
   git(source, 'add', 'tracked.txt', 'staged.txt');
   git(source, 'commit', '-qm', 'first native commit');
   const historical = git(source, 'rev-parse', 'HEAD');
-  writeFileSync(join(source, 'tracked.txt'), 'committed\n');
+  writeFileSync(join(source, 'tracked.txt'), 'base\n');
   git(source, 'commit', '-qam', 'second native commit');
+  const base = git(source, 'rev-parse', 'HEAD');
+  git(source, 'branch', 'dev', base);
+  writeFileSync(join(source, 'tracked.txt'), 'committed\n');
+  git(source, 'commit', '-qam', 'third native commit');
   const head = git(source, 'rev-parse', 'HEAD');
-  return { source, historical, head };
+  return { source, historical, base, head };
 }
 function copyWorkingFiles(source: string, target: string) {
   mkdirSync(target);
@@ -47,9 +51,9 @@ function copyWorkingFiles(source: string, target: string) {
   }
 }
 
-test('native check Git custody retains real history, dirty source, staged status and independent worktree creation', async () => {
+test('native check Git custody retains the candidate and base as shallow history with independent worktree creation', async () => {
   const root = sandbox();
-  const { source, historical, head } = repository(root);
+  const { source, historical, base, head } = repository(root);
   const linked = join(root, 'linked-source');
   git(source, 'worktree', 'add', '--detach', linked, head);
   writeFileSync(join(linked, 'staged.txt'), 'staged\n');
@@ -73,7 +77,10 @@ test('native check Git custody retains real history, dirty source, staged status
   rmSync(artifacts, { recursive: true, force: true });
   await restoreCheckGit(copiedManifest, checkout);
   expect(git(checkout, 'rev-parse', 'HEAD')).toBe(head);
-  expect(git(checkout, 'show', `${historical}:tracked.txt`)).toBe('historical');
+  expect(git(checkout, 'rev-parse', '--is-shallow-repository')).toBe('true');
+  expect(git(checkout, 'merge-base', 'dev', 'HEAD')).toBe(base);
+  expect(git(checkout, 'diff', '--name-only', 'dev...HEAD')).toBe('tracked.txt');
+  expect(git(checkout, 'rev-list', '--all')).not.toContain(historical);
   expect(git(checkout, 'status', '--porcelain=v1')).toBe(original);
   expect(readFileSync(join(checkout, 'tracked.txt'), 'utf8')).toBe('unstaged\n');
   expect(git(checkout, 'config', '--local', '--list')).not.toContain('credential-must-not-travel');
@@ -86,13 +93,18 @@ test('native check Git custody retains real history, dirty source, staged status
 test('native check Git custody gives concurrent physical runs independent mutable indexes', async () => {
   const root = sandbox();
   const { source, head } = repository(root);
+  git(source, 'branch', '-D', 'dev');
   writeFileSync(join(source, 'untracked.txt'), 'separate\n');
   const inputs = [join(root, 'input-one'), join(root, 'input-two')];
   for (const input of inputs) mkdirSync(input);
   const manifests = await Promise.all(inputs.map((input) => stageCheckGit(source, input)));
+  const snapshot = JSON.parse(readFileSync(manifests[0]!, 'utf8')) as { dev: string | null; shallow: string };
+  expect(snapshot.dev).toBeNull();
+  expect(snapshot.shallow).toBe(head);
   const targets = [join(root, 'run-one'), join(root, 'run-two')];
   for (const target of targets) copyWorkingFiles(source, target);
   await Promise.all(targets.map((target, index) => restoreCheckGit(manifests[index]!, target)));
+  expect(git(targets[0]!, 'rev-parse', '--is-shallow-repository')).toBe('true');
   writeFileSync(join(targets[0]!, 'tracked.txt'), 'only run one\n');
   git(targets[0]!, 'add', 'tracked.txt');
   expect(git(targets[0]!, 'diff', '--cached', '--name-only')).toBe('tracked.txt');
