@@ -146,29 +146,30 @@ test('independent publication creation, local corrections, immutable recovery an
     await act(async () => user.click(scope(index).getByRole('checkbox', { name: m.publication_independent() })));
   };
   const ids = () => [...host.querySelectorAll('[id]')].map((element) => element.id);
-  const associations = (index: number) => {
-    const current = article(index);
-    for (const label of current.querySelectorAll<HTMLLabelElement>('label[for]')) {
-      const control = window.document.getElementById(label.htmlFor);
-      expect(control).not.toBeNull();
-      expect(current.contains(control)).toBe(true);
-    }
-    for (const element of current.querySelectorAll('[aria-describedby], [aria-labelledby]')) {
-      for (const attribute of ['aria-describedby', 'aria-labelledby']) {
-        for (const id of (element.getAttribute(attribute) ?? '').split(' ').filter(Boolean)) {
-          expect(current.contains(window.document.getElementById(id))).toBe(true);
+  const associations = (index: number) =>
+    act(async () => {
+      const current = article(index);
+      for (const label of current.querySelectorAll<HTMLLabelElement>('label[for]')) {
+        const control = window.document.getElementById(label.htmlFor);
+        expect(control).not.toBeNull();
+        expect(current.contains(control)).toBe(true);
+      }
+      for (const element of current.querySelectorAll('[aria-describedby], [aria-labelledby]')) {
+        for (const attribute of ['aria-describedby', 'aria-labelledby']) {
+          for (const id of (element.getAttribute(attribute) ?? '').split(' ').filter(Boolean)) {
+            expect(current.contains(window.document.getElementById(id))).toBe(true);
+          }
         }
       }
-    }
-    for (const link of current.querySelectorAll<HTMLAnchorElement>('a[href^="#"]')) {
-      const target = window.document.getElementById(decodeURIComponent(link.hash.slice(1)))!;
-      expect(current.contains(target)).toBe(true);
-      expect(target.matches('input, select, button, [tabindex="-1"]')).toBe(true);
-      // Programmatic focusability only: browser fragment navigation is asserted only in the UNRUN stories.
-      target.focus();
-      expect(window.document.activeElement).toBe(target);
-    }
-  };
+      for (const link of current.querySelectorAll<HTMLAnchorElement>('a[href^="#"]')) {
+        const target = window.document.getElementById(decodeURIComponent(link.hash.slice(1)))!;
+        expect(current.contains(target)).toBe(true);
+        expect(target.matches('input, select, button, [tabindex="-1"]')).toBe(true);
+        // Programmatic focusability only: browser fragment navigation is asserted only in the UNRUN stories.
+        target.focus();
+        expect(window.document.activeElement).toBe(target);
+      }
+    });
   try {
     const first = tracked();
     const second = tracked();
@@ -181,8 +182,8 @@ test('independent publication creation, local corrections, immutable recovery an
     const initialIds = ids();
     expect(initialIds.some((id) => id.includes(':publication:'))).toBe(true);
     expect(new Set(initialIds).size).toBe(initialIds.length);
-    associations(0);
-    associations(1);
+    await associations(0);
+    await associations(1);
     const profile = publicationProfiles(first.fixture.release, first.fixture.work.subject.type, 'en')[0]!;
     expect(scope().getByRole('heading', { name: first.fixture.work.subject.labels.en, level: 2 })).toBeDefined();
     expect(scope().getByRole('heading', { name: profile.label, level: 2 }).closest('legend')).not.toBeNull();
@@ -216,7 +217,7 @@ test('independent publication creation, local corrections, immutable recovery an
     expect(scope(1).queryByRole('alert')).toBeNull();
     expect(first.commands).toHaveLength(0);
     expect(first.fixture.calls).toHaveLength(beforeValidation);
-    associations(0);
+    await associations(0);
     await ready();
     await add('schema:isbn');
     await replace(input(m.correction_value()), '978-0-140-44430-8');
@@ -232,8 +233,8 @@ test('independent publication creation, local corrections, immutable recovery an
     expect(second.loads()).toBe(1);
     expect(second.fixture.calls).toHaveLength(3);
     expect(input(m.catalogue_create_label(), 1).value).toBe('Untouched second draft');
-    associations(0);
-    associations(1);
+    await associations(0);
+    await associations(1);
 
     // The real fixture transport proves the exact payload and bounded request sequence for uncertain retry.
     const uncertain = tracked('uncertain');
@@ -308,7 +309,7 @@ test('independent publication creation, local corrections, immutable recovery an
       scope().getByRole('heading', { name: m.catalogue_create_created(), level: 2 }).closest('[role="status"]'),
     ).not.toBeNull();
     expect(article().querySelector('form')).toBeNull();
-    associations(0);
+    await associations(0);
 
     for (const scenario of ['reader-unavailable', 'reader-concealed'] as const) {
       const result = tracked(scenario);
@@ -348,7 +349,7 @@ test('independent publication creation, local corrections, immutable recovery an
       expect(input(m.correction_value()).value).toBe('978-0-140-44430-8');
       expect(refusal.fixture.receipts.size).toBe(0);
       expect(refusal.navigations).toEqual([]);
-      associations(0);
+      await associations(0);
       if (scenario === 'conflict') {
         expect((scope().getByRole('button', { name: m.publication_submit() }) as HTMLButtonElement).disabled).toBe(
           true,
@@ -498,14 +499,14 @@ test('independent publication creation, local corrections, immutable recovery an
     const targets = fragments.map((link) => decodeURIComponent(link.hash.slice(1)));
     expect(new Set(targets).size).toBe(6);
     expect(new Set(ids()).size).toBe(ids().length);
-    associations(0);
-    associations(1);
+    await associations(0);
+    await associations(1);
     const collisionIds = ids();
     await draw();
     expect(ids()).toEqual(collisionIds);
     await replace(input(m.catalogue_create_language()), 'bad/language');
     await click(m.publication_submit());
-    associations(0);
+    await associations(0);
     expect(
       [...article().querySelectorAll<HTMLAnchorElement>('a[href^="#"]')].some(
         (link) => decodeURIComponent(link.hash.slice(1)) === input(m.catalogue_create_language()).id,
