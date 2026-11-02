@@ -6,7 +6,10 @@ import { createDiscoverySearch } from '../../src/search/discovery-service.ts';
 import { createDiscoveryRegistry } from '../../src/search/discovery-registry.ts';
 import { admitDiscoveryRequest } from '../../src/search/discovery-request.ts';
 import { encodeSearchCursor } from '../../src/search/cursor.ts';
-import { installPublicFilterCoveragePage, type PublicFilterCoveragePage } from '../../src/search/public-filter-coverage-page.ts';
+import {
+  installPublicFilterCoveragePage,
+  type PublicFilterCoveragePage,
+} from '../../src/search/public-filter-coverage-page.ts';
 import type { DiscoveryReadContext, DiscoveryRegistry } from '../../src/search/discovery.ts';
 import type {
   PublicDiscoveryConsumerOperations,
@@ -59,7 +62,11 @@ async function fixture(captureStatus: 'captured' | 'preparing' = 'captured', clo
     meaningDigest: null,
     readDefinition: null,
   };
-  const newConsumer: PublicFilterConsumer = { ...oldConsumer, physicalTarget: 'subjects-g2', incarnation: 'incarnation-2' };
+  const newConsumer: PublicFilterConsumer = {
+    ...oldConsumer,
+    physicalTarget: 'subjects-g2',
+    incarnation: 'incarnation-2',
+  };
   const queried: PublicFilterQueriedObservation = {
     consumer: newConsumer,
     snapshot: { kind: 'pit', observation: 'observation-2', pit: 'pit-2' },
