@@ -141,19 +141,23 @@ export function reusableCommand(command: readonly string[]): boolean {
   );
 }
 
+function reusableStoredTime(time: unknown, now: number): time is number {
+  return typeof time === 'number' && Number.isFinite(time) && time <= now && time >= now - CHECK_RESULT_TTL_MS;
+}
+
 export class CheckResults {
   constructor(readonly db: Database) {}
   lookup(key: string, now = Date.now()): CheckResult | undefined {
     this.db.query('DELETE FROM check_results WHERE time < ?').run(now - CHECK_RESULT_TTL_MS);
     const row = this.db
       .query(
-        `SELECT key, unit, producer, host, duration, log_path AS logPath, time, schema_version AS schemaVersion FROM check_results WHERE key=? AND time>=?`,
+        `SELECT key, unit, producer, host, duration, log_path AS logPath, time, schema_version AS schemaVersion FROM check_results WHERE key=? AND schema_version=? AND time>=? AND time<=?`,
       )
-      .get(key, now - CHECK_RESULT_TTL_MS) as Omit<CheckResult, 'passed'> | undefined;
-    return row ? { ...row, passed: true } : undefined;
+      .get(key, CHECK_RESULT_SCHEMA, now - CHECK_RESULT_TTL_MS, now) as Omit<CheckResult, 'passed'> | undefined;
+    return row && reusableStoredTime(row.time, now) ? { ...row, passed: true } : undefined;
   }
-  record(result: CheckResult): void {
-    if (!result.passed || result.schemaVersion !== CHECK_RESULT_SCHEMA) return;
+  record(result: CheckResult, now = Date.now()): void {
+    if (!result.passed || result.schemaVersion !== CHECK_RESULT_SCHEMA || !reusableStoredTime(result.time, now)) return;
     this.db
       .query(
         `INSERT OR REPLACE INTO check_results(key,unit,passed,producer,host,duration,log_path,time,schema_version) VALUES(?,?,1,?,?,?,?,?,?)`,

@@ -99,7 +99,12 @@ export function parseRouting(value: unknown): RoutingTable {
   const consultation = parseProfile(table.consultation, 'consultation');
   if (agentAdapter(consultation.cli).supportsConsultation?.(consultation) === false)
     throw new Error('consultation must use Codex Sol medium');
-  return { version: text(table.version, 'version'), classes, experiments, consultation };
+  // Routing files number their versions; a positive integer is read as its label.
+  const version =
+    typeof table.version === 'number' && Number.isSafeInteger(table.version) && table.version > 0
+      ? String(table.version)
+      : text(table.version, 'version');
+  return { version, classes, experiments, consultation };
 }
 export function readRouting(file: string): RoutingTable {
   return parseRouting(JSON.parse(readFileSync(file, 'utf8')));
