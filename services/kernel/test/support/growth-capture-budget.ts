@@ -62,11 +62,7 @@ export class GrowthCaptureBudget {
       throw new GrowthCaptureBudgetExceededError(
         `${this.#label} exceeded native notice byte capacity (${this.limits.nativeNoticeBytes} bytes); ${side} notice has ${bytes} UTF-8 bytes.`,
       );
-    this.reserve(
-      `${side} native plan notice`,
-      1,
-      bytes * GROWTH_NATIVE_NOTICE_RETAINED_BYTE_MULTIPLIER,
-    );
+    this.reserve(`${side} native plan notice`, 1, bytes * GROWTH_NATIVE_NOTICE_RETAINED_BYTE_MULTIPLIER);
   }
 
   retainNativePlanNode(side: GrowthCaptureEvidenceSide): void {

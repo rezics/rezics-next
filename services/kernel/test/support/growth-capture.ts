@@ -3,11 +3,7 @@ import { Buffer } from 'node:buffer';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import pg, { type Pool, type PoolClient } from 'pg';
 import { createPool, withConnection } from '../../src/database/pool.ts';
-import {
-  GrowthCaptureBudget,
-  parseNativePlanNotice,
-  type GrowthCaptureBudgetLimits,
-} from './growth-capture-budget.ts';
+import { GrowthCaptureBudget, parseNativePlanNotice, type GrowthCaptureBudgetLimits } from './growth-capture-budget.ts';
 import { walkPlanTree } from './growth-plan-walk.ts';
 import type { Capture } from './growth-cost.ts';
 import { drainCaptureWork } from './growth-capture-drain.ts';
