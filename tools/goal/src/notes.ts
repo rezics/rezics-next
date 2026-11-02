@@ -8,6 +8,9 @@ import { join } from 'node:path';
  */
 export type Note = { text: string; remindAt?: string; everyHours?: number };
 
+const hourMs = 3_600_000;
+const minimumPeriodMs = 1;
+
 export function parseNotes(value: unknown, label = 'notes'): Note[] {
   if (value === undefined) return [];
   if (!Array.isArray(value)) throw new Error(`${label} must be an array`);
@@ -24,6 +27,11 @@ export function parseNotes(value: unknown, label = 'notes'): Note[] {
       throw new Error(`${label}[${index}].remindAt must be an ISO time`);
     if (note.everyHours !== undefined && (typeof note.everyHours !== 'number' || !(note.everyHours > 0)))
       throw new Error(`${label}[${index}].everyHours must be a positive number`);
+    if (note.everyHours !== undefined) {
+      const periodMs = note.everyHours * hourMs;
+      if (!Number.isFinite(periodMs) || periodMs < minimumPeriodMs)
+        throw new Error(`${label}[${index}].everyHours must resolve to at least one millisecond`);
+    }
     if (note.everyHours !== undefined && note.remindAt === undefined)
       throw new Error(`${label}[${index}].everyHours needs remindAt`);
     return {
@@ -38,10 +46,34 @@ export function parseNotes(value: unknown, label = 'notes'): Note[] {
 export function occurrence(note: Note, now: number): string | undefined {
   if (!note.remindAt) return undefined;
   const first = Date.parse(note.remindAt);
-  if (first > now) return undefined;
+  if (!Number.isFinite(first) || !Number.isFinite(now) || first > now) return undefined;
   if (!note.everyHours) return new Date(first).toISOString();
-  const period = note.everyHours * 3_600_000;
-  return new Date(first + Math.floor((now - first) / period) * period).toISOString();
+  const period = note.everyHours * hourMs;
+  if (!Number.isFinite(period) || period < minimumPeriodMs) return undefined;
+  let latest = first + Math.floor((now - first) / period) * period;
+  if (latest > now) latest -= period;
+  if (latest < first) latest = first;
+  const date = new Date(latest);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : undefined;
+}
+
+function isRecordedOccurrence(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) && new Date(timestamp).toISOString() === value;
+}
+
+function readDeliveryJournal(path: string): Record<string, string> {
+  const delivered = Object.create(null) as Record<string, string>;
+  try {
+    const state: unknown = JSON.parse(readFileSync(path, 'utf8'));
+    if (!state || typeof state !== 'object' || Array.isArray(state)) return delivered;
+    for (const [text, value] of Object.entries(state))
+      if (isRecordedOccurrence(value)) delivered[text] = value;
+  } catch {
+    /* A damaged record delivers again rather than never. */
+  }
+  return delivered;
 }
 
 /** Deliver each due reminder once per occurrence; returns how many were delivered. */
@@ -52,12 +84,7 @@ export function deliverDueReminders(
   now = Date.now(),
 ): number {
   const path = join(stateDirectory, 'note-reminders.json');
-  let delivered: Record<string, string> = {};
-  try {
-    if (existsSync(path)) delivered = JSON.parse(readFileSync(path, 'utf8')) as Record<string, string>;
-  } catch {
-    /* A damaged record delivers again rather than never. */
-  }
+  const delivered = existsSync(path) ? readDeliveryJournal(path) : (Object.create(null) as Record<string, string>);
   let count = 0;
   for (const note of notes) {
     const at = occurrence(note, now);
