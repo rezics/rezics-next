@@ -436,6 +436,6 @@ test('the host width sweep dispatches a backlog brief through the dispatch path 
     expect(['integrated', 'merged']).toContain(h.store.task(taskId).state);
     expect(h.store.task(taskId).brief.markdown).toBe(readFileSync(join(backlog, 'dispatched', dispatched!), 'utf8'));
   } finally {
-    h.dispose();
+    await h.disposeAsync();
   }
 }, 60_000);
