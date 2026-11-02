@@ -139,6 +139,97 @@ async function change(label: string, value: string) {
     input.dispatchEvent(new window.Event('change', { bubbles: true }));
   });
 }
+for (const editing of [false, true]) {
+  test(`${editing ? 'edit' : 'create'} checks copy text limits before dispatch and preserves the corrected draft`, async () => {
+    await render(editing, true);
+    await click(m.library_copy_more());
+    if (!editing) {
+      const kind = form().querySelector<HTMLSelectElement>('select[name="kind"]')!;
+      await act(async () => {
+        kind.value = 'digital';
+        kind.dispatchEvent(new window.Event('change', { bubbles: true }));
+      });
+    }
+    await change(m.library_copy_location(), '📚'.repeat(201));
+    await change(m.library_copy_source(), '📚'.repeat(201));
+    await change(m.library_copy_acquired(), '2024-02-29');
+    await change(m.library_copy_disposed(), '2024-03-01');
+    await change(m.library_copy_note(), '📚'.repeat(1001));
+    await submit();
+    expect(editing ? update : create).not.toHaveBeenCalled();
+    for (const [label, limit] of [
+      [m.library_copy_location(), 200],
+      [m.library_copy_source(), 200],
+      [m.library_copy_note(), 1000],
+    ] as const) {
+      const input = field(label);
+      expect(input.getAttribute('aria-invalid')).toBe('true');
+      const description = input.getAttribute('aria-describedby');
+      expect(description).toBeTruthy();
+      expect(window.document.getElementById(description!)?.textContent).toContain(String(limit));
+    }
+    await change(m.library_copy_location(), '  Shelf  ');
+    expect(field(m.library_copy_source()).value).toBe('📚'.repeat(201));
+    expect(field(m.library_copy_note()).value).toBe('📚'.repeat(1001));
+    expect(field(m.library_copy_acquired()).value).toBe('2024-02-29');
+    expect(field(m.library_copy_disposed()).value).toBe('2024-03-01');
+    if (!editing) {
+      expect(form().querySelector<HTMLSelectElement>('select[name="kind"]')!.value).toBe('digital');
+      expect(form().querySelector<HTMLSelectElement>('select[name="status"]')!.value).toBe('kept');
+    }
+    await click(m.library_copy_cancel());
+    const prompt = window.document.body.querySelector<HTMLElement>('[role="alertdialog"]')!;
+    expect(prompt).toBeTruthy();
+    expect([...prompt.querySelectorAll('button')].filter((node) => node.textContent === m.library_copy_draft_navigation_stay())).toHaveLength(1);
+    expect([...prompt.querySelectorAll('button')].filter((node) => node.textContent === m.library_copy_draft_navigation_discard())).toHaveLength(1);
+    await click(m.library_copy_draft_navigation_stay(), prompt);
+    await change(m.library_copy_source(), 'Gift shop');
+    const note = '  note\n\n  ';
+    await change(m.library_copy_note(), note);
+    await submit();
+    const input = (editing ? update : create).mock.calls[0]![0] as { data: Record<string, unknown> };
+    expect(input.data).toMatchObject({
+      location: '  Shelf  ',
+      source: 'Gift shop',
+      acquiredOn: '2024-02-29',
+      disposedOn: '2024-03-01',
+      note,
+      ...(!editing ? { kind: 'digital', status: 'kept' } : {}),
+    });
+  });
+}
+for (const editing of [false, true]) {
+  test(`${editing ? 'edit' : 'create'} accepts exact scalar limits and retries its captured payload`, async () => {
+    await render(editing, true);
+    await click(m.library_copy_more());
+    const location = '📚'.repeat(200);
+    const source = '📚'.repeat(200);
+    const note = ' \n\n' + '📚'.repeat(994) + '   ';
+    await change(m.library_copy_location(), location);
+    await change(m.library_copy_source(), source);
+    await change(m.library_copy_note(), note);
+    await submit();
+    const action = editing ? update : create;
+    expect(action).toHaveBeenCalledTimes(1);
+    const original = action.mock.calls[0]![0];
+    expect(original).toMatchObject({ data: { location, source, note } });
+    await change(m.library_copy_note(), '📚'.repeat(1001));
+    await submit();
+    expect(action).toHaveBeenCalledTimes(2);
+    expect(action.mock.calls[1]![0]).toEqual(original);
+  });
+}
+for (const [reason, expected] of [
+  ['unavailable', m.library_copy_failure()],
+  ['conflict', m.library_copy_conflict()],
+] as const) {
+  test(`copy save keeps ${reason} distinct from other outcomes`, async () => {
+    update.mockResolvedValueOnce({ ok: false, reason });
+    await render(true, true);
+    await submit();
+    expect(form().querySelector('[role="alert"]')?.textContent).toBe(expected);
+  });
+}
 for (const presentation of ['inline', 'sheet', 'dialog'] as const) {
   test(`${presentation}: disclosure retains exact fields, dates and historical meaning through an uncertain save`, async () => {
     mobile = presentation === 'sheet';
