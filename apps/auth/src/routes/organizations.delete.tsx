@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Field, FieldError, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Alert, AlertDescription } from '@rezics/ui/shadcn/alert';
@@ -27,6 +27,7 @@ import {
   readCurrentOrganizationForDeletion,
   type OrganizationDeletionLoad,
   type OrganizationDeletionReader,
+  type OrganizationDeletionReview,
 } from '../organization-deletion';
 
 // Trusted issuer entry for Web management: /organizations/delete?organization_id=<immutable UUID>.
@@ -69,56 +70,91 @@ export function OrganizationDeleteContent({
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState('');
   const [outcome, setOutcome] = useState<'form' | 'accepted' | 'unknown'>('form');
-  const submitting = useRef(false);
-  const revision = useRef(0);
+  const submitting = useRef<object | null>(null);
+  const review = useRef<(OrganizationDeletionReview & { selected?: string | undefined; active: boolean }) | null>(null);
   const selectedId = useRef<string | undefined>(undefined);
   const input = useRef<HTMLInputElement>(null);
   const alert = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    let active = true;
-    revision.current += 1;
+  function resetReview() {
+    submitting.current = null;
+    setPending(false);
     setLoaded(null);
     setConfirmationError(false);
     setMessage('');
     setConfirmation('');
     setOutcome('form');
+  }
+
+  async function loadReview(current: NonNullable<typeof review.current>) {
+    const result = current.selected
+      ? await loadOrganizationDeletion(current.selected, read, current)
+      : { kind: 'missing' as const };
+    if (!current.isCurrent()) return;
     const continuation = readOrganizationDeleteStepUp();
-    const saved = continuation.kind === 'pending' ? continuation.value : null;
-    const selected = organizationId ?? saved?.organizationId;
-    selectedId.current = selected;
-    if (continuation.kind === 'invalid' || (saved && organizationId && saved.organizationId !== organizationId)) {
-      clearOrganizationDeleteStepUp();
-      setMessage(m.auth_organization_delete_changed());
-    }
-    if (!selected) {
-      setLoaded({ kind: 'missing' });
-      return;
-    }
-    void loadOrganizationDeletion(selected, read).then((result) => {
-      if (!active) return;
-      if (
-        saved &&
-        saved.organizationId === selected &&
-        result.kind === 'ready' &&
-        !organizationDeleteSessionMatches(result.target.session, saved)
-      ) {
+    if (
+      continuation.kind === 'pending' &&
+      continuation.value.organizationId === current.selected &&
+      result.kind === 'ready'
+    ) {
+      if (!organizationDeleteSessionMatches(result.target.session, continuation.value)) {
         clearOrganizationDeleteStepUp();
         setLoaded({ kind: 'denied' });
         return;
       }
-      if (saved && saved.organizationId === selected) setMessage(m.auth_account_operation_reconfirm());
-      const uncertain = readOrganizationDeleteUnknown(selected);
-      if (uncertain.kind !== 'absent') {
-        setOutcome('unknown');
-        setMessage(m.auth_organization_delete_unknown());
-      }
-      setLoaded(result);
-    });
+      setMessage(m.auth_account_operation_reconfirm());
+    }
+    setLoaded(result);
+  }
+
+  useLayoutEffect(() => {
+    resetReview();
+    const continuation = readOrganizationDeleteStepUp();
+    const saved = continuation.kind === 'pending' ? continuation.value : null;
+    const selected = organizationId ?? saved?.organizationId;
+    selectedId.current = selected;
+    const uncertain = selected ? readOrganizationDeleteUnknown(selected) : { kind: 'absent' as const };
+    const current = {
+      selected,
+      active: true,
+      humanAccountId:
+        uncertain.kind === 'pending' ? uncertain.value.humanAccountId : saved?.organizationId === selected ? saved?.humanAccountId : undefined,
+      isCurrent: (): boolean => review.current === current && current.active,
+    };
+    review.current = current;
+    if (continuation.kind === 'invalid' || (saved && organizationId && saved.organizationId !== organizationId)) {
+      clearOrganizationDeleteStepUp();
+      setMessage(m.auth_organization_delete_changed());
+    }
+    if (uncertain.kind !== 'absent') setOutcome('unknown');
+    void loadReview(current);
+    const retire = () => {
+      current.active = false;
+      resetReview();
+      setLoaded({ kind: 'unavailable' });
+    };
+    const restore = (event: PageTransitionEvent) => {
+      if (event.persisted) retire();
+    };
+    window.addEventListener('pagehide', retire);
+    window.addEventListener('pageshow', restore);
     return () => {
-      active = false;
+      current.active = false;
+      window.removeEventListener('pagehide', retire);
+      window.removeEventListener('pageshow', restore);
     };
   }, [organizationId, read]);
+
+  async function recover() {
+    const previous = review.current;
+    if (!previous || submitting.current) return;
+    previous.active = false;
+    const current = { ...previous, active: true, isCurrent: (): boolean => review.current === current && current.active };
+    review.current = current;
+    resetReview();
+    if (current.selected && readOrganizationDeleteUnknown(current.selected).kind !== 'absent') setOutcome('unknown');
+    await loadReview(current);
+  }
 
   useLayoutEffect(() => {
     if (confirmationError) input.current?.focus();
@@ -130,13 +166,14 @@ export function OrganizationDeleteContent({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!target || !privacyContact || submitting.current || outcome !== 'form') return;
+    const current = review.current;
+    if (!current?.isCurrent() || !target || !privacyContact || submitting.current || outcome !== 'form') return;
     if (!organizationDeleteConfirmed(confirmation, phrase)) {
       setConfirmationError(true);
       return;
     }
-    submitting.current = true;
-    const submittedRevision = revision.current;
+    const operationToken = {};
+    submitting.current = operationToken;
     setPending(true);
     setConfirmationError(false);
     setMessage('');
@@ -154,9 +191,9 @@ export function OrganizationDeleteContent({
         setMessage(m.auth_organization_delete_changed());
         return;
       }
-      const result = await executeOrganizationDeletion(target, key, read);
+      const result = await executeOrganizationDeletion(target, key, read, current);
       // Navigation cannot apply an earlier target's result to the new selection.
-      if (revision.current !== submittedRevision) return;
+      if (!current.isCurrent()) return;
       if (result.ok) {
         forgetOperationKey(operation, target.humanAccountId);
         clearOrganizationDeleteStepUp();
@@ -180,8 +217,8 @@ export function OrganizationDeleteContent({
       }
       setConfirmation('');
       if (result.reason === 'unknown') {
-        // No new approval or execution after ambiguity. The original helper has
-        // already retried the same reference/body/key; only current readback follows.
+        // No new approval or execution after ambiguity; only current readback
+        // follows while the original command identity remains stored.
         clearOrganizationDeleteStepUp();
         setOutcome('unknown');
         setMessage(m.auth_organization_delete_unknown());
@@ -196,19 +233,22 @@ export function OrganizationDeleteContent({
       else if (result.reason === 'unavailable') setMessage(m.auth_account_operation_unavailable());
       else setMessage(m.auth_account_operation_failure());
     } finally {
-      submitting.current = false;
-      setPending(false);
+      if (current.isCurrent() && submitting.current === operationToken) {
+        submitting.current = null;
+        setPending(false);
+      }
     }
   }
 
   async function readback(currentOrganizationId: string) {
-    if (submitting.current) return;
-    submitting.current = true;
-    const submittedRevision = revision.current;
+    const current = review.current;
+    if (!current?.isCurrent() || submitting.current) return;
+    const operationToken = {};
+    submitting.current = operationToken;
     setPending(true);
     try {
-      const result = await loadOrganizationDeletion(currentOrganizationId, read);
-      if (revision.current !== submittedRevision) return;
+      const result = await loadOrganizationDeletion(currentOrganizationId, read, current);
+      if (!current.isCurrent()) return;
       // A missing/denied read is not proof of deletion; a readable target is not
       // proof that an earlier command failed. Preserve the unknown command state.
       setLoaded(result);
@@ -220,8 +260,10 @@ export function OrganizationDeleteContent({
             : m.auth_account_operation_unavailable(),
       );
     } finally {
-      submitting.current = false;
-      setPending(false);
+      if (current.isCurrent() && submitting.current === operationToken) {
+        submitting.current = null;
+        setPending(false);
+      }
     }
   }
 
@@ -276,11 +318,18 @@ export function OrganizationDeleteContent({
             <a href="/login">{m.auth_security_sign_in()}</a>
           </>
         ) : !target ? (
-          <ErrorAlert>
-            {loaded.kind === 'denied' || loaded.kind === 'missing'
-              ? m.auth_organization_delete_read_denied()
-              : m.auth_account_operation_unavailable()}
-          </ErrorAlert>
+          <>
+            <ErrorAlert>
+              {loaded.kind === 'denied' || loaded.kind === 'missing'
+                ? m.auth_organization_delete_read_denied()
+                : m.auth_account_operation_unavailable()}
+            </ErrorAlert>
+            {loaded.kind === 'unavailable' ? (
+              <Button type="button" onClick={() => void recover()}>
+                {m.auth_account_delete_retry()}
+              </Button>
+            ) : null}
+          </>
         ) : (
           <form
             method="post"

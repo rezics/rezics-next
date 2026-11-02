@@ -45,14 +45,26 @@ export type OrganizationDeletionLoad =
   | { kind: 'ready'; target: OrganizationDeletionTarget }
   | { kind: 'signed-out' | 'denied' | 'missing' | 'unavailable' };
 
+// The page owns browser liveness and pins the first discovered initiating human,
+// including when the following private read is unavailable.
+export type OrganizationDeletionReview = {
+  humanAccountId?: string | undefined;
+  isCurrent: () => boolean;
+};
+
 export async function loadOrganizationDeletion(
   organizationId: string,
   read: OrganizationDeletionReader = readCurrentOrganizationForDeletion,
+  review?: OrganizationDeletionReview,
 ): Promise<OrganizationDeletionLoad> {
+  if (review && !review.isCurrent()) return { kind: 'unavailable' };
   if (!isAccountId(organizationId)) return { kind: 'missing' };
   const session = await loadAccountSession();
+  if (review && !review.isCurrent()) return { kind: 'unavailable' };
   if (session.kind === 'signed-out') return session;
   if (session.kind !== 'ready') return { kind: 'unavailable' };
+  if (review?.humanAccountId && review.humanAccountId !== session.accountId) return { kind: 'denied' };
+  if (review) review.humanAccountId = session.accountId;
   if (!isAccountId(session.accountId) || session.accountId === organizationId) return { kind: 'denied' };
   try {
     const result = await read({ humanAccountId: session.accountId, organizationId });
@@ -86,13 +98,15 @@ export async function executeOrganizationDeletion(
   target: OrganizationDeletionTarget,
   operationKey: string,
   read: OrganizationDeletionReader = readCurrentOrganizationForDeletion,
+  review?: OrganizationDeletionReview,
 ): Promise<AccountOperationResult | { ok: false; reason: 'changed' }> {
   if (!/^[a-f0-9]{32}$/.test(operationKey)) return { ok: false, reason: 'changed' };
   const previous = readOrganizationDeleteUnknown(target.organizationId);
   if (previous.kind !== 'absent') return { ok: false, reason: 'unknown' };
   // Re-read at explicit submission, never as an effect of navigation. Native
   // approval and execution still revalidate every write operand independently.
-  const current = await loadOrganizationDeletion(target.organizationId, read);
+  const current = await loadOrganizationDeletion(target.organizationId, read, review);
+  if (review && !review.isCurrent()) return { ok: false, reason: 'failure' };
   if (current.kind !== 'ready') return { ok: false, reason: current.kind === 'unavailable' ? 'unavailable' : 'denied' };
   if (
     current.target.humanAccountId !== target.humanAccountId ||
@@ -122,7 +136,10 @@ export async function executeOrganizationDeletion(
   } catch {
     return { ok: false, reason: 'unavailable' };
   }
-  const result = await runAccountOperation(operationKey, { kind: 'delete', accountId: target.organizationId });
+  const result = await runAccountOperation(operationKey, { kind: 'delete', accountId: target.organizationId }, review);
+  // Departure retires browser storage changes too; the original native command
+  // may already be running, so its uncertainty identity must remain available.
+  if (review && !review.isCurrent()) return result;
   if (result.ok || result.reason !== 'unknown') {
     clearOrganizationDeleteUnknown(target.organizationId);
   }

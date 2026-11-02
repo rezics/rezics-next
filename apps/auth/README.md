@@ -197,6 +197,19 @@ response was lost is replayed without repeating its effect. Success shows a conf
 actions. The flow makes three Auth requests for its initial page and submit, independent of the number of sessions,
 organizations or operated accounts.
 
+## Delete organization
+
+`/organizations/delete?organization_id=<UUID>` reviews only the selected organization through the private native
+management reader seam in `organization-deletion.ts`; the default unavailable binding offers Retry. Recovery keeps
+the selected organization and first discovered initiating human, and clears typed confirmation before each fresh review.
+Submission revalidates the review and uses the installed approval, execution and step-up protocol. Accepted deletion
+is distinct from cleanup completion. Uncertain results retain the original command identity; unavailable, missing,
+denied and readable readback never establish success or permit a fresh deletion.
+
+Departure and selection changes retire private reviews, pending browser stages, completions and operation locks;
+already dispatched native work continues. Decision: cached-page recovery is explicit Retry with fresh confirmation,
+retaining the initiating human and any original uncertainty identity.
+
 ## Create organization
 
 `/organizations/new` reads the current session and asks for one handle. An unavailable initial read offers Retry without discarding the saved draft. It applies the same claim rule and
