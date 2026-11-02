@@ -34,19 +34,12 @@ test('real authoring departure preserves drafts and focus, confirms only the cho
   mock.module('cloudflare:workers', () => ({ env: {} }));
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
-  const {
-    createMemoryHistory,
-    createRootRoute,
-    createRoute,
-    createRouter,
-    Outlet,
-    RouterProvider,
-  } = await import('@tanstack/react-router');
+  const { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } =
+    await import('@tanstack/react-router');
   const { AuthoringDepartureProvider } = await import('../src/threads/authoring-departure');
   const { EditionPublication } = await import('../src/content-editions/edition-create-view');
-  const { EditionPublicationController, editionCreateNavigationContext } = await import(
-    '../src/content-editions/edition-create'
-  );
+  const { EditionPublicationController, editionCreateNavigationContext } =
+    await import('../src/content-editions/edition-create');
   const { PostComposer, InlinePostEditor } = await import('../src/threads/composer');
   const { ThreadReplyComposer } = await import('../src/threads/reply-context-composer');
   const { sessionQuery } = await import('../src/session/query');
@@ -115,9 +108,7 @@ test('real authoring departure preserves drafts and focus, confirms only the cho
     const description = document.getElementById(popup.getAttribute('aria-describedby')!);
     expect(description?.textContent).toBe(message);
     expect(description?.closest('details')).toBeNull();
-    expect(popup.querySelector('h2')?.textContent).toBe(
-      discard ? m.thread_authoring_discard_title() : title,
-    );
+    expect(popup.querySelector('h2')?.textContent).toBe(discard ? m.thread_authoring_discard_title() : title);
     expect(popup.querySelectorAll('button')).toHaveLength(2);
     const stay = button(popup, m.thread_authoring_stay());
     const leave = button(popup, discard ? m.thread_authoring_discard() : m.thread_authoring_leave());
@@ -282,7 +273,9 @@ test('real authoring departure preserves drafts and focus, confirms only the cho
       ),
     );
     await settle(() =>
-      kind === 'edition' ? host.textContent?.includes(m.edition_publication_draft_heading()) === true : !!host.querySelector('.ProseMirror'),
+      kind === 'edition'
+        ? host.textContent?.includes(m.edition_publication_draft_heading()) === true
+        : !!host.querySelector('.ProseMirror'),
     );
     expect(blocked()).toBe(false);
     if (kind === 'opening') {

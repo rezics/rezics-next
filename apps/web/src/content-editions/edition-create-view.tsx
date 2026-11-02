@@ -143,12 +143,8 @@ export function EditionPublication({
   const initialPostId = initialSource?.postId;
   const initialRevisionId = initialSource?.revisionId;
   const unresolvedCommand = !!state.intent && (state.busy || state.uncertain);
-  const localSelection =
-    state.resumeEditionId === null &&
-    !state.edition &&
-    (!!sourceLink.trim() || !!state.identity);
-  const needsDeparture =
-    localSelection || (confirmed && state.edition?.state === 'draft') || unresolvedCommand;
+  const localSelection = state.resumeEditionId === null && !state.edition && (!!sourceLink.trim() || !!state.identity);
+  const needsDeparture = localSelection || (confirmed && state.edition?.state === 'draft') || unresolvedCommand;
   useAuthoringDeparture(
     needsDeparture,
     unresolvedCommand,

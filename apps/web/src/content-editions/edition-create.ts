@@ -145,8 +145,7 @@ export function editionCreateSearch(search: Record<string, unknown>) {
 export function editionCreateNavigationContext(location: { pathname: string; search: Record<string, unknown> }) {
   if (!location.pathname.endsWith('/editions/new')) return location.pathname;
   const { editionId, postId, revisionId } = editionCreateSearch(location.search);
-  const identity =
-    editionId !== undefined ? `edition:${editionId}` : `source:${postId ?? ''}:${revisionId ?? ''}`;
+  const identity = editionId !== undefined ? `edition:${editionId}` : `source:${postId ?? ''}:${revisionId ?? ''}`;
   return `${location.pathname}\u0000${identity}`;
 }
 
@@ -211,7 +210,13 @@ export class EditionPublicationController {
     for (const listener of this.listeners) listener();
   }
   async resume(editionId: string, loaded?: EditionResumeRead) {
-    if (this.retired || this.state.busy || this.state.intent || this.state.edition || this.state.resumeEditionId !== null)
+    if (
+      this.retired ||
+      this.state.busy ||
+      this.state.intent ||
+      this.state.edition ||
+      this.state.resumeEditionId !== null
+    )
       return;
     const generation = ++this.generation;
     this.set({
