@@ -217,6 +217,10 @@ response was lost is replayed without repeating its effect. Success shows a conf
 actions. The flow makes three Auth requests for its initial page and submit, independent of the number of sessions,
 organizations or operated accounts.
 
+Unavailable session reads offer Retry for the intended account, without submitting deletion; recovery and cached-page
+restoration require fresh typed confirmation, and departure retires callbacks while preserving the original command
+for explicit reconciliation. An accepted deletion remains a confirmation of acceptance with cleanup still pending.
+
 ## Delete organization
 
 `/organizations/delete?organization_id=<UUID>` reviews only the selected organization through the private native
@@ -229,9 +233,6 @@ denied and readable readback never establish success or permit a fresh deletion.
 Departure and selection changes retire private reviews, pending browser stages, completions and operation locks;
 already dispatched native work continues. Decision: cached-page recovery is explicit Retry with fresh confirmation,
 retaining the initiating human and any original uncertainty identity.
-Unavailable session reads offer Retry for the intended account, without submitting deletion; recovery and cached-page
-restoration require fresh typed confirmation, and departure retires callbacks while preserving the original command
-for explicit reconciliation. An accepted deletion remains a confirmation of acceptance with cleanup still pending.
 
 ## Create organization
 
@@ -260,6 +261,9 @@ until an initiating account is known; subsequent reads retain that account and o
 organizations ends pending browser continuations before they can install a review or start another request.
 An already dispatched change continues independently; its stored command, exact operands and original key remain
 available for explicit confirmation and native reconciliation. Failed identity confirmation keeps the current review usable.
+
+## Operator transfer
+
 Operator-transfer read failures offer Retry within the same page view. A failed session read preserves the saved
 attempt without treating it as an account mismatch; recovery restores it only for its initiating account and requires
 fresh confirmation. Signed-out or changed accounts cannot act on it. Relation retries repeat only the failed read;
