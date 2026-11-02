@@ -1,7 +1,7 @@
 import { useContext, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnonymousSessionContext, sessionQuery, useSession } from '../../session/query';
-import { Button } from '../../components/ui/button';
+import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import { useListReaderAdmission } from './list-reader-admission';
 import { hasSelectedRealmTarget, typeListTargetFromPage } from './type-list-model';
