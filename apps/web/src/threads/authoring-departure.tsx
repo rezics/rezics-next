@@ -213,10 +213,20 @@ export function AuthoringDepartureProvider({ children }: { children: ReactNode }
   return (
     <DepartureContext.Provider value={navigation}>
       {retired.current ? (
-        <div role="alert" className="space-y-3 p-4">
-          <p>{m.thread_authoring_session_changed()}</p>
-          <Button type="button" variant="outline" onClick={() => window.location.reload()}>
-            {m.settings_reload()}
+        <div
+          role="alert"
+          className="mx-auto grid min-w-0 max-w-2xl grid-cols-[minmax(0,1fr)] gap-4 rounded-2xl border border-border bg-card p-5 text-start text-foreground sm:p-6"
+        >
+          <p className="min-w-0 text-base leading-relaxed [overflow-wrap:anywhere]">
+            {m.thread_authoring_session_changed()}
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-auto min-h-11 min-w-11 max-w-full shrink px-4 py-3 text-center leading-snug whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring sm:w-fit"
+            onClick={() => window.location.reload()}
+          >
+            <span className="min-w-0">{m.settings_reload()}</span>
           </Button>
         </div>
       ) : (
@@ -255,6 +265,7 @@ function DepartureDialog({ navigation }: { navigation: AuthoringDepartureState }
   const recovery = navigation.unresolved();
   return (
     <AlertDialogContent
+      className="min-w-0 max-w-lg grid-cols-[minmax(0,1fr)] gap-6 p-5 text-start sm:max-w-xl sm:p-6"
       initialFocus={stayButton}
       finalFocus={() =>
         navigation.suppressFocusReturn
@@ -264,11 +275,11 @@ function DepartureDialog({ navigation }: { navigation: AuthoringDepartureState }
             : undefined
       }
     >
-      <AlertDialogHeader>
-        <AlertDialogTitle>
+      <AlertDialogHeader className="min-w-0 grid-cols-[minmax(0,1fr)] place-items-stretch gap-3 text-start sm:group-data-[size=default]/alert-dialog-content:place-items-stretch sm:group-data-[size=default]/alert-dialog-content:text-start">
+        <AlertDialogTitle className="min-w-0 text-xl leading-snug [overflow-wrap:anywhere]">
           {discard ? m.thread_authoring_discard_title() : m.thread_authoring_leave_title()}
         </AlertDialogTitle>
-        <AlertDialogDescription>
+        <AlertDialogDescription className="min-w-0 text-base leading-relaxed text-pretty [overflow-wrap:anywhere]">
           {discard
             ? recovery
               ? m.thread_authoring_discard_pending()
@@ -278,10 +289,19 @@ function DepartureDialog({ navigation }: { navigation: AuthoringDepartureState }
               : m.thread_authoring_leave_unsaved()}
         </AlertDialogDescription>
       </AlertDialogHeader>
-      <AlertDialogFooter>
-        <AlertDialogCancel ref={stayButton}>{m.thread_authoring_stay()}</AlertDialogCancel>
-        <AlertDialogAction variant="destructive" onClick={navigation.leave}>
-          {discard ? m.thread_authoring_discard() : m.thread_authoring_leave()}
+      <AlertDialogFooter className="grid min-w-0 grid-cols-[minmax(0,1fr)] items-stretch gap-3 sm:grid-cols-2">
+        <AlertDialogCancel
+          ref={stayButton}
+          className="h-auto min-h-11 min-w-11 max-w-full shrink px-4 py-3 text-center leading-snug whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring"
+        >
+          <span className="min-w-0">{m.thread_authoring_stay()}</span>
+        </AlertDialogCancel>
+        <AlertDialogAction
+          variant="destructive"
+          className="h-auto min-h-11 min-w-11 max-w-full shrink px-4 py-3 text-center leading-snug whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring"
+          onClick={navigation.leave}
+        >
+          <span className="min-w-0">{discard ? m.thread_authoring_discard() : m.thread_authoring_leave()}</span>
         </AlertDialogAction>
       </AlertDialogFooter>
     </AlertDialogContent>
