@@ -4,6 +4,7 @@ import { exportJWK, generateKeyPair, SignJWT, type JWK } from 'jose';
 import { createAccess } from '../../src/access/index.ts';
 import { deriveAccess } from '../../src/access/derived-access.ts';
 import { authenticationWorkBound } from '../../src/access/authentication-work.ts';
+import { PROBLEMS } from '../../src/http/problem.ts';
 import {
   AccessWorkUnavailableError,
   AccessWorkAccounting,
@@ -240,6 +241,41 @@ test('invalid and unresolved delegated Bearers settle their reached reads withou
   expect(unresolvedAccounting.work.usage().emptySeeks).toBeGreaterThan(0);
   expect(unresolvedAccounting.reservations[0]!.actual).toEqual(unresolvedAccounting.work.usage());
   expect(JSON.stringify(unresolvedAccounting.reservations)).not.toContain(absentReference);
+});
+
+test('metered original authentication keeps suspended-account denial after charging its anchored read', async () => {
+  const value = await token();
+  const deadline = Date.now() + 5000;
+  const metered = accounting(deadline);
+  statements.length = 0;
+  try {
+    await pool.query('UPDATE access.account SET state = $3 WHERE route = $1 AND account_id = $2', [
+      routeOf(actorId),
+      actorId,
+      'suspended',
+    ]);
+    await expect(
+      actorOf(derived, bearer(value), { pool: observedPool, deadline, work: metered.work }),
+    ).rejects.toMatchObject({ code: 'account_suspended' });
+    expect(PROBLEMS.account_suspended.status).toBe(403);
+    expect(statements).toHaveLength(1);
+    expect(statements[0]).toContain('access.account');
+    expect(metered.reservations).toHaveLength(1);
+    expect(metered.reservations[0]).toMatchObject({
+      operation: 'access.authenticate',
+      bound: authenticationWorkBound(value),
+      actual: metered.work.usage(),
+    });
+    expect(metered.work.usage().rows).toBe(2);
+    expect(JSON.stringify(metered.reservations)).not.toContain(value);
+    expect(JSON.stringify(metered.reservations)).not.toContain(actorId);
+  } finally {
+    await pool.query('UPDATE access.account SET state = $3 WHERE route = $1 AND account_id = $2', [
+      routeOf(actorId),
+      actorId,
+      'active',
+    ]);
+  }
 });
 
 test('a dispatched account-read failure burns the original finite authentication declaration', async () => {
