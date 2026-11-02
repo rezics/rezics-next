@@ -696,6 +696,59 @@ test('Public figure pages preserve start, strict cursor, end and exact published
   expect(await readPublicFigures(database.pool, { ...input, subjectIds: [] })).toEqual([]);
 });
 
+test('Public figure pages preserve zero-valued pending snapshots and isolate shared subject keys', async () => {
+  const populationId = id(figureRoute, 94);
+  const otherPopulationId = id(figureRoute, 95);
+  const otherQuestionId = id(figureRoute, 96);
+  const subjectId = id(figureRoute, 20);
+  const unpublishedId = id(figureRoute, 21);
+  const input = { partition: partitionOf(figureRoute), questionId: STANDARD_QUESTION_ID, populationId };
+  await database.admin.query(
+    `INSERT INTO rating.question (id, owner_id, revision, label, grain, minimum_units, maximum_units, step_units)
+     VALUES ($1, NULL, 1, 'Shared subject figure question', 'work', 0, 20, 1)`,
+    [otherQuestionId],
+  );
+  await database.admin.query(
+    `INSERT INTO rating.public_figure
+       (route, question_id, population_id, subject_id, count, mean, score, m, c, prior_epoch,
+        revision, as_of, position, pending_position)
+     VALUES ($1, $2, $3, $4, 5, 0, 0, 0, 5, 1, 3, $5, 42, 43),
+            ($1, $2, $6, $4, 99, 9, 9, 9, 5, 2, 8, $5, 50, NULL),
+            ($1, $7, $3, $4, 88, 8, 8, 8, 5, 2, 9, $5, 60, NULL),
+            ($1, $2, $3, $8, 9, 9, 9, 9, 5, 2, 0, NULL, 0, 1)`,
+    [
+      figureRoute,
+      STANDARD_QUESTION_ID,
+      populationId,
+      subjectId,
+      timestamp,
+      otherPopulationId,
+      otherQuestionId,
+      unpublishedId,
+    ],
+  );
+  const published = {
+    questionId: STANDARD_QUESTION_ID,
+    populationId,
+    subjectId,
+    count: 5,
+    mean: 0,
+    score: 0,
+    m: 0,
+    C: 5,
+    priorEpoch: 1,
+    revision: '3',
+    asOf: timestamp,
+    position: '42',
+  };
+  expect(await pagePublicFigures(database.pool, { ...input, after: null, limit: 500 })).toEqual([published]);
+  expect(await pagePublicFigures(database.pool, { ...input, after: null, limit: 1 })).toEqual([published]);
+  expect(await pagePublicFigures(database.pool, { ...input, after: subjectId, limit: 500 })).toEqual([]);
+  expect(await readPublicFigures(database.pool, { ...input, subjectIds: [unpublishedId, subjectId] })).toEqual([
+    published,
+  ]);
+});
+
 test('Source statistic writes and reads stay within their bound as statistics grow', async () => {
   const writeReport = await checkGrowth(database, {
     name: 'mounted rating source statistic write',

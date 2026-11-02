@@ -171,7 +171,8 @@ with one statement. `pagePublicFigures(client, { partition, questionId, populati
 500 current figures in subject order with one statement. The page directly constrains the equality prefix
 `(partition_no, question_id, population_id)` and strict `subject_id > after` cursor beneath its ordered limit,
 using `public_figure_population_subject_idx` and its `revision > 0` predicate. A null cursor starts before all
-valid subject IDs. The batch retains exact full-key seeks for the requested IDs.
+valid subject IDs. The batch retains exact full-key seeks for the requested IDs. Both reads retain the published
+values, including numeric zero, revision, as-of time and position, while a newer publication is pending.
 `publicFigureState(figure, grain, pending)` computes the shared consumer state from the published count and the
 figure's pending mark: `ready` at the grain threshold, otherwise `updating` when pending and `insufficient_data`
 when not. A ready figure remains ready during an apply and retains its last published numbers. No published row
