@@ -153,7 +153,7 @@ function CreateVisit({ locale, session, owner, onCreate, onNavigate }: CreatePro
       <CreateNavigationGuard
         locale={locale}
         session={session}
-        owner={owner}
+        {...(owner ? { owner } : {})}
         capture={capture}
         needsDecision={() => !creationSucceeded.current && (hasEffectiveDraft || requestMayComplete)}
         requestMayComplete={requestMayComplete}
