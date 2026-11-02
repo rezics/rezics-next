@@ -94,7 +94,7 @@ function GameProfileLive({
   const creationResult = useRef<HTMLDivElement>(null);
   const creationFailure = useRef<HTMLDivElement>(null);
   const existingResult = useRef<HTMLElement>(null);
-  const existingFailure = useRef<HTMLElement>(null);
+  const existingFailure = useRef<HTMLDivElement>(null);
   const [, setFocusSettlement] = useState(0);
   // Reuse the editor's retirement boundary; session observations also retire local retry intent.
   const recovery = useMemo(() => ({ pending: false, dispose: () => {} }), [lifetime.generation, id, locale, session]);
