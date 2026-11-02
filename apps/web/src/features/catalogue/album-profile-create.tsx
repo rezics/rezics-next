@@ -557,15 +557,38 @@ function AlbumInitialField({
   const [picked, setPicked] = useState<Record<string, EntityPickerSubject>>({});
   const statement = row.statement;
   const definition = release.properties[statement.property.id];
+  const qualifiers = statement.qualifiers ?? [];
+  const qualifierIsAdmitted = (current: StatementInput, currentRelease: Release, qualifier: string) => {
+    const parent = currentRelease.properties[current.property.id];
+    const parts = current.qualifiers ?? [];
+    return (
+      !!qualifier &&
+      !!parent?.qualifiers.includes(qualifier) &&
+      !!currentRelease.types[albumType]?.properties.includes(current.property.id) &&
+      !!currentRelease.properties[qualifier] &&
+      parts.length < 16 &&
+      !parts.some((part) => part.property.id === qualifier)
+    );
+  };
+  const qualifierOptions = definition?.qualifiers.filter((id) => qualifierIsAdmitted(statement, release, id)) ?? [];
+  const [qualifierChoice, setQualifierChoice] = useState('');
+  const qualifierAllowed = qualifierOptions.includes(qualifierChoice);
+  const qualifierState = useRef({ row, release, metadataReady, disabled, choice: qualifierChoice, qualifierOptions });
+  qualifierState.current = { row, release, metadataReady, disabled, choice: qualifierChoice, qualifierOptions };
   const lifetime = useEditorLifetime();
   const section = useRef<HTMLFieldSetElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const cancel = useRef<HTMLButtonElement>(null);
   const restoreFocus = useRef(false);
+  const qualifierFocus = useRef<{ cancel: () => void }>();
   const [confirming, setConfirming] = useState(false);
   const current = useRef({ disabled, remove });
   current.current = { disabled, remove };
   const editable = () => lifetime.active() && !current.current.disabled;
+  useLayoutEffect(() => {
+    if (qualifierChoice && !qualifierAllowed) setQualifierChoice('');
+  }, [qualifierChoice, qualifierAllowed]);
+  useLayoutEffect(() => () => qualifierFocus.current?.cancel(), []);
   useLayoutEffect(() => {
     if (!editable()) return;
     if (confirming) cancel.current?.focus();
@@ -670,7 +693,6 @@ function AlbumInitialField({
         {removal}
       </fieldset>
     );
-  const qualifiers = statement.qualifiers ?? [];
   const qualifierId = (at: number) => row.qualifierIds?.[at] ?? at;
   const qualifierControlId = (at: number) => `album-row-${row.id}-qualifier-${qualifierId(at)}`;
   const named = (id: string) => pickText(release.properties[id]?.labels ?? {}, locale).text;
@@ -691,8 +713,99 @@ function AlbumInitialField({
   // Admission happens before either private values or picker descriptors change. Each
   // callback compares only its own part, then patches the latest surviving statement.
   const edit = (update: StatementEdit, items?: EntityPickerSubject[]) => {
-    if (!editable() || !section.current?.isConnected || !change(update)) return;
+    if (!editable() || !section.current?.isConnected || !change(update)) return false;
     if (items) remember(items);
+    return true;
+  };
+  const deferQualifierFocus = (button: HTMLButtonElement, qualifier: string) => {
+    qualifierFocus.current?.cancel();
+    const document = button.ownerDocument;
+    const view = document.defaultView;
+    if (!view) return;
+    let active = true;
+    let frame = 0;
+    const cancel = () => {
+      if (!active) return;
+      active = false;
+      view.cancelAnimationFrame(frame);
+      document.removeEventListener('focusin', moved, true);
+      document.removeEventListener('pointerdown', cancel, true);
+      document.removeEventListener('keydown', tabbed, true);
+      view.removeEventListener('blur', cancel);
+      if (qualifierFocus.current?.cancel === cancel) qualifierFocus.current = undefined;
+    };
+    const moved = (event: FocusEvent) => {
+      if (event.target !== button) cancel();
+    };
+    const tabbed = (event: KeyboardEvent) => {
+      if (event.key === 'Tab') cancel();
+    };
+    qualifierFocus.current = { cancel };
+    document.addEventListener('focusin', moved, true);
+    document.addEventListener('pointerdown', cancel, true);
+    document.addEventListener('keydown', tabbed, true);
+    view.addEventListener('blur', cancel);
+    frame = view.requestAnimationFrame(() => {
+      const state = qualifierState.current;
+      const latest = state.row.statement;
+      const parent = state.release.properties[latest.property.id];
+      const parts = latest.qualifiers ?? [];
+      const group = [...(section.current?.querySelectorAll<HTMLElement>('[data-album-qualifier]') ?? [])].find(
+        (element) => element.dataset.albumQualifier === qualifier,
+      );
+      const target = group?.querySelector<HTMLElement>('input:not([type="hidden"]), select, textarea');
+      const admitted =
+        active &&
+        state.metadataReady &&
+        editable() &&
+        state.release.types[albumType]?.properties.includes(latest.property.id) &&
+        !!parent?.qualifiers.includes(qualifier) &&
+        !!state.release.properties[qualifier] &&
+        parts.length <= 16 &&
+        parts.filter((part) => part.property.id === qualifier).length === 1 &&
+        section.current?.isConnected &&
+        button.isConnected &&
+        !button.disabled &&
+        document.activeElement === button;
+      if (!admitted || !target?.isConnected || target.matches(':disabled')) {
+        cancel();
+        return;
+      }
+      cancel();
+      target.focus();
+    });
+  };
+  const addQualifier = (button: HTMLButtonElement, keyboard: boolean) => {
+    const state = qualifierState.current;
+    const qualifier = state.choice;
+    if (
+      !qualifier ||
+      !state.qualifierOptions.includes(qualifier) ||
+      !state.metadataReady ||
+      !editable() ||
+      !section.current?.isConnected
+    )
+      return;
+    const added = edit((latest) => {
+      const currentState = qualifierState.current;
+      if (
+        currentState.choice !== qualifier ||
+        !currentState.metadataReady ||
+        latest.qualifiers !== currentState.row.statement.qualifiers ||
+        !qualifierIsAdmitted(latest, currentState.release, qualifier)
+      )
+        return undefined;
+      return {
+        ...latest,
+        qualifiers: [
+          ...(latest.qualifiers ?? []),
+          { property: { id: qualifier }, value: { type: 'value', content: '' } },
+        ],
+      };
+    });
+    if (!added) return;
+    setQualifierChoice('');
+    if (keyboard && button.ownerDocument.activeElement === button) deferQualifierFocus(button, qualifier);
   };
   const editValue = (value: StatementInput['value'], items?: EntityPickerSubject[]) =>
     edit((latest) => (latest.value === statement.value ? { ...latest, value } : undefined), items);
@@ -762,7 +875,11 @@ function AlbumInitialField({
                 items,
               );
             return (
-              <div key={identity} className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+              <div
+                key={identity}
+                data-album-qualifier={part.property.id}
+                className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end"
+              >
                 <div id={qualifierControlId(at)} tabIndex={-1} className={qualifierClassName}>
                   {metadata?.datatype === 'wikibase-item' ? (
                     <Field className="gap-2">
@@ -824,37 +941,47 @@ function AlbumInitialField({
             );
           })}
           {!!definition?.qualifiers.length && (
-            <Field className="min-w-0">
-              <FieldLabel className={labelClassName} htmlFor={`album-qualifier-${row.id}`}>
-                {m.relation_qualifier({}, o)}
-              </FieldLabel>
-              <NativeSelect
-                className={selectClassName}
-                id={`album-qualifier-${row.id}`}
-                value=""
-                onChange={(event) => {
-                  const id = event.target.value;
-                  if (definition.qualifiers.includes(id))
-                    edit((latest) =>
-                      latest.qualifiers === statement.qualifiers
-                        ? {
-                            ...latest,
-                            qualifiers: [...qualifiers, { property: { id }, value: { type: 'value', content: '' } }],
-                          }
-                        : undefined,
-                    );
-                }}
-              >
-                <NativeSelectOption value="">{m.relation_add_qualifier({}, o)}</NativeSelectOption>
-                {definition.qualifiers
-                  .filter((id) => !!release.properties[id] && !qualifiers.some((part) => part.property.id === id))
-                  .map((id) => (
+            <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end">
+              <Field className="min-w-0 basis-full sm:basis-48 sm:flex-1">
+                <FieldLabel className={labelClassName} htmlFor={`album-qualifier-${row.id}`}>
+                  {m.relation_qualifier({}, o)}
+                </FieldLabel>
+                <NativeSelect
+                  className={selectClassName}
+                  id={`album-qualifier-${row.id}`}
+                  value={qualifierAllowed ? qualifierChoice : ''}
+                  disabled={disabled || qualifiers.length >= 16}
+                  onChange={(event) => {
+                    const selected = event.target.value;
+                    const state = qualifierState.current;
+                    if (!editable() || !state.metadataReady) return;
+                    if (!selected) setQualifierChoice('');
+                    else if (state.qualifierOptions.includes(selected)) setQualifierChoice(selected);
+                  }}
+                >
+                  <NativeSelectOption value="">{m.relation_add_qualifier({}, o)}</NativeSelectOption>
+                  {qualifierOptions.map((id) => (
                     <NativeSelectOption key={id} value={id}>
                       {named(id)}
                     </NativeSelectOption>
                   ))}
-              </NativeSelect>
-            </Field>
+                </NativeSelect>
+              </Field>
+              <Button
+                className={actionClassName}
+                type="button"
+                variant="outline"
+                disabled={disabled || !qualifierAllowed}
+                onClick={(event) =>
+                  addQualifier(
+                    event.currentTarget,
+                    event.detail === 0 && event.currentTarget.ownerDocument.activeElement === event.currentTarget,
+                  )
+                }
+              >
+                {m.relation_add_qualifier({}, o)}
+              </Button>
+            </div>
           )}
           <Field className="min-w-0">
             <FieldLabel className={labelClassName} htmlFor={`album-citation-${row.id}`}>

@@ -38,6 +38,7 @@ type ScreenStatementEdit = (
   part?: SnakInput,
   allowMissingPart?: () => boolean,
 ) => boolean;
+type ScreenQualifierAdd = (rowKey: string, propertyId: string, qualifierId: string) => boolean;
 
 /** Decode only addresses for controls this local creation editor supports. */
 export function screenCreationControl(pointer: string, rows: ScreenRow[], release: Release, locale: string) {
@@ -169,25 +170,119 @@ function InitialStatement({
   locale,
   search,
   disabled,
+  parentAdmitted,
   change,
+  addQualifier,
 }: {
   row: ScreenRow;
   release: Release;
   locale: string;
   search: EntityPickerSearch;
   disabled: boolean;
+  parentAdmitted: boolean;
   change: ScreenStatementEdit;
+  addQualifier: ScreenQualifierAdd;
 }) {
   const o = { locale: locale as never };
   const statement = row.statement;
   const property = release.properties[statement.property.id]!;
+  const qualifiers = statement.qualifiers ?? [];
+  const qualifierOptions =
+    property?.qualifiers.filter(
+      (id) =>
+        !!release.properties[id] &&
+        qualifiers.length < 16 &&
+        !qualifiers.some((part) => part.property.id === id),
+    ) ?? [];
+  const [qualifierChoice, setQualifierChoice] = useState('');
+  const qualifierAllowed = qualifierOptions.includes(qualifierChoice);
+  const qualifierState = useRef({ row, release, disabled, parentAdmitted, choice: qualifierChoice, qualifierOptions });
+  qualifierState.current = { row, release, disabled, parentAdmitted, choice: qualifierChoice, qualifierOptions };
+  const section = useRef<HTMLDivElement>(null);
+  const qualifierFocus = useRef<{ cancel: () => void }>();
   const emptyCitation = useRef<SnakInput>({ property: { id: 'schema:url' }, value: { type: 'value', content: '' } });
   const citations = statement.references.flatMap((reference, group) =>
     reference.parts.flatMap((part, index) => (part.property.id === 'schema:url' ? [{ part, group, index }] : [])),
   );
+  useLayoutEffect(() => {
+    if (qualifierChoice && !qualifierAllowed) setQualifierChoice('');
+  }, [qualifierChoice, qualifierAllowed]);
+  useLayoutEffect(() => () => qualifierFocus.current?.cancel(), []);
+  const deferQualifierFocus = (button: HTMLButtonElement, qualifier: string) => {
+    qualifierFocus.current?.cancel();
+    const document = button.ownerDocument;
+    const view = document.defaultView;
+    if (!view) return;
+    let active = true;
+    let frame = 0;
+    const cancel = () => {
+      if (!active) return;
+      active = false;
+      view.cancelAnimationFrame(frame);
+      document.removeEventListener('focusin', moved, true);
+      document.removeEventListener('pointerdown', cancel, true);
+      document.removeEventListener('keydown', tabbed, true);
+      view.removeEventListener('blur', cancel);
+      if (qualifierFocus.current?.cancel === cancel) qualifierFocus.current = undefined;
+    };
+    const moved = (event: FocusEvent) => {
+      if (event.target !== button) cancel();
+    };
+    const tabbed = (event: KeyboardEvent) => {
+      if (event.key === 'Tab') cancel();
+    };
+    qualifierFocus.current = { cancel };
+    document.addEventListener('focusin', moved, true);
+    document.addEventListener('pointerdown', cancel, true);
+    document.addEventListener('keydown', tabbed, true);
+    view.addEventListener('blur', cancel);
+    frame = view.requestAnimationFrame(() => {
+      const state = qualifierState.current;
+      const latest = state.row.statement;
+      const parent = state.release.properties[latest.property.id];
+      const parts = latest.qualifiers ?? [];
+      const group = [...(section.current?.querySelectorAll<HTMLElement>('[data-screen-qualifier]') ?? [])].find(
+        (element) => element.dataset.screenQualifierProperty === qualifier,
+      );
+      const target = group?.querySelector<HTMLElement>('input:not([type="hidden"]), select, textarea');
+      const admitted =
+        active &&
+        !state.disabled &&
+        state.parentAdmitted &&
+        !!parent?.qualifiers.includes(qualifier) &&
+        !!state.release.properties[qualifier] &&
+        parts.length <= 16 &&
+        parts.filter((part) => part.property.id === qualifier).length === 1 &&
+        section.current?.isConnected &&
+        button.isConnected &&
+        !button.disabled &&
+        document.activeElement === button;
+      if (!admitted || !target?.isConnected || target.matches(':disabled')) {
+        cancel();
+        return;
+      }
+      cancel();
+      target.focus();
+    });
+  };
+  const commitQualifier = (button: HTMLButtonElement, keyboard: boolean) => {
+    const state = qualifierState.current;
+    const qualifier = state.choice;
+    if (
+      !qualifier ||
+      !state.qualifierOptions.includes(qualifier) ||
+      state.disabled ||
+      !state.parentAdmitted ||
+      !section.current?.isConnected ||
+      !addQualifier(state.row.key, state.row.statement.property.id, qualifier)
+    )
+      return;
+    setQualifierChoice('');
+    if (keyboard && button.ownerDocument.activeElement === button) deferQualifierFocus(button, qualifier);
+  };
   if (!property) return <p role="status">{m.correction_preserved({}, o)}</p>;
   return (
-    <div className="min-w-0 space-y-4 [overflow-wrap:anywhere]">
+    <div ref={section} className="min-w-0 space-y-4 [overflow-wrap:anywhere]">
       <InitialValue
         id={screenRowId(row)}
         part={statement}
@@ -198,7 +293,12 @@ function InitialStatement({
         change={(value) => change((current) => ({ ...current, value }))}
       />
       {(statement.qualifiers ?? []).map((part, index) => (
-        <div key={partKey(part)} data-screen-qualifier className="min-w-0 space-y-2 border-s-2 ps-3">
+        <div
+          key={partKey(part)}
+          data-screen-qualifier
+          data-screen-qualifier-property={part.property.id}
+          className="min-w-0 space-y-2 border-s-2 ps-3"
+        >
           <p
             lang={screenName(release, part.property.id, locale).lang ?? undefined}
             className="min-w-0 max-w-full text-sm font-medium [overflow-wrap:anywhere]"
@@ -241,38 +341,47 @@ function InitialStatement({
         </div>
       ))}
       {!!property.qualifiers.length && (
-        <Field className="min-w-0">
-          <FieldLabel className={screenLabelClassName} htmlFor={`screen-qualifier-${row.key}`}>
-            {m.correction_add_qualifier({}, o)}
-          </FieldLabel>
-          <NativeSelect
-            className={screenSelectClassName}
-            id={`screen-qualifier-${row.key}`}
-            value=""
-            onChange={(event) => {
-              const qualifier = event.target.value;
-              change((current, currentRelease) => {
-                if (!currentRelease.properties[current.property.id]?.qualifiers.includes(qualifier)) return;
-                return {
-                  ...current,
-                  qualifiers: [
-                    ...(current.qualifiers ?? []),
-                    { property: { id: qualifier }, value: { type: 'value', content: '' } },
-                  ],
-                };
-              });
-            }}
-          >
-            <NativeSelectOption value="">{m.correction_add_qualifier({}, o)}</NativeSelectOption>
-            {property.qualifiers
-              .filter((id) => release.properties[id])
-              .map((id) => (
+        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end">
+          <Field className="min-w-0 basis-full sm:basis-48 sm:flex-1">
+            <FieldLabel className={screenLabelClassName} htmlFor={`screen-qualifier-${row.key}`}>
+              {m.correction_add_qualifier({}, o)}
+            </FieldLabel>
+            <NativeSelect
+              className={screenSelectClassName}
+              id={`screen-qualifier-${row.key}`}
+              value={qualifierAllowed ? qualifierChoice : ''}
+              disabled={disabled || qualifiers.length >= 16}
+              onChange={(event) => {
+                const selected = event.target.value;
+                const state = qualifierState.current;
+                if (state.disabled || !state.parentAdmitted) return;
+                if (!selected) setQualifierChoice('');
+                else if (state.qualifierOptions.includes(selected)) setQualifierChoice(selected);
+              }}
+            >
+              <NativeSelectOption value="">{m.correction_add_qualifier({}, o)}</NativeSelectOption>
+              {qualifierOptions.map((id) => (
                 <NativeSelectOption key={id} value={id} lang={screenName(release, id, locale).lang ?? undefined}>
                   {screenName(release, id, locale).text}
                 </NativeSelectOption>
               ))}
-          </NativeSelect>
-        </Field>
+            </NativeSelect>
+          </Field>
+          <Button
+            className={screenActionClassName}
+            type="button"
+            variant="outline"
+            disabled={disabled || !parentAdmitted || !qualifierAllowed}
+            onClick={(event) =>
+              commitQualifier(
+                event.currentTarget,
+                event.detail === 0 && event.currentTarget.ownerDocument.activeElement === event.currentTarget,
+              )
+            }
+          >
+            {m.relation_add_qualifier({}, o)}
+          </Button>
+        </div>
       )}
       {release.properties['schema:url']?.datatype === 'url' &&
         (citations.length ? citations : [{ part: emptyCitation.current, group: -1, index: -1 }]).map((citation) => {
@@ -810,6 +919,40 @@ export function ScreenInitialFields({
     }
     return true;
   };
+  const addQualifier: ScreenQualifierAdd = (rowKey, propertyId, qualifierId) => {
+    const state = current.current;
+    const row = state.rows.find((item) => item.key === rowKey && item.statement.property.id === propertyId);
+    const definition = state.release.properties[propertyId];
+    const qualifiers = row?.statement.qualifiers ?? [];
+    if (
+      !mounted.current ||
+      state.disabled ||
+      !state.fields.includes(propertyId) ||
+      !row ||
+      !definition?.qualifiers.includes(qualifierId) ||
+      !state.release.properties[qualifierId] ||
+      qualifiers.length >= 16 ||
+      qualifiers.some((part) => part.property.id === qualifierId)
+    )
+      return false;
+    const next = state.rows.map((item) =>
+      item.key === rowKey
+        ? {
+            ...item,
+            statement: {
+              ...item.statement,
+              qualifiers: [
+                ...qualifiers,
+                { property: { id: qualifierId }, value: { type: 'value' as const, content: '' } },
+              ],
+            },
+          }
+        : item,
+    );
+    current.current = { ...state, rows: next };
+    state.change(next);
+    return true;
+  };
   const removeRow = (rowKey: string, propertyId: string) => {
     const state = current.current;
     if (!mounted.current || state.disabled) return;
@@ -925,9 +1068,11 @@ export function ScreenInitialFields({
               locale={locale}
               search={search}
               disabled={disabled}
+              parentAdmitted={fields.includes(row.statement.property.id)}
               change={(update, part, allowMissingPart) =>
                 edit(row.key, row.statement.property.id, update, part, allowMissingPart)
               }
+              addQualifier={addQualifier}
             />
             <ScreenInitialRemove
               row={row}

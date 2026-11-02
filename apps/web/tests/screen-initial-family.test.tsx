@@ -234,6 +234,7 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
     expect(within(window.document.body).queryByRole('option', { name: /Wrong target/ })).toBeNull();
     await act(async () => user.click(within(window.document.body).getByRole('option', { name: /A\. Observer/ })));
     await choose(director, m.correction_add_qualifier(), 'schema:position');
+    await act(async () => user.click(within(director).getByRole('button', { name: m.relation_add_qualifier() })));
     await replace(textbox(director, m.correction_value()), '2');
     await replace(textbox(director, m.relation_citation()), citation);
     const duration = await add(host, 'schema:duration');
@@ -273,6 +274,36 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
     expect(select(director, m.correction_add_qualifier()).id).toBe(`screen-qualifier-${directorKey}`);
     expect(textbox(director, m.relation_citation()).id).toStartWith(director.id);
     await choose(director, m.correction_add_qualifier(), 'schema:position');
+    expect(observed.second![0]!.statement.qualifiers).toEqual([]);
+    const withoutPosition = structuredClone(recorded.release) as Release;
+    delete withoutPosition.properties['schema:position'];
+    await render(
+      <>
+        <Fields name="first" />
+        <Fields name="second" release={withoutPosition} />
+      </>,
+    );
+    const refused = within(director).getByRole('button', { name: m.relation_add_qualifier() });
+    expect(refused.matches(':disabled')).toBe(true);
+    await act(async () => user.click(refused));
+    expect(observed.second![0]!.statement.qualifiers).toEqual([]);
+    await render(
+      <>
+        <Fields name="first" />
+        <Fields name="second" />
+      </>,
+    );
+    await choose(director, m.correction_add_qualifier(), 'schema:position');
+    expect(observed.second![0]!.statement.qualifiers).toEqual([]);
+    const addPosition = within(director).getByRole('button', { name: m.relation_add_qualifier() }) as HTMLButtonElement;
+    addPosition.focus();
+    await key('{Enter}');
+    await act(async () => new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve())));
+    expect(observed.second![0]!.statement.qualifiers).toEqual([
+      { property: { id: 'schema:position' }, value: { type: 'value', content: '' } },
+    ]);
+    const positionGroup = director.querySelector<HTMLElement>('[data-screen-qualifier-property="schema:position"]')!;
+    expect(positionGroup.contains(window.document.activeElement)).toBe(true);
     await replace(textbox(director, m.correction_value()), '2');
     await replace(textbox(director, m.relation_citation()), ` ${citation} `);
     expect(observed.second![0]!.statement.references).toEqual([
@@ -779,6 +810,7 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
     await until(() => within(window.document.body).queryByRole('option', { name: /B\. Observer/ }) !== null);
     await act(async () => user.click(within(window.document.body).getByRole('option', { name: /B\. Observer/ })));
     await choose(secondCredit, m.correction_add_qualifier(), 'schema:position');
+    await act(async () => user.click(within(secondCredit).getByRole('button', { name: m.relation_add_qualifier() })));
     await replace(textbox(secondCredit, m.correction_value()), '3');
     await replace(textbox(secondCredit, m.relation_citation()), citation);
     await click(host, m.catalogue_create_add_language());

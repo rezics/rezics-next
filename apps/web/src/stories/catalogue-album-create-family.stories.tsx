@@ -171,8 +171,10 @@ async function fill(element: HTMLElement, complete = false) {
       await within(element.ownerDocument.body).findByRole('option', { name: /The Harbour Ensemble/ }),
     );
     await userEvent.selectOptions(credit.getByRole('combobox', { name: m.relation_qualifier() }), 'wdt:P1932');
+    await userEvent.click(credit.getByRole('button', { name: m.relation_add_qualifier() }));
     await userEvent.type(credit.getByRole('textbox', { name: name(fixture, 'wdt:P1932') }), longAlias);
     await userEvent.selectOptions(credit.getByRole('combobox', { name: m.relation_qualifier() }), 'wdt:P3831');
+    await userEvent.click(credit.getByRole('button', { name: m.relation_add_qualifier() }));
     await userEvent.type(credit.getByRole('combobox', { name: name(fixture, 'wdt:P3831') }), 'Performer');
     const popup = within(element.ownerDocument.body);
     await popup.findByRole('option', { name: /Performer/ });

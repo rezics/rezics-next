@@ -35,6 +35,7 @@ test('Album qualifier cancellation, stable correction targets, selective removal
     client = new QueryClient();
   const { release, publicRead } = albumFixture();
   const name = (id: string) => release.properties[id]!.labels.en!;
+  const creditedNameDefinition = release.properties['wdt:P1932']!;
   const commands: AlbumCommand[] = [];
   let enabled = true,
     metadata = true;
@@ -91,6 +92,10 @@ test('Album qualifier cancellation, stable correction targets, selective removal
     act(async () => user.click(within(scope).getByRole('button', { name })));
   const select = (scope: HTMLElement, label: string, value: string) =>
     act(async () => user.selectOptions(within(scope).getByRole('combobox', { name: label }), value));
+  const addQualifier = async (scope: HTMLElement, id: string) => {
+    await select(scope, m.relation_qualifier(), id);
+    await click(scope, m.relation_add_qualifier());
+  };
   const type = (scope: HTMLElement, label: string, value: string) =>
     act(async () => user.type(within(scope).getByRole('textbox', { name: label }), value));
   const choose = async (scope: HTMLElement, property: string, id: string) => {
@@ -133,6 +138,23 @@ test('Album qualifier cancellation, stable correction targets, selective removal
     await choose(row, 'schema:contributor', artistId);
     await type(row, m.relation_citation(), 'https://example.test/source');
     await select(row, m.relation_qualifier(), 'wdt:P1932');
+    expect(row.querySelector('[data-album-qualifier]')).toBeNull();
+    delete release.properties['wdt:P1932'];
+    await paint();
+    expect((within(row).getByRole('combobox', { name: m.relation_qualifier() }) as HTMLSelectElement).value).toBe('');
+    expect(within(row).getByRole('button', { name: m.relation_add_qualifier() }).matches(':disabled')).toBe(true);
+    await click(row, m.relation_add_qualifier());
+    expect(row.querySelector('[data-album-qualifier]')).toBeNull();
+    release.properties['wdt:P1932'] = creditedNameDefinition;
+    await paint();
+    await select(row, m.relation_qualifier(), 'wdt:P1932');
+    const addCreditedName = within(row).getByRole('button', { name: m.relation_add_qualifier() });
+    addCreditedName.focus();
+    await act(async () => user.keyboard('{Enter}'));
+    await act(async () => new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve())));
+    const creditedNameGroup = row.querySelector<HTMLElement>('[data-album-qualifier="wdt:P1932"]')!;
+    expect(creditedNameGroup.contains(window.document.activeElement)).toBe(true);
+    expect(row.querySelectorAll('[data-album-qualifier]')).toHaveLength(1);
     await type(row, name('wdt:P1932'), 'Credited name');
     const original = within(row).getByRole('textbox', { name: name('wdt:P1932') });
     const oldCredit = inputChange(original);
@@ -148,12 +170,15 @@ test('Album qualifier cancellation, stable correction targets, selective removal
     expect((within(row).getByRole('textbox', { name: m.relation_citation() }) as HTMLInputElement).value).toBe(
       'https://example.test/source/newer',
     );
-    await select(row, m.relation_qualifier(), 'wdt:P3831');
+    await addQualifier(row, 'wdt:P3831');
+    expect(row.querySelector<HTMLElement>('[data-album-qualifier="wdt:P3831"]')!.contains(window.document.activeElement)).toBe(
+      false,
+    );
     await choose(row, 'wdt:P3831', roleId);
     const role = within(row).getByRole('combobox', { name: name('wdt:P3831') });
     const oldRole = pickerChange(role);
     const roleTarget = role.closest('[id^="album-row-"]')!.id;
-    await select(row, m.relation_qualifier(), 'schema:position');
+    await addQualifier(row, 'schema:position');
     await select(host, m.character_add_fact(), 'schema:sameAs');
     await click(host, m.correction_add());
     const sibling = [...host.querySelectorAll<HTMLElement>('fieldset[id^="album-row-"]')].at(-1)!;
@@ -187,7 +212,7 @@ test('Album qualifier cancellation, stable correction targets, selective removal
     expect(within(row).getByRole('combobox', { name: name('wdt:P3831') })).toBe(role);
     expect(role.closest('[id^="album-row-"]')!.id).toBe(roleTarget);
     await click(row, m.candidate_cancel());
-    await select(row, m.relation_qualifier(), 'wdt:P1932');
+    await addQualifier(row, 'wdt:P1932');
     await act(async () => oldCredit({ target: { value: 'Replacement overwritten' } }));
     expect((within(row).getByRole('textbox', { name: name('wdt:P1932') }) as HTMLInputElement).value).toBe('');
     await click(row, remove('wdt:P1932'));

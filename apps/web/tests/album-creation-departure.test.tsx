@@ -115,6 +115,7 @@ test('Album departure retains mounted nested drafts and native retries, then fen
     expect(blocked()).toBe(true); // An explicitly added fact counts even before its value is entered.
     await type(m.relation_citation(), 'https://example.test/source');
     await select(m.relation_qualifier(), 'wdt:P1932');
+    await click(m.relation_add_qualifier());
     await type(release.properties['wdt:P1932']!.labels.en!, 'Private credit');
     const retained = draft(),
       control = host.querySelector('[id^="album-citation-"]');
