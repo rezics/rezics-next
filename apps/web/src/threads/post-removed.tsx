@@ -56,7 +56,8 @@ export function RemovedPost({
     id: anchorId,
     ref: itemRef,
     tabIndex: -1 as const,
-    className: 'min-w-0 scroll-mt-24 target:bg-muted/50',
+    className:
+      'min-w-0 scroll-mt-24 [overflow-wrap:anywhere] target:bg-muted/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
     style: minHeight === undefined ? undefined : { minHeight },
   };
 
@@ -77,7 +78,7 @@ export function RemovedPost({
           <Withheld shape="passage" labels={{ withheld: m.thread_post_withheld() }} />
           {owner && 'decisionId' in post && post.decisionId ? (
             <a
-              className="mt-3 inline-block underline-offset-4 hover:underline"
+              className="mt-3 inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm py-2 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               href={`/moderation/decisions/${encodeURIComponent(post.decisionId)}`}
             >
               {m.thread_post_decision_link()}
@@ -98,6 +99,7 @@ export function RemovedPost({
           <Tombstone
             shape="post"
             reason={reason}
+            className="pr-16 [&_button]:h-auto [&_button]:min-h-11 [&_button]:min-w-11 [&_button]:max-w-full [&_button]:whitespace-normal [&_button]:py-2 [&_button:focus-visible]:outline-2 [&_button:focus-visible]:outline-offset-2 [&_button:focus-visible]:outline-ring [&_time]:min-w-0 [&_time]:max-w-full"
             {...(ownedRestorableUntil && onRestore ? { restoreUntil: ownedRestorableUntil, onRestore } : {})}
             labels={{
               unavailable: m.thread_post_unavailable(),
@@ -112,7 +114,13 @@ export function RemovedPost({
                 title={m.thread_content_more_actions()}
                 backLabel={m.thread_delete_cancel()}
                 trigger={
-                  <Button aria-label={m.thread_content_more_actions()} ref={menuButton} size="icon-sm" variant="ghost">
+                  <Button
+                    aria-label={m.thread_content_more_actions()}
+                    ref={menuButton}
+                    size="icon-sm"
+                    variant="ghost"
+                    className="size-11 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  >
                     <EllipsisIcon aria-hidden="true" />
                   </Button>
                 }
@@ -125,7 +133,12 @@ export function RemovedPost({
           <div className="mt-3 space-y-2 text-sm text-muted-foreground">
             <p>{m.thread_post_restore_deadline_unknown()}</p>
             {onRestore ? (
-              <Button variant="outline" size="sm" onClick={onRestore}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                onClick={onRestore}
+              >
                 {m.thread_post_restore()}
               </Button>
             ) : null}
@@ -136,7 +149,12 @@ export function RemovedPost({
             <p className="text-destructive">{restoreError}</p>
             {existingReviewId ? <ExistingReviewNotice reviewId={existingReviewId} /> : null}
             {onRefresh ? (
-              <Button variant="outline" size="sm" onClick={onRefresh}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                onClick={onRefresh}
+              >
                 {m.thread_post_refresh()}
               </Button>
             ) : null}
