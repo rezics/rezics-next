@@ -45,13 +45,6 @@ export const Route = createFileRoute('/creator/statements/$id')({
     const id = Route.useParams().id;
     if (hasStatementAddressIssue(search))
       return <CreatorStatementAddressRecovery kind="detail" id={id} locale={getLocale()} {...search} />;
-    return (
-      <CreatorStatementCurrent
-        initial={Route.useLoaderData()!}
-        id={id}
-        locale={getLocale()}
-        {...search}
-      />
-    );
+    return <CreatorStatementCurrent initial={Route.useLoaderData()!} id={id} locale={getLocale()} {...search} />;
   },
 });

@@ -37,9 +37,7 @@ test('malformed positions wait for a choice and recovery keeps the statement and
 });
 
 test('malformed list restart returns to the first statements page', () => {
-  const html = renderToStaticMarkup(
-    createElement(CreatorStatementAddressRecovery, { kind: 'list', locale: 'en' }),
-  );
+  const html = renderToStaticMarkup(createElement(CreatorStatementAddressRecovery, { kind: 'list', locale: 'en' }));
   expect(html).toContain('Restart statements');
   expect(html).toContain('href="/en/creator/statements"');
 });

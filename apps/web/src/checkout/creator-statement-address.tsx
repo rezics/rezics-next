@@ -17,17 +17,7 @@ export function creatorStatementAddressHref(locale: string, id: string, search: 
   return `/${locale}/creator/statements/${encodeURIComponent(id)}${query.size ? `?${query}` : ''}`;
 }
 
-function AddressChoice({
-  id,
-  message,
-  href,
-  label,
-}: {
-  id: string;
-  message: string;
-  href: string;
-  label: string;
-}) {
+function AddressChoice({ id, message, href, label }: { id: string; message: string; href: string; label: string }) {
   return (
     <div className="space-y-3">
       <p id={id} className="text-sm leading-relaxed text-muted-foreground">

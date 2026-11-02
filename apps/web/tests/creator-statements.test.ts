@@ -237,7 +237,9 @@ describe('Creators can inspect private royalty statements, source lines and exte
     expect(await loadCreatorStatements(api.client, request(), {}, { cursor: 'x'.repeat(4097) })).toEqual({
       kind: 'unavailable',
     });
-    expect(await loadCreatorStatement(api.client, request(), {}, { id: statement.id, cursor: 'x'.repeat(4097) })).toEqual({
+    expect(
+      await loadCreatorStatement(api.client, request(), {}, { id: statement.id, cursor: 'x'.repeat(4097) }),
+    ).toEqual({
       kind: 'unavailable',
     });
     expect(api.calls).toHaveLength(0);

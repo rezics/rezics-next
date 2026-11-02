@@ -18,7 +18,9 @@ export const Route = createFileRoute('/creator/statements/')({
   validateSearch: statementSearch,
   loaderDeps: ({ search }) => statementSearch(search),
   loader: ({ deps }) =>
-    hasStatementAddressIssue(deps) ? undefined : readCreatorStatementsCurrent({ data: { ...deps, locale: getLocale() } }),
+    hasStatementAddressIssue(deps)
+      ? undefined
+      : readCreatorStatementsCurrent({ data: { ...deps, locale: getLocale() } }),
   staleTime: 0,
   gcTime: 0,
   head: ({ match }) =>
