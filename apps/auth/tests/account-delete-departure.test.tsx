@@ -7,6 +7,7 @@ import {
   RouterContextProvider,
 } from '@tanstack/react-router';
 import { creationFixture, approval, button, dom, fill, flush, open, send, session } from './creation-page-fixture';
+import type { AccountIdentitySource } from '../src/account-identity';
 import { DeleteAccountContent } from '../src/routes/account.delete';
 import { emptyInventory } from '../src/stories/accounts-operations/story';
 import { readPendingAccountOperationStepUp } from '../src/account-operation-step-up';
@@ -24,7 +25,7 @@ async function setup() {
     ['/account/delete', '/security'].map((path) => createRoute({ getParentRoute: () => root, path })),
   );
   const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/account/delete'] }) });
-  const view = (value = initial, source = props.identitySource) => (
+  const view = (value = initial, source: AccountIdentitySource = props.identitySource) => (
     <RouterContextProvider router={router}>
       <DeleteAccountContent {...props} initial={value} identitySource={source} />
     </RouterContextProvider>
@@ -133,7 +134,7 @@ test.each(['replacement', 'permission'] as const)(
     await flush(() => send(page.host));
     await page.navigate();
     if (kind === 'replacement') await page.render(page.view({ kind: 'signed-out' }));
-    else await page.render(page.view(initial, async () => ({ kind: 'denied' as never })));
+    else await page.render(page.view(initial, async () => ({ kind: 'denied' })));
     expect(page.unload()).toBe(false);
     expect(page.router.history.location.pathname).toBe('/security');
     await flush(() => page.calls[0]!.resolve(approval()));
