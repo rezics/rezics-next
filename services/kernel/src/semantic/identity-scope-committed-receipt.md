@@ -161,3 +161,11 @@ receipt reconcilers; Library custody and effects adapter; retained Kind scope,
 evidence, catalogue and audience source; the full foreign operand disposition;
 and both the Semantic native writer decision and Commerce regional consent. No
 external reference project is prescribed for this surface.
+
+The permitted foreground command was
+`bun run --cwd services/kernel typecheck --emit-schema=semantic`. Its supported
+compiler placement terminated with exit 1 before reaching TypeScript: dbmate
+required the new migration's omitted `-- migrate:up` marker. That marker is now
+fixed and committed. The single-run policy does not permit another invocation;
+workspace typing and generated snapshot normalization therefore remain unverified.
+No native/unit/growth/full acceptance command was run.

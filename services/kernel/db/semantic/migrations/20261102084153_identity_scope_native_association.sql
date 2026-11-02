@@ -1,3 +1,4 @@
+-- migrate:up
 -- No backfill: old registration metadata cannot prove a native transaction.
 CREATE TABLE semantic.identity_scope_native_association (
     partition_no integer NOT NULL CHECK (partition_no BETWEEN 0 AND 4095),
