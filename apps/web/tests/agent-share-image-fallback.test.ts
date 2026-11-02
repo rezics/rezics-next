@@ -9,7 +9,7 @@ const cover = {
   media: 'published-cover',
   width: 640,
   height: 960,
-  variants: ['avif', 'webp'].map((format) => ({ format, width: 2560 })),
+  variants: (['avif', 'webp'] as const).map((format) => ({ format, width: 2560 })),
 };
 const avatar = { ...cover, media: 'published-avatar' };
 
