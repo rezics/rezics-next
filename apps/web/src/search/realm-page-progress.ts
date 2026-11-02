@@ -34,7 +34,13 @@ export function advanceRealmPageProgress(
     (typeof nextCursor !== 'string' || nextCursor.length === 0 || nextCursor.length > REALM_DISCOVERY_CURSOR_MAX_LENGTH)
   )
     return null;
-  if (nextCursor === null) return { ...previous, cursor: undefined, started: true };
+  if (nextCursor === null)
+    return {
+      ...(previous.anchor !== undefined ? { anchor: previous.anchor } : {}),
+      power: previous.power,
+      distance: previous.distance,
+      started: true,
+    };
   if (!previous.started)
     return { cursor: nextCursor, anchor: nextCursor, power: 1, distance: 0, started: true };
   if (nextCursor === previous.anchor) return null;

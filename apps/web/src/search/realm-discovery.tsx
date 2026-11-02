@@ -42,7 +42,7 @@ function SearchRealmDiscoveryPage({
 
   useEffect(() => {
     const page = createRealmPageProgress({
-      initial: initialState.kind === 'loading' ? undefined : initialState,
+      ...(initialState.kind !== 'loading' ? { initial: initialState } : {}),
       read: async ({ cursor, signal }) => {
         const query = read
           ? realmDiscoveryQueryOptions(locale, sort, cursor, read)
