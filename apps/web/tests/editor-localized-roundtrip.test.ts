@@ -39,6 +39,7 @@ test('localized edits, translations and clears survive Puck resolution without l
     ['Title', { en: 'Title', ja: '題' }, { en: 'Title', ja: '題' }],
     [{ en: 'Title', fr: '', de: 'Titel' }, { en: '', fr: '', de: 'Titel' }, { en: '', fr: '', de: 'Titel' }],
     [{ ja: '' }, { ja: '題', en: '' }, { ja: '題' }],
+    [{ en: 'Title', de: 'Titel' }, { en: 'Changed' }, { en: 'Changed', de: 'Titel' }],
   ] as const) {
     const data = structuredClone(fromComposition(document(text)));
     label(data).label = edit;

@@ -109,6 +109,8 @@ The same rules are patterns on the generated JSON Schema, so a consumer that onl
 against that schema applies the same safety. Localized text is an `anyOf` of the string and
 the object, and the object uses `propertyNames` for its keys.
 
+The editor preserves authored scalar/map forms and locale entries; clearing an existing map entry saves empty text, while a blank new locale control adds no translation.
+
 ## Violations
 
 `validateComposition` returns `{ pointer, code }[]` with RFC 6901 pointers.

@@ -63,7 +63,7 @@ test('an edited page becomes a composition document', () => {
       content: [{ type: 'Heading', props: { id: 'h', text: { en: 'Hi', fr: '' }, level: 3 } }],
     }),
   );
-  expect(blanks.content[0]!.props.text).toEqual({ en: 'Hi' });
+  expect(blanks.content[0]!.props.text).toEqual({ en: 'Hi', fr: '' });
 });
 
 test('publishing refuses a document the platform would refuse', () => {

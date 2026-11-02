@@ -23,7 +23,7 @@ type Schema = {
 type EditorNode = {
   type: string;
   props: Record<string, unknown>;
-  _localizedScalars?: string[];
+  _localizedValues?: Record<string, unknown>;
   [key: string]: unknown;
 };
 
@@ -228,13 +228,53 @@ function registryComponents(registry: CompositionRegistry): Map<string, Registry
   return components;
 }
 
+function transformLocalized(
+  value: unknown,
+  direction: 'to' | 'from',
+  path: (string | number)[],
+  originals: Record<string, unknown>,
+): unknown {
+  const key = JSON.stringify(path);
+  if (direction === 'from') {
+    if (typeof value === 'string') {
+      originals[key] = value;
+      return { en: value };
+    }
+    if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+      originals[key] = { ...value };
+      return { ...value };
+    }
+    return value;
+  }
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return value;
+
+  const source = originals[key];
+  const sourceMap = typeof source === 'string' ? { en: source } : source;
+  // Keep authored key order for the draft comparison, and retain languages with no editor control.
+  const retained =
+    sourceMap !== null && typeof sourceMap === 'object' && !Array.isArray(sourceMap)
+      ? Object.fromEntries(
+          Object.entries(sourceMap).filter(
+            ([locale]) => Object.hasOwn(value, locale) || !UI_LOCALES.includes(locale as (typeof UI_LOCALES)[number]),
+          ),
+        )
+      : {};
+  // A blank existing locale is saved text; a blank newly visited control adds no translation.
+  const entries = Object.entries({ ...retained, ...value }).filter(
+    ([locale, text]) => text !== '' || Object.hasOwn(retained, locale),
+  );
+  if (typeof source === 'string' && entries.every(([locale]) => locale === 'en')) {
+    return entries.length === 0 ? '' : entries[0]![1];
+  }
+  return entries.length > 0 ? Object.fromEntries(entries) : { en: '' };
+}
+
 function transformValue(
   value: unknown,
   schema: Schema,
   direction: 'to' | 'from',
   path: (string | number)[],
-  scalarPaths: string[],
-  sourceScalarPaths: Set<string>,
+  localizedValues: Record<string, unknown>,
 ): unknown {
   if (schema['~kind'] === 'PublicFilter' || objectChoices(schema)) {
     if (direction === 'from') return typeof value === 'string' ? value : JSON.stringify(value, null, 2);
@@ -247,18 +287,7 @@ function transformValue(
     }
   }
   if (localized(schema)) {
-    if (direction === 'from' && typeof value === 'string') {
-      scalarPaths.push(JSON.stringify(path));
-      return { en: value };
-    }
-    if (direction === 'to' && value !== null && typeof value === 'object' && !Array.isArray(value)) {
-      const entries = Object.entries(value as Record<string, unknown>).filter(([, text]) => text !== '');
-      if (sourceScalarPaths.has(JSON.stringify(path)) && entries.length === 1 && entries[0]?.[0] === 'en') {
-        return entries[0][1];
-      }
-      return entries.length > 0 ? Object.fromEntries(entries) : { en: '' };
-    }
-    return value;
+    return transformLocalized(value, direction, path, localizedValues);
   }
 
   if (curieArray(schema) && Array.isArray(value)) {
@@ -276,7 +305,7 @@ function transformValue(
   if (closedObject(itemSchema) && Array.isArray(value)) {
     return value.map((item, index) =>
       item !== null && typeof item === 'object' && !Array.isArray(item)
-        ? transformValue(item, itemSchema, direction, [...path, index], scalarPaths, sourceScalarPaths)
+        ? transformValue(item, itemSchema, direction, [...path, index], localizedValues)
         : item,
     );
   }
@@ -290,8 +319,7 @@ function transformValue(
           propSchema,
           direction,
           [...path, prop],
-          scalarPaths,
-          sourceScalarPaths,
+          localizedValues,
         );
       }
     }
@@ -310,13 +338,12 @@ function transformNode(
   const schema = definition?.schema;
   const slots = definition?.slots ?? [];
   const props: Record<string, unknown> = { ...node.props };
-  const localizedScalars: string[] = [];
-  const sourceScalarPaths = new Set(direction === 'to' ? (node._localizedScalars ?? []) : []);
+  const localizedValues = direction === 'to' ? (node._localizedValues ?? {}) : {};
 
   if (schema !== undefined) {
     for (const [prop, propSchema] of Object.entries(schemaProperties(schema))) {
       if (Object.hasOwn(props, prop)) {
-        props[prop] = transformValue(props[prop], propSchema, direction, [prop], localizedScalars, sourceScalarPaths);
+        props[prop] = transformValue(props[prop], propSchema, direction, [prop], localizedValues);
         if (propSchema['~kind'] === 'PublicFilter' && props[prop] === undefined) delete props[prop];
       }
     }
@@ -336,7 +363,7 @@ function transformNode(
   return {
     type: node.type,
     props,
-    ...(direction === 'from' && localizedScalars.length > 0 ? { _localizedScalars: localizedScalars } : {}),
+    ...(direction === 'from' && Object.keys(localizedValues).length > 0 ? { _localizedValues: localizedValues } : {}),
   };
 }
 
