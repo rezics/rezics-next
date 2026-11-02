@@ -72,6 +72,7 @@ test('selection refresh retains drafts, switches retire targets, and created rea
     const keywords = [...host.querySelectorAll('section')].find(
       (node) => node.getAttribute('aria-label') === fixture.release.properties['schema:keywords']!.labels.en,
     )!;
+    expect(keywords, host.innerHTML).toBeDefined();
     await settle(() =>
       [...keywords.querySelectorAll('button')].find((node) => node.textContent === m.facts_edit_field())!.click(),
     );
