@@ -23,7 +23,7 @@ export async function openFollowingSpace(
     actor,
     'space:read',
     { ...resource, eligibility: spaceReadEligibility(resource) },
-    { deadline },
+    { pool: deps.pool, deadline },
   );
   const read = () => readSpaceForViewer(deps, actor, spaceId, at, { deadline }, check);
   const initial = await read();

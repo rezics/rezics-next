@@ -10,7 +10,7 @@ test('Space-selected Following retains native membership, kind conjunction, spar
       await world.command('POST', `/v1/platform/exposure/${group}:open`, undefined, {
         bearer: world.governance.bearer, expectedStatus: 200,
       });
-    const selected = world.mainTarget;
+    const selected = await world.createRealmTarget('Selected Space', 'public');
     const unrelated = await world.createRealmTarget('Unrelated Space', 'public');
     const store = createFeedActivityStore({ pool: world.system.database.pool, tokens: world.system.tokenKeys });
     const spaces: string[] = [];
