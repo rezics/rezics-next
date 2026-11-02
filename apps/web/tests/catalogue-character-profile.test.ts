@@ -19,6 +19,22 @@ import { readCreatedSubject } from '../src/features/catalogue/create-subject-req
 import { relationActor, relationRole } from '../src/kernel/fake/catalogue-relations';
 import { factChanged, sealFacts, sendFacts, stageFact } from '../src/features/catalogue/subject-facts';
 import { characterFacts } from '../src/features/catalogue/character-profile';
+import { readDirectoryDescriptor, readTypeDescriptor } from '../src/features/catalogue/type-directory-client';
+
+test('shared display descriptors retain nullable languages and hints without certifying work admission', async () => {
+  const fixture = characterProfileFixture();
+  const descriptor = {
+    typeId: characterType,
+    label: 'Character',
+    language: null,
+    description: null,
+    descriptionLanguage: null,
+    definition: { listPresentation: { imageAspect: 'portrait', keyFacts: [] } },
+  };
+  fixture.descriptorResponses.set(characterType, { status: 200, body: descriptor });
+  expect(await readDirectoryDescriptor(fixture.client, characterType, 'en')).toEqual({ ok: true, descriptor });
+  expect(await readTypeDescriptor(fixture.client, characterType, 'en')).toEqual({ ok: false, reason: 'unavailable' });
+});
 
 test('retained Character reads are disclosed only for a settled successful exact-address match', async () => {
   const fixture = characterProfileFixture();
