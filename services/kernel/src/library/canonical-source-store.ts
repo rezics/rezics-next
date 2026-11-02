@@ -203,8 +203,6 @@ import { shareAccount } from '../access/account-share.ts';
 import { currentCommand, currentCommandResources, type CommandTransaction } from '../command/command.ts';
 import { isDeepStrictEqual } from 'node:util';
 
-import { advanceLibraryIdentityNativePlan, readLibraryIdentityPendingJobs } from './identity-native-planner.ts';
-
 const drivers = ['member', 'entry', 'label', 'session', 'copy', 'output'] as const;
 const contexts = new WeakMap<Pool, WorkContext>();
 export const CANONICAL_SOURCE_WORKFLOW = 'library.canonicalSource';
@@ -217,8 +215,6 @@ type ScopeRow = {
   frontier: NativeSourceFrontier | null;
   capture: string | null;
   revision: string | null;
-  pending_identity_jobs: { jobId: string; epoch: string }[];
-  pending_identity_originals: string[];
 };
 type Generation = {
   generation: string;
@@ -371,7 +367,7 @@ async function query<R extends QueryResultRow>(
     (rows) => ({ emptySeeks: rows.length === 0 ? 1 : 0, candidateKeys: rawBound ? rows.length : 0 }),
   );
 }
-const scopeSQL = `SELECT identity,frontier,capture_id::text AS capture,committed_revision::text AS revision,pending_identity_jobs,pending_identity_originals
+const scopeSQL = `SELECT identity,frontier,capture_id::text AS capture,committed_revision::text AS revision
   FROM library.canonical_source_scope WHERE route=$1 AND collection_id=$2 AND source_fence=$3`;
 const generationSQL = `SELECT generation::text,basis,driver,after_subject::text,after_fact::text,source_exhausted,state,version::text
   FROM library.canonical_source_generation WHERE route=$1 AND collection_id=$2 AND generation=$3`;
@@ -925,80 +921,6 @@ export async function advanceCanonicalSourceCapture(pool: Pool, input: Canonical
     }
     if (!row) return notReady(l, 'source');
     const custody = createNativeLibrarySourceCustody({ pool });
-    // Drain the durable native job locators before advancing another capture page. A short
-    // reservation/crash must not lose the remaining jobs discovered on the previous raw page.
-    const pendingJob = row.pending_identity_jobs[0];
-    if (pendingJob) {
-      const planning = await l.run((allowance) =>
-        advanceLibraryIdentityNativePlan(pool, {
-          job: { jobId: pendingJob.jobId, epoch: BigInt(pendingJob.epoch) },
-          sourceIdentity: row!.identity,
-          scope: 'collection-source',
-          limit: 100,
-          allowance,
-          deadline: input.deadline,
-        }),
-      );
-      if (planning.status === 'unavailable') return notReady(l, 'identity');
-      if (planning.status === 'pending') {
-        await mutate(pool, input, l, metadata, tx => enqueueIntent(tx, {
-          queue: 'maintenance', workflowName: CANONICAL_SOURCE_WORKFLOW,
-          workflowId: `${CANONICAL_SOURCE_WORKFLOW}:${input.collectionId}:${randomUUID()}`,
-          input: {accounts: [metadata.curatorAccountId!], collectionId: input.collectionId},
-        }));
-        return notReady(l, 'incomplete');
-      }
-      await mutate(pool, input, l, metadata, async (tx) => {
-        const changed = await query(
-          tx,
-          l,
-          `UPDATE library.canonical_source_scope
-          SET pending_identity_jobs=$4::jsonb WHERE route=$1 AND collection_id=$2 AND source_fence=$3
-          AND pending_identity_jobs=$5::jsonb RETURNING collection_id`,
-          [
-            input.route,
-            input.collectionId,
-            fence,
-            JSON.stringify(row!.pending_identity_jobs.slice(1)),
-            JSON.stringify(row!.pending_identity_jobs),
-          ],
-        );
-        if (changed.length)
-          await enqueueIntent(tx, {
-            queue: 'maintenance',
-            workflowName: CANONICAL_SOURCE_WORKFLOW,
-            workflowId: `${CANONICAL_SOURCE_WORKFLOW}:${input.collectionId}:${randomUUID()}`,
-            input: { accounts: [metadata.curatorAccountId!], collectionId: input.collectionId },
-          });
-      });
-      return notReady(l, 'incomplete');
-    }
-    if (row.pending_identity_originals.length) {
-      const originals = row.pending_identity_originals;
-      // Read mapping homes only after the raw locator page has been durably checkpointed.
-      const {jobs} = await l.run((allowance) =>
-        readLibraryIdentityPendingJobs(pool, originals, {allowance, deadline: input.deadline}),
-      );
-      await mutate(pool, input, l, metadata, async (tx) => {
-        const changed = await query(
-          tx,
-          l,
-          `UPDATE library.canonical_source_scope
-          SET pending_identity_jobs=$4::jsonb,pending_identity_originals='{}'::uuid[]
-          WHERE route=$1 AND collection_id=$2 AND source_fence=$3 AND pending_identity_originals=$5::uuid[]
-          AND pending_identity_jobs='[]'::jsonb RETURNING collection_id`,
-          [input.route, input.collectionId, fence, JSON.stringify(jobs), originals],
-        );
-        if (changed.length)
-          await enqueueIntent(tx, {
-            queue: 'maintenance',
-            workflowName: CANONICAL_SOURCE_WORKFLOW,
-            workflowId: `${CANONICAL_SOURCE_WORKFLOW}:${input.collectionId}:${randomUUID()}`,
-            input: { accounts: [metadata.curatorAccountId!], collectionId: input.collectionId },
-          });
-      });
-      return notReady(l, 'incomplete');
-    }
     if (!row.frontier || row.frontier.driver !== 'done') {
       if (l.allowance().remaining.candidateKeys < 1) return notReady(l, 'allowance');
       const page = await l.run((allowance) =>
@@ -1011,12 +933,11 @@ export async function advanceCanonicalSourceCapture(pool: Pool, input: Canonical
         }),
       );
       if (page.status !== 'pending') return notReady(l, 'identity');
-      const originals = [...new Set(page.rows.flatMap((row) => row.subjectId ? [row.subjectId] : []))];
       await mutate(pool, input, l, metadata, async (tx) => {
         const changed = await query(
           tx,
           l,
-          `UPDATE library.canonical_source_scope SET frontier=$4::jsonb,pending_identity_originals=$6::uuid[]
+          `UPDATE library.canonical_source_scope SET frontier=$4::jsonb
         WHERE route=$1 AND collection_id=$2 AND source_fence=$3 AND frontier IS NOT DISTINCT FROM $5::jsonb RETURNING collection_id`,
           [
             input.route,
@@ -1024,7 +945,6 @@ export async function advanceCanonicalSourceCapture(pool: Pool, input: Canonical
             fence,
             JSON.stringify(page.frontier),
             row!.frontier ? JSON.stringify(row!.frontier) : null,
-            originals,
           ],
         );
         if (changed.length)

@@ -477,7 +477,7 @@ export function createNativeLibrarySourceCustody({
     // Reserve cleanup before checkout/BEGIN. A depleted call can still roll back without extending its deadline.
     const terminal = work.reserve(footprint('ROLLBACK', [], 0, 0), true);
     let terminalUsed = false;
-    const checkout = work.reserve({ ...footprint('', [], 0, 1), statements: 0, bytes: 0 });
+    const checkout = work.reserve({ ...footprint('', [], 0, 1), statements: 0, bytes: 0, emptySeeks: 0 });
     checkout.dispatch();
     checkout.settle();
     try {

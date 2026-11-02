@@ -76,13 +76,6 @@ CREATE TRIGGER identity_scope_effect_immutable BEFORE UPDATE OR DELETE ON librar
 CREATE TRIGGER identity_scope_seal_immutable BEFORE UPDATE OR DELETE ON library.identity_scope_seal
   FOR EACH ROW EXECUTE FUNCTION library.guard_identity_scope_evidence();
 
--- One bounded discovery page survives between raw capture and native per-job planning.
-ALTER TABLE library.canonical_source_scope ADD COLUMN pending_identity_jobs jsonb NOT NULL DEFAULT '[]'::jsonb
- CHECK(jsonb_typeof(pending_identity_jobs)='array' AND jsonb_array_length(pending_identity_jobs)<=100
-       AND octet_length(pending_identity_jobs::text)<=16384);
-ALTER TABLE library.canonical_source_scope ADD COLUMN pending_identity_originals uuid[] NOT NULL DEFAULT '{}'::uuid[]
- CHECK(cardinality(pending_identity_originals)<=100);
-
 CREATE INDEX canonical_source_identity_raw ON library.canonical_source_reference
  (route,collection_id,generation,driver,stored_subject_id,fact_id);
 CREATE INDEX canonical_source_identity_old_fact ON library.canonical_source_fact

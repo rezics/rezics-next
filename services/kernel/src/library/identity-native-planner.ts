@@ -798,22 +798,3 @@ export async function advanceLibraryIdentityNativePlanWithWork(pool: Pool, input
     throw error;
   }
 }
-
-/** Native locator discovery; the caller checkpoints originals before crossing mapping homes. */
-export async function readLibraryIdentityPendingJobs(
-  pool: Pool, originals: readonly string[], input: {allowance: WorkAllowance; deadline: number},
-): Promise<{ jobs: readonly {jobId: string; epoch: string}[]; work: WorkReceipt }> {
-  if (originals.length > 100) throw new TypeError('Native discovery limit is 100 originals');
-  const work = bindLibraryIdentityDeadline(new NativeCollectionWork(input.allowance, input.deadline), input.deadline);
-  try {
-    return await withLibraryIdentityWork(pool, work, async () => {
-      const mappings = originals.length ? await bounded(work, () => withRequestDeadline(input.deadline, () => identityEpochStore.readMappings(pool, originals))) : [];
-      const jobs = [...new Map(mappings.flatMap(mapping => mapping.state === 'pending'
-        ? [[mapping.job.jobId, {jobId: mapping.job.jobId, epoch: mapping.job.epoch.toString()}] as const] : [])).values()];
-      return {jobs, work: work.receipt()};
-    });
-  } catch (error) {
-    if (error instanceof Error) Object.defineProperty(error, 'work', {get: () => work.receipt(), configurable: true});
-    throw error;
-  }
-}

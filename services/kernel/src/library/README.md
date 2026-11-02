@@ -2488,7 +2488,8 @@ raw-width cases. `collection-list-facts-growth.test.ts` measures the whole fixed
 
 `createLibraryIdentityNativePlanner` in `module.ts` exposes the default native `advance`, `readPage` and
 same-command `verifySeal` ports. The exact key is `{job, sourceIdentity, scope: 'collection-source'}`.
-The admitted saved `IdentityJob` and `identityEpochStore.pageChanges` transform immutable input-generation
+This is an explicitly funded native maintenance entry point; ordinary Source capture does not gain an
+unfunded mapping-discovery pass. The admitted saved `IdentityJob` and `identityEpochStore.pageChanges` transform immutable input-generation
 originals. Ordinary pending mappings never supply a guessed destination. Metadata, raw capture and raw
 planning are independent of ordinary Source readiness. Supported placement is a genuine same-home account,
 Source and admitted job: curated members, private built-in entry/label/session/copy, and committed active
