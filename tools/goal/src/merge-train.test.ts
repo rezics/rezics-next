@@ -68,7 +68,7 @@ test('dev origin pushes are shared across train instances, throttled for a minut
     git(repo.main, 'branch', 'dev');
     const state = join(repo.path, 'state');
     const push = () =>
-      Bun.spawnSync(['sh', '-c', devPushScript(state, 'dev')], {
+      Bun.spawnSync(['sh', '-c', `sleep() { printf 'cooldown:%s\\n' "$1"; exit 0; }\n${devPushScript(state, 'dev')}`], {
         cwd: repo.main,
         stdout: 'pipe',
         stderr: 'pipe',
@@ -79,7 +79,9 @@ test('dev origin pushes are shared across train instances, throttled for a minut
     expect(git(repo.main, '--git-dir', origin, 'rev-parse', 'dev')).toBe(original);
     repo.commit('next');
     git(repo.main, 'branch', '-f', 'dev', 'HEAD');
-    expect(push().exitCode).toBe(0);
+    const throttled = push();
+    expect(throttled.exitCode).toBe(0);
+    expect(throttled.stdout.toString()).toMatch(/^cooldown:\d+/);
     expect(git(repo.main, '--git-dir', origin, 'rev-parse', 'dev')).toBe(original);
     git(repo.main, 'remote', 'set-url', 'origin', join(repo.path, 'unreachable.git'));
     writeFileSync(join(state, 'dev-origin-push.timestamp'), '0');

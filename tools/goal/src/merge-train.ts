@@ -1332,9 +1332,11 @@ mkdir -p ${quote(stateDirectory)}
   stamp=${quote(join(stateDirectory, 'dev-origin-push.timestamp'))}
   now=$(date +%s)
   last=$(cat "$stamp" 2>/dev/null || echo 0)
-  [ "$((now - last))" -ge 60 ] || exit 0
+  # Hold the shared lock during the cooldown so one trailing push picks up every subsequent landing.
+  if [ "$((now - last))" -lt 60 ]; then sleep "$((60 - now + last))"; fi
+  now=$(date +%s)
   printf '%s\\n' "$now" > "$stamp"
-  if ! GIT_TERMINAL_PROMPT=0 git push --no-verify origin ${quote(`refs/heads/${branch}:refs/heads/${branch}`)}; then
+  if ! GIT_TERMINAL_PROMPT=0 git push --no-follow-tags origin ${quote(`refs/heads/${branch}:refs/heads/${branch}`)}; then
     echo 'merge-train: background dev push failed; landing continues' >&2
   fi
 ) 9>${quote(join(stateDirectory, 'dev-origin-push.lock'))}`;

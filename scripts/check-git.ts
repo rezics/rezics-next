@@ -122,7 +122,7 @@ function pushCheckGit(workspace: string, refspecs: string[], overrides: Record<s
     if (process.env[key] === undefined) delete env[key];
     else env[key] = process.env[key]!;
   }
-  const pushed = Bun.spawnSync(['git', 'push', '--progress', 'origin', ...refspecs], {
+  const pushed = Bun.spawnSync(['git', 'push', '--no-follow-tags', '--progress', 'origin', ...refspecs], {
     cwd: workspace,
     env,
     stdin: 'ignore',
@@ -131,7 +131,10 @@ function pushCheckGit(workspace: string, refspecs: string[], overrides: Record<s
     timeout: GIT_OPERATION_TIMEOUT_MS,
   });
   if (pushed.exitCode !== 0) throw new Error('check-git: check ref push failed');
-  const bytes = pushed.stderr.toString().match(/Writing objects: 100%[^\r\n]*/)?.[0];
+  const bytes = pushed.stderr
+    .toString()
+    .match(/Writing objects: 100%[^\r\n]*/g)
+    ?.at(-1);
   if (bytes) console.error(`check-git: ${bytes}`);
 }
 
