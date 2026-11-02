@@ -31,12 +31,7 @@ const populated: MyRealmsPage = {
   next: cursor,
 };
 
-async function render(
-  pages: readonly MyRealmsPage[],
-  locale: Locale,
-  dir: 'ltr' | 'rtl' = 'ltr',
-  unavailable = false,
-) {
+async function render(pages: readonly MyRealmsPage[], locale: Locale, dir: 'ltr' | 'rtl' = 'ltr', unavailable = false) {
   await setLocale(locale, { reload: false });
   const root = createRootRoute({
     component: () =>

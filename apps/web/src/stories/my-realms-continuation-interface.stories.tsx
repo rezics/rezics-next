@@ -124,7 +124,9 @@ const meta = {
       if (page.realms.length === 0) {
         const copy = page.next ? m.realm_list_details_sparse_page_empty() : m.realms_empty();
         await expect(view.getByText(copy)).toBeVisible();
-        await expect(view.queryByText(page.next ? m.realms_empty() : m.realm_list_details_sparse_page_empty())).toBeNull();
+        await expect(
+          view.queryByText(page.next ? m.realms_empty() : m.realm_list_details_sparse_page_empty()),
+        ).toBeNull();
       } else {
         await expect(view.queryByText(m.realms_empty())).toBeNull();
         await expect(view.queryByText(m.realm_list_details_sparse_page_empty())).toBeNull();
