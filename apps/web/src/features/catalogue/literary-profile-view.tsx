@@ -52,13 +52,13 @@ function initialFactControl(pointer: string, rows: InitialRow[], read: Ready, ty
   const row = siblings[index]!;
   if (!literaryFields(read.release, type, locale).scalars.includes(property)) return;
   let address = 'fact';
-  let part = row.statement;
+  let part: Pick<StatementInput, 'property'> = row.statement;
   let path = nested;
   // Initial facts render exactly one URL citation, with no qualifier or additional reference editors.
   if (nested.slice(0, 4).join('/') === 'references/0/parts/0') {
     const citation = row.statement.references[0]?.parts[0];
-    if (!citation) return;
-    part = { ...row.statement, ...citation };
+    if (citation?.property.id !== 'schema:url') return;
+    part = citation;
     address = 'reference-0-part-0';
     path = nested.slice(4);
   }
