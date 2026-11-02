@@ -124,6 +124,12 @@ signed-in account from `GET /session`, its sessions from one `GET /sessions`, wi
 passkeys from one `GET /passkeys`. The view makes no kernel reads. A password change uses three Auth calls. Session revocation and passkey removal first check the current native account using the same BFF request cookie, then dispatch the existing exact-key command once. A signed-out response
 offers a link to `/login`.
 
+Password changes, passkey prompts/removal and session revocation share one operation boundary: all other credential
+and session writes stay disabled until completion or cancellation. Uncertain removal/revocation holds that boundary
+through current-target readback; a present target permits only its confirmed retry, and proven absence returns the page
+to idle. A determinate failure permits another operation. Account/session changes clear the boundary and private state,
+and results from the previous page authority cannot restore them.
+
 Password changes accept 8 to 128 characters and use one random key for the staged credential effect: stage, approve,
 then apply. A failed network request retries only its step with the same key, and a replayed apply receipt counts as
 success. A `step_up_required` response sends the person to `/step-up?return_to=%2Fsecurity` and clears the password

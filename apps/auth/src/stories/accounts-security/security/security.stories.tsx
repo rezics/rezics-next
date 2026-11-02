@@ -18,7 +18,7 @@ import {
 } from '../../accounts-operations/story';
 
 export default { title: 'Pages/Account/Account security', parameters: reviewParameters, decorators: [authLocale] };
-const initial: SecurityLoadResult = {
+export const initial: SecurityLoadResult = {
   kind: 'ready',
   accountId: storyAccount,
   sessions: [

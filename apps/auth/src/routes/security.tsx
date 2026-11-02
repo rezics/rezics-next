@@ -40,6 +40,10 @@ export const Route = createFileRoute('/security')({
 });
 
 type LoadState = 'loading' | 'ready' | 'signed-out' | 'failure';
+type SecurityOperation =
+  | { kind: 'password' | 'passkey-add' }
+  | { kind: 'target'; target: SecurityTarget }
+  | { kind: 'recovery'; target: SecurityTarget; phase: 'unknown' | 'accepted' | 'present'; reading: boolean };
 
 const STEP_UP_URL = '/step-up?return_to=%2Fsecurity';
 
@@ -60,33 +64,33 @@ export function SecurityPage({
   const [loadMessage, setLoadMessage] = useState('');
   const [consentReduced, setConsentReduced] = useState(false);
   const [password, setPassword] = useState('');
-  const [passwordPending, setPasswordPending] = useState(false);
   const [passwordNotice, setPasswordNotice] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [passwordFieldError, setPasswordFieldError] = useState('');
-  const [sessionPending, setSessionPending] = useState('');
   const [sessionNotice, setSessionNotice] = useState('');
   const [sessionError, setSessionError] = useState('');
   const [passkeysLoad, setPasskeysLoad] = useState<PasskeysLoad>({ kind: 'hidden' });
   const [passkeys, setPasskeys] = useState<SecurityPasskey[]>([]);
   const [passkeyName, setPasskeyName] = useState('');
-  const [passkeyAdding, setPasskeyAdding] = useState(false);
-  const [passkeyRemoving, setPasskeyRemoving] = useState('');
   const [passkeyNotice, setPasskeyNotice] = useState('');
   const [passkeyError, setPasskeyError] = useState('');
-  const [recovery, setRecovery] = useState<{
-    target: SecurityTarget;
-    phase: 'unknown' | 'accepted' | 'present';
-  } | null>(null);
-  const [reading, setReading] = useState(false);
+  const [operation, setOperation] = useState<SecurityOperation | null>(null);
+  // The ref closes the boundary synchronously, including two submissions before React renders.
+  const activeOperation = useRef<SecurityOperation | null>(null);
+  const passwordPending = operation?.kind === 'password';
+  const passkeyAdding = operation?.kind === 'passkey-add';
+  const sessionPending = operation?.kind === 'target' && operation.target.kind === 'session' ? operation.target.id : '';
+  const passkeyRemoving =
+    operation?.kind === 'target' && operation.target.kind === 'passkey' ? operation.target.id : '';
+  const recovery = operation?.kind === 'recovery' ? operation : null;
+  const reading = recovery?.reading ?? false;
+  const operationBlocked = operation !== null;
   const [signedOutNotice, setSignedOutNotice] = useState('');
-  const actionPending = useRef(false);
   const activeAccount = useRef('');
   const authorityGeneration = useRef(0);
   const retryLoad = useRef<(() => void) | null>(null);
   const recoveryStatus = useRef<HTMLDivElement>(null);
   const sessionStatus = useRef<HTMLDivElement>(null);
-  const submittingPassword = useRef(false);
   const passwordInput = useRef<HTMLInputElement>(null);
   const passwordAlert = useRef<HTMLDivElement>(null);
   const identity = useAccountIdentity(
@@ -145,11 +149,15 @@ export function SecurityPage({
     else if (sessionNotice) sessionStatus.current?.focus();
   }, [recovery, sessionNotice]);
 
+  function updateOperation(next: SecurityOperation | null) {
+    activeOperation.current = next;
+    setOperation(next);
+  }
+
   function clearPrivateData(state: Exclude<LoadState, 'ready'>, notice = '') {
     authorityGeneration.current++;
     activeAccount.current = '';
-    actionPending.current = false;
-    submittingPassword.current = false;
+    updateOperation(null);
     setAccountId('');
     setSessions([]);
     setPasskeys([]);
@@ -163,34 +171,26 @@ export function SecurityPage({
     setSessionError('');
     setPasskeyNotice('');
     setPasskeyError('');
-    setRecovery(null);
-    setReading(false);
-    setPasswordPending(false);
-    setSessionPending('');
-    setPasskeyAdding(false);
-    setPasskeyRemoving('');
     setSignedOutNotice(notice);
     setLoadMessage(m.auth_security_authority_changed());
     setLoadState(state);
   }
 
   async function recoverTarget() {
-    if (!recovery || actionPending.current || reading) return;
-    actionPending.current = true;
-    setReading(true);
-    const { target } = recovery;
+    const held = activeOperation.current;
+    if (held?.kind !== 'recovery' || held.reading) return;
+    updateOperation({ ...held, reading: true });
+    const { target } = held;
     const generation = authorityGeneration.current;
     const result = await (securitySource?.read(target) ?? readSecurityTarget(target));
     if (authorityGeneration.current !== generation) return;
-    actionPending.current = false;
-    setReading(false);
     if (activeAccount.current !== target.accountId) return;
     if (result.kind === 'signed-out' || result.kind === 'denied') {
       clearPrivateData(result.kind === 'signed-out' ? 'signed-out' : 'failure', m.auth_security_action_unverified());
       return;
     }
     if (result.kind === 'unavailable') {
-      setRecovery({ target, phase: 'unknown' });
+      updateOperation({ kind: 'recovery', target, phase: 'unknown', reading: false });
       setSessionError(m.auth_security_readback_unavailable());
       return;
     }
@@ -198,10 +198,15 @@ export function SecurityPage({
     setSessions(result.sessions);
     if (result.passkeys) setPasskeys(result.passkeys);
     if (result.presence === 'absent') {
-      setRecovery(null);
+      updateOperation(null);
       setSessionNotice(m.auth_security_target_absent());
     } else {
-      setRecovery({ target, phase: result.presence === 'present' ? 'present' : 'unknown' });
+      updateOperation({
+        kind: 'recovery',
+        target,
+        phase: result.presence === 'present' ? 'present' : 'unknown',
+        reading: false,
+      });
       if (result.presence === 'unknown') setSessionError(m.auth_security_readback_unavailable());
     }
   }
@@ -221,9 +226,10 @@ export function SecurityPage({
         );
         return;
       }
-      setRecovery({ target, phase: result.kind });
+      updateOperation({ kind: 'recovery', target, phase: result.kind, reading: false });
       return;
     }
+    updateOperation(null);
     if (target.kind === 'passkey')
       setPasskeyError(
         result.kind === 'last-credential'
@@ -234,15 +240,16 @@ export function SecurityPage({
   }
 
   async function runAction(target: SecurityTarget, current = false, retry = false) {
-    if (
-      actionPending.current ||
-      sessionPending ||
-      passkeyAdding ||
-      passkeyRemoving ||
-      (recovery && (!retry || recovery.phase !== 'present')) ||
-      activeAccount.current !== target.accountId
-    )
-      return;
+    const held = activeOperation.current;
+    const retryAllowed =
+      retry &&
+      held?.kind === 'recovery' &&
+      !held.reading &&
+      held.phase === 'present' &&
+      held.target.accountId === target.accountId &&
+      held.target.kind === target.kind &&
+      held.target.id === target.id;
+    if ((held && !retryAllowed) || activeAccount.current !== target.accountId || !target.accountId) return;
     if (
       !window.confirm(
         target.kind === 'session'
@@ -251,9 +258,7 @@ export function SecurityPage({
       )
     )
       return;
-    actionPending.current = true;
-    if (target.kind === 'session') setSessionPending(target.id);
-    else setPasskeyRemoving(target.id);
+    updateOperation({ kind: 'target', target });
     setSessionNotice('');
     setSessionError('');
     setPasskeyNotice('');
@@ -265,18 +270,14 @@ export function SecurityPage({
         ? await revokeSession(target.id, target.accountId)
         : await removePasskey(target.id, target.accountId);
     if (authorityGeneration.current !== generation) return;
-    actionPending.current = false;
-    setSessionPending('');
-    setPasskeyRemoving('');
     if (activeAccount.current !== target.accountId) return;
-    // A retry consumed the previous observation; another uncertain response needs another current read.
-    setRecovery(null);
+    // A retry consumes the observation; finishAction keeps any new uncertainty inside the boundary.
     finishAction(target, result, current);
   }
 
   async function submitPassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (submittingPassword.current || passwordPending) return;
+    if (activeOperation.current || !activeAccount.current) return;
     const passwordLength = Array.from(password).length;
     if (passwordLength < 8 || passwordLength > 128) {
       setPasswordNotice('');
@@ -284,16 +285,14 @@ export function SecurityPage({
       return;
     }
     setPasswordFieldError('');
-    submittingPassword.current = true;
-    setPasswordPending(true);
+    updateOperation({ kind: 'password' });
     setPasswordNotice('');
     setPasswordError('');
     const owner = accountId;
     const generation = authorityGeneration.current;
     const result = await changePassword(accountId, password);
     if (authorityGeneration.current !== generation) return;
-    submittingPassword.current = false;
-    setPasswordPending(false);
+    updateOperation(null);
     if (activeAccount.current !== owner) return;
     if (result.ok) {
       clearPrivateData('signed-out', m.auth_security_password_changed());
@@ -309,15 +308,15 @@ export function SecurityPage({
 
   async function submitPasskey(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (actionPending.current || recovery || passkeyAdding || passkeyRemoving) return;
-    setPasskeyAdding(true);
+    if (activeOperation.current || !activeAccount.current) return;
+    updateOperation({ kind: 'passkey-add' });
     setPasskeyNotice('');
     setPasskeyError('');
     const owner = accountId;
     const generation = authorityGeneration.current;
     const result = await addPasskey(passkeyName);
     if (authorityGeneration.current !== generation) return;
-    setPasskeyAdding(false);
+    updateOperation(null);
     if (activeAccount.current !== owner) return;
     if (result.ok) {
       setPasskeys((current) => [...current, result.passkey]);
@@ -374,7 +373,7 @@ export function SecurityPage({
         <AccountIdentitySummary accountId={accountId} state={identity.state} action="security" retry={identity.retry} />
       }
     >
-      <div className="auth-security-page" aria-busy={loadState === 'loading'}>
+      <div className="auth-security-page" aria-busy={loadState === 'loading' || operationBlocked}>
         {loadState === 'loading' ? (
           <p role="status">{m.auth_inventory_loading()}</p>
         ) : (
@@ -392,7 +391,7 @@ export function SecurityPage({
                   type="button"
                   variant="outline"
                   onClick={() => void recoverTarget()}
-                  disabled={reading || Boolean(sessionPending) || Boolean(passkeyRemoving)}
+                  disabled={reading}
                   aria-busy={reading}
                 >
                   {m.auth_security_check_current()}
@@ -401,7 +400,7 @@ export function SecurityPage({
                   <Button
                     type="button"
                     variant="outline"
-                    disabled={reading || Boolean(sessionPending) || Boolean(passkeyRemoving)}
+                    disabled={reading}
                     onClick={() =>
                       void runAction(
                         recovery.target,
@@ -433,7 +432,7 @@ export function SecurityPage({
                     name="password"
                     autoComplete="new-password"
                     required
-                    readOnly={passwordPending}
+                    readOnly={operationBlocked}
                     ref={passwordInput}
                     id="security-new-password"
                     value={password}
@@ -460,7 +459,7 @@ export function SecurityPage({
                     {passwordError}
                   </ErrorAlert>
                 ) : null}
-                <Button type="submit" disabled={passwordPending} aria-busy={passwordPending} className="w-full">
+                <Button type="submit" disabled={operationBlocked} aria-busy={passwordPending} className="w-full">
                   {m.auth_security_password_submit()}
                 </Button>
               </form>
@@ -512,13 +511,7 @@ export function SecurityPage({
                                   type="button"
                                   variant="outline"
                                   onClick={() => void removeOnePasskey(passkey)}
-                                  disabled={
-                                    Boolean(recovery) ||
-                                    reading ||
-                                    Boolean(sessionPending) ||
-                                    passkeyAdding ||
-                                    Boolean(passkeyRemoving)
-                                  }
+                                  disabled={operationBlocked}
                                   aria-busy={passkeyRemoving === passkey.id}
                                   aria-label={m.auth_security_passkey_remove_named({ name: passkey.name })}
                                 >
@@ -542,21 +535,10 @@ export function SecurityPage({
                           maxLength={64}
                           value={passkeyName}
                           onChange={(event) => setPasskeyName(event.target.value)}
-                          readOnly={passkeyAdding}
+                          readOnly={operationBlocked}
                         />
                       </Field>
-                      <Button
-                        type="submit"
-                        disabled={
-                          Boolean(recovery) ||
-                          reading ||
-                          Boolean(sessionPending) ||
-                          passkeyAdding ||
-                          Boolean(passkeyRemoving)
-                        }
-                        aria-busy={passkeyAdding}
-                        className="w-full"
-                      >
+                      <Button type="submit" disabled={operationBlocked} aria-busy={passkeyAdding} className="w-full">
                         {m.auth_security_passkey_add()}
                       </Button>
                     </form>
@@ -620,13 +602,7 @@ export function SecurityPage({
                             type="button"
                             variant="outline"
                             onClick={() => void revoke(session)}
-                            disabled={
-                              Boolean(recovery) ||
-                              reading ||
-                              passkeyAdding ||
-                              Boolean(passkeyRemoving) ||
-                              Boolean(sessionPending)
-                            }
+                            disabled={operationBlocked}
                             aria-busy={sessionPending === session.id}
                             aria-label={m.auth_security_sign_out_session({ device })}
                           >

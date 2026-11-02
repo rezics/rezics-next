@@ -1,0 +1,147 @@
+import { afterAll, afterEach, expect, test } from 'bun:test';
+import { dirname } from 'node:path';
+import { act } from 'react';
+import type { Root } from 'react-dom/client';
+import type { SecurityActionResult, SecurityReadback, SecurityTarget } from '../src/security-reconciliation';
+
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', `${import.meta.dir}/../../web`)))
+);
+const dom = new Window({ url: 'https://auth.test/security' });
+const globals = {
+  ...Object.fromEntries(
+    ['window', 'document', 'navigator', 'HTMLElement', 'HTMLInputElement', 'Element', 'Node'].map((key) => [
+      key,
+      dom[key as keyof typeof dom],
+    ]),
+  ),
+  getComputedStyle: dom.getComputedStyle.bind(dom),
+  IS_REACT_ACT_ENVIRONMENT: true,
+  PublicKeyCredential: class {},
+};
+const original = new Map(
+  [...Object.keys(globals), 'fetch'].map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
+);
+for (const [key, value] of Object.entries(globals))
+  Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
+const { createRoot } = await import('react-dom/client');
+const { SecurityPage } = await import('../src/routes/security');
+const { initial } = await import('../src/stories/accounts-security/security/security.stories');
+const { emptyInventory, fill, button } = await import('../src/stories/accounts-operations/story');
+const { overwriteGetLocale } = await import('../src/paraglide/runtime.js');
+const { m } = await import('../src/paraglide/messages.js');
+overwriteGetLocale(() => 'en');
+const identitySource = async () => ({ kind: 'unavailable' as const });
+const flush = (action: () => void) => act(action);
+const deferred = <T,>() => Promise.withResolvers<T>();
+let host: HTMLDivElement, root: Root;
+let calls: unknown[];
+let response: ReturnType<typeof deferred<Response>>, prompt: ReturnType<typeof deferred<Credential | null>>;
+let action: ReturnType<typeof deferred<SecurityActionResult>>, read: ReturnType<typeof deferred<SecurityReadback>>;
+const source = {
+  act: (target: SecurityTarget) => {
+    calls.push(target);
+    return action.promise;
+  },
+  read: () => read.promise,
+};
+const props = { identitySource, inventorySource: emptyInventory, securitySource: source };
+const render = (value = initial) => flush(() => root.render(<SecurityPage initial={value} {...props} />));
+const click = (label: string) => button(host, label)!.click();
+const writes = () => [...host.querySelectorAll<HTMLButtonElement>('form button[type="submit"], li button')];
+const submit = (index: number) =>
+  host
+    .querySelectorAll('form')
+    [index]!.dispatchEvent(new dom.Event('submit', { bubbles: true, cancelable: true }) as unknown as Event);
+afterEach(async () => {
+  await flush(() => root.unmount());
+  host.remove();
+});
+afterAll(async () => {
+  for (const [key, descriptor] of original) {
+    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+    else Reflect.deleteProperty(globalThis, key);
+  }
+  await dom.happyDOM.close();
+});
+async function mount() {
+  host = document.createElement('div');
+  document.body.append(host);
+  root = createRoot(host);
+  calls = [];
+  action = deferred();
+  read = deferred();
+  response = deferred();
+  prompt = deferred();
+  Object.defineProperty(navigator, 'credentials', { configurable: true, value: { create: () => prompt.promise } });
+  window.confirm = () => true;
+  globalThis.fetch = (async (path) => {
+    calls.push(String(path));
+    if (path === '/passkeys/register/options')
+      return Response.json({
+        challenge: 'Y2hhbGxlbmdl',
+        rp: { id: 'auth.test', name: 'REZICS' },
+        user: { id: 'YWNjb3VudA', name: 'reader', displayName: 'Reader' },
+        pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
+      });
+    return response.promise;
+  }) as typeof fetch;
+  await render();
+  await flush(() => fill(host.querySelector('#security-new-password')!, 'a secure password'));
+}
+
+test.each(['password', 'prompt'])('%s blocks every credential/session write until it finishes', async (kind) => {
+  await mount();
+  await flush(() => {
+    submit(kind === 'password' ? 0 : 1);
+    // Same-turn form submissions must obey the boundary before disabled controls render.
+    submit(0);
+    submit(1);
+  });
+  expect(writes().every((control) => control.disabled)).toBe(true);
+  expect(calls).toHaveLength(1);
+  await flush(() => {
+    if (kind === 'password') response.resolve(Response.json({ error: 'credential_effect_denied' }, { status: 409 }));
+    else prompt.reject(Object.assign(new Error('dismissed'), { name: 'NotAllowedError' }));
+  });
+  expect(writes().every((control) => !control.disabled)).toBe(true);
+  if (kind === 'prompt') expect(host.querySelector('[role="alert"]')).toBeNull();
+});
+
+test('uncertain revocation holds the exact target through readback and retry, then returns to idle', async () => {
+  await mount();
+  await flush(() => click(m.auth_security_sign_out()));
+  await flush(() => action.resolve({ kind: 'unknown' }));
+  await flush(() => {
+    submit(0);
+    submit(1);
+  });
+  expect(calls).toHaveLength(1);
+  expect(writes().every((control) => control.disabled)).toBe(true);
+  await flush(() => click(m.auth_security_check_current()));
+  const sessions = initial.kind === 'ready' ? initial.sessions : [];
+  await flush(() => read.resolve({ kind: 'ready', presence: 'present', sessions, passkeys: null }));
+  action = deferred();
+  read = deferred();
+  await flush(() => click(m.auth_security_retry_action()));
+  expect(calls[1]).toEqual(calls[0]);
+  await flush(() => action.resolve({ kind: 'unknown' }));
+  expect(button(host, m.auth_security_retry_action())).toBeUndefined();
+  await flush(() => click(m.auth_security_check_current()));
+  await flush(() => read.resolve({ kind: 'ready', presence: 'absent', sessions: [], passkeys: null }));
+  expect(writes().every((control) => !control.disabled)).toBe(true);
+  action = deferred();
+  await flush(() => click(m.auth_security_passkey_remove()));
+  await flush(() => action.resolve({ kind: 'accepted' }));
+  expect(host.querySelector('form')).toBeNull();
+  expect(host.textContent).toContain(m.auth_security_sign_in_required());
+});
+
+test('a late action result cannot restore private state after authority changes', async () => {
+  await mount();
+  await flush(() => click(m.auth_security_passkey_remove()));
+  await render({ kind: 'signed-out' });
+  await flush(() => action.resolve({ kind: 'unknown' }));
+  expect(host.querySelector('form')).toBeNull();
+  expect(button(host, m.auth_security_check_current())).toBeUndefined();
+});
