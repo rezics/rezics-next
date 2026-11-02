@@ -9,6 +9,7 @@ import { subjectHref } from '../../subject/subject-href';
 import type { CandidateTransport } from '../../subject/candidate-review';
 import { relationFields, type RelationTransport } from '../../subject/relation-candidates';
 import { ViewHeading } from '../pages/view-heading';
+import { CandidateValue } from '../pages/data';
 import { CreateSubjectForm } from './create-subject-form';
 import type { CreatedReader, CreateResult } from './create-subject';
 import { SubjectTermsEntry } from './subject-terms-entry';
@@ -18,7 +19,7 @@ import { SubjectFacts } from './subject-facts-view';
 import type { FactsTransport } from './subject-facts';
 import { RelationEditor } from './relation-editor';
 import { DefinitionGuideLink } from './definition-guide-view';
-import { EditorFailure, PartValue } from './statement-editor-view';
+import { EditorFailure } from './statement-editor-view';
 import type { StatementInput } from './statement-editor';
 import { GameClassifications, GameInitialFacts, gameGroupLabel } from './game-profile-fields';
 import { gameDefinitions, gameDraft, gameGroups, type GameCommand, type GameRead } from './game-profile';
@@ -39,6 +40,9 @@ export type GameProfileTransport = {
   classificationReview: (property: string, session?: string) => CandidateTransport;
 };
 export const GameProfile = catalogueEditor(GameProfileLive);
+type ReadyGame = Extract<GameRead, { ok: true }> & {
+  public: NonNullable<Extract<GameRead, { ok: true }>['public']>;
+};
 
 function GameProfileLive({
   id,
@@ -62,8 +66,25 @@ function GameProfileLive({
     retry: false,
   });
   const [drafts, setDrafts] = useState<Record<string, { key: string; statement: StatementInput }[]>>({});
+  const [observed, setObserved] = useState(query.data);
+  const [lastReading, setLastReading] = useState<Extract<GameRead, { ok: true }> | undefined>(
+    query.data?.ok && query.data.public ? query.data : undefined,
+  );
+  // Retain one admitted reading within this editor lifetime, only across transient failures.
+  // Retiring responses clear it synchronously, so a later outage cannot revive concealed content.
+  if (observed !== query.data) {
+    setObserved(query.data);
+    setLastReading(
+      query.data?.ok && query.data.public
+        ? query.data
+        : query.data && !query.data.ok && query.data.reason === 'unavailable'
+          ? lastReading
+          : undefined,
+    );
+  }
+  const refreshFailed = query.isError || (!!query.data && !query.data.ok && query.data.reason === 'unavailable');
   const o = { locale: locale as never };
-  const read = query.data;
+  const read = id && refreshFailed ? lastReading : query.data;
   if (!read || !read.ok)
     return (
       <article className="mx-auto min-w-0 max-w-4xl space-y-5">
@@ -73,8 +94,8 @@ function GameProfileLive({
         ) : (
           <>
             <EditorFailure reason={read && !read.ok ? read.reason : 'unavailable'} locale={locale} />
-            <Button className={gameActionClass} onClick={() => void query.refetch()}>
-              {m.correction_reload({}, o)}
+            <Button className={gameActionClass} disabled={query.isFetching} onClick={() => void query.refetch()}>
+              {id ? m.game_profile_refresh({}, o) : m.correction_reload({}, o)}
             </Button>
           </>
         )}
@@ -129,7 +150,15 @@ function GameProfileLive({
         />
       </div>
     );
-  if (!read.public) return <EditorFailure reason="unavailable" locale={locale} />;
+  if (!read.public)
+    return (
+      <article className="mx-auto max-w-4xl space-y-4">
+        <EditorFailure reason="denied" locale={locale} />
+        <Button className={gameActionClass} disabled={query.isFetching} onClick={() => void query.refetch()}>
+          {m.game_profile_refresh({}, o)}
+        </Button>
+      </article>
+    );
   return (
     <GameCorrection
       read={{ ...read, public: read.public }}
@@ -138,6 +167,8 @@ function GameProfileLive({
       transport={transport}
       search={search}
       refresh={() => query.refetch().then(() => undefined)}
+      refreshing={query.isFetching}
+      refreshFailed={refreshFailed}
     />
   );
 }
@@ -148,9 +179,13 @@ function GameCorrection({
   transport,
   search,
   refresh,
+  refreshing,
+  refreshFailed,
 }: {
   refresh: () => Promise<void>;
-  read: Extract<GameRead, { ok: true }> & { public: NonNullable<Extract<GameRead, { ok: true }>['public']> };
+  refreshing: boolean;
+  refreshFailed: boolean;
+  read: ReadyGame;
   locale: string;
   session: string;
   transport: GameProfileTransport;
@@ -207,10 +242,23 @@ function GameCorrection({
           ) && <AuthoredFieldEntry id={subject.id} title={title.text} locale={locale} />}
           {subject.type !== 'wd:Q20631656' && <PublicationEditorEntry work={subject.id} locale={locale} />}
           <DefinitionGuideLink locale={locale} address={{ type: subject.type, returnTo: `${href}/game` }} />
-          <Button className={gameActionClass} type="button" variant="outline" onClick={() => void refresh()}>
-            {m.correction_reload({}, o)}
+          <Button
+            className={gameActionClass}
+            type="button"
+            variant="outline"
+            disabled={refreshing}
+            onClick={() => void refresh()}
+          >
+            {refreshFailed ? m.catalogue_create_retry({}, o) : m.game_profile_refresh({}, o)}
           </Button>
         </nav>
+        <p role={refreshing || refreshFailed ? 'status' : undefined} className="text-sm">
+          {refreshing
+            ? m.game_profile_refreshing({}, o)
+            : refreshFailed
+              ? m.game_profile_refresh_failed({}, o)
+              : m.game_profile_current({}, o)}
+        </p>
         <p className="text-sm text-muted-foreground">{m.game_profile_support({}, o)}</p>
       </header>
       {Object.entries(groups)
@@ -230,26 +278,11 @@ function GameCorrection({
                       {!subject.statements[property]?.length && (
                         <span className="text-sm text-muted-foreground">{m.facts_no_value({}, o)}</span>
                       )}
-                      {(subject.statements[property] ?? []).map((statement) => (
-                        <div key={statement.id} className="space-y-1">
-                          <PartValue part={statement} read={read} locale={locale} />
-                          {statement.qualifiers.map((part, i) => (
-                            <div key={i} className="text-sm">
-                              <span>
-                                {pickText(read.release.properties[part.property.id]?.labels ?? {}, locale).text}:{' '}
-                              </span>
-                              <PartValue part={part} read={read} locale={locale} />
-                            </div>
-                          ))}
-                          {statement.references.map((reference, i) => (
-                            <div key={i} className="border-s-2 ps-3 text-sm">
-                              {reference.parts.map((part, j) => (
-                                <PartValue key={j} part={part} read={read} locale={locale} />
-                              ))}
-                            </div>
-                          ))}
-                        </div>
-                      ))}
+                      <ol className="space-y-3">
+                        {(subject.statements[property] ?? []).map((statement) => (
+                          <GameStatement key={statement.id} statement={statement} read={read} locale={locale} />
+                        ))}
+                      </ol>
                     </dd>
                   </div>
                 );
@@ -362,5 +395,67 @@ function GameCorrection({
         <p className="text-sm text-muted-foreground">{m.game_profile_terms_help({}, o)}</p>
       </details>
     </article>
+  );
+}
+
+/** Keep the assertion, qualifier meaning and each individually labelled citation together. */
+function GameStatement({
+  statement,
+  read,
+  locale,
+}: {
+  statement: ReadyGame['public']['subject']['statements'][string][number];
+  read: ReadyGame;
+  locale: string;
+}) {
+  const o = { locale: locale as never };
+  return (
+    <li className="min-w-0 space-y-2 [overflow-wrap:anywhere]">
+      <CandidateValue snak={statement} related={read.public.related} locale={locale} />
+      <dl className="space-y-2 text-sm">
+        {statement.qualifiers.map((part, index) => (
+          <GamePart key={index} part={part} read={read} locale={locale} />
+        ))}
+      </dl>
+      <ol className="space-y-3">
+        {statement.references.map((reference, index) => (
+          <li key={index} className="space-y-2 border-s-2 ps-3 text-sm">
+            <p className="text-muted-foreground">
+              {m.correction_references({}, o)} {index + 1}
+            </p>
+            <dl className="space-y-2">
+              {reference.parts.map((part, partIndex) => (
+                <GamePart key={partIndex} part={part} read={read} locale={locale} />
+              ))}
+            </dl>
+          </li>
+        ))}
+      </ol>
+    </li>
+  );
+}
+
+function GamePart({
+  part,
+  read,
+  locale,
+}: {
+  part: ReadyGame['public']['subject']['statements'][string][number]['qualifiers'][number];
+  read: ReadyGame;
+  locale: string;
+}) {
+  const label = pickText(
+    read.release.properties[part.property.id]?.labels ?? read.public.related[part.property.id]?.labels ?? {},
+    locale,
+  );
+  return (
+    <div className="min-w-0 space-y-1">
+      <dt className="text-muted-foreground" lang={label.lang ?? undefined}>
+        {label.text || <code>{part.property.id}</code>}
+      </dt>
+      <dd className="min-w-0">
+        <CandidateValue snak={part} related={read.public.related} locale={locale} />
+      </dd>
+    </div>
   );
 }
