@@ -123,9 +123,7 @@ class Remote {
       const owner = JSON.stringify([body.source, body.external_id]);
       const prior = this.sourceRecords.get(owner);
       const record =
-        body.expected_metadata_revision === null && prior
-          ? { ...prior.record, ...body.metadata }
-          : body.metadata;
+        body.expected_metadata_revision === null && prior ? { ...prior.record, ...body.metadata } : body.metadata;
       const changed = !prior || JSON.stringify(prior.record) !== JSON.stringify(record);
       const revision = prior ? prior.revision + Number(changed) : 1;
       this.sourceRecords.set(owner, { record, revision });
@@ -133,7 +131,13 @@ class Remote {
         {
           record,
           metadata_revision: revision,
-          effect: !prior ? 'filled' : changed ? (body.expected_metadata_revision === null ? 'filled' : 'corrected') : 'noEffect',
+          effect: !prior
+            ? 'filled'
+            : changed
+              ? body.expected_metadata_revision === null
+                ? 'filled'
+                : 'corrected'
+              : 'noEffect',
         },
         { status: prior ? 200 : 201 },
       );
