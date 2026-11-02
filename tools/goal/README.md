@@ -892,17 +892,21 @@ is retried on the same pool; a spent window, a stale reading, or three refusals 
 different allowed pool. A provider capacity refusal continues after a short pause, however often it repeats.
 
 Every other tool failure, including a CLI that fails before a session, a silent worker and a check-host transport
-failure, resumes the same session after a backoff by its fingerprint: the failure's first line with numbers, hashes and
-identifiers removed. The first sighting of a fingerprint across all tasks in the last hour waits two minutes, the second
+failure, resumes the same session after a backoff by its fingerprint: the failure's first line with worktree paths,
+numbers, hashes and identifiers removed. The first sighting of a fingerprint across all tasks in the last hour waits two minutes, the second
 ten and later ones thirty; each sighting is a `tool-blocker-retry` event. The delay is persisted as the retry intent's
 `notBefore`, so a restarted host honours it. A check-host transport failure also waits while the watchdog's probes
 show a listed check host in outage (two failed probes in a row, cleared by a success; see [Watchdog](#watchdog)), and
 every relaunch waits for [host capacity](#host-capacity-admission); the manager host's recovery sweep tries the pending
-retry again every minute. The same tool blocker in two consecutive attempts parks the task and sends its manager one
-`environment` event, whether or not the worker reran the failing command; two silence stalls in a row are reported as
-`stalled`. Work other than product work on dev also stops as stalled when a tool failure follows another without a
-rerun of the failing command. A repeated environment fingerprint at landing is escalated as stalled to the owning
-manager.
+retry again every minute. When three distinct tasks end on the same normalized line within 20 minutes, Goal opens one
+environment incident, holds retries for those tasks and new tasks that hit the line, and sends one `blocker` to the
+supermanager with the line, count, example tasks and the first tracked source match from `git grep`. Goal retries one
+affected task every 10 minutes; a rerun that passes the blocker closes the incident and releases the other pending
+retries. `status` lists open incidents and identifies affected pending retries. Without a shared incident, the same
+tool blocker in two consecutive attempts parks the task and sends its manager one `environment` event, whether or not
+the worker reran the failing command; two silence stalls in a row are reported as `stalled`. Work other than product
+work on dev also stops as stalled when a tool failure follows another without a rerun of the failing command. A
+repeated environment fingerprint at landing is escalated as stalled to the owning manager.
 
 Integration does not run gates or classify assertion text. A specification conflict reaches the manager inbox directly.
 Quota exhaustion chooses another allowed pool. Outside product work on dev, repeating the same first assertion after a

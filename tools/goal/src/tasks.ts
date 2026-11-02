@@ -34,6 +34,7 @@ import type { Attempt, Brief, Profile, Settings, Task } from './types.ts';
 import { frozenFile, parseFrozenFiles, type FrozenFile } from './frozen.ts';
 import { webModule, WorkspaceController } from './workspace.ts';
 import { captureLaunchContext } from './launch-context.ts';
+import { toolIncidentRetryAllowed } from './tool-incidents.ts';
 import { dependencyInstallationMatches, installShared } from './shared-dependencies.ts';
 import {
   authenticatedManager,
@@ -934,11 +935,17 @@ export class WorkerTasks {
     }
     this.assertLocalAcceptanceCustody(task, nextBrief);
     const ref = { taskId, attempt: task.currentAttempt };
+    const incidentHeld = !toolIncidentRetryAllowed(this.store, ref);
     // A held task's brief can change while its retry waits for dependencies: refusing it made managers cancel held
     // tasks and lose their branches. The pending retry then starts the amended brief.
     // A product retry still waiting to start takes an amended brief; the pending retry then starts that brief.
     const amendPending = devProduct && options.brief !== undefined;
-    if (task.state !== 'held' && !amendPending && this.store.retryIntent(ref)?.status === 'pending')
+    if (
+      task.state !== 'held' &&
+      !amendPending &&
+      !incidentHeld &&
+      this.store.retryIntent(ref)?.status === 'pending'
+    )
       throw new Error('a retry is already pending');
     if (task.state === 'held') {
       const reshaped = options.brief === undefined ? undefined : this.validateBrief(options.brief, taskId, actor);
@@ -1039,7 +1046,7 @@ export class WorkerTasks {
           } else if (current.state === 'stopped') current.state = 'ready';
         },
         retryOptions,
-        { amendPending },
+        { amendPending: amendPending || incidentHeld },
       );
     } catch (error) {
       if (briefPath) rmSync(briefPath, { force: true });
