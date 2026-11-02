@@ -5,7 +5,23 @@ import type {
   OperationAddress,
   CancelCommand,
   CancelResult,
+  BulkOutcomePageRead,
 } from './bulk-operation-recovery-native';
+
+export type LibraryBulkOperation = BulkOperation;
+export type LibraryBulkOutcome = BulkOutcomes['outcomes'][number];
+export type LibraryBulkCancelIntent = {
+  operationId: string;
+  sender: string;
+  idempotencyKey: string;
+  locale: string;
+  capture: string;
+};
+export type LibraryBulkRecoveryRead =
+  | { state: 'available'; operation: LibraryBulkOperation; outcomes: LibraryBulkOutcome[]; next: string | null }
+  | { state: 'expired' | 'forbidden' | 'unavailable'; operationId: string };
+export type LibraryBulkOutcomePageRead = BulkOutcomePageRead;
+export type LibraryBulkRecoveryStatus = 'unattempted' | 'running' | 'skipped' | 'failed' | 'success';
 
 export type RecoveryState = {
   read: BulkRead['state'] | 'loading';
@@ -110,4 +126,55 @@ export class BulkOperationRecovery {
     };
     this.publish();
   }
+}
+
+export function bulkRecoveryStatus(outcome: LibraryBulkOutcome): LibraryBulkRecoveryStatus {
+  switch (outcome.state) {
+    case 'pending':
+      return 'unattempted';
+    case 'reconciling':
+      return 'running';
+    case 'applied':
+      return 'success';
+    case 'no_effect':
+    case 'conflict':
+    case 'cancelled':
+      return 'skipped';
+    case 'denied':
+    case 'failed':
+      return 'failed';
+  }
+}
+
+export function canCancelBulkOperation(operation: LibraryBulkOperation): boolean {
+  return !operation.cancelRequested && (operation.phase === 'preview' || operation.phase === 'applying');
+}
+
+export function isCurrentBulkRecoveryAddress(
+  addressOperationId: string,
+  requestedOperationId: string,
+  authorized: boolean,
+): boolean {
+  return authorized && addressOperationId === requestedOperationId;
+}
+
+/** Accept a page only for the still-current address, authority and native cursor. */
+export function appendBulkOutcomePage(input: {
+  addressOperationId: string;
+  authorized: boolean;
+  requestedOperationId: string;
+  requestedCursor: string;
+  current: LibraryBulkRecoveryRead;
+  page: BulkOutcomes;
+}): LibraryBulkRecoveryRead {
+  const { addressOperationId, authorized, requestedOperationId, requestedCursor, current, page } = input;
+  if (
+    !authorized ||
+    addressOperationId !== requestedOperationId ||
+    current.state !== 'available' ||
+    current.operation.id !== requestedOperationId ||
+    current.next !== requestedCursor
+  )
+    return current;
+  return { ...current, outcomes: [...current.outcomes, ...page.outcomes], next: page.next };
 }

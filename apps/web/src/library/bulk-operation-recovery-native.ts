@@ -75,3 +75,88 @@ export async function cancelNativeOperation(
     return { state: 'uncertain' };
   }
 }
+
+
+export type CapturedCancelCommand = {
+  version: 1;
+  operationId: string;
+  sender: string;
+  method: 'POST';
+  path: string;
+  locale: string;
+  headers: {
+    authorization: string;
+    'idempotency-key': string;
+    'accept-language': string;
+    'content-type': 'application/json';
+  };
+  body: Record<string, never>;
+};
+
+export type BulkRecoveryNativeRead =
+  | { state: 'available'; operation: BulkOperation; outcomes: BulkOutcomes['outcomes']; next: string | null }
+  | { state: 'expired' | 'forbidden' | 'unavailable'; operationId: string };
+export type BulkOutcomePageRead =
+  | { state: 'available'; page: BulkOutcomes }
+  | { state: 'expired' | 'forbidden' | 'unavailable'; operationId: string };
+
+function failureState(status: number, missingMeansExpired = false): 'expired' | 'forbidden' | 'unavailable' {
+  if (status === 401 || status === 403) return 'forbidden';
+  if (status === 404 && missingMeansExpired) return 'expired';
+  return 'unavailable';
+}
+
+/** Read the stored operation and its first bounded native result page. */
+export async function readBulkOperationFromNative(
+  client: KernelClient,
+  operationId: string,
+  authorization: string,
+): Promise<BulkRecoveryNativeRead> {
+  const operationResult = await client.libraryOperations({ operationId }).get({
+    headers: { authorization },
+    fetch: { cache: 'no-store', redirect: 'manual' },
+  });
+  if (operationResult.status !== 200 || operationResult.error || !operationResult.data?.operation)
+    return { state: failureState(operationResult.status), operationId };
+  const operation = operationResult.data.operation;
+  if (operation.id !== operationId) return { state: 'unavailable', operationId };
+
+  const resultPage = await client.libraryOperations({ operationId }).outcomes.get({
+    query: { limit: 20 },
+    headers: { authorization },
+    fetch: { cache: 'no-store', redirect: 'manual' },
+  });
+  if (resultPage.status !== 200 || resultPage.error || !resultPage.data)
+    return { state: failureState(resultPage.status, true), operationId };
+  return {
+    state: 'available',
+    operation,
+    outcomes: resultPage.data.outcomes,
+    next: resultPage.data.next,
+  };
+}
+
+/** Keep later result reads on the same operation and native cursor. */
+export async function readBulkOperationPageFromNative(
+  client: KernelClient,
+  operationId: string,
+  cursor: string,
+  authorization: string,
+): Promise<BulkOutcomePageRead> {
+  const result = await client.libraryOperations({ operationId }).outcomes.get({
+    query: { limit: 20, cursor },
+    headers: { authorization },
+    fetch: { cache: 'no-store', redirect: 'manual' },
+  });
+  if (result.status !== 200 || result.error || !result.data)
+    return { state: failureState(result.status, true), operationId };
+  return { state: 'available', page: result.data };
+}
+
+/** Replay the exact captured native cancellation command after an uncertain result. */
+export function sendCapturedBulkCancelCommand(client: KernelClient, command: CapturedCancelCommand) {
+  return client.libraryOperations({ operationId: command.operationId }).$cancel.post(command.body, {
+    headers: command.headers,
+    fetch: { cache: 'no-store', redirect: 'manual' },
+  });
+}
