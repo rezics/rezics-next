@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
-import type { EditionCommandRead, EditionPublicationIntent } from '../src/content-editions/edition-create';
+import type { EditionCommandRead } from '../src/content-editions/edition-create';
 
 test('publication hands keyboard focus to admitted results and cancels superseded callers', async () => {
   const { Window } = await import(
@@ -30,7 +30,6 @@ test('publication hands keyboard focus to admitted results and cancels supersede
     await import('../src/stories/patterns/edition-publication/edition-publication-fixtures');
   const { m } = await import('../src/paraglide/messages.js');
   const { userEvent } = await import('storybook/test');
-  const user = userEvent.setup({ document: window.document });
   const host = document.createElement('main');
   const outside = document.createElement('button');
   document.body.append(outside, host);
@@ -55,7 +54,7 @@ test('publication hands keyboard focus to admitted results and cancels supersede
   const press = async (label: string) =>
     act(async () => {
       button(label).focus();
-      await user.keyboard('{Enter}');
+      await userEvent.keyboard('{Enter}');
     });
   const focused = () => (document.activeElement?.tagName === 'H2' ? document.activeElement.textContent : null);
   try {
@@ -66,10 +65,11 @@ test('publication hands keyboard focus to admitted results and cancels supersede
     expect(focused()).toBe(m.edition_publication_draft_heading());
     expect(host.querySelector<HTMLInputElement>('[type="checkbox"]')!.checked).toBe(false);
     await act(async () => fixture.controller.refresh());
+    expect(focused()).toBeNull();
     await press(m.edition_publication_accept_review());
     expect(focused()).toBe(m.edition_publication_draft_heading());
     expect(button(m.edition_publication_publish()).disabled).toBe(true);
-    await act(async () => user.click(host.querySelector('[type="checkbox"]')!));
+    await act(async () => userEvent.click(host.querySelector('[type="checkbox"]')!));
     await press(m.edition_publication_publish());
     expect(focused()).toBe(m.edition_publication_published_heading());
     expect(fixture.calls.filter((call) => call.path.endsWith(':publish'))).toHaveLength(1);
@@ -78,13 +78,9 @@ test('publication hands keyboard focus to admitted results and cancels supersede
       const current = await mount();
       const pending = Promise.withResolvers<EditionCommandRead>();
       const send = current.api.command;
-      let intent!: EditionPublicationIntent;
-      current.api.command = (command) => {
-        intent = command;
-        return pending.promise;
-      };
+      current.api.command = () => pending.promise;
       await press(m.edition_publication_create());
-      const result = await send(intent);
+      const result = await send(current.controller.snapshot().intent!);
       if (cancel === 'focus') outside.focus();
       if (cancel === 'pointer') document.dispatchEvent(new window.Event('pointerdown', { bubbles: true }));
       if (cancel === 'refresh') await act(async () => current.controller.refresh());
@@ -95,7 +91,7 @@ test('publication hands keyboard focus to admitted results and cancels supersede
       if (cancel === 'focus') expect(document.activeElement).toBe(outside);
     }
     await mount();
-    await act(async () => user.click(button(m.edition_publication_create())));
+    await act(async () => userEvent.click(button(m.edition_publication_create())));
     expect(focused()).toBeNull();
   } finally {
     await act(async () => root.unmount());
