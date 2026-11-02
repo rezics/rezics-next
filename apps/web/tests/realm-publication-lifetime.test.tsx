@@ -218,22 +218,36 @@ describe('Complete Realm publication original caller lifetime', () => {
     const { AuthoringDepartureState } = await import('../src/threads/authoring-departure');
     const { createPublicationDraft } = await import('../src/community/publication-subject-picker');
     const calls: Write['input'][] = [];
-    const draft = createPublicationDraft(realmId, async (input) => {
-      calls.push(structuredClone(input));
-      return { kind: 'unavailable' as const };
-    }, () => undefined, subjects);
-    draft.connect(); draft.choose(target());
-    await draft.change('publish'); const exact = calls[0];
+    const draft = createPublicationDraft(
+      realmId,
+      async (input) => {
+        calls.push(structuredClone(input));
+        return { kind: 'unavailable' as const };
+      },
+      () => undefined,
+      subjects,
+    );
+    draft.connect();
+    draft.choose(target());
+    await draft.change('publish');
+    const exact = calls[0];
     const owner = new AuthoringDepartureState();
-    owner.register({ needsDecision: () => !!draft.getSnapshot().target, unresolved: () => true, discard: () => undefined,
-      leave: draft.retire });
+    owner.register({
+      needsDecision: () => !!draft.getSnapshot().target,
+      unresolved: () => true,
+      discard: () => undefined,
+      leave: draft.retire,
+    });
     const staying = owner.block('/realm', '/next', null);
-    owner.stay(); expect(await staying).toBe(true);
+    owner.stay();
+    expect(await staying).toBe(true);
     expect(draft.getSnapshot().target).toEqual(target());
     await draft.retry();
     expect(calls[1]).toEqual(exact);
     const leaving = owner.block('/realm', '/next', null);
-    owner.leave(); expect(draft.getSnapshot().target).toBeNull(); expect(await leaving).toBe(false);
+    owner.leave();
+    expect(draft.getSnapshot().target).toBeNull();
+    expect(await leaving).toBe(false);
   });
 
   test('healthy renders keep the draft and read the current authoritative shelf head', async () => {

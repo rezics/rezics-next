@@ -170,7 +170,16 @@ export function usePublicationControls(
   useAuthoringDeparture(
     unresolved || (!!state.target && state.outcome?.kind !== 'saved'),
     unresolved,
-    JSON.stringify([realmId, reader, locale, draft.id, state.target?.id, state.action, state.outcome?.kind, state.busy]),
+    JSON.stringify([
+      realmId,
+      reader,
+      locale,
+      draft.id,
+      state.target?.id,
+      state.action,
+      state.outcome?.kind,
+      state.busy,
+    ]),
     undefined,
     draft.retire,
   );
