@@ -25,11 +25,8 @@ import {
 import { createSubjectIndexer } from './indexer.ts';
 import { createSearchWriterGuard } from './writer-guard.ts';
 import type { SubjectListingSource, SubjectSource } from './source.ts';
-import { searchConsumerName } from './consumer-name.ts';
 
-export function subjectConsumer(prefix: string, generation: number): string {
-  return searchConsumerName(prefix, generation, 'subjects');
-}
+export { subjectConsumer } from './consumer-name.ts';
 
 export async function startSearchIndexing(options: {
   pool: Pool;

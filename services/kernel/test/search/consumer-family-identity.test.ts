@@ -1,6 +1,5 @@
 import { expect, test } from 'bun:test';
-import { discoveryConsumer } from '../../src/search/generations.ts';
-import { subjectConsumer } from '../../src/search/runner.ts';
+import { discoveryConsumer, subjectConsumer } from '../../src/search/consumer-name.ts';
 
 const native = (name: string) => name.length <= 63 && /^[a-z][a-z0-9_]{0,62}/.exec(name)?.[0] === name;
 const near = 'a'.repeat(45);

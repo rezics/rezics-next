@@ -38,3 +38,11 @@ export function searchConsumerName(prefix: string, generation: number, family: S
   if (!isNativeConsumerName(consumer)) throw new RangeError('consumer name is invalid');
   return consumer;
 }
+
+export function subjectConsumer(prefix: string, generation: number): string {
+  return searchConsumerName(prefix, generation, 'subjects');
+}
+
+export function discoveryConsumer(prefix: string, generation: number): string {
+  return searchConsumerName(prefix, generation, 'discovery');
+}
