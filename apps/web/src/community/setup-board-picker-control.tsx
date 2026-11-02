@@ -192,10 +192,8 @@ export function SetupBoardPicker({
                 className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
                 disabled={disabled}
                 onClick={(event) =>
-                  pageAction(
-                    event.detail,
-                    shown.status !== 'ready' && shown.status !== 'loading',
-                    () => pager.retry(expected),
+                  pageAction(event.detail, shown.status !== 'ready' && shown.status !== 'loading', () =>
+                    pager.retry(expected),
                   )
                 }
               >
@@ -207,7 +205,9 @@ export function SetupBoardPicker({
                   variant="outline"
                   className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
                   disabled={disabled}
-                  onClick={(event) => pageAction(event.detail, shown.canRestart === true, () => pager.restart(expected))}
+                  onClick={(event) =>
+                    pageAction(event.detail, shown.canRestart === true, () => pager.restart(expected))
+                  }
                 >
                   {m.space_setup_board_choice_restart()}
                 </Button>

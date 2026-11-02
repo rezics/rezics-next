@@ -65,11 +65,13 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
       keyboardPosition.current = null;
     }
   }, [disabled, page, picker, state.query]);
-  const pageAction = (detail: number, cursor: string | undefined, action: () => boolean | void, mouseAccepted?: () => void) => {
-    const pending =
-      detail === 0
-        ? { picker, query: state.query, cursor, version: searchVersion + 1 }
-        : null;
+  const pageAction = (
+    detail: number,
+    cursor: string | undefined,
+    action: () => boolean | void,
+    mouseAccepted?: () => void,
+  ) => {
+    const pending = detail === 0 ? { picker, query: state.query, cursor, version: searchVersion + 1 } : null;
     keyboardPosition.current = pending;
     const accepted = action();
     if (pending && (accepted === false || picker.searchVersion() !== pending.version)) keyboardPosition.current = null;
@@ -279,7 +281,8 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
                       pageAction(
                         event.detail,
                         undefined,
-                        () => picker.restartSearch({ query: state.query, cursor: page.cursor!, version: searchVersion }),
+                        () =>
+                          picker.restartSearch({ query: state.query, cursor: page.cursor!, version: searchVersion }),
                         () => queryInput.current?.focus(),
                       )
                     }
