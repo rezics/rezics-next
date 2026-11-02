@@ -4,7 +4,6 @@ import type { Readable } from 'node:stream';
 import type { Database } from 'bun:sqlite';
 import { migrate } from './db.ts';
 import { ensureFlow, type FlowEvent } from './flow.ts';
-import { ensureLandingQueue } from './land.ts';
 import { lifecycleMetrics } from './lifecycle-metrics.ts';
 import { formatLifecycleMetrics } from './report.ts';
 import { listOpenToolIncidents } from './tool-incidents.ts';
@@ -390,7 +389,6 @@ export async function renderHourlyEfficiencyReport(
   const bucket = options.bucket ? parseUtcHour(options.bucket) : completedUtcHour(options.now);
   const flowAvailable = hasTable(db, 'flow_events');
   if (flowAvailable) ensureFlow(db);
-  if (hasTable(db, 'landing_queue')) ensureLandingQueue(db);
   const events = hourEvents(db, bucket, flowAvailable);
   const asOf = options.now ?? Date.now();
   const metrics = lifecycleMetrics(db, asOf);
