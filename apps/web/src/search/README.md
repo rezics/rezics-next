@@ -73,7 +73,10 @@ explicit sort value.
 Local Recent keeps exact query text within global Search's 512 UTF-8 bytes or native Recent's 256 UTF-16-unit bound,
 never truncates, and leaves longer valid global queries local-only so they cannot block native synchronization.
 Recent history reads at most two 20-row pages for its 32-row view; each nonterminal page must contain 20 rows, and
-malformed continuations keep accepted local history and pending changes until a fresh traversal succeeds. Failed
+malformed continuations keep accepted local history and pending changes until a fresh traversal succeeds. A native
+page is admitted only when every row matches the kernel entry, revision, date, identity and display contract; a present
+query destination is that row's own scope path with the authored query and language parameters, never another route,
+identity or origin, and never a reconstructed label or followed URL. Failed
 local writes remain in the memory fallback until a write succeeds; observed durable removals and
 `localStorage.clear()` invalidate cached durable buckets, including inactive ones, while account labels remain
 native-hydrated. Keyboard removal focuses the next available row action, including one newly shown at the 5/32-row

@@ -39,7 +39,7 @@ mock.module('../src/search/recent', () => ({
         revision,
         lastUsed,
         entry: pending.change.entry,
-        display: { name: 'Saved search', href: '/search?q=saved', avatar: null },
+        display: { name: 'Saved search', href: `/search?q=${encodeURIComponent('Saved search')}`, avatar: null },
       });
     return { ok: true, value: { id, revision, lastUsed } };
   },
@@ -95,7 +95,7 @@ test('same-account session replacement retires late work and resumes its pending
       revision,
       lastUsed: '2026-11-02T00:00:00.000Z',
       entry: { kind: 'query', text: 'Current native history' },
-      display: { name: 'Current native history', href: '/search?q=current', avatar: null },
+      display: { name: 'Current native history', href: `/search?q=${encodeURIComponent('Current native history')}`, avatar: null },
     },
   ];
   writes = [];
@@ -130,7 +130,7 @@ test('same-account session replacement retires late work and resumes its pending
             revision: 4,
             lastUsed: '2026-11-01T00:00:00.000Z',
             entry: { kind: 'query', text: 'Stale old session' },
-            display: { name: 'Stale old session', href: '/search?q=stale', avatar: null },
+            display: { name: 'Stale old session', href: `/search?q=${encodeURIComponent('Stale old session')}`, avatar: null },
           },
         ],
       },

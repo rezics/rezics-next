@@ -10,6 +10,7 @@ import {
   type RecentSyncAdapter,
 } from './recent-history';
 import { createRecentPageProgress, RECENT_HISTORY_READ_PAGE_LIMIT } from './recent-page-progress';
+import { admitRecentPage, recentItemAction } from './recent-response';
 import type { RecentEntry as NativeEntry, RecentItem, RecentPage, Pending } from './recent';
 import { admitRecentJournal, freshRecentJournal, type RecentJournal } from './recent-journal';
 
@@ -69,6 +70,7 @@ export function nativeRecentEntry(entry: RecentEntry): NativeEntry | undefined {
 }
 export function localRecentEntry(item: RecentItem): RecentEntry {
   const ref = item.entry.scope;
+  const action = recentItemAction(item);
   const scope = ref
     ? {
         kind:
@@ -79,7 +81,7 @@ export function localRecentEntry(item: RecentItem): RecentEntry {
               : ('Collection' as const),
         id: ref.kind === 'route' ? ref.route : ref.id,
         name: item.display?.name ?? '',
-        ...(item.display ? { searchAction: item.display.href.split('?')[0]! } : {}),
+        ...(action ? { searchAction: action } : {}),
       }
     : undefined;
   const query = item.entry.kind === 'query' ? item.entry.text : '';
@@ -211,10 +213,12 @@ export function createRecentSearchSyncAdapter(options: RecentSearchSyncOptions):
       live(signal);
       if (response.accountId !== accountId || !response.page)
         throw new RecentSyncError(response.code === 'stale_cursor' ? 'conflict' : 'unavailable');
-      if (revision !== undefined && revision !== response.page.revision) throw new RecentSyncError('conflict');
-      revision = response.page.revision;
-      if (!progress.accept(response.page)) throw new RecentSyncError('unavailable');
-      cursor = response.page.next ?? undefined;
+      const page = admitRecentPage(response.page);
+      if (!page) throw new RecentSyncError('unavailable');
+      if (revision !== undefined && revision !== page.revision) throw new RecentSyncError('conflict');
+      revision = page.revision;
+      if (!progress.accept(page)) throw new RecentSyncError('unavailable');
+      cursor = page.next ?? undefined;
       if (!cursor || progress.rows.length >= RECENT_HISTORY_LIMIT)
         return { rows: progress.rows.slice(0, RECENT_HISTORY_LIMIT), revision: revision! };
     }
