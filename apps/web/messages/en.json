@@ -4575,5 +4575,8 @@
   "library_copies_address_recovery": "Recover Copies address",
   "library_copies_address_clear": "Clear selector and show all copies",
   "library_copies_address_restart": "Restart from the first page",
-  "library_copies_address_cursor_restarted": "This page position is no longer valid. The first page of the same Copies view is shown."
+  "library_copies_address_cursor_restarted": "This page position is no longer valid. The first page of the same Copies view is shown.",
+  "access_leave_title": "Leave access changes?",
+  "access_leave_unsaved": "Your access changes have not been saved. Stay to keep editing, or leave to discard them.",
+  "access_leave_pending": "An access change has not been reconciled. Stay to keep its exact retry. Leaving does not cancel or repeat the server operation."
 }

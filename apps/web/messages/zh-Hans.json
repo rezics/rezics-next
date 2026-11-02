@@ -4540,5 +4540,8 @@
   "library_copies_address_recovery": "修正副本地址",
   "library_copies_address_clear": "清除选择并显示全部副本",
   "library_copies_address_restart": "从第一页重新开始",
-  "library_copies_address_cursor_restarted": "此分页位置已失效。当前显示同一副本视图的第一页。"
+  "library_copies_address_cursor_restarted": "此分页位置已失效。当前显示同一副本视图的第一页。",
+  "access_leave_title": "离开访问权限更改？",
+  "access_leave_unsaved": "访问权限更改尚未保存。留下可继续编辑，离开将丢弃更改。",
+  "access_leave_pending": "访问权限更改的结果尚未核实。留下可重试原操作。离开不会取消或重复服务器操作。"
 }

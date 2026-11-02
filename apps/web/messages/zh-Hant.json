@@ -4540,5 +4540,8 @@
   "library_copies_address_recovery": "修正副本網址",
   "library_copies_address_clear": "清除選擇並顯示全部副本",
   "library_copies_address_restart": "從第一頁重新開始",
-  "library_copies_address_cursor_restarted": "此分頁位置已失效。目前顯示同一副本檢視的第一頁。"
+  "library_copies_address_cursor_restarted": "此分頁位置已失效。目前顯示同一副本檢視的第一頁。",
+  "access_leave_title": "離開存取權限變更？",
+  "access_leave_unsaved": "存取權限變更尚未儲存。留下可繼續編輯，離開將捨棄變更。",
+  "access_leave_pending": "存取權限變更的結果尚未確認。留下可重試原操作。離開不會取消或重複伺服器操作。"
 }

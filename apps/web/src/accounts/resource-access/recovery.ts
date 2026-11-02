@@ -6,6 +6,7 @@ export type EditorState = {
   page: AccessState;
   phase: 'idle' | WriteResult['status'];
   busy: boolean;
+  reconciling: boolean;
   pending: Change | OwnerTransfer | null;
 };
 
@@ -20,7 +21,7 @@ export class AccessRecovery {
     page: AccessState,
     private io: AccessIO,
   ) {
-    this.state = { page, phase: 'idle', busy: false, pending: null };
+    this.state = { page, phase: 'idle', busy: false, reconciling: false, pending: null };
   }
   snapshot = () => this.state;
   /** Effect replay may reattach this controller, but never its old continuations. */
@@ -32,10 +33,14 @@ export class AccessRecovery {
     }
     return this.dispose;
   };
-  dispose = () => {
+  /** Departure retires local continuations without cancelling or replaying the dispatched command. */
+  retire = () => {
     this.active = false;
     this.generation++;
-    this.request.abort();
+  };
+  dispose = () => {
+    this.retire();
+    if (!this.state.pending) this.request.abort();
     // A retired write may still commit. Only explicit retry may resolve its exact command.
     this.state = {
       ...this.state,
@@ -43,6 +48,13 @@ export class AccessRecovery {
       busy: false,
       phase: this.state.busy && this.state.pending ? 'uncertain' : this.state.phase,
     };
+  };
+  /** A deliberate local replacement starts fresh without replaying the abandoned command. */
+  abandon = () => {
+    this.retire();
+    this.request = new AbortController();
+    this.active = true;
+    this.update({ pending: null, busy: false, reconciling: false, phase: 'idle' });
   };
   private owns(generation: number) {
     return this.active && generation === this.generation;
@@ -110,9 +122,10 @@ export class AccessRecovery {
     this.update({
       page: { status: 'loading' },
       phase: result.status,
+      reconciling: true,
       pending: result.status === 'uncertain' || result.status === 'preparing' ? pending : null,
     });
     const page = current ?? (await this.current());
-    if (this.owns(generation)) this.update({ page, busy: false });
+    if (this.owns(generation)) this.update({ page, busy: false, reconciling: false });
   }
 }

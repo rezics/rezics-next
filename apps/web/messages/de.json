@@ -4540,5 +4540,8 @@
   "library_copies_address_recovery": "Exemplaradresse wiederherstellen",
   "library_copies_address_clear": "Auswahl löschen und alle Exemplare anzeigen",
   "library_copies_address_restart": "Bei der ersten Seite neu starten",
-  "library_copies_address_cursor_restarted": "Diese Seitenposition ist nicht mehr gültig. Die erste Seite derselben Exemplaransicht wird angezeigt."
+  "library_copies_address_cursor_restarted": "Diese Seitenposition ist nicht mehr gültig. Die erste Seite derselben Exemplaransicht wird angezeigt.",
+  "access_leave_title": "Zugriffsänderungen verlassen?",
+  "access_leave_unsaved": "Deine Zugriffsänderungen wurden noch nicht gespeichert. Bleibe, um weiterzubearbeiten, oder verlasse die Seite, um sie zu verwerfen.",
+  "access_leave_pending": "Eine Zugriffsänderung wurde noch nicht abgeglichen. Bleibe, um denselben Vorgang erneut versuchen zu können. Beim Verlassen wird der Servervorgang weder abgebrochen noch wiederholt."
 }

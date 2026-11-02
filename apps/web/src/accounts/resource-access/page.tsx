@@ -1,3 +1,5 @@
+import { AccessDeparture, useAccessDraft } from './departure';
+import { AuthoringDepartureBoundary } from '../../threads/authoring-departure';
 import { recipientRequest } from './request';
 import { OwnerTransferForm, resourceLabel, IdentityDetails } from './owner-transfer.tsx';
 import { transferableOwner } from './owner-transfer.ts';
@@ -165,6 +167,10 @@ function useRecipientLookup(io: AccessIO) {
     error,
     setError,
     lookup,
+    retire() {
+      generation.current++;
+      requestAbort.current?.abort();
+    },
     changeHandle(value: string) {
       invalidate();
       setHandle(value);
@@ -192,11 +198,14 @@ function GrantForm({
   const [kind, setKind] = useState<'role' | 'direct'>(grant?.kind ?? 'role');
   const [role, setRole] = useState(grant?.role ?? page.roles.find((role) => role.delegable)?.id ?? '');
   const [action, setAction] = useState(grant?.actions[0] ?? page.actions[0] ?? '');
-  const { recipient, handle, identity, finding, error, setError, lookup, changeHandle, changeRecipient } =
+  const { recipient, handle, identity, finding, error, setError, lookup, retire, changeHandle, changeRecipient } =
     useRecipientLookup(io);
   const [groupRole, setGroupRole] = useState<'owner' | 'member'>('member');
   const [startsAt, setStartsAt] = useState(localDate(grant?.startsAt ?? null));
   const [endsAt, setEndsAt] = useState(localDate(grant?.endsAt ?? null));
+  const signature = JSON.stringify([kind, role, action, recipient, handle, identity, groupRole, startsAt, endsAt]);
+  const [original] = useState(signature);
+  useAccessDraft(signature, signature !== original, retire);
   const submit = (event: FormEvent) => {
     event.preventDefault();
     const valid = interval(startsAt, endsAt);
@@ -401,7 +410,26 @@ export function ResourceAccessPage({ initial, io }: { initial: AccessState; io: 
   // A loader's resource and complete acting authority own all controller and form state.
   const scope =
     initial.status === 'ready' ? JSON.stringify([initial.page.resource, initial.page.authority]) : initial.status;
-  return <ResourceAccessEditor key={scope} initial={initial} io={io} />;
+  const [lifetime, setLifetime] = useState({ scope, io, version: 0 });
+  if (lifetime.scope !== scope || lifetime.io !== io) {
+    setLifetime({ scope, io, version: lifetime.version + 1 });
+    return null;
+  }
+  return (
+    <AuthoringDepartureBoundary
+      navigationMessages={{
+        title: m.access_leave_title(),
+        unsaved: m.access_leave_unsaved(),
+        pending: m.access_leave_pending(),
+        discardTitle: m.access_leave_title(),
+        discardUnsaved: m.access_leave_unsaved(),
+        discardPending: m.access_leave_pending(),
+        discardAction: m.thread_authoring_leave(),
+      }}
+    >
+      <ResourceAccessEditor key={lifetime.version} initial={initial} io={io} />
+    </AuthoringDepartureBoundary>
+  );
 }
 
 function ResourceAccessEditor({ initial, io }: { initial: AccessState; io: AccessIO }) {
@@ -427,297 +455,326 @@ function ResourceAccessEditor({ initial, io }: { initial: AccessState; io: Acces
                 ? m.access_denied()
                 : null;
   return (
-    <main className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6 sm:px-8 sm:py-10">
-      <header className="space-y-2">
-        <PageHeading>{m.access_heading()}</PageHeading>
-        <p className="max-w-2xl text-muted-foreground">{m.access_description()}</p>
-      </header>
-      {notice ? (
-        <p role="status" className="rounded-lg bg-muted p-3">
-          {notice}
-        </p>
-      ) : null}
-      {state.pending ? (
-        <div className="space-y-3">
-          <p className="text-sm text-muted-foreground">{m.access_retry_help()}</p>
-          <Button type="button" disabled={state.busy} onClick={() => void controller.retry()}>
-            {m.access_retry_operation()}
-          </Button>
-        </div>
-      ) : null}
-      {!page ? (
-        <section aria-busy={state.busy || state.page.status === 'loading'} className="space-y-4">
-          <p role={state.page.status === 'unavailable' ? 'alert' : 'status'}>
-            {state.page.status === 'denied'
-              ? m.access_denied()
-              : state.page.status === 'loading'
-                ? m.access_loading()
-                : state.page.status === 'preparing'
-                  ? m.access_preparing()
-                  : m.access_unavailable()}
-          </p>
-          {state.page.status !== 'loading' ? (
-            <Button type="button" variant="outline" disabled={state.busy} onClick={() => void controller.reload()}>
-              {m.access_reload()}
-            </Button>
-          ) : null}
-        </section>
-      ) : (
-        <>
-          <section className="min-w-0 space-y-2 [overflow-wrap:anywhere]" aria-label={m.access_resource()}>
-            <h2 className="text-lg font-semibold">{resourceLabel(page.resource.type)}</h2>
-            <p className="text-sm">
-              {m.access_acting_as({
-                name: identityName(page.identities.find((item) => item.id === page.authority.accountId)),
-              })}
-            </p>
-            {page.authority.principalId ? (
-              <p className="text-sm text-muted-foreground">
-                {m.access_delegated_by({
-                  name: identityName(page.identities.find((item) => item.id === page.authority.principalId)),
-                })}
-              </p>
-            ) : null}
-            <p className="text-sm text-muted-foreground">{m.access_authority_help()}</p>
-            <IdentityDetails
-              entries={[
-                [m.access_identity_resource_id(), page.resource.id],
-                [m.access_identity_type(), page.resource.type],
-                [m.access_identity_route(), page.resource.route],
-                [m.access_identity_acting_id(), page.authority.accountId],
-                ...(page.authority.principalId
-                  ? [[m.access_identity_principal_id(), page.authority.principalId] as const]
-                  : []),
-              ]}
-            />
-          </section>
-          {page.mutationState === 'realm_guard_unavailable' ? (
-            <p role="status" className="rounded-lg bg-muted p-4">
-              {m.access_realm_guard()}
+    <AccessDeparture
+      unresolved={state.page.status !== 'denied' && (!!state.pending || state.reconciling)}
+      retire={controller.retire}
+      abandon={controller.abandon}
+    >
+      {(move) => (
+        <main className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6 sm:px-8 sm:py-10">
+          <header className="space-y-2">
+            <PageHeading>{m.access_heading()}</PageHeading>
+            <p className="max-w-2xl text-muted-foreground">{m.access_description()}</p>
+          </header>
+          {notice ? (
+            <p role="status" className="rounded-lg bg-muted p-3">
+              {notice}
             </p>
           ) : null}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-xl font-semibold">{m.access_current_grants()}</h2>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={state.busy}
-                onClick={() => {
-                  setForm(null);
-                  setTransfer(null);
-                  void controller.reload();
-                }}
-              >
-                {m.access_reload()}
+          {state.pending ? (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">{m.access_retry_help()}</p>
+              <Button type="button" disabled={state.busy} onClick={() => void controller.retry()}>
+                {m.access_retry_operation()}
               </Button>
-              {page.mutationState === 'ready' &&
-              (page.actions.length > 0 || page.roles.some((item) => item.delegable)) ? (
-                <Button
-                  type="button"
-                  disabled={state.busy || !!state.pending}
-                  onClick={() => {
-                    setTransfer(null);
-                    setForm('new');
-                  }}
-                >
-                  {m.access_add_grant()}
+            </div>
+          ) : null}
+          {!page ? (
+            <section aria-busy={state.busy || state.page.status === 'loading'} className="space-y-4">
+              <p role={state.page.status === 'unavailable' ? 'alert' : 'status'}>
+                {state.page.status === 'denied'
+                  ? m.access_denied()
+                  : state.page.status === 'loading'
+                    ? m.access_loading()
+                    : state.page.status === 'preparing'
+                      ? m.access_preparing()
+                      : m.access_unavailable()}
+              </p>
+              {state.page.status !== 'loading' ? (
+                <Button type="button" variant="outline" disabled={state.busy} onClick={() => void controller.reload()}>
+                  {m.access_reload()}
                 </Button>
               ) : null}
-            </div>
-          </div>
-          {transfer &&
-          !state.busy &&
-          !state.pending &&
-          page.grants.some(
-            (grant) =>
-              grant.subject.kind === 'account' &&
-              transfer.subject.kind === 'account' &&
-              grant.subject.id === transfer.subject.id &&
-              grant.role === transfer.role &&
-              grant.valid === transfer.valid,
-          ) ? (
-            <OwnerTransferForm
-              page={page}
-              grant={transfer}
-              io={io}
-              onCancel={() => setTransfer(null)}
-              onConfirm={(input) => {
-                setTransfer(null);
-                void controller.submitTransfer(input);
-              }}
-            />
-          ) : null}
-          {form !== null && !state.busy && !state.pending ? (
-            <GrantForm
-              key={JSON.stringify([
-                page.resource.id,
-                page.resource.route,
-                page.resource.type,
-                page.authority.accountId,
-                page.authority.clientId,
-                page.authority.principalId,
-                form === 'new' ? 'new' : [form.subject, form.valid, form.role, form.actions],
-              ])}
-              page={page}
-              grant={form === 'new' ? null : form}
-              io={io}
-              onCancel={() => setForm(null)}
-              onSubmit={(change) => {
-                setForm(null);
-                void controller.submit(change);
-              }}
-            />
-          ) : null}
-          {page.grants.length === 0 ? (
-            <p role="status" className="py-6 text-muted-foreground">
-              {m.access_empty()}
-            </p>
+            </section>
           ) : (
-            <ul className="space-y-2">
-              {page.grants.map((grant, index) => {
-                const subject = grant.subject;
-                const identity =
-                  subject.kind === 'account' || subject.kind === 'organization'
-                    ? page.identities.find((identity) => identity.id === subject.id)
-                    : undefined;
-                return (
-                  <ContentItem
-                    key={index}
-                    className="p-3 sm:p-4 [&_[data-content-item-slot=title]]:line-clamp-none [&_[data-content-item-slot=title]]:[overflow-wrap:anywhere]"
-                    title={subjectTitle(subject, identity)}
-                    headingLevel={3}
-                    metadata={grant.kind === 'role' ? roleName(grant.role!) : m.access_direct_action()}
-                    preview={
-                      <>
-                        <p className="break-words text-muted-foreground">
-                          {grant.actions.map(actionName).join(', ') || m.access_role_unavailable()}
-                        </p>
-                        <p className="text-muted-foreground">
-                          {m.access_valid_interval({
-                            start: dateLabel(grant.startsAt, m.access_no_start()),
-                            end: dateLabel(grant.endsAt, m.access_no_end()),
-                          })}
-                        </p>
-                        <IdentityDetails
-                          entries={[
-                            ...(subject.kind !== 'active_accounts'
-                              ? [[m.access_identity_subject_id(), subject.id] as const]
-                              : []),
-                            ...(grant.role ? [[m.access_named_role(), grant.role] as const] : []),
-                            [m.access_identity_valid(), grant.valid],
-                          ]}
-                        />
-                      </>
+            <>
+              <section className="min-w-0 space-y-2 [overflow-wrap:anywhere]" aria-label={m.access_resource()}>
+                <h2 className="text-lg font-semibold">{resourceLabel(page.resource.type)}</h2>
+                <p className="text-sm">
+                  {m.access_acting_as({
+                    name: identityName(page.identities.find((item) => item.id === page.authority.accountId)),
+                  })}
+                </p>
+                {page.authority.principalId ? (
+                  <p className="text-sm text-muted-foreground">
+                    {m.access_delegated_by({
+                      name: identityName(page.identities.find((item) => item.id === page.authority.principalId)),
+                    })}
+                  </p>
+                ) : null}
+                <p className="text-sm text-muted-foreground">{m.access_authority_help()}</p>
+                <IdentityDetails
+                  entries={[
+                    [m.access_identity_resource_id(), page.resource.id],
+                    [m.access_identity_type(), page.resource.type],
+                    [m.access_identity_route(), page.resource.route],
+                    [m.access_identity_acting_id(), page.authority.accountId],
+                    ...(page.authority.principalId
+                      ? [[m.access_identity_principal_id(), page.authority.principalId] as const]
+                      : []),
+                  ]}
+                />
+              </section>
+              {page.mutationState === 'realm_guard_unavailable' ? (
+                <p role="status" className="rounded-lg bg-muted p-4">
+                  {m.access_realm_guard()}
+                </p>
+              ) : null}
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className="text-xl font-semibold">{m.access_current_grants()}</h2>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={state.busy}
+                    onClick={() =>
+                      move(() => {
+                        setForm(null);
+                        setTransfer(null);
+                        void controller.reload();
+                      })
                     }
-                    state={
-                      identity?.state === 'deleted' || grant.state === 'scheduled' ? (
-                        <>
-                          {identity?.state === 'deleted' ? (
-                            <Tombstone shape="row" reason="deleted" labels={{ deleted: m.access_deleted_account() }} />
-                          ) : null}
-                          {grant.state === 'scheduled' ? <p>{m.access_scheduled()}</p> : null}
-                        </>
-                      ) : null
-                    }
-                    actions={
-                      grant.manageable ? (
-                        <Menu
-                          title={m.access_grant_actions()}
-                          trigger={
-                            <Button
-                              size="icon-sm"
-                              variant="ghost"
-                              aria-label={m.access_grant_actions()}
-                              disabled={state.busy || !!state.pending}
-                            >
-                              <EllipsisIcon aria-hidden="true" />
-                            </Button>
-                          }
-                          entries={[
-                            {
-                              type: 'item',
-                              label: m.access_edit_grant(),
-                              onSelect: () => {
-                                setTransfer(null);
-                                setForm(grant);
-                              },
-                            },
-                            ...(io.transfer && transferableOwner(page, grant)
-                              ? [
-                                  {
-                                    type: 'item' as const,
-                                    label: m.access_transfer_owner(),
-                                    onSelect: () => {
+                  >
+                    {m.access_reload()}
+                  </Button>
+                  {page.mutationState === 'ready' &&
+                  (page.actions.length > 0 || page.roles.some((item) => item.delegable)) ? (
+                    <Button
+                      type="button"
+                      disabled={state.busy || !!state.pending}
+                      onClick={() =>
+                        move(() => {
+                          setTransfer(null);
+                          setForm('new');
+                        })
+                      }
+                    >
+                      {m.access_add_grant()}
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+              {transfer &&
+              !state.busy &&
+              !state.pending &&
+              page.grants.some(
+                (grant) =>
+                  grant.subject.kind === 'account' &&
+                  transfer.subject.kind === 'account' &&
+                  grant.subject.id === transfer.subject.id &&
+                  grant.role === transfer.role &&
+                  grant.valid === transfer.valid,
+              ) ? (
+                <OwnerTransferForm
+                  page={page}
+                  grant={transfer}
+                  io={io}
+                  onCancel={() => move(() => setTransfer(null))}
+                  onConfirm={(input) => {
+                    setTransfer(null);
+                    void controller.submitTransfer(input);
+                  }}
+                />
+              ) : null}
+              {form !== null && !state.busy && !state.pending ? (
+                <GrantForm
+                  key={JSON.stringify([
+                    page.resource.id,
+                    page.resource.route,
+                    page.resource.type,
+                    page.authority.accountId,
+                    page.authority.clientId,
+                    page.authority.principalId,
+                    form === 'new' ? 'new' : [form.subject, form.valid, form.role, form.actions],
+                  ])}
+                  page={page}
+                  grant={form === 'new' ? null : form}
+                  io={io}
+                  onCancel={() => move(() => setForm(null))}
+                  onSubmit={(change) => {
+                    setForm(null);
+                    void controller.submit(change);
+                  }}
+                />
+              ) : null}
+              {page.grants.length === 0 ? (
+                <p role="status" className="py-6 text-muted-foreground">
+                  {m.access_empty()}
+                </p>
+              ) : (
+                <ul className="space-y-2">
+                  {page.grants.map((grant, index) => {
+                    const subject = grant.subject;
+                    const identity =
+                      subject.kind === 'account' || subject.kind === 'organization'
+                        ? page.identities.find((identity) => identity.id === subject.id)
+                        : undefined;
+                    return (
+                      <ContentItem
+                        key={index}
+                        className="p-3 sm:p-4 [&_[data-content-item-slot=title]]:line-clamp-none [&_[data-content-item-slot=title]]:[overflow-wrap:anywhere]"
+                        title={subjectTitle(subject, identity)}
+                        headingLevel={3}
+                        metadata={grant.kind === 'role' ? roleName(grant.role!) : m.access_direct_action()}
+                        preview={
+                          <>
+                            <p className="break-words text-muted-foreground">
+                              {grant.actions.map(actionName).join(', ') || m.access_role_unavailable()}
+                            </p>
+                            <p className="text-muted-foreground">
+                              {m.access_valid_interval({
+                                start: dateLabel(grant.startsAt, m.access_no_start()),
+                                end: dateLabel(grant.endsAt, m.access_no_end()),
+                              })}
+                            </p>
+                            <IdentityDetails
+                              entries={[
+                                ...(subject.kind !== 'active_accounts'
+                                  ? [[m.access_identity_subject_id(), subject.id] as const]
+                                  : []),
+                                ...(grant.role ? [[m.access_named_role(), grant.role] as const] : []),
+                                [m.access_identity_valid(), grant.valid],
+                              ]}
+                            />
+                          </>
+                        }
+                        state={
+                          identity?.state === 'deleted' || grant.state === 'scheduled' ? (
+                            <>
+                              {identity?.state === 'deleted' ? (
+                                <Tombstone
+                                  shape="row"
+                                  reason="deleted"
+                                  labels={{ deleted: m.access_deleted_account() }}
+                                />
+                              ) : null}
+                              {grant.state === 'scheduled' ? <p>{m.access_scheduled()}</p> : null}
+                            </>
+                          ) : null
+                        }
+                        actions={
+                          grant.manageable ? (
+                            <Menu
+                              title={m.access_grant_actions()}
+                              trigger={
+                                <Button
+                                  size="icon-sm"
+                                  variant="ghost"
+                                  aria-label={m.access_grant_actions()}
+                                  disabled={state.busy || !!state.pending}
+                                >
+                                  <EllipsisIcon aria-hidden="true" />
+                                </Button>
+                              }
+                              entries={[
+                                {
+                                  type: 'item',
+                                  label: m.access_edit_grant(),
+                                  onSelect: () =>
+                                    move(() => {
+                                      setTransfer(null);
+                                      setForm(grant);
+                                    }),
+                                },
+                                ...(io.transfer && transferableOwner(page, grant)
+                                  ? [
+                                      {
+                                        type: 'item' as const,
+                                        label: m.access_transfer_owner(),
+                                        onSelect: () =>
+                                          move(() => {
+                                            setForm(null);
+                                            setTransfer(grant);
+                                          }),
+                                      },
+                                    ]
+                                  : []),
+                                {
+                                  type: 'destructive',
+                                  label: m.access_revoke(),
+                                  onSelect: () =>
+                                    move(() => {
                                       setForm(null);
-                                      setTransfer(grant);
-                                    },
-                                  },
-                                ]
-                              : []),
-                            { type: 'destructive', label: m.access_revoke(), onSelect: () => setRevoke(grant) },
-                          ]}
-                        />
-                      ) : null
-                    }
-                  />
-                );
-              })}
-            </ul>
+                                      setTransfer(null);
+                                      setRevoke(grant);
+                                    }),
+                                },
+                              ]}
+                            />
+                          ) : null
+                        }
+                      />
+                    );
+                  })}
+                </ul>
+              )}
+              {page.next ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={state.busy || !!state.pending}
+                  onClick={() =>
+                    move(() => {
+                      setForm(null);
+                      setTransfer(null);
+                      void controller.reload(page.next!);
+                    })
+                  }
+                >
+                  {m.access_next_page()}
+                </Button>
+              ) : null}
+            </>
           )}
-          {page.next ? (
-            <Button
-              type="button"
-              variant="outline"
-              disabled={state.busy || !!state.pending}
-              onClick={() => {
-                setForm(null);
-                setTransfer(null);
-                void controller.reload(page.next!);
-              }}
-            >
-              {m.access_next_page()}
-            </Button>
-          ) : null}
-        </>
+          <AlertDialog
+            open={revoke !== null}
+            onOpenChange={(open) => {
+              if (!open) setRevoke(null);
+            }}
+          >
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>{m.access_revoke_title()}</AlertDialogTitle>
+                <AlertDialogDescription>{m.access_revoke_description()}</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>{m.access_cancel()}</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => {
+                    if (!revoke || !page) return;
+                    const { kind, subject, role, actions, valid } = revoke;
+                    if (subject.kind === 'realm') return;
+                    setRevoke(null);
+                    setForm(null);
+                    setTransfer(null);
+                    void controller.submit({
+                      resourceId: page.resource.id,
+                      operation: 'revoke',
+                      kind,
+                      subject,
+                      role,
+                      actions,
+                      valid,
+                    });
+                  }}
+                >
+                  {m.access_revoke()}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </main>
       )}
-      <AlertDialog
-        open={revoke !== null}
-        onOpenChange={(open) => {
-          if (!open) setRevoke(null);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{m.access_revoke_title()}</AlertDialogTitle>
-            <AlertDialogDescription>{m.access_revoke_description()}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{m.access_cancel()}</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (!revoke || !page) return;
-                const { kind, subject, role, actions, valid } = revoke;
-                if (subject.kind === 'realm') return;
-                setRevoke(null);
-                setForm(null);
-                setTransfer(null);
-                void controller.submit({
-                  resourceId: page.resource.id,
-                  operation: 'revoke',
-                  kind,
-                  subject,
-                  role,
-                  actions,
-                  valid,
-                });
-              }}
-            >
-              {m.access_revoke()}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </main>
+    </AccessDeparture>
   );
 }

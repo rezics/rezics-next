@@ -4540,5 +4540,8 @@
   "library_copies_address_recovery": "Recuperar dirección de ejemplares",
   "library_copies_address_clear": "Borrar selector y mostrar todos los ejemplares",
   "library_copies_address_restart": "Reiniciar desde la primera página",
-  "library_copies_address_cursor_restarted": "Esta posición de página ya no es válida. Se muestra la primera página de la misma vista de ejemplares."
+  "library_copies_address_cursor_restarted": "Esta posición de página ya no es válida. Se muestra la primera página de la misma vista de ejemplares.",
+  "access_leave_title": "¿Salir de los cambios de acceso?",
+  "access_leave_unsaved": "Tus cambios de acceso no se han guardado. Quédate para seguir editando o sal para descartarlos.",
+  "access_leave_pending": "Un cambio de acceso aún no se ha conciliado. Quédate para poder reintentar la misma operación. Salir no cancela ni repite la operación del servidor."
 }

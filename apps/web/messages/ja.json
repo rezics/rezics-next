@@ -4540,5 +4540,8 @@
   "library_copies_address_recovery": "コピーのアドレスを修正",
   "library_copies_address_clear": "指定を解除してすべてのコピーを表示",
   "library_copies_address_restart": "最初のページから開く",
-  "library_copies_address_cursor_restarted": "このページ位置は無効になりました。同じコピー一覧の最初のページを表示しています。"
+  "library_copies_address_cursor_restarted": "このページ位置は無効になりました。同じコピー一覧の最初のページを表示しています。",
+  "access_leave_title": "アクセスの変更を破棄して移動しますか？",
+  "access_leave_unsaved": "アクセスの変更は保存されていません。このページに残ると編集を続けられます。移動すると変更は失われます。",
+  "access_leave_pending": "アクセスの変更結果をまだ確認できていません。このページに残ると同じ操作を再試行できます。移動してもサーバーの操作は取り消されず、繰り返されることもありません。"
 }

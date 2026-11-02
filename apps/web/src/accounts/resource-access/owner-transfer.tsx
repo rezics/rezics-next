@@ -1,5 +1,6 @@
+import { useAccessDraft } from './departure';
 import { recipientRequest } from './request';
-import { useEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Field, FieldDescription, FieldLabel } from '@rezics/ui/shadcn/field';
@@ -109,7 +110,7 @@ function OwnerTransferReview({
   const active = useRef(true);
   const request = useRef(0);
   const requestAbort = useRef<AbortController | null>(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
     active.current = true;
     return () => {
       active.current = false;
@@ -117,6 +118,15 @@ function OwnerTransferReview({
       requestAbort.current?.abort();
     };
   }, []);
+  useAccessDraft(
+    JSON.stringify([handle, recipient, review]),
+    handle !== '' || recipient !== null || review !== null,
+    () => {
+      active.current = false;
+      request.current++;
+      requestAbort.current?.abort();
+    },
+  );
   const source = label(page.identities.find((item) => item.id === fromAccountId));
   const target = recipient ? label(recipient) : '';
   const facts: Review['facts'] = [
@@ -213,8 +223,6 @@ function OwnerTransferReview({
           type="button"
           variant="ghost"
           onClick={() => {
-            active.current = false;
-            discard();
             onCancel();
           }}
         >
