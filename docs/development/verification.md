@@ -56,7 +56,8 @@ discarded work to the shared budget. A bounded returned array or request count d
 The control plane follows the same rule.
 
 Do not weaken a growth bound to fit a failure. Distinguish an algorithm defect, a fixture defect and a classifier
-question; route each to its owner.
+question; route each to its owner. A counted `limits` ceiling applies to every repetition at every scale and reports
+the unit, scale, 1-based repetition, value and limit; counted `bounds` continue to compare medians.
 
 Review interfaces in the running product. Compare phone and desktop, both themes, representative content and important
 empty, loading and failure states. Compare shared components across surfaces. Fix the defect class. Automated tests

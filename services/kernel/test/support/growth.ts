@@ -1173,10 +1173,10 @@ async function runGrowthCheck(db: GrowthDatabase, check: GrowthCheck): Promise<G
           })
         : [];
     const attributions = established.length > 0 ? formatStatementAttribution(samples, established) : '';
-    const countDetails = countedFailures.map(({ unit, scale, value, limit, kind }) =>
-      kind === 'limit'
-        ? `counted unit ${unit} at scale ${scale}: value ${value} exceeds limit ${limit}`
-        : `counted unit ${unit} at scale ${scale}: value ${value} violates ${limit} growth bound`,
+    const countDetails = countedFailures.map((failure) =>
+      failure.kind === 'limit'
+        ? `counted unit ${failure.unit} at scale ${failure.scale} repetition ${failure.repetition}: value ${failure.value} exceeds limit ${failure.limit}`
+        : `counted unit ${failure.unit} at scale ${failure.scale}: value ${failure.value} violates ${failure.limit} growth bound`,
     );
     error.message = `${check.name}: ${[error.message, ...details, attributions, ...countDetails]
       .filter(Boolean)

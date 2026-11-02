@@ -447,6 +447,8 @@ before restoring attribution on success or failure. If cleanup also fails, the i
 cause and cleanup failures remain available in its errors.
 CTE buffer costs match producers and scans within nested native plan scopes. When a unique relationship cannot be
 established, producer blocks stay in the total and the unmatched relationship appears in `Cost.limitations`.
+A counted `limits` ceiling applies to every repetition at every scale and reports the unit, scale, 1-based repetition,
+value and limit; counted `bounds` continue to compare medians.
 
 Byte totals are recorded for each captured statement. Request bytes include the UTF-8 statement text whenever an
 unnamed statement is sent and once when a named statement is first prepared on a connection, plus each parameter after

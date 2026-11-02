@@ -45,8 +45,17 @@ test('a counted unit over its numeric limit fails at a scale and identifies its 
     }),
   ).rejects.toMatchObject({
     name: 'GrowthBoundError',
-    message: expect.stringContaining('counted unit candidates at scale 64: value 64 exceeds limit 8'),
+    message: expect.stringContaining('counted unit candidates at scale 64 repetition 1: value 64 exceeds limit 8'),
   });
+}, 60_000);
+
+test('a counted limit rejects an over-limit repetition when its median passes', async () => {
+  await expect(
+    base(async (_database, _scale, repetition) => ({ count: repetition % 3 === 0 ? 9 : 1 }), {
+      read: (value) => ({ candidates: (value as { count: number }).count }),
+      limits: { candidates: 3 },
+    }),
+  ).rejects.toThrow('counted unit candidates at scale 1 repetition 3: value 9 exceeds limit 3');
 }, 60_000);
 
 test('counted growth is checked while rows, blocks and statements satisfy their bounds', async () => {

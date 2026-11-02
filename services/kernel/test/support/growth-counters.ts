@@ -19,13 +19,14 @@ export type CountedCheck<T = unknown> = {
 export type CountedSample = Readonly<
   Record<string, { readonly value: number; readonly repetitions: readonly number[] }>
 >;
-export type CountedViolation = {
+type CountedViolationDetails = {
   readonly unit: string;
   readonly scale: number;
   readonly value: number;
-  readonly limit: number | Bound;
-  readonly kind: 'limit' | 'bound';
 };
+export type CountedViolation =
+  | (CountedViolationDetails & { readonly limit: number; readonly kind: 'limit'; readonly repetition: number })
+  | (CountedViolationDetails & { readonly limit: Bound; readonly kind: 'bound' });
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -190,8 +191,9 @@ export function countedViolations(
     const limit = check.limits?.[name];
     if (limit !== undefined)
       for (const sample of samples) {
-        const value = sample.counted[name]!.value;
-        if (value > limit) violations.push({ unit: name, scale: sample.scale, value, limit, kind: 'limit' });
+        for (const [index, value] of sample.counted[name]!.repetitions.entries())
+          if (value > limit)
+            violations.push({ unit: name, scale: sample.scale, repetition: index + 1, value, limit, kind: 'limit' });
       }
     const bound = check.bounds?.[name];
     if (bound === undefined) continue;
