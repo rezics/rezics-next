@@ -213,6 +213,13 @@ test('the actual selected shelf uses the default authorized per-entry action, re
     });
   };
   const outcome = (status: string) => host.querySelectorAll(`[data-selection-outcome="${status}"]`);
+  const retry = async (title: string) => {
+    await act(async () => {
+      host
+        .querySelector<HTMLButtonElement>(`button[aria-label="${m.library_selection_retry_title({ title })}"]`)!
+        .click();
+    });
+  };
   try {
     const page = await readPersonalLibrary({ data: {} });
     if (!page.signedIn) throw new Error('Expected owner page');
@@ -269,13 +276,13 @@ test('the actual selected shelf uses the default authorized per-entry action, re
     expect(unknown.body).toEqual({ state: chosen, revision: 2, incarnationId: id(903) });
     expect(calls.every((call) => call.request.headers.get('authorization') === 'Bearer owner-token')).toBe(true);
     expect(new Set(calls.map((call) => call.request.headers.get('idempotency-key'))).size).toBe(4);
-    await act(async () => {
-      host
-        .querySelector<HTMLButtonElement>(
-          `button[aria-label="${m.library_selection_retry_title({ title: 'Work 3' })}"]`,
-        )!
-        .click();
-    });
+    // A refused replay leaves the original uncertain command recoverable, with its exact identity.
+    mode = 'denied';
+    await retry('Work 3');
+    expect(outcome('unknown')).toHaveLength(1);
+    expect(calls.at(-1)!.request.headers.get('idempotency-key')).toBe(unknown.request.headers.get('idempotency-key'));
+    mode = 'mixed';
+    await retry('Work 3');
     expect(outcome('changed')).toHaveLength(2);
     expect(outcome('unknown')).toHaveLength(0);
     const recovered = calls.at(-1)!;
@@ -321,6 +328,33 @@ test('the actual selected shelf uses the default authorized per-entry action, re
       expect(calls).toHaveLength(count + 1);
       expect(outcome('failed')).toHaveLength(1);
       expect(outcome('not-attempted')).toHaveLength(4);
+      if (refusal === 'closed') {
+        // Recovery uses the captured second target, even after selecting only another entry.
+        await act(async () => {
+          button(m.library_selection_clear()).click();
+        });
+        await act(async () => {
+          host.querySelector<HTMLButtonElement>('[aria-label="Work 5"][aria-pressed]')!.click();
+        });
+        mode = 'success';
+        await retry('Work 2');
+        expect(calls).toHaveLength(count + 2);
+        expect(calls.at(-1)!.request.url).toEndWith(id(2));
+        expect(calls.at(-1)!.body).toEqual({
+          state: chosen,
+          revision: initial[1]!.revision,
+          incarnationId: initial[1]!.incarnationId,
+        });
+        expect(calls.at(-1)!.request.headers.get('idempotency-key')).toBe(initial[1]!.changeKey);
+        expect(outcome('changed')).toHaveLength(1);
+        expect(outcome('not-attempted')).toHaveLength(3);
+        expect(host.textContent).toContain(m.library_selection_count({ count: 1 }));
+        const countBeforeNoop = calls.length;
+        await retry('Work 4');
+        expect(calls).toHaveLength(countBeforeNoop);
+        expect(outcome('unchanged')).toHaveLength(1);
+        expect(maximumActive).toBe(1);
+      }
     }
     signedIn = false;
     mode = 'success';

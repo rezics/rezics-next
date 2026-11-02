@@ -191,6 +191,9 @@ discloses private predicates/facts or grants subject access. Common bulk preview
 filtered or selected population, reject stale selection, prevent replay effects and retain inspectable partial failures.
 This document invents no bulk/export ABI and does not make existing stub factories functional.
 
+Tracked-entry state actions retain unattempted targets for explicit per-entry recovery with their captured state,
+revision, incarnation and command key, independent of later selection; a refused unknown replay keeps its exact intent.
+
 ## Indexed filtering and disclosure
 
 Evaluate a complete identified catalogue observation or private owner observation. Admission covers filter, source

@@ -340,8 +340,8 @@ function SelectionOutcomes({ controls }: { controls: Controls }) {
             <span>
               {outcome.title}: {outcomeLabels[outcome.status]()}
             </span>
-            {outcome.status === 'unknown' &&
-            controls.rows.some((row) => row.entry.subjectId === outcome.subjectId && row.unknownIntent) ? (
+            {(outcome.status === 'unknown' || outcome.status === 'not-attempted') &&
+            controls.canRetryState(outcome.subjectId) ? (
               <Button
                 variant="outline"
                 size="sm"

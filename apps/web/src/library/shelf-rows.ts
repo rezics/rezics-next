@@ -53,6 +53,12 @@ export type ShelfRow = {
   unknownLabelIntent?: ShelfLabelIntent;
 };
 
+type CapturedStateTarget = {
+  intent: ShelfStateIntent;
+  unchanged: boolean;
+  status: ShelfOutcome['status'];
+};
+
 function withoutIncarnation(entry: PersonalLibraryEntry): PersonalLibraryEntry {
   const current = { ...entry };
   delete current.incarnationId;
@@ -113,6 +119,7 @@ export function useShelfRows(
   }, []);
   const labelOperation = useRef<{ id: string; running: boolean } | null>(null);
   const [outcomes, setOutcomes] = useState<ShelfOutcome[]>([]);
+  const stateTargets = useRef(new Map<string, CapturedStateTarget>());
   const [labelOutcomes, setLabelOutcomes] = useState<ShelfLabelOutcome[]>([]);
   const [assignedLabelName, setAssignedLabelName] = useState('');
   const [labelKind, setLabelKind] = useState<ShelfLabelKind>('assign');
@@ -186,7 +193,10 @@ export function useShelfRows(
     });
     currentRows.current = next;
     setRows(next);
-    if (state) setOutcomes([]);
+    if (state) {
+      stateTargets.current.clear();
+      setOutcomes([]);
+    }
     if (label && !currentRows.current.some((row) => row.unknownLabelIntent)) {
       setLabelOutcomes([]);
       setAssignedLabelName('');
@@ -311,6 +321,11 @@ export function useShelfRows(
         return { status: 'failed' };
       }
       if (!result.ok && result.reason !== 'unavailable') {
+        // A refused replay cannot establish whether the earlier, unanswered command committed.
+        if (row.unknownIntent) {
+          patch(intent.subjectId, (current) => ({ ...current, failure: failureOf(result.reason) }));
+          return { status: 'unknown', stop: ['closed', 'denied', 'signed-out'].includes(result.reason) };
+        }
         patch(intent.subjectId, (current) => {
           const next = { ...current };
           delete next.unknownIntent;
@@ -353,6 +368,8 @@ export function useShelfRows(
   };
   const record = (subjectId: string, status: ShelfOutcome['status']) => {
     if (!isCurrent() || !stateCurrent()) return;
+    const target = stateTargets.current.get(subjectId);
+    if (target) target.status = status;
     setOutcomes((current) =>
       current.map((outcome) => (outcome.subjectId === subjectId ? { ...outcome, status } : outcome)),
     );
@@ -380,14 +397,23 @@ export function useShelfRows(
       release();
     }
   };
-  const retryState = async (subjectId: string) => {
+  // Recovery belongs to the captured action, even when the person has selected different rows since it stopped.
+  const recoverableState = (subjectId: string) => {
+    if (!stateCurrent()) return undefined;
     const row = currentRows.current.find((item) => item.entry.subjectId === subjectId);
-    const intent = row?.unknownIntent;
-    if (!row || !intent || !matchesShelfIntent(row.entry, intent) || !stateCurrent()) return;
+    if (!row || row.unknownRemove || row.unknownLabelIntent) return undefined;
+    const target = stateTargets.current.get(subjectId);
+    const intent = row.unknownIntent ?? (target?.status === 'not-attempted' ? target.intent : undefined);
+    if (!intent || !matchesShelfIntent(row.entry, intent)) return undefined;
+    return { intent, unchanged: !row.unknownIntent && !!target?.unchanged };
+  };
+  const retryState = async (subjectId: string) => {
+    const target = recoverableState(subjectId);
+    if (!target) return;
     const release = lock(stateCurrent);
     if (!release) return;
     try {
-      record(subjectId, (await transition(intent)).status);
+      record(subjectId, target.unchanged ? 'unchanged' : (await transition(target.intent)).status);
     } finally {
       release();
     }
@@ -412,6 +438,9 @@ export function useShelfRows(
     }));
     const release = lock(stateCurrent);
     if (!release) return;
+    stateTargets.current = new Map(
+      snapshot.map(({ intent, unchanged }) => [intent.subjectId, { intent, unchanged, status: 'not-attempted' }]),
+    );
     setOutcomes(snapshot.map(({ intent, title }) => ({ subjectId: intent.subjectId, title, status: 'not-attempted' })));
     try {
       for (const { intent, unchanged } of snapshot) {
@@ -747,6 +776,7 @@ export function useShelfRows(
     },
     changeSelectedState,
     retryState,
+    canRetryState: (subjectId: string) => !!recoverableState(subjectId),
     writeAdmitted: stateCurrent(),
     selectionBlocked: selectedRows.some(
       (row) => !!row.unknownIntent || !!row.unknownLabelIntent || !!row.unknownRemove,
