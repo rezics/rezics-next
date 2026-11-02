@@ -471,7 +471,9 @@ function AlbumCorrectionWorkspaceLive({
                     disabled={busy || !enabled}
                     onRemove={() => {
                       if (!lifetime.active() || running.current || !visible || !enabled || draft.command) return;
-                      setDrafts((previous) => changeAlbumSelection(previous, { kind: 'remove', property, target: draft }));
+                      setDrafts((previous) =>
+                        changeAlbumSelection(previous, { kind: 'remove', property, target: draft }),
+                      );
                     }}
                   />
                 )}
@@ -571,7 +573,13 @@ function AlbumCorrectionWorkspaceLive({
 }
 
 /** The pending choice belongs to this local draft, independently of its property and siblings. */
-function AlbumDraftRemoval({ draft, locale, label, disabled, onRemove }: {
+function AlbumDraftRemoval({
+  draft,
+  locale,
+  label,
+  disabled,
+  onRemove,
+}: {
   draft: FactDraft;
   locale: string;
   label: string;
@@ -607,7 +615,8 @@ function AlbumDraftRemoval({ draft, locale, label, disabled, onRemove }: {
     const row = section.current.parentElement!;
     const form = row.closest('form');
     flushSync(() => current.current.onRemove());
-    const selector = 'select:not(:disabled), button:not(:disabled):not([hidden]), input:not(:disabled):not([type="hidden"])';
+    const selector =
+      'select:not(:disabled), button:not(:disabled):not([hidden]), input:not(:disabled):not([type="hidden"])';
     (row.querySelector<HTMLElement>(selector) ?? form?.querySelector<HTMLElement>(selector))?.focus();
   };
   return (

@@ -21,10 +21,14 @@ export function albumDraftPopulated(draft: FactDraft): boolean {
     if (typeof value === 'object') return Object.values(value).some(hasValue);
     return true;
   };
-  const meaningful = (part: Pick<FactDraft['statement'], 'value'>) => part.value.type !== 'value' || hasValue(part.value.content);
+  const meaningful = (part: Pick<FactDraft['statement'], 'value'>) =>
+    part.value.type !== 'value' || hasValue(part.value.content);
   const statement = draft.statement;
   return !!(
-    touched.has(draft) || draft.source || meaningful(statement) || statement.qualifiers?.some(meaningful) ||
+    touched.has(draft) ||
+    draft.source ||
+    meaningful(statement) ||
+    statement.qualifiers?.some(meaningful) ||
     statement.references.some((reference) => reference.parts.some(meaningful))
   );
 }
@@ -41,7 +45,8 @@ export function changeAlbumSelection(drafts: FactDraft[], change: SelectionChang
     }
     case 'remove':
       return current && !current.command && !factLocked(current) && (!change.target || change.target === current)
-        ? drafts.filter((draft) => draft !== current) : drafts;
+        ? drafts.filter((draft) => draft !== current)
+        : drafts;
     case 'revise':
       // A delayed control event must not unseal a command whose delivery is now uncertain.
       if (!current || factLocked(current) || current.source !== change.draft.source) return drafts;
