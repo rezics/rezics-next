@@ -666,7 +666,7 @@ test('Board candidate page stays within its bound as d grows', async () => {
   expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
 }, 90_000);
 
-test.failing.serial(
+test.serial(
   'Concept board creation stays within its bound as boards grow',
   async () => {
     const history = boardHistory(
@@ -678,7 +678,6 @@ test.failing.serial(
     );
     let diagnosticAvailable = true;
     const creationStatuses: number[] = [];
-    // semantic.read-subject.sql reads growing semantic.fact rows and crosses the background block bound.
     const operation = async (_growthDb: GrowthDatabase, _scale: number, repetition: number) => {
       const conceptId = measuredConcepts[repetition];
       if (!conceptId) throw new Error(`No fresh concept was prepared for board creation ${repetition}`);

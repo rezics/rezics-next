@@ -1351,7 +1351,7 @@ idempotent prefix delete, plus one acknowledgement command per account.
   request and already prepared creation/source/target/Realm/participation evidence, without TTL renewal. It is
   checked again on transaction authorization and finalization. Mapping and type proof grant no permission;
   refusal produces no new board, grants, receipt, write basis or outbox event.
-- Growth check: `test/content/board-read-growth.test.ts`: “Concept board creation stays within its bound as boards grow” measures the route wrapper with native Access and is marked expected-failing. `test/semantic/growth-concept-scheme-reference.test.ts` captures the real native caller at
+- Growth check: `test/content/board-read-growth.test.ts`: “Concept board creation stays within its bound as boards grow” measures the route wrapper with native Access. Semantic's current-term subject read is a keyed `current_term_fact` lateral, so unrelated board, Realm and grant history cannot expand that probe. `test/semantic/growth-concept-scheme-reference.test.ts` captures the real native caller at
   `[64,512,4096]`, including native Access and result bytes with a one-connection pool. Compact, expanded imported
   and absent membership retain fixed output while unrelated catalogue and known Concept histories/relations grow.
   `test/content/realm-board-create-native.test.ts` covers real Auth/Realm grants, retained projection lag,
