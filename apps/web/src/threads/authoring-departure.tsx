@@ -294,7 +294,7 @@ function DepartureDialog({
   messages,
 }: {
   navigation: AuthoringDepartureState;
-  messages?: NavigationMessages;
+  messages?: NavigationMessages | undefined;
 }) {
   const stayButton = useRef<HTMLButtonElement>(null);
   const discard = navigation.prompt?.kind === 'discard';

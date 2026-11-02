@@ -407,13 +407,14 @@ function SpaceSetupFormVisit({
       callerRevision,
     ]),
   );
-  useCallerLayoutEffect(
-    () =>
-      caller.subscribe(() => {
-        if (caller.isRetired()) departure.release();
-      }),
-    [caller, departure.release],
-  );
+  useCallerLayoutEffect(() => {
+    const stop = caller.subscribe(() => {
+      if (caller.isRetired()) departure.release();
+    });
+    return () => {
+      stop();
+    };
+  }, [caller, departure.release]);
   useEffect(() => {
     if (conceptSelection?.source === boardChoices && !currentBoardConcept(conceptSelection, realm?.schemeId ?? null)) {
       setConceptSelection(null);
