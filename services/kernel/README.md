@@ -74,12 +74,21 @@ uses its disposable database container; the development dump command uses the lo
 do not set `KERNEL_DATABASE_CONTAINER` retain the `docker run` fallback.
 
 CI and the controller run `bun run derived schema` from this workspace (`bun run --cwd services/kernel derived schema`).
-It checks migration versions, migrates a fresh throwaway PostgreSQL container, and writes `db/schema.sql` plus every
-module dump `db/<module>/schema.sql`, using all current migrations, the pinned PostgreSQL image and the same dump
+It checks migration versions, migrates a throwaway PostgreSQL container, and writes `db/schema.sql` plus every module
+dump `db/<module>/schema.sql`, using all current migrations, the pinned PostgreSQL image and the same dump
 normalization as database checks. The command uses that container's `DATABASE_URL` and `KERNEL_DATABASE_CONTAINER`,
 so an inherited development URL or container is ignored. It does not construct the kernel, read Auth or runtime secrets,
-write the OpenAPI document or client, or touch the development database. `bun run derived` with no arguments still
-regenerates the OpenAPI document and client. Any other argument is rejected before a database starts.
+write the OpenAPI document or client, or touch the development database. Any other argument is rejected before a
+database starts.
+
+Derived generation keeps one throwaway database per checkout in a container labeled with that checkout's cache key.
+It reuses the container only while the pinned PostgreSQL image and migration fingerprint match, and recreates only that
+owned container after a migration change. The container uses temporary storage and is separate from the development
+database. Its metadata and the compiler caches live under the repository's `.temp/` and can be deleted.
+
+The client declaration cache is keyed by checkout and source file inventory under `.temp/`, so content edits reuse
+incremental TypeScript state while file additions or removals get a clean output tree. OpenAPI generation is skipped
+only when the kernel and workspace-package source fingerprint and the current generated contract hash both match.
 
 ## Development search node
 

@@ -1,6 +1,6 @@
 import {
   existsSync,
-  mkdtempSync,
+  lstatSync,
   mkdirSync,
   readFileSync,
   readdirSync,
@@ -9,6 +9,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { dirname, relative, resolve, sep } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
@@ -90,6 +91,30 @@ function publishSqlDeclarations(directory: string): void {
   }
 }
 
+const declarationSourceExtensions = new Set(['.ts', '.tsx', '.mts', '.cts', '.sql', '.json']);
+
+/** Keep emitted files and compiler state stable for content edits, but isolate changes to the source file set. */
+export function clientDeclarationCacheDirectory(
+  repositoryRoot = ROOT,
+  kernelDirectory = KERNEL,
+): string {
+  const sourceRoot = resolve(kernelDirectory, 'src');
+  const files = [...new Bun.Glob('**/*').scanSync({ cwd: sourceRoot })]
+    .filter((file) => declarationSourceExtensions.has(file.slice(file.lastIndexOf('.'))))
+    .sort();
+  const key = createHash('sha256')
+    .update(resolve(repositoryRoot))
+    .update('\0')
+    .update(resolve(kernelDirectory))
+    .update('\0')
+    .update(readFileSync(resolve(ROOT, 'node_modules/typescript/package.json')))
+    .update('\0')
+    .update(files.join('\0'))
+    .digest('hex')
+    .slice(0, 20);
+  return resolve(repositoryRoot, '.temp', `kernel-client-${key}`);
+}
+
 function declarationPath(sourcePath: string, specifier: string): string {
   const path = resolve(dirname(sourcePath), specifier);
   if (path.endsWith('.ts')) return `${path.slice(0, -3)}.d.ts`;
@@ -104,59 +129,72 @@ export function clientCompilerEnvironment(environment: NodeJS.ProcessEnv): NodeJ
   return rest;
 }
 
-export function clientDeclarations(kernelDirectory = KERNEL): Map<string, string> {
-  const temporaryRoot = resolve(ROOT, '.temp');
-  mkdirSync(temporaryRoot, { recursive: true });
-  const temporaryDirectory = mkdtempSync(resolve(temporaryRoot, 'kernel-client-'));
-  try {
-    const compiler = resolve(ROOT, 'node_modules/.bin/tsc');
-    const compilerConfig = resolve(temporaryDirectory, 'tsconfig.json');
-    const modules = resolve(kernelDirectory, 'node_modules');
-    if (existsSync(modules)) symlinkSync(modules, resolve(temporaryDirectory, 'node_modules'), 'dir');
-    writeFileSync(
-      compilerConfig,
-      JSON.stringify({
-        extends: resolve(kernelDirectory, 'tsconfig.json'),
-        compilerOptions: {
-          rootDir: kernelDirectory,
-          outDir: temporaryDirectory,
-          noEmit: false,
-          declaration: true,
-          emitDeclarationOnly: true,
-        },
-        include: [resolve(kernelDirectory, 'src')],
-      }),
-    );
-    const result = spawnSync(compiler, ['-p', compilerConfig, '--runExternalCode'], {
-      cwd: kernelDirectory,
-      // The Reylo project file's directory sets each statement's file tag, so the caller's project must not leak in.
-      env: clientCompilerEnvironment(process.env),
-      encoding: 'utf8',
-    });
-    if (result.error) throw result.error;
-    if (result.status !== 0) throw new Error(`${result.stdout}${result.stderr}`);
-
-    const sourceRoot = resolve(temporaryDirectory, 'src');
-    publishSqlDeclarations(sourceRoot);
-    const pending = ['http/kernel.d.ts', 'http/request.d.ts'];
-    const declarations = new Map<string, string>();
-    while (pending.length) {
-      const key = pending.pop()!;
-      if (declarations.has(key)) continue;
-      const sourcePath = resolve(sourceRoot, key);
-      const content = readFileSync(sourcePath, 'utf8');
-      declarations.set(key, content);
-      for (const specifier of declarationSpecifiers(content).filter((value) => /^\.{1,2}\//.test(value))) {
-        const target = declarationPath(sourcePath, specifier);
-        const targetKey = relative(sourceRoot, target).split(sep).join('/');
-        if (!targetKey.startsWith('../') && !declarations.has(targetKey)) pending.push(targetKey);
-      }
+export function clientDeclarations(
+  kernelDirectory = KERNEL,
+  options: { repositoryRoot?: string; cacheDirectory?: string; compiler?: string } = {},
+): Map<string, string> {
+  const repositoryRoot = resolve(options.repositoryRoot ?? ROOT);
+  const cacheDirectory = resolve(
+    options.cacheDirectory ?? clientDeclarationCacheDirectory(repositoryRoot, kernelDirectory),
+  );
+  const outputDirectory = resolve(cacheDirectory, 'emit');
+  mkdirSync(cacheDirectory, { recursive: true });
+  mkdirSync(outputDirectory, { recursive: true });
+  const compiler = options.compiler ?? resolve(ROOT, 'node_modules/.bin/tsc');
+  const compilerConfig = resolve(cacheDirectory, 'tsconfig.json');
+  const modules = resolve(kernelDirectory, 'node_modules');
+  const linkedModules = resolve(cacheDirectory, 'node_modules');
+  if (existsSync(modules)) {
+    try {
+      lstatSync(linkedModules);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      symlinkSync(modules, linkedModules, 'dir');
     }
-    assertNoServiceImports(declarations, resolve(kernelDirectory, '../..'));
-    return sorted(declarations);
-  } finally {
-    rmSync(temporaryDirectory, { recursive: true, force: true });
   }
+  writeFileSync(
+    compilerConfig,
+    JSON.stringify({
+      extends: resolve(kernelDirectory, 'tsconfig.json'),
+      compilerOptions: {
+        rootDir: kernelDirectory,
+        outDir: outputDirectory,
+        noEmit: false,
+        declaration: true,
+        emitDeclarationOnly: true,
+        incremental: true,
+        tsBuildInfoFile: resolve(cacheDirectory, 'tsconfig.tsbuildinfo'),
+      },
+      include: [resolve(kernelDirectory, 'src')],
+    }),
+  );
+  const result = spawnSync(compiler, ['-p', compilerConfig, '--runExternalCode'], {
+    cwd: kernelDirectory,
+    // The Reylo project file's directory sets each statement's file tag, so the caller's project must not leak in.
+    env: clientCompilerEnvironment(process.env),
+    encoding: 'utf8',
+  });
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error(`${result.stdout}${result.stderr}`);
+
+  const sourceRoot = resolve(outputDirectory, 'src');
+  publishSqlDeclarations(sourceRoot);
+  const pending = ['http/kernel.d.ts', 'http/request.d.ts'];
+  const declarations = new Map<string, string>();
+  while (pending.length) {
+    const key = pending.pop()!;
+    if (declarations.has(key)) continue;
+    const sourcePath = resolve(sourceRoot, key);
+    const content = readFileSync(sourcePath, 'utf8');
+    declarations.set(key, content);
+    for (const specifier of declarationSpecifiers(content).filter((value) => /^\.{1,2}\//.test(value))) {
+      const target = declarationPath(sourcePath, specifier);
+      const targetKey = relative(sourceRoot, target).split(sep).join('/');
+      if (!targetKey.startsWith('../') && !declarations.has(targetKey)) pending.push(targetKey);
+    }
+  }
+  assertNoServiceImports(declarations, repositoryRoot);
+  return sorted(declarations);
 }
 
 export function committedDeclarations(): Map<string, string> {
