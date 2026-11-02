@@ -121,14 +121,20 @@ test('completed creation leaves normally, and caller replacement revokes a chang
   expect(unloadWarns()).toBe(false);
   await page.navigate();
   expect(page.host.textContent).toContain('Destination');
-  // Clear only test storage to start a fresh draft after the completed command.
-  window.sessionStorage.clear();
-  await flush(() => {
-    void page.router.navigate({ to: '/automated/new' });
-  });
-  await page.draft();
-  globalThis.fetch = (() => Promise.resolve(Response.json({ ...session, account_id: operator.id }))) as typeof fetch;
-  await page.navigate();
-  expect(page.host.querySelector('dialog')).toBeNull();
-  expect(page.host.textContent).toContain('Destination');
+  const nativeFetch = globalThis.fetch;
+  for (const replacement of [
+    { ...session, account_id: operator.id },
+    { ...session, scope: [] },
+  ]) {
+    window.sessionStorage.clear();
+    globalThis.fetch = nativeFetch;
+    await flush(() => {
+      void page.router.navigate({ to: '/automated/new' });
+    });
+    await page.draft();
+    globalThis.fetch = (() => Promise.resolve(Response.json(replacement))) as typeof fetch;
+    await page.navigate();
+    expect(page.host.querySelector('dialog')).toBeNull();
+    expect(page.host.textContent).toContain('Destination');
+  }
 });

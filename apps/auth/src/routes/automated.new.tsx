@@ -267,7 +267,7 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
       if (!isCurrent()) return;
       const session = await loadManagementSession();
       if (!isCurrent()) return;
-      if (session.kind !== 'ready' || session.accountId !== accountId) {
+      if (session.kind !== 'ready' || session.accountId !== accountId || !session.scopes.includes('account:manage')) {
         if (session.kind !== 'unavailable') retire();
         setStatus(session.kind === 'unavailable' ? 'unavailable' : 'refused');
         return;
@@ -297,6 +297,8 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
     setConfirmed(false);
     try {
       const result = await reauthenticateAutomated(accountId, email, password, isCurrent);
+      if (!isCurrent()) return;
+      await validateCaller();
       if (!isCurrent()) return;
       if (result) {
         if (result.kind === 'refused') retire();
