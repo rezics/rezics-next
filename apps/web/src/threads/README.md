@@ -35,6 +35,12 @@ This behavior protects against accidental departure. It does not persist drafts 
 tab closure, authentication expiry or reopening the thread. Composer copy describes writing as unsaved and does not
 claim server autosave. The guard does not create, replay or alter a write command or its authority.
 
+Stale-edit recovery previews only the admitted current snapshot without extra reads; Keep editing returns focus to
+the unchanged local body, and only explicit replacement with an available body resets the base and settled command
+intent. The preview uses unavailable image placeholders rather than inventing media authority. A missing or erased
+current body cannot replace the draft. Unknown outcomes retain recovery of the original immutable command.
+The inline edit still inherits native licence and review metadata and offers no separate controls for them.
+
 ## Author erasure caller lifetime
 
 The mounted author-erasure entry binds its admission and command to the current thread, viewer, signed-in session,

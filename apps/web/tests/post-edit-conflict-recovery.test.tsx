@@ -1,0 +1,198 @@
+import { expect, mock, test } from 'bun:test';
+import { createRequire } from 'node:module';
+import { dirname } from 'node:path';
+import { act } from 'react';
+import type { CurrentPost, EditFailure } from '../src/threads/actions';
+
+test('stale editing reviews before replacement, keeps the full correction, and separates unknown outcomes', async () => {
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
+  const window = new Window({ url: 'https://site.test/en/compose' });
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    HTMLFormElement: window.HTMLFormElement,
+    Element: window.Element,
+    Node: window.Node,
+    MutationObserver: window.MutationObserver,
+    ResizeObserver: window.ResizeObserver,
+    getComputedStyle: window.getComputedStyle.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    matchMedia: window.matchMedia.bind(window),
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const previous = new Map(
+    [...Object.keys(globals), 'fetch'].map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
+  );
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  mock.module('cloudflare:workers', () => ({ env: {} }));
+  const { createRoot } = await import('react-dom/client');
+  const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+  const { InlinePostEditor } = await import('../src/threads/composer');
+  const { sessionQuery } = await import('../src/session/query');
+  const { fromPlainText } = await import('@rezics/document');
+  const { m } = await import('../src/paraglide/messages.js');
+  const require = createRequire(createRequire(import.meta.url).resolve('storybook/test'));
+  const { default: userEvent } = await import(require.resolve('@testing-library/user-event'));
+  const user = userEvent.setup({ document: window.document });
+  const requests: string[] = [];
+  Object.defineProperty(globalThis, 'fetch', {
+    configurable: true,
+    writable: true,
+    value: Object.assign(
+      async (url: unknown) => {
+        requests.push(String(url));
+        throw new Error('Unexpected recovery read');
+      },
+      { preconnect() {} },
+    ),
+  });
+  const host = document.createElement('main');
+  document.body.append(host);
+  const root = createRoot(host);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const owner = { state: 'signed-in' as const, subject: 'author', csrfToken: 'original-session' };
+  const localMedia = '0192f3a0-6c1e-7b2a-9d4e-000000000011';
+  const currentMedia = '0192f3a0-6c1e-7b2a-9d4e-000000000012';
+  const bodyWithImage = (text: string, media: string) => {
+    const body = fromPlainText(text, 'blocks');
+    return {
+      ...body,
+      doc: {
+        ...body.doc,
+        content: [...(body.doc.content ?? []), { type: 'image', attrs: { src: media, alt: 'Selected image' } }],
+      },
+    };
+  };
+  const current = {
+    body: bodyWithImage('Admitted current correction', currentMedia),
+    mediaIds: [currentMedia],
+    revisionId: 'current-revision',
+    availability: 'available',
+    licence: 'CC-BY-4.0',
+  } as CurrentPost;
+  const commands: Parameters<React.ComponentProps<typeof InlinePostEditor>['onSubmit']>[0][] = [];
+  let outcome: EditFailure = { ok: false, reason: 'stale', currentPost: current };
+  let cancelled = false;
+  const button = (label: string, scope: ParentNode = document) => {
+    const result = [...scope.querySelectorAll<HTMLButtonElement>('button')].find(
+      (node) => node.textContent?.trim() === label,
+    );
+    expect(result).toBeDefined();
+    return result!;
+  };
+  const click = async (label: string, scope?: ParentNode) => act(async () => user.click(button(label, scope)));
+  const editor = () => host.querySelector<HTMLElement>('.ProseMirror[contenteditable="true"]');
+  const popup = () => document.querySelector<HTMLElement>('[role="alertdialog"]');
+  const settle = async (ready: () => boolean) => {
+    for (let n = 0; n < 180 && !ready(); n++)
+      await act(async () => {
+        await new Promise((resolve) => window.setTimeout(resolve, 10));
+      });
+    expect(ready()).toBe(true);
+  };
+  const mount = async () => {
+    await act(async () => root.render(null));
+    client.setQueryData(sessionQuery.queryKey, owner);
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={client}>
+          <InlinePostEditor
+            initialBody={bodyWithImage('Original writing', localMedia)}
+            initialMediaIds={[localMedia]}
+            revisionId="original-revision"
+            idempotencyKey="original-key"
+            containerId="thread"
+            onSubmit={async (command) => {
+              commands.push(structuredClone(command));
+              return outcome;
+            }}
+            onCancel={() => {
+              cancelled = true;
+            }}
+            onSuccess={() => {
+              throw new Error('Unexpected success');
+            }}
+          />
+        </QueryClientProvider>,
+      ),
+    );
+    await settle(() => !!editor());
+  };
+  try {
+    await mount();
+    await act(async () => {
+      await user.click(editor()!);
+      await user.keyboard(' unsaved correction');
+    });
+    await click(m.thread_edit_save());
+    await click(m.thread_edit_review_current());
+    await settle(() => !!popup());
+    expect(popup()!.textContent).toContain('Admitted current correction');
+    expect(popup()!.textContent).toContain(current.licence);
+    expect(editor()!.textContent).toContain('unsaved correction');
+    await settle(() => document.activeElement === button(m.thread_edit_keep_editing(), popup()!));
+    await click(m.thread_edit_keep_editing(), popup()!);
+    await settle(() => !popup() && document.activeElement === editor());
+    await click(m.thread_edit_review_current());
+    await act(async () => user.keyboard('{Escape}'));
+    await settle(() => !popup() && document.activeElement === editor());
+    expect(cancelled).toBe(false);
+    await click(m.thread_edit_save());
+    expect(commands[1]).toEqual(commands[0]);
+    expect(commands[1]!.mediaIds).toEqual([localMedia]);
+    await click(m.thread_edit_review_current());
+    await click(m.thread_edit_replace_current(), popup()!);
+    await settle(() => !popup() && !!editor()?.textContent?.includes('Admitted current correction'));
+    expect(editor()!.textContent).not.toContain('unsaved correction');
+    outcome = { ok: false, reason: 'unavailable' };
+    await click(m.thread_edit_save());
+    expect(commands[2]).toMatchObject({ body: current.body, revisionId: current.revisionId, mediaIds: [currentMedia] });
+    expect(commands[2]!.idempotencyKey).not.toBe(commands[0]!.idempotencyKey);
+    expect(host.textContent).not.toContain(m.thread_edit_review_current());
+    await click(m.thread_edit_save());
+    expect(commands[3]).toEqual(commands[2]);
+    for (const unavailable of [
+      { ...current, body: null },
+      { ...current, availability: 'removed' as const },
+    ]) {
+      outcome = { ok: false, reason: 'stale', currentPost: unavailable };
+      await mount();
+      await click(m.thread_edit_save());
+      await click(m.thread_edit_review_current());
+      expect(popup()!.textContent).toContain(m.thread_edit_current_unavailable());
+      expect(popup()!.textContent).not.toContain('Admitted current correction');
+      expect(button(m.thread_edit_replace_current(), popup()!).disabled).toBe(true);
+      await click(m.thread_edit_keep_editing(), popup()!);
+      expect(editor()!.textContent).toContain('Original writing');
+    }
+    outcome = { ok: false, reason: 'stale' };
+    await mount();
+    await click(m.thread_edit_save());
+    expect(host.textContent).not.toContain(m.thread_edit_review_current());
+    outcome = { ok: false, reason: 'stale', currentPost: current };
+    await click(m.thread_edit_save());
+    await click(m.thread_edit_review_current());
+    await act(async () => {
+      client.setQueryData(sessionQuery.queryKey, { ...owner, csrfToken: 'replacement-session' });
+    });
+    expect(host.textContent).toContain(m.thread_authoring_session_changed());
+    expect(document.body.textContent).not.toContain('Admitted current correction');
+    expect(requests).toEqual([]);
+  } finally {
+    await act(async () => root.unmount());
+    client.clear();
+    host.remove();
+    for (const [key, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+    mock.restore();
+    await window.happyDOM.close();
+  }
+});

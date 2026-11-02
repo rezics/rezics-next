@@ -716,10 +716,18 @@ test(
       await saveEdit(slot).click();
       await page.getByRole('alert').filter({ hasText: 'changed elsewhere' }).waitFor();
       expect(await inlineEditor(slot).innerText()).toContain(draft);
-      await slot.getByRole('button', { name: 'Load current version', exact: true }).waitFor();
+      await slot.getByRole('button', { name: 'Review current version', exact: true }).waitFor();
       expect(new Set(calls.filter((call) => call.path.endsWith('/revisions')).map((call) => call.key)).size).toBe(1);
 
-      await slot.getByRole('button', { name: 'Load current version', exact: true }).click();
+      await slot.getByRole('button', { name: 'Review current version', exact: true }).click();
+      const recovery = page.getByRole('alertdialog');
+      await recovery.getByText('Current version on the server', { exact: true }).waitFor();
+      expect(await inlineEditor(slot).innerText()).toContain(draft);
+      await recovery.getByRole('button', { name: 'Keep editing', exact: true }).click();
+      await inlineEditor(slot).waitFor({ state: 'visible' });
+      expect(await inlineEditor(slot).innerText()).toContain(draft);
+      await slot.getByRole('button', { name: 'Review current version', exact: true }).click();
+      await recovery.getByRole('button', { name: 'Replace draft with current', exact: true }).click();
       expect(await inlineEditor(slot).innerText()).toContain('Current version on the server');
     } finally {
       await page.context().close();
@@ -741,6 +749,7 @@ test(
       await page.getByRole('menuitem', { name: 'Edit', exact: true }).click();
       await inlineEditor(slot).fill('Discard this edit');
       await slot.getByRole('button', { name: 'Cancel edit', exact: true }).click();
+      await page.getByRole('alertdialog').getByRole('button', { name: 'Discard edit', exact: true }).click();
       await slot.getByText('Existing contribution', { exact: true }).waitFor();
       expect(await trigger.evaluate((element) => document.activeElement === element)).toBe(true);
 
@@ -748,6 +757,7 @@ test(
       await page.getByRole('menuitem', { name: 'Edit', exact: true }).click();
       await inlineEditor(slot).fill('Discard this too');
       await inlineEditor(slot).press('Escape');
+      await page.getByRole('alertdialog').getByRole('button', { name: 'Discard edit', exact: true }).click();
       await slot.getByText('Existing contribution', { exact: true }).waitFor();
       expect(await trigger.evaluate((element) => document.activeElement === element)).toBe(true);
       expect(calls.filter((call) => call.path.endsWith('/revisions'))).toHaveLength(0);

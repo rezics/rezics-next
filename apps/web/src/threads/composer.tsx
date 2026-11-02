@@ -28,6 +28,7 @@ import { ReplyImageUploadRecovery, ReplyUploadRecoveryRefusal, type ReplyUploadT
 import { ExistingReviewNotice } from './write-prompts';
 import { ReplyIntent, type ReplyCommand } from './reply-context-intent';
 import { AuthoringDepartureBoundary, useAuthoringDeparture } from './authoring-departure';
+import { EditConflictRecovery } from './edit-conflict-recovery';
 export { ExistingReviewNotice, SignInPrompt } from './write-prompts';
 
 type WriteResult<T> = { ok: true; value: T } | WriteFailure;
@@ -1059,6 +1060,7 @@ function InlinePostEditorContent({
   onSuccess,
 }: InlinePostEditorProps) {
   const lifetime = useComposerLifetime();
+  const editorRoot = useRef<HTMLDivElement>(null);
   const locale = getLocale();
   const labels = useMemo(() => editorLabels(), [locale]);
   const [body, setBody] = useState(initialBody);
@@ -1288,14 +1290,18 @@ function InlinePostEditorContent({
     }
   }
 
-  async function loadCurrentVersion() {
-    if (!lifetime.current()) return;
-    if (!failure || failure.reason !== 'stale' || !failure.currentPost) return;
-    const current = failure.currentPost as CurrentPost;
-    if (current.body === null) {
-      setFailure({ ok: false, reason: 'not-found' });
+  function replaceWithCurrent(current: CurrentPost) {
+    if (
+      !lifetime.current() ||
+      submittingRef.current ||
+      editIntent.current.unresolved ||
+      failure?.reason !== 'stale' ||
+      failure.currentPost !== current ||
+      current.availability !== 'available' ||
+      current.body === null
+    )
       return;
-    }
+    pruneCopiedImages(current.body);
     initialBodyRef.current = current.body;
     bodyRef.current = current.body;
     setBody(current.body);
@@ -1303,6 +1309,7 @@ function InlinePostEditorContent({
     setRevisionId(current.revisionId);
     editIntent.current.reset(crypto.randomUUID());
     setFailure(null);
+    setUploadNotice(null);
   }
 
   function handleUploadState(state: UploadState, count: number) {
@@ -1322,6 +1329,7 @@ function InlinePostEditorContent({
 
   return (
     <div
+      ref={editorRoot}
       className="min-w-0 space-y-4 rounded-xl border border-border/70 bg-card p-5 [overflow-wrap:anywhere]"
       onInputCapture={captureEditorInput}
       onKeyDownCapture={(event) => {
@@ -1331,7 +1339,12 @@ function InlinePostEditorContent({
             event.currentTarget.querySelector('[data-slot="editor-mention"]'))
         )
           return;
-        if (event.key === 'Escape' && !submitting) {
+        if (
+          event.key === 'Escape' &&
+          !submitting &&
+          !event.defaultPrevented &&
+          !(event.target instanceof HTMLElement && event.target.closest('[role="alertdialog"]'))
+        ) {
           event.preventDefault();
           departure.requestDiscard(onCancel);
         }
@@ -1378,18 +1391,13 @@ function InlinePostEditorContent({
               removeIssueImage,
               checking,
             )}
-            {failure.reason === 'stale' && failure.currentPost ? (
-              <Button
-                type="button"
-                variant="outline"
-                className={authoringActionClassName}
-                onClick={() => void loadCurrentVersion()}
-              >
-                {m.thread_edit_load_current()}
-              </Button>
-            ) : null}
           </div>
         ) : null}
+        <EditConflictRecovery
+          current={failure?.reason === 'stale' && !editIntent.current.unresolved ? failure.currentPost : undefined}
+          onReplace={replaceWithCurrent}
+          returningFocus={() => editorRoot.current?.querySelector<HTMLElement>('[role="textbox"]') ?? null}
+        />
         {uploadNotice ? (
           <p className="min-w-0 text-sm [overflow-wrap:anywhere]" role="alert">
             {uploadNotice}
