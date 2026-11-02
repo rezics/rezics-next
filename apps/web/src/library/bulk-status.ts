@@ -1,8 +1,7 @@
-import type { Kernel } from '@rezics/client';
+import { createKernelClient, type Kernel } from '@rezics/client';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
-import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
 import { libraryEntryStateWrite } from './entries-read';
@@ -41,6 +40,7 @@ export type BulkStatusPreviewCapture =
     }>;
 
 type KernelRoutes = Kernel['~Routes']['v1'];
+type NativePreviewRequest = KernelRoutes['libraryOperations']['post']['body'];
 export type BulkStatusOperation =
   KernelRoutes['libraryOperations'][':operationId']['get']['response'][200]['operation'];
 export type BulkStatusTargetOutcome =
@@ -185,7 +185,9 @@ async function nativeClient(headers: Readonly<Record<string, string>>) {
   if (await prepareSession(request, env as Partial<SessionEnv>)) throw new Error('Sign in to use Shelf operations');
   const authorization = viewerCredential(request);
   if (!authorization) throw new Error('Sign in to use Shelf operations');
-  return { client: kernelClient(), authorization };
+  const origin = (env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN;
+  if (!origin) throw new Error('KERNEL_ORIGIN is required for Shelf operations');
+  return { client: createKernelClient(origin, { headers: { authorization } }) };
 }
 
 function responseData<T>(result: { data: T | null; error: unknown }): T {
@@ -196,10 +198,10 @@ function responseData<T>(result: { data: T | null; error: unknown }): T {
 const previewNativeBulkStatus = createServerFn({ method: 'POST', strict: false })
   .validator((data: BulkStatusPreviewCall) => data)
   .handler(async ({ data }) => {
-    const { client, authorization } = await nativeClient(data.headers);
+    const { client } = await nativeClient(data.headers);
     const result = await client.libraryOperations.post(
-      JSON.parse(data.body) as BulkStatusPreviewRequest,
-      { headers: { authorization, 'idempotency-key': data.idempotencyKey } },
+      JSON.parse(data.body) as NativePreviewRequest,
+      { headers: { 'idempotency-key': data.idempotencyKey } },
     );
     return responseData(result).operation as BulkStatusOperation;
   });
@@ -207,11 +209,11 @@ const previewNativeBulkStatus = createServerFn({ method: 'POST', strict: false }
 const confirmNativeBulkStatus = createServerFn({ method: 'POST', strict: false })
   .validator((data: BulkStatusConfirmCall) => data)
   .handler(async ({ data }) => {
-    const { client, authorization } = await nativeClient(data.headers);
+    const { client } = await nativeClient(data.headers);
     const result = await client
       .libraryOperations({ operationId: data.operationId })
       .$confirm.post(JSON.parse(data.body) as object, {
-        headers: { authorization, 'idempotency-key': data.idempotencyKey },
+        headers: { 'idempotency-key': data.idempotencyKey },
       });
     return responseData(result).operation;
   });
@@ -219,10 +221,8 @@ const confirmNativeBulkStatus = createServerFn({ method: 'POST', strict: false }
 const readNativeBulkStatus = createServerFn({ method: 'GET', strict: false })
   .validator((data: BulkStatusReadCall) => data)
   .handler(async ({ data }): Promise<BulkStatusReadResult> => {
-    const { client, authorization } = await nativeClient(data.headers);
-    const operation = responseData(
-      await client.libraryOperations({ operationId: data.operationId }).get({ headers: { authorization } }),
-    ).operation;
+    const { client } = await nativeClient(data.headers);
+    const operation = responseData(await client.libraryOperations({ operationId: data.operationId }).get()).operation;
     const outcomes: BulkStatusTargetOutcome[] = [];
     const seen = new Set<string>();
     let cursor: string | null | undefined;
@@ -231,7 +231,7 @@ const readNativeBulkStatus = createServerFn({ method: 'GET', strict: false })
       const page = responseData(
         await client
           .libraryOperations({ operationId: data.operationId })
-          .outcomes.get({ query, headers: { authorization } }),
+          .outcomes.get({ query }),
       );
       outcomes.push(...page.outcomes);
       cursor = page.next;

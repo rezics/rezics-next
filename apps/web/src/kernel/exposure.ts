@@ -76,7 +76,12 @@ export type LibraryLabelOperation =
   | 'library_label.assign'
   | 'library_label.unassign'
   | 'library_label.assignment_list';
-type ExposureOperation = GatedOperation | LibraryLabelOperation;
+type LibraryOperation =
+  | 'library_operation.preview'
+  | 'library_operation.confirm'
+  | 'library_operation.get'
+  | 'library_operation.outcomes';
+type ExposureOperation = GatedOperation | LibraryLabelOperation | LibraryOperation;
 
 /** Resolve one operation against its admitted response, failing closed when it is absent. */
 export function operationIsAdmitted(operation: ExposureOperation, admitted: readonly string[] | undefined): boolean {

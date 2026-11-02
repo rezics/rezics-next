@@ -87,7 +87,7 @@ function bulkStatusItems(rows: readonly ShelfRow[], ids: readonly string[]): Bul
       state: entry.state ?? '',
       revision: entry.revision,
       changeKey: entry.changeKey,
-      ...(entry.incarnationId === undefined ? {} : { incarnationId: entry.incarnationId }),
+      ...(entry.incarnationId == null ? {} : { incarnationId: entry.incarnationId }),
     }));
 }
 
