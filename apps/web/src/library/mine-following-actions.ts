@@ -13,7 +13,10 @@ type MineFollowingInput = { cursor?: string; invalidAddress?: true };
 
 function validateInput(input: unknown): MineFollowingInput {
   if (!input || typeof input !== 'object') throw new Error('Invalid follows cursor');
-  const address = personalDirectoryAddress('cursor' in input ? input.cursor : undefined, PERSONAL_DIRECTORY_CURSOR_LIMITS.following);
+  const address = personalDirectoryAddress(
+    'cursor' in input ? input.cursor : undefined,
+    PERSONAL_DIRECTORY_CURSOR_LIMITS.following,
+  );
   return address.valid
     ? address.cursor
       ? { cursor: address.cursor }

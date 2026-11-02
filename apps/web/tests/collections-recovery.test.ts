@@ -114,8 +114,7 @@ test('The ordinary Collections page offers one honest next step for signed-out e
 
   // Use the default route's loader, including its real server adapters and native result mapping.
   // The isolated leaf host also exercises the defensive signed-out result; the production guard stays installed.
-  const load = Route.options.loader as (context: { deps: MineCollectionsSearch }) =>
-    Promise<MineCollectionsViewerPage>;
+  const load = Route.options.loader as (context: { deps: MineCollectionsSearch }) => Promise<MineCollectionsViewerPage>;
   const route = createRootRoute({
     loader: async ({ location }) => {
       const url = new URL(location.href, 'https://site.test');

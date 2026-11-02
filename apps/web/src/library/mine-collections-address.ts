@@ -28,7 +28,8 @@ export function admitMineCollectionsAddress(input: unknown): MineCollectionsSear
     source.cursor !== undefined &&
     (typeof source.cursor !== 'string' || source.cursor.length === 0 || source.cursor.length > 4096)
   )
-    errors.cursor = typeof source.cursor === 'string' && source.cursor.length === 0 ? 'empty string' : describe(source.cursor);
+    errors.cursor =
+      typeof source.cursor === 'string' && source.cursor.length === 0 ? 'empty string' : describe(source.cursor);
   if (source.layout !== undefined && source.layout !== 'rows' && source.layout !== 'previews')
     errors.layout = describe(source.layout);
   return {

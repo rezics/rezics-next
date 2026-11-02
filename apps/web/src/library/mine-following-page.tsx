@@ -136,8 +136,7 @@ export function CurrentViewerMineFollowingPage({
   };
   const retryState = origin.client.getQueryState(options.queryKey);
   const status =
-    !addressInvalid &&
-    origin.subject && origin.allowed[0] === true && (read.isError || !page.signedIn)
+    !addressInvalid && origin.subject && origin.allowed[0] === true && (read.isError || !page.signedIn)
       ? read.isError || read.data
         ? 'unavailable'
         : 'preparing'
