@@ -268,9 +268,7 @@ function PublicationEditorLive({
           <AlertDialogHeader>
             <AlertDialogTitle>{m.thread_authoring_leave_title({}, o)}</AlertDialogTitle>
             <AlertDialogDescription>
-              {busy || uncertain
-                ? m.thread_authoring_leave_pending({}, o)
-                : m.thread_authoring_leave_unsaved({}, o)}
+              {busy || uncertain ? m.thread_authoring_leave_pending({}, o) : m.thread_authoring_leave_unsaved({}, o)}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

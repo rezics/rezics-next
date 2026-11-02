@@ -99,9 +99,10 @@ test('independent publication creation, local corrections, immutable recovery an
   let entries: Entry[] = [];
   let scene = 0;
   let admitted = true;
-  const observed = () => admitted
-    ? { state: 'signed-in' as const, subject: 'reader', csrfToken: 'original-credential-epoch' }
-    : { state: 'signed-out' as const, csrfToken: null };
+  const observed = () =>
+    admitted
+      ? { state: 'signed-in' as const, subject: 'reader', csrfToken: 'original-credential-epoch' }
+      : { state: 'signed-out' as const, csrfToken: null };
   const Scene = () => {
     const destination = useRouterState({ select: (state) => state.location.search.page });
     return destination === 'other' ? null : (
