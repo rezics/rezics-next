@@ -94,9 +94,10 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
     root.render(createElement(QueryClientProvider, { client }, createElement(RouterProvider, { router }))),
   );
   const render = (node: ReactNode) => act(async () => show(node));
-  const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+  const settle = (milliseconds = 0) => act(async () => new Promise((resolve) => setTimeout(resolve, milliseconds)));
   const until = async (predicate: () => boolean) => {
-    for (let attempt = 0; attempt < 100 && !predicate(); attempt++) await settle();
+    // The production picker deliberately debounces searches for 250ms.
+    for (let attempt = 0; attempt < 100 && !predicate(); attempt++) await settle(10);
     expect(predicate()).toBe(true);
   };
   const fetch = spyOn(globalThis, 'fetch').mockImplementation(async () => {
