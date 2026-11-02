@@ -1,7 +1,8 @@
-import { expect, test } from 'bun:test';
+import { afterAll, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
+import { createHash } from 'node:crypto';
 import type { Browser } from 'playwright';
 import {
   hasWebCheckCustody,
@@ -15,6 +16,12 @@ import {
   type DriverExecution,
   type WebPlacementRuntime,
 } from './check-placement.ts';
+import type {
+  PreparedCheckRunDescriptor,
+  WebCheckCustodyRuntime,
+  WebCheckDriverInvocation,
+  WebCheckPrivateFiles,
+} from './check-placement-custody.ts';
 import { runBrowserWorker, runWebTestLanes } from './check.ts';
 import { smokeStorybook } from './storybook-smoke.ts';
 import { unavailableInteractiveCheck } from './storybook-dev.ts';
@@ -31,31 +38,323 @@ const forged = {
   REZICS_STACK_LEASE: 'local',
 };
 
+const fixtureRoots: string[] = [];
+
+afterAll(() => {
+  for (const directory of fixtureRoots) rmSync(directory, { recursive: true, force: true });
+});
+
+function sha(value: string | Uint8Array): string {
+  return createHash('sha256').update(value).digest('hex');
+}
+
+function parsePrepare(command: string[]) {
+  const separator = command.indexOf('--');
+  const value = (name: string) => command[command.indexOf(name) + 1]!;
+  return {
+    descriptorFile: value('--descriptor'),
+    hostsFile: value('--hosts'),
+    workspace: value('--workspace'),
+    cwd: value('--cwd'),
+    sourceRevision: value('--source-revision'),
+    environmentFile: value('--env-file'),
+    returns: command.slice(0, separator).flatMap((part, index, list) => part === '--returns' ? [list[index + 1]!] : []),
+    command: command.slice(separator + 1),
+  };
+}
+
+function descriptorFor(input: WebCheckDriverInvocation): PreparedCheckRunDescriptor {
+  const parsed = parsePrepare(input.command);
+  const environment = JSON.parse(readFileSync(parsed.environmentFile, 'utf8')) as Record<string, string>;
+  const sortedEnvironment = Object.entries(environment).sort(([left], [right]) => left.localeCompare(right));
+  const priority = input.env.REMOTE_CHECK_PRIORITY ?? null;
+  const environmentHash = sha(JSON.stringify({ values: sortedEnvironment, priority }));
+  const returns = [...new Set(parsed.returns)];
+  const binding = {
+    sourceRevision: parsed.sourceRevision,
+    indexTree: parsed.sourceRevision,
+    sourceSha256: 'c'.repeat(64),
+    argvSha256: sha(JSON.stringify(parsed.command)),
+    cwd: parsed.cwd,
+    semanticEnvironmentSha256: environmentHash,
+    relocatedEnvironmentSha256: environmentHash,
+    producerClosureSha256: 'd'.repeat(64),
+    hostsSha256: sha(readFileSync(parsed.hostsFile)),
+    preparationCommandsSha256: 'e'.repeat(64),
+    returnsSha256: sha(JSON.stringify(returns)),
+  };
+  return {
+    schema: 1,
+    type: 'check-run-preparation',
+    invocationId: '11111111-1111-4111-8111-111111111111',
+    nonce: 'a'.repeat(64),
+    binding,
+    cancellation: { file: join(dirname(parsed.descriptorFile), 'cancel.json'), id: '11111111-1111-4111-8111-111111111111' },
+  };
+}
+
+function terminalMessages(descriptor: PreparedCheckRunDescriptor, exitCode: number, returns: string[], duplicateFinal = false) {
+  const physical = { host: 'a' as const, run: 'fixture-physical-run' };
+  const receipt = { schema: 1 as const, host: physical.host, run: physical.run, exitCode, lifetimeFailure: null, resources: null };
+  const receiptSha256 = sha(JSON.stringify({ schema: receipt.schema, host: receipt.host, run: receipt.run, exitCode, lifetimeFailure: null }));
+  const native = {
+    schema: 1 as const,
+    type: 'native-terminal' as const,
+    invocationId: descriptor.invocationId,
+    nonce: descriptor.nonce,
+    binding: descriptor.binding,
+    physical,
+    receipt,
+  };
+  const final = {
+    schema: 1 as const,
+    type: 'final-settlement' as const,
+    invocationId: descriptor.invocationId,
+    nonce: descriptor.nonce,
+    binding: descriptor.binding,
+    physical,
+    native: { exitCode, lifetimeFailure: false, receiptSha256 },
+    preparedInputs: { status: 'verified' as const, sourceSha256: descriptor.binding.sourceSha256, manifestSha256: 'f'.repeat(64), fileCount: 1, totalBytes: 1 },
+    returns: {
+      status: returns.length ? 'restored' as const : 'empty' as const,
+      declarationsSha256: descriptor.binding.returnsSha256,
+      entries: returns.map((path) => ({ path, size: 0, sha256: sha('') })),
+      missing: [],
+      failures: [],
+    },
+    cleanup: { disposition: 'settled' as const, remote: 'verified' as const, transportChild: 'reaped' as const, source: 'verified' as const, localWorktree: 'removed' as const, failures: [] },
+    failures: { primary: [], cleanup: [] },
+  };
+  const nativeLine = `${JSON.stringify(native)}\n`;
+  const finalLine = `${JSON.stringify(final)}\n`;
+  return { physical, receipt, native, final, nativeLine, finalLine, bytes: Buffer.from(nativeLine + finalLine + (duplicateFinal ? finalLine : '')) };
+}
+
+type ProducerReferences = {
+  preparedExecution: { file: string; sha256: string };
+  descriptor: { file: string; sha256: string };
+  preparationIntent: { file: string; sha256: string } | null;
+};
+
+function registrationFor(descriptor: PreparedCheckRunDescriptor, prepared: ReturnType<typeof parsePrepare>): ProducerReferences {
+  return {
+    preparedExecution: { file: join(dirname(prepared.descriptorFile), 'prepared-execution.json'), sha256: sha('prepared execution bytes') },
+    descriptor: { file: prepared.descriptorFile, sha256: sha(`${JSON.stringify(descriptor)}\n`) },
+    preparationIntent: null,
+  };
+}
+
+function preparationStatusFor(
+  descriptor: PreparedCheckRunDescriptor,
+  prepared: ReturnType<typeof parsePrepare>,
+  registration: ProducerReferences,
+) {
+  return {
+    schema: 1,
+    invocationId: descriptor.invocationId,
+    nonce: descriptor.nonce,
+    createdAt: '2026-11-02T00:00:00.000Z',
+    updatedAt: '2026-11-02T00:00:00.500Z',
+    phase: 'prepared',
+    binding: descriptor.binding,
+    physical: null,
+    transportChild: null,
+    native: null,
+    snapshot: { workspace: '/frozen/workspace', scratch: '/frozen', sourceSha256: descriptor.binding.sourceSha256, inputFiles: [] },
+    candidateWorkspace: prepared.workspace,
+    preparedExecution: registration.preparedExecution,
+    descriptor: registration.descriptor,
+    preparationIntent: null,
+    snapshotCustody: 'owned',
+    returns: prepared.returns,
+    cancellation: { requested: false, signal: null },
+    final: null,
+    finalCustody: null,
+    failure: null,
+  };
+}
+
+function statusFor(
+  descriptor: PreparedCheckRunDescriptor,
+  messages: ReturnType<typeof terminalMessages>,
+  prepared: ReturnType<typeof parsePrepare>,
+  registration: ProducerReferences,
+) {
+  const snapshot = {
+    workspace: '/frozen/workspace',
+    scratch: '/frozen',
+    sourceSha256: descriptor.binding.sourceSha256,
+    inputFiles: [],
+  };
+  const identityCore = {
+    bindingSha256: sha(JSON.stringify(descriptor.binding)),
+    physical: messages.physical,
+    sourceSha256: descriptor.binding.sourceSha256,
+    snapshotSha256: sha(JSON.stringify(snapshot)),
+    candidateWorkspaceSha256: sha(JSON.stringify(prepared.workspace)),
+    returnsSha256: descriptor.binding.returnsSha256,
+    preparedExecutionReferenceSha256: sha(JSON.stringify(registration.preparedExecution)),
+    descriptorReferenceSha256: sha(JSON.stringify(registration.descriptor)),
+    preparationIntentReferenceSha256: registration.preparationIntent ? sha(JSON.stringify(registration.preparationIntent)) : null,
+  };
+  const finalCustody = {
+    schema: 1,
+    aggregate: 'settled',
+    delivery: 'delivered',
+    deliverySha256: sha(messages.finalLine.slice(0, -1)),
+    privateFiles: 'settled',
+    reconciliation: 'settled',
+    originalFinalSha256: sha(JSON.stringify(messages.final)),
+    identity: { sha256: sha(JSON.stringify(identityCore)), ...identityCore },
+    observations: [{ observedAt: '2026-11-02T00:00:01.000Z', disposition: 'settled', transportIdentity: null, final: messages.final, reason: null }],
+    continuation: null,
+  };
+  return {
+    schema: 1,
+    invocationId: descriptor.invocationId,
+    nonce: descriptor.nonce,
+    createdAt: '2026-11-02T00:00:00.000Z',
+    updatedAt: '2026-11-02T00:00:01.000Z',
+    phase: 'settled',
+    binding: descriptor.binding,
+    physical: messages.physical,
+    transportChild: null,
+    native: messages.final.native,
+    snapshot,
+    candidateWorkspace: prepared.workspace,
+    preparedExecution: null,
+    descriptor: registration.descriptor,
+    preparationIntent: null,
+    snapshotCustody: 'removed',
+    returns: prepared.returns,
+    cancellation: { requested: false, signal: null },
+    final: messages.final,
+    finalCustody,
+    failure: null,
+  };
+}
+
 function fixture() {
+  mkdirSync(join(root, '.temp'), { recursive: true });
+  const fixtureRoot = mkdtempSync(join(root, '.temp', 'web-placement-fixture-'));
+  fixtureRoots.push(fixtureRoot);
+  const workspace = join(fixtureRoot, 'candidate');
+  const privateRoot = join(fixtureRoot, 'private');
+  mkdirSync(join(workspace, 'apps/web'), { recursive: true });
+  mkdirSync(join(workspace, 'packages/ui'), { recursive: true });
+  mkdirSync(join(workspace, '.temp'), { recursive: true });
+  mkdirSync(privateRoot, { recursive: true });
+  const hostsFile = join(privateRoot, 'hosts.json');
+  writeFileSync(hostsFile, '{"hosts":[]}', { mode: 0o600 });
   const calls: DriverExecution[] = [];
+  const runCalls: DriverExecution[] = [];
   const overlays: Record<string, string>[] = [];
   let closed = 0;
+  let nativeExitCode = 0;
+  let missingFinal = false;
+  let duplicateFinal = false;
+  let transportError: unknown;
+  let cleanupError: unknown;
+  let lastFiles: WebCheckPrivateFiles | undefined;
+  let descriptor: PreparedCheckRunDescriptor | undefined;
+  let prepared: ReturnType<typeof parsePrepare> | undefined;
+  let registration: ProducerReferences | undefined;
+  let messages: ReturnType<typeof terminalMessages> | undefined;
+  const custody: WebCheckCustodyRuntime = {
+    async invoke(input) {
+      if (input.phase === 'prepare') {
+        calls.push({ command: input.command, cwd: input.cwd, env: input.env, ...(input.signal ? { signal: input.signal } : {}) });
+        descriptor = descriptorFor(input);
+        prepared = parsePrepare(input.command);
+        const output = `${JSON.stringify(descriptor)}\n`;
+        writeFileSync(prepared.descriptorFile, output, { mode: 0o600 });
+        registration = registrationFor(descriptor, prepared);
+        return { code: 0, signal: null, closed: true, output, outputOverflow: false };
+      }
+      if (input.phase === 'run-prepared') {
+        runCalls.push({ command: input.command, cwd: input.cwd, env: input.env, ...(input.signal ? { signal: input.signal } : {}) });
+        if (transportError) throw transportError;
+        messages = terminalMessages(descriptor!, nativeExitCode, prepared!.returns, duplicateFinal);
+        input.onReceipt?.(Buffer.from(missingFinal ? `${messages.nativeLine}` : messages.bytes));
+        return { code: nativeExitCode, signal: null, closed: true, output: '', outputOverflow: false };
+      }
+      if (input.phase === 'status') {
+        if (!messages) {
+          const value = preparationStatusFor(descriptor!, prepared!, registration!);
+          return { code: 0, signal: null, closed: true, output: `${JSON.stringify(value)}\n`, outputOverflow: false };
+        }
+        const value = statusFor(descriptor!, messages, prepared!, registration!);
+        if (missingFinal) value.final = null as never;
+        return { code: 0, signal: null, closed: true, output: `${JSON.stringify(value)}\n`, outputOverflow: false };
+      }
+      if (!messages) return { code: 75, signal: null, closed: true, output: '', outputOverflow: false };
+      const result = statusFor(descriptor!, messages, prepared!, registration!);
+      return { code: 0, signal: null, closed: true, output: `${JSON.stringify(result)}\n`, outputOverflow: false };
+    },
+    cleanup(files) {
+      if (cleanupError) throw cleanupError;
+      files.close();
+    },
+  };
   const adapter: WebPlacementRuntime = {
-    custody: hasWebCheckCustody,
+    custody: () => false,
     driver: () => '/trusted/producer',
-    hosts: () => '/private/hosts.json',
+    hosts: () => hostsFile,
     revision: () => revision,
     isTreeClean: () => true,
     environment(values) {
       overlays.push(values);
-      return {
-        path: '/private/invocation/environment.json',
+      const directory = mkdtempSync(join(privateRoot, 'invocation-'));
+      const path = join(directory, 'environment.json');
+      writeFileSync(path, JSON.stringify(values), { mode: 0o600 });
+      const evidenceFile = join(directory, 'receipts.ndjson');
+      writeFileSync(evidenceFile, '', { mode: 0o600 });
+      lastFiles = {
+        directory,
+        environmentFile: path,
+        descriptorFile: join(directory, 'prepared-descriptor.json'),
+        recordFile: join(directory, 'web-custody.json'),
+        evidenceFile,
         close: () => {
           closed += 1;
+          rmSync(directory, { recursive: true, force: true });
         },
       };
+      return lastFiles;
     },
+    receiver: custody,
     execute: async (input) => {
       calls.push(input);
       return 0;
     },
   };
-  return { adapter, calls, overlays, closed: () => closed };
+  return {
+    adapter,
+    calls,
+    runCalls,
+    overlays,
+    workspace,
+    app: join(workspace, 'apps/web'),
+    hostsFile,
+    setNativeExitCode: (value: number) => { nativeExitCode = value; },
+    setMissingFinal: (value: boolean) => { missingFinal = value; },
+    setDuplicateFinal: (value: boolean) => { duplicateFinal = value; },
+    setTransportError: (value: unknown) => { transportError = value; },
+    setCleanupError: (value: unknown) => { cleanupError = value; },
+    files: () => lastFiles!,
+    descriptor: () => descriptor!,
+    closed: () => closed,
+  };
+}
+
+function fixtureRun(
+  f: ReturnType<typeof fixture>,
+  run: { root: string; cwd: string; command: string[]; returns?: string[]; label?: string },
+) {
+  const cwd = relative(root, resolve(run.cwd));
+  if (cwd === '..' || cwd.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`))
+    throw new Error('test fixture cwd must be under the Web worktree');
+  return { ...run, label: run.label ?? 'Web fixture', root: f.workspace, cwd: join(f.workspace, cwd) };
 }
 
 function git(directory: string, args: string[]): string {
@@ -318,7 +617,7 @@ test('every finite heavy route crosses the exact driver with ordered argv, cwd, 
     let nativeStarts = 0;
     expect(
       await placeWebCheck(
-        { root, label: 'heavy route', ...route },
+        fixtureRun(f, { root, label: 'heavy route', ...route }),
         async () => {
           nativeStarts += 1;
           return 0;
@@ -330,22 +629,33 @@ test('every finite heavy route crosses the exact driver with ordered argv, cwd, 
     expect(nativeStarts).toBe(0);
     expect(f.calls).toHaveLength(1);
     const args = f.calls[0]!.command;
-    expect(args.slice(args.indexOf('--') + 1)).toEqual(route.command);
-    expect(args.slice(0, 14)).toEqual([
+    const separator = args.indexOf('--');
+    expect(args.slice(0, separator)).toEqual([
       'bun',
-      '/trusted/producer/scripts/check-run.ts',
+      join('/trusted/producer', 'scripts/check-run.ts'),
+      'prepare',
+      '--descriptor',
+      f.files().descriptorFile,
       '--hosts',
-      '/private/hosts.json',
+      f.hostsFile,
       '--workspace',
-      root,
+      f.workspace,
       '--cwd',
       route.cwd === app ? 'apps/web' : 'packages/ui',
       '--source-revision',
       revision,
       '--env-file',
-      '/private/invocation/environment.json',
-      ...(route.returns.length ? ['--returns', route.returns[0]!] : ['--', route.command[0]!]),
+      f.files().environmentFile,
+      ...route.returns.flatMap((path) => ['--returns', path]),
     ]);
+    expect(args.slice(separator + 1)).toEqual(route.command);
+    expect(f.runCalls).toHaveLength(1);
+    expect(f.runCalls[0]!.command).toEqual([
+      'bun', join('/trusted/producer', 'scripts/check-run.ts'), 'run-prepared', '--descriptor', f.files().descriptorFile,
+    ]);
+    expect(f.runCalls[0]!.env.REMOTE_CHECK_RECEIPT_FD).toBe('3');
+    expect(f.runCalls[0]!.env.REMOTE_CHECK_RECEIPT_NONCE).toBe(f.descriptor().nonce);
+    expect(f.runCalls[0]!.env.REMOTE_CHECK_INVOCATION_ID).toBe(f.descriptor().invocationId);
     expect(f.closed()).toBe(1);
   }
 });
@@ -364,7 +674,7 @@ test('an explicit local publication admits only the exact finite deployment vali
   for (const route of routes) {
     const f = fixture();
     f.adapter.custody = () => false;
-    expect(await routeWebCheck({ root, cwd: app, ...route }, local, f.adapter)).toBeNull();
+    expect(await routeWebCheck(fixtureRun(f, { root, cwd: app, ...route }), local, f.adapter)).toBeNull();
     expect(f.calls).toHaveLength(0);
     expect(f.overlays).toHaveLength(0);
     expect(f.closed()).toBe(0);
@@ -383,7 +693,7 @@ test('local publication authorization never admits interactive, altered or unrel
   for (const command of commands) {
     const f = fixture();
     f.adapter.custody = () => false;
-    expect(await routeWebCheck({ root, cwd: app, command }, local, f.adapter)).toBe(0);
+    expect(await routeWebCheck(fixtureRun(f, { root, cwd: app, command }), local, f.adapter)).toBe(0);
     expect(f.calls).toHaveLength(1);
     expect(f.calls[0]!.command.slice(-command.length)).toEqual(command);
     expect(f.calls[0]!.env).not.toHaveProperty(localStorybookPublicationRevisionEnvironment);
@@ -402,19 +712,19 @@ test('local publication requires the exact committed revision and a clean source
   const changed = fixture();
   changed.adapter.custody = () => false;
   changed.adapter.revision = () => 'b'.repeat(40);
-  await expect(routeWebCheck(run, local, changed.adapter)).rejects.toThrow('revision changed');
+  await expect(routeWebCheck(fixtureRun(changed, run), local, changed.adapter)).rejects.toThrow('revision changed');
   expect(changed.calls).toHaveLength(0);
 
   const dirty = fixture();
   dirty.adapter.custody = () => false;
   dirty.adapter.isTreeClean = () => false;
-  await expect(routeWebCheck(run, local, dirty.adapter)).rejects.toThrow('clean working tree');
+  await expect(routeWebCheck(fixtureRun(dirty, run), local, dirty.adapter)).rejects.toThrow('clean working tree');
   expect(dirty.calls).toHaveLength(0);
 
   const malformed = fixture();
   malformed.adapter.custody = () => false;
   await expect(
-    routeWebCheck(run, { [localStorybookPublicationRevisionEnvironment]: 'head' }, malformed.adapter),
+    routeWebCheck(fixtureRun(malformed, run), { [localStorybookPublicationRevisionEnvironment]: 'head' }, malformed.adapter),
   ).rejects.toThrow('full committed revision');
   expect(malformed.calls).toHaveLength(0);
 });
@@ -428,7 +738,7 @@ test('absent/invalid hosts or producer source never admit the native callback', 
     let nativeStarts = 0;
     await expect(
       placeWebCheck(
-        { root, cwd: app, label: 'heavy', command: ['bun', 'test', '--local'] },
+        fixtureRun(f, { root, cwd: app, label: 'heavy', command: ['bun', 'test', '--local'] }),
         async () => {
           nativeStarts += 1;
           return 0;
@@ -445,59 +755,44 @@ test('absent/invalid hosts or producer source never admit the native callback', 
 test('unreachable transport, timeout and native exits are returned without a local replay', async () => {
   for (const status of [75, 124, 1, 17, 130, 143]) {
     const f = fixture();
-    f.adapter.execute = async (input) => {
-      f.calls.push(input);
-      return status;
-    };
-    expect(await routeWebCheck({ root, cwd: app, command: ['unknown', '--local'] }, forged, f.adapter)).toBe(status);
+    f.setNativeExitCode(status);
+    expect(await routeWebCheck(fixtureRun(f, { root, cwd: app, command: ['unknown', '--local'] }), forged, f.adapter)).toBe(status);
     expect(f.calls).toHaveLength(1);
+    expect(f.runCalls).toHaveLength(1);
     expect(f.closed()).toBe(1);
   }
   const f = fixture();
-  const error = new AggregateError([new Error('native failed'), new Error('return/cleanup failed')]);
-  f.adapter.execute = async () => {
-    throw error;
-  };
-  await expect(routeWebCheck({ root, cwd: app, command: ['bun', 'test'] }, {}, f.adapter)).rejects.toBe(error);
-  expect(f.closed()).toBe(1);
+  f.setTransportError(new Error('transport terminality unknown'));
+  expect(await routeWebCheck(fixtureRun(f, { root, cwd: app, command: ['bun', 'test'] }), {}, f.adapter)).toBe(75);
+  expect(f.calls).toHaveLength(1);
+  expect(f.runCalls).toHaveLength(1);
+  expect(f.closed()).toBe(0);
 });
 
 test('only actual remote custody admits the native continuation; forged markers are irrelevant', async () => {
   const f = fixture();
-  expect(hasWebCheckCustody(root, app)).toBe(false);
-  expect(await routeWebCheck({ root, cwd: app, command: ['bun', 'test'] }, forged, f.adapter)).toBe(0);
+  expect(hasWebCheckCustody(f.workspace, f.app)).toBe(false);
+  expect(await routeWebCheck(fixtureRun(f, { root, cwd: app, command: ['bun', 'test'] }), forged, f.adapter)).toBe(0);
   f.adapter.custody = () => true; // Trusted physical-boundary fixture, not an environment override.
-  expect(await routeWebCheck({ root, cwd: app, command: ['bun', 'test'] }, {}, f.adapter)).toBeNull();
+  expect(await routeWebCheck(fixtureRun(f, { root, cwd: app, command: ['bun', 'test'] }), {}, f.adapter)).toBeNull();
   expect(f.calls).toHaveLength(1);
 });
 
 test('private environment cleanup cannot hide native or transport failure', async () => {
-  for (const native of [true, false]) {
-    const f = fixture();
-    const cleanup = new Error('private environment cleanup failed');
-    const transport = new Error('transport terminality unknown');
-    f.adapter.environment = () => ({
-      path: '/private/environment.json',
-      close: () => {
-        throw cleanup;
-      },
-    });
-    f.adapter.execute = async () => {
-      if (native) return 17;
-      throw transport;
-    };
-    let failure: unknown;
-    try {
-      await routeWebCheck({ root, cwd: app, command: ['bun', 'test'] }, {}, f.adapter);
-    } catch (error) {
-      failure = error;
-    }
-    expect(failure).toBeInstanceOf(AggregateError);
-    const errors = (failure as AggregateError).errors;
-    expect(errors[1]).toBe(cleanup);
-    if (native) expect(errors[0].message).toContain('status 17');
-    else expect(errors[0]).toBe(transport);
-  }
+  const native = fixture();
+  const cleanup = new Error('private environment cleanup failed');
+  native.setNativeExitCode(17);
+  native.setCleanupError(cleanup);
+  expect(await routeWebCheck(fixtureRun(native, { root, cwd: app, command: ['bun', 'test'] }), {}, native.adapter)).toBe(17);
+  expect(native.closed()).toBe(0);
+  expect(readFileSync(native.files().evidenceFile, 'utf8')).toContain('native-terminal');
+  expect(readFileSync(native.files().evidenceFile, 'utf8')).toContain('final-settlement');
+
+  const transport = fixture();
+  transport.setTransportError(new Error('transport terminality unknown'));
+  transport.setCleanupError(cleanup);
+  expect(await routeWebCheck(fixtureRun(transport, { root, cwd: app, command: ['bun', 'test'] }), {}, transport.adapter)).toBe(75);
+  expect(transport.closed()).toBe(0);
 });
 
 test('semantic strings/newlines survive JSON while host controls and receipt authority stay at the driver', async () => {
@@ -506,8 +801,8 @@ test('semantic strings/newlines survive JSON while host controls and receipt aut
     ...forged,
     CI: '1',
     MESSAGE: 'a\nb "quoted" $literal',
-    STORYBOOK_OUTPUT_DIR: resolve(app, 'storybook-static'),
-    WEB_CHECK_EVENTS: resolve(root, '.temp/events'),
+    STORYBOOK_OUTPUT_DIR: resolve(f.app, 'storybook-static'),
+    WEB_CHECK_EVENTS: resolve(f.workspace, '.temp/events'),
     GOAL_SESSION_SECRET: 'private',
     PATH: '/local/bin',
     HOME: '/local/home',
@@ -515,7 +810,7 @@ test('semantic strings/newlines survive JSON while host controls and receipt aut
     REMOTE_CHECK_RECEIPT_NONCE: 'authenticated',
   };
   const command = ['env', 'NAME=value with spaces\nand newline', 'bun', 'test', '--test-name-pattern', 'a "quote"'];
-  await routeWebCheck({ root, cwd: app, command }, env, f.adapter);
+  await routeWebCheck(fixtureRun(f, { root, cwd: app, command }), env, f.adapter);
   expect(JSON.parse(JSON.stringify(f.overlays[0]))).toEqual({
     CI: '1',
     MESSAGE: env.MESSAGE,
@@ -534,15 +829,15 @@ test('ambient Nix trust path stays out of the remote overlay while semantics, ar
     NIX_SSL_CERT_FILE: certificatePath,
     CI: '1',
     MESSAGE: 'a\nb "quoted" $literal',
-    STORYBOOK_OUTPUT_DIR: resolve(app, 'storybook-static'),
-    GROWTH_PROFILE: resolve(app, '.temp/growth-profile.json'),
-    WEB_TEST_STATE_DIR: resolve(app, '.temp/web-test-state'),
-    WEB_CHECK_EVENTS: resolve(root, '.temp/web-check-events'),
+    STORYBOOK_OUTPUT_DIR: resolve(f.app, 'storybook-static'),
+    GROWTH_PROFILE: resolve(f.app, '.temp/growth-profile.json'),
+    WEB_TEST_STATE_DIR: resolve(f.app, '.temp/web-test-state'),
+    WEB_CHECK_EVENTS: resolve(f.workspace, '.temp/web-check-events'),
   };
   const originalEnvironment = { ...env };
   const command = ['bun', 'test', 'tests/check placement.test.ts', '--test-name-pattern', 'a "quote"'];
 
-  await routeWebCheck({ root, cwd: app, command, returns: ['apps/web/reports/check.json'] }, env, f.adapter);
+  await routeWebCheck(fixtureRun(f, { root, cwd: app, command, returns: ['apps/web/reports/check.json'] }), env, f.adapter);
 
   expect(f.overlays).toHaveLength(1);
   expect(f.overlays[0]).toEqual({
@@ -585,7 +880,7 @@ test('Nix certificate classification leaves unrelated absolute settings and opti
     const f = fixture();
     await expect(
       routeWebCheck(
-        { root, cwd: app, command: ['bun', 'test'] },
+        fixtureRun(f, { root, cwd: app, command: ['bun', 'test'] }),
         { NIX_SSL_CERT_FILE: certificatePath, [name]: value },
         f.adapter,
       ),
@@ -601,7 +896,7 @@ test('unsupported host dependencies and destinations fail before a driver or nat
   expect(() => webCheckEnvironment({ NATIVE_CONFIG_FILE: '/outside/config' }, root, app)).toThrow('NATIVE_CONFIG_FILE');
   const f = fixture();
   await expect(
-    routeWebCheck({ root, cwd: app, command: ['bun', 'test', '/outside/test.ts'] }, {}, f.adapter),
+    routeWebCheck(fixtureRun(f, { root, cwd: app, command: ['bun', 'test', '/outside/test.ts'] }), {}, f.adapter),
   ).rejects.toThrow('host-absolute');
   expect(f.calls).toHaveLength(0);
   expect(() =>
@@ -634,15 +929,18 @@ test('cancellation before dispatch cannot start queued work and the driver obser
   const f = fixture();
   const controller = new AbortController();
   controller.abort();
-  expect(await routeWebCheck({ root, cwd: app, command: ['bun', 'test'] }, {}, f.adapter, controller.signal)).toBe(143);
+  expect(await routeWebCheck(fixtureRun(f, { root, cwd: app, command: ['bun', 'test'] }), {}, f.adapter, controller.signal)).toBe(143);
   expect(f.calls).toHaveLength(0);
   const active = new AbortController();
-  f.adapter.execute = async (input) => {
-    expect(input.signal).toBe(active.signal);
-    active.abort();
-    return input.signal!.aborted ? 143 : 0;
+  const invoke = f.adapter.receiver.invoke;
+  f.adapter.receiver.invoke = async (input) => {
+    if (input.phase === 'run-prepared') {
+      expect(input.signal).toBe(active.signal);
+      active.abort();
+    }
+    return invoke(input);
   };
-  expect(await routeWebCheck({ root, cwd: app, command: ['bun', 'test'] }, {}, f.adapter, active.signal)).toBe(143);
+  expect(await routeWebCheck(fixtureRun(f, { root, cwd: app, command: ['bun', 'test'] }), {}, f.adapter, active.signal)).toBe(143);
   expect(f.closed()).toBe(1);
 });
 

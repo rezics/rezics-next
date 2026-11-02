@@ -1,8 +1,16 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
-import { constants, tmpdir } from 'node:os';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { constants } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { hostsLocation, mainCheckout, onCheckHost, type StackRun } from '../../../scripts/stack-run.ts';
+import {
+  createWebCheckPrivateFiles,
+  disposeWebCheckEnvironmentInput,
+  runPreparedWebCheck,
+  webCheckCustodyRuntime,
+  type WebCheckCustodyRuntime,
+  type WebCheckPrivateFiles,
+} from './check-placement-custody.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const signals = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const;
@@ -277,7 +285,8 @@ export type WebPlacementRuntime = {
   hosts: (workspace: string, env: NodeJS.ProcessEnv) => string;
   revision: (workspace: string) => string;
   isTreeClean: (workspace: string) => boolean;
-  environment: (values: Record<string, string>) => { path: string; close: () => void };
+  environment: (values: Record<string, string>) => WebCheckPrivateFiles;
+  receiver: WebCheckCustodyRuntime;
   execute: (input: DriverExecution) => Promise<number>;
 };
 
@@ -291,18 +300,8 @@ const runtime: WebPlacementRuntime = {
   },
   revision: (workspace) => git(workspace, ['rev-parse', 'HEAD']),
   isTreeClean: (workspace) => git(workspace, ['status', '--porcelain', '--untracked-files=normal']) === '',
-  environment(values) {
-    // Private caller data outside the candidate source; never included in its source transfer.
-    const directory = mkdtempSync(join(tmpdir(), 'rezics-web-check-'));
-    const path = join(directory, 'environment.json');
-    try {
-      writeFileSync(path, JSON.stringify(values), { mode: 0o600 });
-    } catch (error) {
-      rmSync(directory, { recursive: true, force: true });
-      throw error;
-    }
-    return { path, close: () => rmSync(directory, { recursive: true, force: true }) };
-  },
+  environment: createWebCheckPrivateFiles,
+  receiver: webCheckCustodyRuntime,
   execute: executeDriver,
 };
 
@@ -357,47 +356,36 @@ export async function routeWebCheck(
   const revision = adapter.revision(workspace);
   const semantic = webCheckEnvironment(env, workspace, run.cwd);
   const file = adapter.environment(semantic);
-  let code: number | undefined;
-  let failed = false;
-  let failure: unknown;
   try {
-    if (signal?.aborted) code = 143;
-    else {
-      const command = webCheckDriverCommand({
+    const result = await runPreparedWebCheck(
+      {
         driverRoot,
-        hosts,
+        hostsFile: hosts,
         workspace,
         cwd,
-        revision,
-        environmentFile: file.path,
+        sourceRevision: revision,
         command: run.command,
+        environment: semantic,
+        priority: env.REMOTE_CHECK_PRIORITY ?? null,
         returns,
-      });
-      code = await adapter.execute({
-        command,
-        cwd: workspace,
         env: withoutLocalPublicationControl(env),
-        ...(signal ? { signal } : {}),
-      });
-    }
+        files: file,
+      },
+      adapter.receiver,
+      signal,
+    );
+    if (result.custody === 'occupied')
+      console.error(`Web check custody remains occupied; reconcile the original descriptor with --descriptor ${result.descriptorFile}`);
+    return result.code;
   } catch (error) {
-    failed = true;
-    failure = error;
+    // A journal is created before prepare dispatch; keep its input whenever caller close is uncertain.
+    if (!existsSync(file.recordFile)) {
+      try { file.close(); } catch {
+        try { disposeWebCheckEnvironmentInput(file); } catch { /* Preserve the original invocation error. */ }
+      }
+    }
+    throw error;
   }
-  try {
-    file.close();
-  } catch (cleanup) {
-    if (failed)
-      throw new AggregateError([failure, cleanup], 'Web placement and environment cleanup failed', { cause: failure });
-    if (code !== 0)
-      throw new AggregateError(
-        [new WebCheckFailure(code!, 'Web remote command'), cleanup],
-        'Web remote command and environment cleanup failed',
-      );
-    throw cleanup;
-  }
-  if (failed) throw failure;
-  return code!;
 }
 
 /** StackRun-shaped receiving adapter for existing Web callers, without its historical local fallback. */

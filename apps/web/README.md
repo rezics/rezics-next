@@ -1,5 +1,39 @@
 Run the site locally with `bun run dev` from `apps/web`. Run `bun run check` to generate, type-check, test, and build.
 
+## Prepared remote Web checks
+
+`scripts/check-placement.ts` is the Web receiving adapter. `routeWebCheck` prepares one invocation through the trusted
+Performance driver, records the caller's expected source, argv, environment, return declarations and private paths,
+then requires the producer's prepared status to register the exact snapshot before `run-prepared` can start. The
+prepared descriptor and its eleven-field binding stay tied to that original invocation. The native-terminal and
+final-settlement records arrive on FD 3 using closed message schemas; each message is limited to 64 KiB.
+
+The receiver fsyncs the original FD 3 bytes before validating each message and records their byte ranges plus raw,
+body and decoded-object SHA-256 digests in the private `web-custody.json` and append-only `receipts.ndjson` files.
+Caller prepare/run lifetime, source and returns validation, producer final custody, private input disposal, Web private
+directory cleanup and cancellation/reconciliation remain separate evidence. Delivery callbacks alone do not admit a
+final. Unknown, pending, partial, rejected, duplicate, out-of-order or mismatched evidence keeps the original private
+descriptor occupied. The producer's aggregate final custody is derived from its delivery, private-file and
+reconciliation dimensions; any unknown dimension remains unknown. Its original final and invocation identity are
+immutable during later reconciliation.
+
+`reconcileWebCheckCustody(descriptorFile)` and the CLI
+`bun apps/web/scripts/check-placement-custody.ts reconcile --descriptor <absolute-private-descriptor>` operate only on
+that saved descriptor and evidence. Recovery helpers have a 30 second observation deadline, then a 5 second TERM grace,
+a 5 second KILL/closure settle deadline and an independent 5 second output settle deadline. An observation timeout
+therefore returns within 45 seconds at most. At most 16 helper attempts are journaled, and an unresolved helper PID,
+process group or output pipe stays occupied. Late close events update the journal but never dispose the Web private
+directory by themselves. Reconciliation cannot replace the invocation or turn a recovery timeout into disposal
+authority. When a timeout or caller cancellation leaves custody unresolved, Web preserves any original nonzero native
+code; otherwise it returns the caller's cancellation code or 75. It does not claim that a timer proves process or
+output closure. Observation buffers are bounded, and their overflow state does not reconstruct omitted output.
+
+The actual `run-prepared` command has no elapsed observation cutoff, so a slow native check can finish under its own
+driver lifetime. Explicit cancellation sends TERM to the driver caller, escalates to KILL after 15 seconds and waits
+up to 5 seconds for caller and FD 3 closure. If they remain unresolved, Web retains the original descriptor until the
+driver's native and final custody evidence is known. Web never retries locally, scans processes, fabricates a receipt
+or starts a replacement invocation.
+
 ## Creator edition return page
 
 `/editions` uses the ordinary AppShell, shared buttons and full available main width. It reads one bounded own-account
