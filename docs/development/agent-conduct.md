@@ -26,6 +26,9 @@ first: line counts are a measure, never a goal ([efficiency](efficiency.md)).
   loops, `ps` or `pgrep` to wait.
 - A failure that also occurs on your base commit is not yours. Say so in one line and finish.
 - When the acceptance condition holds, stop. Do not add audits, proofs or checks the brief does not ask for.
+- Tests and stories prove the outcome; they are not the outcome. Write the fewest tests that pin the user-visible
+  behaviour and its edge cases, as a rule fewer test lines than product lines, and only the stories for the states the
+  brief names.
 
 ## Act instead of asking or refusing
 
@@ -63,6 +66,9 @@ first: line counts are a measure, never a goal ([efficiency](efficiency.md)).
 
 ## Managers
 
+- A manager synthesizes what its workers report (results, decisions, conflicts, duplicated or missing work across
+  tasks) and turns it into decisions and the next briefs. Workers do not read other workers' tasks; the manager reads
+  them once for all.
 - Your outputs are ready briefs and decisions. Keep at least eight ready briefs in your Goal's backlog.
 - Do not sleep or poll. End the turn; the controller wakes you on an inbox event.
 - Send only decisions, questions and handoffs: one message per decision, at most 60 words. Never send
