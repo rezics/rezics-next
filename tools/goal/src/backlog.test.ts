@@ -83,18 +83,16 @@ function existingTask(
   h.store.db
     .query('UPDATE worker_tasks SET current_attempt=1, body=? WHERE id=?')
     .run(JSON.stringify({ ...created, currentAttempt: 1, state }), id);
-  h.store.db
-    .query('INSERT INTO worker_attempts(task_id, attempt, body) VALUES (?, 1, ?)')
-    .run(
-      id,
-      JSON.stringify({
-        state: attemptState,
-        session: `paid-${id}`,
-        process: null,
-        driver: null,
-        auxiliaryProcesses: [],
-      }),
-    );
+  h.store.db.query('INSERT INTO worker_attempts(task_id, attempt, body) VALUES (?, 1, ?)').run(
+    id,
+    JSON.stringify({
+      state: attemptState,
+      session: `paid-${id}`,
+      process: null,
+      driver: null,
+      auxiliaryProcesses: [],
+    }),
+  );
   return created;
 }
 
@@ -255,7 +253,10 @@ test('an interrupted claim whose dispatch already committed archives onto the ex
 
   expect(f.dispatched).toEqual([]);
   expect(sweep.dispatched).toEqual([{ goal: 'web', taskId: id, brief: 'work.md' }]);
-  expect(readdirSync(join(f.state, 'backlog', 'web', 'dispatched')).sort()).toEqual([`${id}-work.md`, 'older-prior.md']);
+  expect(readdirSync(join(f.state, 'backlog', 'web', 'dispatched')).sort()).toEqual([
+    `${id}-work.md`,
+    'older-prior.md',
+  ]);
   expect(readFileSync(join(f.state, 'backlog', 'web', 'dispatched', `${id}-work.md`), 'utf8')).toBe(text);
   expect((await sweepBacklog(f.runtime)).dispatched).toEqual([]);
   expect(f.dispatched).toEqual([]);
