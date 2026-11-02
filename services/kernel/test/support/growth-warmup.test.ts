@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import type { PoolClient } from 'pg';
 import { withConnection } from '../../src/database/pool.ts';
 import {
   checkGrowth,
@@ -312,7 +313,7 @@ test('exhausted cold backends stay in the report and do not certify a compatible
 
 test('a warmed series that still grows fails after discard exhaustion', async () => {
   const database = db!;
-  let held: Awaited<ReturnType<typeof database.pool.connect>> | undefined;
+  let held: PoolClient | undefined;
   let calls = 0;
   let error: unknown;
   try {

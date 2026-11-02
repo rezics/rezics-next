@@ -210,7 +210,7 @@ export function definitionRoutes(
           200: t.Object({ types: t.Array(typeSummary, { maxItems: 20 }), next: t.Union([t.String(), t.Null()]) }),
           ...typeReadResponses,
         },
-        detail: catalogueReadDetail('definitionTypes.list'),
+        detail: catalogueReadDetail('definition_types.list'),
       },
       async ({ query, authorize, admission, job }) => {
         const check = await authorize({
@@ -226,7 +226,7 @@ export function definitionRoutes(
         params: t.Object({ typeId: t.String({ maxLength: 4194304 }) }),
         query: t.Object({ locale: typeLocale }),
         response: { 200: typeDescriptor, ...typeReadResponses },
-        detail: catalogueReadDetail('definitionTypes.read'),
+        detail: catalogueReadDetail('definition_types.read'),
       },
       async ({ params, query, authorize, admission, job }) => {
         const check = await authorize({

@@ -478,7 +478,7 @@ async function consumeWithdrawal(
     return false;
   let sourceName: unknown;
   try {
-    sourceName = JSON.parse(row.consumer.toString()).source;
+    sourceName = JSON.parse(Buffer.from(row.consumer).toString()).source;
   } catch {
     return false;
   }
@@ -490,9 +490,9 @@ async function consumeWithdrawal(
     id: row.consumer_id,
     sequence: row.sequence,
     closedGeneration: row.closed_generation,
-    consumer: row.consumer,
-    provenance: row.provenance,
-    dependency: row.dependency,
+    consumer: Buffer.from(row.consumer),
+    provenance: Buffer.from(row.provenance),
+    dependency: Buffer.from(row.dependency),
     enrollmentGeneration: row.enrollment_generation,
   };
   const ack = await source.readCurrentWithdrawal(tx, capture);

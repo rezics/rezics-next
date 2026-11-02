@@ -283,7 +283,7 @@ test('attempted 40001 and 40P01 failures retain inclusive costs without hiding u
     expect((error as Error).message).toContain(`4 {"${sqlstate}":1}`);
     expect((error as Error).message).toContain(`16 {"${sqlstate}":1}`);
     const samples = (error as GrowthBoundError & { samples: readonly ReportSample[] }).samples;
-    expect(samples.map(({ repetitions }) => repetitions[0]!.statements)).toEqual([71, 81, 88]);
+    expect(samples.map(({ repetitions }) => repetitions![0]!.statements)).toEqual([71, 81, 88]);
     expect(samples[0]!.attempts?.repetitions[0]!.byOutcome[`aborted:${sqlstate}`]).toBe(1);
   }
 }, 120_000);
