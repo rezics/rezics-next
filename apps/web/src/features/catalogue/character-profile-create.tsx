@@ -12,6 +12,12 @@ import { CreateSubjectLanguageRemove } from './create-subject-language-remove';
 import { ScalarControl, EditorFailure } from './statement-editor-view';
 import { editableScalar, type StatementInput } from './statement-editor';
 import type { CreateFailure, CreateResult, TermDraft } from './create-subject';
+import {
+  characterCreateCorrections,
+  characterCorrectionTargets,
+  characterFactId,
+  type CharacterCorrection,
+} from './character-create-guidance';
 import { characterDraft, characterGroups, type CharacterCommand, type CharacterTransport } from './character-profile';
 
 const actionClassName =
@@ -42,6 +48,55 @@ function CharacterProfileCreateLive({
   const [facts, setFacts] = useState<StatementInput[]>([]);
   const [field, setField] = useState('');
   const [failure, setFailure] = useState<CreateFailure>();
+  const [corrections, setCorrections] = useState<CharacterCorrection[]>([]);
+  const factIds = useRef(new WeakMap<StatementInput, number>());
+  const nextFactId = useRef(0);
+  const factId = (fact: StatementInput) => {
+    let id = factIds.current.get(fact);
+    if (id === undefined) {
+      id = nextFactId.current++;
+      factIds.current.set(fact, id);
+    }
+    return id;
+  };
+  const addressedFacts = facts.map((fact) => ({ fact, id: factId(fact) }));
+  const targets = characterCorrectionTargets(termsId, terms, addressedFacts, release);
+  const displayedCorrections =
+    failure?.reason === 'invalid'
+      ? corrections.map((error) =>
+          error.target && targets.has(error.target)
+            ? error
+            : {
+                ...error,
+                target: undefined,
+                instruction: `${error.reason} ${m.character_create_correction_fallback({}, o)}`,
+              },
+        )
+      : [];
+  const associated = new Map<string, string[]>();
+  const scalarFeedback = new Map<string, (CharacterCorrection & { target: string })[]>();
+  for (const error of displayedCorrections) {
+    if (!error.target) continue;
+    const ids = associated.get(error.target) ?? [];
+    ids.push(error.id);
+    associated.set(error.target, ids);
+    const address = error.target.slice(0, error.target.lastIndexOf('-'));
+    const scalarErrors = scalarFeedback.get(address) ?? [];
+    scalarErrors.push({ ...error, target: error.target });
+    scalarFeedback.set(address, scalarErrors);
+  }
+  const feedback = (target: string) => ({
+    'aria-invalid': associated.has(target) ? (true as const) : undefined,
+    'aria-describedby': associated.get(target)?.join(' '),
+  });
+  function reportFailure(next: CreateFailure) {
+    setFailure(next);
+    setCorrections(
+      next.reason === 'invalid'
+        ? characterCreateCorrections(next.errors ?? [], terms, addressedFacts, release, locale, termsId)
+        : [],
+    );
+  }
   const [busy, setBusy] = useState(false);
   const pending = useRef<CharacterCommand | null>(null);
   const running = useRef(false);
@@ -55,7 +110,7 @@ function CharacterProfileCreateLive({
     if (!pending.current) {
       const draft = characterDraft(release, terms, facts);
       if (draft.errors.length) {
-        setFailure({ ok: false, reason: 'invalid', errors: draft.errors });
+        reportFailure({ ok: false, reason: 'invalid', errors: draft.errors });
         return;
       }
       pending.current = { item: draft.item, key: crypto.randomUUID() };
@@ -69,12 +124,12 @@ function CharacterProfileCreateLive({
         pending.current = null;
         onCreated(result);
       } else {
-        setFailure(result);
+        reportFailure(result);
         if (result.reason !== 'unavailable' && result.reason !== 'conflict') pending.current = null;
       }
     } catch {
       if (!lifetime.active()) return;
-      setFailure({ ok: false, reason: 'unavailable' });
+      reportFailure({ ok: false, reason: 'unavailable' });
     } finally {
       if (!lifetime.active()) return;
       running.current = false;
@@ -117,6 +172,7 @@ function CharacterProfileCreateLive({
                   <Textarea
                     className="min-w-0 max-w-full"
                     id={`${termsId}-${key}-${term.id}`}
+                    {...feedback(`${termsId}-${key}-${term.id}`)}
                     value={term[key]}
                     onChange={(event) =>
                       setTerms((previous) =>
@@ -128,6 +184,7 @@ function CharacterProfileCreateLive({
                   <Input
                     className="min-h-11 min-w-0 max-w-full md:pointer-fine:min-h-8"
                     id={`${termsId}-${key}-${term.id}`}
+                    {...feedback(`${termsId}-${key}-${term.id}`)}
                     value={term[key]}
                     onChange={(event) =>
                       setTerms((previous) =>
@@ -168,11 +225,11 @@ function CharacterProfileCreateLive({
           {m.catalogue_create_add_language({}, o)}
         </Button>
         <Field className="min-w-0">
-          <FieldLabel className={labelClassName} htmlFor="character-initial-field">
+          <FieldLabel className={labelClassName} htmlFor={`${termsId}-initial-field`}>
             {m.character_initial_fact({}, o)}
           </FieldLabel>
           <NativeSelect
-            id="character-initial-field"
+            id={`${termsId}-initial-field`}
             className="w-full [&>select]:min-h-11"
             value={field}
             onChange={(event) => setField(event.target.value)}
@@ -214,7 +271,21 @@ function CharacterProfileCreateLive({
               definition={release.properties[fact.property.id]}
               locale={locale}
               read={{ release, public: { related: {} } }}
-              onChange={(value) => setFacts(facts.map((row, at) => (at === index ? { ...row, value } : row)))}
+              feedback={{
+                id: characterFactId(termsId, factId(fact)),
+                address: 'fact',
+                errors: scalarFeedback.get(`${characterFactId(termsId, factId(fact))}-fact`) ?? [],
+              }}
+              onChange={(value) =>
+                setFacts(
+                  facts.map((row, at) => {
+                    if (at !== index) return row;
+                    const next = { ...row, value };
+                    factIds.current.set(next, factId(row));
+                    return next;
+                  }),
+                )
+              }
             />
             <Button
               className={actionClassName}
@@ -231,14 +302,50 @@ function CharacterProfileCreateLive({
         <div role="alert" className="space-y-2">
           <EditorFailure reason={failure.reason === 'conflict' ? 'stale' : failure.reason} locale={locale} />
           {failure.refreshDefinitions && <p>{m.catalogue_create_refresh({}, o)}</p>}
+          {failure.reason === 'invalid' && displayedCorrections.length === 0 && (
+            <p>{m.character_create_correction_fallback({}, o)}</p>
+          )}
+          {displayedCorrections.length > 0 && (
+            <section aria-label={m.character_create_correction_summary({}, o)} className="min-w-0 space-y-2">
+              <h2 className="font-semibold">{m.character_create_correction_summary({}, o)}</h2>
+              <ul className="list-disc space-y-3 ps-5 text-sm">
+                {displayedCorrections.map((error) => (
+                  <li key={error.id} id={error.id}>
+                    {error.target ? (
+                      <a
+                        className="inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+                        href={`#${encodeURIComponent(error.target)}`}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          if (!lifetime.active()) return;
+                          const control = event.currentTarget.ownerDocument.getElementById(error.target!);
+                          control?.focus();
+                          control?.scrollIntoView?.({ block: 'center' });
+                        }}
+                      >
+                        {error.label}
+                      </a>
+                    ) : (
+                      <p className="font-medium">{error.label}</p>
+                    )}
+                    <p>{error.instruction}</p>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
           {!!failure.errors?.length && (
-            <ul className="break-words text-sm">
-              {failure.errors.map((error, index) => (
-                <li key={index}>
-                  {error.pointer}: {error.code}
-                </li>
-              ))}
-            </ul>
+            <details className="min-w-0 text-sm">
+              <summary className="min-h-11 cursor-pointer py-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">
+                {m.catalogue_creation_technical_details({}, o)}
+              </summary>
+              <pre
+                tabIndex={0}
+                className="min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere] focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+              >
+                <code className="select-all">{JSON.stringify(failure.errors, null, 2)}</code>
+              </pre>
+            </details>
           )}
           {failure.reason === 'conflict' && (
             <Button
