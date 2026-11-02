@@ -24,6 +24,8 @@ import {
 } from './post-history-lifetime';
 
 type Revision = HistoryPage['revisions'][number];
+type ContinuationIntent = { connection: number; element: HTMLButtonElement };
+type ContinuationBoundary = { connection: number; revisionId: string | null; intent: ContinuationIntent };
 
 type PostHistoryProps = {
   postId: string;
@@ -109,7 +111,9 @@ function HistoryDisclosure({
 }) {
   const regionId = `post-history-${useId().replaceAll(':', '')}`;
   const [continuationStatus, setContinuationStatus] = useState<string | null>(null);
-  const continuationBoundary = useRef<{ connection: number; revisionId: string | null } | undefined>(undefined);
+  const keyboardActivation = useRef<HTMLButtonElement | undefined>(undefined);
+  const continuationIntent = useRef<ContinuationIntent | undefined>(undefined);
+  const continuationBoundary = useRef<ContinuationBoundary | undefined>(undefined);
   const {
     open,
     loading,
@@ -130,26 +134,55 @@ function HistoryDisclosure({
   const showHistoryAction = available ? next !== null || pageFailed : loaded;
 
   useLayoutEffect(() => {
+    const cancel = () => {
+      keyboardActivation.current = undefined;
+      continuationIntent.current = undefined;
+    };
+    document.addEventListener('pointerdown', cancel, true);
+    document.addEventListener('focusin', cancel, true);
+    window.addEventListener('blur', cancel);
+    return () => {
+      cancel();
+      document.removeEventListener('pointerdown', cancel, true);
+      document.removeEventListener('focusin', cancel, true);
+      window.removeEventListener('blur', cancel);
+    };
+  }, []);
+
+  useLayoutEffect(() => {
     const pending = continuationBoundary.current;
     if (!pending) return;
-    if (pending.connection !== connection || !lifetime.ownsConnection(connection)) {
+    if (
+      pending.connection !== connection ||
+      !lifetime.ownsConnection(connection) ||
+      pending.intent !== continuationIntent.current ||
+      document.activeElement !== pending.intent.element
+    ) {
       continuationBoundary.current = undefined;
+      continuationIntent.current = undefined;
+      setContinuationStatus(null);
       return;
     }
     const boundary = document.getElementById(regionId)?.querySelector<HTMLElement>('[data-history-focus-boundary]');
     if (!boundary) {
       continuationBoundary.current = undefined;
+      continuationIntent.current = undefined;
+      setContinuationStatus(null);
       return;
     }
-    boundary.focus({ preventScroll: true });
+    continuationIntent.current = undefined;
     continuationBoundary.current = undefined;
+    boundary.focus({ preventScroll: true });
   }, [connection, continuationStatus, lifetime, regionId, revisions]);
 
-  async function load(cursor?: string) {
+  async function load(cursor?: string, keyboardElement?: HTMLButtonElement) {
+    continuationIntent.current = undefined;
     continuationBoundary.current = undefined;
     setContinuationStatus(null);
     const request = lifetime.begin(connection, source, postId, cursor, locale, credentialMode, viewerId);
     if (!request) return;
+    const intent = cursor !== undefined && keyboardElement ? { connection, element: keyboardElement } : undefined;
+    continuationIntent.current = intent;
     lifetime.update(connection, (view) => ({ ...view, loading: true }));
     try {
       // Fence the queued transport itself, before it can borrow replacement session credentials.
@@ -194,10 +227,18 @@ function HistoryDisclosure({
       }
       const page = result.data;
       const entries = page.revisions.map((revision) => ({ revision, documentMedia: page.documentMedia }));
-      if (cursor !== undefined && lifetime.snapshot().open) {
+      if (
+        cursor !== undefined &&
+        intent &&
+        continuationIntent.current === intent &&
+        document.activeElement === intent.element &&
+        lifetime.snapshot().open &&
+        lifetime.ownsConnection(connection)
+      ) {
         continuationBoundary.current = {
           connection,
           revisionId: entries[0]?.revision.revisionId ?? null,
+          intent,
         };
         setContinuationStatus(
           entries.length === 0
@@ -225,11 +266,18 @@ function HistoryDisclosure({
     } catch {
       lifetime.failPage(request);
     } finally {
+      if (intent && continuationIntent.current === intent && continuationBoundary.current?.intent !== intent) {
+        continuationIntent.current = undefined;
+      }
       lifetime.finish(request);
     }
   }
 
   function toggle() {
+    keyboardActivation.current = undefined;
+    continuationIntent.current = undefined;
+    continuationBoundary.current = undefined;
+    setContinuationStatus(null);
     if (!lifetime.ownsConnection(connection)) return;
     const view = lifetime.snapshot();
     const reveal = !view.open;
@@ -321,7 +369,22 @@ function HistoryDisclosure({
             size="sm"
             className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
             disabled={loading}
-            onClick={() => void load(retryPage ? failedCursor : (next ?? undefined))}
+            onKeyDown={(event) => {
+              keyboardActivation.current =
+                !event.repeat && (event.key === 'Enter' || event.key === ' ') ? event.currentTarget : undefined;
+            }}
+            onKeyUp={(event) => {
+              const button = event.currentTarget;
+              queueMicrotask(() => {
+                if (keyboardActivation.current === button) keyboardActivation.current = undefined;
+              });
+            }}
+            onClick={(event) => {
+              const button = event?.currentTarget;
+              const keyboard = event?.detail === 0 && keyboardActivation.current === button;
+              keyboardActivation.current = undefined;
+              void load(retryPage ? failedCursor : (next ?? undefined), keyboard ? button : undefined);
+            }}
           >
             {retryPage ? m.exact_revision_retry() : m.thread_history_more()}
           </Button>

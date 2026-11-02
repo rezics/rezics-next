@@ -325,10 +325,8 @@ test('A transport failure keeps admitted revisions readable through close, reope
     await page.getByRole('button', { name: m.thread_history_hide() }).click();
     await page.getByRole('button', { name: m.thread_history_show() }).click();
     expect(await calls(page)).toHaveLength(3);
-    await retry.evaluate((button) => {
-      (button as HTMLButtonElement).click();
-      (button as HTMLButtonElement).click();
-    });
+    await retry.focus();
+    await retry.press('Enter');
     await pending(page);
     expect(await firstEntry!.isVisible()).toBe(true);
     expect(await page.getByText(m.thread_history_page_failed(), { exact: true }).isVisible()).toBe(true);
@@ -360,7 +358,7 @@ test('empty continuation pages keep the admitted window, move focus to their bou
     await open(page);
     await finish(page, { revisions: [first], next: cursor });
     await versions(page, 1);
-    await page.getByRole('button', { name: m.thread_history_more() }).click();
+    await page.getByRole('button', { name: m.thread_history_more() }).press('Enter');
     await pending(page);
     await finish(page, { revisions: [], next: nextCursor });
 
@@ -371,7 +369,7 @@ test('empty continuation pages keep the admitted window, move focus to their bou
     expect(await page.getByRole('button', { name: m.thread_history_more() }).count()).toBe(1);
     expect(await page.locator('section > ol > li').count()).toBe(1);
 
-    await page.getByRole('button', { name: m.thread_history_more() }).click();
+    await page.getByRole('button', { name: m.thread_history_more() }).press('Enter');
     await pending(page);
     await finish(page, { revisions: [], next: null });
     const terminalBoundary = page.locator('h4[data-history-focus-boundary]');
@@ -381,6 +379,60 @@ test('empty continuation pages keep the admitted window, move focus to their bou
     expect(await page.getByRole('button', { name: m.thread_history_more() }).count()).toBe(0);
     expect(await page.locator('section > ol > li').count()).toBe(1);
     expect((await calls(page)).map(({ cursor }) => cursor)).toEqual([null, cursor, nextCursor]);
+  } finally {
+    await page.close();
+  }
+});
+
+test('continuation handoff follows only its still-owned keyboard intent', async () => {
+  const page = await mounted();
+  try {
+    await open(page);
+    await finish(page, { revisions: [first], next: cursor });
+    await versions(page, 1);
+    const more = page.getByRole('button', { name: m.thread_history_more() });
+    const hide = page.getByRole('button', { name: m.thread_history_hide() });
+    await more.click();
+    await pending(page);
+    await finish(page, { revisions: [], next: 'moved' });
+    expect(await page.locator('[data-history-focus-boundary]').count()).toBe(0);
+    expect(await more.evaluate((button) => button === document.activeElement)).toBe(true);
+
+    await more.press('Enter');
+    await pending(page);
+    await page.getByRole('heading', { name: m.thread_history_heading() }).click();
+    await finish(page, { revisions: [], next: 'focused' });
+    expect(await more.evaluate((button) => button === document.activeElement)).toBe(true);
+    expect(await page.locator('[data-history-focus-boundary]').count()).toBe(0);
+
+    await more.press('Enter');
+    await pending(page);
+    await hide.focus();
+    await finish(page, { revisions: [], next: 'closed' });
+    expect(await hide.evaluate((button) => button === document.activeElement)).toBe(true);
+    expect(await page.locator('[data-history-focus-boundary]').count()).toBe(0);
+
+    await more.press('Enter');
+    await pending(page);
+    await hide.click();
+    await finish(page, { revisions: [], next: 'retired' });
+    expect(await page.locator('section').isVisible()).toBe(false);
+
+    await page.getByRole('button', { name: m.thread_history_show() }).click();
+    await more.press('Enter');
+    await pending(page);
+    await page.evaluate(() => {
+      const driver = window as unknown as Driver;
+      driver.unmountHistory();
+      driver.mountHistory();
+    });
+    await page.getByRole('button', { name: m.thread_history_show() }).click();
+    await pending(page, 2);
+    await finish(page, { revisions: [second], next: null });
+    expect(await hide.evaluate((button) => button === document.activeElement)).toBe(true);
+    expect(await page.locator('[data-history-focus-boundary]').count()).toBe(0);
+    await finish(page, { revisions: [first], next: cursor });
+    await versions(page, 1);
   } finally {
     await page.close();
   }
