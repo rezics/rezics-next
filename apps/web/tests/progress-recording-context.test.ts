@@ -202,7 +202,7 @@ test('Record progress with title unit and explicit total semantics', async () =>
       return dialog!;
     };
     const enter = async (dialog: HTMLElement, value: string) => {
-      const input = dialog.querySelector('input[type="number"]')!;
+      const input = dialog.querySelector('input[inputmode="decimal"]')!;
       await act(async () => {
         Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, value);
         input.dispatchEvent(new window.Event('input', { bubbles: true }));
@@ -214,9 +214,9 @@ test('Record progress with title unit and explicit total semantics', async () =>
     expect(dialog.textContent).toContain('Unit: segment');
     expect(dialog.textContent).toContain('Current recorded total: 2.5 segments');
     expect(dialog.textContent).toContain(m.library_progress_replace_total());
-    expect(dialog.querySelector('input[type="number"]')?.getAttribute('min')).toBe('0');
-    expect(dialog.querySelector('input[type="number"]')?.getAttribute('max')).toBe('98.5');
-    expect(dialog.querySelector('input[type="number"]')?.getAttribute('step')).toBe('0.01');
+    expect(dialog.querySelector('input[inputmode="decimal"]')?.getAttribute('min')).toBe('0');
+    expect(dialog.querySelector('input[inputmode="decimal"]')?.getAttribute('max')).toBe('98.5');
+    expect(dialog.querySelector('input[inputmode="decimal"]')?.getAttribute('step')).toBe('0.01');
     expect(dialog.textContent).not.toContain('Session total:');
     expect(dialog.textContent).not.toContain(' / ');
     expect(host.querySelector('details')?.open).toBe(false);
@@ -228,6 +228,7 @@ test('Record progress with title unit and explicit total semantics', async () =>
     await act(async () =>
       dialog.querySelector('form')!.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })),
     );
+    await act(async () => button(m.library_progress_confirm_correction()).click());
     expect(writes).toEqual([
       {
         body: { revision: 1, amount: '3.75' },
@@ -246,6 +247,7 @@ test('Record progress with title unit and explicit total semantics', async () =>
     await act(async () =>
       again.querySelector('form')!.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })),
     );
+    await act(async () => button(m.library_progress_confirm_correction()).click());
     expect(writes[1]?.body).toEqual({ revision: 2, amount: '0' });
     expect(writes[1]?.key).not.toBe(JSON.stringify(page.idempotencyKey));
     expect(session.amount).toBe('0');

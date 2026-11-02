@@ -1,4 +1,10 @@
 {
+  "library_progress_decimal_input_required": "値を入力してください。",
+  "library_progress_decimal_input_syntax": "指数表記を使わず、整数部12桁、小数部6桁以内の0以上の小数を入力してください。",
+  "library_progress_decimal_input_min": "{value}以上を入力してください。",
+  "library_progress_decimal_input_max": "{value}以下を入力してください。",
+  "library_progress_decimal_input_precision": "小数部は{places}桁以内にしてください。",
+  "library_progress_decimal_input_locator": "位置の目印を1〜256文字で入力してください。",
   "library_collection_draft_navigation_unsaved": "コレクションに未保存の変更があります。",
   "library_collection_draft_navigation_title": "コレクションの下書きから離れますか？",
   "library_collection_draft_navigation_description": "未保存のメタデータ、並び順、メモは失われます。離れても変更は保存されません。",

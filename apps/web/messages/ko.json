@@ -1,4 +1,10 @@
 {
+  "library_progress_decimal_input_required": "값을 입력하세요.",
+  "library_progress_decimal_input_syntax": "지수 표기 없이 정수부 최대 12자리, 소수부 최대 6자리의 0 이상인 소수를 입력하세요.",
+  "library_progress_decimal_input_min": "{value} 이상을 입력하세요.",
+  "library_progress_decimal_input_max": "{value} 이하를 입력하세요.",
+  "library_progress_decimal_input_precision": "소수부는 최대 {places}자리까지 입력하세요.",
+  "library_progress_decimal_input_locator": "위치 표시를 1~256자로 입력하세요.",
   "library_collection_draft_navigation_unsaved": "컬렉션에 저장하지 않은 변경 사항이 있습니다.",
   "library_collection_draft_navigation_title": "컬렉션 초안에서 나갈까요?",
   "library_collection_draft_navigation_description": "저장하지 않은 메타데이터, 순서 및 메모가 사라집니다. 나가도 변경 사항은 저장되지 않습니다.",

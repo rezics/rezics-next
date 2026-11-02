@@ -1,4 +1,10 @@
 {
+  "library_progress_decimal_input_required": "Introduce un valor.",
+  "library_progress_decimal_input_syntax": "Usa un decimal no negativo con hasta 12 dígitos enteros y 6 decimales, sin notación exponencial.",
+  "library_progress_decimal_input_min": "Introduce {value} o más.",
+  "library_progress_decimal_input_max": "Introduce {value} o menos.",
+  "library_progress_decimal_input_precision": "Usa como máximo {places} decimales.",
+  "library_progress_decimal_input_locator": "Introduce un localizador de entre 1 y 256 caracteres.",
   "library_collection_draft_navigation_unsaved": "Tienes cambios sin guardar en la colección.",
   "library_collection_draft_navigation_title": "¿Salir del borrador de la colección?",
   "library_collection_draft_navigation_description": "Se perderán los metadatos, el orden y las notas sin guardar. Salir no guarda los cambios.",

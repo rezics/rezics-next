@@ -810,7 +810,7 @@ test(
       expect(await main(page).getByRole('combobox', { name: 'Unit', exact: true }).inputValue()).toBe('page');
       await main(page).getByRole('radio', { name: 'Amount', exact: true }).check();
       await main(page).getByRole('combobox', { name: 'Unit', exact: true }).selectOption('page');
-      await main(page).getByRole('spinbutton', { name: 'Total', exact: true }).fill('240');
+      await main(page).getByRole('textbox', { name: 'Total', exact: true }).fill('240');
       await main(page).getByRole('button', { name: 'Start', exact: true }).click();
       await page.waitForURL(new RegExp(`/library/progress/${id(80)}`));
       expect(calls.find((call) => call.method === 'POST')?.body).toEqual({
@@ -838,7 +838,7 @@ test(
       await main(page).getByRole('radio', { name: 'Amount', exact: true }).check();
       const unit = main(page).getByRole('combobox', { name: 'Unit', exact: true });
       await unit.selectOption('chapter');
-      await main(page).getByRole('spinbutton', { name: 'Total', exact: true }).fill('240');
+      await main(page).getByRole('textbox', { name: 'Total', exact: true }).fill('240');
       await main(page).getByRole('button', { name: 'Start', exact: true }).click();
       await page.waitForURL(new RegExp(`/library/progress/${id(80)}`));
       expect(calls.find((call) => call.method === 'POST')?.body).toEqual({
@@ -994,7 +994,7 @@ test(
       await main(page).getByRole('button', { name: 'Update progress', exact: true }).click();
       expect(await page.getByRole('heading', { name: 'Update progress', exact: true }).count()).toBe(1);
       expect(await page.getByRole('textbox', { name: 'Locator', exact: true }).inputValue()).toBe('Part 2, chapter 14');
-      expect(await page.getByRole('spinbutton', { name: 'Position', exact: true }).inputValue()).toBe('42');
+      expect(await page.getByRole('textbox', { name: 'Position', exact: true }).inputValue()).toBe('42');
     } finally {
       await page.context().close();
     }

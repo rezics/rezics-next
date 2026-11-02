@@ -208,7 +208,7 @@ async function mount(initial = page()) {
   const user = userEvent.setup({ document: window.document as unknown as Document });
   const form = () => host.querySelector('form')!;
   const key = () => form().querySelector<HTMLInputElement>('[name="idempotencyKey"]')!.value;
-  const total = () => body.getByRole('spinbutton', { name: m.library_progress_total() }) as HTMLInputElement;
+  const total = () => body.getByRole('textbox', { name: m.library_progress_total() }) as HTMLInputElement;
   const beforeUnload = () => {
     const event = new window.Event('beforeunload', { cancelable: true });
     window.dispatchEvent(event);
@@ -440,7 +440,7 @@ test('Current-page creation preserves native subject/version, modes, totals, ret
         await act(async () => {
           await h.user.type(h.total(), '0');
         });
-      else expect(h.body.queryByRole('spinbutton', { name: m.library_progress_total() })).toBeNull();
+      else expect(h.body.queryByRole('textbox', { name: m.library_progress_total() })).toBeNull();
       await h.show(initial); // Ordinary rerenders retain drafts, chosen version and key.
       const old = await h.start('start');
       expect(commands).toHaveLength(1);

@@ -1,4 +1,10 @@
 {
+  "library_progress_decimal_input_required": "Saisissez une valeur.",
+  "library_progress_decimal_input_syntax": "Utilisez un nombre décimal positif ou nul avec au plus 12 chiffres entiers et 6 décimales, sans notation exponentielle.",
+  "library_progress_decimal_input_min": "Saisissez au moins {value}.",
+  "library_progress_decimal_input_max": "Saisissez au plus {value}.",
+  "library_progress_decimal_input_precision": "Utilisez au maximum {places} décimales.",
+  "library_progress_decimal_input_locator": "Saisissez un repère de 1 à 256 caractères.",
   "library_collection_draft_navigation_unsaved": "Vous avez des modifications non enregistrées dans la collection.",
   "library_collection_draft_navigation_title": "Quitter ce brouillon de collection ?",
   "library_collection_draft_navigation_description": "Les métadonnées, l’ordre et les notes non enregistrés seront perdus. Quitter n’enregistre aucune modification.",

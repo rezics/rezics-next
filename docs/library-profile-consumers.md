@@ -177,6 +177,8 @@ A changed final source fails closed; it never returns a stale allow or a reassoc
 fixed request deadline and releases each home before visiting another. The read creates no migration/preparation,
 receipt, reserve, activation or other write.
 
+Decision: Progress editors retain raw text, trim only numeric operands, and validate exact native bounds and step-derived precision before a new command or review; opaque locators retain their native 1–256-character bound without trimming.
+
 Scalar captured totals remain frozen. Cursor text stays opaque, with no CFI interpretation. Sparse IDs remain exact
 session-local keys: `{1,3,7}` has cardinality three, and completion never fills a range. New reading/version choices
 create a distinct session with empty values; they never repoint, rescale, clamp, copy or repin earlier history.

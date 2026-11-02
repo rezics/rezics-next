@@ -1,8 +1,9 @@
+import { progressDecimalIssue } from './progress-decimal-input';
+import { ProgressDecimalInput } from './progress-decimal-input-field';
 import { progressAddressIssue } from './progress-address';
 import { ProgressAddressCorrection } from './progress-address-correction';
 import { Exposure, useOperation } from '../kernel/exposure';
 import { Button } from '@rezics/ui/shadcn/button';
-import { Input } from '@rezics/ui/shadcn/input';
 import { Field, FieldLabel, FieldLegend } from '@rezics/ui/shadcn/field';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { RadioGroup, RadioGroupItem } from '@rezics/ui/shadcn/radio-group';
@@ -337,6 +338,7 @@ function ProgressIndexPageContent({
   const choiceRequest = useRef(0);
   const [choosing, setChoosing] = useState(false);
   const [total, setTotal] = useState('');
+  const [validateTotal, setValidateTotal] = useState(false);
   const [key, setKey] = useState(page.idempotencyKey);
   const [alert, setAlert] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -356,6 +358,7 @@ function ProgressIndexPageContent({
       setChoosing(false);
       setVersion([]);
       setTotal('');
+      setValidateTotal(false);
       setUnit('');
       setMode(page.progressChoices?.[0]?.mode);
       setKey(authority ? crypto.randomUUID() : page.idempotencyKey);
@@ -442,6 +445,10 @@ function ProgressIndexPageContent({
     event.preventDefault();
     const origin = episode;
     if (!current() || !draftCurrent() || origin.pending || (!intent.current && (!mode || !pair))) return;
+    if (!intent.current) {
+      setValidateTotal(true);
+      if (pair?.total !== 'forbidden' && progressDecimalIssue(total, pair, pair?.total === 'required')) return;
+    }
     origin.pending = true;
     setAlert(null);
     setPending(true);
@@ -608,7 +615,7 @@ function ProgressIndexPageContent({
               </p>
             ) : null}
             {choices?.length && !choosing ? (
-              <form className="max-w-xl space-y-5" onSubmit={onStart}>
+              <form className="max-w-xl space-y-5" noValidate onSubmit={onStart}>
                 <input type="hidden" name="idempotencyKey" value={key} />
                 <input type="hidden" name="subjectId" value={subject} />
                 <Field>
@@ -684,14 +691,12 @@ function ProgressIndexPageContent({
                   {pair?.total !== 'forbidden' ? (
                     <Field>
                       <FieldLabel htmlFor="progress-total">{m.library_progress_total()}</FieldLabel>
-                      <Input
+                      <ProgressDecimalInput
                         id="progress-total"
                         name="total"
                         disabled={draftLocked}
-                        type="number"
-                        min={pair?.min}
-                        max={pair?.max}
-                        step={pair?.step}
+                        rules={pair}
+                        issue={validateTotal ? progressDecimalIssue(total, pair, pair?.total === 'required') : null}
                         required={pair?.total === 'required'}
                         value={total}
                         onChange={(event) => {

@@ -1,3 +1,4 @@
+import { progressDecimalPattern as decimal } from './progress-decimal-input';
 import { isNotFound } from '@tanstack/react-router';
 import { progressAddressIssue, ProgressAddressError, type ProgressAddressField } from './progress-address';
 import type { ProgressChoices, ProgressInputRules as ProfileProgressInputRules } from './progress-profile';
@@ -20,7 +21,6 @@ export const PROGRESS_BATCH_LIMIT = 100;
 
 const routeId = /^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const idempotencyKeyPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const decimal = /^(?:0|[1-9][0-9]{0,11})(?:\.[0-9]{1,6})?$/;
 const unitIdPattern = /^[A-Za-z0-9._:~-]{1,128}$/;
 const modes = new Set(['scalar_amount', 'cursor_position', 'completed_units']);
 

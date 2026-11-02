@@ -1,4 +1,10 @@
 {
+  "library_progress_decimal_input_required": "Gib einen Wert ein.",
+  "library_progress_decimal_input_syntax": "Verwende eine nicht negative Dezimalzahl mit höchstens 12 Vorkomma- und 6 Nachkommastellen, ohne Exponentialschreibweise.",
+  "library_progress_decimal_input_min": "Gib mindestens {value} ein.",
+  "library_progress_decimal_input_max": "Gib höchstens {value} ein.",
+  "library_progress_decimal_input_precision": "Verwende höchstens {places} Nachkommastellen.",
+  "library_progress_decimal_input_locator": "Gib eine Positionsangabe mit 1 bis 256 Zeichen ein.",
   "library_collection_draft_navigation_unsaved": "Du hast ungespeicherte Änderungen an der Sammlung.",
   "library_collection_draft_navigation_title": "Diesen Sammlungsentwurf verlassen?",
   "library_collection_draft_navigation_description": "Ungespeicherte Metadaten, die Reihenfolge und Notizen gehen verloren. Beim Verlassen wird nichts gespeichert.",

@@ -1,3 +1,5 @@
+import { progressDecimalIssue, progressLocatorIssue } from './progress-decimal-input';
+import { ProgressDecimalInput, ProgressInputError } from './progress-decimal-input-field';
 import { ProgressAddressCorrection } from './progress-address-correction';
 import * as exposure from '../kernel/exposure';
 import { useQuery } from '@tanstack/react-query';
@@ -551,6 +553,7 @@ function SessionEditor({
   const [amount, setAmount] = useState(retainedRecord?.amount ?? '');
   const [locator, setLocator] = useState(retainedRecord?.locator ?? '');
   const [position, setPosition] = useState(retainedRecord?.position ?? '');
+  const [validateRecord, setValidateRecord] = useState(false);
   const [addText, setAddText] = useState(retainedRecord?.add?.join('\n') ?? '');
   const [removeText, setRemoveText] = useState(retainedRecord?.remove?.join('\n') ?? '');
   const [alert, setAlert] = useState<string | null>(null);
@@ -575,6 +578,10 @@ function SessionEditor({
   const changesHeading = useId();
   const unitsHeading = useId();
   const amountHint = useId();
+  const locatorError = useId();
+  const amountId = useId();
+  const locatorId = useId();
+  const positionId = useId();
   const structureHint = useId();
 
   useLayoutEffect(() => {
@@ -624,6 +631,7 @@ function SessionEditor({
         removeText: recording?.remove?.join('\n') ?? '',
       };
       draftBaseline.current = baseline;
+      setValidateRecord(false);
       setAmount(baseline.amount);
       setLocator(baseline.locator);
       setPosition(baseline.position);
@@ -650,6 +658,7 @@ function SessionEditor({
       setReadDenied(false);
       setSession(page.session);
       setKey(lifetime.current.custody.retry?.data.idempotencyKey ?? page.idempotencyKey);
+      setValidateRecord(false);
       setAmount('');
       setLocator('');
       setPosition('');
@@ -703,6 +712,7 @@ function SessionEditor({
       const origin = lifetime.current;
       if (!isCurrent(origin) || origin.custody.flight || origin.custody.retry) return;
       draftBaseline.current = null;
+      setValidateRecord(false);
       setAmount(session.amount ?? '');
       setLocator(session.locator ?? '');
       setPosition(session.position ?? '');
@@ -867,6 +877,14 @@ function SessionEditor({
   async function onRecord() {
     const origin = lifetime.current;
     if (!canHandle() || !isCurrent(origin) || session.state !== 'active' || !offered) return;
+    if (origin.custody.retry) {
+      stage(origin.custody.retry);
+      return;
+    }
+    setValidateRecord(true);
+    if (session.mode === 'cursor_position') {
+      if (progressLocatorIssue(locator) || progressDecimalIssue(position, session.inputRules)) return;
+    } else if (progressDecimalIssue(amount, session.inputRules)) return;
     const intent =
       session.mode === 'cursor_position' ? { locator, position: position.trim() } : { amount: amount.trim() };
     stage({
@@ -950,8 +968,7 @@ function SessionEditor({
     );
   }
 
-  const { min, max, step } = session.inputRules ?? {};
-  const inputBounds = { min, max, step: step ?? 'any' };
+  const locatorIssue = validateRecord ? progressLocatorIssue(locator) : null;
   const ratio = rowRatio([session.subject, session.versionSubjectId ? session.versionSubject : session.subject]);
   const progress = progressView(session, getLocale());
   const currentAmount = scalarRecordingValue(session, session.amount, getLocale());
@@ -993,6 +1010,7 @@ function SessionEditor({
         {offered && session.state === 'active' && session.mode !== 'completed_units' ? (
           <form
             className="max-w-xl space-y-4"
+            noValidate
             onSubmit={(event) => {
               event.preventDefault();
               void onRecord();
@@ -1003,16 +1021,18 @@ function SessionEditor({
                 <p className="text-sm">
                   {m.library_progress_current_total({ value: currentAmount ?? m.library_progress_unrecorded() })}
                 </p>
-                <label className="block space-y-1">
-                  <span className="text-sm font-medium">{m.library_progress_amount()}</span>
-                  <Input
-                    type="number"
-                    {...inputBounds}
+                <div className="space-y-1">
+                  <label htmlFor={amountId} className="text-sm font-medium">{m.library_progress_amount()}</label>
+                  <ProgressDecimalInput
+                    id={amountId}
+                    rules={session.inputRules}
+                    issue={validateRecord ? progressDecimalIssue(amount, session.inputRules) : null}
+                    required
                     aria-describedby={amountHint}
                     value={amount}
                     onChange={(event) => editRecord(() => setAmount(event.target.value))}
                   />
-                </label>
+                </div>
                 <p id={amountHint} className="text-sm text-muted-foreground">
                   {m.library_progress_replace_total()}
                 </p>
@@ -1029,19 +1049,29 @@ function SessionEditor({
               </div>
             ) : (
               <>
-                <label className="block space-y-1">
-                  <span className="text-sm font-medium">{m.library_progress_locator()}</span>
-                  <Input value={locator} onChange={(event) => editRecord(() => setLocator(event.target.value))} />
-                </label>
-                <label className="block space-y-1">
-                  <span className="text-sm font-medium">{m.library_progress_position()}</span>
+                <div className="space-y-1">
+                  <label htmlFor={locatorId} className="text-sm font-medium">{m.library_progress_locator()}</label>
                   <Input
-                    type="number"
-                    {...inputBounds}
+                    id={locatorId}
+                    value={locator}
+                    required
+                    aria-invalid={locatorIssue ? true : undefined}
+                    aria-describedby={locatorIssue ? locatorError : undefined}
+                    onChange={(event) => editRecord(() => setLocator(event.target.value))}
+                  />
+                  <ProgressInputError id={locatorError} issue={locatorIssue} />
+                </div>
+                <div className="space-y-1">
+                  <label htmlFor={positionId} className="text-sm font-medium">{m.library_progress_position()}</label>
+                  <ProgressDecimalInput
+                    id={positionId}
+                    rules={session.inputRules}
+                    issue={validateRecord ? progressDecimalIssue(position, session.inputRules) : null}
+                    required
                     value={position}
                     onChange={(event) => editRecord(() => setPosition(event.target.value))}
                   />
-                </label>
+                </div>
               </>
             )}
             <Button type="submit">{m.library_progress_record()}</Button>

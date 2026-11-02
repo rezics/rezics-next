@@ -532,13 +532,13 @@ test('the page inputs follow pair bounds, precision and total policy', async () 
   expect(await total.count()).toBe(0);
   await mount('session');
   await page.getByRole('button', { name: 'Update progress', exact: true }).click();
-  const amount = page.getByRole('spinbutton', { name: 'Amount', exact: true });
+  const amount = page.getByRole('textbox', { name: 'Amount', exact: true });
   expect(await amount.getAttribute('min')).toBe('0.25');
   expect(await amount.getAttribute('max')).toBe('98.5');
   expect(await amount.getAttribute('step')).toBe('0.01');
   await mount('session', 'Novel', { mode: 'cursor_position', unit: 'coordinate-x', position: '42', locator: 'Marker' });
   await page.getByRole('button', { name: 'Update progress', exact: true }).click();
-  const position = page.getByRole('spinbutton', { name: 'Position', exact: true });
+  const position = page.getByRole('textbox', { name: 'Position', exact: true });
   expect(await position.getAttribute('min')).toBe('0');
   expect(await position.getAttribute('max')).toBe('999');
   expect(await position.getAttribute('step')).toBe('any');

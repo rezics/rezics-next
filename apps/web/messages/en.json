@@ -1,4 +1,10 @@
 {
+  "library_progress_decimal_input_required": "Enter a value.",
+  "library_progress_decimal_input_syntax": "Use a nonnegative decimal with up to 12 integer digits and 6 decimal places, without exponent notation.",
+  "library_progress_decimal_input_min": "Enter {value} or more.",
+  "library_progress_decimal_input_max": "Enter {value} or less.",
+  "library_progress_decimal_input_precision": "Use at most {places} decimal places.",
+  "library_progress_decimal_input_locator": "Enter a locator of 1 to 256 characters.",
   "library_collection_draft_navigation_unsaved": "You have unsaved Collection changes.",
   "library_collection_draft_navigation_title": "Leave this Collection draft?",
   "library_collection_draft_navigation_description": "Your unsaved metadata, member order and notes will be lost. Leaving does not save any changes.",

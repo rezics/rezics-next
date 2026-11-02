@@ -1,4 +1,10 @@
 {
+  "library_progress_decimal_input_required": "請輸入數值。",
+  "library_progress_decimal_input_syntax": "請輸入非負定點小數，整數部分最多12位、小數部分最多6位，不使用指數記法。",
+  "library_progress_decimal_input_min": "請輸入不小於{value}的數值。",
+  "library_progress_decimal_input_max": "請輸入不大於{value}的數值。",
+  "library_progress_decimal_input_precision": "小數部分最多{places}位。",
+  "library_progress_decimal_input_locator": "請輸入1至256個字元的位置標記。",
   "library_collection_draft_navigation_unsaved": "合集有尚未儲存的變更。",
   "library_collection_draft_navigation_title": "離開合集草稿？",
   "library_collection_draft_navigation_description": "尚未儲存的中繼資料、成員順序和備註將會遺失。離開不會儲存變更。",

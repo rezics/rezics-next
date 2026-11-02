@@ -880,7 +880,7 @@ const writesFor = (suffix: string) => calls.filter((call) => call.method === 'PO
 async function chooseMode(page: Page, mode: string, unit: string, total?: string) {
   await page.getByRole('radio', { name: mode, exact: true }).check();
   await page.getByRole('combobox', { name: 'Unit', exact: true }).selectOption(unit);
-  if (total !== undefined) await page.getByRole('spinbutton', { name: 'Total', exact: true }).fill(total);
+  if (total !== undefined) await page.getByRole('textbox', { name: 'Total', exact: true }).fill(total);
   await page.getByRole('button', { name: 'Start', exact: true }).click();
 }
 function expectReads(sessionId: string, access: string) {
