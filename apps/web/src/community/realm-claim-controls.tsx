@@ -131,10 +131,7 @@ function RealmClaimControlsContent({
       : null;
   const owned = current?.snapshot.ownershipState === 'owned';
   const copyState =
-    copy?.control === control &&
-    copy.request === request &&
-    copy.read === state.read &&
-    copy.lifetime === lifetime
+    copy?.control === control && copy.request === request && copy.read === state.read && copy.lifetime === lifetime
       ? copy.state
       : 'idle';
   useEffect(() => {
