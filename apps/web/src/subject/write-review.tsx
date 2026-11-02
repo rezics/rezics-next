@@ -1,4 +1,5 @@
 import { Button } from '@rezics/ui/shadcn/button';
+import { ContentItemFrame, ContentItemHeading, ContentItemTitleLink } from '@rezics/ui/content-item';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { useEffect, useState, type MouseEvent } from 'react';
@@ -136,12 +137,18 @@ function WriteReviewVisitView({
   if (session !== 'signed-in') return null;
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Button type="button" variant="outline" onClick={toggleExpanded} aria-expanded={expanded}>
+    <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2 [overflow-wrap:anywhere]">
+      <Button
+        type="button"
+        variant="outline"
+        className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal sm:min-h-9 [@media(pointer:coarse)]:min-h-11"
+        onClick={toggleExpanded}
+        aria-expanded={expanded}
+      >
         {m.thread_review_write()}
       </Button>
       {expanded ? (
-        <div className="basis-full space-y-3 rounded-lg border border-border/70 bg-card p-4">
+        <div className="min-w-0 basis-full space-y-3 rounded-lg border border-border/70 bg-card p-4">
           {realmRead.state === 'loading' ? (
             <p className="text-sm text-muted-foreground">{m.thread_review_boards_loading()}</p>
           ) : null}
@@ -159,22 +166,31 @@ function WriteReviewVisitView({
                 <p className="text-sm text-muted-foreground">{m.thread_review_no_board()}</p>
               ) : null}
               {boardRead.state === 'ready' && boardRead.choices.length > 1 ? (
-                <ul className="grid gap-2 sm:grid-cols-2" aria-label={m.thread_review_choose_board()}>
+                <ul className="grid min-w-0 gap-2 sm:grid-cols-2" aria-label={m.thread_review_choose_board()}>
                   {boardRead.choices.map((board) => (
-                    <li key={board.id}>
-                      <a
-                        className="block rounded-lg border border-border/70 bg-background p-3 font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        href={reviewThreadHref(
-                          visit.target.locale,
-                          board.id,
-                          visit.target.subjectId,
-                          visit.target.subjectTitle,
-                        )}
-                        onClick={preventStaleNavigation}
-                      >
-                        <span className="block">{board.title ?? m.threads_untitled()}</span>
-                        <span className="mt-1 block text-xs font-normal text-muted-foreground">{board.realmName}</span>
-                      </a>
+                    <li key={board.id} className="min-w-0">
+                      <ContentItemFrame as="div" className="h-full min-w-0 p-3">
+                        <ContentItemHeading level={3} className="min-w-0 text-base leading-snug font-medium">
+                          <ContentItemTitleLink
+                            stretch={false}
+                            className="inline-flex min-h-11 min-w-11 max-w-full flex-col justify-center whitespace-normal rounded-sm text-primary underline-offset-4 [overflow-wrap:anywhere] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                            href={reviewThreadHref(
+                              visit.target.locale,
+                              board.id,
+                              visit.target.subjectId,
+                              visit.target.subjectTitle,
+                            )}
+                            onClick={preventStaleNavigation}
+                          >
+                            <span dir="auto" className="block min-w-0 max-w-full">
+                              {board.title ?? m.threads_untitled()}
+                            </span>
+                            <span dir="auto" className="mt-1 block min-w-0 max-w-full text-sm font-normal text-muted-foreground">
+                              {board.realmName}
+                            </span>
+                          </ContentItemTitleLink>
+                        </ContentItemHeading>
+                      </ContentItemFrame>
                     </li>
                   ))}
                 </ul>
