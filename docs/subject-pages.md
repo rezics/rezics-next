@@ -102,6 +102,7 @@ and unknown server addresses stay unlinked until validation runs again. Errors r
 row identities when another row is removed. Corrections preserve all other terms, facts, instructions and original
 declarations; document and subject-picker errors describe their field groups and lead into the editable control.
 Removing a populated unsent recipe field confirms locally, including authored text, language, licence, original-work declaration or citations; Cancel or Escape preserves the row and sibling feedback, and confirmation focuses the next usable control or a preceding survivor while sealed commands stay locked.
+A successful refresh that withdraws a selected additional Recipe field identifies the stale choice, returns the chooser to its prompt, preserves entered terms and rows, and keeps Add disabled until a currently admitted field with available single-value capacity is deliberately selected.
 
 ## Correct names and descriptions
 
