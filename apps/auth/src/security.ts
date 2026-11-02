@@ -35,7 +35,9 @@ export type SecurityLoadResult =
 
 export type PasskeyRegistrationReview =
   | { kind: 'ready'; passkeys: SecurityPasskey[] }
-  | { kind: 'signed-out' | 'denied' | 'unavailable' };
+  | { kind: 'signed-out' }
+  | { kind: 'denied' }
+  | { kind: 'unavailable' };
 
 const registrationReview = createServerFn({ method: 'POST' })
   .validator((accountId: string) => {
