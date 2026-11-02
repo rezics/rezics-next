@@ -13,6 +13,7 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type KeyboardEvent as ReactKeyboardEvent,
   type MutableRefObject,
 } from 'react';
 import { m } from '../paraglide/messages.js';
@@ -137,7 +138,15 @@ function refusalText(result: Extract<ReportResult, { ok: false }>): string {
 }
 
 type OwnerToken = { key: string; value: object };
-type CopyResult = { kind: 'copied' } | { kind: 'manual'; url: string; isCurrent: () => boolean };
+type CopyFocusIntent = {
+  active: boolean;
+  claimed: boolean;
+  allowTriggerRestore: boolean;
+  dispose: () => void;
+};
+type CopyResult =
+  | { kind: 'copied' }
+  | { kind: 'manual'; url: string; isCurrent: () => boolean; focusIntent: CopyFocusIntent | null };
 
 /** The overflow menu of a thread, post or subject the viewer did not write: copy its link or report it. */
 export function PostActions({
@@ -216,10 +225,60 @@ function ReportActionsVisit({
   const copyTrigger = useRef<HTMLButtonElement>(null);
   const copyField = useRef<HTMLInputElement>(null);
   const copyAttempt = useRef(0);
+  const keyboardCopyActivation = useRef<CopyFocusIntent | null>(null);
+  const copyFocusIntent = useRef<CopyFocusIntent | null>(null);
   const copyFieldId = useId();
   const copyStatusId = useId();
   const [copyResult, setCopyResult] = useState<CopyResult | null>(null);
   const ownerTarget = { kind: target.kind, id: target.id };
+
+  const cancelCopyFocusIntent = useCallback((intent: CopyFocusIntent | null = copyFocusIntent.current) => {
+    if (!intent) return;
+    intent.active = false;
+    intent.dispose();
+    if (keyboardCopyActivation.current === intent) keyboardCopyActivation.current = null;
+    if (copyFocusIntent.current === intent) copyFocusIntent.current = null;
+  }, []);
+
+  const armKeyboardCopyIntent = useCallback(() => {
+    cancelCopyFocusIntent();
+    const doc = copyTrigger.current?.ownerDocument;
+    if (!doc) return;
+
+    let intent: CopyFocusIntent;
+    const cancel = () => cancelCopyFocusIntent(intent);
+    const onFocusIn = (event: FocusEvent) => {
+      if (event.target === copyTrigger.current && intent.allowTriggerRestore) {
+        intent.allowTriggerRestore = false;
+        return;
+      }
+      cancel();
+    };
+    intent = {
+      active: true,
+      claimed: false,
+      allowTriggerRestore: true,
+      dispose: () => {
+        doc.removeEventListener('pointerdown', cancel, true);
+        doc.removeEventListener('keydown', cancel, true);
+        doc.removeEventListener('focusin', onFocusIn, true);
+      },
+    };
+    keyboardCopyActivation.current = intent;
+    copyFocusIntent.current = intent;
+    doc.addEventListener('pointerdown', cancel, true);
+    doc.addEventListener('keydown', cancel, true);
+    doc.addEventListener('focusin', onFocusIn, true);
+  }, [cancelCopyFocusIntent]);
+
+  const onCopyMenuKeyDownCapture = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.repeat || (event.key !== 'Enter' && event.key !== ' ')) return;
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const menuItem = target.closest('[role="menuitem"]');
+    if ((menuItem?.getAttribute('aria-label') ?? menuItem?.textContent?.trim()) === m.report_copy())
+      armKeyboardCopyIntent();
+  };
 
   useClientLayoutEffect(() => {
     mounted.current = true;
@@ -230,9 +289,10 @@ function ReportActionsVisit({
       tokenRevision.current += 1;
       tokenRef.current = '';
       idempotencyKey.current = '';
+      cancelCopyFocusIntent();
       copyAttempt.current += 1;
     };
-  }, []);
+  }, [cancelCopyFocusIntent]);
 
   const currentOwner = useCallback(() => {
     if (!mounted.current || activeOwner.current?.value !== owner) return false;
@@ -251,18 +311,32 @@ function ReportActionsVisit({
 
   useEffect(() => {
     if (copyResult?.kind !== 'manual') return;
+    const intent = copyResult.focusIntent;
+    if (!intent) return;
     const frame = requestAnimationFrame(() => {
-      if (!copyResult.isCurrent()) return;
-      copyField.current?.focus();
-      copyField.current?.select();
+      const field = copyField.current;
+      if (
+        !intent.active ||
+        !intent.claimed ||
+        copyFocusIntent.current !== intent ||
+        !copyResult.isCurrent() ||
+        !field?.isConnected
+      ) {
+        cancelCopyFocusIntent(intent);
+        return;
+      }
+      cancelCopyFocusIntent(intent);
+      field.focus();
+      field.select();
     });
     return () => cancelAnimationFrame(frame);
-  }, [copyResult]);
+  }, [cancelCopyFocusIntent, copyResult]);
 
   const retireCopyResult = useCallback(() => {
+    cancelCopyFocusIntent();
     copyAttempt.current += 1;
     setCopyResult(null);
-  }, []);
+  }, [cancelCopyFocusIntent]);
 
   const updateToken = useCallback(
     (next: string) => {
@@ -374,6 +448,13 @@ function ReportActionsVisit({
   );
 
   const copyLink = async () => {
+    const activation = keyboardCopyActivation.current;
+    keyboardCopyActivation.current = null;
+    const focusIntent =
+      activation?.active && !activation.claimed && copyFocusIntent.current === activation ? activation : null;
+    if (focusIntent) focusIntent.claimed = true;
+    else cancelCopyFocusIntent();
+
     const url = `${location.origin}${location.pathname}${target.kind === 'subject' ? '' : `#${target.kind}-${target.id}`}`;
     const attempt = ++copyAttempt.current;
     const admittedCeremony = ceremony;
@@ -388,8 +469,10 @@ function ReportActionsVisit({
     try {
       await navigator.clipboard.writeText(url);
       if (isCurrent()) setCopyResult({ kind: 'copied' });
+      if (focusIntent) cancelCopyFocusIntent(focusIntent);
     } catch {
-      if (isCurrent()) setCopyResult({ kind: 'manual', url, isCurrent });
+      if (isCurrent()) setCopyResult({ kind: 'manual', url, isCurrent, focusIntent });
+      else if (focusIntent) cancelCopyFocusIntent(focusIntent);
     }
   };
 
@@ -401,28 +484,30 @@ function ReportActionsVisit({
 
   return (
     <>
-      <ContentActions
-        key={ceremony}
-        ownsContent={false}
-        onCopyLink={copyLink}
-        triggerRef={copyTrigger}
-        onReport={report}
-        onReportOpenChange={changeReportOpen}
-        reportOpen={reportOpen}
-        labels={{ moreActions: m.report_more(), copyLink: m.report_copy(), report: m.report_action() }}
-        reportLabels={labels()}
-        maxDetails={4096}
-        verified={canReport && Boolean(token.value)}
-        verification={
-          <Verification
-            config={verification}
-            locale={getLocale()}
-            onToken={updateToken}
-            reset={reset}
-            onStart={startChallenge}
-          />
-        }
-      />
+      <div className="contents" onKeyDownCapture={onCopyMenuKeyDownCapture}>
+        <ContentActions
+          key={ceremony}
+          ownsContent={false}
+          onCopyLink={copyLink}
+          triggerRef={copyTrigger}
+          onReport={report}
+          onReportOpenChange={changeReportOpen}
+          reportOpen={reportOpen}
+          labels={{ moreActions: m.report_more(), copyLink: m.report_copy(), report: m.report_action() }}
+          reportLabels={labels()}
+          maxDetails={4096}
+          verified={canReport && Boolean(token.value)}
+          verification={
+            <Verification
+              config={verification}
+              locale={getLocale()}
+              onToken={updateToken}
+              reset={reset}
+              onStart={startChallenge}
+            />
+          }
+        />
+      </div>
       {/* Keep the selected URL and its deliberate Close action together in the content action flow. */}
       {copyResult ? (
         <div className="min-w-0 max-w-full space-y-2 text-sm">

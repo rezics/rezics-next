@@ -89,6 +89,20 @@ async function copy() {
   await click(m.report_copy());
 }
 
+async function keyboardCopy() {
+  await click(m.report_more());
+  await act(async () => {
+    const copyItem = item(m.report_copy());
+    copyItem.focus();
+    copyItem.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+}
+
+async function nextFrame() {
+  await act(async () => new Promise((resolve) => requestAnimationFrame(() => resolve(undefined))));
+}
+
 async function paint(patch: Partial<Props> = {}) {
   props = { ...props, ...patch };
   await act(async () => {
@@ -127,13 +141,35 @@ afterAll(() => {
   }
 });
 
-test('the real report menu recovers denied copying, closes to its trigger, and confirms only success', async () => {
+test('the real keyboard menu keeps denied-copy recovery focused through close and consumes it once', async () => {
   const url = 'https://site.test/en/threads/one/reading#post-post-one';
-  await copy();
+  await keyboardCopy();
   expect(writes[0]?.url).toBe(url);
-  await act(async () => writes[0]!.reject(new Error('NotAllowedError')));
-  await act(async () => new Promise((resolve) => requestAnimationFrame(() => resolve(undefined))));
+  const requestFrame = globalThis.requestAnimationFrame;
+  const frames: FrameRequestCallback[] = [];
+  let focusCalls = 0;
+  globalThis.requestAnimationFrame = (callback) => {
+    frames.push(callback);
+    return frames.length;
+  };
+  try {
+    await act(async () => writes[0]!.reject(new Error('NotAllowedError')));
+    const field = host.querySelector<HTMLInputElement>('input')!;
+    const focus = field.focus.bind(field);
+    field.focus = () => {
+      focusCalls += 1;
+      focus();
+    };
+    expect(frames).toHaveLength(1);
+    await act(async () => {
+      frames[0]!(0);
+      frames[0]!(0);
+    });
+  } finally {
+    globalThis.requestAnimationFrame = requestFrame;
+  }
   const field = host.querySelector<HTMLInputElement>('input')!;
+  expect(focusCalls).toBe(1);
   expect(field.value).toBe(url);
   expect(field.readOnly).toBe(true);
   expect(document.querySelector(`label[for="${field.id}"]`)?.textContent).toBe(m.report_copy_recovery_link_label());
@@ -150,17 +186,44 @@ test('the real report menu recovers denied copying, closes to its trigger, and c
   expect(host.querySelector('input')).toBeNull();
 });
 
-test('session ABA and target replacement retire old and late denied destinations', async () => {
+test('later focus movement cancels delayed keyboard focus while preserving explicit selection', async () => {
+  await keyboardCopy();
+  await act(async () => writes[0]!.reject(new Error('Denied')));
+  const field = host.querySelector<HTMLInputElement>('input')!;
+  const elsewhere = document.createElement('button');
+  host.append(elsewhere);
+  elsewhere.focus();
+  await nextFrame();
+  expect(field.value).toBe('https://site.test/en/threads/one/reading#post-post-one');
+  expect(document.activeElement).toBe(elsewhere);
+  field.focus();
+  expect(field.selectionEnd).toBe(field.value.length);
+});
+
+test('pointer copy keeps denied recovery inline until the field is explicitly focused', async () => {
   await copy();
+  await act(async () => writes[0]!.reject(new Error('Denied')));
+  await nextFrame();
+  const field = host.querySelector<HTMLInputElement>('input')!;
+  expect(field).toBeDefined();
+  expect(document.activeElement).not.toBe(field);
+  field.focus();
+  expect(field.selectionStart).toBe(0);
+  expect(field.selectionEnd).toBe(field.value.length);
+});
+
+test('session ABA and target replacement retire old and late denied destinations', async () => {
+  await keyboardCopy();
   await act(async () => writes[0]!.reject(new Error('Denied')));
   expect(host.querySelector('input')?.value).toBe('https://site.test/en/threads/one/reading#post-post-one');
   await act(async () => {
     client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'reader-two', csrfToken: 'csrf-two' });
     client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'reader', csrfToken: 'csrf' });
   });
+  await nextFrame();
   expect(host.querySelector('input')).toBeNull();
 
-  await copy();
+  await keyboardCopy();
   await paint({ target: { kind: 'post', id: 'post-two' } });
   await act(async () => writes[1]!.reject(new Error('Late denial')));
   expect(host.querySelector('input, [role="status"]')).toBeNull();
