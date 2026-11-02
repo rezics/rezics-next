@@ -139,8 +139,9 @@ function directoryPage(value: unknown): value is GuideDirectoryPage {
 
 function typeDescriptor(value: unknown): value is GuideTypeDescriptor {
   if (!typeSummary(value) || !record(value)) return false;
-  const definition = value.definition;
-  const properties = value.properties;
+  const descriptor = value as Record<string, unknown>;
+  const definition = descriptor.definition;
+  const properties = descriptor.properties;
   if (!record(definition) || !record(properties)) return false;
   if (!releasedMetadata({ types: { [value.typeId]: definition }, properties })) return false;
   const typedDefinition = definition as Release['types'][string];
