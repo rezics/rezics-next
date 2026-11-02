@@ -492,8 +492,17 @@ waiting for the periodic worker/memory poll.
 - **Touches:** One SQLite statement and the state-index entries for running attempts; no attempt bodies are returned.
 - **Bound:** One indexed count per capacity check, with work proportional to the number of running entries and no scan
   of non-running attempt history.
-- **Growth check:** `capacity-wait.test.ts` seeds 10, 100 and 1,000 attempts, verifies the indexed query plan and
-  checks the running count at each scale.
+- **Growth check:** `capacity-wait.test.ts`, `a start waiting for host capacity counts running attempts with one
+  indexed query, without reading every attempt body`, holds running entries at 0/1/10/100 while independently
+  crossing settled histories of 10/100/1,000 entries with 128/1,024/8,192-byte payloads. It captures the store's
+  actual statement execution and aggregate result, checks zero body decoding and the nonpartial state-index schema
+  and query plan, and replays that captured SQL with native `sqlite3` against the same fixture. Each replay executes
+  once with zero fullscan steps and at most `5 * running entries + 20` VM steps, identical across history/payload
+  scales for each running set. Zero running entries also leave host capacity available.
+- **Measurement decision:** Use required native `sqlite3` statement statistics for the captured-SQL replay because
+  Bun exposes no statement-status counters. VM steps measure executed opcodes; fullscan steps exclude indexed visits.
+  Indexed rows examined and physical page/byte work remain unavailable; the returned aggregate is not examined work.
+  Delivery's owning runner submits the integrated check through shared admission and reuses its exact successful result.
 
 ### Manager-host database reads
 
