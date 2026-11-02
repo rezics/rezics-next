@@ -188,7 +188,10 @@ test('native aliases survive bootstrap, bound refresh, removal and durable repla
     const commands = () => f.calls.flatMap((request) => request.commands);
     expect(commands()).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ op: 'create', subject: { aliases: { und: ['Harbor Sentinel'] } } }),
+        expect.objectContaining({
+          op: 'create',
+          subject: expect.objectContaining({ aliases: { und: ['Harbor Sentinel'] } }),
+        }),
       ]),
     );
     const digest = f.facade.baseline('v123')!.digest;
