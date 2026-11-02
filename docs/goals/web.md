@@ -57,6 +57,10 @@ nothing, retaining drafts and exact sealed retry credentials, keys and operands;
 original address before using current authority. Creation and selected-reader recovery remain independent. Keep
 Global editing and native Realm refusal unchanged; viewer or CSRF-session epoch changes release the whole mount.
 
+StoryArc explicit keyboard reload keeps its surviving focused header opener; if disabling it loses focus, orient
+only to the completed same-selection arc, work, creation or failure boundary. Focus movement, pointer use,
+selection confirmation and editor or reader changes cancel that intent; other reads never move focus.
+
 The research demonstrates source transitions and error-address mismatches. It supplies no passing browser, native,
 visual, accessibility or publication proof; those remain separate integration obligations for each outcome.
 

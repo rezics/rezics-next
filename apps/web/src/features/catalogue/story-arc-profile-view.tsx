@@ -5,7 +5,7 @@ import {
   useEditorWorkspaceLifetime,
 } from './editor-lifetime';
 import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../../threads/authoring-departure';
-import { useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { EntityPicker, type EntityPickerSearch } from '@rezics/ui/entity-picker';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
@@ -105,6 +105,20 @@ function StoryArcProfileLive({
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
+  const focusScope = JSON.stringify([selection, locale, session, lifetime.generation]);
+  const recoveryFocus = useRef<
+    | {
+        scope: string;
+        opener: HTMLButtonElement;
+        result?: Awaited<ReturnType<typeof query.refetch>>;
+        cancel: () => void;
+      }
+    | undefined
+  >(undefined);
+  const resultBoundary = useRef<HTMLElement>(null);
+  const workBoundary = useRef<HTMLElement>(null);
+  const failureBoundary = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => () => recoveryFocus.current?.cancel(), []);
   const retained = useRef<
     | {
         selection: string;
@@ -128,6 +142,34 @@ function StoryArcProfileLive({
     locale,
   }).href;
   const editable = session === 'signed-in' && readable;
+  // Only the completed explicit keyboard attempt may orient a reader whose opener lost focus.
+  useLayoutEffect(() => {
+    const intent = recoveryFocus.current;
+    if (!intent) return;
+    if (intent.scope !== focusScope || !lifetime.active()) return intent.cancel();
+    const result = intent.result;
+    if (
+      reloading ||
+      query.isFetching ||
+      !result ||
+      result.data !== query.data ||
+      result.error !== query.error ||
+      result.dataUpdatedAt !== query.dataUpdatedAt ||
+      result.errorUpdatedAt !== query.errorUpdatedAt
+    )
+      return;
+    const document = intent.opener.ownerDocument;
+    const active = document.activeElement;
+    intent.cancel();
+    if (active === intent.opener && intent.opener.isConnected && !intent.opener.disabled) return;
+    if (active && active !== document.body) return;
+    (readable
+      ? arc || !current?.work
+        ? resultBoundary.current
+        : workBoundary.current
+      : failureBoundary.current
+    )?.focus();
+  });
   const observation = useRef({ readable, selection, token: {} });
   if (observation.current.readable !== readable || observation.current.selection !== selection)
     observation.current = { readable, selection, token: {} };
@@ -136,6 +178,7 @@ function StoryArcProfileLive({
   const choose = (destination: { id: string | undefined } | { work: string | undefined }) => {
     if (!lifetime.active() || observation.current.token !== token) return;
     if ('id' in destination ? destination.id === id : destination.work === work) return;
+    recoveryFocus.current?.cancel();
     requestNavigation(() => {
       // A read may recover while the decision is open; the captured selection still owns the choice.
       if (!lifetime.active() || observation.current.selection !== selection) return;
@@ -148,14 +191,41 @@ function StoryArcProfileLive({
     });
   };
   const canEdit = () => lifetime.active() && editable && observation.current.token === token;
-  const reload = () => {
-    if (query.isFetching) return;
+  const reload = (event: MouseEvent<HTMLButtonElement>) => {
+    if (!lifetime.active() || observation.current.token !== token || query.isFetching || reloading) return;
+    recoveryFocus.current?.cancel();
+    const opener = event.currentTarget;
+    const document = opener.ownerDocument;
+    if (event.detail === 0 && document.activeElement === opener) {
+      const cancel = () => {
+        document.removeEventListener('focusin', moved, true);
+        document.removeEventListener('pointerdown', cancel, true);
+        document.removeEventListener('keydown', tabbed, true);
+        if (recoveryFocus.current?.cancel === cancel) recoveryFocus.current = undefined;
+      };
+      const moved = (event: FocusEvent) => {
+        if (event.target !== opener) cancel();
+      };
+      const tabbed = (event: KeyboardEvent) => {
+        if (event.key === 'Tab') cancel();
+      };
+      recoveryFocus.current = { scope: focusScope, opener, cancel };
+      document.addEventListener('focusin', moved, true);
+      document.addEventListener('pointerdown', cancel, true);
+      document.addEventListener('keydown', tabbed, true);
+    }
+    const intent = recoveryFocus.current;
     const sequence = ++reloadSequence.current;
     observation.current = { readable: false, selection, token: {} };
     setReloadAttempt({ selection, sequence });
-    void query.refetch().finally(() => {
-      setReloadAttempt((active) => (active?.sequence === sequence ? undefined : active));
-    });
+    void query
+      .refetch()
+      .then((result) => {
+        if (intent && recoveryFocus.current === intent) intent.result = result;
+      })
+      .finally(() => {
+        setReloadAttempt((active) => (active?.sequence === sequence ? undefined : active));
+      });
   };
   return (
     <article key={selection} className="mx-auto w-full max-w-4xl space-y-8 px-4 py-8 sm:px-6">
@@ -173,8 +243,10 @@ function StoryArcProfileLive({
       />
       <p className="text-muted-foreground">{id ? m.story_arc_intro({}, o) : m.story_arc_creation_help({}, o)}</p>
       {(query.isPending || reloading) && <p role="status">{m.candidate_loading({}, o)}</p>}
-      {(query.isError || (query.data && !query.data.ok)) && (
-        <EditorFailure locale={locale} reason={query.data && !query.data.ok ? query.data.reason : 'unavailable'} />
+      {!reloading && (query.isError || (query.data && !query.data.ok)) && (
+        <div ref={failureBoundary} tabIndex={-1}>
+          <EditorFailure locale={locale} reason={query.data && !query.data.ok ? query.data.reason : 'unavailable'} />
+        </div>
       )}
       <Button variant="outline" className={callerActionClass} disabled={query.isFetching} onClick={reload}>
         {m.correction_reload({}, o)}
@@ -217,7 +289,12 @@ function StoryArcProfileLive({
         </p>
       )}
       <div className="space-y-8">
-        <section className="space-y-3 rounded-xl border border-border bg-card p-4 sm:p-6">
+        <section
+          ref={resultBoundary}
+          tabIndex={-1}
+          aria-label={arc ? m.story_arc_identity({}, o) : m.story_arc_create({}, o)}
+          className="space-y-3 rounded-xl border border-border bg-card p-4 sm:p-6"
+        >
           {current && arc ? (
             <>
               <h2 className="text-xl font-semibold">{m.story_arc_identity({}, o)}</h2>
@@ -347,6 +424,8 @@ function StoryArcProfileLive({
           </CatalogueCurrentReading>
         )}
         <section
+          ref={workBoundary}
+          tabIndex={-1}
           aria-label={m.story_arc_work({}, o)}
           className="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6"
         >

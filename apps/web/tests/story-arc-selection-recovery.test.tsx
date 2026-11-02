@@ -5,6 +5,7 @@ import type { RelationTransport, RelationResult } from '../src/subject/relation-
 import { act } from 'react';
 import type { FactsTransport, FactResult } from '../src/features/catalogue/subject-facts';
 import type { StoryArcRead } from '../src/features/catalogue/story-arc-profile';
+import type { StoryArcProfileProps } from '../src/features/catalogue/story-arc-profile-view';
 
 test('refused readings retire markup and callbacks, recovery retains sealed drafts, and selection opens the created arc', async () => {
   const { Window } = await import(
@@ -105,22 +106,60 @@ test('refused readings retire markup and callbacks, recovery retains sealed draf
   const decide = (label: string) => act(async () => user.click(within(dialog()).getByRole('button', { name: label })));
   const visible = (selector: string) =>
     [...host.querySelectorAll(selector)].filter((node) => !node.closest('[hidden]'));
-  try {
-    await settle(() =>
-      root.render(
-        <QueryClientProvider client={client}>
-          <StoryArcProfile
-            {...fixture.props}
-            locale="en"
-            id={storyArcProfileId}
-            work={fixture.work.id}
-            transport={transport}
-            facts={facts}
-            relations={relations}
-          />
-        </QueryClientProvider>,
-      ),
+  const render = (overrides: Partial<StoryArcProfileProps> = {}) =>
+    root.render(
+      <QueryClientProvider client={client}>
+        <StoryArcProfile
+          {...fixture.props}
+          locale="en"
+          id={storyArcProfileId}
+          work={fixture.work.id}
+          transport={transport}
+          facts={facts}
+          relations={relations}
+          {...overrides}
+        />
+      </QueryClientProvider>,
     );
+  try {
+    await settle(() => render());
+    expect(window.document.activeElement).toBe(window.document.body); // Initial reads stay silent.
+    const ready = await fixture.transport.load({ id: storyArcProfileId, work: fixture.work.id });
+    const elsewhere = window.document.createElement('button');
+    window.document.body.append(elsewhere);
+    for (const mode of ['keep', 'result', 'failure', 'moved', 'returned', 'pointer', 'interrupted', 'tab'] as const) {
+      held = new Promise((resolve) => {
+        lateRead = resolve;
+      });
+      const reload = button(m.correction_reload());
+      const before = loads.length;
+      reload.focus();
+      if (mode === 'pointer')
+        await settle(() => reload.dispatchEvent(new window.MouseEvent('click', { bubbles: true, detail: 1 })));
+      else {
+        await act(async () => user.keyboard('{Enter}'));
+        await settle(() => {});
+      }
+      expect(reload.disabled).toBe(true);
+      expect(within(host).getByRole('status').textContent).toBe(m.candidate_loading());
+      expect(host.querySelector('[role="alert"]')).toBeNull();
+      expect(host.innerHTML).not.toContain('The journey arc');
+      await settle(() => reload.click());
+      expect(loads.length - before).toBe(1);
+      if (mode === 'moved' || mode === 'returned') elsewhere.focus();
+      if (mode === 'interrupted') reload.dispatchEvent(new window.Event('pointerdown', { bubbles: true }));
+      if (mode === 'tab') reload.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+      if (mode !== 'keep' && mode !== 'moved') (window.document.activeElement as HTMLElement).blur();
+      held = undefined;
+      await settle(() => lateRead!(mode === 'failure' ? { ok: false, reason: 'denied' } : ready));
+      expect(reload.disabled).toBe(false);
+      const active = window.document.activeElement;
+      if (mode === 'keep') expect(active).toBe(reload);
+      else if (mode === 'result') expect(active?.getAttribute('aria-label')).toBe(m.story_arc_identity());
+      else if (mode === 'failure') expect(active?.textContent).toBe(m.correction_denied());
+      else expect(active).toBe(mode === 'moved' ? elsewhere : window.document.body);
+    }
+    elsewhere.remove();
     await settle(() => button(m.relation_open()).click());
     await act(async () =>
       user.selectOptions(within(host).getByRole('combobox', { name: m.relation_property() }), 'rezics:storyArc'),
@@ -270,6 +309,50 @@ test('refused readings retire markup and callbacks, recovery retains sealed draf
     await settle(() => lateRead!(previousRead));
     expect(host.innerHTML).not.toContain('The journey arc');
     expect(host.textContent).toContain('A real arc');
+    for (const address of [
+      { id: undefined, work: fixture.work.id },
+      { id: undefined, work: undefined },
+    ]) {
+      await settle(() => render(address));
+      const result = await fixture.transport.load(address);
+      held = new Promise((resolve) => {
+        lateRead = resolve;
+      });
+      const reload = button(m.correction_reload());
+      reload.focus();
+      await act(async () => user.keyboard('{Enter}'));
+      await settle(() => {});
+      reload.blur();
+      held = undefined;
+      await settle(() => lateRead!(result));
+      expect(window.document.activeElement?.getAttribute('aria-label')).toBe(
+        address.work ? m.story_arc_work() : m.story_arc_create(),
+      );
+    }
+    // Same-selection results from retired keyboard attempts cannot orient a different reader or selection.
+    for (const change of [
+      { id: undefined },
+      { work: undefined },
+      { locale: 'ja' },
+      { session: 'signed-out' as const },
+      'selection',
+      null,
+    ] as const) {
+      await settle(() => render());
+      held = new Promise((resolve) => {
+        lateRead = resolve;
+      });
+      button(m.correction_reload()).focus();
+      await act(async () => user.keyboard('{Enter}'));
+      await settle(() => {});
+      if (change === 'selection') await settle(() => button(m.story_arc_choose_work()).click());
+      else if (change) await settle(() => render(change));
+      else await settle(() => root.render(null));
+      (window.document.activeElement as HTMLElement).blur();
+      held = undefined;
+      await settle(() => lateRead!(ready));
+      expect(window.document.activeElement).toBe(window.document.body);
+    }
   } finally {
     await act(async () => root.unmount());
     client.clear();
