@@ -29,6 +29,7 @@ import {
 } from '@rezics/composition';
 import type { ComponentProps, ReactNode } from 'react';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { Cover, type CoverLabels, type CoverRatio } from '@rezics/ui/cover';
 import { MetaLine } from '@rezics/ui/meta-line';
 import { m } from '../../paraglide/messages.js';
@@ -262,16 +263,23 @@ export function SubjectFrame({
           ratio={ratio ?? '5:7'}
         />
         <div className="min-w-0 flex-1 space-y-0.5">
-          <p className="flex flex-wrap items-baseline gap-x-3 break-words">
+          <p className="flex min-w-0 flex-wrap items-baseline gap-x-3">
             <span
-              className={`${linkClass} ${frame.title.text ? linkColor : 'text-muted-foreground'} font-sans text-lg font-semibold`}
+              className={`${linkClass} ${frame.title.text ? linkColor : 'text-muted-foreground'} min-w-0 max-w-full font-sans text-lg font-semibold wrap-anywhere`}
             >
-              <Link href={contextHref(base, realm)} {...(frame.title.lang ? { lang: frame.title.lang } : {})}>
+              <Link
+                href={contextHref(base, realm)}
+                className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm whitespace-normal wrap-anywhere focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+                {...(frame.title.lang ? { lang: frame.title.lang } : {})}
+              >
                 {title}
               </Link>
             </span>
             {frame.original && (
-              <span lang={frame.original.lang} className="text-sm text-muted-foreground">
+              <span
+                lang={frame.original.lang}
+                className="min-w-0 max-w-full text-sm wrap-anywhere text-muted-foreground"
+              >
                 {frame.original.text}
               </span>
             )}
@@ -347,7 +355,14 @@ export function SubjectFrame({
           />
         )}
       </header>
-      {library ? <div data-slot="subject-library">{library}</div> : null}
+      {library ? (
+        <div
+          data-slot="subject-library"
+          className="min-w-0 [&_a]:h-auto [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:whitespace-normal [&_a]:wrap-anywhere [&_button]:h-auto [&_button]:min-h-11 [&_button]:min-w-11 [&_button]:max-w-full [&_button]:whitespace-normal [&_button]:wrap-anywhere"
+        >
+          {library}
+        </div>
+      ) : null}
       {navigation ?? (
         <ViewTabs
           tabs={withCurrent(tabs, view)}
@@ -400,14 +415,23 @@ export function SubjectViewPage({ frame, label, actions, nextHref, ...page }: Su
       {frame}
       {ownHeading ? (
         actions ? (
-          <div className="flex flex-wrap items-center gap-2">{actions}</div>
+          <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2 [&_a]:h-auto [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:whitespace-normal [&_a]:wrap-anywhere [&_button]:h-auto [&_button]:min-h-11 [&_button]:min-w-11 [&_button]:max-w-full [&_button]:whitespace-normal [&_button]:wrap-anywhere">
+            {actions}
+          </div>
         ) : null
       ) : (
         <ViewHeadingActions label={label} actions={actions} />
       )}
       <SubjectPage {...page} framed />
       {nextHref && !ownContinuation ? (
-        <a data-slot="next-page" href={nextHref} className={buttonVariants({ variant: 'outline' })}>
+        <a
+          data-slot="next-page"
+          href={nextHref}
+          className={cn(
+            buttonVariants({ variant: 'outline' }),
+            'h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring',
+          )}
+        >
           {m.subject_view_continue({ label }, { locale: page.locale as never })}
         </a>
       ) : null}
