@@ -2645,8 +2645,10 @@ disclosure. There are no per-board/source HTTP reads, count requests, retries, r
 values. Rendering is linear in the one bounded DTO: two images with at most twelve variants each and one Text rules
 document of at most 65,536 canonical UTF-8 bytes.
 
-`RealmHomeHeader` uses the existing shared community image, count, rules and credit parts. The Space keeps its own
-heading, summary, banner and address; the labelled Realm card has its own selected images and community heading.
+`SpacePage` presents one dominant community identity through `RealmHomeHeader`, using the existing shared native
+image, count, rules and credit parts. Follow and Join/Leave sit beside that identity, followed by boards and published
+subjects. Matching Space and community names share one heading and description; a differing Space name and summary
+remain compact routed context above the community identity. The Space address and routed identity remain stable.
 Native concealed/erased images and rules may be `none` even with a selected reference; optional failures remain
 unavailable. Members display only the supplied current count/version or unknown, without a fabricated zero.
 `RealmMembership` retains its separate native personal state and all existing admission/pending behavior; neither
@@ -2659,12 +2661,26 @@ native presentation read and final Realm/Space checks may disclose its current t
 count and rules. Native missing, denied or removed responses (including presentation 404) hide the region; source
 errors remain unavailable. Neither an original owner nor an account avatar/profile supplies fallback data.
 
-`SpacePage` keeps that current presentation visible while its existing setup, publication, appearance, bans,
+`SpacePage` keeps that current presentation visible while an orphan's setup, publication, appearance, bans,
 grant-write and participation controls remain frozen. A lifecycle observation that newly orphans an owned page
 cannot expose its old presentation. A changed claim source, approval or orphan episode also discards the old region
 until a matching current page arrives; the existing personal claim admission and original 720-hour wait are
-unchanged. Previously mounted management stays hidden and inert through restrictions so appearance drafts survive;
-`RealmAppearancePanel` remains the sole editor. No appearance native, panel or fixture source is changed here.
+unchanged. Public removal/orphan notices remain independent of management. Personal ownership recovery appears only
+for a current native-admitted orphan or an already attempted recovery; an ordinary owned page has no ownership panel.
+
+Management is an explicit secondary same-page disclosure. Only a current signed-in subject with at least one native
+admission receives its entry: appearance `canManage`, the existing successful ban-list read, lifecycle `actions`, or
+setup `permitted`. Each operation remains independent; membership, readability, role names and client scopes grant
+no authority. The same mounted bans control supplies both admission and its first private page, with explicit native
+cursor pagination. Visitors see no private loading, denial or unavailable panels. These fixed point reads do not grow
+with boards, members or history. Native command checks, CAS and uncertain request keys remain authoritative.
+
+Closing management hides and inerts its mounted controls, retaining selection, upload, confirmation and recovery
+state. Current native denial removes the affected actions while an entered panel retains its recovery message.
+Changing the Space, Realm or session subject discards private controllers, admissions and cached reads; late results
+cannot populate the new viewer's surface. `RealmAppearancePanel` remains the sole editor. Its image previews have
+independent sizes and its controls use the available width at both ordinary review widths; selection and upload
+protocols remain unchanged.
 
 Web's ordinary 390/1280 light/dark review inputs use these exact CSF sources and IDs:
 

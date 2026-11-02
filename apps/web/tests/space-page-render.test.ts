@@ -14,9 +14,14 @@ mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const session = await import('../src/session/query');
+let currentSession: { state: 'signed-in' | 'signed-out'; csrfToken: string | null; subject: string | null } = {
+  state: 'signed-in',
+  csrfToken: 'member-csrf',
+  subject: 'story-viewer',
+};
 mock.module('../src/session/query', () => ({
   ...session,
-  useSession: () => ({ state: 'signed-in', csrfToken: 'member-csrf', subject: 'story-viewer' }),
+  useSession: () => currentSession,
 }));
 
 const { SpacePage } = await import('../src/community/space-page');
@@ -30,6 +35,90 @@ function client() {
   return createKernelClient('http://kernel.local', { fetch: createStoryRecordedKernelFetch() });
 }
 const request = new Request('https://site.example.test/en/spaces/atlas-member');
+
+test('The default Space home shows one community identity with participation and boards, and exposes management only after native viewer admission', async () => {
+  const recorded = createStoryRecordedKernelFetch();
+  const native = createKernelClient('http://kernel.local', {
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      if (request.method === 'POST' && new URL(request.url).pathname === '/v1/viewerActions') {
+        const { resources } = (await request.json()) as { resources: { type: string; id: string }[] };
+        return Response.json({
+          resources: resources.map((resource) => ({
+            ...resource,
+            viewerActions:
+              request.headers.get('authorization') === 'Bearer manager' && resource.type === 'community.space'
+                ? [{ action: 'space:manage', operations: ['space_address.change'] }]
+                : [],
+          })),
+        });
+      }
+      return recorded(request);
+    },
+  });
+  const page = await loadSpacePage(native, request, {}, { address: 'atlas-member' }, 'anonymous');
+  if (!page.realm) throw new Error('The common native Space fixture lost its Realm');
+  const previous = currentSession;
+  try {
+    for (const persona of ['anonymous', 'member', 'manager'] as const) {
+      const queries = new QueryClient();
+      currentSession =
+        persona === 'anonymous'
+          ? { state: 'signed-out', csrfToken: null, subject: null }
+          : { state: 'signed-in', csrfToken: `${persona}-csrf`, subject: persona };
+      if (persona !== 'anonymous') {
+        const setup = await readSetup(native, `Bearer ${persona}`, page.space.id);
+        expect(setup.kind).toBe('ready');
+        expect(setup.kind === 'ready' && Object.values(setup.permitted).some(Boolean)).toBe(persona === 'manager');
+        queries.setQueryData(['space-setup-entry', page.space.id, persona], setup);
+        // Both signed-in viewers have the same ordinary membership. It supplies no management authority.
+        const membership = await loadRealmMembership(native, page.realm.id, {
+          headers: { authorization: 'Bearer member' },
+        });
+        queries.setQueryData(realmMembershipQuery(page.realm.id, persona).queryKey, membership);
+        queries.setQueryData(['exposure', 'anonymous'], ['personal_library']);
+        queries.setQueryData(['follow-state', page.space.id], { state: 'ready', following: false });
+      }
+      const root = createRootRoute({ component: () => createElement(SpacePage, { page }) });
+      const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ['/'] }) });
+      await router.load();
+      try {
+        const html = renderToStaticMarkup(
+          createElement(QueryClientProvider, { client: queries }, createElement(RouterProvider, { router })),
+        );
+        expect([...html.matchAll(/<h1\b/g)]).toHaveLength(1);
+        expect([...html.matchAll(/data-slot="realm-home-presentation"/g)]).toHaveLength(1);
+        expect(html).toContain(`>${page.space.title}</h1>`);
+        const identity = html.split('data-slot="realm-home-presentation"')[1]!.split('id="realm-boards-heading"')[0]!;
+        expect(identity).toContain(m.library_follow());
+        expect(identity).toContain(persona === 'anonymous' ? m.realm_join() : m.realm_leave());
+        for (const board of page.realm.boards) expect(html).toContain(board.title ?? m.threads_untitled());
+        expect(html).toContain(m.realm_published_heading());
+        for (const label of [
+          m.realm_claim_heading(),
+          m.realm_appearance_heading(),
+          m.realm_bans_heading(),
+          m.realm_bans_forbidden(),
+          m.container_lifecycle_space(),
+          m.container_lifecycle_realm(),
+          m.space_setup_entry(),
+        ])
+          expect(html).not.toContain(label);
+        if (persona === 'manager') {
+          expect(html).toContain(m.community_manage());
+          expect(html).toContain('aria-expanded="false"');
+          const destination = html.match(/aria-controls="([^"]+)"/)?.[1];
+          expect(destination).toBeDefined();
+          expect(html).toContain(`id="${destination}" hidden=""`);
+        } else expect(html).not.toContain(m.community_manage());
+      } finally {
+        queries.clear();
+      }
+    }
+  } finally {
+    currentSession = previous;
+  }
+});
 
 test('the genuine member Space home renders boards, publications and current controls with optional authority unavailable', async () => {
   const kernel = client();

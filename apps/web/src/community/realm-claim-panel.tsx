@@ -54,6 +54,7 @@ export function RealmClaimPanel({
       ready={!!session.csrfToken || !!adapter}
       load={session.state !== 'unknown'}
       onRead={onRead}
+      recoveryOnly
     />
   );
 }

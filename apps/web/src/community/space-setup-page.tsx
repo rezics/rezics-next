@@ -292,8 +292,8 @@ export function SpaceSetupPage({
   );
 }
 
-/** The existing home keeps its membership, following, boards and publication regions. */
-export function SpaceSetupEntry({ spaceId }: { spaceId: string }) {
+/** Share the current native setup result without adding a second admission read. */
+export function useSpaceSetupRead(spaceId: string) {
   const session = useSession();
   const hydrated = useHydrated();
   const queryClient = useContext(QueryClientContext) ?? null;
@@ -349,18 +349,20 @@ export function SpaceSetupEntry({ spaceId }: { spaceId: string }) {
       sessionMatches(latest, session)
     );
   };
-  const queryKey = [
-    'space-setup-entry',
-    spaceId,
-    sessionSource?.id ?? null,
-    sessionRevision,
-    dataUpdateCount,
-    dataUpdatedAt,
-    observation?.errorUpdateCount ?? 0,
-    observation?.errorUpdatedAt ?? 0,
-    session.subject ?? null,
-  ] as const;
-  const { data } = useQuery({
+  const queryKey = useMemo(
+    () => [
+      'space-setup-entry', spaceId, sessionSource?.id ?? null, sessionRevision,
+      dataUpdateCount, dataUpdatedAt, observation?.errorUpdateCount ?? 0,
+      observation?.errorUpdatedAt ?? 0, session.subject ?? null,
+    ] as const,
+    [spaceId, sessionSource?.id, sessionRevision, dataUpdateCount, dataUpdatedAt,
+      observation?.errorUpdateCount, observation?.errorUpdatedAt, session.subject],
+  );
+  useEffect(
+    () => () => queryClient?.removeQueries({ queryKey, exact: true }),
+    [queryClient, queryKey],
+  );
+  const { data, isError } = useQuery({
     queryKey,
     queryFn: async () => {
       if (!current()) throw new Error('Space setup entry caller retired');
@@ -373,7 +375,17 @@ export function SpaceSetupEntry({ spaceId }: { spaceId: string }) {
     staleTime: 0,
     retry: false,
   });
-  if (!current() || data?.kind !== 'ready' || !Object.values(data.permitted).some(Boolean)) return null;
+  return current() && !isError ? data : undefined;
+}
+
+export function SpaceSetupEntry({
+  spaceId,
+  read,
+}: {
+  spaceId: string;
+  read: SetupSnapshot | SetupFailure | undefined;
+}) {
+  if (read?.kind !== 'ready' || !Object.values(read.permitted).some(Boolean)) return null;
   return (
     <Link
       to="/realms/new"

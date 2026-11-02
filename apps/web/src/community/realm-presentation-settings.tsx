@@ -4,6 +4,7 @@ import { Input } from '@rezics/ui/shadcn/input';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { m } from '../paraglide/messages.js';
 import { localizeUrl } from '../paraglide/runtime.js';
+import { useCommunityManagementAdmission } from './community-management';
 import {
   createRealmAppearance,
   realmImageSource,
@@ -113,6 +114,14 @@ export function RealmAppearanceSettings({
   const previousOwner = useRef(control);
   const previousCaller = useRef(callerId);
   const read = initial !== incoming.current ? initial : state.read;
+  const visible = useCommunityManagementAdmission(
+    'appearance',
+    (!lifetime || lifetime.current()) &&
+      read.kind === 'ready' &&
+      read.snapshot.realmId === realmId &&
+      read.snapshot.state === 'active' &&
+      read.snapshot.canManage,
+  );
   const visibleSelection =
     selectionState?.owner === control &&
     selectionState.callerId === callerId &&
@@ -183,16 +192,23 @@ export function RealmAppearanceSettings({
   useLayoutEffect(() => control.connect(), [control]);
   useEffect(() => () => control.cancelUpload(), [control]);
   useEffect(() => () => control.disconnect(), [control]);
-  if (
-    read.kind === 'hidden' ||
-    (read.kind === 'ready' && (read.snapshot.state !== 'active' || read.snapshot.realmId !== realmId))
-  )
-    return null;
+  if (!visible || (lifetime && !lifetime.current())) return null;
   const heading = (
     <h2 id={`${ids}-heading`} className="text-xl font-semibold">
       {m.realm_appearance_heading()}
     </h2>
   );
+  if (read.kind === 'hidden')
+    return state.draft ? (
+      <section aria-labelledby={`${ids}-heading`} className="space-y-4 rounded-2xl border p-4 sm:p-6">
+        {heading}
+        <p role="alert">{m.community_management_denied()}</p>
+        <Button variant="outline" disabled={state.busy} onClick={() => void control.refresh()}>
+          {m.realm_appearance_refresh()}
+        </Button>
+      </section>
+    ) : null;
+  if (read.kind === 'ready' && (read.snapshot.state !== 'active' || read.snapshot.realmId !== realmId)) return null;
   if (read.kind !== 'ready' || !state.draft)
     return (
       <section aria-labelledby={`${ids}-heading`} className="space-y-4 rounded-2xl border p-4 sm:p-6">
@@ -265,7 +281,7 @@ export function RealmAppearanceSettings({
       <p className="text-sm text-muted-foreground">
         {snapshot.canManage ? m.realm_appearance_intro() : m.realm_appearance_readonly()}
       </p>
-      <div className="grid gap-6 sm:grid-cols-[7rem_1fr]">
+      <div className="grid min-w-0 gap-6 lg:grid-cols-2">
         {(['avatar', 'banner'] as const).map((slot) => (
           <div key={slot} className="min-w-0 space-y-3">
             <h3 className="font-medium">{label(slot)}</h3>
@@ -285,14 +301,14 @@ export function RealmAppearanceSettings({
                 <Button variant="outline" disabled={!editable} onClick={() => openSelection(slot)}>
                   {m.realm_appearance_choose()}
                 </Button>
-                <Field className="w-auto">
+                <Field className="w-full min-w-0 max-w-64">
                   <FieldLabel htmlFor={`${ids}-${slot}-upload`} className="text-sm">
                     {m.realm_appearance_upload()}
                   </FieldLabel>
                   <Input
                     id={`${ids}-${slot}-upload`}
                     type="file"
-                    className="max-w-56"
+                    className="w-full min-w-0"
                     disabled={!editable}
                     accept="image/avif,image/gif,image/jpeg,image/png,image/webp"
                     aria-label={`${label(slot)}: ${m.realm_appearance_upload()}`}

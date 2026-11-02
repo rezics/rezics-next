@@ -16,6 +16,7 @@ import {
 } from './container-lifecycle';
 import { readContainerLifecycle, changeContainerLifecycle, readContainerLifecycleDestination } from './space-actions';
 import { lifecycleCommandSchema } from './container-lifecycle-native';
+import { useCommunityManagementAdmission } from './community-management';
 import {
   useDefaultContainerLifecycleCaller,
   useInjectedContainerLifecycleCaller,
@@ -78,10 +79,26 @@ function LifecycleControlsView({
   );
   const state = useSyncExternalStore(control.subscribe, control.getSnapshot, control.getSnapshot);
   const [confirmation, setConfirmation] = useState<LifecycleAction | null>(null);
+  const visible = useCommunityManagementAdmission(
+    target.kind === 'space' ? 'space-lifecycle' : 'realm-lifecycle',
+    caller.ready &&
+      caller.lifetime.current() &&
+      state.read.kind === 'ready' &&
+      state.read.snapshot.state !== 'orphaned' &&
+      state.read.snapshot.actions.length > 0,
+  );
   useEffect(() => {
     setConfirmation(null);
     if (caller.ready && caller.lifetime.current()) void control.refresh();
   }, [control, caller.lifetime, caller.connectionRevision, caller.ready]);
+  useEffect(() => {
+    if (
+      state.read.kind !== 'ready' ||
+      state.read.snapshot.state === 'orphaned' ||
+      (confirmation && !state.read.snapshot.actions.includes(confirmation))
+    )
+      setConfirmation(null);
+  }, [state.read, confirmation]);
   useEffect(() => {
     if (!caller.ready || !caller.lifetime.current()) return;
     if (state.outcome === 'confirmed' && state.intent?.action === 'remove') onRestriction?.('removed');
@@ -93,7 +110,7 @@ function LifecycleControlsView({
     state.read.kind === 'ready' && state.read.snapshot.state !== 'orphaned' && state.read.snapshot.actions.length === 0;
   const problem = state.problem ?? (state.read.kind === 'refused' ? state.read : null);
   const locked = state.busy || state.intent !== null;
-  if (!caller.ready || !caller.lifetime.current()) return null;
+  if (!visible || !caller.ready || !caller.lifetime.current()) return null;
   return (
     <section aria-labelledby={`${id}-heading`} className="space-y-4 rounded-2xl border bg-card p-5 sm:p-6">
       <header className="space-y-1">
@@ -245,6 +262,8 @@ export function ContainerLifecycleControls(props: ContainerLifecycleControlsProp
 
 /** Session presence allows preparation only; it conveys no lifecycle permission. */
 export function ContainerLifecyclePanel(props: ContainerLifecycleControlsProps) {
-  const { state } = useSession();
-  return state === 'signed-in' ? <ContainerLifecycleControls {...props} /> : null;
+  const { state, subject } = useSession();
+  return state === 'signed-in' && subject ? (
+    <ContainerLifecycleControls key={`${props.target.kind}:${props.target.id}:${subject}`} {...props} />
+  ) : null;
 }

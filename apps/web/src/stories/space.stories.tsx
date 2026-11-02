@@ -8,7 +8,15 @@ import { communityCurrentClaimStory } from './community-current-claim';
 
 const meta = {
   title: 'Pages/Community/Space',
-  parameters: { layout: 'fullscreen' },
+  parameters: {
+    layout: 'fullscreen',
+    docs: {
+      description: {
+        component:
+          'One native community identity with adjacent Follow and Join/Leave, then boards and published subjects. A distinct routed Space stays compact context. Manage community requires current native operation admission; its controls remain mounted when closed and reset for a changed viewer or Realm. Public readers see no private management dashboards.',
+      },
+    },
+  },
   beforeEach: communityCurrentClaimStory,
 } satisfies Meta;
 export default meta;
@@ -22,6 +30,11 @@ async function spaceReady(context: { canvasElement: HTMLElement }) {
   const board = realmBoardsRecording.items[0]?.title;
   if (!board) throw new Error('The recorded Realm has no board.');
   await view.findByRole('link', { name: new RegExp(board) });
+  await expect(view.queryByRole('heading', { name: m.realm_appearance_heading() })).toBeNull();
+  await expect(view.queryByRole('heading', { name: m.realm_bans_heading() })).toBeNull();
+  await expect(view.queryByRole('heading', { name: m.realm_claim_heading() })).toBeNull();
+  await expect(view.queryByRole('heading', { name: m.container_lifecycle_space() })).toBeNull();
+  await expect(view.queryByRole('heading', { name: m.container_lifecycle_realm() })).toBeNull();
   const firstRow = (await view.findAllByRole('listitem'))[0]!;
   await userEvent.hover(firstRow);
   firstRow.setAttribute('data-overlay', 'visible');

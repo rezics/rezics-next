@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { personalRead } from '../kernel/query';
 import { useSession } from '../session/query';
 import { uploadRealmImage, resumeRealmImageUpload } from '../threads/upload';
@@ -17,6 +17,7 @@ const unavailable: RealmAppearanceRead = { kind: 'unavailable' };
 export function RealmAppearancePanel({ realmId }: { realmId: string }) {
   const { state, csrfToken, subject } = useSession();
   const viewer = state === 'signed-in' && subject ? subject : null;
+  const queries = useQueryClient();
   const adapter = useMemo<RealmAppearanceAdapter>(
     () => ({
       read: (targetRealm) => readRealmAppearanceSettings({ data: { realmId: targetRealm } }),
@@ -33,17 +34,19 @@ export function RealmAppearancePanel({ realmId }: { realmId: string }) {
   );
   const caller = useRealmAppearanceCaller(realmId, adapter, { state, csrfToken, subject: subject ?? null });
   // Base subject namespace retained for compatibility: queryKey: ['realm-appearance', realmId, viewer]
-  const queryKey = ['realm-appearance', realmId, viewer] as const;
+  const queryKey = useMemo(
+    () => [
+      'realm-appearance', realmId, viewer, caller.source?.id ?? null,
+      caller.cacheRevision, caller.lifetime.id, caller.ready, caller.lifetime.locale,
+    ] as const,
+    [realmId, viewer, caller.source?.id, caller.cacheRevision, caller.lifetime.id, caller.ready, caller.lifetime.locale],
+  );
+  useEffect(
+    () => () => queries.removeQueries({ queryKey, exact: true }),
+    [queries, queryKey],
+  );
   const { data, isError } = useQuery({
-    // Keep the old subject namespace visible while isolating every private result by its exact caller visit.
-    queryKey: [
-      ...queryKey,
-      caller.source?.id ?? null,
-      caller.cacheRevision,
-      caller.lifetime.id,
-      caller.ready,
-      caller.lifetime.locale,
-    ],
+    queryKey,
     queryFn: async () => {
       if (!caller.lifetime.current()) return unavailable;
       try {

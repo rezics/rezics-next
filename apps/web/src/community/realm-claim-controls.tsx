@@ -30,6 +30,7 @@ export function RealmClaimControls({
   ready = true,
   load = false,
   onRead,
+  recoveryOnly = false,
 }: {
   realmId: string;
   initial: RealmClaimRead;
@@ -38,6 +39,7 @@ export function RealmClaimControls({
   ready?: boolean;
   load?: boolean;
   onRead?: (read: RealmClaimRead) => void;
+  recoveryOnly?: boolean;
 }) {
   const id = useId();
   const control = useMemo(() => createRealmClaim(realmId, initial, adapter), [realmId, adapter]);
@@ -63,6 +65,7 @@ export function RealmClaimControls({
       ? receipt
       : null;
   const owned = current?.snapshot.ownershipState === 'owned';
+  if (recoveryOnly && !(orphan && current?.admission === 'allowed') && !state.intent) return null;
   return (
     <section aria-labelledby={`${id}-heading`} className="space-y-4 rounded-2xl border bg-card p-5 sm:p-6">
       <div className="space-y-2">

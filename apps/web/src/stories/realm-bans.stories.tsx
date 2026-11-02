@@ -9,6 +9,8 @@ import { PatternStory } from './page';
 import { RealmBansExample } from './realm-bans/example';
 import { banAndUnban } from './realm-bans/realm-bans.stories';
 import { communityCurrentClaim, communityCurrentClaimStory } from './community-current-claim';
+import { userEvent, within } from 'storybook/test';
+import { m } from '../paraglide/messages.js';
 
 const meta = { title: 'Pages/Community/Realm bans', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
@@ -41,5 +43,8 @@ export const ManagementJourney: Story = {
       </AppShell>
     </PatternStory>
   ),
-  play: banAndUnban,
+  play: async (context) => {
+    await userEvent.click(await within(context.canvasElement).findByRole('button', { name: m.community_manage() }));
+    await banAndUnban(context);
+  },
 };

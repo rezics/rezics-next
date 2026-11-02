@@ -1,5 +1,5 @@
 import { ResourceAccessLink } from '../accounts/resource-access/link';
-import { useCallback, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useId, useMemo, useState, type ReactNode } from 'react';
 import { Link, useLocation } from '@tanstack/react-router';
 import { ListRow } from '@rezics/ui/list-row';
 import { placeholderColors, sharedRatio, type CoverSubject } from '@rezics/ui/cover';
@@ -12,7 +12,7 @@ import { subjectHref } from '../subject/subject-href';
 import { RealmMembership } from './realm-membership';
 import { RealmBansPanel } from './realm-bans-panel';
 import type { PublishedSubject, RealmBoard, RealmHome, SpacePageData } from './space';
-import { SpaceSetupEntry } from './space-setup-page';
+import { SpaceSetupEntry, useSpaceSetupRead } from './space-setup-page';
 import { FollowTargetControl } from '../library/follow-target-control';
 import { useSession } from '../session/query';
 import { useShelfList } from './space-queries';
@@ -38,6 +38,8 @@ import {
   type RealmClaimSnapshot,
 } from './realm-claim';
 import { RealmHomeHeader } from './realm-home-header';
+import { Button } from '@rezics/ui/shadcn/button';
+import { CommunityManagementContext, type CommunityManagementOperation } from './community-management';
 
 function subjectTitle(subject: PublishedSubject, locale: string): string {
   return (
@@ -272,61 +274,36 @@ export function RealmShelf({
   );
 }
 
-function Home({
-  realm,
-  management,
-  claim,
-  frozen,
-  readable,
-  presentationCurrent,
-  participation,
-  removed,
-}: {
-  realm: RealmHome;
-  management: ReactNode;
-  claim: ReactNode;
-  frozen: boolean;
-  readable: boolean;
-  presentationCurrent: boolean;
-  participation: ReactNode;
-  removed: boolean;
-}) {
-  const lifetime = useSpacePageLifetime();
-  const managementVisible = !removed && !frozen && readable;
-  const managementMounted = useRef(false);
-  if (managementVisible) managementMounted.current = true;
-  return (
-    <>
-      {!removed && readable && presentationCurrent ? (
-        <RealmHomeHeader realm={realm} participation={frozen ? null : participation} />
-      ) : null}
-      {!removed && readable ? (
-        <RealmShelf key={`${realm.id}:${lifetime?.scopeKey ?? 'standalone'}`} realm={realm} frozen={frozen} />
-      ) : null}
-      {!removed ? claim : null}
-      {managementMounted.current ? (
-        <div hidden={!managementVisible} inert={!managementVisible} className="space-y-10">
-          {management}
-        </div>
-      ) : null}
-    </>
-  );
-}
-
-/** A Space's page: its title and summary as the brand surface, and the Realm it carries as that Realm's home. */
-export function SpacePage({
-  page,
-  realmManagement,
-  realmAppearance,
-  lifecycleAdapter,
-  realmClaimAdapter,
-}: {
+/** A changed actor or container discards private controllers before the new viewer can render them. */
+export function SpacePage(props: {
   page: SpacePageData;
   realmManagement?: ReactNode;
   realmAppearance?: ReactNode;
   lifecycleAdapter?: ContainerLifecycleAdapter;
   realmClaimAdapter?: RealmClaimAdapter;
 }) {
+  const { state, subject } = useSession();
+  const viewer = state === 'signed-in' && subject ? subject : null;
+  const lifetime = useSpacePageLifetime();
+  return (
+    <SpaceHome
+      key={`${props.page.space.id}:${props.page.realm?.id ?? ''}:${viewer ?? state}:${lifetime?.scopeKey ?? 'standalone'}`}
+      {...props}
+      viewer={viewer}
+      signedOut={state === 'signed-out'}
+    />
+  );
+}
+
+function SpaceHome({
+  page,
+  realmManagement,
+  realmAppearance,
+  lifecycleAdapter,
+  realmClaimAdapter,
+  viewer,
+  signedOut,
+}: Parameters<typeof SpacePage>[0] & { viewer: string | null; signedOut: boolean }) {
   const location = useLocation();
   const [spaceRestriction, restrictSpace] = useState<{ id: string; state: 'removed' | 'orphaned' } | null>(null);
   const [realmRestriction, restrictRealm] = useState<{ id: string; state: 'removed' | 'orphaned' } | null>(null);
@@ -365,6 +342,58 @@ export function SpacePage({
     (claimRead
       ? claimRead.kind !== 'ready' || claimRead.snapshot.governanceReadOnly
       : page.realm?.continuity?.governanceReadOnly === true);
+  const [entered, setEntered] = useState(false);
+  const managementId = useId();
+  const [admissions, setAdmissions] = useState<Partial<Record<CommunityManagementOperation, boolean>>>({});
+  const report = useCallback((operation: CommunityManagementOperation, admitted: boolean) => {
+    setAdmissions((previous) => (previous[operation] === admitted ? previous : { ...previous, [operation]: admitted }));
+  }, []);
+  const management = useMemo(() => ({ entered, report }), [entered, report]);
+  const setup = useSpaceSetupRead(page.space.id);
+  const orphaned =
+    realmRestricted === 'orphaned' ||
+    (claimRead?.kind === 'ready'
+      ? claimRead.snapshot.ownershipState === 'orphaned'
+      : pageSource?.ownershipState === 'orphaned');
+  const managementRestricted = realmRemoved || orphaned || !readable;
+  const setupAdmitted =
+    !managementRestricted && setup?.kind === 'ready' && Object.values(setup.permitted).some(Boolean);
+  const admitted =
+    viewer !== null &&
+    (setupAdmitted ||
+      admissions['space-lifecycle'] ||
+      (!orphaned && admissions['realm-lifecycle']) ||
+      (!managementRestricted && (admissions.appearance || admissions.bans)));
+  const presentationCurrent =
+    !realmRemoved &&
+    readable &&
+    (realmRestricted !== 'orphaned' || pageSource?.governanceReadOnly === true) &&
+    (!claimRead ||
+      (claimRead.kind === 'ready' && !!pageSource && sameRealmClaimSource(pageSource, claimRead.snapshot)));
+  const showCommunity = presentationCurrent && page.realm && page.realm.presentation?.state !== 'hidden';
+  const participation = !spaceRemoved ? (
+    <section aria-label={m.space_follow_label()} className="flex flex-wrap items-start gap-3">
+      {signedOut ? (
+        <Button
+          variant="outline"
+          render={
+            <a href={`/auth/sign-in?return_to=${encodeURIComponent(location.publicHref.split(/[?#]/, 1)[0]!)}`} />
+          }
+        >
+          {m.library_follow()}
+        </Button>
+      ) : (
+        <FollowTargetControl targetId={page.space.id} />
+      )}
+      {page.realm && !realmRemoved && readable && !frozen ? (
+        <RealmMembership
+          realm={page.realm}
+          spaceId={page.space.id}
+          returnTo={location.publicHref.split(/[?#]/, 1)[0]!}
+        />
+      ) : null}
+    </section>
+  ) : null;
   const colors = placeholderColors({ id: page.space.id, types: [] });
   const banner = page.space.banner;
   const bannerVariant = banner?.variants.find((variant) => variant.format === 'webp') ?? banner?.variants.at(-1);
@@ -375,98 +404,107 @@ export function SpacePage({
     (banner && bannerVariant ? coverSrc(banner.media, bannerVariant.format, bannerVariant.width) : undefined);
   return (
     <article className="max-w-5xl space-y-10 text-foreground">
-      <header
-        className="relative isolate flex flex-col gap-4 overflow-hidden rounded-3xl px-6 py-8 sm:px-10 sm:py-10"
-        style={{ backgroundColor: colors.background, color: colors.foreground }}
-      >
-        {bannerSrc && !spaceRemoved ? (
-          <>
-            <img
-              src={bannerSrc}
-              alt=""
-              aria-hidden="true"
-              className="absolute inset-0 -z-20 h-full w-full object-cover"
-              onError={(event) => {
-                event.currentTarget.style.display = 'none';
-              }}
-            />
-            <div aria-hidden="true" className="absolute inset-0 -z-10 bg-black/75" />
-          </>
-        ) : null}
-        <div className="relative z-10 flex w-full flex-wrap items-center justify-between gap-4">
-          <PageHeading className="min-w-0 flex-1 basis-64">{page.space.title}</PageHeading>
-        </div>
-        {page.space.summary && !spaceRemoved ? (
-          <p className="relative z-10 max-w-2xl text-lg/relaxed whitespace-pre-wrap">{page.space.summary}</p>
-        ) : null}
-      </header>
-      {!realmRemoved && !frozen ? <SpaceSetupEntry spaceId={page.space.id} /> : null}
-      {!spaceRemoved ? (
+      {showCommunity && page.realm ? (
+        <RealmHomeHeader realm={page.realm} space={page.space} participation={participation} />
+      ) : (
         <>
-          <section aria-label={m.space_follow_label()}>
-            <FollowTargetControl targetId={page.space.id} />
-            {!realmRemoved && readable && !frozen ? (
-              <ResourceAccessLink resourceId={page.realm?.id ?? page.space.id} />
+          <header
+            className="relative isolate flex flex-col gap-4 overflow-hidden rounded-3xl px-6 py-8 sm:px-10 sm:py-10"
+            style={{ backgroundColor: colors.background, color: colors.foreground }}
+          >
+            {bannerSrc && !spaceRemoved ? (
+              <>
+                <img
+                  src={bannerSrc}
+                  alt=""
+                  aria-hidden="true"
+                  className="absolute inset-0 -z-20 h-full w-full object-cover"
+                  onError={(event) => {
+                    event.currentTarget.style.display = 'none';
+                  }}
+                />
+                <div aria-hidden="true" className="absolute inset-0 -z-10 bg-black/75" />
+              </>
             ) : null}
-          </section>
+            <div className="relative z-10 flex w-full flex-wrap items-center justify-between gap-4">
+              <PageHeading className="min-w-0 flex-1 basis-64">{page.space.title}</PageHeading>
+            </div>
+            {page.space.summary && !spaceRemoved ? (
+              <p className="relative z-10 max-w-2xl text-lg/relaxed whitespace-pre-wrap">{page.space.summary}</p>
+            ) : null}
+          </header>
+          {participation}
         </>
+      )}
+      {spaceRemoved || realmRemoved || orphaned ? (
+        <p role="status" className="rounded-xl border p-4 text-sm">
+          {spaceRemoved || realmRemoved ? m.container_lifecycle_removed_state() : m.container_lifecycle_orphaned()}
+        </p>
       ) : null}
-      {page.realm ? (
-        <Home
-          key={page.realm.id}
-          realm={page.realm}
-          removed={realmRemoved}
-          frozen={frozen}
-          readable={readable}
-          presentationCurrent={
-            (realmRestricted !== 'orphaned' || pageSource?.governanceReadOnly === true) &&
-            (!claimRead ||
-              (claimRead.kind === 'ready' && !!pageSource && sameRealmClaimSource(pageSource, claimRead.snapshot)))
-          }
-          participation={
-            <RealmMembership
-              realm={page.realm}
-              spaceId={page.space.id}
-              returnTo={location.publicHref.split(/[?#]/, 1)[0]!}
-            />
-          }
-          claim={
-            <RealmClaimPanel
-              realmId={page.realm.id}
-              initial={page.realm.continuity ?? null}
-              returnTo={location.publicHref.split(/[?#]/, 1)[0]!}
-              onRead={onClaimRead}
-              {...(realmClaimAdapter ? { adapter: realmClaimAdapter } : {})}
-            />
-          }
-          management={
-            <>
+      {page.realm && !realmRemoved && readable ? (
+        <RealmShelf key={page.realm.id} realm={page.realm} frozen={frozen} />
+      ) : null}
+      {page.realm && !realmRemoved ? (
+        <RealmClaimPanel
+          realmId={page.realm.id}
+          initial={page.realm.continuity ?? null}
+          returnTo={location.publicHref.split(/[?#]/, 1)[0]!}
+          onRead={onClaimRead}
+          {...(realmClaimAdapter ? { adapter: realmClaimAdapter } : {})}
+        />
+      ) : null}
+      {admitted ? (
+        <Button
+          variant="outline"
+          aria-expanded={entered}
+          aria-controls={managementId}
+          onClick={() => setEntered((previous) => !previous)}
+        >
+          {m.community_manage()}
+        </Button>
+      ) : null}
+      <CommunityManagementContext.Provider value={management}>
+        <div id={managementId} hidden={!entered} inert={!entered} className="min-w-0 space-y-8">
+          {entered ? (
+            <header className="flex flex-wrap items-center justify-between gap-3 border-t pt-6">
+              <h2 className="text-2xl font-semibold">{m.community_manage()}</h2>
+              <Button variant="ghost" onClick={() => setEntered(false)}>
+                {m.community_manage_close()}
+              </Button>
+            </header>
+          ) : null}
+          {entered && setupAdmitted ? <SpaceSetupEntry spaceId={page.space.id} read={setup} /> : null}
+          {entered && !managementRestricted ? (
+            <ResourceAccessLink resourceId={page.realm?.id ?? page.space.id} />
+          ) : null}
+          {viewer && page.realm ? (
+            <div hidden={managementRestricted} inert={managementRestricted} className="min-w-0 space-y-8">
               {realmAppearance ?? <RealmAppearancePanel realmId={page.realm.id} />}
               {realmManagement ?? <RealmBansPanel realmId={page.realm.id} />}
-            </>
-          }
-        />
-      ) : null}
-      <ContainerLifecyclePanel
-        key={`space:${page.space.id}`}
-        target={{ kind: 'space', id: page.space.id }}
-        title={page.space.title}
-        {...(lifecycleAdapter ? { adapter: lifecycleAdapter } : {})}
-        onRestriction={(state) =>
-          restrictSpace((previous) =>
-            previous?.id === page.space.id && previous.state === state ? previous : { id: page.space.id, state },
-          )
-        }
-      />
-      {page.realm ? (
-        <ContainerLifecyclePanel
-          key={`realm:${page.realm.id}`}
-          target={{ kind: 'realm', id: page.realm.id }}
-          title={page.realm.title}
-          {...(lifecycleAdapter ? { adapter: lifecycleAdapter } : {})}
-          onRestriction={onRealmRestriction}
-        />
-      ) : null}
+            </div>
+          ) : null}
+          <ContainerLifecyclePanel
+            key={`space:${page.space.id}`}
+            target={{ kind: 'space', id: page.space.id }}
+            title={page.space.title}
+            {...(lifecycleAdapter ? { adapter: lifecycleAdapter } : {})}
+            onRestriction={(state) =>
+              restrictSpace((previous) =>
+                previous?.id === page.space.id && previous.state === state ? previous : { id: page.space.id, state },
+              )
+            }
+          />
+          {page.realm ? (
+            <ContainerLifecyclePanel
+              key={`realm:${page.realm.id}`}
+              target={{ kind: 'realm', id: page.realm.id }}
+              title={page.realm.title}
+              {...(lifecycleAdapter ? { adapter: lifecycleAdapter } : {})}
+              onRestriction={onRealmRestriction}
+            />
+          ) : null}
+        </div>
+      </CommunityManagementContext.Provider>
     </article>
   );
 }

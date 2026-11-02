@@ -17,6 +17,7 @@ import {
 } from './realm-ban-target';
 import type { BanReadState, BanWriteInput, BanWriteResult } from './realm-bans';
 import { RealmBanLifetime } from './realm-ban-lifetime';
+import { useCommunityManagementAdmission } from './community-management';
 
 export type RealmBansControlProps = {
   realmId: string;
@@ -202,6 +203,7 @@ function RealmBansVisit({
   const renderGeneration = generation.current;
   const pageReady = useRef(initial?.state === 'ready');
   const uncertain = useRef<BanWriteInput | null>(null);
+  const visible = useCommunityManagementAdmission('bans', gate.current() && view.state === 'ready');
 
   const refresh = useCallback(
     async (cursor?: string) => {
@@ -408,7 +410,7 @@ function RealmBansVisit({
   }
 
   const disabled = busy || retry !== null;
-  if (!gate.current()) return null;
+  if (!visible || !gate.current()) return null;
   return (
     <section
       aria-labelledby={`${id}-title`}
