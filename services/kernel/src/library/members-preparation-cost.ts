@@ -121,12 +121,13 @@ export const MEMBERS_PREPARATION_LOCAL_COST = Object.freeze({
     "statements": 1,
     "bytes": 1024
   },
+  // Four retained result indexes, duplicate probes and parent FK checks for at most 100 candidates.
   "apply": {
     "candidateKeys": 100,
-    "nativeRows": 202,
+    "nativeRows": 256,
     "identityMetadataRows": 0,
-    "emptySeeks": 512,
-    "nativePoints": 512,
+    "emptySeeks": 768,
+    "nativePoints": 768,
     "witnessKeys": 0,
     "statements": 1,
     "bytes": 65536

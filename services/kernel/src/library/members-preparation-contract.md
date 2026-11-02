@@ -208,7 +208,8 @@ Source kinds lacking declarations or final physical authority retain their typed
 
 ### First preparation admission and duplicate
 
-Native result retirement uses the retained subject primary key. Its local declaration covers up to 100 key
+Native result application includes all four retained result indexes, duplicate probes and parent FK checks.
+Retirement uses the retained subject primary key. Its local declaration covers up to 100 key
 reads and deletes, primary lookups, all four result indexes, the bounded prefix seek and failed/empty paths,
 within the existing Members body allowance; it does not borrow a foreign child or add a payer.
 
