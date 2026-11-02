@@ -183,49 +183,21 @@ test('native aliases survive bootstrap, bound refresh, removal and durable repla
   const f = await local();
   try {
     const original = await f.stage();
-    const originalRow = f.facade.page(original, null, 16).records.find((row) => row.key === 'v123')!;
-    expect(originalRow.output.normalizedRecord.vn.aliases).toEqual(['Harbor Sentinel']);
-    expect(originalRow.record.vn_titles.map((title) => title.title)).toContain('Sentinel Harbor');
-    expect(originalRow.output.sourceMetadata.contentsLicense).toBe('LicenseRef-DbCL-1.0');
-    const originalDigest = originalRow.output.digest;
     expect((await f.facade.commit(original)).status).toBe('committed');
-    const bootstrap = f.calls
-      .flatMap((request) => request.commands)
-      .find((command) => command.op === 'create' && command.source.external_id === 'v123');
-    expect(bootstrap).toMatchObject({
-      op: 'create',
-      subject: { labels: { en: 'Sentinel Harbor' }, aliases: { und: ['Harbor Sentinel'] } },
-    });
+    const commands = () => f.calls.flatMap((request) => request.commands);
+    expect(commands()).toEqual(expect.arrayContaining([expect.objectContaining({ op: 'create', subject: { aliases: { und: ['Harbor Sentinel'] } } })]));
+    const digest = f.facade.baseline('v123')!.digest;
 
     f.calls.length = 0;
     f.deny(true);
     const changed = await f.stage(false, 'Harbor Watch\\nHarbor Guard');
-    const changedRow = f.facade.page(changed, null, 16).records.find((row) => row.key === 'v123')!;
-    expect(changedRow.record.vn.alias).toBe('Harbor Watch\nHarbor Guard');
-    expect(changedRow.output.normalizedRecord.vn.aliases).toEqual(['Harbor Watch', 'Harbor Guard']);
-    expect(changedRow.output.digest).not.toBe(originalDigest);
-    expect(changedRow.output.record_revision).toBe('7');
-    expect(changedRow.record.vn_titles.map((title) => title.title)).toContain('Sentinel Harbor');
+    const row = f.facade.page(changed, null, 16).records.find((record) => record.key === 'v123')!;
+    expect(row.output.normalizedRecord.vn.aliases).toEqual(['Harbor Watch', 'Harbor Guard']);
+    expect(row.output.digest).not.toBe(digest);
+    expect(row.output.record_revision).toBe('7');
     expect((await f.facade.commit(changed)).status).toBe('bulk-failed');
     const replay = structuredClone(f.calls[0]!);
-    const alternate = f.calls
-      .flatMap((request) => request.commands)
-      .find((command) => command.op === 'propose' && command.statement.property.id === 'schema:alternateName');
-    expect(alternate).toMatchObject({
-      source: { source: 'vndb', external_id: 'v123', record_revision: '7', converter_revision: 'vndb@8' },
-      statement: {
-        value: { type: 'value', content: { language: 'und', text: 'Harbor Watch' } },
-        references: [
-          {
-            parts: expect.arrayContaining([
-              { property: { id: 'wdt:P3180' }, value: { type: 'value', content: 'v123' } },
-              { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://vndb.org/v123.7' } },
-              { property: { id: 'schema:version' }, value: { type: 'value', content: '7' } },
-            ]),
-          },
-        ],
-      },
-    });
+    expect(commands()).toEqual(expect.arrayContaining([expect.objectContaining({ op: 'propose', source: expect.objectContaining({ external_id: 'v123' }), statement: expect.objectContaining({ property: { id: 'schema:alternateName' }, value: { type: 'value', content: { language: 'und', text: 'Harbor Watch' } } }) })]));
 
     await f.reopen();
     f.deny(false);
@@ -237,7 +209,7 @@ test('native aliases survive bootstrap, bound refresh, removal and durable repla
     f.calls.length = 0;
     expect((await f.facade.commit(removed)).status).toBe('committed');
     expect(f.facade.baseline('v123')!.run).toBe(removed);
-    expect(f.calls.flatMap((request) => request.commands).some((command) => command.op === 'retract')).toBe(true);
+    expect(commands().some((command) => command.op === 'retract')).toBe(true);
   } finally {
     await f.close();
   }

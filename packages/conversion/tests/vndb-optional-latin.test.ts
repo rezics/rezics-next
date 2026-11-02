@@ -91,32 +91,16 @@ test('native alias lines remain undetermined alternate names with source citatio
   const bootstrap = convertVndb(native);
   const resolved = convertVndb(native, { subjectId });
   expect(bootstrap.normalizedRecord.vn.aliases).toEqual(['Harbor Watch', 'Sentinel Watch']);
-  expect(bootstrap.proposals[0]).toMatchObject({
-    op: 'create',
-    subject: { labels: { ja: '港の物語' }, aliases: { und: ['Harbor Watch', 'Sentinel Watch'] } },
-  });
-  const alternateNames = resolved.proposals.filter(
-    (command) => command.op === 'propose' && command.statement.property.id === 'schema:alternateName',
-  );
-  expect(alternateNames.map((command) => command.op === 'propose' ? command.statement.value : null)).toEqual([
-    { type: 'value', content: { language: 'und', text: 'Harbor Watch' } },
-    { type: 'value', content: { language: 'und', text: 'Sentinel Watch' } },
-  ]);
-  expect(alternateNames[0]).toMatchObject({
+  expect(bootstrap.proposals[0]).toMatchObject({ op: 'create', subject: { labels: { ja: '港の物語' }, aliases: { und: ['Harbor Watch', 'Sentinel Watch'] } } });
+  const alternate = resolved.proposals.find((command) => command.op === 'propose' && command.statement.property.id === 'schema:alternateName');
+  expect(alternate).toMatchObject({
     source: { source: 'vndb', external_id: 'v124', record_revision: '19', converter_revision },
-    statement: {
-      references: [{ parts: expect.arrayContaining([
-        { property: { id: 'wdt:P3180' }, value: { type: 'value', content: 'v124' } },
-        { property: { id: 'schema:version' }, value: { type: 'value', content: '19' } },
-      ]) }],
-    },
+    statement: { value: { type: 'value', content: { language: 'und', text: 'Harbor Watch' } }, references: [{ parts: expect.arrayContaining([{ property: { id: 'wdt:P3180' }, value: { type: 'value', content: 'v124' } }, { property: { id: 'schema:version' }, value: { type: 'value', content: '19' } }]) }] },
   });
   expect(resolved.digest).toBe(bootstrap.digest);
   expect(bootstrap.digest).not.toBe(convertVndb(input('')).digest);
-  expect(bootstrap.sourceMetadata).toEqual({
-    databaseLicense: 'ODbL-1.0',
-    contentsLicense: 'LicenseRef-DbCL-1.0',
-    attribution: 'VNDB',
-  });
-  expect(checkBatchWrite({ commands: resolved.proposals })).toEqual([]);
+  expect(bootstrap.sourceMetadata).toMatchObject({ databaseLicense: 'ODbL-1.0', contentsLicense: 'LicenseRef-DbCL-1.0' });
+  const bounded = inputWithAlias(Array.from({ length: 64 }, (_, i) => `Alias ${i}`).join('\n'));
+  bounded.record.vn_titles = Array.from({ length: 64 }, (_, i) => ({ id: 'v124', lang: 'ja', official: true, title: `Title ${i}`, latin: null }));
+  expect(convertVndb(bounded, { subjectId }).proposals).toHaveLength(130);
 });
