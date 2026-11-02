@@ -289,9 +289,7 @@ export function MemberList({
   const queryClient = useQueryClient();
   const [page, setPage] = useState(() => admitMemberSection(section));
   const [restart, setRestart] = useState(false);
-  const progress = useRef(
-    createMemberPageProgress(page.ok ? memberPageCursor(page.body) : undefined),
-  );
+  const progress = useRef(createMemberPageProgress(page.ok ? memberPageCursor(page.body) : undefined));
   const [error, setError] = useState<Section>();
   const [retryAt, setRetryAt] = useState(() => (section.ok ? undefined : memberRetryAt(section.retryAfter)));
   const waiting = useSearchRetryWait(retryAt);

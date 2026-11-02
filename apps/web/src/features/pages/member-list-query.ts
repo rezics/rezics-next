@@ -151,9 +151,7 @@ export async function readMemberList(
   if (!read || (read.kind !== 'members' && read.kind !== 'search')) return { ok: false, status: 400 };
   if (result?.status !== 200 || !isRecord(result.body))
     return failedMemberRead(result?.status, isRecord(result) ? result.headers : undefined);
-  return admitMemberPage(read, result.body)
-    ? { ok: true, read, body: result.body }
-    : { ok: false, status: 422 };
+  return admitMemberPage(read, result.body) ? { ok: true, read, body: result.body } : { ok: false, status: 422 };
 }
 
 function failedMemberRead(status: number | undefined, headers: unknown): Section {

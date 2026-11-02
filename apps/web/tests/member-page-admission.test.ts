@@ -76,7 +76,10 @@ test('over-limit pages and a malformed later row fail as a whole', () => {
     [read, membersBody([snow, genji, prince])],
     [read, membersBody([snow, { subjectId: 'not-a-uuid' }])],
     [read, membersBody([{ ...snow, subject: genji.subject }])],
-    [searchRead(), { subjects: [hit(snow.subjectId, 'A'), hit(genji.subjectId, 'B'), hit(prince.subjectId, 'C')], next: null }],
+    [
+      searchRead(),
+      { subjects: [hit(snow.subjectId, 'A'), hit(genji.subjectId, 'B'), hit(prince.subjectId, 'C')], next: null },
+    ],
     [searchRead(), laterSearch],
   ] as const) {
     expect(admitMemberPage(descriptor, body)).toBeUndefined();
@@ -86,7 +89,9 @@ test('over-limit pages and a malformed later row fail as a whole', () => {
 
 const document: CompositionDocument = {
   root: { props: {} },
-  content: [{ type: 'Members', props: { id: 'members', title: {}, source: { kind: 'everything' }, limit: 2, paged: true } }],
+  content: [
+    { type: 'Members', props: { id: 'members', title: {}, source: { kind: 'everything' }, limit: 2, paged: true } },
+  ],
 };
 
 async function nativePage(body: Record<string, unknown>, cursor?: string) {
