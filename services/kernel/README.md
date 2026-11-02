@@ -641,6 +641,13 @@ first line, its value at every scale, and the plan node that used the most buffe
 present). Statements that appeared in only some repetitions are listed as intermittent with their repetition
 numbers. SQL literals and parameters are normalized together while leading SQL comments remain, so comments can
 identify a tagged statement.
+When a bound fails, `GrowthBoundError` keeps its scale and relation summary and adds the statements with the largest
+first-to-last-scale growth for each failing metric. Each statement line shows its normalized first line, its value at
+every scale, and the plan node that used the most buffers (including its relation or index when present). Statements
+that appeared in only some repetitions are listed as intermittent with their repetition numbers. SQL literals,
+dollar-quoted strings, escaped string constants and `$n` parameters are replaced with `?` so literal variants group
+together; quoted identifiers and comments stay intact. Unclosed quotes, unclosed dollar quoting, or a backslash in a
+non-`E` string stay as captured so unsupported syntax is not treated as equivalent.
 Set `GROWTH_PROFILE` to a file inside the workspace to collect profiles on local and remote check runs. Remote stack
 runs forward its workspace-relative path and return the file with the result; earlier local lines are retained when the
 returned profile is merged. Write failures are best-effort by default: `checkGrowth` warns once per destination and still

@@ -6,9 +6,179 @@ import { walkPlanTree, type PlanNode } from './growth-plan-walk.ts';
 import { validateCaptureEvidence } from './growth-capture-evidence.ts';
 
 function normalizeStatement(statement: string): string {
-  const leading = /^\s*(?:--[^\n]*(?:\n|$)|\/\*[\s\S]*?\*\/\s*)*/.exec(statement)?.[0] ?? '';
-  const body = statement.slice(leading.length).replace(/'(?:''|[^'])*'|\$\d+|\?\d*|\b\d+(?:\.\d+)?\b/g, '?');
-  return `${leading}${body}`.replace(/\s+/g, ' ').trim();
+  const identifierPart = (character: string | undefined) =>
+    character !== undefined && (/[a-z0-9_$]/i.test(character) || character.charCodeAt(0) >= 0x80);
+  const identifierStart = (character: string | undefined) =>
+    character !== undefined && (/[a-z_]/i.test(character) || character.charCodeAt(0) >= 0x80);
+  const opaque = () => statement;
+  const quotedEnd = (start: number, quote: "'" | '"', backslashEscapes: boolean): number | undefined => {
+    for (let index = start + 1; index < statement.length; index++) {
+      const character = statement[index];
+      if (backslashEscapes && character === '\\') {
+        index++;
+        continue;
+      }
+      if (character === quote) {
+        if (statement[index + 1] === quote) index++;
+        else return index + 1;
+      }
+    }
+    return undefined;
+  };
+  const numericLiteral = (start: number): number | undefined => {
+    const rest = statement.slice(start);
+    const match =
+      /^(?:0[xX][\da-fA-F](?:_?[\da-fA-F])*|0[oO][0-7](?:_?[0-7])*|0[bB][01](?:_?[01])*|(?:\d(?:_?\d)*(?:\.(?:\d(?:_?\d)*)?)?|\.\d(?:_?\d)*)(?:[eE][+-]?\d(?:_?\d)*)?)/.exec(
+        rest,
+      )?.[0];
+    if (!match || identifierPart(statement[start - 1]) || identifierPart(statement[start + match.length]))
+      return undefined;
+    return start + match.length;
+  };
+
+  let normalized = '';
+  let pendingSpace = false;
+  const append = (token: string) => {
+    if (pendingSpace && normalized && !normalized.endsWith('\n')) normalized += ' ';
+    normalized += token;
+    pendingSpace = false;
+  };
+
+  for (let index = 0; index < statement.length; ) {
+    const character = statement[index]!;
+    if (/\s/.test(character)) {
+      pendingSpace = true;
+      index++;
+      continue;
+    }
+
+    if (character === '-' && statement[index + 1] === '-') {
+      if (normalized && !normalized.endsWith('\n')) normalized += ' ';
+      let end = index + 2;
+      while (end < statement.length && statement[end] !== '\n' && statement[end] !== '\r') end++;
+      normalized += statement.slice(index, end);
+      if (end < statement.length) {
+        normalized += '\n';
+        end += statement[end] === '\r' && statement[end + 1] === '\n' ? 2 : 1;
+      }
+      index = end;
+      pendingSpace = false;
+      continue;
+    }
+
+    if (character === '/' && statement[index + 1] === '*') {
+      let depth = 1;
+      let end = index + 2;
+      while (end < statement.length && depth > 0) {
+        if (statement[end] === '/' && statement[end + 1] === '*') {
+          depth++;
+          end += 2;
+        } else if (statement[end] === '*' && statement[end + 1] === '/') {
+          depth--;
+          end += 2;
+        } else end++;
+      }
+      if (depth > 0) return opaque();
+      if (normalized && !normalized.endsWith('\n')) normalized += ' ';
+      normalized += statement.slice(index, end);
+      pendingSpace = true;
+      index = end;
+      continue;
+    }
+
+    if (character === '"') {
+      const end = quotedEnd(index, '"', false);
+      if (end === undefined) return opaque();
+      append(statement.slice(index, end));
+      index = end;
+      continue;
+    }
+
+    const previousIsPart = identifierPart(statement[index - 1]);
+    let prefix = '';
+    let quoteIndex = index;
+    let escapes = false;
+    if (!previousIsPart) {
+      const next = statement[index + 1];
+      if ((character === 'E' || character === 'e') && next === "'") {
+        prefix = character;
+        quoteIndex++;
+        escapes = true;
+      } else if (
+        (character === 'N' ||
+          character === 'n' ||
+          character === 'B' ||
+          character === 'b' ||
+          character === 'X' ||
+          character === 'x') &&
+        next === "'"
+      ) {
+        prefix = character;
+        quoteIndex++;
+      } else if ((character === 'U' || character === 'u') && next === '&' && statement[index + 2] === "'") {
+        prefix = `${character}&`;
+        quoteIndex += 2;
+      }
+    }
+    if (character === "'" || quoteIndex !== index) {
+      const end = quotedEnd(quoteIndex, "'", escapes);
+      if (end === undefined) return opaque();
+      if (!escapes && statement.slice(quoteIndex, end).includes('\\')) return opaque();
+      append(`${prefix}?`);
+      index = end;
+      continue;
+    }
+
+    if (character === '$') {
+      const parameter = /^\$\d+/.exec(statement.slice(index))?.[0];
+      if (parameter) {
+        append('?');
+        index += parameter.length;
+        continue;
+      }
+      if (!previousIsPart) {
+        const delimiter = /^\$(?:[a-z_][a-z_0-9]*|[\u0080-\uffff][a-z_0-9\u0080-\uffff]*)?\$/i.exec(
+          statement.slice(index),
+        )?.[0];
+        if (delimiter) {
+          const close = statement.indexOf(delimiter, index + delimiter.length);
+          if (close < 0) return opaque();
+          append('?');
+          index = close + delimiter.length;
+          continue;
+        }
+        return opaque();
+      }
+    }
+
+    if (character === '.' && /\d/.test(statement[index + 1] ?? '')) {
+      const end = numericLiteral(index);
+      if (end !== undefined) {
+        append('?');
+        index = end;
+        continue;
+      }
+    } else if (/\d/.test(character)) {
+      const end = numericLiteral(index);
+      if (end !== undefined) {
+        append('?');
+        index = end;
+        continue;
+      }
+    }
+
+    if (identifierStart(character)) {
+      let end = index + 1;
+      while (identifierPart(statement[end])) end++;
+      append(statement.slice(index, end));
+      index = end;
+      continue;
+    }
+
+    append(character);
+    index++;
+  }
+  return normalized.trim();
 }
 
 function planEntries(document: unknown, location = 'plan'): { queryText?: string; plan: PlanNode; location: string }[] {
