@@ -2,7 +2,15 @@ import { expect, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement, useState, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  Link,
+  Outlet,
+  RouterProvider,
+} from '@tanstack/react-router';
 import type { StatementFieldsRead } from '../src/features/catalogue/statement-editor-view';
 import {
   statementInput,
@@ -50,13 +58,29 @@ test('statement family owns labels, independent supplied parts, feedback, exact 
   overwriteGetLocale(() => 'en');
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   let show!: (node: ReactNode) => void;
+  let showSearchLink = false;
   function Surface() {
     const [node, setNode] = useState<ReactNode>(null);
     show = (next) => setNode(() => next);
-    return node;
+    return showSearchLink ? (
+      createElement('div', null, createElement(Link, { to: '/search' }, 'Search destination'), node)
+    ) : (
+      node
+    );
   }
-  const route = createRootRoute({ component: Surface });
-  const router = createRouter({ routeTree: route, history: createMemoryHistory({ initialEntries: ['/'] }) });
+  const rootRoute = createRootRoute({ component: Outlet });
+  const editorRoute = createRoute({ getParentRoute: () => rootRoute, path: '/edit', component: Surface });
+  let arrivals = 0;
+  const destinationRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/search',
+    onEnter: () => arrivals++,
+    component: () => createElement('h1', null, 'Actual search destination'),
+  });
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([editorRoute, destinationRoute]),
+    history: createMemoryHistory({ initialEntries: ['/edit'] }),
+  });
   await router.load();
   const host = window.document.createElement('main');
   window.document.body.append(host);
@@ -85,6 +109,11 @@ test('statement family owns labels, independent supplied parts, feedback, exact 
   };
   const click = async (scope: ParentNode, name: string) => {
     await act(async () => button(scope, name).click());
+  };
+  const unloadIsProtected = () => {
+    const event = new window.Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
   };
   const control = (scope: ParentNode, label: string, index = 0) => {
     const labels = [...scope.querySelectorAll<HTMLLabelElement>('label')].filter(
@@ -401,6 +430,7 @@ test('statement family owns labels, independent supplied parts, feedback, exact 
     });
     await submit();
     await until(() => host.textContent!.includes(m.correction_proposed()));
+    expect(unloadIsProtected()).toBe(false);
     expect(writes(fixture)).toHaveLength(2);
     expect(writes(fixture)[1]).toEqual(frozen);
     expect(fixture.publicRead.subject.statements[fixture.address.property]![0]).toEqual(publicBefore);
@@ -564,6 +594,51 @@ test('statement family owns labels, independent supplied parts, feedback, exact 
       }
     }
     expect(fetch.mock.calls).toHaveLength(0);
+    await render(null);
+    const navigationFixture = statementFixture();
+    const navigationRead = await currentRead(navigationFixture);
+    if (!navigationRead.ok) throw new Error('Expected a correction for navigation');
+    showSearchLink = true;
+    await render(
+      createElement(StatementEditor, {
+        initial: navigationRead,
+        locale: 'en',
+        transport: navigationFixture.editor,
+        review: () => navigationFixture.review,
+      }),
+    );
+    const year = control(host, m.correction_year());
+    await input(year, '1946');
+    await click(host, m.correction_add_reference());
+    const citationSelect = control(host, m.correction_add_part(), 1);
+    await input(citationSelect, 'schema:url');
+    await click(citationSelect.closest('[data-slot="field"]')!.parentElement!, m.correction_add());
+    const citation = 'https://example.org/navigation-retained-citation';
+    await input(control(host, m.correction_url(), 1), citation);
+    expect(unloadIsProtected()).toBe(true);
+    const departure = host.querySelector<HTMLAnchorElement>('a[href="/search"]')!;
+    await act(async () => {
+      departure.focus();
+      departure.click();
+    });
+    await until(() => !!window.document.querySelector('[role="alertdialog"]'));
+    const dialog = window.document.querySelector('[role="alertdialog"]')!;
+    expect(dialog.textContent).toContain(m.thread_authoring_discard_unsaved());
+    await click(dialog, m.thread_authoring_stay());
+    await until(() => !window.document.querySelector('[role="alertdialog"]'));
+    await until(() => window.document.activeElement === departure);
+    expect(control(host, m.correction_year()).value).toBe('1946');
+    expect(control(host, m.correction_url(), 1).value).toBe(citation);
+    expect(unloadIsProtected()).toBe(true);
+    await act(async () => {
+      departure.focus();
+      departure.click();
+    });
+    await until(() => !!window.document.querySelector('[role="alertdialog"]'));
+    await click(window.document.querySelector('[role="alertdialog"]')!, m.thread_authoring_discard());
+    await until(() => router.state.location.pathname === '/search');
+    expect(arrivals).toBe(1);
+    expect(unloadIsProtected()).toBe(false);
   } finally {
     await act(async () => root.unmount());
     client.clear();
