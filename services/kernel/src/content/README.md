@@ -1070,6 +1070,7 @@ the second round adds O(ids × H) indexed point work and scans no unrelated medi
 The page and download routes retain their existing cache policy and read authority;
 Realm participation is not substituted for Realm reading.
 Semantic cover claims through `claimMedia` delegate authority to the native cover port, including `statement:propose` and `subject:create` on the Global Context; media, container and candidate retain their exact subject route binding.
+Shared `ProblemError` identity initializes in a dependency-free HTTP module so native command and Realm imports cannot prevent media admission or contract construction from loading.
 
 A post image belongs to the first post that claims it; that post's later revisions may name it again, any other reference is `media_unavailable`, and erasing the post erases it.
 
