@@ -1,8 +1,8 @@
 -- Drive every probe from the requested subject key. A join onto current_term_fact
 -- can expand the view into a sequential scan of semantic.fact as unrelated history grows.
 WITH input AS NOT MATERIALIZED (
-  SELECT :route::integer AS route, :subject_id::uuid AS subject_id,
-         (:route::integer / 16) AS partition_no
+  SELECT route, :subject_id::uuid AS subject_id, (route / 16) AS partition_no
+  FROM (SELECT :route::integer AS route) AS requested
 )
 SELECT s.subject_id::text AS id, s.type, account.account_id::text AS account,
        s.security_revision::text AS security_revision,
