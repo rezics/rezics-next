@@ -257,60 +257,75 @@ function InitialStatement({
         </Field>
       )}
       {release.properties['schema:url']?.datatype === 'url' &&
-        (citations.length ? citations : [{ part: emptyCitation.current, group: -1, index: -1 }]).map(
-          (citation, index) => {
-            const id = controlId(`${screenRowId(row)}-${partKey(citation.part)}`, 'fact', 'value');
-            const value = citation.part.value;
-            return (
-              <Field key={index} className="min-w-0">
-                <FieldLabel className={screenLabelClassName} htmlFor={id}>
-                  {m.relation_citation({}, o)}
-                </FieldLabel>
-                <Input
-                  className={screenInputClassName}
-                  id={id}
-                  type="url"
-                  value={value?.type === 'value' && typeof value.content === 'string' ? value.content : ''}
-                  onChange={(event) => {
-                    const url = event.target.value.trim();
-                    if (!url)
-                      emptyCitation.current = { property: { id: 'schema:url' }, value: { type: 'value', content: '' } };
+        (citations.length ? citations : [{ part: emptyCitation.current, group: -1, index: -1 }]).map((citation) => {
+          const id = controlId(`${screenRowId(row)}-${partKey(citation.part)}`, 'fact', 'value');
+          const value = citation.part.value;
+          return (
+            <Field key={partKey(citation.part)} className="min-w-0">
+              <FieldLabel className={screenLabelClassName} htmlFor={id}>
+                {m.relation_citation({}, o)}
+              </FieldLabel>
+              <Input
+                className={screenInputClassName}
+                id={id}
+                type="url"
+                value={value?.type === 'value' && typeof value.content === 'string' ? value.content : ''}
+                onChange={(event) => {
+                  const url = event.target.value.trim();
+                  change({
+                    ...statement,
+                    references:
+                      citation.group >= 0
+                        ? statement.references.map((reference, group) =>
+                            group !== citation.group
+                              ? reference
+                              : {
+                                  ...reference,
+                                  parts: reference.parts.map((part, index) =>
+                                    index !== citation.index ? part : partValue(part, { type: 'value', content: url }),
+                                  ),
+                                },
+                          )
+                        : url
+                          ? [
+                              ...statement.references,
+                              { parts: [partValue(citation.part, { type: 'value', content: url })] },
+                            ]
+                          : statement.references,
+                  });
+                }}
+              />
+              <p className="min-w-0 max-w-full text-sm text-muted-foreground empty:hidden [overflow-wrap:anywhere]">
+                {value?.type === 'value' && typeof value.content === 'string' ? value.content : ''}
+              </p>
+              {citation.group >= 0 && (
+                <Button
+                  className={screenActionClassName}
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    emptyCitation.current = { property: { id: 'schema:url' }, value: { type: 'value', content: '' } };
                     change({
                       ...statement,
-                      references:
-                        citation.group >= 0
-                          ? statement.references
-                              .map((reference, group) =>
-                                group !== citation.group
-                                  ? reference
-                                  : {
-                                      ...reference,
-                                      parts: reference.parts.flatMap((part, index) =>
-                                        index !== citation.index
-                                          ? [part]
-                                          : url
-                                            ? [partValue(part, { type: 'value', content: url })]
-                                            : [],
-                                      ),
-                                    },
-                              )
-                              .filter((reference) => reference.parts.length)
-                          : url
-                            ? [
-                                ...statement.references,
-                                { parts: [partValue(citation.part, { type: 'value', content: url })] },
-                              ]
-                            : statement.references,
+                      references: statement.references
+                        .map((reference, group) =>
+                          group !== citation.group
+                            ? reference
+                            : {
+                                ...reference,
+                                parts: reference.parts.filter((_, index) => index !== citation.index),
+                              },
+                        )
+                        .filter((reference) => reference.parts.length),
                     });
                   }}
-                />
-                <p className="min-w-0 max-w-full text-sm text-muted-foreground empty:hidden [overflow-wrap:anywhere]">
-                  {value?.type === 'value' && typeof value.content === 'string' ? value.content : ''}
-                </p>
-              </Field>
-            );
-          },
-        )}
+                >
+                  {m.relation_remove({}, o)}
+                </Button>
+              )}
+            </Field>
+          );
+        })}
     </div>
   );
 }

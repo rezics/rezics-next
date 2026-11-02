@@ -286,7 +286,7 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
     removeQualifier.focus();
     await key('{Enter}');
     expect(observed.second![0]!.statement.qualifiers).toEqual([]);
-    within(director).getByRole('button', { name: m.relation_remove() }).focus();
+    director.querySelector<HTMLButtonElement>(':scope > button')!.focus();
     await key('{Enter}');
     expect(observed.second).toEqual([]);
     expect(fields('first').querySelector('section')).toBeNull();
