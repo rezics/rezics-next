@@ -4,7 +4,7 @@ import { act, StrictMode } from 'react';
 import * as start from '../.storybook/react-start';
 import type { CreatorSalesCurrentRead } from '../src/checkout/creator-sales';
 import { creatorSaleFixture } from '../src/kernel/fake/creator-sales';
-// UNRUN: creator sales cache/DOM regressions for integration. These use the actual session QueryClient,
+// creator sales cache/DOM regressions for integration. These use the actual session QueryClient,
 // viewerExposureLifetime and subject-scoped admission, without native or browser acceptance claims.
 mock.module('@tanstack/react-start', () => ({
   ...start,
@@ -99,7 +99,7 @@ test('sales retires late viewer, admission and address ABA results, retains acce
   const keep = lifetime.subscribe(() => {});
   const session = (subject = A, csrfToken = 'csrf-A') =>
     client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject, csrfToken });
-  const admit = (admitted = ['selling']) => {
+  const admit = (admitted = ['selling', 'commerce_sale.list']) => {
     const snapshot = lifetime.getSnapshot();
     if (snapshot.state !== 'signed-in') throw new Error('Expected real viewer observation');
     client.setQueryData(viewerExposureQuery(snapshot.observation).queryKey, {

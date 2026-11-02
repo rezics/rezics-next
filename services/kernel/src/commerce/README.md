@@ -300,11 +300,11 @@ verification. The private-sales source producer is described below; target use a
 
 ### Served creator sales
 
-The served `/creator/sales` page calls the generated `kernelClient().commerceSales.get` through
+The served `/creator/sales` page calls `kernelClient().commerceSales.get` through
 `checkout/creator-sales.ts`, using the existing signed-in BFF, `prepareSession` and `viewerCredential`.
 Each call uses `cache: no-store` and `redirect: manual`; both the route and response prohibit private retention
 and indexing. The server prepares a session once, binds the normalized cursor and subject to the page, checks
-the existing selling exposure and uses the same credential for both native reads. The existing current-origin
+the advertised Sales operation under selling exposure and uses the same credential for both native reads. The existing current-origin
 observer retires reads synchronously on viewer, admission or locale/cursor replacement, including ABA before
 React commits. Healthy same-viewer credential renewal can retain an accepted read but never an in-flight result.
 
@@ -313,9 +313,10 @@ unknowns, signed continuation, retry/restart and genuine denial/error/stale/unav
 show verified rows but never claims completed zero sales. Rows add neither guessed offer links nor buyer-order
 links. `/creator/offers` and `/creator/statements` retain their separate management and royalty destinations.
 The mounted catalogue and existing website registration/request helpers supply exact `commerce_sale:list`;
-old consent and refresh tokens never widen themselves. Navigation uses `gate:selling` for `commerce_sale.list`.
+old consent and refresh tokens never widen themselves. Kernel exposure uses `gate:selling`; website navigation requires the advertised `commerce_sale.list` operation.
 
-Endpoint DTO and generated client are authoritative. The controller regenerates OpenAPI and the client after
+The native endpoint DTO is authoritative. The existing transport uses a narrow consumer-local typed bridge while
+canonical bindings are unavailable. The controller regenerates OpenAPI and the client after
 mounting the endpoint; the unused standalone `creator-sales.d.ts` is not an alternative contract. Source delivery,
 constructed Web responses and permitted workspace typing establish no native, privacy, browser, physical or
 promoted-main acceptance. Original acceptance remains required after integration.
@@ -326,8 +327,8 @@ the old sale. Initial loader data seeds the query once; it is never a fallback a
 
 The canonical compiler's `typecheck --emit-client` composes mounted native routes into the generated client using
 the same admitted compiler database. This is declaration emission, not a substitute transport or a second DTO.
-The existing Web acceptance assertion that rejects `selling` for `commerce_sale.list` conflicts with this owner's
-`gate:selling` contract; preserve that assertion for cross-Goal reconciliation rather than changing the gate.
+The exposure read advertises `commerce_sale.list` only when that mounted operation is visible through the existing
+`gate:selling` discovery. Group admission alone never enables Sales navigation; the frozen Web assertions remain valid.
 
 ### Adopted native Content edition and delivery state
 

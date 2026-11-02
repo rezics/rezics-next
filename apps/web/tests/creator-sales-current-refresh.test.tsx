@@ -4,7 +4,7 @@ import { act, StrictMode } from 'react';
 import * as start from '../.storybook/react-start';
 import type { CreatorSalesCurrentRead } from '../src/checkout/creator-sales';
 import { creatorSaleFixture } from '../src/kernel/fake/creator-sales';
-// UNRUN: a refresh must replace accepted private data, including across healthy session rotation.
+// a refresh must replace accepted private data, including across healthy session rotation.
 // Uses the existing viewer/query fixtures; native and browser acceptance remain deferred.
 mock.module('@tanstack/react-start', () => ({
   ...start,
@@ -94,7 +94,7 @@ test('a foreign refresh replaces a seeded sale with unavailable and healthy rota
     if (snapshot.state !== 'signed-in') throw new Error('Expected real viewer observation');
     client.setQueryData(viewerExposureQuery(snapshot.observation).queryKey, {
       subject: A,
-      admitted: ['selling'],
+      admitted: ['selling', 'commerce_sale.list'],
     });
   };
   session('first');

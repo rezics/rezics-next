@@ -102,7 +102,10 @@ async function read(token?: string): Promise<string[]> {
   const visibleGroups = visible.flatMap((operation) =>
     operation.exposure.startsWith('gate:') ? [operation.exposure.slice(5)] : [],
   );
-  expect(body.admitted).toEqual([...new Set(visibleGroups)].sort());
+  const sales = visible.some((operation) => operation.operationId === 'commerce_sale.list')
+    ? ['commerce_sale.list']
+    : [];
+  expect(body.admitted).toEqual([...new Set([...visibleGroups, ...sales])].sort());
   for (const group of mountedGroups().filter((group) => !body.admitted.includes(group))) {
     expect(text).not.toContain(group);
   }

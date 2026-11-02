@@ -3207,7 +3207,7 @@ uncertain commands retain their original payload and key.
 ## Private creator Sales
 
 `/creator/sales` uses the existing signed-in route and list/card family. Its current read prepares one server
-session, observes selling exposure and calls the real generated `kernelClient().commerceSales.get` with that
+session, requires the advertised Sales operation and calls `kernelClient().commerceSales.get` with that
 credential, a 20-row limit and the signed cursor. Every call sets `cache: no-store` and `redirect: manual`;
 responses are private/no-store/noindex/nofollow and route retention is zero. Native authorization remains final.
 An exposure refusal stops the sales request and preserves its denied, error or stale outcome; transport failure,
@@ -3223,11 +3223,12 @@ The endpoint DTO owns the sanitized boundary: captured amounts and historic unkn
 preparing versus complete empty, and genuine denied/error/stale/unavailable states. There are no buyer details,
 Library telemetry, guessed current-offer links, mixed-currency totals or payout/entitlement claims. The mounted
 operation uses the existing selling gate and exact action/catalogue/website scope helpers without widening consent.
-OpenAPI/client generation remains controller-owned; standalone ambient declarations are not another contract.
+The existing client transport uses a narrow consumer-local typed bridge until canonical OpenAPI/client generation
+lands through dev integration; standalone ambient declarations are not another contract.
 
 Cost: current sales read
 
-- Touches: one session preparation, one existing exposure GET and one generated sales GET, at most 20 displayed
+- Touches: one session preparation, one existing exposure GET and one sales GET, at most 20 displayed
   rows, signed continuation only; no per-row HTTP, source/backfill dispatch, buyer reads or prefetch.
 - Bound: per-call restrictive transport, source DTO validation and zero personal query retention; repeats and
   failures charge their actual calls. The native owner's eight-axis composed SQL/Work total remains explicitly
@@ -3237,4 +3238,4 @@ Cost: current sales read
   healthy rotation, delayed viewer/admission/address ABA and foreign-empty rejection.
   `creator-sales-current-refresh.test.tsx` covers replacement of a seeded page after a foreign refresh and
   subsequent healthy rotation.
-  These source cases are UNRUN; native/browser/visual/full acceptance remains controller-owned after integration.
+  Native/browser/visual/full acceptance remains controller-owned after integration.

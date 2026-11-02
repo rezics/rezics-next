@@ -164,17 +164,31 @@ export async function advanceNativeErasure(
     });
   } catch (error) {
     if (error instanceof LiveCopyPendingError) {
-      return transaction(pool,async tx=>{
-        const locked=(await tx.query<Progress>('SELECT route,account_id,progress_id,phase,page,retry_phase FROM access.erasure_native_progress WHERE progress_id=$1 FOR UPDATE',[progressId])).rows[0];
+      return transaction(pool, async (tx) => {
+        const locked = (
+          await tx.query<Progress>(
+            'SELECT route,account_id,progress_id,phase,page,retry_phase FROM access.erasure_native_progress WHERE progress_id=$1 FOR UPDATE',
+            [progressId],
+          )
+        ).rows[0];
         allow(locked);
-        if (locked.phase!==anchor.phase || locked.page!==anchor.page) return 'advanced';
-        await tx.query(`INSERT INTO access.erasure_native_blocked(progress_id,phase,page,reason,consumer_index)
+        if (locked.phase !== anchor.phase || locked.page !== anchor.page) return 'advanced';
+        await tx.query(
+          `INSERT INTO access.erasure_native_blocked(progress_id,phase,page,reason,consumer_index)
           VALUES($1,$2,$3,'live-copy-original-role-coverage',0)
-          ON CONFLICT(progress_id,phase) DO UPDATE SET page=excluded.page,reason=excluded.reason`,[progressId,expected.phase,expected.page]);
-        await tx.query(`UPDATE access.erasure_native_progress SET phase=$2,page=0,retry_phase=$3,
+          ON CONFLICT(progress_id,phase) DO UPDATE SET page=excluded.page,reason=excluded.reason`,
+          [progressId, expected.phase, expected.page],
+        );
+        await tx.query(
+          `UPDATE access.erasure_native_progress SET phase=$2,page=0,retry_phase=$3,
           pending='native-inventory',native_complete_at=NULL WHERE progress_id=$1`,
-          [progressId,expected.retry?locked.phase:expected.phase+1,expected.retry?expected.phase:locked.retry_phase]);
-        return expected.retry?'pending-native-consumer':'advanced';
+          [
+            progressId,
+            expected.retry ? locked.phase : expected.phase + 1,
+            expected.retry ? expected.phase : locked.retry_phase,
+          ],
+        );
+        return expected.retry ? 'pending-native-consumer' : 'advanced';
       });
     }
     // A concurrent consumer can commit (and remove the copied page) between our

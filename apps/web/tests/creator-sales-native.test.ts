@@ -1,4 +1,4 @@
-// UNRUN: real generated-client/default BFF composition with constructed wire responses.
+// real generated-client/default BFF composition with constructed wire responses.
 // These cases establish no native authorization or browser acceptance.
 import { describe, expect, mock, spyOn, test } from 'bun:test';
 import { createElement } from 'react';
@@ -179,7 +179,7 @@ describe("Creator's real private sales history page and statement navigation", (
 
 test('served current sales binds one session preparation, gate, empty page and signed address to that exact viewer', async () => {
   const calls: Request[] = [];
-  let admitted = ['selling'];
+  let admitted = ['selling', 'commerce_sale.list'];
   const fetcher = spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const call = new Request(input, init);
     calls.push(call);
@@ -220,7 +220,7 @@ test('served current sales binds one session preparation, gate, empty page and s
     expect(second.sessionSubject).toBe('other');
     expect(preparations - before).toBe(2);
     expect(calls.at(-1)!.headers.get('authorization')).toBe('Bearer credential-other');
-    admitted = [];
+    admitted = ['selling'];
     const count = calls.length;
     const closed = await readCreatorSalesCurrent({ data: {} });
     expect(closed).toEqual({

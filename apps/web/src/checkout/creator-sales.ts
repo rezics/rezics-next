@@ -50,9 +50,11 @@ export interface CreatorSalesCaller {
 /** Narrow bridge until the controller's canonical generated client includes this mounted endpoint. */
 type CreatorSalesKernelClient = {
   commerceSales: {
-    get(input: Parameters<CreatorSalesCaller['get']>[0] & {
-      fetch: { cache: 'no-store'; redirect: 'manual' };
-    }): Promise<{ status: number; data?: unknown; error?: unknown }>;
+    get(
+      input: Parameters<CreatorSalesCaller['get']>[0] & {
+        fetch: { cache: 'no-store'; redirect: 'manual' };
+      },
+    ): Promise<{ status: number; data?: unknown; error?: unknown }>;
   };
 };
 
@@ -212,7 +214,7 @@ export const readCreatorSalesCurrent = createServerFn({ method: 'GET' })
       const failure = creatorSalesFailure(exposure.status);
       if (failure) return { ...result, page: failure };
       if (exposure.error || !exposure.data) return { ...result, page: { kind: 'unavailable' } };
-      if (!exposure.data.admitted.includes('selling')) return result;
+      if (!exposure.data.admitted.includes('commerce_sale.list')) return result;
       result.selling = true;
       result.page = await loadPreparedCreatorSales(nativeCreatorSalesCaller, authorization, data);
       return result;

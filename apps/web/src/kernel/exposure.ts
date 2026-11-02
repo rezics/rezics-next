@@ -46,7 +46,7 @@ export const operationGroups = {
   'library_shelf.types': 'personal_library',
   'offer.get': 'purchases',
   'offer.list': 'selling',
-  'commerce_sale.list': 'selling',
+  'commerce_sale.list': 'commerce_sale.list',
   'payout_statement.list': 'selling',
   'order.create': 'purchases',
   'order.get': 'purchases',

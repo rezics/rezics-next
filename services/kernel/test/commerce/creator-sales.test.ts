@@ -215,6 +215,9 @@ test('Minimal native creator sales accounting view, source-backed and private', 
   expect(Object.keys(page).sort()).toEqual(['next', 'projectionState', 'sales']);
   expect(page.projectionState).toBe('preparing');
   expect(page.next).toBeNull();
+  const exposure = await (await request('/v1/platform/exposure')).json();
+  expect(exposure.admitted).toContain('selling');
+  expect(exposure.admitted).toContain('commerce_sale.list');
   expect(page.sales.map((row: { orderId: string }) => row.orderId)).toEqual(
     orders
       .slice(0, 2)

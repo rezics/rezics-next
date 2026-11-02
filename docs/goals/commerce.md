@@ -158,13 +158,12 @@ negative work creates no new personal identity. Accounts discovers/minimizes sou
 without treating History receipts as live-copy permission or financial/all-copy acknowledgment.
 
 The page uses current own-account Access, exact `commerce_sale:list`, `gate:selling`, native signed epoch-bound
-keysets and generated typed transport, with synchronous viewer/admission/address retirement. Complete historical
+keysets and the existing typed source transport bridge, with synchronous viewer/admission/address retirement. Complete historical
 cross-home coverage is unknown, so verified rows remain `preparing`; local empty/frontier exhaustion is no complete
 empty certificate. Unsupported backup/restore lineage remains fenced by actual native activation/domain guards;
 no offline reconciliation or external physical closure is claimed. Full financial retention/shared custody remain
 separate pending producer obligations.
 
 Controller generation of OpenAPI/client and original native/physical/privacy/browser/main acceptance remain
-required. Focused new tests are source-only and UNRUN at this delivery boundary. Workspace typing is a source
-check, not acceptance or whole-Goal completion. The current acceptance command remains
+required. Focused tests and workspace typing do not replace native acceptance or whole-Goal completion. The current acceptance command remains
 `bun run --cwd services/kernel check test/commerce/creator-sales.test.ts` for controller integration.

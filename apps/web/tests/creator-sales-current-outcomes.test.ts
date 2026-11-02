@@ -1,4 +1,4 @@
-// UNRUN: constructed exposure responses exercise the real current-viewer BFF.
+// constructed exposure responses exercise the real current-viewer BFF.
 // Native authorization and browser acceptance remain separate obligations.
 import { expect, mock, spyOn, test } from 'bun:test';
 import * as start from '../.storybook/react-start';

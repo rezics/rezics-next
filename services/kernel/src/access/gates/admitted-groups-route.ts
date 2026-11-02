@@ -4,7 +4,7 @@ import type { Access } from '../../request/access.ts';
 import { problemSchema } from '../../http/problem.ts';
 import type { MountedRoute } from '../../http/request.ts';
 import type { definitionRoutes } from '../../semantic/http/definitions.ts';
-import { admittedGroups } from './visibility.ts';
+import { visibleOperations } from './visibility.ts';
 
 /** Capture the complete mounted catalogue on the first request, as the served OpenAPI route does. */
 export function admittedGroupsRoutes(
@@ -29,7 +29,7 @@ export function admittedGroupsRoutes(
     },
     async ({ actor, job, set }) => {
       catalogue ??= [...app.routes];
-      const admitted = await admittedGroups({
+      const visible = await visibleOperations({
         viewer: actor,
         pool: dependencies.pool,
         access: dependencies.access(),
@@ -37,8 +37,14 @@ export function admittedGroupsRoutes(
         deadline: job.deadline,
         clock: dependencies.clock,
       });
+      const admitted = new Set(
+        visible.flatMap((operation) => (operation.exposure.startsWith('gate:') ? [operation.exposure.slice(5)] : [])),
+      );
+      // Sales navigation requires an actual mounted operation, independently of its selling gate.
+      if (visible.some((operation) => operation.operationId === 'commerce_sale.list'))
+        admitted.add('commerce_sale.list');
       set.headers['cache-control'] = 'no-store';
-      return { admitted: [...admitted] };
+      return { admitted: [...admitted].sort() };
     },
   );
 }
