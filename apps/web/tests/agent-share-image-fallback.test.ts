@@ -9,21 +9,11 @@ const cover = {
   media: 'published-cover',
   width: 640,
   height: 960,
-  variants: [
-    { format: 'avif', width: 2560 },
-    { format: 'webp', width: 2560 },
-  ],
+  variants: ['avif', 'webp'].map((format) => ({ format, width: 2560 })),
 };
 const avatar = { ...cover, media: 'published-avatar' };
 
-function check(
-  avatar: unknown,
-  subject: unknown,
-  path: string,
-  width: number,
-  height: number,
-  card?: ShareCardProjection,
-) {
+function check(avatar: unknown, subject: unknown, path: string, size = [2560, 3840], card?: ShareCardProjection) {
   const page = structuredClone(recording);
   page.reads.r1.body.accounts[0]!.avatar = avatar as (typeof page.reads.r1.body.accounts)[0]['avatar'];
   Object.assign(page.reads.r0.body, { summary: { cover: subject } });
@@ -40,16 +30,16 @@ function check(
     result.meta.flatMap((item) => ('content' in item ? [[item.property ?? item.name, item.content]] : [])),
   );
   expect([meta['og:image'], meta['twitter:image']]).toEqual([`${origin}${path}`, `${origin}${path}`]);
-  expect([meta['og:image:width'], meta['og:image:height']]).toEqual([String(width), String(height)]);
+  expect([meta['og:image:width'], meta['og:image:height']]).toEqual(size.map(String));
   const entity = JSON.parse(result.scripts[0]!.children)['@graph'][0].mainEntity;
   expect(entity.image).toBe(path.startsWith('/media/') ? `${origin}${path}` : undefined);
 }
 
 test('account sharing keeps avatar priority, published formats and actual aspect ratios', () => {
-  check(avatar, cover, '/media/published-avatar/webp-2560', 2560, 3840);
-  check({ ...avatar, width: 1e308, height: 1e308 }, cover, '/media/published-avatar/webp-2560', 2560, 2560);
-  check({ ...avatar, height: 0.01 }, cover, '/media/published-avatar/webp-2560', 2560, 1);
-  check(null, { ...cover, variants: [{ format: 'avif', width: 319 }] }, '/media/published-cover/avif-319', 319, 479);
+  check(avatar, cover, '/media/published-avatar/webp-2560', [2560, 3840]);
+  check({ ...avatar, width: 1e308, height: 1e308 }, cover, '/media/published-avatar/webp-2560', [2560, 2560]);
+  check({ ...avatar, height: 0.01 }, cover, '/media/published-avatar/webp-2560', [2560, 1]);
+  check(null, { ...cover, variants: [{ format: 'avif', width: 319 }] }, '/media/published-cover/avif-319', [319, 479]);
   const variants = [
     null,
     { format: 'webp', width: 1280.5 },
@@ -57,7 +47,7 @@ test('account sharing keeps avatar priority, published formats and actual aspect
     { format: 'jpeg', width: 2560 },
     { format: 'avif', width: 640 },
   ];
-  check({ ...avatar, variants }, cover, '/media/published-avatar/avif-640', 640, 960);
+  check({ ...avatar, variants }, cover, '/media/published-avatar/avif-640', [640, 960]);
 });
 
 test('incomplete or unusable published images fall through without exposing withheld media', () => {
@@ -81,15 +71,15 @@ test('incomplete or unusable published images fall through without exposing with
     { ...avatar, width: Number.MIN_VALUE, height: Number.MAX_VALUE },
   ];
   for (const value of unusable) {
-    check(value, cover, '/media/published-cover/webp-2560', 2560, 3840);
-    check(null, value, '/cards/default.png', 1200, 630);
+    check(value, cover, '/media/published-cover/webp-2560', [2560, 3840]);
+    check(null, value, '/cards/default.png', [1200, 630]);
   }
   const page = { id: recording.subject, locale: 'en' as const, title: 'Public card', types: [] };
-  check(null, { ...cover, withheld: 'suitability' }, `/en/cards/${page.id}.png`, 1200, 630, { kind: 'ready', page });
+  check(null, { ...cover, withheld: 'suitability' }, `/en/cards/${page.id}.png`, [1200, 630], { kind: 'ready', page });
   for (const value of [
     { ...cover, width: 1e308, height: 1e308 },
     { ...cover, variants: [{ format: 'webp' as const, width: 1200 }] },
   ]) {
-    check(null, null, '/cards/default.png', 1200, 630, { kind: 'ready', page: { ...page, cover: value } });
+    check(null, null, '/cards/default.png', [1200, 630], { kind: 'ready', page: { ...page, cover: value } });
   }
 });
