@@ -31,11 +31,14 @@ type PinControlInput = {
 
 type PinAction = 'pin' | 'unpin' | 'up' | 'down';
 type WriteAdmission = { allowed: boolean; active: boolean; version: number | undefined };
+type PinSender = typeof pinCollection | typeof unpinCollection;
 type PinAttempt = {
   admission: WriteAdmission;
   lifetime: symbol;
   action: PinAction;
   data: { collectionId: string; revision: number; after?: string | null; idempotencyKey: string };
+  headers: ReturnType<typeof csrfHeaders>;
+  sender: PinSender;
   pending: boolean;
 };
 
@@ -202,6 +205,7 @@ export function usePinControlActions({ collectionId, pins, mode, origin }: PinCo
       if (live.current.pins !== loadedPins) return;
       if ((action === 'up' && index <= 0) || (action === 'down' && (index < 0 || index >= pinCount - 1))) return;
       const after = action === 'up' ? (index <= 1 ? null : orderedIds[index - 2]!) : orderedIds[index + 1]!;
+      const actual = cachedSession(live.current.queryClient);
       current = {
         admission,
         lifetime,
@@ -212,6 +216,8 @@ export function usePinControlActions({ collectionId, pins, mode, origin }: PinCo
           ...(action === 'up' || action === 'down' ? { after } : {}),
           idempotencyKey: crypto.randomUUID(),
         },
+        headers: actual?.csrfToken ? { 'X-CSRF-Token': actual.csrfToken } : csrfHeaders(),
+        sender: action === 'unpin' ? unpinCollection : pinCollection,
         pending: false,
       };
       attempt.current = current;
@@ -238,13 +244,7 @@ export function usePinControlActions({ collectionId, pins, mode, origin }: PinCo
     };
     try {
       if (!isCurrentAttempt()) return;
-      const actual = cachedSession(live.current.queryClient);
-      const headers = actual?.csrfToken ? { 'X-CSRF-Token': actual.csrfToken } : csrfHeaders();
-      if (!isCurrentAttempt()) return;
-      const result =
-        captured.action === 'unpin'
-          ? await unpinCollection({ data: captured.data, headers })
-          : await pinCollection({ data: captured.data, headers });
+      const result = await captured.sender({ data: captured.data, headers: captured.headers });
       if (!isCurrentAttempt()) return;
       retain = !result.ok && result.reason === 'unavailable';
       if (result.ok) {
