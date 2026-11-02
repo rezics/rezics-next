@@ -371,6 +371,114 @@ export function GameInitialFacts({
   );
 }
 /** Common per-field sealing/retry and review, with item controls for native classification slots. */
+/** Local confirmation belongs to one exact unsent row and its admitted current reading. */
+function GameClassificationDiscard({
+  draft,
+  disabled,
+  locale,
+  allowed,
+  discard,
+}: {
+  draft: FactDraft;
+  disabled: boolean;
+  locale: string;
+  allowed: (row: FactDraft) => boolean;
+  discard: (row: FactDraft) => void;
+}) {
+  const lifetime = useEditorLifetime();
+  const trigger = useRef<HTMLButtonElement>(null);
+  const cancel = useRef<HTMLButtonElement>(null);
+  const holder = useRef<HTMLDivElement>(null);
+  const restoreFocus = useRef(false);
+  const [confirmation, setConfirmation] = useState<{ row: FactDraft; active: () => boolean }>();
+  const current = useRef({ draft, allowed, discard });
+  current.current = { draft, allowed, discard };
+  const confirming = confirmation?.row === draft && confirmation.active() && !disabled;
+  const o = { locale: locale as never };
+  const title = m.candidate_confirm_title({ action: m.authored_discard({}, o) }, o);
+  useLayoutEffect(() => {
+    if (confirming) cancel.current?.focus();
+    else if (restoreFocus.current && !disabled) {
+      restoreFocus.current = false;
+      trigger.current?.focus();
+    }
+  }, [confirming, disabled]);
+  const cancelDiscard = () => {
+    restoreFocus.current = true;
+    setConfirmation(undefined);
+  };
+  const discardDraft = () => {
+    if (
+      !lifetime.active() ||
+      !holder.current?.isConnected ||
+      current.current.draft !== draft ||
+      !current.current.allowed(draft)
+    ) return;
+    current.current.discard(draft);
+  };
+  // Property/rank and empty scaffolding alone are not assertion content.
+  const hasContent = (value: unknown): boolean => {
+    if (typeof value === 'string') return !!value.trim();
+    if (value == null) return false;
+    if (typeof value === 'object') return Object.values(value).some(hasContent);
+    return true;
+  };
+  const populatedPart = (part: SnakInput) => part.value.type !== 'value' || hasContent(part.value.content);
+  const populated =
+    populatedPart(draft.statement) ||
+    draft.statement.qualifiers?.some(populatedPart) ||
+    draft.statement.references.some((reference) => reference.parts.some(populatedPart));
+  return (
+    <div ref={holder}>
+      {confirming ? (
+        <div
+          role="group"
+          aria-label={title}
+          className="space-y-2"
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              cancelDiscard();
+            }
+          }}
+        >
+          <p>{title}</p>
+          <div className="flex flex-wrap gap-2">
+            <Button ref={cancel} className={gameActionClass} type="button" variant="outline" onClick={cancelDiscard}>
+              {m.candidate_cancel({}, o)}
+            </Button>
+            <Button
+              className={gameActionClass}
+              type="button"
+              variant="destructive"
+              onClick={() => {
+                if (confirmation.row === draft && confirmation.active()) discardDraft();
+              }}
+            >
+              {m.authored_discard({}, o)}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <Button
+          ref={trigger}
+          className={gameActionClass}
+          type="button"
+          variant="ghost"
+          disabled={disabled}
+          onClick={() => {
+            if (!lifetime.active() || !current.current.allowed(draft)) return;
+            if (populated) setConfirmation({ row: draft, active: lifetime.active });
+            else discardDraft();
+          }}
+        >
+          {m.authored_discard({}, o)}
+        </Button>
+      )}
+    </div>
+  );
+}
+
 export const GameClassifications = catalogueEditor(GameClassificationsLive);
 
 function GameClassificationsLive({
@@ -391,6 +499,26 @@ function GameClassificationsLive({
   const [drafts, setDrafts] = useState<FactDraft[]>([]);
   const [busy, setBusy] = useState(false);
   const running = useRef(false);
+  const holder = useRef<HTMLElement>(null);
+  const focusAfterDiscard = useRef<FactDraft | null>(null);
+  const current = useRef({ drafts, busy, lifetime });
+  current.current = { drafts, busy, lifetime };
+  const canDiscard = (row: FactDraft) =>
+    current.current.lifetime.active() &&
+    !running.current &&
+    !current.current.busy &&
+    current.current.drafts.includes(row) &&
+    !row.command &&
+    !factLocked(row);
+  useLayoutEffect(() => {
+    const row = focusAfterDiscard.current;
+    if (!row || !lifetime.active()) return;
+    focusAfterDiscard.current = null;
+    const section = [...(holder.current?.querySelectorAll<HTMLElement>('[data-classification-property]') ?? [])]
+      .find((node) => node.dataset.classificationProperty === row.property);
+    const controls = [...(section?.querySelectorAll<HTMLButtonElement>('button[data-classification-source]') ?? [])];
+    (controls.find((button) => button.dataset.classificationSource === (row.source ?? '')) ?? controls[0])?.focus();
+  }, [drafts, lifetime]);
   const [address, setAddress] = useState<{ property: string; candidate: string; session?: string | undefined }>();
   const [comparison, setComparison] = useState<CandidateTransport>();
   const o = { locale: locale as never };
@@ -431,7 +559,7 @@ function GameClassificationsLive({
   }
   if (!visible) return null;
   return (
-    <section className="min-w-0 max-w-full space-y-5" aria-busy={busy}>
+    <section ref={holder} className="min-w-0 max-w-full space-y-5" aria-busy={busy}>
       <h2 className="font-sans text-xl font-semibold">{m.game_profile_classification({}, o)}</h2>
       <p className="text-sm text-muted-foreground">{m.facts_separate_results({}, o)}</p>
       {fields.map((property) => {
@@ -461,7 +589,7 @@ function GameClassificationsLive({
           ]);
         };
         return (
-          <section key={property} className="min-w-0 max-w-full">
+          <section key={property} data-classification-property={property} className="min-w-0 max-w-full">
             <ContentItemFrame as="div" data-slot="game-classification" className={gameFieldFrameClass}>
               <ContentItemHeading
                 level={3}
@@ -496,6 +624,7 @@ function GameClassificationsLive({
                       type="button"
                       variant="outline"
                       disabled={busy}
+                      data-classification-source={statement.id}
                       onClick={() => stage(statement)}
                     >
                       {m.facts_edit_field({}, o)}
@@ -509,6 +638,7 @@ function GameClassificationsLive({
                   type="button"
                   variant="outline"
                   disabled={busy}
+                  data-classification-source=""
                   onClick={() => stage(null)}
                 >
                   {m.facts_add_value({}, o)}
@@ -534,6 +664,17 @@ function GameClassificationsLive({
                       }
                     />
                   </fieldset>
+                  <GameClassificationDiscard
+                    draft={draft}
+                    disabled={busy || !!draft.command || factLocked(draft) || !lifetime.active()}
+                    locale={locale}
+                    allowed={canDiscard}
+                    discard={(row) => {
+                      if (!canDiscard(row)) return;
+                      focusAfterDiscard.current = row;
+                      setDrafts((rows) => rows.filter((item) => item !== row));
+                    }}
+                  />
                   {draft.result && !draft.result.ok && <EditorFailure reason={draft.result.reason} locale={locale} />}
                   {draft.result?.ok && (
                     <div role="status">
