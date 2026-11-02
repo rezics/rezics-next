@@ -28,5 +28,10 @@ export function createFollowIntent() {
       // an older dispatch must not clear a newer request's recovery identity.
       if (current === input) current = null;
     },
+    reject(input: FollowWriteInput) {
+      // Only deliberate recovery from definitive rejection may discard an intent.
+      // An unavailable response must retain the original command for exact retry.
+      if (current === input) current = null;
+    },
   };
 }

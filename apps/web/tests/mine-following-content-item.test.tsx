@@ -110,10 +110,15 @@ test('Following uses shared item headings and independent native actions while p
     component: function FollowingFixture() {
       const [current, setCurrent] = useState(page);
       replacePage = setCurrent;
-      return <MineFollowingPageView page={current} onReview={async () => {
-        reviews++;
-        return { state: 'ready', following: true };
-      }} />;
+      return (
+        <MineFollowingPageView
+          page={current}
+          onReview={async () => {
+            reviews++;
+            return { state: 'ready', following: true };
+          }}
+        />
+      );
     },
   });
   const router = createRouter({
@@ -207,7 +212,9 @@ test('Following uses shared item headings and independent native actions while p
     expect(new Headers(write.mock.calls[0]![0].headers).get('X-CSRF-Token')).toBe('current-csrf');
     expect(host.querySelectorAll('li[data-slot="list-row"]')).toHaveLength(4);
     await act(async () => {
-      const review = [...host.querySelectorAll('button')].find((node) => node.textContent === m.library_follow_conflict_recovery_review())!;
+      const review = [...host.querySelectorAll('button')].find(
+        (node) => node.textContent === m.library_follow_conflict_recovery_review(),
+      )!;
       await user.click(review);
       await tick();
     });

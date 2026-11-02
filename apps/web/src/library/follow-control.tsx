@@ -1,5 +1,5 @@
 import { Menu } from '@rezics/ui/menu';
-import { Button } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { EllipsisIcon } from 'lucide-react';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { m } from '../paraglide/messages.js';
@@ -24,6 +24,8 @@ export type FollowControlProps = {
   menuTitle?: string;
   onChange?: (following: boolean) => void;
   onRetry?: () => void;
+  /** Explicit, permitted own-edge or current-list review; never a target read or a write. */
+  onReview?: () => Promise<FollowState | null>;
   /** Routed controls bind callbacks to actual mounted viewer and directional write admission. */
   isCurrent?: (following: boolean) => boolean;
   readLifetime?: string | null;
@@ -72,6 +74,15 @@ export function FollowControl(props: FollowControlProps) {
             },
           }
         : {})}
+      {...(props.onReview
+        ? {
+            onReview: async () => {
+              if (!origin.active || !origin.mounted) return null;
+              const result = await props.onReview?.();
+              return origin.active && origin.mounted ? (result ?? null) : null;
+            },
+          }
+        : {})}
       isCurrent={(next) =>
         origin.active &&
         origin.mounted &&
@@ -94,6 +105,7 @@ function FollowControlState({
   menuTitle,
   onChange,
   onRetry,
+  onReview,
   isCurrent,
   readLifetime,
   onAccepted,
@@ -104,6 +116,8 @@ function FollowControlState({
   const [removed, setRemoved] = useState(false);
   const intent = useRef(createFollowIntent()).current;
   const conflict = useRef(false);
+  const review = useRef<{ readLifetime: FollowControlProps['readLifetime'] } | null>(null);
+  const [reviewState, setReviewState] = useState<'idle' | 'pending' | 'failed' | 'ready'>('idle');
   const inFlight = useRef<{
     input: FollowWriteInput;
     isCurrent: FollowControlProps['isCurrent'];
@@ -124,6 +138,10 @@ function FollowControlState({
     setObserved(initialKey);
     setCurrent(initial);
     setRemoved(false);
+  }
+  if (review.current && (!onReview || signedOut || review.current.readLifetime !== readLifetime)) {
+    review.current = null;
+    setReviewState('failed');
   }
   const running = inFlight.current;
   if (
@@ -154,6 +172,7 @@ function FollowControlState({
     () => () => {
       committed.current = null;
       inFlight.current = null;
+      review.current = null;
     },
     [],
   );
@@ -169,7 +188,35 @@ function FollowControlState({
           ? 'remove'
           : null
       : followAction(current, canFollow, canRemove);
-  const disabled = !ready || pending || failure === 'conflict';
+  const reviewing = reviewState === 'pending';
+  const disabled = !ready || pending || conflict.current || reviewing;
+  function recover(input: FollowWriteInput, edge: FollowState) {
+    if (!committed.current || !conflict.current || intent.current !== input) return;
+    intent.reject(input);
+    conflict.current = false;
+    setFailure(null);
+    setCurrent(edge);
+    setRemoved(false);
+  }
+  async function reviewConflict() {
+    const input = intent.current;
+    if (!input || !conflict.current || !onReview || review.current) return;
+    const request = { readLifetime };
+    review.current = request;
+    setReviewState('pending');
+    let edge: FollowState | null = null;
+    try {
+      edge = await onReview();
+    } catch {
+      // Failed review leaves the rejected command locked; it supplies no edge knowledge.
+    }
+    if (review.current !== request || !committed.current) return;
+    review.current = null;
+    if (edge?.state === 'ready') {
+      recover(input, edge);
+      setReviewState('ready');
+    } else setReviewState('failed');
+  }
   async function submit() {
     const live = committed.current;
     if (!live?.ready || disabled || conflict.current || inFlight.current || !action) return;
@@ -191,6 +238,7 @@ function FollowControlState({
     inFlight.current = running;
     setPending(true);
     setFailure(null);
+    setReviewState('idle');
     if (current.state === 'pending') setCurrent({ state: 'unavailable' });
     let result: FollowWriteResult;
     try {
@@ -230,7 +278,11 @@ function FollowControlState({
           ? m.error_message()
           : '';
   return (
-    <div data-slot="follow-control" className="flex min-w-0 flex-wrap items-center gap-2" aria-busy={pending}>
+    <div
+      data-slot="follow-control"
+      className="flex min-w-0 flex-wrap items-center gap-2"
+      aria-busy={pending || reviewing}
+    >
       {current.state === 'ready' && current.following && !menuTitle ? (
         <span className="text-sm text-muted-foreground">{m.library_following()}</span>
       ) : null}
@@ -265,10 +317,47 @@ function FollowControlState({
           {m.library_follow_unavailable()}
         </p>
       ) : null}
-      {onRetry && current.state !== 'ready' && current.state !== 'pending' ? (
+      {conflict.current ? (
+        <>
+          {onReview ? (
+            <Button type="button" variant="ghost" disabled={reviewing} onClick={() => void reviewConflict()}>
+              {m.library_follow_conflict_recovery_review()}
+            </Button>
+          ) : null}
+          {!onReview || reviewState === 'failed' ? (
+            <>
+              <p role="status" className="text-sm text-muted-foreground">
+                {m.library_follow_conflict_recovery_unavailable()}
+              </p>
+              {canRemove ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={reviewing}
+                  onClick={() => {
+                    if (intent.current) recover(intent.current, { state: 'unavailable' });
+                    setReviewState('idle');
+                  }}
+                >
+                  {m.library_follow_conflict_recovery_remove()}
+                </Button>
+              ) : (
+                <a href="" className={buttonVariants({ variant: 'ghost' })}>
+                  {m.library_follow_conflict_recovery_reload()}
+                </a>
+              )}
+            </>
+          ) : null}
+        </>
+      ) : onRetry && current.state !== 'ready' && current.state !== 'pending' ? (
         <Button type="button" variant="ghost" disabled={pending} onClick={onRetry}>
           {m.library_follow_retry()}
         </Button>
+      ) : null}
+      {reviewState === 'ready' ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          {m.library_follow_conflict_recovery_ready()}
+        </p>
       ) : null}
       {error ? (
         <p role="alert" className="text-sm">

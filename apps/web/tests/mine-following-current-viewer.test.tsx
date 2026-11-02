@@ -352,8 +352,22 @@ test('the mounted default Following composition retires viewer, cursor and row l
     await settle(reads[1]!, b);
     expect(host.textContent).toContain('B current title');
     await remove();
-    const uncertain = writes[1]!;
-    expect(uncertain.input.idempotencyKey).toBe(b.page.follows[0]!.idempotencyKey);
+    const rejected = writes.at(-1)!;
+    expect(rejected.input.idempotencyKey).toBe(b.page.follows[0]!.idempotencyKey);
+    await settle(rejected, { ok: false, reason: 'conflict' });
+    await act(async () => {
+      [...host.querySelectorAll<HTMLButtonElement>('button')]
+        .find((button) => button.textContent === m.library_follow_conflict_recovery_review())!
+        .click();
+      await tick();
+    });
+    expect(reads.at(-1)!.cursor).toBeUndefined();
+    await settle(reads.at(-1)!, loaded('B', null, 'B current title'));
+    expect(writes).toHaveLength(2);
+    await remove();
+    const uncertain = writes.at(-1)!;
+    expect(uncertain.input.targetId).toBe(rejected.input.targetId);
+    expect(uncertain.input.idempotencyKey).not.toBe(rejected.input.idempotencyKey);
     await act(async () => {
       client.setQueryData(sessionQuery.queryKey, viewer('B', 'csrf-rotated'));
       await tick();

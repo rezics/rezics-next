@@ -22,6 +22,9 @@ import {
 } from './history-current-origin';
 import { readMineFollowingForViewer, type MineFollowingRead } from './mine-following-actions';
 import { PERSONAL_DIRECTORY_CURSOR_LIMITS, personalDirectoryAddress } from './personal-directory-address';
+import type { FollowState } from './follow-records';
+
+type ReviewFollow = (targetId: string) => Promise<FollowState | null>;
 
 const retiredPage: MineFollowingPage = { signedIn: false, follows: [], next: null };
 
@@ -149,6 +152,24 @@ export function CurrentViewerMineFollowingPage({
         invalidAddress={addressInvalid}
         origin={rowOrigin}
         status={status}
+        onReview={async (targetId) => {
+          if (addressInvalid || !current() || !readCurrent()) return null;
+          const result = await read.refetch();
+          if (
+            !current() ||
+            result.isError ||
+            !result.data ||
+            !origin.subject ||
+            !matches(result.data, origin.subject, address.cursor, locale) ||
+            origin.client.getQueryState(options.queryKey)?.status !== 'success' ||
+            origin.client.getQueryData(options.queryKey) !== result.data
+          )
+            return null;
+          // Absence on a bounded page is not proof that the owner has no edge.
+          return result.data.page.follows.some((follow) => follow.targetId === targetId && follow.state === 'following')
+            ? { state: 'ready', following: true }
+            : null;
+        }}
         onRetry={
           status === 'unavailable'
             ? () => {
@@ -168,6 +189,7 @@ export function MineFollowingPageView({
   origin,
   status,
   onRetry,
+  onReview,
 }: {
   page: MineFollowingPage;
   cursor?: string | null | undefined;
@@ -175,6 +197,7 @@ export function MineFollowingPageView({
   origin?: HistoryOrigin;
   status?: 'unavailable' | 'preparing' | undefined;
   onRetry?: (() => void) | undefined;
+  onReview?: ReviewFollow | undefined;
 }) {
   const requestedAddress = personalDirectoryAddress(cursor, PERSONAL_DIRECTORY_CURSOR_LIMITS.following);
   const addressRejected = invalidAddress || page.addressInvalid || !requestedAddress.valid;
@@ -217,6 +240,7 @@ export function MineFollowingPageView({
       origin={originating}
       status={status}
       onRetry={onRetry}
+      onReview={onReview}
     />
   );
 }
@@ -228,6 +252,7 @@ function MineFollowingPageState({
   origin,
   status,
   onRetry,
+  onReview,
 }: {
   page: MineFollowingPage;
   cursor: string | null;
@@ -235,6 +260,7 @@ function MineFollowingPageState({
   origin: HistoryOrigin;
   status?: 'unavailable' | 'preparing' | undefined;
   onRetry?: (() => void) | undefined;
+  onReview?: ReviewFollow | undefined;
 }) {
   const canUnfollow = useOperation('follow.delete');
   const canReadCollection = useOperation('collection.get');
@@ -333,6 +359,7 @@ function MineFollowingPageState({
                               disabled={!!status}
                               idempotencyKey={follow.idempotencyKey}
                               menuTitle={m.library_follow_more_actions({ title: title.text })}
+                              onReview={onReview ? () => onReview(follow.targetId) : undefined}
                               onRemoved={() => {
                                 if (!origin.isCurrent()) return;
                                 setFollows((items) => items.filter((item) => item.targetId !== follow.targetId));

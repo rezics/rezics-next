@@ -446,3 +446,23 @@ test('a delete-only supplied edge can prepare a new removal after conflict witho
   expect(removed).toBe(1);
   expect(reads).toHaveLength(0);
 });
+
+test('revoking a pending review immediately leaves independent removal available and retires its late result', async () => {
+  await paint();
+  await settle(reads[0]!, page(firstTarget, false));
+  await click(m.library_follow());
+  await settle(writes[0]!, { ok: false, reason: 'conflict' });
+  await click(m.library_follow_conflict_recovery_review());
+  await replace(() => {
+    admitted = ['follow.delete'];
+  });
+  await click(m.library_follow_conflict_recovery_remove());
+  expect(button(m.library_follow_unfollow()).disabled).toBe(false);
+  await settle(reads[1]!, page());
+  expect(host.textContent).not.toContain(m.library_following());
+  expect(writes).toHaveLength(1);
+  await click(m.library_follow_unfollow());
+  expect(writes[1]!.input.following).toBe(false);
+  expect(writes[1]!.input.idempotencyKey).not.toBe(firstKey);
+  await settle(writes[1]!, { ok: true, following: false });
+});

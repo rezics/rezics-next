@@ -205,6 +205,7 @@ The destinations are **Library**, **Following** and **History**. Library contain
 Liked, pinned Collections and All Collections. Desktop uses a short pinned sidebar; phone uses a Collection selector
 and a few pins. State is a tile chip in profile wording and a filter; state Collections may be pinned, never compulsory
 navigation tabs. Following holds subjects, Collections and Spaces, with no following feed or public follower totals.
+Decision: A definitively rejected Follow command can be replaced only after explicit own-edge/current-list review or explicit preparation of an independently permitted removal; an unavailable review retains the rejection, and an uncertain command always retains its original identity.
 Personal directory cursors remain opaque and keep their current BFF limits: 4,096 characters for All Collections and
 2,048 for Following. Empty, non-string, and over-limit addresses retain the request URL and offer a first-page restart
 without a native directory read.

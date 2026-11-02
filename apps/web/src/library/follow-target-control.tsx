@@ -66,6 +66,7 @@ export function FollowTargetControl({
   idempotencyKey,
   menuTitle,
   onRemoved,
+  onReview,
   disabled = false,
   origin: parent,
 }: {
@@ -74,6 +75,8 @@ export function FollowTargetControl({
   idempotencyKey?: string;
   menuTitle?: string;
   onRemoved?: () => void;
+  /** Supplied rows review only through their existing current list reader. */
+  onReview?: (() => Promise<FollowState | null>) | undefined;
   /** Retained rows can show recovery while their list read is unavailable. */
   disabled?: boolean;
   /** Supplied owner rows retain their actual reader and mounted address. */
@@ -155,6 +158,19 @@ export function FollowTargetControl({
         ready={!disabled && (origin.allowed[1] === true || origin.allowed[2] === true)}
         {...(idempotencyKey ? { idempotencyKey } : {})}
         {...(menuTitle ? { menuTitle } : {})}
+        {...(following !== undefined
+          ? onReview
+            ? { onReview }
+            : {}
+          : canRead && origin.allowed[0]
+            ? {
+                onReview: async () => {
+                  if (!readLifetime.isCurrent()) return null;
+                  const result = await read.refetch();
+                  return readLifetime.isCurrent() && !result.isError && acceptedRead() ? (result.data ?? null) : null;
+                },
+              }
+            : {})}
         {...(following === undefined && canRead && origin.allowed[0]
           ? {
               onRetry: () => {
