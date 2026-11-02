@@ -49,6 +49,8 @@ async function fixture() {
   let edition: EditionMetadata | null = null;
   let sourceStatus = 200;
   let postActions = true;
+  let postOperations = ['post.revise', 'content_edition.create'];
+  let concealed = false;
   let lostCreate = true;
   let lostPublish = true;
   const receipts = new Map<string, { editionId: string; editionRevision: string }>();
@@ -70,12 +72,16 @@ async function fixture() {
           resources: [
             {
               ...resource,
-              viewerActions:
-                resource.type === 'content.post'
-                  ? postActions
-                    ? [{ action: 'post:revise', operations: ['post.revise'] }]
-                    : []
-                  : [{ action: 'edition:sell', operations: ['content_edition.publish'] }],
+              ...(concealed
+                ? { error: 'not_found' }
+                : {
+                    viewerActions:
+                      resource.type === 'content.post'
+                        ? postActions
+                          ? [{ action: 'post:revise', operations: postOperations }]
+                          : []
+                        : [{ action: 'edition:sell', operations: ['content_edition.publish'] }],
+                  }),
             },
           ],
         });
@@ -132,6 +138,12 @@ async function fixture() {
     revision,
     setSourceStatus: (status: number) => {
       sourceStatus = status;
+    },
+    setPostOperations: (operations: string[]) => {
+      postOperations = operations;
+    },
+    concealActions: () => {
+      concealed = true;
     },
     denyPostActions: () => {
       postActions = false;
@@ -747,4 +759,14 @@ test('A temporarily unavailable exact-revision edition entry can explicitly retr
   } finally {
     client.clear();
   }
+});
+
+test('edition creation requires its own mounted operation and concealed advice refuses the source', async () => {
+  const native = await fixture();
+  native.setPostOperations(['post.revise']);
+  expect(await native.api.source(identity)).toMatchObject({ kind: 'refused', status: 403 });
+  native.setPostOperations(['content_edition.create']);
+  expect((await native.api.source(identity)).kind).toBe('source');
+  native.concealActions();
+  expect(await native.api.source(identity)).toMatchObject({ kind: 'refused', status: 404 });
 });

@@ -144,6 +144,7 @@ export function editionRoutes(app: ReturnType<typeof appealRoutes>, deps: Editio
         response: { 201: withHeaders(command, cacheHeaders), ...failures },
         detail: {
           operationId: 'content_edition.create',
+          'x-authority-resource-types': ['content.post'],
           'x-exposure': 'public',
           'x-action': 'post:revise',
           'x-resource-types': ['content.edition'],
@@ -176,6 +177,7 @@ export function editionRoutes(app: ReturnType<typeof appealRoutes>, deps: Editio
         response: { 200: withHeaders(command, cacheHeaders), ...failures },
         detail: {
           operationId: 'content_edition.publish',
+          'x-resource-types': ['content.edition'],
           'x-exposure': 'public',
           'x-action': 'edition:sell',
           'x-rate-limit': writeRate,
@@ -207,6 +209,7 @@ export function editionRoutes(app: ReturnType<typeof appealRoutes>, deps: Editio
         response: { 200: withHeaders(command, cacheHeaders), ...failures },
         detail: {
           operationId: 'content_edition.unpublish',
+          'x-resource-types': ['content.edition'],
           'x-exposure': 'public',
           'x-action': 'edition:unpublish',
           'x-rate-limit': writeRate,
@@ -237,6 +240,7 @@ export function editionRoutes(app: ReturnType<typeof appealRoutes>, deps: Editio
         response: { 200: withHeaders(strictContentSchema(ContentEditionSchema), cacheHeaders), ...failures },
         detail: {
           operationId: 'content_edition.get',
+          'x-resource-types': ['content.edition'],
           'x-exposure': 'public',
           'x-action': 'edition:read',
           security: [{ bearerAuth: [] }],
@@ -269,6 +273,7 @@ export function editionRoutes(app: ReturnType<typeof appealRoutes>, deps: Editio
         response: { 200: withHeaders(strictContentSchema(ContentEditionRevisionSchema), cacheHeaders), ...failures },
         detail: {
           operationId: 'content_edition.get_revision',
+          'x-resource-types': ['content.edition'],
           'x-exposure': 'public',
           'x-action': 'edition:read',
           security: [{ bearerAuth: [] }],

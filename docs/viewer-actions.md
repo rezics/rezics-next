@@ -63,6 +63,17 @@ Malformed JSON or references, duplicates, more than 100 references, and unsuppor
 permission work. Authentication failures retain their normal statuses. In particular, a suspended caller receives
 its normal credential refusal; a refused bearer must never become an anonymous request or reuse an old positive.
 
+## Content references
+
+The kernel registers `content.board` (`board:read`), `content.thread` (`thread:read`),
+`content.post` (`post:read`) and `content.edition` (`edition:read`). Container authority, current
+Realm bans and the complete bounded reply ancestry determine disclosure before operations are offered.
+Removed, taken-down, draft posts and threads, missing ancestors and unreadable containers are concealed.
+Draft edition metadata remains visible to its creator under the ordinary source checks, so that its owner can
+obtain `edition:sell` / `content_edition.publish`; other callers receive `not_found`.
+Edition creation binds `content_edition.create` to the source post's `post:revise`, independently of `post.revise`.
+Interfaces require that exact operation, and treat a concealed reference as a source refusal.
+
 ## Actions and operations
 
 An action can back several operations whose platform gates differ. A control is enabled only when **both** its

@@ -50,9 +50,10 @@ const writeFailures = {
   ),
 };
 const writeRate = defineRateLimit({ family: 'write', units: 1 });
-function detail(operationId: string, action: 'moderation:takedown' | 'post:erase') {
+function detail(operationId: string, action: 'moderation:takedown' | 'post:erase', type: 'board' | 'thread' | 'post') {
   return {
     operationId,
+    'x-resource-types': [`content.${type}`],
     'x-exposure': 'public' as const,
     'x-action': action,
     'x-rate-limit': writeRate,
@@ -158,7 +159,7 @@ export function moderationRoutes(app: ReturnType<typeof reportRoutes>, deps: Mod
     )
     .post(
       customMethod('/v1/boards/:id', 'takeDown'),
-      { ...pointOptions, detail: detail('board.takedown', 'moderation:takedown') },
+      { ...pointOptions, detail: detail('board.takedown', 'moderation:takedown', 'board') },
       async ({ params: { id }, actor, body, request, admission, job, session }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         return command(() =>
@@ -177,7 +178,7 @@ export function moderationRoutes(app: ReturnType<typeof reportRoutes>, deps: Mod
     )
     .post(
       customMethod('/v1/threads/:id', 'takeDown'),
-      { ...pointOptions, detail: detail('thread.takedown', 'moderation:takedown') },
+      { ...pointOptions, detail: detail('thread.takedown', 'moderation:takedown', 'thread') },
       async ({ params: { id }, actor, body, request, admission, job, session }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         return command(() =>
@@ -196,7 +197,7 @@ export function moderationRoutes(app: ReturnType<typeof reportRoutes>, deps: Mod
     )
     .post(
       customMethod('/v1/posts/:id', 'takeDown'),
-      { ...pointOptions, detail: detail('post.takedown', 'moderation:takedown') },
+      { ...pointOptions, detail: detail('post.takedown', 'moderation:takedown', 'post') },
       async ({ params: { id }, actor, body, request, admission, job, session }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         return command(() =>
@@ -215,7 +216,7 @@ export function moderationRoutes(app: ReturnType<typeof reportRoutes>, deps: Mod
     )
     .post(
       customMethod('/v1/posts/:id', 'erase'),
-      { ...pointOptions, detail: detail('post.erase_point', 'post:erase') },
+      { ...pointOptions, detail: detail('post.erase_point', 'post:erase', 'post') },
       async ({ params: { id }, actor, body, request, admission, job, session }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         return command(() =>
@@ -238,7 +239,7 @@ export function moderationRoutes(app: ReturnType<typeof reportRoutes>, deps: Mod
         ...pointOptions,
         body: strictContentSchema(AuthorErasureInputSchema),
         response: { 202: withHeaders(operation, sessionHeader), ...writeFailures },
-        detail: detail('thread.erase', 'post:erase'),
+        detail: detail('thread.erase', 'post:erase', 'thread'),
       },
       async ({ params: { id }, actor, body, request, admission, job, session, set }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');

@@ -147,6 +147,7 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
         },
         detail: {
           operationId: 'report.create',
+          'x-resource-types': ['content.board', 'content.thread', 'content.post'],
           'x-exposure': 'public',
           'x-action': 'report:create',
           'x-rate-limit': defineRateLimit({ family: 'report', units: 1 }),
@@ -214,6 +215,7 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
       ...listOptions,
       detail: {
         operationId: 'board.reports',
+        'x-resource-types': ['content.board'],
         'x-exposure': 'public',
         'x-action': 'moderation:read_reports',
         security: [{ bearerAuth: [] }],
@@ -236,6 +238,7 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
       ...listOptions,
       detail: {
         operationId: 'thread.reports',
+        'x-resource-types': ['content.thread'],
         'x-exposure': 'public',
         'x-action': 'moderation:read_reports',
         security: [{ bearerAuth: [] }],
@@ -258,6 +261,7 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
       ...listOptions,
       detail: {
         operationId: 'post.reports',
+        'x-resource-types': ['content.post'],
         'x-exposure': 'public',
         'x-action': 'moderation:read_reports',
         security: [{ bearerAuth: [] }],

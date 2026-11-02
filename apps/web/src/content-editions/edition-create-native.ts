@@ -117,14 +117,11 @@ export async function readEditionCreateSource(
     );
     if (actions.error || !actions.data) return failure(actions.status);
     const resource = actions.data.resources.find((item) => item.type === 'content.post' && item.id === identity.postId);
-    // Content is not yet registered in the current native viewer-actions catalogue. This is no permission assertion.
-    if (!resource || !('viewerActions' in resource))
-      return { kind: 'unavailable', status: 503, reason: 'admission-pending' };
+    if (!resource) return { kind: 'unavailable', status: 502, reason: 'binding' };
+    if (!('viewerActions' in resource)) return { kind: 'refused', status: 404, reason: 'source' };
     if (
       !resource.viewerActions.some(
-        (entry) =>
-          entry.action === 'post:revise' &&
-          entry.operations.some((operation) => operation === 'post.revise' || operation === 'content_edition.create'),
+        (entry) => entry.action === 'post:revise' && entry.operations.includes('content_edition.create'),
       )
     )
       return { kind: 'refused', status: 403 };
@@ -229,8 +226,8 @@ export function createNativeEditionCreateApi(
     );
     if (result.error || !result.data) return failure(result.status);
     const resource = result.data.resources.find((item) => item.type === 'content.edition' && item.id === editionId);
-    if (!resource || !('viewerActions' in resource))
-      return { kind: 'unavailable', status: 503, reason: 'admission-pending' };
+    if (!resource) return { kind: 'unavailable', status: 502, reason: 'binding' };
+    if (!('viewerActions' in resource)) return { kind: 'refused', status: 404, reason: 'source' };
     return resource.viewerActions.some(
       (entry) => entry.action === 'edition:sell' && entry.operations.includes('content_edition.publish'),
     )

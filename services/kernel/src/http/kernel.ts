@@ -1,3 +1,4 @@
+import { contentViewerActionResources } from '../content/viewer-actions.ts';
 import { readCommerceMoneyPolicy, type CommerceMoneyPolicy } from '../commerce/money.ts';
 import { mountContentEditionConsent } from '../content/edition-sale.ts';
 import type { CurrentConsentReader } from '../access/auth-consent.ts';
@@ -647,6 +648,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
   });
   const viewerResources = new Map([
     ...subjectViewerActionResources,
+    ...contentViewerActionResources,
     ['semantic.context', contextViewerActionResource],
     ['access.account', accountViewerActionResource],
     ['library.collection', collectionViewerActionResource],

@@ -438,6 +438,8 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         },
         detail: {
           operationId: 'board.create_global',
+          'x-authority-resource-types': ['semantic.context'],
+          'x-authority-resource-id': '00000000-0000-8000-8000-000000000000',
           'x-exposure': 'public',
           'x-action': 'board:create',
           'x-resource-types': ['content.board'],
@@ -480,6 +482,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         },
         detail: {
           operationId: 'board.create',
+          'x-authority-resource-types': ['community.realm'],
           'x-exposure': 'public',
           'x-action': 'board:create',
           'x-resource-types': ['content.board'],
@@ -548,6 +551,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         },
         detail: {
           operationId: 'thread.create',
+          'x-authority-resource-types': ['content.board'],
           'x-exposure': 'public',
           'x-action': 'thread:create',
           'x-resource-types': ['content.thread', 'content.post'],
@@ -623,6 +627,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         response: { 200: withHeaders(threadResponse, sessionHeader), ...readFailures },
         detail: {
           operationId: 'thread.get',
+          'x-resource-types': ['content.thread'],
           'x-exposure': 'public',
           'x-action': 'thread:read',
           security: readSecurity,
@@ -668,6 +673,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         },
         detail: {
           operationId: 'post.create',
+          'x-authority-resource-types': ['content.thread'],
           'x-exposure': 'public',
           'x-action': 'post:create',
           'x-resource-types': ['content.post'],
@@ -703,7 +709,13 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         params,
         query: ContentPageQuerySchema,
         response: { 200: withHeaders(postPageResponse, sessionHeader), ...readFailures },
-        detail: { operationId: 'post.list', 'x-exposure': 'public', 'x-action': 'post:read', security: readSecurity },
+        detail: {
+          operationId: 'post.list',
+          'x-resource-types': ['content.thread'],
+          'x-exposure': 'public',
+          'x-action': 'post:read',
+          security: readSecurity,
+        },
       },
       async ({ params: { id }, query, actor, admission, job, session }) => {
         existingId(id);
@@ -758,7 +770,13 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
           200: withHeaders(postResponse, { ...sessionHeader, etag: t.Optional(t.String()) }),
           ...readFailures,
         },
-        detail: { operationId: 'post.get', 'x-exposure': 'public', 'x-action': 'post:read', security: readSecurity },
+        detail: {
+          operationId: 'post.get',
+          'x-resource-types': ['content.post'],
+          'x-exposure': 'public',
+          'x-action': 'post:read',
+          security: readSecurity,
+        },
       },
       async ({ params: { id }, actor, admission, job, session, set }) =>
         contentOperation(() =>
@@ -783,6 +801,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         },
         detail: {
           operationId: 'post.restore',
+          'x-resource-types': ['content.post'],
           'x-exposure': 'public',
           'x-action': 'post:erase',
           'x-replay-authorization': 'self-account-read',
@@ -817,6 +836,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         response: { 204: withHeaders(t.Void(), sessionHeader), ...writeFailures },
         detail: {
           operationId: 'post.erase',
+          'x-resource-types': ['content.post'],
           'x-exposure': 'public',
           'x-action': 'post:erase',
           'x-replay-authorization': 'self-account-read',
@@ -861,6 +881,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         },
         detail: {
           operationId: 'post.revise',
+          'x-resource-types': ['content.post'],
           'x-exposure': 'public',
           'x-action': 'post:revise',
           'x-rate-limit': writeRate,
@@ -907,6 +928,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         response: { 200: withHeaders(revisionPageResponse, sessionHeader), ...readFailures },
         detail: {
           operationId: 'post.history',
+          'x-resource-types': ['content.post'],
           'x-exposure': 'public',
           'x-action': 'post:read',
           security: readSecurity,
@@ -946,6 +968,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         },
         detail: {
           operationId: 'post.revision',
+          'x-resource-types': ['content.post'],
           'x-exposure': 'public',
           'x-action': 'post:read',
           security: readSecurity,
@@ -979,6 +1002,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         response: { 200: withHeaders(boardThreadsResponse, sessionHeader), ...readFailures },
         detail: {
           operationId: 'board_threads.list',
+          'x-resource-types': ['content.board'],
           'x-exposure': 'public',
           'x-action': 'thread:read',
           security: readSecurity,
@@ -1147,7 +1171,13 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       {
         params,
         response: { 200: withHeaders(boardResponse, sessionHeader), ...readFailures },
-        detail: { operationId: 'board.get', 'x-exposure': 'public', 'x-action': 'board:read', security: readSecurity },
+        detail: {
+          operationId: 'board.get',
+          'x-resource-types': ['content.board'],
+          'x-exposure': 'public',
+          'x-action': 'board:read',
+          security: readSecurity,
+        },
       },
       async ({ params: { id }, actor, admission, job, session }) => {
         existingId(id);
@@ -1170,6 +1200,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         response: { 200: reactionResponse, ...writeFailures },
         detail: {
           operationId: 'thread.set_reaction',
+          'x-resource-types': ['content.thread'],
           'x-exposure': 'public',
           'x-action': 'reaction:set',
           'x-rate-limit': writeRate,
@@ -1189,6 +1220,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         response: { 204: t.Void(), ...writeFailures },
         detail: {
           operationId: 'thread.clear_reaction',
+          'x-resource-types': ['content.thread'],
           'x-exposure': 'public',
           'x-action': 'reaction:set',
           'x-rate-limit': writeRate,
@@ -1209,6 +1241,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         response: { 200: reactionResponse, ...writeFailures },
         detail: {
           operationId: 'post.set_reaction',
+          'x-resource-types': ['content.post'],
           'x-exposure': 'public',
           'x-action': 'reaction:set',
           'x-rate-limit': writeRate,
@@ -1228,6 +1261,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         response: { 204: t.Void(), ...writeFailures },
         detail: {
           operationId: 'post.clear_reaction',
+          'x-resource-types': ['content.post'],
           'x-exposure': 'public',
           'x-action': 'reaction:set',
           'x-rate-limit': writeRate,
