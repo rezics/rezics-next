@@ -116,41 +116,63 @@ export function identityScopeCommittedReceiptFootprint(
   };
 }
 
+/** Locators cross a released boundary. Validate the native/schema scalar
+ * domains before either routing or reserving an SQL operation. In particular,
+ * partitionOf throws for an invalid route; that is a refused locator here,
+ * rather than a producer exception or an extra database probe.
+ */
+function boundedText(value: unknown, bytes: number): value is string {
+  return typeof value === 'string' && value.length > 0 && Buffer.byteLength(value) <= bytes;
+}
+function nativeUuid(value: unknown): value is string {
+  return typeof value === 'string' && uuid.test(value);
+}
+function nativeDecimal(value: unknown, minimum: bigint): value is string {
+  return typeof value === 'string' && unsigned.test(value) &&
+    BigInt(value) >= minimum && BigInt(value) <= maxBigint;
+}
+function nativeEpoch(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 && value <= 2147483647;
+}
 function validNative(native: IdentityNativeReceipt): boolean {
   return !!native && Number.isInteger(native.partition) && native.partition >= 0 && native.partition <= 4095 &&
-    Number.isSafeInteger(native.epoch) && native.epoch > 0 &&
+    nativeEpoch(native.epoch) &&
     typeof native.position === 'bigint' && native.position > 0n && native.position <= maxBigint &&
-    uuid.test(native.transactionId);
+    nativeUuid(native.transactionId);
 }
 
 /** Account native custody only. Explicit/public output has another owner and no inherited admission. */
 function parameters(locator: IdentityScopeCommittedLocator): unknown[] | null {
+  if (!locator?.expected?.key?.source || !locator.completion ||
+      (locator.completion.kind !== 'initial' && locator.completion.kind !== 'repair')) return null;
   const { expected, registration } = locator;
   const key = expected.key;
-  if (!uuid.test(registration) || !uuid.test(expected.captureId) ||
+  if (!nativeUuid(registration) || !nativeUuid(expected.captureId) || !boundedText(key.scopeId, 256) ||
       typeof expected.committedRevision !== 'bigint' || expected.committedRevision <= 0n ||
       expected.committedRevision > maxBigint || key.source.kind !== 'library') return null;
   const i = key.source.identity;
-  if (i.scope !== 'curated' && i.scope !== 'private_builtin') return null;
+  if (!i || (i.scope !== 'curated' && i.scope !== 'private_builtin')) return null;
+  // UUID route equality also validates the integer route domain before partitionOf.
+  const collectionRoute = routeOf(i.collectionId);
   const accountRoute = routeOf(i.accountId);
-  if (accountRoute === null || partitionOf(accountRoute) !== partitionOf(i.route) ||
-      !uuid.test(i.collectionId) || !uuid.test(i.accountId) ||
-      !i.incarnation || Buffer.byteLength(i.incarnation) > 128 ||
-      !unsigned.test(i.generation) || BigInt(i.generation) > maxBigint ||
-      !unsigned.test(i.receivingEpoch) || BigInt(i.receivingEpoch) < 1n ||
-      BigInt(i.receivingEpoch) > maxBigint || !i.effectKey || Buffer.byteLength(i.effectKey) > 256) return null;
+  if (collectionRoute === null || collectionRoute !== i.route || accountRoute === null ||
+      partitionOf(accountRoute) !== partitionOf(collectionRoute) || !nativeEpoch(i.ownerEpoch) ||
+      !boundedText(i.incarnation, 128) || !nativeDecimal(i.generation, 0n) ||
+      !nativeDecimal(i.receivingEpoch, 1n) || !boundedText(i.effectKey, 256)) return null;
+  const source = json(key.source);
+  if (Buffer.byteLength(source) > 4096) return null;
   const address = identityScopeAddress(key);
   if (locator.completion.kind === 'repair') {
     const { receiving, attempt } = locator.completion;
-    if (!validNative(attempt) || !uuid.test(receiving.directoryTransactionId) ||
-        !uuid.test(receiving.job.jobId) || typeof receiving.job.epoch !== 'bigint' ||
+    if (!validNative(attempt) || !receiving?.job || !nativeUuid(receiving.directoryTransactionId) ||
+        !nativeUuid(receiving.job.jobId) || typeof receiving.job.epoch !== 'bigint' ||
         receiving.job.epoch <= 0n || receiving.job.epoch > maxBigint ||
-        !receiving.pageId || Buffer.byteLength(receiving.pageId) > 256 ||
+        !boundedText(receiving.pageId, 256) ||
         !Number.isSafeInteger(receiving.ordinal) || receiving.ordinal < 0 || receiving.ordinal > 2147483647)
       return null;
   }
   return [address.partition, address.source, address.scope, registration, expected.captureId,
-    expected.committedRevision.toString(), json(key.source), i.ownerEpoch, i.route,
+    expected.committedRevision.toString(), source, i.ownerEpoch, i.route,
     i.collectionId, accountRoute, i.accountId, i.incarnation, i.generation, i.scope,
     i.receivingEpoch, i.effectKey];
 }

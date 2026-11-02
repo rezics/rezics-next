@@ -28,6 +28,12 @@ initial capture-completion pair inside its bounded existence probe. All SQL stay
 in that source home. Foreign receiving/capture work completes before the writer
 takes its source-home transaction.
 
+Locator validation uses the native UUID route and schema scalar domains before
+routing or SQL admission. Invalid routes, owner epochs, oversized scope/source
+values and noncanonical generations refuse as `source_binding` without IO or an
+additional debit. This prevents malformed locators from throwing at the route
+boundary or reaching PostgreSQL casts. It creates no source or permission evidence.
+
 ## Durable writer association
 
 The forward migration adds only `identity_scope_native_association`, with primary

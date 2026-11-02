@@ -720,3 +720,24 @@ test('native association package refuses an attributed command before an unprice
     WHERE partition_no=$1 AND transaction_id=$2`, [address.partition, transactionId])).rowCount).toBe(0);
   expect(await associationsFor(s.locator)).toEqual(before);
 }, 120000);
+
+
+test('invalid native routes and schema scalars refuse before charging or querying', async () => {
+  const s = await fundedInitial();
+  await frame(async (context) => {
+    const work = identitySourceConsumerLibraryWork(f.pool, context.identityConsumerWork, context.deadline)!;
+    const before = work.receipt();
+    for (const [field, value] of [['route', -1], ['route', 65536], ['ownerEpoch', 2147483648],
+      ['generation', '-1'], ['receivingEpoch', '0']] as const) {
+      const locator = structuredClone(s.locator);
+      Object.assign(locator.expected.key.source.identity, { [field]: value });
+      expect(await resolveCommittedIdentityScopeReceipt(f.pool, { locator, context }))
+        .toMatchObject({ status: 'unavailable', reason: 'source_binding' });
+    }
+    const locator = structuredClone(s.locator);
+    Object.assign(locator.expected.key, { scopeId: 'x'.repeat(257) });
+    expect(await resolveCommittedIdentityScopeReceipt(f.pool, { locator, context }))
+      .toMatchObject({ status: 'unavailable', reason: 'source_binding' });
+    expect(work.receipt()).toEqual(before);
+  });
+}, 120000);
