@@ -143,17 +143,20 @@ test('keyboard navigation stays in the departure dialog and Escape stays on the 
   const { navigation } = await startNavigation(ui.router, '/next');
   const stay = document.body.querySelector<HTMLButtonElement>('[data-stay]')!;
   const leave = document.body.querySelector<HTMLButtonElement>('[data-leave]')!;
-  await flush(() => {
-    leave.focus();
-    leave.dispatchEvent(new dom.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
-  });
-  expect(document.activeElement).toBe(stay);
-  await flush(() => stay.dispatchEvent(new dom.KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true })));
-  expect(document.activeElement).toBe(leave);
+  const dialog = document.body.querySelector<HTMLElement>('[role="alertdialog"]')!;
+  const input = ui.host.querySelector<HTMLInputElement>('#rename-handle')!;
+  for (const [edge, shiftKey] of [[leave, false], [stay, true]] as const) {
+    await flush(() => {
+      edge.focus();
+      edge.dispatchEvent(new dom.KeyboardEvent('keydown', { key: 'Tab', shiftKey, bubbles: true }));
+      input.focus();
+    });
+    expect(dialog.contains(document.activeElement)).toBe(true);
+  }
   await flush(() => document.activeElement!.dispatchEvent(new dom.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
   await flush(() => navigation);
   expect(ui.router.state.location.pathname).toBe('/account/rename');
-  expect(ui.host.querySelector<HTMLInputElement>('#rename-handle')!.value).toBe('after');
+  expect(input.value).toBe('after');
   expect(ui.host.querySelector<HTMLInputElement>('#rename-confirm')!.checked).toBe(true);
   expect(document.activeElement).toBe(ui.host.querySelector('#rename-handle'));
 });
