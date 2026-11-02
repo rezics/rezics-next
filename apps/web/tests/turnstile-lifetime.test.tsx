@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, StrictMode, type RefObject } from 'react';
+import type { VerificationConfig } from '../src/report/turnstile';
 
 // UNRUN: the real lazy Verification component with only the configured script and vendor API supplied by the test.
 const { Window } = await import(
@@ -31,7 +32,7 @@ for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 
 const { createRoot } = await import('react-dom/client');
-const { Verification, type VerificationConfig } = await import('../src/report/turnstile');
+const { Verification } = await import('../src/report/turnstile');
 
 type Options = {
   sitekey: string;
