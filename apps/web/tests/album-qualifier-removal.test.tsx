@@ -95,6 +95,17 @@ test('Album qualifier cancellation, stable correction targets, selective removal
     await act(async () => new Promise((resolve) => setTimeout(resolve, 350)));
     await act(async () => user.keyboard('{ArrowDown}{Enter}'));
   };
+  const inputChange = (node: Element) =>
+    (Reflect.get(node, Object.keys(node).find((key) => key.startsWith('__reactProps$'))!) as {
+      onChange: (event: { target: { value: string } }) => void;
+    }).onChange;
+  const pickerChange = (node: Element) => {
+    type Fiber = { memoizedProps: { onValueChange?: (items: typeof selected[]) => void }; return?: Fiber };
+    let fiber = Reflect.get(node, Object.keys(node).find((key) => key.startsWith('__reactFiber$'))!) as Fiber;
+    while (!fiber.memoizedProps.onValueChange) fiber = fiber.return!;
+    return fiber.memoizedProps.onValueChange;
+  };
+  const selected = { id: artistId, title: 'Late descriptor', types: [], typeLabel: '', cover: null };
   const remove = (id: string) => `${m.relation_remove()}: ${name(id)}`;
   try {
     await paint();
@@ -107,6 +118,19 @@ test('Album qualifier cancellation, stable correction targets, selective removal
     await select(row, m.relation_qualifier(), 'wdt:P1932');
     await type(row, name('wdt:P1932'), 'Credited name');
     const original = within(row).getByRole('textbox', { name: name('wdt:P1932') });
+    const oldCredit = inputChange(original);
+    const oldCitation = inputChange(within(row).getByRole('textbox', { name: m.relation_citation() }));
+    const oldArtist = pickerChange(within(row).getByRole('combobox', { name: name('schema:contributor') }));
+    await type(row, m.relation_citation(), '/newer');
+    await act(async () => oldCredit({ target: { value: 'Current credit' } }));
+    expect((original as HTMLInputElement).value).toBe('Current credit');
+    expect((within(row).getByRole('textbox', { name: m.relation_citation() }) as HTMLInputElement).value).toBe(
+      'https://example.test/source/newer',
+    );
+    await act(async () => oldCitation({ target: { value: 'https://example.test/stale' } }));
+    expect((within(row).getByRole('textbox', { name: m.relation_citation() }) as HTMLInputElement).value).toBe(
+      'https://example.test/source/newer',
+    );
     await select(row, m.relation_qualifier(), 'wdt:P3831');
     await choose(row, 'wdt:P3831', roleId);
     const role = within(row).getByRole('combobox', { name: name('wdt:P3831') });
@@ -119,7 +143,7 @@ test('Album qualifier cancellation, stable correction targets, selective removal
     await click(row, remove('wdt:P1932'));
     await click(row, m.candidate_cancel());
     expect(within(row).getByRole('textbox', { name: name('wdt:P1932') })).toBe(original);
-    expect((original as HTMLInputElement).value).toBe('Credited name');
+    expect((original as HTMLInputElement).value).toBe('Current credit');
     expect(window.document.activeElement).toBe(within(row).getByRole('button', { name: remove('wdt:P1932') }));
     await click(row, remove('wdt:P3831'));
     await act(async () => user.keyboard('{Escape}'));
@@ -128,6 +152,13 @@ test('Album qualifier cancellation, stable correction targets, selective removal
     await click(row, remove('schema:position')); // Untouched scaffolding removes immediately.
     await click(row, remove('wdt:P1932'));
     await click(row, remove('wdt:P1932'));
+    await act(async () => oldCredit({ target: { value: 'Resurrected' } }));
+    expect(within(row).queryByRole('textbox', { name: name('wdt:P1932') })).toBeNull();
+    await act(async () => oldArtist([{ ...selected, title: 'Current artist' }]));
+    expect(row.textContent).toContain('Current artist');
+    const currentArtist = pickerChange(within(row).getByRole('combobox', { name: name('schema:contributor') }));
+    await act(async () => oldArtist([selected]));
+    expect(row.textContent).not.toContain('Late descriptor');
     expect(window.document.activeElement).toBe(role);
     expect(within(row).getByRole('combobox', { name: name('wdt:P3831') })).toBe(role);
     expect(role.closest('[id^="album-row-"]')!.id).toBe(roleTarget);
@@ -154,9 +185,13 @@ test('Album qualifier cancellation, stable correction targets, selective removal
     expect(row.contains(window.document.activeElement)).toBe(true);
     await click(host, m.album_create());
     const exact = structuredClone(commands[1]);
+    await act(async () => currentArtist([selected]));
+    expect(row.textContent).not.toContain('Late descriptor');
     await click(row, remove('wdt:P3831')); // Busy command.
     await act(async () => finish({ ok: false, reason: 'unavailable' }));
     await click(row, remove('wdt:P3831')); // Uncertain command.
+    await act(async () => currentArtist([selected]));
+    expect(row.textContent).not.toContain('Late descriptor');
     await click(host, m.catalogue_create_retry());
     expect(commands[2]).toBe(commands[1]);
     expect(commands[2]).toEqual(exact);
@@ -169,7 +204,7 @@ test('Album qualifier cancellation, stable correction targets, selective removal
     expect(facts['schema:contributor']![0]!.value).toEqual({ type: 'value', content: artistId });
     expect(facts['schema:contributor']![0]!.references[0]!.parts[0]!.value).toEqual({
       type: 'value',
-      content: 'https://example.test/source',
+      content: 'https://example.test/source/newer',
     });
     expect(facts['schema:sameAs']![0]!.value).toEqual({ type: 'value', content: 'https://example.test/album' });
   } finally {
