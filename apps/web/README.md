@@ -116,7 +116,8 @@ never blocks native sign-out. Changing the current viewer or CSRF session epoch 
 their guards. No unseen category starts its producer; selection adds no native IO or command identity.
 
 Reading saves spoiler level and cover suitability when chosen, with the version it read; a stale version keeps the
-choice on screen and offers a reload. Privacy reads the signed-in person's Collections after selection and hydration,
+choice on screen and offers a reload. Reload keeps the draft for review; only “Use confirmed settings” replaces it,
+and an unresolved write still requires its separate exact retry. Privacy reads the signed-in person's Collections after selection and hydration,
 one page at a time, and lets them change visibility. Account links to security settings on the Auth site and offers
 sign-out. Controls stay disabled until the page hydrates.
 
@@ -215,7 +216,7 @@ The assigned, closed native wire is:
 {
   editionId: string;
   editionRevision: string;
-  state: 'draft' | 'published' | 'withdrawn';
+  state: "draft" | "published" | "withdrawn";
   targetSubjectId: string;
   creatorAccountId: string;
   revisionId: string;
@@ -443,22 +444,24 @@ The trusted Auth bootstrap entry is `createAuthService(options)` followed by
 Use the mounted protected action catalogue supplied to Auth as `siteActions`:
 
 ```ts
-import { websiteRegistrationScopes } from './src/session/website-scopes.ts';
+import { websiteRegistrationScopes } from "./src/session/website-scopes.ts";
 
 const registration = {
   publicJwks: { keys: [websitePublicJwk] },
-  redirectUris: ['https://rezics.com/auth/callback'],
-  postLogoutRedirectUris: ['https://rezics.com/'],
+  redirectUris: ["https://rezics.com/auth/callback"],
+  postLogoutRedirectUris: ["https://rezics.com/"],
   scopes: websiteRegistrationScopes([
-    ...[...mountedWebsiteActions].filter(([, action]) => !action.anonymous).map(([name]) => name),
-    'organization:create',
-    'account:manage',
-    'account:delete',
+    ...[...mountedWebsiteActions]
+      .filter(([, action]) => !action.anonymous)
+      .map(([name]) => name),
+    "organization:create",
+    "account:manage",
+    "account:delete",
   ]),
 };
 await auth.internal.registerWebsiteClient(registration);
 // Deploy this exact string as the Worker's WEBSITE_SCOPES text variable.
-const websiteScopes = registration.scopes.join(' ');
+const websiteScopes = registration.scopes.join(" ");
 ```
 
 The catalogue must include the five media scopes above, the posting scopes `thread:create` and `post:create`,
@@ -1490,7 +1493,7 @@ Space response at 390 and 1280 pixels.
 ### Collection editing
 
 - **Touches:** One session read, then one kernel write: `POST /v1/collections`, `PATCH` or `DELETE
-  /v1/collections/<id>?revision=…`, `POST …/members/<memberId>:move`, `PATCH` or `DELETE …/members/<memberId>`, or
+/v1/collections/<id>?revision=…`, `POST …/members/<memberId>:move`, `PATCH` or `DELETE …/members/<memberId>`, or
   `PUT`/`DELETE /v1/follows/<id>`. A move sends only the member and its `after` neighbour and never reads the member
   list. The collection page of a signed-in person who is not the curator of a public or unlisted collection adds one
   `GET /v1/follows/<id>?view=FULL` after its own two reads, with the session credential it already holds.
@@ -1576,7 +1579,7 @@ are deferred to integration; local workspace typing does not establish visual or
 - **Bound:** At most 20 Collection rows per requested page and one kernel read per page. A visibility change is one
   kernel write. No read cost depends on Collections beyond pages the person opens.
 - **Growth check:** `tests/settings-privacy.test.ts`: `first-page cost stays fixed for 5 and 50 Collections, then grows
-  by one read per requested page`; the paging test also checks one additional read for Load more.
+by one read per requested page`; the paging test also checks one additional read for Load more.
 
 ### Settings notifications
 
