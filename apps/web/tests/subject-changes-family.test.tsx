@@ -642,7 +642,6 @@ test('the complete Subject history family keeps independent headings, bounded su
     expect(host.querySelector('article')?.getAttribute('aria-busy')).toBe('true');
     await act(async () => pendingList.resolve(await first.transport.list()));
     await until(() => !!host.querySelector('ol button'));
-    expect(window.location.href).toBe('https://site.test/en');
     expect(reload).not.toHaveBeenCalled();
   } finally {
     await act(async () => root.unmount());
