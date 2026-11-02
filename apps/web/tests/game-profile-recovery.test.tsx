@@ -121,6 +121,7 @@ test('Game retires refused readings, privately retains exact corrections, and re
     const summary = [...host.querySelectorAll<HTMLElement>('summary')].find(
       (node) => node.textContent === m.game_profile_classification(),
     )!;
+    const holder = summary.closest('details')!;
     await click(summary);
     const region = host.querySelector<HTMLElement>('[data-slot="game-classification"]')!;
     await click(within(region).getByRole('button', { name: m.facts_edit_field() }));
@@ -129,8 +130,7 @@ test('Game retires refused readings, privately retains exact corrections, and re
       await user.clear(input);
       await user.type(input, 'fr');
     });
-    fixture.setScenario('uncertain');
-    const submit = within(region.closest('details')!).getByRole('button', { name: m.facts_submit() });
+    const submit = within(holder).getByRole('button', { name: m.facts_submit() });
     await click(submit);
     await waitFor(() => expect(corrections()).toHaveLength(1));
     const original = structuredClone(corrections()[0]);
@@ -147,7 +147,7 @@ test('Game retires refused readings, privately retains exact corrections, and re
       await status(m.game_profile_current());
       expect(draftInput().value).toBe('fr');
       expect(draftInput().disabled || draftInput().closest('fieldset')?.disabled).toBe(true);
-      expect(summary.closest('details')?.open).toBe(true);
+      expect(holder.open).toBe(true);
       expect(corrections()).toHaveLength(1);
     }
     expect(loads).toBe(5);
@@ -181,7 +181,7 @@ test('Game retires refused readings, privately retains exact corrections, and re
     });
     expect(host.textContent).not.toContain(m.correction_proposed());
     expect(corrections()).toHaveLength(1);
-    await click(within(summary.closest('details')!).getByRole('button', { name: m.facts_submit() }));
+    await click(within(holder).getByRole('button', { name: m.facts_submit() }));
     await status(m.correction_proposed());
     expect(corrections()).toHaveLength(2);
     expect(corrections()[1]).toEqual(original);
