@@ -4331,5 +4331,9 @@
   "specialist_identity_reference": "參考資訊與技術詳細資料",
   "specialist_identity_subject_id": "條目 ID",
   "specialist_identity_type": "技術類型",
-  "specialist_identity_names": "名稱、描述與別名"
+  "specialist_identity_names": "名稱、描述與別名",
+  "library_progress_history_reader_change_details": "完整的變更紀錄 · 第 {number} 項",
+  "library_progress_history_reader_unit_details": "完整的單位紀錄 · 第 {number} 項",
+  "library_progress_history_reader_changes_page_empty": "此頁沒有進度變更紀錄。",
+  "library_progress_history_reader_units_page_empty": "此頁沒有已完成的單位。"
 }

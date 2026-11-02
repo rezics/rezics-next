@@ -24,6 +24,7 @@ import { PageHeading } from '../shell/page-heading';
 import { csrfHeaders } from '../threads/composer';
 import {
   parseUnitBatch,
+  type ProgressChange,
   type ProgressFailure,
   type ProgressSessionPage,
   type ProgressState,
@@ -324,6 +325,163 @@ function stateLabel(state: ProgressState): string {
   if (state === 'completed') return m.library_progress_state_completed();
   if (state === 'abandoned') return m.library_progress_state_abandoned();
   return m.library_progress_state_active();
+}
+
+const historyTextLimit = 160;
+const historyUnitLimit = 4;
+const historyDisclosureClass =
+  'min-h-11 cursor-pointer content-center rounded-md text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const historyPreviewClass = 'min-w-0 [&:has(>details[open])>[data-history-preview]]:hidden';
+
+function longHistoryText(value: string): boolean {
+  return value.length > historyTextLimit || value.split(/\r\n|\r|\n/, 4).length > 3;
+}
+
+function historyExcerpt(value: string): string {
+  // Do not split a surrogate pair. Only the preview is shortened; disclosure uses the original.
+  const end = (value.codePointAt(historyTextLimit - 1) ?? 0) > 0xffff ? historyTextLimit - 1 : historyTextLimit;
+  return value.length > end ? `${value.slice(0, end)}…` : value;
+}
+
+function ProgressHistoryFacts({ change, preview = false }: { change: ProgressChange; preview?: boolean }) {
+  return (
+    <dl className="flex min-w-0 flex-wrap gap-x-8 gap-y-3">
+      {(
+        [
+          [m.library_progress_amount(), change.amount],
+          [m.library_progress_locator(), change.locator],
+          [m.library_progress_position(), change.position],
+        ] as const
+      )
+        .filter(([, value]) => value != null)
+        .map(([label, value]) => (
+          <div key={label} className="min-w-0 max-w-full space-y-1">
+            <dt className="text-muted-foreground">{label}</dt>
+            <dd className={`whitespace-pre-wrap [overflow-wrap:anywhere] ${preview ? 'line-clamp-2' : ''}`}>
+              {preview ? historyExcerpt(value!) : value}
+            </dd>
+          </div>
+        ))}
+      {(
+        [
+          [m.library_progress_units_added(), change.add],
+          [m.library_progress_units_removed(), change.remove],
+        ] as const
+      ).map(([label, units]) =>
+        units.length ? (
+          <div key={label} className="min-w-0 max-w-full space-y-1">
+            <dt className="text-muted-foreground">{label}</dt>
+            <dd>
+              <ul className="space-y-1">
+                {(preview ? units.slice(0, 2) : units).map((unit, occurrence) => (
+                  // Each immutable change owns its ordered occurrences, including duplicates.
+                  <li
+                    key={occurrence}
+                    className={`whitespace-pre-wrap [overflow-wrap:anywhere] ${preview ? 'line-clamp-2' : ''}`}
+                  >
+                    {preview ? historyExcerpt(unit) : unit}
+                  </li>
+                ))}
+              </ul>
+              {preview && units.length > 2 ? <span aria-hidden="true">…</span> : null}
+            </dd>
+          </div>
+        ) : null,
+      )}
+    </dl>
+  );
+}
+
+function progressHistoryPreview(change: ProgressChange, occurrence: number) {
+  const values = [change.amount, change.locator, change.position];
+  if (!values.some((value) => value !== null) && !change.add.length && !change.remove.length) return null;
+  const expandable =
+    values.some((value) => value !== null && longHistoryText(value)) ||
+    [change.add, change.remove].some((units) => units.length > historyUnitLimit || units.some(longHistoryText));
+  if (!expandable) return <ProgressHistoryFacts change={change} />;
+  return (
+    <div className={historyPreviewClass}>
+      <div data-history-preview>
+        <ProgressHistoryFacts change={change} preview />
+      </div>
+      <details className="min-w-0 space-y-3">
+        <summary className={historyDisclosureClass}>
+          {m.library_progress_history_reader_change_details({ number: occurrence })}
+        </summary>
+        <ProgressHistoryFacts change={change} />
+      </details>
+    </div>
+  );
+}
+
+function ProgressHistoryUnit({ value, occurrence }: { value: string; occurrence: number }) {
+  if (!longHistoryText(value)) return <span className="whitespace-pre-wrap [overflow-wrap:anywhere]">{value}</span>;
+  return (
+    <div className={historyPreviewClass}>
+      <p data-history-preview className="line-clamp-2 whitespace-pre-wrap [overflow-wrap:anywhere]">
+        {historyExcerpt(value)}
+      </p>
+      <details className="min-w-0 space-y-3">
+        <summary className={historyDisclosureClass}>
+          {m.library_progress_history_reader_unit_details({ number: occurrence })}
+        </summary>
+        <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{value}</p>
+      </details>
+    </div>
+  );
+}
+
+/** Read-only navigation captures this render's current authority without joining editor custody. */
+function ProgressHistoryLink({
+  operation,
+  id,
+  search,
+  originating,
+  children,
+}: {
+  operation: 'progress_session.changes' | 'progress_session.units';
+  id: string;
+  search: { changes?: string; units?: string; logs?: string };
+  originating: ProgressDetailOrigin | undefined;
+  children: ReactNode;
+}) {
+  const admitted = exposure.useOperation(operation);
+  const locale = getLocale();
+  const guard = originating?.capture?.();
+  const token = {};
+  const rendered = useRef(token);
+  rendered.current = token;
+  const mounted = useRef(false);
+  useLayoutEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const current = () =>
+    mounted.current &&
+    rendered.current === token &&
+    admitted &&
+    getLocale() === locale &&
+    (guard ? guard.isCurrent() : !originating || originating.isCurrent());
+  if (!admitted) return null;
+  return (
+    <Link
+      to="/library/progress/$id"
+      params={{ id }}
+      search={search}
+      preload={false}
+      onClick={(event) => {
+        if (!current()) event.preventDefault();
+      }}
+      onAuxClick={(event) => {
+        if (!current()) event.preventDefault();
+      }}
+      className={buttonClass}
+    >
+      {children}
+    </Link>
+  );
 }
 
 export function ProgressSessionPage({
@@ -1004,7 +1162,7 @@ function SessionEditor({
         </h2>
         {session.changes.length ? (
           <ol className="space-y-1">
-            {session.changes.map((change) => (
+            {session.changes.map((change, occurrence) => (
               <ContentItem
                 key={change.id}
                 headingLevel={3}
@@ -1014,73 +1172,46 @@ function SessionEditor({
                     : m.library_progress_change_recorded()
                 }
                 metadata={<RelativeTime value={change.createdAt} />}
-                preview={
-                  change.amount !== null ||
-                  change.locator !== null ||
-                  change.position !== null ||
-                  change.add.length ||
-                  change.remove.length ? (
-                    <dl className="flex min-w-0 flex-wrap gap-x-8 gap-y-3">
-                      {(
-                        [
-                          [m.library_progress_amount(), change.amount],
-                          [m.library_progress_locator(), change.locator],
-                          [m.library_progress_position(), change.position],
-                        ] as const
-                      )
-                        .filter(([, value]) => value != null)
-                        .map(([label, value]) => (
-                          <div key={label} className="min-w-0 max-w-full space-y-1">
-                            <dt className="text-muted-foreground">{label}</dt>
-                            <dd className="whitespace-pre-wrap [overflow-wrap:anywhere]">{value}</dd>
-                          </div>
-                        ))}
-                      {(
-                        [
-                          [m.library_progress_units_added(), change.add],
-                          [m.library_progress_units_removed(), change.remove],
-                        ] as const
-                      ).map(([label, units]) =>
-                        units.length ? (
-                          <div key={label} className="min-w-0 max-w-full space-y-1">
-                            <dt className="text-muted-foreground">{label}</dt>
-                            <dd>
-                              <ul className="space-y-1">
-                                {units.map((unit) => (
-                                  <li key={unit} className="whitespace-pre-wrap [overflow-wrap:anywhere]">
-                                    {unit}
-                                  </li>
-                                ))}
-                              </ul>
-                            </dd>
-                          </div>
-                        ) : null,
-                      )}
-                    </dl>
-                  ) : null
-                }
+                preview={progressHistoryPreview(change, occurrence + 1)}
               />
             ))}
           </ol>
         ) : (
-          <p className="text-muted-foreground">{m.library_progress_changes_empty()}</p>
+          <p className="text-muted-foreground">
+            {page.changesCursor || session.changesNext
+              ? m.library_progress_history_reader_changes_page_empty()
+              : m.library_progress_changes_empty()}
+          </p>
         )}
-        {session.changesNext ? (
-          <Exposure operation="progress_session.changes">
-            <Link
-              to="/library/progress/$id"
-              params={{ id: session.id }}
+        <div className="flex flex-wrap gap-3">
+          {page.changesCursor ? (
+            <ProgressHistoryLink
+              operation="progress_session.changes"
+              id={session.id}
+              originating={originating}
+              search={{
+                ...(logsCursor ? { logs: logsCursor } : {}),
+                ...(page.unitsCursor ? { units: page.unitsCursor } : {}),
+              }}
+            >
+              {m.library_collections_first_page()}
+            </ProgressHistoryLink>
+          ) : null}
+          {session.changesNext ? (
+            <ProgressHistoryLink
+              operation="progress_session.changes"
+              id={session.id}
+              originating={originating}
               search={{
                 changes: session.changesNext,
                 ...(logsCursor ? { logs: logsCursor } : {}),
                 ...(page.unitsCursor ? { units: page.unitsCursor } : {}),
               }}
-              className={buttonClass}
             >
               {m.library_progress_more()}
-            </Link>
-          </Exposure>
-        ) : null}
+            </ProgressHistoryLink>
+          ) : null}
+        </div>
       </section>
       <section
         role="region"
@@ -1092,32 +1223,54 @@ function SessionEditor({
           {m.library_progress_units()}
         </h2>
         {session.units.length ? (
-          <ul className="space-y-3">
-            {session.units.map((unit) => (
-              <li key={unit} className="py-2 whitespace-pre-wrap [overflow-wrap:anywhere]">
-                {unit}
+          <ul
+            // Native unit rows have no IDs. Scope occurrence identity to this exact ordered page,
+            // so an open disclosure cannot migrate to another record after page replacement.
+            key={JSON.stringify([session.id, page.unitsCursor, session.units])}
+            className="space-y-3"
+          >
+            {session.units.map((unit, occurrence) => (
+              <li key={occurrence} className="min-w-0 py-2">
+                <ProgressHistoryUnit value={unit} occurrence={occurrence + 1} />
               </li>
             ))}
           </ul>
         ) : (
-          <p className="text-muted-foreground">{m.library_progress_units_empty()}</p>
+          <p className="text-muted-foreground">
+            {page.unitsCursor || session.unitsNext
+              ? m.library_progress_history_reader_units_page_empty()
+              : m.library_progress_units_empty()}
+          </p>
         )}
-        {session.unitsNext ? (
-          <Exposure operation="progress_session.units">
-            <Link
-              to="/library/progress/$id"
-              params={{ id: session.id }}
+        <div className="flex flex-wrap gap-3">
+          {page.unitsCursor ? (
+            <ProgressHistoryLink
+              operation="progress_session.units"
+              id={session.id}
+              originating={originating}
+              search={{
+                ...(logsCursor ? { logs: logsCursor } : {}),
+                ...(page.changesCursor ? { changes: page.changesCursor } : {}),
+              }}
+            >
+              {m.library_collections_first_page()}
+            </ProgressHistoryLink>
+          ) : null}
+          {session.unitsNext ? (
+            <ProgressHistoryLink
+              operation="progress_session.units"
+              id={session.id}
+              originating={originating}
               search={{
                 units: session.unitsNext,
                 ...(logsCursor ? { logs: logsCursor } : {}),
                 ...(page.changesCursor ? { changes: page.changesCursor } : {}),
               }}
-              className={buttonClass}
             >
               {m.library_progress_more()}
-            </Link>
-          </Exposure>
-        ) : null}
+            </ProgressHistoryLink>
+          ) : null}
+        </div>
       </section>
       {children}
     </article>

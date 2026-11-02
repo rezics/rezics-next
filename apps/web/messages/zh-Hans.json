@@ -4332,5 +4332,9 @@
   "specialist_identity_reference": "参考信息与技术详情",
   "specialist_identity_subject_id": "条目 ID",
   "specialist_identity_type": "技术类型",
-  "specialist_identity_names": "名称、描述与别名"
+  "specialist_identity_names": "名称、描述与别名",
+  "library_progress_history_reader_change_details": "完整的变更记录 · 第 {number} 项",
+  "library_progress_history_reader_unit_details": "完整的单位记录 · 第 {number} 项",
+  "library_progress_history_reader_changes_page_empty": "此页没有进度变更记录。",
+  "library_progress_history_reader_units_page_empty": "此页没有已完成的单位。"
 }

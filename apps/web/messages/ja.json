@@ -4331,5 +4331,9 @@
   "specialist_identity_reference": "参照情報と技術的な詳細",
   "specialist_identity_subject_id": "項目 ID",
   "specialist_identity_type": "技術上の型",
-  "specialist_identity_names": "名前・説明・別名"
+  "specialist_identity_names": "名前・説明・別名",
+  "library_progress_history_reader_change_details": "記録された変更の全文 · {number} 件目",
+  "library_progress_history_reader_unit_details": "記録された単位の全文 · {number} 件目",
+  "library_progress_history_reader_changes_page_empty": "このページに進捗の変更はありません。",
+  "library_progress_history_reader_units_page_empty": "このページに完了した単位はありません。"
 }

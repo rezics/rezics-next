@@ -4332,5 +4332,9 @@
   "specialist_identity_reference": "Reference and technical details",
   "specialist_identity_subject_id": "Subject ID",
   "specialist_identity_type": "Technical type",
-  "specialist_identity_names": "Names, descriptions and aliases"
+  "specialist_identity_names": "Names, descriptions and aliases",
+  "library_progress_history_reader_change_details": "Full recorded change · entry {number}",
+  "library_progress_history_reader_unit_details": "Full recorded unit · entry {number}",
+  "library_progress_history_reader_changes_page_empty": "No progress changes on this page.",
+  "library_progress_history_reader_units_page_empty": "No completed units on this page."
 }

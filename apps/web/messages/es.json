@@ -4331,5 +4331,9 @@
   "specialist_identity_reference": "Referencia y detalles técnicos",
   "specialist_identity_subject_id": "ID de la ficha",
   "specialist_identity_type": "Tipo técnico",
-  "specialist_identity_names": "Nombres, descripciones y alias"
+  "specialist_identity_names": "Nombres, descripciones y alias",
+  "library_progress_history_reader_change_details": "Cambio registrado completo · entrada {number}",
+  "library_progress_history_reader_unit_details": "Unidad registrada completa · entrada {number}",
+  "library_progress_history_reader_changes_page_empty": "No hay cambios de progreso en esta página.",
+  "library_progress_history_reader_units_page_empty": "No hay unidades completadas en esta página."
 }

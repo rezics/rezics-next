@@ -4331,5 +4331,9 @@
   "specialist_identity_reference": "참조 정보 및 기술 세부 정보",
   "specialist_identity_subject_id": "항목 ID",
   "specialist_identity_type": "기술적 유형",
-  "specialist_identity_names": "이름, 설명 및 별칭"
+  "specialist_identity_names": "이름, 설명 및 별칭",
+  "library_progress_history_reader_change_details": "기록된 변경 전체 · {number}번째 항목",
+  "library_progress_history_reader_unit_details": "기록된 단위 전체 · {number}번째 항목",
+  "library_progress_history_reader_changes_page_empty": "이 페이지에는 진행 변경 기록이 없습니다.",
+  "library_progress_history_reader_units_page_empty": "이 페이지에는 완료한 단위가 없습니다."
 }

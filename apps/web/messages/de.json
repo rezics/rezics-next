@@ -4331,5 +4331,9 @@
   "specialist_identity_reference": "Referenz und technische Details",
   "specialist_identity_subject_id": "Eintrags-ID",
   "specialist_identity_type": "Technischer Typ",
-  "specialist_identity_names": "Namen, Beschreibungen und Aliasnamen"
+  "specialist_identity_names": "Namen, Beschreibungen und Aliasnamen",
+  "library_progress_history_reader_change_details": "Vollständige aufgezeichnete Änderung · Eintrag {number}",
+  "library_progress_history_reader_unit_details": "Vollständige aufgezeichnete Einheit · Eintrag {number}",
+  "library_progress_history_reader_changes_page_empty": "Keine Fortschrittsänderungen auf dieser Seite.",
+  "library_progress_history_reader_units_page_empty": "Keine abgeschlossenen Einheiten auf dieser Seite."
 }
