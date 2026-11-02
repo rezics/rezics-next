@@ -340,6 +340,47 @@ test('historical pending differs from approval and closed DTOs exclude private i
   ).toBeUndefined();
 });
 
+test('own-status keeps validated absence on observe and refresh; exact null and private reads stay concealed', async () => {
+  const none: RealmClaimStatusRead = { kind: 'ready', claimRequest: null, source };
+  const adapter = { read: async () => none };
+  const ownStatus = createRealmClaimStatus({ realmId }, none, adapter);
+  expect(ownStatus.getSnapshot().read).toEqual(none);
+  ownStatus.observe(own);
+  expect(ownStatus.getSnapshot().read).toEqual(own);
+  ownStatus.observe(none);
+  expect(ownStatus.getSnapshot().read).toEqual(none);
+  await ownStatus.refresh();
+  expect(ownStatus.getSnapshot().read).toEqual(none);
+  const exact = createRealmClaimStatus({ realmId, requestId }, none, adapter);
+  expect(exact.getSnapshot().read.kind).toBe('unavailable');
+  await exact.refresh();
+  expect(exact.getSnapshot().read.kind).toBe('unavailable');
+  expect(
+    createRealmClaimStatus({ realmId }, { kind: 'ready', claimRequest: null, source: { ...source, realmId: key } }, adapter)
+      .getSnapshot().read.kind,
+  ).toBe('unavailable');
+  expect(
+    createRealmClaimStatus(
+      { realmId },
+      { kind: 'ready', claimRequest: { ...pending, claimantAccountId: key } as never, source },
+      adapter,
+    ).getSnapshot().read.kind,
+  ).toBe('unavailable');
+  for (const kind of ['signed-out', 'denied', 'closed'] as const) {
+    expect(createRealmClaimStatus({ realmId }, { kind }, adapter).getSnapshot().read).toEqual({ kind });
+  }
+  const late = deferred<RealmClaimStatusRead>();
+  let live = true;
+  const lifetime = createRealmClaimCallerLifetime(() => live);
+  const retired = createRealmClaimStatus({ realmId }, none, { read: () => late.promise }, lifetime);
+  const hiding = retired.refresh();
+  live = false;
+  lifetime.current();
+  late.resolve(none);
+  await hiding;
+  expect(retired.getSnapshot().read.kind).toBe('unavailable');
+});
+
 test('caller retirement withholds the original status and suppresses its late point read', async () => {
   const late = deferred<RealmClaimStatusRead>();
   let current = true;

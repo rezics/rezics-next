@@ -63,7 +63,6 @@ export function createRealmClaimStatus(
     if (
       read.kind === 'ready' &&
       (read.source.realmId !== input.realmId ||
-        !read.claimRequest ||
         realmClaimStatusResponse({ claimRequest: read.claimRequest }, input) === undefined)
     )
       return { kind: 'unavailable' };
