@@ -141,6 +141,31 @@ test('Labels protects local drafts, preserves focus and original retries, and by
     });
     await settle(() => !!field('new-label'));
     expect(unload()).toBe(false);
+    const invalidNames = [
+      ['📚'.repeat(101), m.library_label_name_input_too_long()],
+      [' \u2003 ', m.library_label_name_input_empty()],
+      ['A\u0000B', m.library_label_name_input_controls()],
+      ['A\ud800', m.library_label_name_input_surrogates()],
+    ];
+    for (const id of ['new-label', 'label-label']) {
+      if (id === 'label-label') await click(m.library_label_rename());
+      const help = window.document.getElementById(field(id).getAttribute('aria-describedby')!);
+      expect(help?.textContent).toBe(m.library_label_name_input_help());
+      for (const [name, message] of invalidNames) {
+        await edit(id, name!);
+        await submit(id);
+        expect(calls).toHaveLength(0);
+        expect(field(id).value).toBe(name!);
+        expect(field(id).getAttribute('aria-invalid')).toBe('true');
+        const descriptions = field(id).getAttribute('aria-describedby')!.split(' ');
+        const error = descriptions.map((key) => window.document.getElementById(key)).find((node) => node?.getAttribute('role') === 'alert');
+        expect(error?.textContent).toBe(message!);
+        expect(window.document.activeElement).toBe(field(id));
+      }
+      await edit(id, id === 'new-label' ? '' : 'Original');
+      if (id === 'label-label') await click(m.action_cancel());
+      expect(unload()).toBe(false);
+    }
     await edit('new-label', '  Draft e\u0301  ');
     expect(unload()).toBe(true);
     await act(async () => {
@@ -182,7 +207,7 @@ test('Labels protects local drafts, preserves focus and original retries, and by
     await edit('label-label', 'Changed');
     await edit('label-label', 'Original');
     expect(unload()).toBe(false);
-    await edit('label-label', 'Sent');
+    await edit('label-label', '📚'.repeat(100));
     await submit('label-label');
     expect(unload()).toBe(false);
     await act(async () => {
@@ -190,25 +215,27 @@ test('Labels protects local drafts, preserves focus and original retries, and by
     });
     expect(field('label-label').disabled).toBe(false);
     expect(unload()).toBe(false);
-    await edit('label-label', 'Later');
+    await edit('label-label', '📚'.repeat(101));
     expect(unload()).toBe(true);
     await submit('label-label');
     expect(calls[1]).toEqual(calls[0]);
-    expect(calls[1]!.data).toMatchObject({ name: 'Sent', revision: 7, idempotencyKey: 'rename-key' });
+    expect(calls[1]!.data).toMatchObject({ name: '📚'.repeat(100), revision: 7, idempotencyKey: 'rename-key' });
     await act(async () => {
       finish({ ok: true });
     });
-    expect(field('label-label').value).toBe('Later');
+    expect(field('label-label').value).toBe('📚'.repeat(101));
     expect(unload()).toBe(true);
     await click(m.action_cancel());
     await click(m.library_label_draft_navigation_discard());
     expect(unload()).toBe(false);
-    await edit('new-label', 'Refused');
+    const rawName = `  ${'e\u0301'.repeat(100)}  `;
+    await edit('new-label', rawName);
     await submit('new-label');
     await act(async () => {
       finish({ ok: false, reason: 'conflict' });
     });
-    expect(field('new-label').value).toBe('Refused');
+    expect(field('new-label').value).toBe(rawName);
+    expect(calls.at(-1)!.data.name).toBe(rawName);
     expect(unload()).toBe(true);
     await submit('new-label');
     await act(async () => {
