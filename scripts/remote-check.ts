@@ -4585,7 +4585,7 @@ async function finishedRsync(
     child.exited,
     forward(child.stdout, process.stdout, observeProgress),
     forward(child.stderr, process.stderr, observeDiagnostics),
-  ]).then(([code]) => ({ code, bytesSent, vanishedFiles }));
+  ]).then(([code]) => ({ code, ...(bytesSent === undefined ? {} : { bytesSent }), vanishedFiles }));
   try {
     if (signal.aborted) abort();
     const outcome = await Promise.race([
