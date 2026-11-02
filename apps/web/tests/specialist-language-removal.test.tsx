@@ -40,6 +40,7 @@ test('specialist language choices preserve stable drafts, focus, corrections and
   const { AlbumProfileCreate } = await import('../src/features/catalogue/album-profile-create');
   const { MangaProfile } = await import('../src/features/catalogue/manga-profile-view');
   const { RecipeEditor } = await import('../src/features/catalogue/recipe-editor-view');
+  const { CatalogueCurrentReading } = await import('../src/features/catalogue/editor-lifetime');
   const { albumFixture } = await import('../src/kernel/fake/catalogue-album-profile');
   const { mangaFixture } = await import('../src/kernel/fake/catalogue-manga-profile');
   const { recipeFixture } = await import('../src/kernel/fake/recipe-editor');
@@ -83,35 +84,39 @@ test('specialist language choices preserve stable drafts, focus, corrections and
         },
       };
       const props = { locale: 'en', transport, search: async () => [] };
-      await act(async () =>
-        root.render(
-          <QueryClientProvider client={client}>
-            <CandidateReaderBoundary
-              key={family}
-              address={family}
-              observed={{ state: 'signed-in', subject: 'viewer', csrfToken: 'first' }}
-            >
-              {family === 'Album' ? (
-                <AlbumProfileCreate
-                  {...props}
-                  release={fixture.release}
-                  metadataCurrent={() => metadata}
-                  onReload={async () => {}}
-                  enabled
-                />
-              ) : family === 'Manga' ? (
-                <MangaProfile {...props} session="signed-in" />
-              ) : (
-                <RecipeEditor {...props} session="signed-in" />
-              )}
-            </CandidateReaderBoundary>
-          </QueryClientProvider>,
-        ),
-      );
+      const show = (ready = true) =>
+        act(async () =>
+          root.render(
+            <QueryClientProvider client={client}>
+              <CandidateReaderBoundary
+                key={family}
+                address={family}
+                observed={{ state: 'signed-in', subject: 'viewer', csrfToken: 'first' }}
+              >
+                {family === 'Album' ? (
+                  <AlbumProfileCreate
+                    {...props}
+                    release={fixture.release}
+                    metadataCurrent={() => metadata}
+                    onReload={async () => {}}
+                    enabled
+                  />
+                ) : family === 'Manga' ? (
+                  <MangaProfile {...props} session="signed-in" />
+                ) : (
+                  <CatalogueCurrentReading visible={ready} ready={ready} revision={String(ready)}>
+                    <RecipeEditor {...props} session="signed-in" />
+                  </CatalogueCurrentReading>
+                )}
+              </CandidateReaderBoundary>
+            </QueryClientProvider>,
+          ),
+        );
+      await show();
       await act(async () => {
         await new Promise((resolve) => setTimeout(resolve, 20));
       });
-      if (family !== 'Recipe') {
+      {
         const add = canvas.getByRole('button', { name: m.catalogue_create_add_language() });
         const keyboardAdd = () =>
           act(async () => {
@@ -137,6 +142,20 @@ test('specialist language choices preserve stable drafts, focus, corrections and
           add.focus();
         });
         expect(document.activeElement).toBe(add);
+        if (family === 'Recipe') {
+          const key = Object.keys(add).find((key) => key.startsWith('__reactProps$'))!;
+          const queued = (Reflect.get(add, key) as { onClick: (event: unknown) => void }).onClick;
+          const count = canvas.getAllByRole('textbox', { name: m.catalogue_create_language() }).length;
+          await act(async () => {
+            queued({ currentTarget: add, detail: 0 });
+            await show(false);
+          });
+          expect(document.activeElement).toBe(add);
+          await show();
+          await act(async () => queued({ currentTarget: add, detail: 0 }));
+          expect(canvas.getAllByRole('textbox', { name: m.catalogue_create_language() })).toHaveLength(count + 1);
+          expect(document.activeElement).toBe(add);
+        }
         if (family === 'Album') {
           metadata = false;
           await keyboardAdd();

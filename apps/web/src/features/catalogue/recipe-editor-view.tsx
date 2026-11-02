@@ -26,6 +26,7 @@ import {
 import { coverSrc } from '../../media/cover-src';
 import { m } from '../../paraglide/messages.js';
 import { CreateSubjectLanguageRemove } from './create-subject-language-remove';
+import { useSpecialistLanguageAddFocus } from './specialist-language-add-focus';
 import { editorLabels } from '../../threads/composer';
 import { PageHeading } from '../../shell/page-heading';
 import { CandidateReview, type CandidateTransport } from '../../subject/candidate-review';
@@ -164,6 +165,7 @@ function RecipeEditorLive({
   const readUnavailable = query.isError || (!!query.data && (!query.data.ok || !matchesIdentity(query.data)));
   const termsId = useId();
   const nextTermId = useRef(1);
+  const focusAddedLanguage = useSpecialistLanguageAddFocus();
   const [terms, setTerms] = useState([{ id: 0, language: locale, label: '', description: '', aliases: '' }]);
   const [rows, setRows] = useState<Row[]>([]);
   const [property, setProperty] = useState('');
@@ -224,8 +226,23 @@ function RecipeEditorLive({
     target.focus();
   }, [busy, query.isFetching, read, readUnavailable, readEpoch, lifetime]);
   const locked = busy || !!pending.current || failure?.refreshDefinitions === true;
-  const fieldAdmission = useRef({ read, locked, created, session, rows, property });
-  fieldAdmission.current = { read, locked, created, session, rows, property };
+  const fieldAdmission = useRef({ read, locked, created, session, rows, property, terms });
+  fieldAdmission.current = { read, locked, created, session, rows, property, terms };
+  const termAdditionAllowed = () => {
+    const current = fieldAdmission.current;
+    return (
+      lifetime.active() &&
+      isReadEpochCurrent(readEpoch) &&
+      !id &&
+      !!current.read &&
+      current.read === read &&
+      !current.locked &&
+      !current.created &&
+      current.session === 'signed-in' &&
+      !running.current &&
+      !pending.current
+    );
+  };
   const fieldEditAllowed = (rowId: string) => {
     const current = fieldAdmission.current;
     const row = current.rows.find((entry) => entry.id === rowId);
@@ -666,13 +683,18 @@ function RecipeEditorLive({
                   type="button"
                   variant="outline"
                   disabled={locked || session !== 'signed-in'}
-                  onClick={() => {
-                    if (locked || running.current || pending.current || session !== 'signed-in') return;
+                  onClick={(event) => {
+                    if (!termAdditionAllowed()) return;
                     const id = nextTermId.current++;
                     setTerms((previous) => [
                       ...previous,
                       { id, language: '', label: '', description: '', aliases: '' },
                     ]);
+                    focusAddedLanguage(
+                      event,
+                      `${termsId}-language-${id}`,
+                      () => termAdditionAllowed() && fieldAdmission.current.terms.some((term) => term.id === id),
+                    );
                   }}
                 >
                   {m.catalogue_create_add_language({}, o)}

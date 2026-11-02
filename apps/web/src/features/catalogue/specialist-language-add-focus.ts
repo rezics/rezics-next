@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, type MouseEvent } from 'react';
 
-/** Album and Manga retain their own row admission; only the keyboard handoff is shared. */
+/** Specialist forms retain their own row admission; only the keyboard handoff is shared. */
 export function useSpecialistLanguageAddFocus() {
   const pending = useRef<{
     origin: HTMLButtonElement;
