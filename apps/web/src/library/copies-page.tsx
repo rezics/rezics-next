@@ -2,13 +2,9 @@ import type { CoverRatio } from '@rezics/ui/cover';
 import type { EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { MetaLine } from '@rezics/ui/meta-line';
 import { ContentItem } from '@rezics/ui/content-item';
-import { Calendar } from '@rezics/ui/shadcn/calendar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@rezics/ui/shadcn/dialog';
 import { BottomSheet } from '@rezics/ui/bottom-sheet';
-import { Popover, PopoverContent, PopoverTrigger } from '@rezics/ui/shadcn/popover';
 import { useIsMobile } from '@rezics/ui/hooks/use-is-mobile';
-import { de, enUS, es, fr, ja, ko, zhCN, zhTW } from 'date-fns/locale';
-import { CalendarDays } from 'lucide-react';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { Link } from '@tanstack/react-router';
@@ -34,15 +30,12 @@ import type { CopyRemoved } from './copies-read';
 import { undoCopy } from './copies-actions';
 export { CopiesFallback } from './copies-fallback';
 const inputClass =
-  'min-h-11 w-full rounded-lg border border-border bg-background px-3 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring';
-const button =
-  'inline-flex min-h-10 items-center justify-center rounded-lg bg-primary px-4 font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60';
-const quiet =
-  'inline-flex min-h-10 items-center justify-center rounded-lg border border-border px-4 hover:bg-muted disabled:opacity-60';
-const locales = { de, en: enUS, es, fr, ja, ko, 'zh-Hans': zhCN, 'zh-Hant': zhTW } as const;
+  'min-h-11 min-w-0 max-w-full w-full rounded-lg border border-border bg-background px-3 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring';
+const target =
+  'min-h-11 min-w-11 max-w-full cursor-pointer whitespace-normal py-2 text-center [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const button = `${target} inline-flex items-center justify-center rounded-lg bg-primary px-4 font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60`;
+const quiet = `${target} inline-flex items-center justify-center rounded-lg border border-border px-4 hover:bg-muted disabled:opacity-60`;
 const locale = () => getLocale();
-const calendarLocale = () => locales[locale() as keyof typeof locales] ?? enUS;
-const dateValue = (value: string) => (value ? new Date(`${value}T12:00:00`) : undefined);
 const dateText = (value: string) =>
   value
     ? new Intl.DateTimeFormat(locale(), { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${value}T12:00:00Z`))
@@ -50,39 +43,18 @@ const dateText = (value: string) =>
 const blank = (value: string): string | null => (value === '' ? null : value);
 
 function DateField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
-  const [open, setOpen] = useState(false);
   const id = useId();
-  const selected = dateValue(value);
   return (
     <Field>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger
-          id={id}
-          render={
-            <button type="button" className={`${inputClass} flex items-center justify-between text-left font-normal`} />
-          }
-        >
-          <span>{selected ? dateText(value) : m.library_copy_choose_date()}</span>
-          <CalendarDays aria-hidden="true" className="size-4 text-muted-foreground" />
-        </PopoverTrigger>
-        <PopoverContent align="start" className="w-auto p-0">
-          <Calendar
-            mode="single"
-            locale={calendarLocale()}
-            selected={selected}
-            onSelect={(date) => {
-              onChange(
-                date
-                  ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-                  : '',
-              );
-              setOpen(false);
-            }}
-            labels={{ labelDayButton: (date) => new Intl.DateTimeFormat(locale(), { dateStyle: 'full' }).format(date) }}
-          />
-        </PopoverContent>
-      </Popover>
+      <input
+        id={id}
+        type="date"
+        lang={locale()}
+        className={inputClass}
+        value={value}
+        onChange={(event) => onChange(event.currentTarget.value)}
+      />
     </Field>
   );
 }
@@ -123,7 +95,7 @@ function ChoiceField({
       <NativeSelect
         id={id}
         name={name}
-        className={inputClass}
+        className={`${inputClass} [&_select]:min-h-11`}
         value={value}
         onChange={(event) => onChange(event.currentTarget.value)}
       >
@@ -219,6 +191,16 @@ export function CopyForm({
   const [failure, setFailure] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const moreId = useId();
+  const confirmationId = useId();
+  const deleteControl = useRef<HTMLButtonElement>(null);
+  const cancelDelete = useRef<HTMLButtonElement>(null);
+  const wasConfirming = useRef(false);
+  useLayoutEffect(() => {
+    if (confirming) cancelDelete.current?.focus();
+    else if (wasConfirming.current) deleteControl.current?.focus();
+    wasConfirming.current = confirming;
+  }, [confirming]);
   const deleteStarted = useRef<number | null>(null);
   const active = useRef(true);
   const busy = useRef(false);
@@ -284,7 +266,8 @@ export function CopyForm({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const operation = copy ? 'copy.update' : 'copy.create';
-    if (!current(operation) || busy.current || !editable || intent.current?.operation === 'delete') return;
+    if (!current(operation) || busy.current || confirming || !editable || intent.current?.operation === 'delete')
+      return;
     const editionBinding = binding.current;
     if (!intent.current) {
       if (!copy && !subjectId && (!edition || editionBinding?.subject.id !== edition.id)) return;
@@ -467,7 +450,15 @@ export function CopyForm({
       aria-label={title}
       data-idempotency-key={copy?.idempotencyKey ?? addKey}
       onSubmit={submit}
-      className="space-y-4"
+      className="min-w-0 max-w-full space-y-4 [overflow-wrap:anywhere] [&_input]:min-h-11 [&_input]:min-w-0 [&_input]:text-base [&_[data-slot=input-group]]:h-auto [&_[data-slot=input-group]]:min-h-11"
+      aria-busy={pending}
+      onKeyDown={(event) => {
+        if (confirming && event.key === 'Escape') {
+          event.preventDefault();
+          event.stopPropagation();
+          if (current()) setConfirming(false);
+        }
+      }}
     >
       <input type="hidden" name="intent" value={copy ? 'update' : 'create'} />
       <input type="hidden" name="idempotencyKey" value={copy?.idempotencyKey ?? addKey} />
@@ -575,45 +566,54 @@ export function CopyForm({
         <>
           <button
             type="button"
-            className="text-sm text-primary underline underline-offset-4"
+            className={`${target} text-left text-sm text-primary underline underline-offset-4`}
+            aria-controls={moreId}
             aria-expanded={more}
             onClick={() => current() && setMore(!more)}
           >
             {more ? m.library_copy_less() : m.library_copy_more()}
           </button>
-          {more ? (
-            <div className="space-y-4">
-              <TextField
-                label={m.library_copy_location()}
-                value={draft.location}
-                onChange={(value) => change('location', value)}
-              />
-              <TextField
-                label={m.library_copy_source()}
-                value={draft.source}
-                onChange={(value) => change('source', value)}
-              />
-              <DateField
-                label={m.library_copy_acquired()}
-                value={draft.acquiredOn}
-                onChange={(value) => change('acquiredOn', value)}
-              />
-              <DateField
-                label={m.library_copy_disposed()}
-                value={draft.disposedOn}
-                onChange={(value) => change('disposedOn', value)}
-              />
-              <TextField label={m.library_copy_note()} value={draft.note} onChange={(value) => change('note', value)} />
-            </div>
-          ) : null}
+          <div id={moreId} hidden={!more} className="min-w-0 space-y-4">
+            <TextField
+              label={m.library_copy_location()}
+              value={draft.location}
+              onChange={(value) => change('location', value)}
+            />
+            <TextField
+              label={m.library_copy_source()}
+              value={draft.source}
+              onChange={(value) => change('source', value)}
+            />
+            <DateField
+              label={m.library_copy_acquired()}
+              value={draft.acquiredOn}
+              onChange={(value) => change('acquiredOn', value)}
+            />
+            <DateField
+              label={m.library_copy_disposed()}
+              value={draft.disposedOn}
+              onChange={(value) => change('disposedOn', value)}
+            />
+            <TextField label={m.library_copy_note()} value={draft.note} onChange={(value) => change('note', value)} />
+          </div>
         </>
       ) : null}
       {failure ? <p role="alert">{failure}</p> : null}
       {confirming ? (
-        <div role="alertdialog" className="space-y-3 rounded-lg border border-border p-4">
-          <p>{m.library_copy_delete_question()}</p>
-          <div className="flex gap-3">
-            <button type="button" className={quiet} onClick={() => current() && setConfirming(false)}>
+        <div
+          role="alertdialog"
+          aria-modal="false"
+          aria-labelledby={confirmationId}
+          className="min-w-0 space-y-3 rounded-lg border border-border p-4"
+        >
+          <p id={confirmationId}>{m.library_copy_delete_question()}</p>
+          <div className="flex flex-wrap gap-3">
+            <button
+              ref={cancelDelete}
+              type="button"
+              className={quiet}
+              onClick={() => current() && setConfirming(false)}
+            >
               {m.library_copy_cancel()}
             </button>
             <button type="button" className={button} disabled={pending} onClick={() => void remove()}>
@@ -631,6 +631,7 @@ export function CopyForm({
         {copy ? (
           <button
             type="button"
+            ref={deleteControl}
             className={quiet}
             disabled={pending || !editable}
             onClick={() =>
@@ -656,7 +657,7 @@ export function CopyForm({
         </BottomSheet>
       ) : (
         <Dialog open onOpenChange={(open) => !open && close()}>
-          <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto">
+          <DialogContent className="[&_[data-slot=dialog-close]]:min-h-11 [&_[data-slot=dialog-close]]:min-w-11">
             <DialogHeader>
               <DialogTitle>{title}</DialogTitle>
             </DialogHeader>
