@@ -128,6 +128,10 @@ export class CheckRunUnavailable extends Error {
   readonly exitCode = REMOTE_TRANSPORT_FAILURE;
 }
 
+function isAdmittedCheckRunHost(host: string): host is 'a' | 'b' {
+  return host === 'a' || host === 'b';
+}
+
 const FORBIDDEN_REMOTE_ENVIRONMENT = new Set([
   'PATH',
   'HOME',
@@ -1074,7 +1078,7 @@ function finalCleanup(
 ): CheckRunCleanupDisposition {
   const remoteStatus: CheckRunCleanupDisposition['remote'] = remoteCleanupIsVerified(remote)
     ? 'verified'
-    : remote?.cleanup.status === 'failed'
+    : remote?.cleanup.status === 'verified' && remote.cleanup.failures.length > 0
       ? 'failed'
       : 'unknown';
   const child = remote?.transportChildReaped ? 'reaped' : 'unknown';
@@ -1511,6 +1515,7 @@ async function runCheckWithFinalSettlement(
   let snapshotBound = false;
   let receivedReceipt: RemotePhysicalRunReceipt | undefined;
   let allocatedPhysical: { host: 'a' | 'b'; run: string } | undefined;
+  let receivedPhysical: { host: 'a' | 'b'; run: string } | undefined;
   let remoteSettlement: RemoteCheckSettlement | undefined;
   let nativeReceiptPromise: Promise<void> | undefined;
   let remoteSettlementPromise: Promise<void> | undefined;
@@ -1524,18 +1529,22 @@ async function runCheckWithFinalSettlement(
   let outcome = REMOTE_TRANSPORT_FAILURE;
   let transportStarted = false;
   let finalRecord: CheckRunInvocationRecord | undefined;
+  let cancellationPromise: Promise<void> | undefined;
 
   const onAbort = () => {
     if (!registration) return;
-    void cancelCheckRunInvocation(registration.invocationId, registration.nonce, 15, stateOptions).catch((error) => {
-      runFailure ??= error;
-    });
+    cancellationPromise = cancelCheckRunInvocation(registration.invocationId, registration.nonce, 15, stateOptions)
+      .then(() => undefined)
+      .catch((error) => {
+        runFailure ??= error;
+      });
   };
 
   try {
     const callerInvocationId = receiptChannel?.invocationId;
     if (claimedPrepared) {
       if (
+        claimedPrepared.record.phase !== 'claimed' ||
         !receiptChannel?.invocationId ||
         receiptChannel.invocationId !== claimedPrepared.record.invocationId ||
         receiptChannel.nonce !== claimedPrepared.record.nonce ||
@@ -1576,19 +1585,40 @@ async function runCheckWithFinalSettlement(
         candidateWorkspace: candidateRoot,
       });
     }
+    const establishedRegistration = registration;
+    if (!establishedRegistration)
+      throw new CheckRunUnavailable('check-run: invocation could not be registered before workspace admission');
+    const cancellationIsRequested = () =>
+      signal.aborted ||
+      readCheckRunCancellation(establishedRegistration.invocationId, stateOptions).requested;
+    const cancellationWon = () => {
+      try {
+        return cancellationIsRequested();
+      } catch {
+        return signal.aborted;
+      }
+    };
     dependencies.onDurableCancellationReady?.((cancellationSignal) =>
-      cancelCheckRunInvocation(registration!.invocationId, registration!.nonce, cancellationSignal, stateOptions).then(
-        () => undefined,
-      ),
+      cancelCheckRunInvocation(
+        establishedRegistration.invocationId,
+        establishedRegistration.nonce,
+        cancellationSignal,
+        stateOptions,
+      ).then(() => undefined),
     );
     if (signal.aborted) {
-      await cancelCheckRunInvocation(registration.invocationId, registration.nonce, 15, stateOptions);
+      await cancelCheckRunInvocation(
+        establishedRegistration.invocationId,
+        establishedRegistration.nonce,
+        15,
+        stateOptions,
+      );
       if (claimedPrepared) {
-        await reconcileCheckRunInvocation(registration.invocationId, { ...stateOptions, force: true });
+        await reconcileCheckRunInvocation(establishedRegistration.invocationId, { ...stateOptions, force: true });
         cleanupWorktree(candidateRoot, snapshot.workspace, snapshot.scratch);
         await markCheckRunPreparedSnapshotCustody(
-          registration.invocationId,
-          registration.nonce,
+          establishedRegistration.invocationId,
+          establishedRegistration.nonce,
           'removed',
           stateOptions,
         );
@@ -1598,25 +1628,39 @@ async function runCheckWithFinalSettlement(
       snapshotBound = true;
       return 130;
     }
-    await bindCheckRunWorkspace(
-      registration.invocationId,
-      registration.nonce,
-      candidateRoot,
-      {
-        workspace: snapshot.workspace,
-        scratch: snapshot.scratch,
-        sourceSha256: snapshot.sourceHash,
-        inputFiles: snapshot.inputFiles,
-      },
-      returns,
-      stateOptions,
-    );
-    snapshotBound = true;
     signal.addEventListener('abort', onAbort, { once: true });
+    try {
+      await bindCheckRunWorkspace(
+        establishedRegistration.invocationId,
+        establishedRegistration.nonce,
+        candidateRoot,
+        {
+          workspace: snapshot.workspace,
+          scratch: snapshot.scratch,
+          sourceSha256: snapshot.sourceHash,
+          inputFiles: snapshot.inputFiles,
+        },
+        returns,
+        stateOptions,
+      );
+    } catch (error) {
+      if (cancellationWon()) throw new Aborted('check-run: cancelled invocation cannot bind its workspace');
+      throw error;
+    }
+    snapshotBound = true;
     // This fsynced transition is the admission linearization point. A cancellation that wins
     // while the record is queued prevents host probing and any later run identity allocation.
-    await beginCheckRunAllocation(registration.invocationId, registration.nonce, stateOptions);
-    if (signal.aborted || readCheckRunCancellation(registration.invocationId, stateOptions).requested)
+    try {
+      await beginCheckRunAllocation(
+        establishedRegistration.invocationId,
+        establishedRegistration.nonce,
+        stateOptions,
+      );
+    } catch (error) {
+      if (cancellationWon()) throw new Aborted('check-run: cancelled invocation cannot enter remote admission');
+      throw error;
+    }
+    if (cancellationIsRequested())
       throw new Aborted('check-run: cancelled invocation cannot enter remote admission');
 
     const remoteOptions: RemoteCheck = {
@@ -1628,23 +1672,30 @@ async function runCheckWithFinalSettlement(
       command: ['env', ...Object.entries(overlay).map(([name, value]) => `${name}=${value}`), ...frozenArgs],
       returns,
       ...(preparation.length === 0 ? {} : { prepare: preparation }),
-      cancellation: registration.cancellation,
+      cancellation: establishedRegistration.cancellation,
       ...(requestedPriority == null ? {} : { priority: requestedPriority }),
       expectedSourceSha256: snapshot.sourceHash,
       expectedSourceManifest: sourceManifest,
       maxTransportAttempts: 1,
       allocated: async ({ host, run }) => {
-        if (host !== 'a' && host !== 'b')
+        if (!isAdmittedCheckRunHost(host))
           throw new CheckRunUnavailable(`check-run: remote transport selected forbidden host ${host}`);
-        allocatedPhysical = { host, run };
-        await allocateCheckRunPhysical(registration!.invocationId, registration!.nonce, host, run, stateOptions);
+        const admitted = { host, run };
+        await allocateCheckRunPhysical(
+          establishedRegistration.invocationId,
+          establishedRegistration.nonce,
+          host,
+          run,
+          stateOptions,
+        );
+        allocatedPhysical = admitted;
       },
       spawnWithCustody: async (physical, spawn) => {
         let child: ReturnType<typeof Bun.spawn> | undefined;
         try {
           return await withCheckRunSpawnPermit(
-            registration!.invocationId,
-            registration!.nonce,
+            establishedRegistration.invocationId,
+            establishedRegistration.nonce,
             physical.host,
             physical.run,
             () => {
@@ -1662,24 +1713,28 @@ async function runCheckWithFinalSettlement(
       },
       started: (host) => {
         if (signal.aborted) throw new Aborted('check-run: cancelled command cannot start');
-        if (host !== 'a' && host !== 'b')
+        if (!isAdmittedCheckRunHost(host))
           throw new CheckRunUnavailable(`check-run: remote transport selected forbidden host ${host}`);
         dependencies.onStarted?.(host);
       },
       completed: (receipt) => {
         nativeReceiptPromise = (async () => {
           const parsed = parseRemotePhysicalRunReceipt(receipt);
-          if (!parsed || !['a', 'b'].includes(parsed.host))
+          if (!parsed || !isAdmittedCheckRunHost(parsed.host))
             throw new CheckRunUnavailable(
               'check-run: remote native terminal receipt is invalid or names a forbidden host',
             );
-          if (allocatedPhysical && (allocatedPhysical.host !== parsed.host || allocatedPhysical.run !== parsed.run))
+          const admitted = allocatedPhysical;
+          if (!admitted)
+            throw new CheckRunUnavailable('check-run: native terminal receipt has no admitted physical identity');
+          if (admitted.host !== parsed.host || admitted.run !== parsed.run)
             throw new CheckRunUnavailable('check-run: native receipt does not match the admitted physical identity');
+          receivedPhysical = admitted;
           receivedReceipt = parsed;
           const digest = checkRunNativeReceiptDigest(parsed);
           await markCheckRunNativeTerminal(
-            registration!.invocationId,
-            registration!.nonce,
+            establishedRegistration.invocationId,
+            establishedRegistration.nonce,
             {
               host: parsed.host,
               run: parsed.run,
@@ -1690,8 +1745,8 @@ async function runCheckWithFinalSettlement(
             stateOptions,
           );
           const message = createCheckRunNativeTerminalMessage({
-            invocationId: registration!.invocationId,
-            nonce: registration!.nonce,
+            invocationId: establishedRegistration.invocationId,
+            nonce: establishedRegistration.nonce,
             binding,
             physical: { host: parsed.host, run: parsed.run },
             receipt: parsed,
@@ -1713,10 +1768,8 @@ async function runCheckWithFinalSettlement(
       settled: (settlement) => {
         remoteSettlementPromise = Promise.resolve()
           .then(() => {
-            if (
-              allocatedPhysical &&
-              (settlement.host !== allocatedPhysical.host || settlement.run !== allocatedPhysical.run)
-            )
+            const admitted = allocatedPhysical;
+            if (!admitted || settlement.host !== admitted.host || settlement.run !== admitted.run)
               throw new CheckRunUnavailable(
                 'check-run: remote final evidence does not match the admitted physical identity',
               );
@@ -1747,6 +1800,7 @@ async function runCheckWithFinalSettlement(
     else outcome = REMOTE_TRANSPORT_FAILURE;
   } finally {
     signal.removeEventListener('abort', onAbort);
+    await cancellationPromise;
   }
 
   if (!registration) {
@@ -1761,7 +1815,13 @@ async function runCheckWithFinalSettlement(
     throw runFailure ?? new CheckRunUnavailable('check-run: invocation could not be registered');
   }
 
-  if (!receivedReceipt) {
+  if (!receivedReceipt || !receivedPhysical) {
+    if (receivedReceipt && !receivedPhysical) {
+      runFailure ??= new CheckRunUnavailable('check-run: native terminal receipt lost its admitted physical identity');
+      outcome = REMOTE_TRANSPORT_FAILURE;
+    } else if (outcome === 0) {
+      outcome = REMOTE_TRANSPORT_FAILURE;
+    }
     const reason = runFailure instanceof Error ? runFailure.message : 'native terminal receipt is unavailable';
     try {
       await setCheckRunUnknown(registration.invocationId, registration.nonce, reason, stateOptions);
@@ -1781,6 +1841,14 @@ async function runCheckWithFinalSettlement(
       }
     } else {
       try {
+        if (
+          claimedPrepared &&
+          (signal.aborted || readCheckRunCancellation(registration.invocationId, stateOptions).requested)
+        )
+          await reconcileCheckRunInvocation(registration.invocationId, {
+            ...stateOptions,
+            force: true,
+          });
         cleanupWorktree(candidateRoot, snapshot.workspace, snapshot.scratch);
         if (claimedPrepared)
           await markCheckRunPreparedSnapshotCustody(
@@ -1834,7 +1902,7 @@ async function runCheckWithFinalSettlement(
     };
   }
 
-  const physical = { host: receivedReceipt.host as 'a' | 'b', run: receivedReceipt.run };
+  const physical = receivedPhysical;
   if (
     remoteSettlement.host !== physical.host ||
     remoteSettlement.run !== physical.run ||

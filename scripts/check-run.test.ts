@@ -6,8 +6,10 @@ import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import {
   parseCheckRunArguments,
+  prepareCheckRunInvocation,
   reconcileRegisteredCheckRun,
   runCheck,
+  runPreparedCheckRunInvocation,
   type CandidateSnapshot,
   type CheckRunArguments,
 } from './check-run.ts';
@@ -878,6 +880,123 @@ test('separate prepare and run-prepared CLI processes consume one authenticated 
   expect(replay.status).not.toBe(0);
   expect(JSON.parse(replay.stdout.trim()).events).toEqual([]);
   expect((await getCheckRunStatus(descriptor.invocationId, { stateDirectory })).final).toEqual(settled.final);
+});
+
+test('prepared execution establishes its original registration before cancellation can bind a workspace or allocate', async () => {
+  const fixture = candidate();
+  const stateDirectory = join(fixture.parent, 'state');
+  mkdirSync(stateDirectory, { recursive: true, mode: 0o700 });
+  const descriptorFile = join(stateDirectory, 'prepared.json');
+  const descriptor = await prepareCheckRunInvocation(
+    argsFor(fixture, ['bun', 'run', 'check']),
+    descriptorFile,
+    { stateDirectory },
+    {},
+  );
+  const before = await getCheckRunStatus(descriptor.invocationId, { stateDirectory });
+  const originalSnapshot = before.snapshot;
+  const controller = new AbortController();
+  let cancellationReady = false;
+  let transportCalls = 0;
+  const result = await runPreparedCheckRunInvocation(
+    descriptorFile,
+    {
+      stateDirectory,
+      onDurableCancellationReady: () => {
+        cancellationReady = true;
+        queueMicrotask(() => controller.abort());
+      },
+      transport: async () => {
+        transportCalls += 1;
+        return 0;
+      },
+    },
+    controller.signal,
+    {
+      REMOTE_CHECK_INVOCATION_ID: descriptor.invocationId,
+      REMOTE_CHECK_RECEIPT_NONCE: descriptor.nonce,
+      REMOTE_CHECK_RECEIPT_FD: '3',
+    },
+  );
+
+  expect(result).toBe(130);
+  expect(cancellationReady).toBe(true);
+  expect(transportCalls).toBe(0);
+  const cancelled = await getCheckRunStatus(descriptor.invocationId, { stateDirectory });
+  expect(cancelled.invocationId).toBe(before.invocationId);
+  expect(cancelled.binding).toEqual(descriptor.binding);
+  expect(cancelled.snapshot).toEqual(originalSnapshot);
+  expect(cancelled.phase).toBe('cancelled');
+  expect(cancelled.cancellation.requested).toBe(true);
+  expect(cancelled.physical).toBeNull();
+  expect(cancelled.snapshotCustody).toBe('removed');
+});
+
+test('unknown and failed remote cleanup evidence stay non-green with the exact admitted physical host', async () => {
+  const cases: Array<{
+    status: 'verified' | 'unknown';
+    failures: string[];
+    settlementHost?: string;
+    expectedRemote: 'failed' | 'unknown';
+  }> = [
+    { status: 'unknown', failures: [], expectedRemote: 'unknown' },
+    { status: 'verified', failures: ['mock remote cleanup failure'], expectedRemote: 'failed' },
+    { status: 'unknown', failures: [], settlementHost: 'a', expectedRemote: 'unknown' },
+  ];
+
+  for (const scenario of cases) {
+    const fixture = candidate();
+    const finals: string[] = [];
+    let retained: CandidateSnapshot | undefined;
+    try {
+      const result = await runCheck(argsFor(fixture, ['bun', 'run', 'check']), {
+        settlementWriter: (line) => finals.push(line),
+        stateDirectory: fixture.parent,
+        onRetainSnapshot: (snapshot) => (retained = snapshot),
+        transport: async (options) => {
+          const native = receipt('b', 0, 'physical-run-admitted-b');
+          const physical = { host: 'b', run: native.run };
+          await options.allocated?.(physical);
+          await options.completed?.(native);
+          await options.settled?.(
+            remoteSettlement(options, native, {
+              host: scenario.settlementHost ?? 'b',
+              cleanup: {
+                schema: 1,
+                host: 'b',
+                run: native.run,
+                status: scenario.status,
+                supervisorStopped: scenario.status === 'verified',
+                commandGroupTerminal: scenario.status === 'verified',
+                containersRemoved: scenario.status === 'verified',
+                runDirectoryRemoved: scenario.status === 'verified',
+                failures: scenario.failures,
+              },
+            }),
+          );
+          return 0;
+        },
+      });
+
+      expect(result).toBe(75);
+      expect(finals).toHaveLength(1);
+      const encoded = finals[0];
+      if (!encoded) throw new Error('remote cleanup did not produce a retained final settlement');
+      const final = JSON.parse(encoded);
+      expect(final.physical).toEqual({ host: 'b', run: 'physical-run-admitted-b' });
+      expect(final.native.exitCode).toBe(0);
+      expect(final.cleanup.remote).toBe(scenario.expectedRemote);
+      expect(final.cleanup.disposition).toBe('unknown');
+      expect(final.failures.cleanup.length).toBeGreaterThan(0);
+      if (scenario.failures.length) expect(final.failures.cleanup).toContain(scenario.failures[0]);
+      if (scenario.settlementHost)
+        expect(final.failures.primary.join(' ')).toContain('admitted physical identity');
+      if (!retained) throw new Error('unknown cleanup did not retain the original snapshot');
+      expect(existsSync(retained.workspace)).toBe(true);
+    } finally {
+      if (retained) removeRetainedSnapshot(fixture, retained);
+    }
+  }
 });
 
 test('descriptor tampering and foreign identity fail closed before transport', async () => {

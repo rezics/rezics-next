@@ -2145,9 +2145,7 @@ export async function markCheckRunQueued(
       throw new Error(
         'check-run-settlement: frozen snapshot or return declarations do not match the registered binding',
       );
-    if (record.phase === 'prepared' || record.phase === 'claimed') {
-      if (record.phase !== 'claimed')
-        throw new Error('check-run-settlement: prepared invocation must be claimed before queueing');
+    if (record.phase === 'claimed') {
       const candidateWorkspace = options.candidateWorkspace ? resolve(options.candidateWorkspace) : null;
       const paths = options.returns ? validatePathList([...options.returns], 'declared return path', true) : [];
       const snapshot = options.snapshot

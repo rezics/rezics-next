@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import {
   acceptCheckRunFinalSettlement,
   allocateCheckRunPhysical,
+  beginCheckRunAllocation,
   cancelCheckRunInvocation,
   claimCheckRunPreparedInvocation,
   createCheckRunFinalSettlement,
@@ -303,4 +304,82 @@ test('prepared descriptor records the prior binding, claims once, and fences que
   });
   expect(abandonedState.phase).toBe('cancelled');
   expect(abandonedState.snapshot?.workspace).toBe(join(candidateRoot, '.temp', 'abandoned-frozen'));
+});
+
+test('queueing rejects an unclaimed prepared invocation and preserves claimed identity behind cancellation fencing', async () => {
+  const state = stateDirectory();
+  const candidateRoot = mkdtempSync(join(temporaryRoot, `check-run-queue-candidate-${randomUUID()}-`));
+  directories.push(candidateRoot);
+  const selectedBinding = {
+    ...binding(),
+    returnsSha256: (await import('node:crypto')).createHash('sha256').update('[]').digest('hex'),
+  };
+  const registration = await registerCheckRunInvocation(selectedBinding, {
+    stateDirectory: state,
+    candidateWorkspace: candidateRoot,
+  });
+  const descriptorFile = join(state, 'queueing.json');
+  const snapshot = {
+    workspace: join(candidateRoot, '.temp', 'original-frozen'),
+    scratch: join(candidateRoot, '.temp', 'original-scratch'),
+    sourceSha256: selectedBinding.sourceSha256,
+    inputFiles: ['src/input.ts'],
+  };
+  await persistCheckRunPreparedInvocation(registration, {
+    stateDirectory: state,
+    candidateWorkspace: candidateRoot,
+    snapshot,
+    returns: [],
+    descriptorFile,
+    execution: { command: ['bun', 'test'] },
+  });
+
+  await expect(
+    markCheckRunQueued(registration.invocationId, registration.nonce, {
+      stateDirectory: state,
+      candidateWorkspace: candidateRoot,
+      returns: [],
+      snapshot,
+    }),
+  ).rejects.toThrow(/cannot queue from prepared/i);
+  const unclaimed = await getCheckRunStatus(registration.invocationId, { stateDirectory: state });
+  expect(unclaimed.phase).toBe('prepared');
+  expect(unclaimed.snapshot).toEqual({ ...snapshot, sourceSha256: selectedBinding.sourceSha256 });
+  expect(unclaimed.physical).toBeNull();
+
+  await claimCheckRunPreparedInvocation(descriptorFile, { stateDirectory: state });
+  const substitutedSnapshot = {
+    ...snapshot,
+    workspace: join(candidateRoot, '.temp', 'substituted-frozen'),
+  };
+  await expect(
+    markCheckRunQueued(registration.invocationId, registration.nonce, {
+      stateDirectory: state,
+      candidateWorkspace: candidateRoot,
+      returns: [],
+      snapshot: substitutedSnapshot,
+    }),
+  ).rejects.toThrow(/cannot be rebound/i);
+  const claimed = await getCheckRunStatus(registration.invocationId, { stateDirectory: state });
+  expect(claimed.phase).toBe('claimed');
+  expect(claimed.invocationId).toBe(registration.invocationId);
+  expect(claimed.binding).toEqual(selectedBinding);
+  expect(claimed.candidateWorkspace).toBe(candidateRoot);
+  expect(claimed.snapshot).toEqual(unclaimed.snapshot);
+
+  await markCheckRunQueued(registration.invocationId, registration.nonce, {
+    stateDirectory: state,
+    candidateWorkspace: candidateRoot,
+    returns: [],
+    snapshot,
+  });
+  await cancelCheckRunInvocation(registration.invocationId, registration.nonce, 15, { stateDirectory: state });
+  await expect(
+    beginCheckRunAllocation(registration.invocationId, registration.nonce, { stateDirectory: state }),
+  ).rejects.toThrow(/cancel/i);
+  const fenced = await getCheckRunStatus(registration.invocationId, { stateDirectory: state });
+  expect(fenced.invocationId).toBe(registration.invocationId);
+  expect(fenced.snapshot).toEqual(unclaimed.snapshot);
+  expect(fenced.physical).toBeNull();
+  expect(fenced.cancellation.requested).toBe(true);
 });

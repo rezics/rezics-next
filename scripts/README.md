@@ -113,9 +113,11 @@ host and environment selections, preparation commands and original argv; the inv
 and digest. `run-prepared` accepts only `--descriptor <absolute-private-json>`, requires the matching caller-established
 `REMOTE_CHECK_INVOCATION_ID`, `REMOTE_CHECK_RECEIPT_NONCE` and `REMOTE_CHECK_RECEIPT_FD=3`, and atomically claims the
 matching `prepared` record once. It reuses the saved snapshot and identities without creating another worktree or
-reconstructing the binding. Changed candidate/frozen inputs, environment file, priority, host file or trusted producer
-closure fail before remote admission. Preparation itself imports no candidate code, starts no check and emits no FD 3
-receipt.
+reconstructing the binding. Before cancellation can bind the workspace or allocation can begin, execution establishes
+that same claimed registration as the sole authority. Queueing rejects an unclaimed `prepared` record and preserves the
+claimed snapshot, returns and cancellation fence. Changed candidate/frozen inputs, environment file, priority, host file
+or trusted producer closure fail before remote admission. Preparation itself imports no candidate code, starts no check
+and emits no FD 3 receipt.
 
 For process loss or abandonment, callers use the durable invocation id from the descriptor:
 
@@ -157,6 +159,9 @@ outcome, private files are settled and reconciliation is settled. Pending or unk
 after physical cleanup. `delivered` records that the writer callback returned; it does not prove downstream
 persistence. A receiver records `received` only after accepting the original final. The invocation phase cannot be
 `settled` while aggregate custody is pending or unknown.
+Remote cleanup is `verified` only with complete failure-free proof, `failed` when a receipt claims verification while
+retaining failure entries, and `unknown` when verification evidence is missing or incomplete. Each outcome other than
+`verified` keeps overall cleanup non-green.
 
 `identity` is `{sha256,bindingSha256,physical,sourceSha256,snapshotSha256,candidateWorkspaceSha256,returnsSha256,preparedExecutionReferenceSha256,descriptorReferenceSha256,preparationIntentReferenceSha256}`. Hashes are SHA-256; `physical` is `{host,run}`; source, snapshot, candidate path and private-file reference digests can be null when no such identity exists. The identity digest covers every identity field except its own `sha256`. An `observations[]` entry is `{observedAt,disposition,transportIdentity,final,reason}` where disposition is `unknown`, `settled` or `rejected`, `transportIdentity` is `live-same`, `gone-or-replaced`, `unknown` or null, and `final` is an exact candidate final settlement or null. A later exact accepted observation may settle custody while the original unknown `final` remains unchanged. Unknown and rejected observations cannot change snapshot custody or prior cleanup authority. Failed removal keeps its exact reference for later cleanup. Secret environment values do not appear in status or settlement messages.
 `finalCustody` is additive versioned status metadata only. The prepared descriptor schema 1 and normal FD 3
