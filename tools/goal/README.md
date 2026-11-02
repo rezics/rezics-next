@@ -1431,7 +1431,15 @@ host's socket. The host skips the minute while the previous child is still runni
   the `goal dispatch` path to create the task and records its first start as a durable start request, which the host's
   next orphan sweep runs and follows; the run itself never waits for host capacity or a worker. The brief moves to
   `dispatched/<task-id>-<name>.md`. Research briefs dispatch the same way. A refused brief moves to `failed/<name>.md`
-  beside `failed/<name>.reason`, and the Goal's manager receives one event per run naming the refused briefs. A brief left in `.dispatching/` by a host that stopped after creating the task is archived once as `dispatched/<task-id>-<name>.md` when exactly one unarchived task in that Goal has the same brief text; with no such task the claim returns to the ready backlog and ordinary dispatch continues; several matches move the brief to `failed/` with a reason that names those tasks. Decision: match interrupted new-task claims by exact Goal and brief markdown among tasks that have no `dispatched/<task-id>-*` file yet.
+  beside `failed/<name>.reason`, and the event names the archived brief. Decision: keep the first failed name and use
+  the next numeric suffix for later collisions; write the reason first and resume it only when its brief fingerprint
+  matches.
+  A brief
+  left in `.dispatching/` by a host that stopped after creating the task is archived once as
+  `dispatched/<task-id>-<name>.md` when exactly one unarchived task in that Goal has the same brief text; with no such
+  task the claim returns to the ready backlog and ordinary dispatch continues; several matches move the brief to
+  `failed/` with a reason that names those tasks. Decision: match interrupted new-task claims by exact Goal and brief
+  markdown among tasks that have no `dispatched/<task-id>-*` file yet.
 - **Continuation.** To resume an existing stopped task, put its rewritten brief in the same Goal backlog with
   a `continuation` object in the YAML front matter containing the task ID and current attempt number. For example:
 

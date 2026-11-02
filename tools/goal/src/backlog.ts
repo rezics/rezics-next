@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import { Buffer } from 'node:buffer';
 import type { Database } from 'bun:sqlite';
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
@@ -175,12 +177,71 @@ function recordGoalDispatch(runtime: BacklogRuntime, goal: string, writtenMs: nu
     .run(goal, (runtime.now ?? Date.now)(), Math.floor(writtenMs));
 }
 
+function failedBriefName(file: string, sequence: number): string {
+  if (sequence === 1) return basename(file);
+  const suffix = `-${sequence}`;
+  const maxStemBytes = 255 - Buffer.byteLength(`${suffix}.md`);
+  let name = '';
+  for (const character of stem(file)) {
+    const next = name + character;
+    if (Buffer.byteLength(next) > maxStemBytes) break;
+    name = next;
+  }
+  return `${name}${suffix}.md`;
+}
+
+function failureFingerprint(file: string): string {
+  return createHash('sha256').update(readFileSync(file)).digest('hex');
+}
+
+function finishInterruptedFailure(
+  failed: string,
+  file: string,
+  fingerprint: string,
+): { brief: string; reason: string } | undefined {
+  const marker = `<!-- backlog-refusal:${fingerprint} -->`;
+  for (let sequence = 1; ; sequence++) {
+    const name = failedBriefName(file, sequence);
+    const briefPath = join(failed, name);
+    const reasonPath = join(failed, `${stem(name)}.reason`);
+    if (existsSync(briefPath)) continue;
+    if (!existsSync(reasonPath)) return undefined;
+    const storedReason = readFileSync(reasonPath, 'utf8');
+    if (!storedReason.trimEnd().endsWith(marker)) continue;
+    renameSync(file, briefPath);
+    const markerStart = storedReason.lastIndexOf('\n\n<!-- backlog-refusal:');
+    return { brief: name, reason: storedReason.slice(0, markerStart).trimEnd() };
+  }
+}
+
 /** Move a brief into `failed/` beside a `.reason` file holding the refusal. */
-function fail(goalDirectory: string, file: string, reason: string): void {
+function fail(goalDirectory: string, file: string, reason: string): string {
   const failed = join(goalDirectory, FAILED_DIRECTORY);
   mkdirSync(failed, { recursive: true });
-  writeFileSync(join(failed, `${stem(file)}.reason`), `${reason.trim()}\n`);
-  renameSync(file, join(failed, basename(file)));
+  const refusal = reason.trim();
+  const fingerprint = failureFingerprint(file);
+  const marker = `<!-- backlog-refusal:${fingerprint} -->`;
+  const resumed = finishInterruptedFailure(failed, file, fingerprint);
+  if (resumed) return resumed.brief;
+  for (let sequence = 1; ; sequence++) {
+    const name = failedBriefName(file, sequence);
+    const briefPath = join(failed, name);
+    const reasonPath = join(failed, `${stem(name)}.reason`);
+    if (existsSync(briefPath)) continue;
+    if (existsSync(reasonPath)) {
+      if (readFileSync(reasonPath, 'utf8').trimEnd().endsWith(marker)) {
+        renameSync(file, briefPath);
+        return name;
+      }
+      continue;
+    }
+
+    const temporaryReason = join(failed, `.${name}.reason.tmp`);
+    writeFileSync(temporaryReason, `${refusal}\n\n${marker}\n`);
+    renameSync(temporaryReason, reasonPath);
+    renameSync(file, briefPath);
+    return name;
+  }
 }
 
 function returnClaimToReady(goalDirectory: string, file: string): void {
@@ -270,6 +331,15 @@ function recoverClaims(
   const refused: { brief: string; reason: string }[] = [];
   for (const file of briefs(join(goalDirectory, CLAIM_DIRECTORY))) {
     try {
+      const interruptedFailure = finishInterruptedFailure(
+        join(goalDirectory, FAILED_DIRECTORY),
+        file,
+        failureFingerprint(file),
+      );
+      if (interruptedFailure) {
+        refused.push(interruptedFailure);
+        continue;
+      }
       const markdown = readFileSync(file, 'utf8');
       if (readBriefContinuation(markdown)) {
         returnClaimToReady(goalDirectory, file);
@@ -289,8 +359,8 @@ function recoverClaims(
     } catch (error) {
       const reason = errorText(error);
       try {
-        fail(goalDirectory, file, reason);
-        refused.push({ brief: basename(file), reason });
+        const archivedBrief = fail(goalDirectory, file, reason);
+        refused.push({ brief: archivedBrief, reason });
       } catch (moveError) {
         console.error(`backlog claim recovery failed for ${file}:`, moveError);
       }
@@ -378,12 +448,13 @@ async function dispatchReady(
       } else taskId = await runtime.dispatch(claimed);
     } catch (error) {
       const reason = errorText(error);
+      let archivedBrief = basename(pick.file);
       try {
-        fail(goalDirectory, claimed, reason);
+        archivedBrief = fail(goalDirectory, claimed, reason);
       } catch (moveError) {
         console.error(`backlog could not move refused brief ${claimed}:`, moveError);
       }
-      refuse(pick.goal, basename(pick.file), reason);
+      refuse(pick.goal, archivedBrief, reason);
       continue;
     }
     const target = join(goalDirectory, continuation ? 'continued' : DISPATCHED_DIRECTORY);

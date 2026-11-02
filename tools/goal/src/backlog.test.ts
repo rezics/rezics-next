@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from 'bun:test';
 import type { Database } from 'bun:sqlite';
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   BACKLOG_WAKE_INTERVAL_MS,
@@ -217,6 +217,43 @@ test('a refused brief moves to failed with its reason, and the owner gets one ev
   expect(events[0]!.event.kind).toBe('instruction');
   expect(events[0]!.event.summary).toContain('Backlog dispatch refused 2 brief(s): bad-one.md');
   expect(events[0]!.event.summary).toContain(failed);
+});
+
+test('refused revisions with the same filename keep separate briefs and reasons', async () => {
+  const f = fixture({ refuse: /REFUSE/ });
+  brief(f.state, 'web', 'same.md', 90_000, 'REFUSE first revision');
+  await sweepBacklog(f.runtime);
+  brief(f.state, 'web', 'same.md', 80_000, 'REFUSE second revision');
+
+  const sweep = await sweepBacklog(f.runtime);
+  const failed = join(f.state, 'backlog', 'web', 'failed');
+
+  expect(sweep.refused.map((entry) => entry.brief)).toEqual(['same-2.md']);
+  expect(readdirSync(failed).sort()).toEqual(['same-2.md', 'same-2.reason', 'same.md', 'same.reason']);
+  expect(readFileSync(join(failed, 'same.md'), 'utf8')).toContain('REFUSE first revision');
+  expect(readFileSync(join(failed, 'same.reason'), 'utf8')).toContain('REFUSE first revision');
+  expect(readFileSync(join(failed, 'same-2.md'), 'utf8')).toContain('REFUSE second revision');
+  expect(readFileSync(join(failed, 'same-2.reason'), 'utf8')).toContain('REFUSE second revision');
+  const events = f.inbox.pending('web');
+  expect(events[events.length - 1]!.event.summary).toContain('same-2.md');
+});
+
+test('a refused brief resumes its reason-first archive after interruption', async () => {
+  const f = fixture({ refuse: /REFUSE/ });
+  brief(f.state, 'web', 'interrupted.md', 90_000, 'REFUSE interrupted');
+  await sweepBacklog(f.runtime);
+
+  const goalDirectory = join(f.state, 'backlog', 'web');
+  const failed = join(goalDirectory, 'failed');
+  const claim = join(goalDirectory, '.dispatching', 'interrupted.md');
+  mkdirSync(join(goalDirectory, '.dispatching'), { recursive: true });
+  renameSync(join(failed, 'interrupted.md'), claim);
+
+  const sweep = await sweepBacklog(f.runtime);
+
+  expect(sweep.refused.map((entry) => entry.brief)).toEqual(['interrupted.md']);
+  expect(readdirSync(failed).sort()).toEqual(['interrupted.md', 'interrupted.reason']);
+  expect(readFileSync(join(failed, 'interrupted.reason'), 'utf8')).toContain('REFUSE interrupted');
 });
 
 test('an uncommitted interrupted claim returns to the ready backlog and dispatches once', async () => {
