@@ -9,6 +9,7 @@ import { Input } from '@rezics/ui/shadcn/input';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { m } from '../../paraglide/messages.js';
+import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../../threads/authoring-departure';
 import { DefinitionMeaning } from './definition-meaning';
 import { ScalarControl, EditorFailure } from './statement-editor-view';
 import { editableScalar, type StatementInput } from './statement-editor';
@@ -99,8 +100,24 @@ function DraftRemoval({
   );
 }
 
+type CharacterProfileCreateProps = {
+  release: Release;
+  locale: string;
+  transport: CharacterTransport;
+  onCreated: (result: Extract<CreateResult, { ok: true }>) => void;
+  onRefreshDefinitions?: () => Promise<Release>;
+};
+
 /** Initial terms and explicitly added facts use the existing validators, scalar controls and subject POST. */
-export const CharacterProfileCreate = catalogueEditor(CharacterProfileCreateLive);
+export const CharacterProfileCreate = catalogueEditor(function CharacterProfileCreateGuarded(
+  props: CharacterProfileCreateProps,
+) {
+  return (
+    <AuthoringDepartureBoundary>
+      <CharacterProfileCreateLive {...props} />
+    </AuthoringDepartureBoundary>
+  );
+});
 
 function CharacterProfileCreateLive({
   release: suppliedRelease,
@@ -108,14 +125,10 @@ function CharacterProfileCreateLive({
   transport,
   onCreated,
   onRefreshDefinitions,
-}: {
-  release: Release;
-  locale: string;
-  transport: CharacterTransport;
-  onCreated: (result: Extract<CreateResult, { ok: true }>) => void;
-  onRefreshDefinitions?: () => Promise<Release>;
-}) {
+}: CharacterProfileCreateProps) {
   const lifetime = useEditorLifetime();
+  const retired = useRef(false);
+  const isCurrent = () => lifetime.active() && !retired.current;
   const o = { locale: locale as never };
   const termsId = useId();
   const [definitions, setDefinitions] = useState<{ source: Release; value: Release }>();
@@ -128,7 +141,7 @@ function CharacterProfileCreateLive({
   const form = useRef<HTMLFormElement>(null);
   const focusAfterChange = useRef<string | null>(null);
   useLayoutEffect(() => {
-    if (!focusAfterChange.current || !lifetime.active()) return;
+    if (!focusAfterChange.current || !isCurrent()) return;
     form.current?.ownerDocument.getElementById(focusAfterChange.current)?.focus();
     focusAfterChange.current = null;
   });
@@ -205,14 +218,32 @@ function CharacterProfileCreateLive({
   const [busy, setBusy] = useState(false);
   const pending = useRef<CharacterCommand | null>(null);
   const running = useRef(false);
+  const hasMeaningfulWork = () =>
+    terms.length > 1 ||
+    terms.some(
+      (term) =>
+        term.language !== locale || term.label !== '' || term.description !== '' || term.aliases !== '',
+    ) ||
+    facts.length > 0 ||
+    field !== '';
+  const departure = useAuthoringDeparture(
+    () => isCurrent() && (hasMeaningfulWork() || pending.current !== null),
+    () => isCurrent() && pending.current !== null,
+    'character-profile-create',
+    undefined,
+    () => {
+      retired.current = true;
+      pending.current = null;
+    },
+  );
   const locked = busy || refreshing || !!pending.current;
   async function refreshDefinitions() {
-    if (!lifetime.active() || !onRefreshDefinitions || refreshRunning.current || pending.current) return;
+    if (!isCurrent() || !onRefreshDefinitions || refreshRunning.current || pending.current) return;
     refreshRunning.current = true;
     setRefreshing(true);
     try {
       const next = await onRefreshDefinitions();
-      if (!lifetime.active()) return;
+      if (!isCurrent()) return;
       setDefinitions({ source: suppliedRelease, value: next });
       // Reconcile private input against the admitted release without sending a command.
       const draft = characterDraft(next, terms, facts);
@@ -225,14 +256,14 @@ function CharacterProfileCreateLive({
       setRefreshFailed(false);
     } catch {
       // A metadata failure does not turn a known rejection into an uncertain creation.
-      if (lifetime.active()) setRefreshFailed(true);
+      if (isCurrent()) setRefreshFailed(true);
     } finally {
       refreshRunning.current = false;
-      if (lifetime.active()) setRefreshing(false);
+      if (isCurrent()) setRefreshing(false);
     }
   }
   async function submit() {
-    if (!lifetime.active()) return;
+    if (!isCurrent()) return;
     if (running.current || refreshRunning.current || failure?.reason === 'conflict') return;
     if (!pending.current) {
       // A known rejection requires fresh metadata; an unresolved command keeps its exact replay.
@@ -248,9 +279,10 @@ function CharacterProfileCreateLive({
     setBusy(true);
     try {
       const result = await transport.create(pending.current);
-      if (!lifetime.active()) return;
+      if (!isCurrent()) return;
       if (result.ok) {
         pending.current = null;
+        departure.release();
         onCreated(result);
       } else {
         reportFailure(result);
@@ -261,10 +293,10 @@ function CharacterProfileCreateLive({
         if (result.refreshDefinitions) await refreshDefinitions();
       }
     } catch {
-      if (!lifetime.active()) return;
+      if (!isCurrent()) return;
       reportFailure({ ok: false, reason: 'unavailable' });
     } finally {
-      if (!lifetime.active()) return;
+      if (!isCurrent()) return;
       running.current = false;
       setBusy(false);
     }
@@ -378,7 +410,7 @@ function CharacterProfileCreateLive({
                   populated={!!(term.language || term.label || term.description || term.aliases)}
                   disabled={locked}
                   onRemove={() => {
-                    if (!lifetime.active() || locked || running.current || pending.current) return;
+                    if (!isCurrent() || locked || running.current || pending.current) return;
                     focusAfterChange.current = terms[index + 1]
                       ? `${termsId}-language-${terms[index + 1]!.id}`
                       : `${termsId}-add`;
@@ -521,7 +553,7 @@ function CharacterProfileCreateLive({
                   description={`${m.recipe_remove_field({}, o)} · ${m.character_create_correction_fact({ number: index + 1 }, o)} · ${name.text || m.candidate_value_unavailable({}, o)}`}
                   disabled={locked}
                   onRemove={() => {
-                    if (!lifetime.active() || locked || running.current || pending.current) return;
+                    if (!isCurrent() || locked || running.current || pending.current) return;
                     focusAfterChange.current = facts[index + 1]
                       ? `${characterFactId(termsId, factId(facts[index + 1]!))}-group`
                       : `${termsId}-initial-field`;
@@ -574,7 +606,7 @@ function CharacterProfileCreateLive({
                         href={`#${encodeURIComponent(error.target)}`}
                         onClick={(event) => {
                           event.preventDefault();
-                          if (!lifetime.active()) return;
+                          if (!isCurrent()) return;
                           const control = event.currentTarget.ownerDocument.getElementById(error.target!);
                           control?.focus();
                           control?.scrollIntoView?.({ block: 'center' });
