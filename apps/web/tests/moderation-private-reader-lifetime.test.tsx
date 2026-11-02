@@ -1148,6 +1148,13 @@ async function mountDecisionDeparture(onAppeal?: import('../src/moderation/decis
     window.dispatchEvent(event);
     return event.defaultPrevented;
   };
+  const settle = async (ready: () => boolean) => {
+    for (let n = 0; n < 100 && !ready(); n++)
+      await act(async () => {
+        await new Promise((resolve) => window.setTimeout(resolve, 10));
+      });
+    expect(ready()).toBe(true);
+  };
   const dialogButton = (label: string) =>
     [...document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button')].find(
       (node) => node.textContent?.trim() === label,
@@ -1162,11 +1169,13 @@ async function mountDecisionDeparture(onAppeal?: import('../src/moderation/decis
     await click('Depart decision');
     expect(document.querySelectorAll('[role="alertdialog"]')).toHaveLength(1);
     expect(arrivals).toBe(0);
+    await settle(() => document.activeElement === dialogButton(m.thread_authoring_stay()));
   };
   return {
     blocked,
     depart,
     decide,
+    settle,
     dialogButton,
     destination,
     arrivals: () => arrivals,
@@ -1199,12 +1208,9 @@ test('Decision draft, uncertain recovery, shared discard and Stay preserve the e
     expect(host.textContent).toContain(m.decision_appeal_uncertain());
     const counts = [nativeReads.length, nativeWrites.length];
     await visit.depart();
-    await act(async () => {
-      await new Promise((resolve) => window.requestAnimationFrame(resolve));
-    });
     expect(document.activeElement).toBe(visit.dialogButton(m.thread_authoring_stay()));
     await visit.decide(m.thread_authoring_stay());
-    expect(document.activeElement).toBe(button('Depart decision'));
+    await visit.settle(() => document.activeElement === button('Depart decision'));
     expect([nativeReads.length, nativeWrites.length]).toEqual(counts);
     await click(m.decision_retry_same());
     expect(nativeWrites).toHaveLength(2);

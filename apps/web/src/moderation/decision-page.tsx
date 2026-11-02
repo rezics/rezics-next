@@ -151,6 +151,7 @@ function DecisionBoundPage(props: DecisionPageProps) {
   const client = useContext(QueryClientContext);
   const [original] = useState(props);
   const [page, setPage] = useState(props.page);
+  const departed = useRef(false);
   const [owner, setOwner] = useState(() =>
     client && typeof window !== 'undefined'
       ? createPrivateReaderLifetime(client, page, decisionReadKey(page.decision.id), props.navigation)
@@ -167,6 +168,7 @@ function DecisionBoundPage(props: DecisionPageProps) {
     owner?.retire();
   useSyncExternalStore(owner?.subscribe ?? emptySubscribe, owner?.snapshot ?? zeroSnapshot, zeroSnapshot);
   if (typeof window !== 'undefined' && !client) return <DecisionReadStatus state="closed" />;
+  if (departed.current) return <DecisionReadStatus state="closed" />;
   if (owner && (!owner.healthy() || !owner.available())) {
     return (
       <DecisionFreshRecovery
@@ -174,9 +176,10 @@ function DecisionBoundPage(props: DecisionPageProps) {
         state={owner.healthy() ? 'unavailable' : 'closed'}
         original={page}
         read={original.onRefresh ?? refreshDecision}
-        allowed={() => client === originalClient && owner.canRecover()}
+        allowed={() => !departed.current && client === originalClient && owner.canRecover()}
         prepare={(id, read) => prepareDecisionRead(client!, id, read)}
         onAdmit={(next) => {
+          if (departed.current) return;
           owner.retire();
           setOwner(createPrivateReaderLifetime(client!, next, decisionReadKey(next.decision.id), original.navigation));
           setPage(next);
@@ -196,7 +199,15 @@ function DecisionBoundPage(props: DecisionPageProps) {
         {...original}
         page={page}
         {...(owner
-          ? { isCurrent: owner.isCurrent, canCommand: owner.canCommand, accepts: owner.accepts, retire: owner.retire }
+          ? {
+              isCurrent: owner.isCurrent,
+              canCommand: owner.canCommand,
+              accepts: owner.accepts,
+              retire: () => {
+                departed.current = true;
+                owner.retire();
+              },
+            }
           : {})}
       />
     </div>
