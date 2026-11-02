@@ -354,11 +354,13 @@ describe('Pin mutation completions cannot cross the originating viewer or Collec
       expect(calls).toHaveLength(1);
       await h.click('up');
       expect(calls[1]!.data).toEqual(intent);
-      expect(calls[1]!.headers).toEqual({ 'X-CSRF-Token': 'rotated-csrf' });
+      expect(calls[1]!.headers).toEqual({ 'X-CSRF-Token': 'csrf' });
       await complete(calls[1]!, 'unavailable');
       expect(calls).toHaveLength(2); // No automatic replay or refresh on uncertainty.
       await h.click('up');
       expect(calls[2]!.data).toEqual(intent);
+      expect(calls[2]!.headers).toEqual(calls[0]!.headers);
+      expect(calls[2]!.operation).toBe(calls[0]!.operation);
       await complete(calls[2]!, 'success');
       expect(h.control.pending).toBe(false);
       expect(h.control.notice).toBe('');
@@ -372,7 +374,58 @@ describe('Pin mutation completions cannot cross the originating viewer or Collec
       });
       expect(calls[3]!.data.idempotencyKey).not.toBe(intent.idempotencyKey);
       expect(calls[3]!.operation).toBe('delete');
-      await complete(calls[3]!, 'success');
+      expect(calls[3]!.headers).toEqual({ 'X-CSRF-Token': 'rotated-csrf' });
+      const removal = calls[3]!;
+      await complete(removal, 'unavailable');
+      viewer = { ...viewer, csrfToken: 'later-csrf' };
+      await h.show({ ...h.props, pins: loaded([], 84) });
+      await h.click('unpin');
+      expect(calls[4]!.operation).toBe('delete');
+      expect(calls[4]!.data).toEqual(removal.data);
+      expect(calls[4]!.headers).toEqual(removal.headers);
+      await complete(calls[4]!, 'success');
+    } finally {
+      await h.close();
+    }
+  });
+
+  test('explicit retries recheck their own PUT and DELETE admission', async () => {
+    for (const [action, operation] of [
+      ['up', 'put'],
+      ['unpin', 'delete'],
+    ] as const) {
+      const h = await mount({ collectionId: 'b', pins: loaded(['a', 'b']), mode: 'list' });
+      try {
+        const retry = h.select(action).onSelect!;
+        await h.click(action);
+        await complete(calls[0]!, 'unavailable');
+        if (operation === 'put') putAdmitted = false;
+        else removeAdmitted = false;
+        await h.show();
+        await invoke(retry);
+        expect(calls).toHaveLength(1);
+        expect(h.control.pending).toBe(false);
+      } finally {
+        await h.close();
+      }
+    }
+  });
+
+  test('a viewer change retires the uncertain command before an explicit retry', async () => {
+    const h = await mount();
+    try {
+      await h.click('pin');
+      const original = calls[0]!;
+      await complete(original, 'unavailable');
+      const retry = h.select('pin').onSelect!;
+      viewer = { state: 'signed-in', subject: 'reader-two', csrfToken: 'new-csrf' };
+      await h.show();
+      await invoke(retry);
+      expect(calls).toHaveLength(1);
+      await h.click('pin');
+      expect(calls[1]!.data.idempotencyKey).not.toBe(original.data.idempotencyKey);
+      expect(calls[1]!.headers).toEqual({ 'X-CSRF-Token': 'new-csrf' });
+      await complete(calls[1]!, 'success');
     } finally {
       await h.close();
     }

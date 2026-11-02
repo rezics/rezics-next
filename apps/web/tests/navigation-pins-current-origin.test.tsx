@@ -344,7 +344,8 @@ test('Prepared navigation origin, independent admissions, retired callbacks and 
     expect(writes).toHaveLength(3); // Refresh/rotation never automatically replays a command.
     await act(async () => select(m.library_pin_move_up())());
     expect(writes[3]!.input.data).toEqual(exact);
-    expect(new Headers(writes[3]!.input.headers).get('X-CSRF-Token')).toBe('rotated-csrf');
+    expect(writes[3]!.operation).toBe(writes[2]!.operation);
+    expect(new Headers(writes[3]!.input.headers).get('X-CSRF-Token')).toBe('csrf');
     await act(async () => writes[3]!.work.resolve({ ok: true, revision: 8 }));
     expect(cache).toHaveBeenCalledWith({ queryKey: navigation.pinsOrigin.queryKey, exact: true });
     expect(control.pending).toBe(false);
@@ -417,7 +418,8 @@ test('Prepared navigation origin, independent admissions, retired callbacks and 
     await act(async () => writes[5]!.work.reject(new Error('Unknown native result')));
     await act(async () => dynamicPin()());
     expect(writes[6]!.input.data).toEqual(dynamicIntent);
-    expect(new Headers(writes[6]!.input.headers).get('X-CSRF-Token')).toBe('next-csrf');
+    expect(writes[6]!.operation).toBe(writes[5]!.operation);
+    expect(new Headers(writes[6]!.input.headers).get('X-CSRF-Token')).toBe('rotated-csrf');
     await act(async () => writes[6]!.work.resolve({ ok: true, revision: 8 }));
   } finally {
     await act(async () => root.unmount());
