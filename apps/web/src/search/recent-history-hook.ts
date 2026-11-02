@@ -3,14 +3,13 @@ import {
   readRecentDocument,
   rememberRecent,
   writeRecentDocument,
-  recentHistoryKey,
   type RecentEntry,
   type RecentHistory,
-  type RecentStorage,
   type RecentSyncAdapter,
 } from './recent-history';
 import { RecentSyncError, type RecentSearchSyncAdapter } from './recent-sync';
 import { useRecentSearchSyncAdapter } from './recent-sync-hook';
+import { createRecentBrowserStorage, observeRecentHistoryStorageEvent } from './recent-storage';
 
 const changedEvent = 'rezics-search-history-changed';
 type Snapshot = { bucket: string | null; entries: readonly RecentEntry[]; version: number };
@@ -19,30 +18,8 @@ export function useRecentHistory(bucket: string | null, supplied?: RecentSyncAda
   const currentBucket = useRef(bucket);
   currentBucket.current = bucket;
   const origin = useRef({});
-  const persistent = useRef(true);
-  const [storage] = useState<RecentStorage>(() => {
-    const memory: Record<string, string> = {};
-    return {
-      getItem(key) {
-        try {
-          const value = localStorage.getItem(key);
-          if (value !== null) memory[key] = value;
-          return value;
-        } catch {
-          persistent.current = false;
-          return memory[key] ?? null;
-        }
-      },
-      setItem(key, value) {
-        memory[key] = value;
-        try {
-          localStorage.setItem(key, value);
-        } catch {
-          persistent.current = false;
-        }
-      },
-    };
-  });
+  const [persistent, setPersistent] = useState(true);
+  const [storage] = useState(() => createRecentBrowserStorage(setPersistent));
   const [snapshot, setSnapshot] = useState<Snapshot>({ bucket: null, entries: [], version: 0 });
   const latest = useRef(snapshot);
   latest.current = snapshot;
@@ -78,7 +55,7 @@ export function useRecentHistory(bucket: string | null, supplied?: RecentSyncAda
       }
     };
     const stored = (event: StorageEvent) => {
-      if (bucket && event.key === recentHistoryKey(bucket)) read();
+      if (observeRecentHistoryStorageEvent(storage, event, bucket)) read();
     };
     const refresh = () => setAttempt((a) => ({ id: a.id + 1, reload: false }));
     window.addEventListener(changedEvent, changed);
@@ -148,7 +125,7 @@ export function useRecentHistory(bucket: string | null, supplied?: RecentSyncAda
   };
   return {
     entries: snapshot.bucket === bucket ? snapshot.entries : [],
-    persistence: !bucket ? 'unavailable' : persistent.current ? 'local' : 'memory',
+    persistence: !bucket ? 'unavailable' : persistent ? 'local' : 'memory',
     sync: adapter ? sync : 'local-only',
     ...(failure ? { failure } : {}),
     remember: (query, scope, languages) =>

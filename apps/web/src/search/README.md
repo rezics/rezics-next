@@ -27,3 +27,5 @@ Search page and default shell across desktop/phone, English/Simplified Chinese a
 geometry, surface paint, focused controls, registered filter entry and retained phone drafts. Execution of that
 acceptance and native/browser evidence is deferred under the current delivery policy; workspace typing alone
 does not establish those outcomes.
+
+Recent history keeps failed local writes in its memory fallback until a write succeeds; observed durable removals and `localStorage.clear()` invalidate cached durable values, while account labels remain native-hydrated.
