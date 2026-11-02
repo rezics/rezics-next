@@ -97,6 +97,14 @@ function useComposerLifetime() {
 
 type ComposerLifetime = ReturnType<typeof useComposerLifetime>;
 
+type PendingComposerFocus = {
+  request: number;
+  caller: string;
+  parentId: string | null | undefined;
+  owner: AbortSignal;
+  cleanup: () => void;
+};
+
 function useComposerUpload(
   target: ReplyUploadTarget | undefined,
   owned: RefObject<Set<string>>,
@@ -564,6 +572,15 @@ function PostComposerContent<T, Context = undefined>({
   const [bodyCanSend, setBodyCanSend] = useState(() => hasDocumentContent(body));
   const editorHost = useRef<HTMLDivElement>(null);
   const [editorReady, setEditorReady] = useState(false);
+  const focusCaller = JSON.stringify([initialKey, containerId ?? null, boardId ?? null, submissionContext]);
+  const focusLatest = useRef({ focusRequest, focusCaller, replyTargetId, editorReady });
+  focusLatest.current = { focusRequest, focusCaller, replyTargetId, editorReady };
+  const focusDelivery = useRef<{
+    request: number;
+    caller: string;
+    parentId: string | null | undefined;
+    pending: PendingComposerFocus | null;
+  }>({ request: 0, caller: focusCaller, parentId: replyTargetId, pending: null });
   const [idempotencyKey, setIdempotencyKey] = useState(initialKey);
   const replyIntent = useRef(new ReplyIntent<Context>(initialKey));
   const [failure, setFailure] = useState<WriteFailure | null>(null);
@@ -671,12 +688,92 @@ function PostComposerContent<T, Context = undefined>({
     setFailure((current) => (current?.reason === 'media-unavailable' ? current : null));
   }, [replyTargetId]);
 
+  function cancelPendingFocus() {
+    const pending = focusDelivery.current.pending;
+    if (!pending) return;
+    focusDelivery.current.pending = null;
+    pending.cleanup();
+  }
+
+  function deliverPendingFocus() {
+    const pending = focusDelivery.current.pending;
+    if (!pending) return;
+    const current = focusLatest.current;
+    const host = editorHost.current;
+    if (
+      pending.request !== current.focusRequest ||
+      pending.caller !== current.focusCaller ||
+      pending.parentId !== current.replyTargetId ||
+      !lifetime.current(pending.owner) ||
+      !host?.isConnected
+    ) {
+      cancelPendingFocus();
+      return;
+    }
+    if (!current.editorReady) return;
+    const editor = host.querySelector<HTMLElement>('.ProseMirror[contenteditable="true"]');
+    if (!editor?.isConnected || !host.contains(editor)) {
+      cancelPendingFocus();
+      return;
+    }
+    cancelPendingFocus();
+    editor.focus({ preventScroll: true });
+    editor.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+
+  function requestComposerFocus(request: number) {
+    const owner = lifetime.controller.signal;
+    const host = editorHost.current;
+    if (!host?.isConnected || !lifetime.current(owner)) return;
+    let pending!: PendingComposerFocus;
+    const cancel = () => {
+      if (focusDelivery.current.pending === pending) cancelPendingFocus();
+    };
+    const onKeyDown: EventListener = (event) => {
+      if ((event as KeyboardEvent).key === 'Tab') cancel();
+    };
+    pending = {
+      request,
+      caller: focusCaller,
+      parentId: replyTargetId,
+      owner,
+      cleanup: () => {
+        owner.removeEventListener('abort', cancel);
+        document.removeEventListener('pointerdown', cancel, true);
+        document.removeEventListener('focusin', cancel, true);
+        document.removeEventListener('keydown', onKeyDown, true);
+      },
+    };
+    focusDelivery.current.pending = pending;
+    if (!focusLatest.current.editorReady) {
+      owner.addEventListener('abort', cancel, { once: true });
+      document.addEventListener('pointerdown', cancel, true);
+      document.addEventListener('focusin', cancel, true);
+      document.addEventListener('keydown', onKeyDown, true);
+    }
+    deliverPendingFocus();
+  }
+
   useEffect(() => {
-    if (focusRequest === 0) return;
-    const editor = editorHost.current?.querySelector<HTMLElement>('[contenteditable="true"]');
-    editor?.focus({ preventScroll: true });
-    editor?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-  }, [focusRequest, editorReady]);
+    const state = focusDelivery.current;
+    if (state.caller !== focusCaller || state.parentId !== replyTargetId) {
+      cancelPendingFocus();
+      state.caller = focusCaller;
+      state.parentId = replyTargetId;
+    }
+    if (state.request !== focusRequest) {
+      state.request = focusRequest;
+      cancelPendingFocus();
+      if (focusRequest !== 0) requestComposerFocus(focusRequest);
+    }
+    return () => {
+      if (focusDelivery.current.pending?.request === focusRequest) cancelPendingFocus();
+    };
+  }, [focusRequest, focusCaller, replyTargetId]);
+
+  useEffect(() => {
+    deliverPendingFocus();
+  }, [editorReady, focusRequest, focusCaller, replyTargetId]);
 
   function updateBody(next: DocumentSnapshot) {
     if (!lifetime.current()) return;
