@@ -1173,7 +1173,6 @@ Collection jobs obtain authoritative command time; the schedule timestamp cannot
 partition numbers from 0 through 4095 for worker fixtures. Leave it unset in deployment so collection visits
 all partitions.
 
-
 Explicit native bulk status uses `POST /v1/libraryOperations` to preview up to 1,000 canonical subjects within a
 64 KiB command. `POST /v1/libraryOperations/:id:confirm` executes the stored manifest; GET operation/outcomes
 recovers authorized progress and results, and `POST /v1/libraryOperations/:id:cancel` stops remaining targets.

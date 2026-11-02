@@ -55,7 +55,10 @@ export const bulkAdmissionSchema = t.Union([
   t.Object({ action: t.Literal('remove_from_library'), selection: subjectSelection }, closed),
 ]);
 
-export const bulkPreviewSchema = t.Object({ action: t.Literal('set_status'), state: entryState, selection: subjectSelection }, closed);
+export const bulkPreviewSchema = t.Object(
+  { action: t.Literal('set_status'), state: entryState, selection: subjectSelection },
+  closed,
+);
 
 const phase = t.Union([
   t.Literal('preview'),
