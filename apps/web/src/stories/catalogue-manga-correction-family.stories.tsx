@@ -181,7 +181,7 @@ export const FullGroups: Story = {
 };
 export const Desktop: Story = {
   globals: { viewport: { value: 'desktop1280', isRotated: false } },
-  play: FullGroups.play,
+  play: ({ canvasElement }) => inspectGroups(canvasElement),
 };
 export const Rtl: Story = { ...FullGroups, args: { rtl: true } };
 export const RtlDesktop: Story = { ...Desktop, args: { rtl: true } };
@@ -198,7 +198,7 @@ export const ProposedAndExactReview: Story = {
     const region = within(await within(canvasElement).findByRole('region', { name: m.candidate_title({}, options()) }));
     await expect(await region.findByRole('heading', { name: m.candidate_proposed({}, options()) })).toBeVisible();
     await expect(region.getByRole('combobox', { name: m.candidate_field({}, options()) })).toBeDisabled();
-    const accept = region.getByRole('button', { name: m.candidate_accept({}, options()), exact: true });
+    const accept = region.getByRole('button', { name: m.candidate_accept({}, options()) });
     accept.focus();
     await userEvent.keyboard('{Enter}');
     const confirmation = region
@@ -230,7 +230,10 @@ export const Invalid: Story = {
   args: { scenario: 'invalid' },
   play: ({ canvasElement }) => failure(canvasElement, m.correction_invalid({}, options())),
 };
-export const Conflict: Story = { args: { scenario: 'conflict' }, play: Stale.play };
+export const Conflict: Story = {
+  args: { scenario: 'conflict' },
+  play: ({ canvasElement }) => failure(canvasElement, m.correction_stale({}, options())),
+};
 export const UncertainReplay: Story = {
   args: { scenario: 'uncertain' },
   play: async ({ canvasElement }) => {
