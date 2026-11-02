@@ -388,6 +388,7 @@
   "auth_automated_unavailable": "L’opérateur ou le service de gestion des comptes est indisponible. La vérification de l’opérateur nécessite une lecture authentifiée auprès du service de gestion natif du système.",
   "auth_automated_created": "Le processus de création natif du système a renvoyé le compte {account}.",
   "auth_automated_result": "Il s’agit du résultat de la création. L’identité publique actuelle et l’état de gestion nécessitent chacun une lecture autorisée distincte.",
+  "auth_opening_departure_heading": "Quitter l’ouverture de session ?",
   "auth_opening_heading": "Ouvrir une session de compte géré",
   "auth_opening_intro": "Passez à une identité gérée par un opérateur. Votre session actuelle dans ce navigateur est remplacée par une session de l’acteur automatisé précisément sélectionné. Vos identifiants de connexion personnels et les autorisations de l’opérateur ne sont pas copiés.",
   "auth_opening_subject": "Compte géré",

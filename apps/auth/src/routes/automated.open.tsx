@@ -1,12 +1,21 @@
-import { createFileRoute, useRouter } from '@tanstack/react-router';
+import { createFileRoute, useBlocker, useRouter } from '@tanstack/react-router';
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from '@rezics/ui/shadcn/alert-dialog';
 import { AuthButton as Button } from '../button';
 import { AuthPage } from '../frame';
 import { ErrorAlert } from '../alert';
 import { m } from '../paraglide/messages.js';
-import { loadManagementSession, managementSessionMatches } from '../management-operations';
+import { loadManagementSession, managementSessionMatches, type ManagementSession } from '../management-operations';
 import {
   managementOperationStepUpUrl,
   pendingManagementOperationMatches,
@@ -71,7 +80,73 @@ export function OperatorSessionOpeningPage() {
   return page ? <OpeningReview key={page.key} isCurrent={page.isCurrent} /> : null;
 }
 
-function OpeningReview({ isCurrent }: { isCurrent: () => boolean }) {
+function OpeningDeparture({
+  work,
+  validate,
+  retire,
+  focus,
+}: {
+  work: () => boolean;
+  validate: () => Promise<void>;
+  retire: () => void;
+  focus: () => void;
+}) {
+  const previous = useRef<HTMLElement | null>(null);
+  const blocker = useBlocker({
+    shouldBlockFn: async ({ next }) => {
+      // Replacing this route remains a new journey, as does cached-page return.
+      if (next.pathname === '/automated/open' || !work()) return false;
+      previous.current = document.activeElement as HTMLElement | null;
+      await validate();
+      return work();
+    },
+    enableBeforeUnload: work,
+    withResolver: true,
+  });
+  useLayoutEffect(() => {
+    if (blocker.status === 'blocked' && !work()) blocker.proceed();
+  });
+  const stay = () => {
+    if (blocker.status === 'blocked') blocker.reset();
+  };
+  return (
+    <AlertDialog
+      open={blocker.status === 'blocked'}
+      onOpenChange={(open) => {
+        if (!open) stay();
+      }}
+    >
+      <AlertDialogContent
+        finalFocus={() => {
+          const target = previous.current;
+          if (target?.isConnected && target.matches('input:not(:disabled),button:not(:disabled),[tabindex]'))
+            target.focus();
+          else focus();
+          return false;
+        }}
+      >
+        <AlertDialogTitle>{m.auth_opening_departure_heading()}</AlertDialogTitle>
+        <AlertDialogDescription>
+          {m.auth_organization_departure_description()} {m.auth_account_operation_leave_notice()}
+        </AlertDialogDescription>
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={stay}>{m.auth_organization_departure_stay()}</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              if (blocker.status !== 'blocked') return;
+              retire();
+              blocker.proceed();
+            }}
+          >
+            {m.auth_organization_departure_leave()}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+function OpeningReview({ isCurrent: pageIsCurrent }: { isCurrent: () => boolean }) {
   const [accountId, setAccountId] = useState('');
   const [subjectId, setSubjectId] = useState('');
   const [operatorId, setOperatorId] = useState('');
@@ -82,9 +157,67 @@ function OpeningReview({ isCurrent }: { isCurrent: () => boolean }) {
   const [status, setStatus] = useState('');
   const [terminal, setTerminal] = useState(false);
   const [outcome, setOutcome] = useState<OpeningOutcome | null>(null);
+  const live = useRef(true);
+  const bypassDeparture = useRef(false);
+  const authority = useRef<ManagementSession | null>(null);
+  const isCurrent = () => live.current && pageIsCurrent();
   const lock = useRef(false);
   const feedback = useRef<HTMLDivElement>(null);
   const confirmation = useRef<HTMLHeadingElement>(null);
+
+  const work = () =>
+    isCurrent() &&
+    !bypassDeparture.current &&
+    outcome?.kind !== 'opened' &&
+    Boolean(subjectId.trim() || operatorId.trim() || attempt);
+  function retire() {
+    // Retire callbacks before clearing private review; submitted recovery stays untouched.
+    live.current = false;
+    setAccountId('');
+    setSubjectId('');
+    setOperatorId('');
+    setAttempt(null);
+    setMetadata(null);
+    setConfirmed(false);
+    setBusy(false);
+    setTerminal(false);
+    setOutcome(null);
+    setStatus('refused');
+  }
+  async function validateCaller() {
+    const owner = authority.current;
+    const submitted = () => {
+      const state = pendingManagementOperationStepUpState();
+      return (
+        state.kind === 'pending' &&
+        state.value.phase === 'submitted' &&
+        Boolean(attempt && pendingManagementOperationMatches(state.value, attempt))
+      );
+    };
+    // Issuance replaces the human cookie deliberately. Its recovery is read-only.
+    if (!isCurrent() || !owner || submitted()) return;
+    const caller = await loadManagementSession();
+    if (!isCurrent() || authority.current !== owner || submitted()) return;
+    if (
+      caller.kind === 'signed-out' ||
+      (caller.kind === 'ready' &&
+        (caller.accountId !== owner.accountId ||
+          caller.clientId !== owner.clientId ||
+          caller.authnEpoch !== owner.authnEpoch ||
+          caller.authTime !== owner.authTime ||
+          JSON.stringify(caller.scopes) !== JSON.stringify(owner.scopes) ||
+          JSON.stringify(caller.amr) !== JSON.stringify(owner.amr) ||
+          (metadata && attempt && !managementSessionMatches(caller, attempt))))
+    )
+      retire();
+  }
+  useEffect(() => {
+    const validate = () => {
+      void validateCaller();
+    };
+    window.addEventListener('focus', validate);
+    return () => window.removeEventListener('focus', validate);
+  });
 
   async function reconcile(saved: OpeningInput) {
     const result = await readOpenedSession(saved);
@@ -139,9 +272,10 @@ function OpeningReview({ isCurrent }: { isCurrent: () => boolean }) {
           return;
         }
         if (human.kind !== 'ready' || human.accountId !== saved.accountId) {
-          setStatus('refused');
+          retire();
           return;
         }
+        authority.current = human;
         setAccountId(human.accountId);
         if ((state.kind === 'pending' && state.value.phase !== 'returned') || !managementSessionMatches(human, saved)) {
           setStatus('step-up');
@@ -155,8 +289,10 @@ function OpeningReview({ isCurrent }: { isCurrent: () => boolean }) {
       }
       const human = await loadManagementSession();
       if (!isCurrent()) return;
-      if (human.kind === 'ready') setAccountId(human.accountId);
-      else setStatus(human.kind);
+      if (human.kind === 'ready') {
+        authority.current = human;
+        setAccountId(human.accountId);
+      } else setStatus(human.kind);
     } finally {
       if (isCurrent()) {
         lock.current = false;
@@ -202,6 +338,7 @@ function OpeningReview({ isCurrent }: { isCurrent: () => boolean }) {
       setStatus('unavailable');
       return;
     }
+    bypassDeparture.current = true;
     window.location.assign(managementOperationStepUpUrl('opening'));
   }
   async function submit(event: FormEvent) {
@@ -227,6 +364,15 @@ function OpeningReview({ isCurrent }: { isCurrent: () => boolean }) {
   }
   return (
     <AuthPage heading={m.auth_opening_heading()}>
+      <OpeningDeparture
+        work={work}
+        validate={validateCaller}
+        retire={retire}
+        focus={() => {
+          const target = confirmation.current ?? feedback.current ?? document.getElementById('opening-subject');
+          target?.focus();
+        }}
+      />
       <div className="space-y-5" aria-busy={busy}>
         <p>{m.auth_opening_intro()}</p>
         {status ? (

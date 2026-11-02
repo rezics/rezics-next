@@ -388,6 +388,7 @@
   "auth_automated_unavailable": "The operator or account management service is unavailable. An authenticated native management read is required to review the operator.",
   "auth_automated_created": "The native creation workflow returned account {account}.",
   "auth_automated_result": "This is the creation result. Current public identity and management state require their own authorized read.",
+  "auth_opening_departure_heading": "Leave session opening?",
   "auth_opening_heading": "Open an operated account session",
   "auth_opening_intro": "Switch to an operated identity. This replaces your current browser session with the selected automated actor. Your human credentials and operator grants are not copied.",
   "auth_opening_subject": "Operated account",

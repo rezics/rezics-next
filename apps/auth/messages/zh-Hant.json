@@ -388,6 +388,7 @@
   "auth_automated_unavailable": "目前無法使用營運者或帳戶管理服務。檢視營運者必須透過已驗證身分的原生管理讀取。",
   "auth_automated_created": "原生建立流程傳回了帳戶 {account}。",
   "auth_automated_result": "此處顯示的是建立結果。若要確認目前的公開身分及管理狀態，必須分別進行具備授權的讀取。",
+  "auth_opening_departure_heading": "離開工作階段開啟頁面？",
   "auth_opening_heading": "開啟受營運帳戶的工作階段",
   "auth_opening_intro": "切換至受營運的身分。瀏覽器目前的工作階段會被取代，改為以所選的那個自動化行動主體使用。你的個人驗證憑證及營運者獲授的權限都不會複製過去。",
   "auth_opening_subject": "受營運帳戶",

@@ -388,6 +388,7 @@
   "auth_automated_unavailable": "El operador o el servicio de gestión de cuentas no está disponible. Para revisar el operador se necesita una consulta autenticada a la gestión de cuentas del propio sistema.",
   "auth_automated_created": "El proceso de creación del sistema ha devuelto la cuenta {account}.",
   "auth_automated_result": "Este es el resultado de la creación. La identidad pública actual y el estado de gestión requieren consultas autorizadas independientes.",
+  "auth_opening_departure_heading": "¿Salir de la apertura de sesión?",
   "auth_opening_heading": "Abrir una sesión de cuenta operada",
   "auth_opening_intro": "Cambia a una identidad operada. Esto sustituye tu sesión actual del navegador por una sesión del actor automatizado exacto que has seleccionado. Tus credenciales personales y los permisos del operador no se copian.",
   "auth_opening_subject": "Cuenta operada",

@@ -388,6 +388,7 @@
   "auth_automated_unavailable": "运营者或账户管理服务不可用。核对运营者需要经过身份认证的原生管理读取。",
   "auth_automated_created": "原生创建流程返回了账户 {account}。",
   "auth_automated_result": "这只是创建结果。当前公开身份和管理状态需要分别通过获授权的读取来确认。",
+  "auth_opening_departure_heading": "离开会话开启页面？",
   "auth_opening_heading": "开启受运营账户的会话",
   "auth_opening_intro": "切换到受运营身份。浏览器当前会话将被替换为所选的这个自动化行为主体的会话。你本人的认证凭据和运营者获授的权限均不会复制过去。",
   "auth_opening_subject": "受运营账户",

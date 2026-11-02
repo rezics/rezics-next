@@ -388,6 +388,7 @@
   "auth_automated_unavailable": "운영자 또는 계정 관리 서비스를 이용할 수 없습니다. 운영자를 검토하려면 시스템 자체의 관리 서비스에서 인증된 조회를 수행해야 합니다.",
   "auth_automated_created": "시스템 자체의 생성 절차에서 반환한 계정: {account}",
   "auth_automated_result": "이것은 생성 결과입니다. 현재 공개 신원과 관리 상태는 각각 권한이 있는 별도의 조회로 확인해야 합니다.",
+  "auth_opening_departure_heading": "세션 열기를 나가시겠습니까?",
   "auth_opening_heading": "운영 대상 계정의 세션 열기",
   "auth_opening_intro": "운영 대상 신원으로 전환합니다. 현재 브라우저 세션이 선택한 바로 그 자동화 행위자의 세션으로 바뀝니다. 본인의 인증 정보와 운영자에게 부여된 권한은 복사되지 않습니다.",
   "auth_opening_subject": "운영 대상 계정",

@@ -388,6 +388,7 @@
   "auth_automated_unavailable": "Der Betreiber oder der Dienst zur Kontoverwaltung ist nicht verfügbar. Zur Prüfung des Betreibers ist eine authentifizierte Abfrage der systemeigenen Kontoverwaltung erforderlich.",
   "auth_automated_created": "Der systemeigene Erstellungsvorgang hat das Konto {account} zurückgegeben.",
   "auth_automated_result": "Dies ist das Ergebnis der Erstellung. Die aktuelle öffentliche Identität und der Verwaltungsstatus müssen jeweils gesondert mit entsprechender Berechtigung abgefragt werden.",
+  "auth_opening_departure_heading": "Sitzungsöffnung verlassen?",
   "auth_opening_heading": "Sitzung für ein betriebenes Konto öffnen",
   "auth_opening_intro": "Wechsle zu einer betriebenen Identität. Deine aktuelle Browsersitzung wird durch eine Sitzung als genau der ausgewählte automatisierte Akteur ersetzt. Deine persönlichen Anmeldedaten und die Berechtigungen des Betreibers werden nicht übertragen.",
   "auth_opening_subject": "Betriebenes Konto",
