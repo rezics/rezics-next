@@ -30,11 +30,7 @@ export function LabelShelfLink({ label, locale }: { label: LibraryLabelSummary; 
       name={label.name}
       locale={locale}
       renderName={(text) => (
-        <ContentItemTitleLink
-          data-library-label-link
-          lang={locale}
-          href={shelfHref(locale, { label: label.id })}
-        >
+        <ContentItemTitleLink data-library-label-link lang={locale} href={shelfHref(locale, { label: label.id })}>
           {text}
         </ContentItemTitleLink>
       )}

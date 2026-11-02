@@ -47,10 +47,7 @@ export function LabelNameReader({
 
   return (
     <div lang={locale} className="min-w-0 flex-1">
-      <ContentItemHeading
-        level={2}
-        className="min-w-0 text-[17px] leading-snug font-semibold sm:text-lg md:text-xl"
-      >
+      <ContentItemHeading level={2} className="min-w-0 text-[17px] leading-snug font-semibold sm:text-lg md:text-xl">
         {renderName ? renderName(text) : text}
       </ContentItemHeading>
       {(truncated || expanded) && (
