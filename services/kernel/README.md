@@ -656,9 +656,10 @@ Each measured repetition starts from a settled state. Warm-ups and repetitions m
 triggers; the harness settles every relation written by the previous run before measuring the next one. Checks should
 use fresh keys where production does, and declare any intentional repeated writes in their growth model.
 
-A module README cites a growth check by its test file and test title and says what grows and what stays fixed. It
-does not restate the scales, which the test owns and may change. Test titles do not name scales either, so a
-scale change does not break a citation.
+A module README cites a growth check by its test file and test title and says what grows and what stays fixed. A
+source-only scan matches generated titles iteratively against their fixed text, requires at least 12 fixed Unicode
+characters and nonempty substitutions, and never executes test code. It does not restate the scales, which the test
+owns and may change. Test titles do not name scales either, so a scale change does not break a citation.
 
 Product code sets no planner method settings (`enable_seqscan`, `enable_bitmapscan` or any other `enable_*`).
 PostgreSQL documents them as a crude, temporary way to influence a plan. A sequential scan of a small relation is

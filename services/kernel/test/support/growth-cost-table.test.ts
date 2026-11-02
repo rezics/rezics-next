@@ -222,6 +222,27 @@ test('a generated check title is found from its template', () => {
   }
 });
 
+test('a repeated generated title delimiter rejects a missing suffix without backtracking', () => {
+  const f = fixture();
+  try {
+    const delimiters = Array.from({ length: 24 }, (_, index) => '${part' + index + '}').join('a');
+    writeTestFile(f, f.testRoot, 'repeated.test.ts', 'test(`generated prefix' + delimiters + 'z`, () => {});');
+    const readmePath = writeReadme(
+      f,
+      'repeated-generated',
+      costReadme([
+        `| Repeated template | one request | constant work | \`repeated.test.ts\`: “generated prefix${'a'.repeat(72)}” |`,
+      ]),
+    );
+
+    const problems = costTableProblems(readmePath, f.options).join('\n');
+    expect(problems).toContain('Repeated template');
+    expect(problems).toContain('was not found in a declared test');
+  } finally {
+    f.cleanup();
+  }
+});
+
 test('a None row needs a reason and no row may have an empty cell', () => {
   const f = fixture();
   try {

@@ -612,27 +612,24 @@ function patternMatches(pattern: TemplatePattern, name: string): boolean {
 }
 
 function matchTemplateParts(parts: string[], name: string, index: number, position: number): boolean {
-  const part = parts[index]!;
-  if (index === parts.length - 1) {
-    if (part.length === 0) return name.length - position > 0;
-    const finalStart = name.length - part.length;
-    return finalStart > position && name.startsWith(part, finalStart);
-  }
-
-  const minimumStart = position + 1;
-  if (part.length === 0) {
-    for (let next = minimumStart; next <= name.length; next++) {
-      if (matchTemplateParts(parts, name, index + 1, next)) return true;
+  let cursor = position;
+  for (let partIndex = index; partIndex < parts.length - 1; partIndex++) {
+    const part = parts[partIndex]!;
+    if (part.length === 0) {
+      cursor++;
+      if (cursor > name.length) return false;
+      continue;
     }
-    return false;
+
+    const next = name.indexOf(part, cursor + 1);
+    if (next < 0) return false;
+    cursor = next + part.length;
   }
 
-  let next = name.indexOf(part, minimumStart);
-  while (next >= 0) {
-    if (matchTemplateParts(parts, name, index + 1, next + part.length)) return true;
-    next = name.indexOf(part, next + 1);
-  }
-  return false;
+  const finalPart = parts[parts.length - 1]!;
+  if (finalPart.length === 0) return name.length - cursor > 0;
+  const finalStart = name.length - finalPart.length;
+  return finalStart > cursor && name.startsWith(finalPart, finalStart);
 }
 
 function normalizeWhitespace(value: string): string {
