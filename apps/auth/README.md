@@ -157,8 +157,10 @@ through current-target readback; a present target permits only its confirmed ret
 to idle. A determinate failure permits another operation. Account/session changes clear the boundary and private state,
 and results from the previous page authority cannot restore them.
 
-Browser departure clears private rows, drafts and confirmations and cancels the passkey prompt; cached-page return
-reloads the account, credential/session lists and both application inventories before enabling their controls.
+Security departure is protected by any nonempty new password, a nonblank passkey name, or an unresolved operation;
+Stay keeps the in-memory review and focus, while Leave clears local authority and drafts without claiming to cancel an
+operation already underway. Reload or close warns while protected. Cached-page return reloads the account,
+credential/session lists and both application inventories before enabling their controls.
 Only an unresolved destructive target's original account, kind and native id survive in page memory: for the same
 account, return requires fresh explicit readback and confirmation; a different account discards that target. Failed
 reads offer Reload, ended sessions offer sign-in, and return never replays a credential or consent command.

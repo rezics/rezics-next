@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useBlocker, useRouter } from '@tanstack/react-router';
 import { Badge } from '@rezics/ui/shadcn/badge';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { AuthButton as Button } from '../button';
@@ -7,7 +7,7 @@ import { Input } from '@rezics/ui/shadcn/input';
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemTitle } from '@rezics/ui/shadcn/item';
 import { PasswordInput } from '../password-input';
 import { Trash2 } from 'lucide-react';
-import { useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { useLayoutEffect, useRef, useState, type FormEvent, type MutableRefObject } from 'react';
 import { flushSync } from 'react-dom';
 import { m } from '../paraglide/messages.js';
 import { AuthPage } from '../frame';
@@ -49,19 +49,50 @@ type SecurityOperation =
   | { kind: 'target'; target: SecurityTarget }
   | { kind: 'recovery'; target: SecurityTarget; phase: 'unknown' | 'accepted' | 'present'; reading: boolean };
 
-const STEP_UP_URL = '/step-up?return_to=%2Fsecurity';
-
-export function SecurityPage({
-  initial,
-  inventorySource,
-  securitySource,
-  identitySource,
-}: {
+type DepartureState = { protected: boolean; allow: boolean };
+type DepartureBlocker =
+  | { status: 'idle'; proceed: undefined; reset: undefined }
+  | { status: 'blocked'; proceed: () => void; reset: () => void };
+type SecurityPageProps = {
   initial?: SecurityLoadResult;
   inventorySource?: InventorySource;
   securitySource?: SecuritySource & { reviewRegistration?: typeof reviewPasskeyRegistration };
   identitySource?: AccountIdentitySource;
-} = {}) {
+};
+
+export function SecurityPage(props: SecurityPageProps = {}) {
+  const router = useRouter({ warn: false });
+  return router ? <RoutedSecurityPage {...props} /> : <SecurityPageView {...props} />;
+}
+
+function RoutedSecurityPage(props: SecurityPageProps) {
+  const departure = useRef<DepartureState>({ protected: false, allow: false });
+  const blocker = useBlocker({
+    shouldBlockFn: () => departure.current.protected && !departure.current.allow,
+    enableBeforeUnload: () => departure.current.protected && !departure.current.allow,
+    withResolver: true,
+  }) as DepartureBlocker;
+  const blockerRef = useRef(blocker);
+  blockerRef.current = blocker;
+  useLayoutEffect(
+    () => () => {
+      if (blockerRef.current.status === 'blocked') blockerRef.current.proceed();
+    },
+    [],
+  );
+  return <SecurityPageView {...props} departure={departure} blocker={blocker} />;
+}
+
+const STEP_UP_URL = '/step-up?return_to=%2Fsecurity';
+
+function SecurityPageView({
+  initial,
+  inventorySource,
+  securitySource,
+  identitySource,
+  departure,
+  blocker,
+}: SecurityPageProps & { departure?: MutableRefObject<DepartureState>; blocker?: DepartureBlocker }) {
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [accountId, setAccountId] = useState('');
   const [sessions, setSessions] = useState<SecuritySession[]>([]);
@@ -90,6 +121,8 @@ export function SecurityPage({
   const registrationRecovery = operation?.kind === 'registration-review' ? operation : null;
   const reading = recovery?.reading ?? false;
   const operationBlocked = operation !== null;
+  const departureProtected = Boolean(password || passkeyName.trim() || operation);
+  if (departure) departure.current.protected = departureProtected;
   const [signedOutNotice, setSignedOutNotice] = useState('');
   const activeAccount = useRef('');
   const authorityGeneration = useRef(0);
@@ -99,6 +132,9 @@ export function SecurityPage({
   const sessionStatus = useRef<HTMLDivElement>(null);
   const passwordInput = useRef<HTMLInputElement>(null);
   const passwordAlert = useRef<HTMLDivElement>(null);
+  const departureDialog = useRef<HTMLDivElement>(null);
+  const departureFocus = useRef<HTMLElement | null>(null);
+  const focusAfterStay = useRef(false);
   const identity = useAccountIdentity(
     accountId,
     authorityGeneration.current,
@@ -189,6 +225,30 @@ export function SecurityPage({
     else if (sessionNotice) sessionStatus.current?.focus();
   }, [recovery, registrationRecovery, sessionNotice]);
 
+  useLayoutEffect(() => {
+    if (!blocker || !departure) return;
+    if (blocker.status === 'blocked') {
+      if (!departureProtected) {
+        departure.current.allow = true;
+        blocker.proceed();
+        return;
+      }
+      if (!departureFocus.current) {
+        const active = document.activeElement;
+        departureFocus.current = active instanceof HTMLElement && active !== document.body ? active : null;
+      }
+      departureDialog.current?.querySelector<HTMLButtonElement>('[data-stay]')?.focus();
+    } else if (focusAfterStay.current) {
+      focusAfterStay.current = false;
+      const target = departureFocus.current;
+      departureFocus.current = null;
+      if (target?.isConnected && !target.hasAttribute('disabled')) target.focus();
+      else if (recovery || registrationRecovery) recoveryStatus.current?.focus();
+      else if (passwordInput.current?.value) passwordInput.current.focus();
+      else document.querySelector<HTMLInputElement>('#security-passkey-name')?.focus();
+    } else if (departure.current.allow) departure.current.allow = false;
+  }, [blocker?.status, departureProtected, recovery, registrationRecovery]);
+
   function updateOperation(next: SecurityOperation | null) {
     activeOperation.current = next;
     setOperation(next);
@@ -210,6 +270,7 @@ export function SecurityPage({
   }
 
   function clearPrivateData(state: Exclude<LoadState, 'ready'>, notice = '') {
+    if (departure) departure.current.protected = false;
     authorityGeneration.current++;
     lifetime.current.abort();
     lifetime.current = new AbortController();
@@ -231,6 +292,20 @@ export function SecurityPage({
     setSignedOutNotice(notice);
     setLoadMessage(m.auth_security_authority_changed());
     setLoadState(state);
+  }
+
+  function stay() {
+    if (blocker?.status !== 'blocked') return;
+    focusAfterStay.current = true;
+    blocker.reset();
+  }
+
+  function leave() {
+    if (blocker?.status !== 'blocked' || !departure) return;
+    departure.current.protected = false;
+    departure.current.allow = true;
+    clearPrivateData('loading');
+    blocker.proceed();
   }
 
   async function recoverTarget() {
@@ -462,12 +537,13 @@ export function SecurityPage({
   const orderedSessions = [...sessions].sort((left, right) => Number(right.current) - Number(left.current));
 
   return (
-    <AuthPage
-      heading={m.auth_security_heading()}
-      identity={
-        <AccountIdentitySummary accountId={accountId} state={identity.state} action="security" retry={identity.retry} />
-      }
-    >
+    <>
+      <AuthPage
+        heading={m.auth_security_heading()}
+        identity={
+          <AccountIdentitySummary accountId={accountId} state={identity.state} action="security" retry={identity.retry} />
+        }
+      >
       <div className="auth-security-page" aria-busy={loadState === 'loading' || operationBlocked}>
         {loadState === 'loading' ? (
           <p role="status">{m.auth_inventory_loading()}</p>
@@ -779,6 +855,34 @@ export function SecurityPage({
           </>
         )}
       </div>
-    </AuthPage>
+      </AuthPage>
+      {blocker?.status === 'blocked' && departureProtected ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div
+            ref={departureDialog}
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="security-departure-heading"
+            aria-describedby="security-departure-description"
+            className="w-full max-w-md rounded-lg border bg-background p-6 text-foreground shadow-xl"
+          >
+            <h2 id="security-departure-heading" className="text-lg font-semibold">
+              {m.auth_security_departure_heading()}
+            </h2>
+            <p id="security-departure-description" className="mt-2 text-sm">
+              {m.auth_security_departure_description()}
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button type="button" variant="outline" data-stay onClick={stay}>
+                {m.auth_security_departure_stay()}
+              </Button>
+              <Button type="button" data-leave onClick={leave}>
+                {m.auth_security_departure_leave()}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }
