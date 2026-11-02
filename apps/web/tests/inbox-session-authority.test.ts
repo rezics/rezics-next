@@ -718,27 +718,18 @@ test('refreshing a successful continuation retires older pages and preserves an 
   try {
     await view.click(m.inbox_load_more());
     await tick();
-    expect(view.rows()).toEqual([
-      ['newest', 'true'],
-      ['older', 'true'],
-      ['oldest', 'true'],
-    ]);
+    expect(view.rows()).toEqual([['newest', 'true'], ['older', 'true'], ['oldest', 'true']]);
     await view.click(m.inbox_triage_mark());
     const original = { ...view.commands[0]!.data };
     await act(async () => view.commands[0]!.work.reject(new Error('response lost')));
     await tick();
-
-    const viewer = currentInboxViewer(view.client)!;
-    const retiredKey = inboxPageQuery(viewer, third).queryKey;
+    expect(view.host.textContent).toContain(m.inbox_seen_unknown());
+    const retiredKey = inboxPageQuery(currentInboxViewer(view.client)!, third).queryKey;
     view.client.setQueryData(retiredKey, ready(['retired-page'], null));
     view.respond((cursor) => (cursor ? ready(['older', 'oldest'], null) : ready(['arrival', 'newest'], continuation)));
     await view.click(m.inbox_start_first_page());
     await tick();
-
-    expect(view.rows()).toEqual([
-      ['arrival', 'true'],
-      ['newest', 'true'],
-    ]);
+    expect(view.rows()).toEqual([['arrival', 'true'], ['newest', 'true']]);
     expect(view.client.getQueryData(retiredKey)).toBeUndefined();
     expect(view.commands).toHaveLength(1);
     await view.click(m.inbox_seen_retry());
