@@ -31,6 +31,17 @@ test('admits bounded sparse pages and only exact selected, concealed identities'
   expect(admitPopulationEnvelope(concealed, selected)).toEqual(concealed);
   const emptySelected: PopulationInput = { ...input, selected: [] };
   expect(admitPopulationEnvelope(envelope(ready({ items: [], next: null, incomplete: false })), emptySelected)).not.toBeNull();
+  const figure = {
+    population,
+    count: 5,
+    mean: 4,
+    histogram: [0, 0, 0, 0, 0, 5],
+    freshness: { asOf: '2026-11-01T00:00:00.000Z', updating: false },
+  };
+  const comparison = envelope(
+    ready({ items: [{ id: population, name: 'Current Realm', figure: { kind: 'ready', value: figure } }], next: null, incomplete: false }),
+  );
+  expect(admitPopulationEnvelope(comparison, { ...input, selected: [population] })).toEqual(comparison);
 
   const delayed = envelope({ kind: 'failed', retryAfter: '15' });
   expect(admitPopulationEnvelope(delayed, input)).toEqual(delayed);

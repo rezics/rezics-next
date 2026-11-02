@@ -1,6 +1,6 @@
-import { GLOBAL, type PopulationEnvelope, type PopulationInput, type PopulationItem } from './subject-rating-populations';
+import { type PopulationEnvelope, type PopulationInput, type PopulationItem } from './subject-rating-populations';
 import { admitRatingAggregate } from './rating-population-value';
-import type { Figure, RatingOutcome } from './subject-ratings';
+import { GLOBAL, type Figure, type RatingOutcome } from './subject-ratings';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const failureKinds = ['absent', 'unavailable', 'terminal', 'failed'] as const;
@@ -109,10 +109,11 @@ function admitPopulationResult(value: unknown, input: PopulationInput): Populati
   const selected = input.selected;
   if (selected !== undefined && page.next !== null) return null;
   const requested = selected === undefined ? undefined : new Set(selected);
+  const itemExpected = { subject: input.id, question: input.question, ...(selected === undefined ? {} : { selected }) };
   const seen = new Set<string>();
   const items: PopulationItem[] = [];
   for (const raw of page.items) {
-    const item = admitItem(raw, { subject: input.id, question: input.question, selected });
+    const item = admitItem(raw, itemExpected);
     if (!item || seen.has(item.id) || (requested && !requested.has(item.id))) return null;
     seen.add(item.id);
     items.push(item);
