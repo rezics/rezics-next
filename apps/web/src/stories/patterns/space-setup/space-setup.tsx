@@ -593,11 +593,10 @@ function SpaceSetupFormVisit({
         setSnapshot(current);
         setNeedsRefresh(false);
         const intent = focusIntent.current;
-        const source =
-          intent?.step === null && currentFocusIntent(intent) ? intent.source : undefined;
-        if (command.step === 'address') advance(1, source, source ? intent : undefined);
-        if (command.step === 'realm' || command.step === 'settings') advance(2, source, source ? intent : undefined);
-        if (command.step === 'scheme') advance(3, source, source ? intent : undefined);
+        const handoff = intent && intent.step === null && currentFocusIntent(intent) ? intent : undefined;
+        if (command.step === 'address') advance(1, handoff?.source, handoff);
+        if (command.step === 'realm' || command.step === 'settings') advance(2, handoff?.source, handoff);
+        if (command.step === 'scheme') advance(3, handoff?.source, handoff);
       } else {
         focusGeneration.current++;
         focusIntent.current = null;
