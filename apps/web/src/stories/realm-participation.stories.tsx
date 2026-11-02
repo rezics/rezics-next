@@ -169,3 +169,18 @@ export const IndependentUnfollow: Story = {
     await expect(canvas.getByRole('button', { name: m.library_follow() })).toBeVisible();
   },
 };
+
+// Additional presentation observations; the existing journeys and their oracles stay unchanged.
+export const SectionHierarchy: Story = {
+  args: { state: 'member', memberLabel: 'A community reading and discussing translated fiction together · '.repeat(6) },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const region = canvas.getByRole('region', { name: m.realm_membership_label() });
+    await expect(within(region).getByRole('heading', { level: 2, name: m.realm_membership_label() })).toBeVisible();
+    const leave = within(region).getByRole('button', { name: m.realm_leave() });
+    await expect(leave).toHaveClass('min-h-11', 'h-auto', 'whitespace-normal');
+    leave.focus();
+    await expect(leave).toHaveFocus();
+    await expect(region.querySelector('details')).toBeNull();
+  },
+};
