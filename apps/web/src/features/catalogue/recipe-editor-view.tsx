@@ -134,7 +134,34 @@ function RecipeEditorLive({
     staleTime: Infinity,
     gcTime: 0,
   });
-  const read = query.data?.ok ? query.data : undefined;
+  const [readEpoch, setReadEpoch] = useState(0);
+  const readEpochRef = useRef(0);
+  const admittedReadEpoch = useRef(0);
+  const retainedRead = useRef<{ id?: string; locale: string; generation: number; value: Ready } | undefined>(undefined);
+  if (
+    retainedRead.current &&
+    (retainedRead.current.id !== id ||
+      retainedRead.current.locale !== locale ||
+      retainedRead.current.generation !== lifetime.generation)
+  )
+    retainedRead.current = undefined;
+  const matchesIdentity = (candidate?: Ready) => !!candidate && (!id || candidate.public?.subject.id === id);
+  if (query.data?.ok && matchesIdentity(query.data))
+    retainedRead.current = { id, locale, generation: lifetime.generation, value: query.data };
+  const draftRead = retainedRead.current?.value;
+  const read =
+    readEpoch === readEpochRef.current &&
+    admittedReadEpoch.current === readEpoch &&
+    !query.isFetching &&
+    !query.isError &&
+    query.data?.ok &&
+    matchesIdentity(query.data)
+      ? query.data
+      : undefined;
+  const isReadEpochCurrent = (epoch: number) => epoch === readEpochRef.current;
+  const readUnavailable =
+    query.isError ||
+    (!!query.data && (!query.data.ok || !matchesIdentity(query.data)));
   const termsId = useId();
   const nextTermId = useRef(1);
   const [terms, setTerms] = useState([{ id: 0, language: locale, label: '', description: '', aliases: '' }]);
@@ -155,8 +182,8 @@ function RecipeEditorLive({
   };
   const reject = (next: CreateFailure, extra: RecipeCorrection[] = []) => {
     const errors =
-      read && next.reason === 'invalid'
-        ? [...recipeCorrections(next.errors ?? [], terms, rows, read.release, locale, termsId), ...extra]
+      draftRead && next.reason === 'invalid'
+        ? [...recipeCorrections(next.errors ?? [], terms, rows, draftRead.release, locale, termsId), ...extra]
         : [];
     if (next.reason === 'invalid' && !errors.length)
       errors.push({
@@ -190,7 +217,7 @@ function RecipeEditorLive({
             : true,
       ));
   const pendingWrite = (pending.current !== null && pendingUncertain.current) || rows.some((row) => row.uncertain);
-  const name = (id: string) => pickText(read?.release.properties[id]?.labels ?? {}, locale).text || id;
+  const name = (id: string) => pickText(draftRead?.release.properties[id]?.labels ?? {}, locale).text || id;
   const offeredAdditionalFields = read ? availableAdditionalFields(read, rows) : [];
   const selectedAdditionalField = offeredAdditionalFields.includes(property) ? property : '';
   const withdrawnChoice = !!property && !selectedAdditionalField;
@@ -204,20 +231,31 @@ function RecipeEditorLive({
         ]),
       ]
     : (read?.fields ?? []);
-  async function refreshCurrentDefinitions(): Promise<boolean> {
+  async function refreshCurrentDefinitions(expectedEpoch = readEpoch): Promise<boolean> {
+    if (!lifetime.active() || expectedEpoch !== readEpochRef.current) return false;
+    const nextEpoch = readEpochRef.current + 1;
+    readEpochRef.current = nextEpoch;
+    setReadEpoch(nextEpoch);
     try {
       const refreshed = await query.refetch();
-      return !refreshed.isError && refreshed.data?.ok === true;
+      const admitted =
+        !refreshed.isError &&
+        refreshed.data?.ok === true &&
+        matchesIdentity(refreshed.data) &&
+        lifetime.active() &&
+        readEpochRef.current === nextEpoch;
+      if (admitted) admittedReadEpoch.current = nextEpoch;
+      return admitted;
     } catch {
       return false;
     }
   }
   async function retryRead() {
-    if (!lifetime.active() || running.current) return;
+    if (!lifetime.active() || !isReadEpochCurrent(readEpoch) || running.current) return;
     running.current = true;
     setBusy(true);
     try {
-      const refreshed = await refreshCurrentDefinitions();
+      const refreshed = await refreshCurrentDefinitions(readEpoch);
       if (!lifetime.active()) return;
       if (refreshed) {
         if (failure?.refreshDefinitions) setFailure(undefined);
@@ -239,11 +277,11 @@ function RecipeEditorLive({
     }
   }
   async function reviewCurrentDefinitions() {
-    if (!lifetime.active() || running.current) return;
+    if (!lifetime.active() || !isReadEpochCurrent(readEpoch) || running.current) return;
     running.current = true;
     setBusy(true);
     try {
-      if (await refreshCurrentDefinitions()) {
+      if (await refreshCurrentDefinitions(readEpoch)) {
         if (!lifetime.active()) return;
         setFailure(undefined);
       }
@@ -254,17 +292,19 @@ function RecipeEditorLive({
     }
   }
   async function create() {
-    if (!lifetime.active()) return;
+    if (!lifetime.active() || !isReadEpochCurrent(readEpoch)) return;
+    const exactReplay = pending.current !== null && pendingUncertain.current;
     if (
       running.current ||
-      !read ||
+      (!read && !exactReplay) ||
       created ||
       session !== 'signed-in' ||
       failure?.reason === 'conflict' ||
-      failure?.refreshDefinitions
+      (failure?.refreshDefinitions && !exactReplay)
     )
       return;
     if (!pending.current) {
+      if (!read) return;
       const draft = recipeDraft(
         read.release,
         locale,
@@ -318,7 +358,7 @@ function RecipeEditorLive({
     setCorrections([]);
     try {
       const result = await transport.create(pending.current, wasUncertain);
-      if (!lifetime.active()) return;
+      if (!lifetime.active() || !isReadEpochCurrent(readEpoch)) return;
       if (result.ok) {
         setCreated(result);
         pending.current = null;
@@ -330,7 +370,7 @@ function RecipeEditorLive({
         if (result.reason !== 'conflict' && !possiblyCommitted) pending.current = null;
       }
     } catch {
-      if (!lifetime.active()) return;
+      if (!lifetime.active() || !isReadEpochCurrent(readEpoch)) return;
       pendingUncertain.current = true;
       setFailure({ ok: false, reason: 'unavailable' });
     } finally {
@@ -359,8 +399,8 @@ function RecipeEditorLive({
           {session === 'signed-out' ? m.catalogue_create_signed_out({}, o) : m.candidate_loading({}, o)}
         </p>
       )}
-      {query.isPending && <p role="status">{m.candidate_loading({}, o)}</p>}
-      {(query.isError || (query.data && !query.data.ok)) && (
+      {(query.isPending || query.isFetching) && <p role="status">{m.candidate_loading({}, o)}</p>}
+      {readUnavailable && (
         <div className="space-y-3">
           {query.data && !query.data.ok && query.data.reason === 'concealed' ? (
             <p role="alert">{m.catalogue_create_concealed({}, o)}</p>
@@ -416,8 +456,8 @@ function RecipeEditorLive({
           )}
         </section>
       ) : (
-        read &&
-        (!id || read.fields.length > 0 || rows.length > 0) && (
+        draftRead &&
+        (!id || draftRead.fields.length > 0 || rows.length > 0) && (
           <Workspace
             ref={(node: HTMLDivElement | HTMLFormElement | null) => {
               workspace.current = node;
@@ -437,6 +477,7 @@ function RecipeEditorLive({
             onSubmit={(event) => {
               if (id) return;
               event.preventDefault();
+              if (!isReadEpochCurrent(readEpoch)) return;
               void create();
             }}
           >
@@ -555,6 +596,7 @@ function RecipeEditorLive({
                             className={recipeActionClassName}
                             disabled={rows.some((row) => row.source?.id === source.id)}
                             onClick={() => {
+                              if (!isReadEpochCurrent(readEpoch)) return;
                               const definition = read.release.properties[field];
                               if (!definition) return;
                               setRows([
@@ -583,18 +625,22 @@ function RecipeEditorLive({
                 feedbackId={recipeRowId(termsId, row.id)}
                 corrections={corrections}
                 clearCorrection={(target) => clearCorrections((error) => error.target === target)}
-                read={read}
+                read={draftRead}
+                currentRead={read}
+                readEpoch={readEpoch}
+                isReadEpochCurrent={isReadEpochCurrent}
                 locale={locale}
                 search={search}
                 disabled={locked || session !== 'signed-in'}
                 removalAllowed={() => !running.current && !pending.current && !locked && !created}
                 transport={transport}
-                refreshDefinitions={refreshCurrentDefinitions}
+                refreshDefinitions={() => refreshCurrentDefinitions(readEpoch)}
                 onState={(patch) =>
                   setRows((previous) => previous.map((entry) => (entry.id === row.id ? { ...entry, ...patch } : entry)))
                 }
                 {...(review ? { review } : {})}
                 onChange={(statement, patch) => {
+                  if (!isReadEpochCurrent(readEpoch)) return;
                   if (statement.value.type !== row.statement.value.type) {
                     const prefix = `${recipeRowId(termsId, row.id)}-fact-`;
                     clearCorrections((error) => !!error.target?.startsWith(prefix));
@@ -603,11 +649,20 @@ function RecipeEditorLive({
                     previous.map((entry) => (entry.id === row.id ? { ...entry, ...(patch ?? {}), statement } : entry)),
                   );
                 }}
-                onOriginal={(original) =>
-                  setRows((previous) => previous.map((entry) => (entry.id === row.id ? { ...entry, original } : entry)))
-                }
+                onOriginal={(original) => {
+                  if (!isReadEpochCurrent(readEpoch)) return;
+                  setRows((previous) => previous.map((entry) => (entry.id === row.id ? { ...entry, original } : entry)));
+                }}
                 onRemove={() => {
-                  if (!lifetime.active() || running.current || pending.current || locked || created) return;
+                  if (
+                    !lifetime.active() ||
+                    !isReadEpochCurrent(readEpoch) ||
+                    running.current ||
+                    pending.current ||
+                    locked ||
+                    created
+                  )
+                    return;
                   setRows((previous) => previous.filter((entry) => entry.id !== row.id));
                   clearCorrections((error) => error.owner === recipeRowId(termsId, row.id));
                 }}
@@ -643,6 +698,7 @@ function RecipeEditorLive({
                 variant="outline"
                 disabled={locked || session !== 'signed-in' || !selectedAdditionalField}
                 onClick={() => {
+                  if (!isReadEpochCurrent(readEpoch) || !read) return;
                   if (!availableAdditionalFields(read, rows).includes(property)) return;
                   const definition = read.release.properties[property];
                   if (!definition) return;
@@ -723,7 +779,7 @@ function RecipeEditorLive({
                     busy ||
                     session !== 'signed-in' ||
                     failure?.reason === 'conflict' ||
-                    failure?.refreshDefinitions === true
+                    (failure?.refreshDefinitions === true && !(pending.current && pendingUncertain.current))
                   }
                 >
                   {busy
@@ -750,6 +806,9 @@ function RecipeFieldLive({
   corrections,
   clearCorrection,
   read,
+  currentRead,
+  readEpoch,
+  isReadEpochCurrent,
   locale,
   search,
   disabled,
@@ -767,6 +826,9 @@ function RecipeFieldLive({
   corrections: RecipeCorrection[];
   clearCorrection: (target: string) => void;
   read: Ready;
+  currentRead: Ready | undefined;
+  readEpoch: number;
+  isReadEpochCurrent: (epoch: number) => boolean;
   locale: string;
   search: EntityPickerSearch;
   disabled: boolean;
@@ -783,11 +845,12 @@ function RecipeFieldLive({
   const o = { locale: locale as never };
   const fieldId = feedbackId;
   const property = row.statement.property.id;
-  const currentDefinition = read.release.properties[property];
-  const matchesCurrentDefinition = rowMatchesCurrentDefinition(row, read);
+  const currentDefinition = currentRead?.release.properties[property];
+  const matchesCurrentDefinition = !!currentRead && rowMatchesCurrentDefinition(row, currentRead);
   const currentSource =
     !row.source ||
-    (read.public?.subject.statements[property] ?? []).some((statement) => statement.id === row.source!.id);
+    (!!currentRead &&
+      (currentRead.public?.subject.statements[property] ?? []).some((statement) => statement.id === row.source!.id));
   const reviewRequired = !matchesCurrentDefinition || !currentSource;
   const definition = matchesCurrentDefinition ? currentDefinition! : row.definition;
   const label = pickText(currentDefinition?.labels ?? row.definition.labels, locale).text || property;
@@ -874,6 +937,7 @@ function RecipeFieldLive({
     row.statement.qualifiers?.some(populatedPart) ||
     row.statement.references.some((reference) => reference.parts.some(populatedPart));
   const updateAuthored = (next: AuthoredField) => {
+    if (!isReadEpochCurrent(readEpoch)) return;
     clearCorrection(`${fieldId}-replace`);
     setAuthored(next);
     onChange({ ...row.statement, value: authoredFieldValue(next) }, { authored: next });
@@ -886,10 +950,11 @@ function RecipeFieldLive({
       ? { target: row.statement.value.content }
       : undefined;
   async function submit() {
-    if (!lifetime.active()) return;
-    if (!read.public || running.current || (reviewRequired && !wasUncertain)) return;
+    if (!lifetime.active() || !isReadEpochCurrent(readEpoch)) return;
+    const exactReplay = !!command && wasUncertain;
+    if ((!currentRead?.public && !exactReplay) || running.current || (reviewRequired && !wasUncertain)) return;
     const pending = command ?? {
-      id: read.public.subject.id,
+      id: currentRead!.public!.subject.id,
       statement: structuredClone(row.statement),
       key: crypto.randomUUID(),
     };
@@ -898,14 +963,14 @@ function RecipeFieldLive({
     setBusy(true);
     try {
       const next = await transport.propose(pending, wasUncertain);
-      if (!lifetime.active()) return;
+      if (!lifetime.active() || !isReadEpochCurrent(readEpoch)) return;
       onState({
         command: next.ok ? undefined : pending,
         result: next,
         uncertain: next.ok ? false : wasUncertain || next.reason === 'unavailable',
       });
     } catch {
-      if (!lifetime.active()) return;
+      if (!lifetime.active() || !isReadEpochCurrent(readEpoch)) return;
       onState({ command: pending, result: { ok: false, reason: 'unavailable' }, uncertain: true });
     } finally {
       if (!lifetime.active()) return;
@@ -914,8 +979,8 @@ function RecipeFieldLive({
     }
   }
   async function reviewCurrentDefinitions() {
-    if (!lifetime.active() || running.current || !result || result.ok) return;
-    if (row.uncertain) return;
+    if (!lifetime.active() || !isReadEpochCurrent(readEpoch) || running.current || !result || result.ok) return;
+    if (row.uncertain && !result.refreshDefinitions) return;
     if (result.reason !== 'stale' && !result.refreshDefinitions) {
       onState({ command: undefined, result: undefined, uncertain: false });
       return;
@@ -925,7 +990,7 @@ function RecipeFieldLive({
     try {
       if (await refreshDefinitions()) {
         if (!lifetime.active()) return;
-        onState({ command: undefined, result: undefined, uncertain: false });
+        onState(row.uncertain ? { result: undefined } : { command: undefined, result: undefined, uncertain: false });
       }
     } finally {
       if (!lifetime.active()) return;
@@ -1036,7 +1101,7 @@ function RecipeFieldLive({
                           {
                             id: row.statement.value.content,
                             title:
-                              pickText(read.public?.related[row.statement.value.content]?.labels ?? {}, locale).text ||
+                              pickText(currentRead?.public?.related[row.statement.value.content]?.labels ?? {}, locale).text ||
                               m.subject_value_unlabelled({}, o),
                             types: [],
                             typeLabel: '',
@@ -1052,6 +1117,7 @@ function RecipeFieldLive({
                 }
                 src={coverSrc}
                 onValueChange={(items) => {
+                  if (!isReadEpochCurrent(readEpoch)) return;
                   clearCorrection(`${fieldId}-entity`);
                   setPicked(items);
                   onChange(
@@ -1072,7 +1138,7 @@ function RecipeFieldLive({
                   .map((error) => ({ ...error, target: error.target! })),
               }}
               definition={definition}
-              read={{ release: read.release, public: { related: read.public?.related ?? {} } }}
+              read={{ release: read.release, public: { related: currentRead?.public?.related ?? {} } }}
               locale={locale}
               onChange={(value) => onChange({ ...row.statement, value })}
             />
@@ -1086,6 +1152,7 @@ function RecipeFieldLive({
               type="url"
               value={citation}
               onChange={(event) => {
+                if (!isReadEpochCurrent(readEpoch)) return;
                 const url = event.target.value;
                 setCitation(url);
                 onChange({
@@ -1176,14 +1243,20 @@ function RecipeFieldLive({
                 {m.correction_proposed({}, o)}
               </p>
               {review && (
-                <Button className={recipeActionClassName} type="button" onClick={() => setReviewing(true)}>
+                <Button
+                  className={recipeActionClassName}
+                  type="button"
+                  onClick={() => {
+                    if (isReadEpochCurrent(readEpoch)) setReviewing(true);
+                  }}
+                >
                   {m.correction_review({}, o)}
                 </Button>
               )}
             </div>
-            {reviewing && review && read.public && (
+            {reviewing && review && currentRead?.public && (
               <CandidateReview
-                id={read.public.subject.id}
+                id={currentRead.public.subject.id}
                 locale={locale}
                 initialProperty={property}
                 exactCandidate={result.candidate}
@@ -1196,8 +1269,11 @@ function RecipeFieldLive({
           <div data-content-item-slot="actions" className="flex min-w-0 flex-wrap gap-3">
             {result &&
               !result.ok &&
-              !row.uncertain &&
-              (result.reason === 'stale' || result.reason === 'invalid' || result.reason === 'denied') && (
+              (!row.uncertain || result.refreshDefinitions === true) &&
+              (result.refreshDefinitions === true ||
+                result.reason === 'stale' ||
+                result.reason === 'invalid' ||
+                result.reason === 'denied') && (
                 <Button
                   className={recipeActionClassName}
                   type="button"
@@ -1207,13 +1283,14 @@ function RecipeFieldLive({
                   {m.catalogue_create_review_new({}, o)}
                 </Button>
               )}
-            {read.public && (
+            {(currentRead?.public || (command && wasUncertain)) && (
               <Button
                 className={recipeActionClassName}
                 type="button"
                 disabled={
                   disabled ||
                   busy ||
+                  (!currentRead?.public && !wasUncertain) ||
                   (reviewRequired && !wasUncertain) ||
                   (result && !result.ok && result.refreshDefinitions === true && !wasUncertain) ||
                   (definition.datatype === 'document' &&

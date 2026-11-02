@@ -107,6 +107,8 @@ creating again. Later per-field submissions create candidates awaiting review an
 unchanged. Each field retains its own draft and request key after uncertain responses. Comparison, acceptance and
 selection reuse the existing candidate review controls and native decision heads. Current denial, concealed data,
 invalid input, conflict and unavailability remain distinct from an empty recipe profile.
+Recipe recovery retires public current markup through failed reads, retains mounted private drafts, permits explicit
+replay of sealed commands with their original requests, and restores authority only from a matching fresh read.
 
 Recipe creation rejection focuses the first known correction; editing clears only that control's feedback,
 and unknown server addresses stay unlinked until validation runs again. Errors retain stable language and fact
