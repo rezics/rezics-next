@@ -272,6 +272,7 @@ function DecisionVisit({
   retire,
 }: DecisionPageProps & { retire?: () => void }) {
   const [current, setCurrent] = useState<DecisionPage | null>(page);
+  const confirmedAppeal = useRef(page.decision.appeal ? page.decision : null);
   const [readState, setReadState] = useState<DecisionReadState>('unavailable');
   const [composition] = useState(createDecisionAppealIntent);
   const [, redraw] = useState(0);
@@ -374,7 +375,8 @@ function DecisionVisit({
           return;
         }
         composition.settle(Boolean(result.decision.appeal));
-        setCurrent((value) => (value ? { ...value, decision: result.decision, target: null } : null));
+        if (result.decision.appeal) confirmedAppeal.current = result.decision;
+        setCurrent((value) => ({ ...(value ?? page), decision: result.decision, target: null }));
         setFeedback(result.state === 'updated' ? 'conflict' : null);
       } else {
         if (result.state !== 'failed') composition.settle();
@@ -407,14 +409,14 @@ function DecisionVisit({
       ) {
         setCurrent(null);
         setReadState('closed');
+        confirmedAppeal.current = null;
         discard();
         return;
       }
       if (!active() || lifetime.current.readSerial !== token) return;
       // An overlapping target read cannot roll back an acknowledged appeal receipt.
-      setCurrent((value) =>
-        value?.decision.appeal && !next.decision.appeal ? { ...next, decision: value.decision } : next,
-      );
+      if (next.decision.appeal) confirmedAppeal.current = next.decision;
+      setCurrent({ ...next, decision: confirmedAppeal.current ?? next.decision });
       // A successful read without an appeal cannot settle a lost command response.
       if (!composition.unresolved || next.decision.appeal) {
         composition.settle(Boolean(next.decision.appeal));
@@ -426,6 +428,7 @@ function DecisionVisit({
         setCurrent(null);
         setReadState(state);
         if (state !== 'unavailable') {
+          confirmedAppeal.current = null;
           discard();
         }
       }

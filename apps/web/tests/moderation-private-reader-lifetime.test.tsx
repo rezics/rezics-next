@@ -1261,6 +1261,13 @@ for (const receipt of [false, true])
         await act(tick);
         expect(host.textContent).toContain(m.decision_appeal_pending());
         expect(visit.blocked()).toBe(false);
+        responseStatus = 503;
+        await click(m.decision_refresh());
+        expect(host.querySelector('textarea')).toBeNull();
+        responseStatus = 200;
+        await click(m.moderation_decision_read_retry());
+        expect(host.textContent).toContain(m.decision_appeal_pending());
+        expect(visit.blocked()).toBe(false);
         return;
       }
       await visit.depart();
