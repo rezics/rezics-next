@@ -80,7 +80,7 @@ test('exhaustion markers follow exact allowance keys and conservatively read leg
     now = Date.now();
   const observe = (allowanceKey: string, at = now) => {
     const keyedPool = { ...pool, allowanceKey };
-    const current = { ...reading(keyedPool, 0), allowanceKey };
+    const current = { ...reading(keyedPool, 0), observedAt: null, windows: [], error: 'unavailable' };
     return withObservedExhaustion(current, keyedPool, state, at);
   };
 
@@ -99,14 +99,29 @@ test('exhaustion markers follow exact allowance keys and conservatively read leg
 
   const legacyDirectory = join(state, 'exhausted');
   mkdirSync(legacyDirectory, { recursive: true });
-  writeFileSync(
-    join(legacyDirectory, 'safe-key.json'),
-    JSON.stringify({ observedAt: new Date(now).toISOString(), expiresAt: new Date(now + 1000).toISOString() }),
-  );
-  writeFileSync(
-    join(legacyDirectory, 'ambiguous_key.json'),
-    JSON.stringify({ observedAt: new Date(now).toISOString(), expiresAt: new Date(now + 1000).toISOString() }),
-  );
+  const legacy = (key: string, identity = {}) =>
+    writeFileSync(
+      join(legacyDirectory, `${key}.json`),
+      JSON.stringify({
+        observedAt: new Date(now).toISOString(),
+        expiresAt: new Date(now + 1000).toISOString(),
+        ...identity,
+      }),
+    );
+  legacy('safe-key');
+  legacy('ambiguous_key');
   expect(observe('safe-key', now + 100).exhausted).toBe(true);
+  expect(observe('safe-key', now + 1000)).toMatchObject({
+    exhausted: false, observedAt: null, windows: [], error: 'unavailable',
+  });
   expect(observe('ambiguous_key', now + 100).exhausted).toBe(false);
+  expect(observe('ambiguous/key', now + 100).exhausted).toBe(false);
+  legacy('old_key', { allowanceKey: 'old/key' });
+  expect(observe('old/key').exhausted).toBe(true);
+  expect(observe('old?key').exhausted).toBe(false);
+  expect(observe('old_key').exhausted).toBe(false);
+  markExhausted(state, 'old/key', now + 100, 100);
+  expect(observe('old/key', now + 199).observedAt).toBe(new Date(now + 100).toISOString());
+  expect(observe('old/key', now + 200).observedAt).toBe(new Date(now).toISOString());
+  expect(observe('old/key', now + 1000).exhausted).toBe(false);
 });

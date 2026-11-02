@@ -84,6 +84,7 @@ function simpleAllowanceKey(allowanceKey: string): boolean {
 
 function exhaustionPath(stateDirectory: string, allowanceKey: string): string {
   const directory = join(stateDirectory, 'exhausted');
+  // Keep existing simple-key paths; encode every code unit of other keys without normalization.
   if (simpleAllowanceKey(allowanceKey)) return join(directory, `${allowanceKey}.json`);
   const encodedKey = Buffer.from(allowanceKey, 'utf16le').toString('base64url');
   return join(directory, 'by-key', `${encodedKey}.json`);
@@ -124,7 +125,7 @@ export function withObservedExhaustion(
   const primaryPath = exhaustionPath(stateDirectory, pool.allowanceKey);
   const legacyPath = legacyExhaustionPath(stateDirectory, pool.allowanceKey);
   const paths = primaryPath === legacyPath ? [primaryPath] : [primaryPath, legacyPath];
-  const markers: { observedAt: string; observedTime: number; expires: number }[] = [];
+  const markers: { observedAt: string; observedTime: number }[] = [];
   for (const path of paths) {
     try {
       const marker = JSON.parse(readFileSync(path, 'utf8')) as {
@@ -142,13 +143,14 @@ export function withObservedExhaustion(
       const expires = marker.expiresAt
         ? Date.parse(String(marker.expiresAt))
         : observedTime + pool.policy.maxAgeMs;
-      if (!Number.isFinite(observedTime) || !Number.isFinite(expires)) continue;
-      markers.push({ observedAt: marker.observedAt, observedTime, expires });
+      // An expired new marker cannot invalidate a still-live, exactly identified legacy observation.
+      if (!Number.isFinite(observedTime) || !Number.isFinite(expires) || now >= expires) continue;
+      markers.push({ observedAt: marker.observedAt, observedTime });
     } catch {
       // Missing or malformed markers do not make a quota observation unavailable.
     }
   }
   const marker = markers.sort((left, right) => right.observedTime - left.observedTime)[0];
-  if (!marker || now >= marker.expires) return reading;
+  if (!marker) return reading;
   return { ...reading, observedAt: marker.observedAt, exhausted: true };
 }
