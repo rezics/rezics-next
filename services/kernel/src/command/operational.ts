@@ -17,6 +17,13 @@ import {
 } from './command.ts';
 import { enterCommandGate } from './gate.ts';
 import fence from './operational-fence.sql';
+import {
+  beginOperationalHistoryAttempt,
+  finalizeOperationalHistoryAttempt,
+  finishOperationalHistoryAttempt,
+  operationalHistoryEnqueueCapture,
+} from '../history/operational-work.ts';
+import { openOperationalWorkOriginal, debitOperationalWorkAttempt } from '../history/operational-work-budget.ts';
 
 declare const operational: unique symbol;
 export type OperationalTransaction = Pick<PoolClient, 'query'> & { readonly [operational]: true };
@@ -28,6 +35,8 @@ type CommonOptions = {
   deadline?: number;
   /** Trusted service configuration only. */
   clock?: () => Date;
+  /** Separate native History producer admission. Existing callers keep their ordinary behaviour. */
+  operationalHistory?: true;
 };
 export type OperationalOptions = CommonOptions &
   (
@@ -45,6 +54,7 @@ type Live = {
   deadline: number;
   partition: number;
   mode: OperationalOptions['mode'];
+  kind: string;
 };
 const live = new WeakMap<OperationalTransaction, Live>();
 
@@ -64,6 +74,7 @@ export function currentOperationalResources(tx: OperationalTransaction): Readonl
     deadline: state.deadline,
     partition: state.partition,
     mode: state.mode,
+    kind: state.kind,
   });
 }
 
@@ -77,7 +88,7 @@ export async function enqueueIntent(tx: OperationalTransaction, intent: WorkInte
     [...intent.input.accounts].sort().some((id, index) => id !== state.accounts[index])
   )
     throw new TypeError('Operational intent must name exactly its fenced accounts');
-  await enqueueWorkIntent(state.workClient, state.client, intent);
+  await enqueueWorkIntent(state.workClient, state.client, intent, operationalHistoryEnqueueCapture(tx, intent));
 }
 
 const remaining = (deadline: number) => Math.max(1, Math.floor(deadline - Date.now()));
@@ -127,11 +138,14 @@ export async function runOperationalTransaction<T>(
         })
       : null;
   const deadline = options.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
+  // One original, Pool, absolute deadline and cumulative local balance across contention.
+  const historyOriginal = options.operationalHistory ? openOperationalWorkOriginal(pool, deadline) : undefined;
   let contentionAttempts = 0;
   let lastAccessContention: AccessUnavailableError | undefined;
   while (Date.now() < deadline) {
     let time: AuthoritativeTime | undefined;
     try {
+      if (historyOriginal) debitOperationalWorkAttempt(historyOriginal);
       const gate = await enterCommandGate(pool, partition, deadline);
       if (gate.status !== 'acquired') throw unavailable(gate.status);
       try {
@@ -179,15 +193,19 @@ export async function runOperationalTransaction<T>(
                 deadline,
                 partition,
                 mode: options.mode,
+                kind,
               });
+              if (historyOriginal) beginOperationalHistoryAttempt(tx, historyOriginal);
               for (const id of accounts) await fenceOperationalAccount(tx, id);
               const value = await body(tx);
               await authorization?.finalize?.(tx, attempt, evidence);
               if (Date.now() >= deadline) throw unavailable('deadline');
+              await finalizeOperationalHistoryAttempt(tx);
               live.delete(tx);
               active = false;
               await client.query(`SET LOCAL statement_timeout = '${remaining(deadline)}ms'`);
               await client.query('COMMIT');
+              finishOperationalHistoryAttempt(tx, true);
               return value;
             });
           } catch (error) {
@@ -196,6 +214,7 @@ export async function runOperationalTransaction<T>(
           } finally {
             active = false;
             live.delete(tx);
+            finishOperationalHistoryAttempt(tx, false);
           }
         });
       } finally {

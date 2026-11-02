@@ -33,6 +33,9 @@ import {
   HISTORY_LOCATOR_INVALIDATION,
 } from './agent-identity-inventory-work.ts';
 import { deadlineFor } from '../request/deadline.ts';
+import { isOperationalWorkCustodyId, type CommittedOperationalWork,
+  type OperationalWorkTransfer } from './operational-work.ts';
+import { inspectOperationalWorkRetirement } from './operational-work-receiving.ts';
 
 /** Historical executions without captured native SDK creation keep this exact unresolved gap.
  * New executions use agent-identity-work's transactional mapping and two-stage source handoff.
@@ -312,9 +315,14 @@ export async function minimizeHistoryWork(
   registry: HistoryRegistry,
   barrier: HistoryBarrier,
   maintenance?: Pick<WorkContext, 'env' | 'clock'>,
+  operational?: Readonly<{ origin: CommittedOperationalWork; transfer: OperationalWorkTransfer }>,
 ): Promise<string | null> {
   const key = decodeLocator('durable-work/v1', locator);
   if (key.artifactType !== 'durable-work/v1') throw new TypeError('Invalid durable locator');
+  // Namespace is dispatch only: the branch resolves its exact durable native mapping and
+  // real SDK writer barrier before using the deterministic SDK name. No generic UUID cleanup.
+  if (isOperationalWorkCustodyId(key.workId))
+    return inspectOperationalWorkRetirement(pool, client, key.workId, operational);
   const { resolveAgentIdentitySDKWork } = await import('./agent-identity-work.ts');
   const unit = currentAgentIdentityHistoryUnit();
   await reserveIdentityHistoryWork(pool, nativeWork(4, 4, 3, 16384), unit?.context);

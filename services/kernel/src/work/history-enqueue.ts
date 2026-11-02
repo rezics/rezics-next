@@ -8,6 +8,8 @@ import { guardHistoryAccounts } from '../history/gates.ts';
 import { encodeLocator, validateLocator, validateScope, type HistoryScope } from '../history/locator.ts';
 import { enqueueWorkIntent, hasRetainedWorkCopies, type WorkClient, type WorkIntent } from './client.ts';
 import record from '../history/record.sql';
+// Separate operational provenance. Existing command and identity producers keep their own paths.
+export { receiveOperationalWorkDestination as receiveOperationalHistoryWork } from '../history/operational-work-receiving.ts';
 
 export type ScopedWorkRequest = Readonly<{ owner: string; intent: WorkIntent; scope: HistoryScope }>;
 function validate(request: ScopedWorkRequest, custodyId = request.intent.workflowId) {

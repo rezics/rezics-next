@@ -79,6 +79,97 @@ also charged before `minimizeHistoryWork` checks out its first connection. `rece
 keep their local deadline while the reservation helper resolves the inherited original Source token and frame;
 wrong-Pool and settled provenance therefore refuses before the next checkout or SQL dispatch.
 
+## Operational Members Work
+
+`operational-work.ts:registerOperationalHistoryWork(tx, binding, intent)` accepts the genuine live
+`OperationalTransaction` from `runOperationalTransaction` with `operationalHistory: true`. The source must be a
+request of kind `library.membersPreparation`, on `partitionOf(route)`, fencing exactly `[ownerAccountId]`. The
+binding contains `route`, `ownerAccountId`, `collectionId`, sorted unique `episodes` and sorted unique `retired`
+locators. Each of the 1..16 new episodes supplies its exact `collectionId`, `episodeId`, `reservedIncarnation`,
+decimal-string `reservedGeneration`, `canonicalBasis` and lowercase SHA-256 `basisDigest`. Retired locators are
+bounded by 32. Canonical basis remains `[1, owner, collection, admittedFilter, sort, releaseDigest]`. Commerce
+owns native reservation verification and episode association; this producer neither admits a filter nor replaces
+that owner. Existing-basis reuse with `intent: null` does not call registration or enqueue.
+
+Registration owns the one existing `enqueueIntent` call on that same underlying source client. Callers must remove
+their separate enqueue when opting in. The exact `workflows/library.membersPreparation` name, deterministic
+`library:members-preparation:<route>:<owner>:<minimum-new-episode>` ID, sorted locator-only
+`accounts/route/episodes/cleanup` input and 4096-byte payload cap are unchanged. No positional arguments or
+additional payload keys are admitted. The full canonical binding is bounded by 196608 bytes. Same binding with a
+different body conflicts; repetition of the exact original returns its existing native locator without enqueue.
+The immutable source association retains the original operation kind/mode/partition/accounts/deadline and the
+complete actual Access identity role union, independently of the payload's single owner account. At most eight
+distinct identity accounts are admitted; role bits are preserved without projection. The owner and
+durable-initiator role bits are added to the native owner association. The record-source binding is stored
+separately in the immutable original and episode tables; it is not an inferred account role.
+
+The returned `OperationalWorkRegistration { partition, custodyId }` is only an opaque durable lookup key. It is
+serializable but is not committed authority. The custody UUID namespace selects a dispatch branch; neither it nor
+the separate transaction UUID proves original authority or funding. The executor seals the association just before
+its native COMMIT, then activates private transfers only after COMMIT succeeds. Every exit invalidates the live
+transaction; rollback/contention invalidate their transfers without refund. Existing non-opted-in operational
+and command/identity History paths keep their existing behavior.
+
+`reserveOperationalWorkTransfer(tx, phase)` reserves a private one-shot child for `resolve`, `receive`, `replay` or
+`retirement` after registration while the authentic original is live. Each token binds that exact native custody
+locator. Copies, foreign Pools or locators, repeated phase issuance, expired deadlines,
+failed attempts and precommit use refuse before checkout. `resolveCommittedOperationalWork(pool, locator, transfer)`
+performs one bounded committed durable read and releases the source client before returning an opaque
+`CommittedOperationalWork` or `null`. Here **committed means the registration association was observed after native
+commit, not that an original log position or custody receipt exists**. `operationalWorkSource(pool, origin)` exposes
+a defensive copy for owner integration during that released resolution's lifetime.
+
+`receiveCommittedOperationalWork(pool, workClient, origin, receiveTransfer)` (also exported as
+`work/history-enqueue.ts:receiveOperationalHistoryWork`) writes the independent partition-led
+`core.operational_work_mapping` and receiving `history_work`/role inventory. It reads back the exact immutable
+mapping and original SDK status/input, and holds the SDK's actual restore-domain/writer barrier through the
+receiving COMMIT. Native custody is translated to the unchanged deterministic SDK ID on every SDK read. It never
+enqueues again or inserts `core.agent_identity_work`. It returns `registered-pending-position` or `uncaptured`;
+an already existing SDK execution or orphan physical copy can never become initial positive custody. SDK creator,
+serialized input digest and writer/restore generation bind the original physical execution. SDK recreation,
+receiving incarnation change and source restore invalidate their respective branches. Physical single-database
+placement is not independent-home or restore-completion evidence.
+
+The eight-axis local declaration is in `operational-work-budget.ts`, in the order candidate keys, native rows,
+identity metadata rows, empty seeks, native points, witness keys, statements, bytes:
+
+| Body | Complete local bound |
+| --- | --- |
+| Executor attempt controls and native fence | `(0,7,0,3,3,0,14,768)` |
+| Registration, same-client SDK/callback, inventory and final seal | `(0,1177,0,1177,1177,0,453,588032)` |
+| Committed resolution | `(0,4,0,3,3,0,7,290816)` |
+| Receiving and exact readback | `(0,1137,0,1133,1133,0,428,676864)` |
+| Replay or guarded retirement probe, each | `(0,29,0,25,25,0,24,317952)` |
+| Original ceiling, three complete attempts including failed child reservations | `(0,7149,0,7098,7098,0,2850,6577152)` |
+
+These bounds include literal SQL controls/settings/commit/rollback, trigger/FK/role bodies, all eight SDK physical
+existence probes, SDK projection/callback reads, bounded serialization, receiving writer checks and repeated probes.
+The executor prepays attempt controls before its first I/O; registration prepays its body before its first read;
+private child reservations subtract their complete body before checkout. One actual Pool, absolute deadline and
+cumulative balance cover all attempts; spent allowances do not refill. This is only the opt-in producer's local
+declaration. Commerce's reservation/association, Access preparation and final Source/Library/physical-owner bodies
+require their own actual prices and private original composition. This local declaration grants none of those
+allowances and does not consume the selected preference-History or identity-only allocation.
+
+The installed native operational fence only locks the current partition. `events/read-log.sql` enumerates every
+partition position and `events/log.ts` rejects a missing envelope as a gap. Incrementing that position for an
+eventless operational registration would break the log, while this producer is not authorized to create an event or
+change command semantics. Consequently the exact missing final operand is the authentic **original operational
+commit `(epoch, position)`**. The association records its real partition epoch but keeps `source_position = NULL`
+and `operational-work-original-log-position-unavailable`; current position, time, xmin, later Source heads and SDK
+IDs are never substituted. A deferred database constraint prevents an unsealed association from committing.
+
+`verifyOperationalWorkReplay` checks the real mapped receiving inventory/writer and then refuses positive replay
+for that missing position (or `operational-work-uncaptured-older-execution`). `durable.ts:minimizeHistoryWork` accepts
+an optional final `{ origin, transfer }` operand and dispatches the native namespace to the same fenced branch;
+missing private funding refuses before I/O. No SDK deletion is attempted under a custody UUID. Native immutable
+mapping/role guards also prevent generic History from declaring readiness, physical absence, retirement or a
+minimized receiving proof. After a genuine original position becomes available, final Source currentness,
+independent physical-home inventory/restore authority and Commerce's completion association remain separate owner
+operands. Registration, terminal workflow status, local cleanup, EOF, source publication and ACK prove none of
+those. Focused native rollback/contention/idempotency/conflict/expiry/uncaptured/recreation regressions are authored
+in `test/history/operational-work.test.ts`; native acceptance remains deferred to the controller.
+
 History validates the exact account-discovery effect row/workflow and effects checkpoint, then must also verify
 Search's current discovery enrollment through a released owner observation and a final same-home result. No such
 Search owner capability is installed in this composition. A checkpoint does not identify the current consumer
