@@ -183,6 +183,7 @@ test('Finish moderator report reference and precise receipt dates', async () => 
             </div>,
           );
           const article = host.querySelector('article')!;
+          expect(article.querySelector('[role="status"]')).not.toBe(window.document.activeElement);
           expect(host.firstElementChild?.getAttribute('dir')).toBe(dir);
           expect(host.firstElementChild?.getAttribute('style')).toContain(`${width}px`);
           expect(article.textContent).toContain(report.reason);
@@ -314,6 +315,7 @@ test('report reference stays independent through pending, exact uncertain retry 
     await flush();
     expect(calls).toHaveLength(1);
     expect(reads).toBe(0);
+    button(host, m.moderation_queue_retry_action()).focus();
     await click(host, m.moderation_queue_retry_action(), flush);
     expect(calls).toHaveLength(2);
     expect(calls[1]).toEqual(calls[0]);
@@ -331,8 +333,73 @@ test('report reference stays independent through pending, exact uncertain retry 
     expect(host.textContent).toContain(report.evidence!);
     expect(host.querySelectorAll('time')).toHaveLength(1);
     expect(host.querySelector('textarea')).toBeNull();
+    expect(window.document.activeElement).toBe(host.querySelector('[role="status"]'));
     reference(host);
     expect(calls).toHaveLength(2);
+  });
+});
+
+test('individual settlement follows only the current keyboard submit or retry intent', async () => {
+  await withDom(async ({ host, window, render, flush }) => {
+    const { ReportReviewCard } = await import('../src/moderation/reports-view-card');
+    const { createReportsBulkAction } = await import('../src/moderation/reports-bulk-action');
+    for (const mode of [
+      'current', 'submit', 'focus', 'focus-return', 'pointer', 'pointer-submit', 'activation',
+      'report-return', 'owner-return', 'read-return', 'connection-return', 'retired', 'unmount',
+    ]) {
+      const pending = deferred<ActionResult>();
+      const owner = createReportsBulkAction([report]);
+      const card = (row = report, intentOwner = owner) => (
+        <ReportReviewCard key={mode} report={row} intentOwner={intentOwner} target={target} revision={revision}
+          takenDown={false} onAction={() => pending.promise} onTakenDown={() => {}} />
+      );
+      await render(card());
+      await click(host, m.moderation_queue_review(), flush);
+      if (mode === 'submit') {
+        const field = host.querySelector('textarea')!;
+        await act(async () => {
+          Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!.call(field, 'Spam');
+          field.dispatchEvent(new window.Event('input', { bubbles: true }));
+        });
+      }
+      const source = button(host, mode === 'submit' ? m.moderation_take_down() : m.moderation_dismiss());
+      source.focus();
+      await act(async () => {
+        source.dispatchEvent(new window.MouseEvent('click', { bubbles: true, detail: mode === 'pointer-submit' ? 1 : 0 }));
+      });
+      await flush();
+      const summary = host.querySelector('summary')!;
+      if (mode === 'focus' || mode === 'focus-return') {
+        summary.focus();
+        if (mode === 'focus-return') source.focus();
+      }
+      if (mode === 'pointer') window.document.body.dispatchEvent(new window.Event('pointerdown', { bubbles: true }));
+      if (mode === 'activation') summary.click();
+      if (mode === 'report-return') {
+        await render(card({ ...report }));
+        await render(card());
+      }
+      if (mode === 'owner-return') {
+        await render(card(report, createReportsBulkAction([report])));
+        await render(card());
+      }
+      if (mode === 'read-return') await act(async () => owner.read(async () => {}));
+      if (mode === 'connection-return') { owner.detach(); owner.attach(); }
+      if (mode === 'retired') owner.leave();
+      if (mode === 'unmount') {
+        await render(<button>Elsewhere</button>);
+        host.querySelector('button')!.focus();
+      }
+      await act(async () => pending.resolve({ ok: true }));
+      await flush();
+      const result = host.querySelector('[role="status"][tabindex="-1"]');
+      expect(result !== null).toBe(!['connection-return', 'retired', 'unmount'].includes(mode));
+      if (mode === 'current' || mode === 'submit') {
+        expect(window.document.activeElement).toBe(result);
+      } else expect(window.document.activeElement).not.toBe(result);
+      if (mode === 'focus') expect(window.document.activeElement).toBe(summary);
+      if (mode === 'unmount') expect(window.document.activeElement).toBe(host.querySelector('button'));
+    }
   });
 });
 

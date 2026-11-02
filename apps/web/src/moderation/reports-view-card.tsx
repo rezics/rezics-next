@@ -16,6 +16,10 @@ import { useAuthoringDeparture } from '../threads/authoring-departure';
 import { reportReviewDepartureMessages, reportReviewNavigationContext } from './reports-bulk-controls';
 
 type Confirmation = { action: 'dismiss' } | { action: 'take-down'; reason: string };
+type SettlementFocus = { generation: unknown; confirmation?: Confirmation; cancel: () => void };
+function keyboardSource(event: { detail: number; currentTarget: HTMLButtonElement }) {
+  return event.detail === 0 ? event.currentTarget : null;
+}
 const utcSuffix = /Z$/;
 // Keep the supplied UTC precision, including fractions finer than JavaScript Date's milliseconds.
 const date = (value: string) => value.replace('T', ' ').replace(utcSuffix, ' UTC');
@@ -87,9 +91,42 @@ export function ReportReviewCard({
     reportReviewNavigationContext,
   );
   const confirmationRef = useRef<HTMLDivElement>(null);
+  const settlementFocus = useRef<SettlementFocus | null>(null);
+  const submitSource = useRef<HTMLButtonElement | null>(null);
+  useLayoutEffect(() => () => settlementFocus.current?.cancel(), [report, intentOwner]);
   useEffect(() => {
-    if (confirmed) confirmationRef.current?.focus();
-  }, [confirmed]);
+    const focus = settlementFocus.current;
+    if (!confirmed || focus?.confirmation !== confirmed) return;
+    focus.cancel();
+    if (intentOwner && (!intentOwner.isCurrent() || intentOwner.generation() !== focus.generation)) return;
+    confirmationRef.current?.focus();
+  }, [confirmed, intentOwner]);
+
+  function beginSettlement(source: HTMLButtonElement | null): SettlementFocus | null {
+    settlementFocus.current?.cancel();
+    if (!source || source.ownerDocument.activeElement !== source) return null;
+    const document = source.ownerDocument;
+    const view = document.defaultView;
+    const events = ['focusin', 'pointerdown', 'click', 'keydown'] as const;
+    let unsubscribe: (() => void) | undefined;
+    const focus: SettlementFocus = {
+      generation: intentOwner?.generation(),
+      cancel() {
+        if (settlementFocus.current === focus) settlementFocus.current = null;
+        for (const event of events) document.removeEventListener(event, focus.cancel, true);
+        view?.removeEventListener('blur', focus.cancel);
+        unsubscribe?.();
+      },
+    };
+    settlementFocus.current = focus;
+    // Listen only for this handoff; moving away and back cannot restore it.
+    for (const event of events) document.addEventListener(event, focus.cancel, true);
+    view?.addEventListener('blur', focus.cancel);
+    unsubscribe = intentOwner?.subscribe(() => {
+      if (!intentOwner.isCurrent() || intentOwner.generation() !== focus.generation) focus.cancel();
+    });
+    return focus;
+  }
   const status =
     report.outcome === 'actioned'
       ? m.moderation_actioned()
@@ -99,7 +136,7 @@ export function ReportReviewCard({
           ? m.moderation_queue_takedown_confirmed()
           : m.moderation_queue_open();
 
-  async function act(action: 'dismiss' | 'take-down') {
+  async function act(action: 'dismiss' | 'take-down', source: HTMLButtonElement | null) {
     if (bulkBlocked || pending || confirmed || report.outcome || failure || (takenDown && action === 'take-down'))
       return;
     setMessage('');
@@ -121,35 +158,47 @@ export function ReportReviewCard({
             reason: confirmation.reason,
           };
     if (intentOwner && !intentOwner.claimIndividual(report.id)) return;
+    const focus = beginSettlement(source);
     setPending(true);
     try {
-      finish(await reviewAction.submit(intent, onAction), confirmation);
+      finish(await reviewAction.submit(intent, onAction), confirmation, focus);
     } finally {
       setPending(false);
     }
   }
 
-  function finish(result: ReportReviewResult | undefined, confirmation: Confirmation) {
-    if (!result) return;
+  function finish(
+    result: ReportReviewResult | undefined,
+    confirmation: Confirmation,
+    focus: SettlementFocus | null,
+  ) {
+    if (!result) {
+      focus?.cancel();
+      return;
+    }
     if (!result.ok) {
+      focus?.cancel();
       setFailure(result.state);
       return;
     }
     setFailure(null);
+    if (focus && settlementFocus.current === focus) focus.confirmation = confirmation;
     setConfirmed(confirmation);
     if (confirmation.action === 'take-down') onTakenDown();
     if (onRefresh) void onRefresh().catch(() => setMessage(m.moderation_queue_error()));
   }
 
-  async function retry() {
+  async function retry(source: HTMLButtonElement | null) {
     const input = reviewAction.input;
     if (bulkBlocked || pending || !input) return;
+    const focus = beginSettlement(source);
     setPending(true);
     setMessage('');
     try {
       finish(
         await reviewAction.retry(onAction),
         input.action === 'dismiss' ? { action: 'dismiss' } : { action: 'take-down', reason: input.reason },
+        focus,
       );
     } finally {
       setPending(false);
@@ -297,7 +346,9 @@ export function ReportReviewCard({
                 aria-busy={pending}
                 onSubmit={(event) => {
                   event.preventDefault();
-                  void act('take-down');
+                  const source = submitSource.current;
+                  submitSource.current = null;
+                  void act('take-down', (event.nativeEvent as SubmitEvent).submitter === source ? source : null);
                 }}
               >
                 <Field>
@@ -322,7 +373,15 @@ export function ReportReviewCard({
                   <p className="text-sm text-muted-foreground">{m.moderation_queue_takedown_confirmed()}</p>
                 ) : null}
                 <div className="flex flex-wrap gap-2">
-                  <Button type="submit" variant="destructive" className="min-h-11" disabled={blocked || takenDown}>
+                  <Button
+                    type="submit"
+                    variant="destructive"
+                    className="min-h-11"
+                    disabled={blocked || takenDown}
+                    onClick={(event) => {
+                      submitSource.current = keyboardSource(event);
+                    }}
+                  >
                     {m.moderation_take_down()}
                   </Button>
                   <Button
@@ -330,7 +389,7 @@ export function ReportReviewCard({
                     variant="outline"
                     className="min-h-11"
                     disabled={blocked}
-                    onClick={() => void act('dismiss')}
+                    onClick={(event) => void act('dismiss', keyboardSource(event))}
                   >
                     {m.moderation_dismiss()}
                   </Button>
@@ -352,7 +411,7 @@ export function ReportReviewCard({
                         variant="outline"
                         className="min-h-11"
                         disabled={bulkBlocked || pending}
-                        onClick={() => void retry()}
+                        onClick={(event) => void retry(keyboardSource(event))}
                       >
                         {m.moderation_queue_retry_action()}
                       </Button>
