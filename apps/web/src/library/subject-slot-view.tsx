@@ -315,6 +315,7 @@ function SubjectLibrarySlotView({
   const memberFlight = useRef(false);
   const pickerFlight = useRef(false);
   const labelFlight = useRef(false);
+  // Explicit retry owns the original sender, credential and exact native command across read recovery.
   const uncertainEntry = useRef<{
     input: SubjectLibraryMutation;
     csrfToken: string;
@@ -355,6 +356,7 @@ function SubjectLibrarySlotView({
     running: boolean;
     response?: Awaited<ReturnType<typeof restoreSubjectLibrarySlot>> | undefined;
   } | null>(null);
+  const memberCreateAdmitted = useOperation('collection_member.create');
   const restoreAdmitted = useOperation('library_entry.restore');
   const entryPutAdmitted = useOperation('library_entry.put');
   const entryDeleteAdmitted = useOperation('library_entry.delete');
@@ -1038,7 +1040,7 @@ function SubjectLibrarySlotView({
         </div>
       ) : null}
       {data.restore ? <EntryRestoreFeedback restore={data.restore} locale={locale} /> : null}
-      {entry && data.session === 'signed-in' ? (
+      {entry && data.session === 'signed-in' && data.csrfToken ? (
         <noscript>
           <EntryRemoveForm
             subjectId={subject.id}
@@ -1146,7 +1148,7 @@ function SubjectLibrarySlotView({
                           <button
                             className={`${linkClass} inline-flex min-h-[44px] w-full min-w-0 items-center justify-between gap-2 rounded-md px-2 py-2 text-start whitespace-normal hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60 ${controlFocusClass}`}
                             type="button"
-                            disabled={!hydrated || !data.csrfToken || !memberCreate}
+                            disabled={!hydrated || !data.csrfToken || !memberCreateAdmitted}
                             onClick={() => void addToCollection(collection.id)}
                           >
                             <span className="min-w-0 [overflow-wrap:anywhere]">{collection.title}</span>

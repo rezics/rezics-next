@@ -654,10 +654,10 @@ test('A tokenless reader sees current native slot facts and can retry reads; tok
   await act(async () => entries[0]!.reject(new Error('write unknown')));
   await act(async () => client.setQueryData(['session'], { ...viewer(), csrfToken: null }));
   await act(async () => reads.at(-1)!.resolve({ ...data, provenance: { ...data.provenance!, readId: crypto.randomUUID() } }));
+  const stale = button(m.library_selection_retry());
   await click(m.library_selection_retry());
   expect(entries[1]!.csrf).toBe('arrived');
   expect(entries[1]!.data).toEqual(entries[0]!.data);
-  const stale = button(m.library_selection_retry());
   await act(async () => client.setQueryData(['session'], { state: 'signed-out', subject: null, csrfToken: null }));
   await act(async () => stale.click());
   expect(entries).toHaveLength(2);
