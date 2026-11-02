@@ -48,9 +48,11 @@ export function registerDefinitionCatalogueWork(context: WorkContext) {
         cataloguePin(rootDigest);
         await context.client.enqueue(
           {
-            queueName: 'maintenance', workflowName: activationName,
+            queueName: 'maintenance',
+            workflowName: activationName,
             workflowID: `semantic:catalogue:activation:${activationId}`,
-            workflowIDReusePolicy: 'return-existing', queuePartitionKey: 'semantic:catalogue:0',
+            workflowIDReusePolicy: 'return-existing',
+            queuePartitionKey: 'semantic:catalogue:0',
           },
           { rootDigest, activationId },
         );

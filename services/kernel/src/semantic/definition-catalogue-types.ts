@@ -43,10 +43,11 @@ export type CatalogueMechanicalInput = Readonly<{
   episode: string;
   position: string;
   deadline: number;
-}> & (
-  | Readonly<{ phase: 'step'; buildTransactionId: string }>
-  | Readonly<{ phase: 'activation-step'; activationId: string }>
-);
+}> &
+  (
+    | Readonly<{ phase: 'step'; buildTransactionId: string }>
+    | Readonly<{ phase: 'activation-step'; activationId: string }>
+  );
 export type CatalogueMechanicalResult =
   | Readonly<{ phase: 'step'; progress: import('./definition-catalogue-publication.ts').CatalogueBuildStatus }>
   | Readonly<{

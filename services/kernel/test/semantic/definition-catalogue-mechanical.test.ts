@@ -5,19 +5,36 @@ import {
   encodeCatalogueMechanicalResult,
   decodeCatalogueMechanicalResult,
 } from '../../src/semantic/definition-catalogue-mechanical.ts';
-import type { CatalogueMechanicalInput, CatalogueMechanicalResult } from '../../src/semantic/definition-catalogue-types.ts';
+import type {
+  CatalogueMechanicalInput,
+  CatalogueMechanicalResult,
+} from '../../src/semantic/definition-catalogue-types.ts';
 
 const root = `sha256:${'a'.repeat(64)}`;
 const job = '11111111-1111-4111-8111-111111111111';
 const input: CatalogueMechanicalInput = {
-  format: 'catalogue-mechanical-input/1', phase: 'step', root,
-  buildTransactionId: job, episode: job, position: '7', deadline: 2_000_000_000_000,
+  format: 'catalogue-mechanical-input/1',
+  phase: 'step',
+  root,
+  buildTransactionId: job,
+  episode: job,
+  position: '7',
+  deadline: 2_000_000_000_000,
 };
 const result: Extract<CatalogueMechanicalResult, { phase: 'step' }> = {
-  phase: 'step', progress: {
+  phase: 'step',
+  progress: {
     pin: { format: CATALOGUE_FORMAT, rootDigest: root, kindSpec: KIND_FORMAT, reduction: KIND_REDUCTION },
-    state: 'incomplete', phase: 'release', steps: '8', nodes: '1', releases: '0',
-    declarations: '0', indexed_rows: '0', examined_bytes: '0', missing_digest: root, error: null,
+    state: 'incomplete',
+    phase: 'release',
+    steps: '8',
+    nodes: '1',
+    releases: '0',
+    declarations: '0',
+    indexed_rows: '0',
+    examined_bytes: '0',
+    missing_digest: root,
+    error: null,
   },
 };
 
@@ -40,26 +57,47 @@ test('bounded result data round trips across restart with exact root, phase and 
 });
 
 test('foreign phase, unsupported public input, oversized or skipped native positions refuse', () => {
-  for (const changed of [{ phase: 'activate' }, { position: '08' }, { position: '9223372036854775808' }, { extra: true }])
+  for (const changed of [
+    { phase: 'activate' },
+    { position: '08' },
+    { position: '9223372036854775808' },
+    { extra: true },
+  ])
     expect(() => catalogueMechanicalSelection({ ...input, ...changed } as CatalogueMechanicalInput)).toThrow();
   for (const steps of ['6', '9'])
-    expect(() => encodeCatalogueMechanicalResult(input, { ...result, progress: { ...result.progress, steps } })).toThrow();
-  expect(() => encodeCatalogueMechanicalResult(input, {
-    ...result, progress: { ...result.progress, error: 'a'.repeat(8193) },
-  })).toThrow();
+    expect(() =>
+      encodeCatalogueMechanicalResult(input, { ...result, progress: { ...result.progress, steps } }),
+    ).toThrow();
+  expect(() =>
+    encodeCatalogueMechanicalResult(input, {
+      ...result,
+      progress: { ...result.progress, error: 'a'.repeat(8193) },
+    }),
+  ).toThrow();
 });
 
 test('activation recovery keeps the exact intent and cannot report active with pending withdrawals', () => {
   const activation: CatalogueMechanicalInput = {
-    format: 'catalogue-mechanical-input/1', phase: 'activation-step', root,
-    activationId: job, episode: job, position: '1', deadline: input.deadline,
+    format: 'catalogue-mechanical-input/1',
+    phase: 'activation-step',
+    root,
+    activationId: job,
+    episode: job,
+    position: '1',
+    deadline: input.deadline,
   };
   const pending: CatalogueMechanicalResult = {
-    phase: 'activation-step', progress: { activationId: job, state: 'invalidating', pending: true },
+    phase: 'activation-step',
+    progress: { activationId: job, state: 'invalidating', pending: true },
   };
-  expect(decodeCatalogueMechanicalResult(activation, encodeCatalogueMechanicalResult(activation, pending))).toEqual(pending);
-  expect(() => encodeCatalogueMechanicalResult(activation, {
-    ...pending, progress: { ...pending.progress, state: 'active' },
-  })).toThrow();
+  expect(decodeCatalogueMechanicalResult(activation, encodeCatalogueMechanicalResult(activation, pending))).toEqual(
+    pending,
+  );
+  expect(() =>
+    encodeCatalogueMechanicalResult(activation, {
+      ...pending,
+      progress: { ...pending.progress, state: 'active' },
+    }),
+  ).toThrow();
   expect(() => encodeCatalogueMechanicalResult(input, pending)).toThrow();
 });

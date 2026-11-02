@@ -126,18 +126,18 @@ A callback returning after the original deadline fails without refund; escaped b
 
 ## Physical inventory and reclamation proof
 
-| Physical record | References and retained liability | Permitted transition |
-| --- | --- | --- |
-| Original allocation | Native command identity, immutable input/deadline, all admitted/spent totals, dispatch/result transactions | admitted → spent → terminal; permanent compact terminal key |
-| Seven tickets | Original FK, kind/slot, each disjoint finite component and dispatch transaction | admitted → spent; bounded deletion only for a terminal original |
-| Native positions | Actual build `steps` or activation `native_position`, original FK, root FK, recording transaction | insert-once; bounded deletion only after original terminal settlement |
-| Root enrollment | Immutable build provenance, current head, consumers, positions, retirement, frontier consumer-root FK, activation previous-root references | unproven stays unproven; open → closed; retained audit record |
-| Build/artifact/identity/index rows | Root pin, immutable addressed artifacts, tasks, members, Kind labels and exact Type/profile closure | retained audit/provenance; no deletion claimed by this slice |
-| Consumer enrollment | Exact root, original consumer, selector, native provenance, generation/sequence; may be negative/pending/in-flight/uncertain | retain until genuine current Source nonrevival proof; missing proof never counts as absence |
-| Frontier capture | Target activation FK and exact old consumer root, duplicated consumer/provenance/selector, closed generation and slot | retain across current-row disappearance, replay and owner ABA; no Source-free removal |
-| Activation and pending event | Expected head, previous-root reverse reference, generation/cut/staged/native positions; committed command receipt and outbox ownership | ready → closing → invalidating → active; no final CAS from a precommit locator |
-| Retirement cursor | Exact activated intent's old root, current head exclusion, phase and last original key | captures → consumers → tickets → positions → terminal; commits with each bounded component |
-| Owner/restore and native receipts | Source owns current owner/nonrevival; Core owns committed dispatch/result association | foreign last-reference/settlement prerequisites; no duplicate writer or deletion |
+| Physical record                    | References and retained liability                                                                                                          | Permitted transition                                                                        |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
+| Original allocation                | Native command identity, immutable input/deadline, all admitted/spent totals, dispatch/result transactions                                 | admitted → spent → terminal; permanent compact terminal key                                 |
+| Seven tickets                      | Original FK, kind/slot, each disjoint finite component and dispatch transaction                                                            | admitted → spent; bounded deletion only for a terminal original                             |
+| Native positions                   | Actual build `steps` or activation `native_position`, original FK, root FK, recording transaction                                          | insert-once; bounded deletion only after original terminal settlement                       |
+| Root enrollment                    | Immutable build provenance, current head, consumers, positions, retirement, frontier consumer-root FK, activation previous-root references | unproven stays unproven; open → closed; retained audit record                               |
+| Build/artifact/identity/index rows | Root pin, immutable addressed artifacts, tasks, members, Kind labels and exact Type/profile closure                                        | retained audit/provenance; no deletion claimed by this slice                                |
+| Consumer enrollment                | Exact root, original consumer, selector, native provenance, generation/sequence; may be negative/pending/in-flight/uncertain               | retain until genuine current Source nonrevival proof; missing proof never counts as absence |
+| Frontier capture                   | Target activation FK and exact old consumer root, duplicated consumer/provenance/selector, closed generation and slot                      | retain across current-row disappearance, replay and owner ABA; no Source-free removal       |
+| Activation and pending event       | Expected head, previous-root reverse reference, generation/cut/staged/native positions; committed command receipt and outbox ownership     | ready → closing → invalidating → active; no final CAS from a precommit locator              |
+| Retirement cursor                  | Exact activated intent's old root, current head exclusion, phase and last original key                                                     | captures → consumers → tickets → positions → terminal; commits with each bounded component  |
+| Owner/restore and native receipts  | Source owns current owner/nonrevival; Core owns committed dispatch/result association                                                      | foreign last-reference/settlement prerequisites; no duplicate writer or deletion            |
 
 Retirement first locks the activated intent and actual previous root in head-first order. A current head or
 unproven/open root cannot retire. A nonempty old cut or any frontier/current consumer retains a precise Source
@@ -164,7 +164,6 @@ catalogue and Accounts branch bodies were read as repository history, not merged
 or legacy branch was ported. Tests append literal arithmetic, pre-IO original refusal and genuine route/native
 replay assertions; they never insert custody, tickets, ACKs or complete bits to manufacture authority. Original
 acceptance/native/unit/growth/full execution remains deferred. Typing alone does not establish product completion.
-
 
 ## Mechanical receiving representation
 

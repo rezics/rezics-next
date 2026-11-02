@@ -94,8 +94,14 @@ export const CATALOGUE_MECHANICAL_COMPOSITION = Object.freeze({
   phases: Object.freeze(['step', 'activation-step'] as const),
   installed: false as const,
   missing: Object.freeze([
-    Object.freeze({ owner: 'Core', operation: 'receipt-free publisher pre-checkout lifetime and committed irreversible-ticket result resolver' }),
-    Object.freeze({ owner: 'Semantic', operation: 'native-position original admission and complete prepaid finite schedule' }),
+    Object.freeze({
+      owner: 'Core',
+      operation: 'receipt-free publisher pre-checkout lifetime and committed irreversible-ticket result resolver',
+    }),
+    Object.freeze({
+      owner: 'Semantic',
+      operation: 'native-position original admission and complete prepaid finite schedule',
+    }),
   ] satisfies CataloguePublisherMissingTerm[]),
 });
 export class CataloguePublisherAdmissionUnavailable extends AccessUnavailableError {
@@ -402,10 +408,13 @@ export function cataloguePublisherInvocation(pool: Pool, phase: CataloguePublish
         if (!original.mechanicalInput) return unavailable();
         const selection = catalogueMechanicalSelection(original.mechanicalInput);
         if (
-          selection.input.phase !== phase || selection.input.root !== root ||
-          selection.input.deadline !== original.deadline || selection.originalKey !== original.originalKey ||
+          selection.input.phase !== phase ||
+          selection.input.root !== root ||
+          selection.input.deadline !== original.deadline ||
+          selection.originalKey !== original.originalKey ||
           !Buffer.from(selection.inputDigest.slice(7), 'hex').equals(original.inputDigest)
-        ) return unavailable();
+        )
+          return unavailable();
       } else if (original.mechanicalInput !== null) return unavailable();
       const action = phase === 'activate' ? 'definitions:activate' : 'definitions:publish';
       if (
@@ -447,7 +456,8 @@ export function cataloguePublisherInvocation(pool: Pool, phase: CataloguePublish
               // association. No precommit locator is promoted to committed proof.
               await cataloguePublisherControl(tx, 'mechanicalResult', async () =>
                 encodeCatalogueMechanicalResult(input, {
-                  phase: input.phase, progress: response.value,
+                  phase: input.phase,
+                  progress: response.value,
                 } as CatalogueMechanicalResult),
               );
             }

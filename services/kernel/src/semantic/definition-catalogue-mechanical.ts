@@ -15,8 +15,12 @@ const fail = (): never => {
   throw new TypeError('Invalid catalogue mechanical representation');
 };
 function record(value: unknown, fields: readonly string[]): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value) ||
-    (Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null))
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    (Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null)
+  )
     return fail();
   const descriptors = Object.getOwnPropertyDescriptors(value);
   if (
@@ -47,11 +51,7 @@ function selected(input: CatalogueMechanicalInput): CatalogueMechanicalInput {
   const phase = member(input.phase, ['step', 'activation-step']);
   const common = ['format', 'root', 'episode', 'position', 'deadline', 'phase'];
   record(input, [...common, phase === 'step' ? 'buildTransactionId' : 'activationId']);
-  if (
-    input.format !== 'catalogue-mechanical-input/1' ||
-    !Number.isSafeInteger(input.deadline) ||
-    input.deadline <= 0
-  )
+  if (input.format !== 'catalogue-mechanical-input/1' || !Number.isSafeInteger(input.deadline) || input.deadline <= 0)
     return fail();
   // Snapshot scalars so a caller cannot change the retained input after hashing.
   const value = {
@@ -62,7 +62,11 @@ function selected(input: CatalogueMechanicalInput): CatalogueMechanicalInput {
     deadline: input.deadline,
   };
   return phase === 'step'
-    ? Object.freeze({ ...value, phase, buildTransactionId: uuid((input as { buildTransactionId: string }).buildTransactionId) })
+    ? Object.freeze({
+        ...value,
+        phase,
+        buildTransactionId: uuid((input as { buildTransactionId: string }).buildTransactionId),
+      })
     : Object.freeze({ ...value, phase, activationId: uuid((input as { activationId: string }).activationId) });
 }
 /** Identity excludes mutable request data and the deadline. A changed deadline or
@@ -94,8 +98,17 @@ function progress(input: CatalogueMechanicalInput, result: CatalogueMechanicalRe
     });
   }
   const value = record(result.progress, [
-    'pin', 'state', 'phase', 'steps', 'nodes', 'releases', 'declarations', 'indexed_rows',
-    'examined_bytes', 'missing_digest', 'error',
+    'pin',
+    'state',
+    'phase',
+    'steps',
+    'nodes',
+    'releases',
+    'declarations',
+    'indexed_rows',
+    'examined_bytes',
+    'missing_digest',
+    'error',
   ]);
   const pin = parseCataloguePin(value.pin);
   if (pin.rootDigest !== input.root) return fail();
@@ -124,23 +137,34 @@ function progress(input: CatalogueMechanicalInput, result: CatalogueMechanicalRe
  * No receipt, event or callback is part of the selected mechanical representation.
  * The native producer must still prove commit; successful decoding alone cannot.
  */
-export function encodeCatalogueMechanicalResult(input: CatalogueMechanicalInput, result: CatalogueMechanicalResult): Buffer {
+export function encodeCatalogueMechanicalResult(
+  input: CatalogueMechanicalInput,
+  result: CatalogueMechanicalResult,
+): Buffer {
   const selection = catalogueMechanicalSelection(input);
-  const bytes = Buffer.from(catalogueBytes({
-    format: 'catalogue-mechanical-result/1',
-    inputDigest: selection.inputDigest,
-    result: progress(selection.input, result),
-  }));
+  const bytes = Buffer.from(
+    catalogueBytes({
+      format: 'catalogue-mechanical-result/1',
+      inputDigest: selection.inputDigest,
+      result: progress(selection.input, result),
+    }),
+  );
   if (bytes.length > CATALOGUE_MECHANICAL_REPRESENTATION.resultBytes) return fail();
   return bytes;
 }
-export function decodeCatalogueMechanicalResult(input: CatalogueMechanicalInput, bytes: Uint8Array): CatalogueMechanicalResult {
+export function decodeCatalogueMechanicalResult(
+  input: CatalogueMechanicalInput,
+  bytes: Uint8Array,
+): CatalogueMechanicalResult {
   if (bytes.byteLength > CATALOGUE_MECHANICAL_REPRESENTATION.resultBytes) return fail();
   const selection = catalogueMechanicalSelection(input);
   const envelope = record(parseCatalogueJson(bytes, CATALOGUE_MECHANICAL_REPRESENTATION.resultBytes), [
-    'format', 'inputDigest', 'result',
+    'format',
+    'inputDigest',
+    'result',
   ]);
-  if (envelope.format !== 'catalogue-mechanical-result/1' || envelope.inputDigest !== selection.inputDigest) return fail();
+  if (envelope.format !== 'catalogue-mechanical-result/1' || envelope.inputDigest !== selection.inputDigest)
+    return fail();
   const result = progress(selection.input, envelope.result as CatalogueMechanicalResult);
   // One stored representation and digest per result, including across restart.
   if (!encodeCatalogueMechanicalResult(selection.input, result).equals(Buffer.from(bytes))) return fail();
