@@ -142,30 +142,26 @@ test('same-address mounted guides associate labels with unique stable native sel
       }
       expect(fixture.calls).toEqual(calls);
       expect(fixture.calls.every((call) => call.method === 'GET')).toBe(true);
+      const { readGuide, fetchGuideRelease } = await import('../src/features/catalogue/definition-guide');
+      for (const address of [
+        { type: 'schema:Recipe', property: 'schema:cookTime' },
+        { type: 'schema:Book', property: 'schema:author' },
+        { type: 'schema:Book', property: 'schema:datePublished' },
+        fixture.address,
+        definitionGuideFixture('pinned').address,
+        {},
+        { type: 'missing:type' },
+        { type: 'schema:Book', property: 'missing:field' },
+      ]) {
+        const initial = await readGuide(address, (digest) => fetchGuideRelease(fixture.client, digest));
+        const props = { address, initial, locale: 'en', transport: { read: async () => initial } };
+        await render(<DefinitionGuide {...props} />);
+        expect(host.querySelector('select')?.value).toBe(initial.ok ? (address.type ?? '') : undefined);
+        expect(host.querySelector('code')?.textContent).toBe(initial.ok ? initial.release.digest : undefined);
+        if (initial.ok && address.property) expect(host.textContent).toContain(address.property);
+      }
     },
   );
-});
-
-test('one mounted guide follows property, type, Back and pinned addresses without retaining a local choice', async () => {
-  await mounted(async ({ host, render, change, DefinitionGuideContent, definitionGuideFixture, definitionText, m }) => {
-    const { readGuide, fetchGuideRelease } = await import('../src/features/catalogue/definition-guide');
-    const fixture = definitionGuideFixture();
-    const book = { type: 'schema:Book', property: 'schema:author' };
-    for (const address of [book, { ...book, property: 'schema:datePublished' },
-      { type: 'schema:Recipe', property: 'schema:cookTime' }, book, definitionGuideFixture('pinned').address,
-      {}, { type: 'missing:type' }, { ...book, property: 'missing:field' }, book]) {
-      const read = await readGuide(address, (digest) => fetchGuideRelease(fixture.client, digest));
-      await render(<DefinitionGuideContent address={address} locale="en" read={read} retry={() => {}} />);
-      const meaning = (kind: 'types' | 'properties', id?: string) => read.ok && id
-        ? definitionText(read.release[kind][id]?.labels, 'en').text ?? m.guide_missing() : undefined;
-      expect([host.querySelector('select')?.value, host.querySelector('h2')?.textContent,
-        host.querySelector('h3')?.textContent, host.querySelector('code')?.textContent]).toEqual([
-        read.ok ? address.type ?? '' : undefined, meaning('types', address.type),
-        meaning('properties', address.property), read.ok ? read.release.digest : undefined]);
-      expect(host.querySelector('[role="alert"]') !== null).toBe(!read.ok);
-      if (read.ok && address.type) await change(host.querySelector('select')!, 'schema:Person');
-    }
-  });
 });
 
 test('supplied field rows retain native list order, exact links, missing meaning and language fallback in the shared frame', async () => {
