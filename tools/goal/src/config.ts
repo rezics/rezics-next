@@ -401,6 +401,15 @@ function settingsFromLocal(value: unknown, { env, initialMain, localFile }: Sett
         if (typeof integration.devLandingChecks !== 'boolean') throw new Error('devLandingChecks must be a boolean');
         return integration.devLandingChecks;
       })(),
+      ...(integration.devPrelandingTypecheck === undefined
+        ? {}
+        : {
+            devPrelandingTypecheck: (() => {
+              if (typeof integration.devPrelandingTypecheck !== 'boolean')
+                throw new Error('devPrelandingTypecheck must be a boolean');
+              return integration.devPrelandingTypecheck;
+            })(),
+          }),
       tmuxCommand: text(integration.tmuxCommand, 'tmuxCommand'),
       tmuxSession: text(integration.tmuxSession, 'tmuxSession'),
       managerCompactTokens: positive(integration.managerCompactTokens, 'managerCompactTokens'),
