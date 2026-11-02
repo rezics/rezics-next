@@ -2161,8 +2161,9 @@ create/replay result navigates to its exact order when settled, unresolved or wi
 only pending orders with a usable URL enter hosted Checkout. The BFF validates the returned full order ID and
 offer binding, and emits only `{orderId}` or `{checkoutUrl}`. Uncertain transport responses retain the original
 operands, revision and key. No offer refresh, replacement key, price acceptance or additional create follows recovery.
-The composed recovery ceiling is the existing credential bound (one D) plus the create/replay bound (one K):
-two outbound operations, with zero follow-up reads, list pages or fan-out. `tests/offer-consent-recovery.test.ts`
+With fresh credentials the composed recovery ceiling is one D credential call plus one K create/replay call:
+two outbound operations, with zero follow-up reads, list pages or fan-out. Refresh retains the separately documented
+[token refresh](#token-refresh) work when due. `tests/offer-consent-recovery.test.ts`
 checks the single exact create/replay call at 1, 8 and 64 unrelated records; native producer bounds remain unchanged.
 
 ### Order return (`/<locale>/orders/<id>`)

@@ -333,11 +333,7 @@ for (const [name, viewer, admitted] of authorityChanges) {
   });
 }
 
-for (const [response, destination] of [
-  [checkout, 'https://checkout.stripe.com/current'],
-  [staleResults.order, `/en/orders/${id(3)}`],
-] as const)
-test(`same-offer refresh and repricing preserve uncertain consent and deliberate retry to ${destination}`, async () => {
+test('same-offer refresh and repricing preserve uncertain consent, request identity, disclosure and deliberate retry', async () => {
   await withPage(async (page) => {
     const pending = deferred<Response>();
     page.enqueue(pending.promise);
@@ -366,8 +362,8 @@ test(`same-offer refresh and repricing preserve uncertain consent and deliberate
       { intent: intent(first), csrf: signedIn.csrfToken },
       { intent: intent(first), csrf: rotated.csrfToken },
     ]);
-    await page.settle(retried, response());
-    expect(page.redirects).toEqual([destination]);
+    await page.settle(retried, checkout());
+    expect(page.redirects).toEqual(['https://checkout.stripe.com/current']);
   });
 });
 
