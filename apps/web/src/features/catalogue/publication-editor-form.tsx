@@ -4,6 +4,16 @@ import { pickText } from '@rezics/composition';
 import { ContentItem, ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@rezics/ui/shadcn/alert-dialog';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldDescription, FieldError, FieldLabel, FieldLegend, FieldSet } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -24,6 +34,7 @@ import {
 } from './publication-editor';
 import { ScalarControl } from './statement-editor-view';
 import type { SnakInput } from './statement-editor';
+import { usePublicationEditorNavigation } from './publication-editor-navigation';
 
 // Caller sizing preserves dense fine-pointer desktops and lets translated actions wrap.
 const actionClassName =
@@ -57,6 +68,9 @@ function PublicationEditorLive({
 }) {
   const id = useId();
   const lifetime = useEditorLifetime();
+  const localDraft = useRef(false);
+  const navigation = usePublicationEditorNavigation(() => localDraft.current);
+  const stay = useRef<HTMLButtonElement>(null);
   const o = { locale: locale as never };
   // Session and the independent public work/definition reads start together.
   const query = useQuery({
@@ -132,6 +146,7 @@ function PublicationEditorLive({
 
   function edit(change: () => void) {
     change();
+    localDraft.current = true;
     // Only an explicit edit after a definite refusal starts a different request. Uncertain drafts stay frozen.
     command.current = null;
     setFailure(undefined);
@@ -200,6 +215,7 @@ function PublicationEditorLive({
       const result = await transport.submit(command.current);
       if (!lifetime.active()) return;
       if (result.ok) {
+        localDraft.current = false;
         setCreated(result);
         if (result.reader.state === 'ready') onNavigate(result.reader.href);
       } else {
@@ -242,6 +258,29 @@ function PublicationEditorLive({
 
   return (
     <article className="mx-auto w-full min-w-0 max-w-3xl space-y-6 px-1 text-foreground [overflow-wrap:anywhere] [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring">
+      <AlertDialog
+        open={navigation.status === 'blocked'}
+        onOpenChange={(open) => {
+          if (!open) navigation.reset?.();
+        }}
+      >
+        <AlertDialogContent initialFocus={stay}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{m.thread_authoring_leave_title({}, o)}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {busy || uncertain
+                ? m.thread_authoring_leave_pending({}, o)
+                : m.thread_authoring_leave_unsaved({}, o)}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel ref={stay}>{m.thread_authoring_stay({}, o)}</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={() => navigation.proceed?.()}>
+              {m.thread_authoring_leave({}, o)}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <header className="space-y-3">
         <PageHeading>{m.publication_add({}, o)}</PageHeading>
         <p className="text-muted-foreground">{m.publication_intro({}, o)}</p>
