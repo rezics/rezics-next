@@ -207,7 +207,9 @@ test('mounted Literary creation keeps the complete initial bibliography family a
     const load = rich.transport.load;
     const label = '完全な書誌情報 — ' + 'BibliographieSansCoupure'.repeat(20);
     const description = 'La description bibliographique complète est conservée. '.repeat(24);
+    let metadataFailed = false;
     rich.transport.load = async () => {
+      if (metadataFailed) return { ok: false, reason: 'unavailable' };
       const read = await load();
       if (!read.ok) return read;
       return {
@@ -286,6 +288,15 @@ test('mounted Literary creation keeps the complete initial bibliography family a
         .disabled,
     ).toBe(true);
     const original = structuredClone(posts()[0]!);
+    for (const failed of [true, false]) {
+      metadataFailed = failed;
+      await act(async () => {
+        await client.invalidateQueries({ predicate: (query) => query.queryKey[0] === 'literary-profile' });
+      });
+      expect(labelledInput(row(), m.correction_amount()).value).toBe('+12000');
+      expect(panel().disabled).toBe(true);
+      expect(posts()).toHaveLength(1);
+    }
     await click(m.catalogue_create_retry());
     await until(() => !!host.querySelector(`a[href*="${literaryWorkId}"]`));
     expect(posts()).toHaveLength(2);
@@ -530,5 +541,135 @@ test('mounted Literary creation keeps the complete initial bibliography family a
     expect(writes).toBe(1);
     expect(host.querySelector(`a[href*="${literaryWorkId}"]`)).toBeNull();
     expect(host.querySelector<HTMLInputElement>('input[id="create-label-0"]')!.value).toBe('');
+  });
+});
+
+test('Literary current refusal withdraws all old markup, fences pending work and recovers the same sealed draft', async () => {
+  await mounted(async ({ host, client, render, click, input, until }) => {
+    const { LiteraryProfile } = await import('../src/features/catalogue/literary-profile-view');
+    const { literaryFixture, literaryWorkId, literaryCandidateId } =
+      await import('../src/kernel/fake/catalogue-literary-profile');
+    const { m } = await import('../src/paraglide/messages.js');
+    const fixture = literaryFixture('ready', 'en', 'schema:Book', true);
+    const initial = await fixture.transport.load();
+    if (!initial.ok || !initial.current) throw new Error('Expected current reading');
+    let reading: LiteraryRead = initial;
+    let unavailable = false;
+    let settleWrite!: (value: { ok: true; candidate: string; revision: number }) => void;
+    let settleRead!: (value: NonNullable<typeof initial.current>) => void;
+    const commands: Parameters<typeof fixture.facts.propose>[0][] = [];
+    const props = {
+      id: literaryWorkId,
+      locale: 'en',
+      session: 'signed-in' as const,
+      transport: {
+        ...fixture.transport,
+        load: async () => {
+          if (unavailable) throw new Error('Current read unavailable');
+          return reading;
+        },
+      },
+      facts: {
+        read: () =>
+          new Promise<NonNullable<typeof initial.current>>((resolve) => {
+            settleRead = resolve;
+          }),
+        propose: async (command: Parameters<typeof fixture.facts.propose>[0]) => {
+          commands.push(structuredClone(command));
+          return commands.length === 1
+            ? new Promise<{ ok: true; candidate: string; revision: number }>((resolve) => {
+                settleWrite = resolve;
+              })
+            : fixture.facts.propose(command);
+        },
+      },
+      review: fixture.review,
+    };
+    const reload = async () => {
+      await act(async () => {
+        await client.invalidateQueries({ queryKey: ['literary-profile'] });
+      });
+      await until(() => !client.isFetching());
+    };
+    const withheld = () => {
+      for (const secret of [
+        literaryWorkId,
+        'An original literary work',
+        '原語の作品名',
+        '別名',
+        'https://example.org/bibliography',
+      ])
+        expect(host.innerHTML).not.toContain(secret);
+      expect(host.querySelector('form, input, a[href*="/subjects/"]')).toBeNull();
+      expect(host.querySelector('[role="alert"]')).not.toBeNull();
+    };
+    const fresh = (name: string) => {
+      const next = structuredClone(initial);
+      next.current!.public.subject.labels = { en: name };
+      next.current!.public.subject.aliases = {};
+      next.current!.public.subject.descriptions = {};
+      return next;
+    };
+    await render(h(LiteraryProfile, props));
+    await until(() => !!host.querySelector('form'));
+    const field = host.querySelector<HTMLElement>('section[aria-label="Word count"]')!;
+    await click(m.facts_edit_field(), field);
+    await input(labelledInput(field, m.correction_amount()), '+13000');
+    const savedSubmit = queuedSubmit(host.querySelector('form')!);
+    await click(m.facts_submit());
+    await until(() => commands.length === 1);
+    reading = { ok: false, reason: 'denied' };
+    await reload();
+    withheld();
+    await act(async () => {
+      settleWrite({ ok: true, candidate: literaryCandidateId, revision: 2 });
+      await savedSubmit({ preventDefault() {} });
+    });
+    withheld();
+    expect(commands).toHaveLength(1);
+    reading = fresh('Recovered literary identity');
+    await reload();
+    await until(() => host.textContent!.includes('Recovered literary identity'));
+    expect(labelledInput(host, m.correction_amount()).value).toBe('+13000');
+    expect(host.textContent).toContain(m.facts_uncertain());
+    expect(host.innerHTML).not.toContain(literaryCandidateId);
+    await act(async () => {
+      await savedSubmit({ preventDefault() {} });
+    });
+    expect(commands).toHaveLength(1);
+    await click(m.facts_submit());
+    await until(() => commands.length === 2);
+    expect(commands[1]).toEqual(commands[0]);
+    await until(() => host.textContent!.includes(m.correction_proposed()));
+    // An older inner reload must not replace the fresh outer reader, even after recovery.
+    await click(m.correction_reload());
+    await until(() => !!settleRead);
+    unavailable = true;
+    await reload();
+    withheld();
+    unavailable = false;
+    reading = fresh('Latest admitted identity');
+    await reload();
+    await until(() => host.textContent!.includes('Latest admitted identity'));
+    await act(async () => {
+      settleRead(initial.current!);
+    });
+    expect(host.textContent).toContain('Latest admitted identity');
+    expect(host.textContent).not.toContain('An original literary work');
+    const mismatched = fresh('Unrelated identity');
+    mismatched.current!.public.subject.id = literaryCandidateId;
+    reading = mismatched;
+    await reload();
+    withheld();
+    expect(host.innerHTML).not.toContain('Unrelated identity');
+    reading = fresh('Final recovered identity');
+    await reload();
+    await until(() => host.textContent!.includes('Final recovered identity'));
+    await render(h(LiteraryProfile, { ...props, session: 'signed-out' }));
+    expect(host.querySelector('form')).toBeNull();
+    await act(async () => {
+      await savedSubmit({ preventDefault() {} });
+    });
+    expect(commands).toHaveLength(2);
   });
 });

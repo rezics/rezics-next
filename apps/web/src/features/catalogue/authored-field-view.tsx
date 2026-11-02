@@ -1,5 +1,6 @@
 import { useCandidateWork, type CandidateWork } from '../../subject/candidate-lifetime';
-import { useEffect, useId, useReducer, useRef, useState, type ComponentProps } from 'react';
+import { useEffect, useId, useMemo, useReducer, useRef, useState, type ComponentProps } from 'react';
+import { useCurrentReadingActive, useCurrentReadingVisible } from './editor-lifetime';
 import { RichTextEditor } from '@rezics/ui';
 import { hasDocumentContent } from '@rezics/document';
 import { DocumentBody } from '../../document-body';
@@ -101,9 +102,11 @@ function Body({
 export function AuthoredField(props: Omit<ComponentProps<typeof AuthoredFieldLive>, 'work'>) {
   const subject = useRef<string | undefined>(undefined);
   if (props.initial.ok) subject.current = props.initial.public.subject.id;
-  const work = useCandidateWork(JSON.stringify([subject.current, props.locale]), props.transport.reader);
-  if (!work.live()) return null;
-  return <AuthoredFieldLive key={work.generation} {...props} work={work} />;
+  const mount = useCandidateWork(JSON.stringify([subject.current, props.locale]), props.transport.reader);
+  const active = useCurrentReadingActive();
+  const work = useMemo(() => ({ ...mount, live: () => mount.live() && active() }), [mount, active]);
+  if (!mount.live()) return null;
+  return <AuthoredFieldLive key={mount.generation} {...props} work={work} />;
 }
 
 function AuthoredFieldLive({
@@ -132,6 +135,7 @@ function AuthoredFieldLive({
     errors: `${formId}-errors`,
     discard: `${formId}-discard`,
   };
+  const visible = useCurrentReadingVisible();
   const o = { locale: locale as never };
   const [metadata, setMetadata] = useState(initial);
   const [current, setCurrent] = useState(initial.ok ? initial : undefined);
@@ -163,6 +167,27 @@ function AuthoredFieldLive({
     setReadFailure(initial.ok ? undefined : initial.reason);
     dispatch({ type: 'read', read: initial, reviewDraft: false });
   }
+  const wasVisible = useRef(visible);
+  const resumeRead = useRef(false);
+  if (wasVisible.current !== visible) {
+    wasVisible.current = visible;
+    if (!visible) {
+      resumeRead.current = true;
+      running.current = false;
+      setBusy(false);
+      setReading(false);
+      setCurrent(undefined);
+      setProposalBody(undefined);
+      setReviewing(false);
+      // A retired completion cannot settle a sealed command. Retain its exact retry.
+      if (command) dispatch({ type: 'result', result: { ok: false, reason: 'unavailable' } });
+    }
+  }
+  useEffect(() => {
+    if (!visible || !resumeRead.current) return;
+    resumeRead.current = false;
+    void refresh(requestedProperty.current, false, true);
+  }, [visible]);
   const property = current?.property ?? requestedProperty.current;
   const draft = drafts[property];
   const failure = submissionFailure ?? (!current ? 'unavailable' : undefined);
@@ -222,7 +247,7 @@ function AuthoredFieldLive({
     readingOnly = false,
     origin: CandidateWork = work,
   ) {
-    if (!work.live() || !origin.live() || running.current || (command && !reviewDraft)) return;
+    if (!work.live() || !origin.live() || running.current || (command && !reviewDraft && !readingOnly)) return;
     requestedProperty.current = nextProperty;
     running.current = true;
     setBusy(true);
@@ -389,6 +414,7 @@ function AuthoredFieldLive({
       return result;
     },
   };
+  if (!visible) return null;
   const selectedContent = current?.selected && (
     <>
       <Body body={current.body} locale={locale} includeProvenance={false} />

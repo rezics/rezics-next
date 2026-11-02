@@ -1,4 +1,4 @@
-import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
+import { CatalogueCurrentReading, catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useQuery } from '@tanstack/react-query';
 import { pickText } from '@rezics/composition';
 import { useId, useRef, useState, type ReactNode } from 'react';
@@ -236,14 +236,13 @@ function LiteraryProfileLive({
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
-  const lastRead = useRef<{ id: string | undefined; locale: string; value: Ready } | undefined>(undefined);
-  if (query.data?.ok) lastRead.current = { id, locale, value: query.data };
+  const creationMetadata = useRef<{ id: string | undefined; locale: string; value: Ready } | undefined>(undefined);
+  if (!id && !query.isError && query.data?.ok) creationMetadata.current = { id, locale, value: query.data };
   // A failed metadata refresh must not unmount the entered terms, facts or sealed create command.
-  const previous = lastRead.current;
-  const read = previous && previous.id === id && previous.locale === locale ? previous.value : undefined;
+  const previous = creationMetadata.current;
+  const read = !id && previous?.locale === locale ? previous.value : undefined;
   const [drafts, setDrafts] = useState<Record<string, InitialRow[]>>({});
   // Keep independently entered facts when switching Types; only the currently chosen Type is submitted.
-  const [opened, setOpened] = useState({ relations: false, authored: false });
   const latest = useRef(drafts);
   const submittingType = useRef('');
   latest.current = drafts;
@@ -258,7 +257,7 @@ function LiteraryProfileLive({
       )}
     </header>
   );
-  if (!read)
+  if (!id && !read)
     return (
       <article className="mx-auto max-w-4xl space-y-5 py-6">
         {heading}
@@ -274,7 +273,7 @@ function LiteraryProfileLive({
         )}
       </article>
     );
-  if (!id)
+  if (!id && read)
     return (
       <section className="mx-auto max-w-3xl space-y-6 py-6">
         {heading}
@@ -342,152 +341,240 @@ function LiteraryProfileLive({
         />
       </section>
     );
-  const current = read.current;
-  if (!current) return <EditorFailure locale={locale} reason="unavailable" />;
-  const subject = current.public.subject;
-  const title = pickText(subject.labels, locale);
-  const typeName = pickText(read.release.types[subject.type]?.labels ?? {}, locale);
-  const fields = literaryFields(read.release, subject.type, locale);
-  const href = subjectHref({ id: subject.id, label: title.text }, locale).href;
+  // A previous successful subject read is never authority for the current public page.
+  const admitted =
+    !query.isError && query.data?.ok && query.data.current?.public.subject.id === id ? query.data : undefined;
   return (
-    <article className="mx-auto min-w-0 w-full max-w-4xl space-y-6 py-6">
-      {heading}
-      <section
-        aria-label={m.literary_identity({}, o)}
-        className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6"
-      >
-        <h2 className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] font-sans text-2xl font-semibold">
-          <a
-            lang={title.lang ?? undefined}
-            href={href}
-            className={`inline-flex min-h-8 min-w-0 items-center underline ${wrappingLink} ${keyboardFocus} [overflow-wrap:anywhere]`}
-          >
-            {title.text || m.subject_value_unlabelled({}, o)}
-          </a>
-        </h2>
-        <p
-          className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]"
-          lang={typeName.lang ?? undefined}
-        >
-          {typeName.text || m.guide_missing({}, o)}
-        </p>
-        <p className="text-sm font-medium">{m.specialist_identity_scope({}, o)}</p>
-        <p className="text-muted-foreground">{m.literary_intro({}, o)}</p>
-        <p className="text-sm text-muted-foreground">{m.literary_grain({}, o)}</p>
-        <a
-          href={`${href}/terms`}
-          className={buttonVariants({ variant: 'outline', className: `${wrappingLink} ${keyboardFocus}` })}
-        >
-          {m.catalogue_terms_title({}, o)}
-        </a>
-      </section>
-      <nav className="flex min-w-0 flex-wrap gap-3">
-        <a className={buttonVariants({ variant: 'outline', className: wrappingLink })} href={href}>
-          {m.candidate_view_public({}, o)}
-        </a>
-        <a className={buttonVariants({ variant: 'outline', className: wrappingLink })} href={`${href}/changes`}>
-          {m.changes_title({}, o)}
-        </a>
-      </nav>
-      <details className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] space-y-3">
-        <summary className="min-h-8 cursor-pointer whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:min-h-11 pointer-coarse:min-h-11">
-          {m.specialist_identity_names({}, o)}
-        </summary>
-        <dl className="mt-3 min-w-0 space-y-3">
-          {Array.from(
-            new Set([
-              ...Object.keys(subject.labels),
-              ...Object.keys(subject.descriptions),
-              ...Object.keys(subject.aliases),
-            ]),
-          ).map((language) => (
-            <div key={language} className="min-w-0">
-              <dt className="text-sm text-muted-foreground">{language}</dt>
-              <dd lang={language} className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]">
-                {subject.labels[language]}
-              </dd>
-              {subject.descriptions[language] && (
-                <dd
-                  lang={language}
-                  className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] text-sm"
-                >
-                  {subject.descriptions[language]}
-                </dd>
-              )}
-              {!!subject.aliases[language]?.length && (
-                <dd
-                  lang={language}
-                  className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] text-sm text-muted-foreground"
-                >
-                  {subject.aliases[language]!.join(' · ')}
-                </dd>
-              )}
-            </div>
-          ))}
-        </dl>
-      </details>
-      <details className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] space-y-3 rounded-xl border border-border p-4">
-        <summary className="min-h-8 cursor-pointer whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:min-h-11 pointer-coarse:min-h-11">
-          {m.specialist_identity_reference({}, o)}
-        </summary>
-        <dl className="mt-3 min-w-0 space-y-3">
-          <div className="min-w-0">
-            <dt className="text-sm text-muted-foreground">{m.specialist_identity_subject_id({}, o)}</dt>
-            <dd className="min-w-0">
-              <code dir="ltr" className="select-text whitespace-normal break-words [overflow-wrap:anywhere]">
-                {subject.id}
-              </code>
-            </dd>
-          </div>
-          <div className="min-w-0">
-            <dt className="text-sm text-muted-foreground">{m.specialist_identity_type({}, o)}</dt>
-            <dd className="min-w-0">
-              <code dir="ltr" className="select-text whitespace-normal break-words [overflow-wrap:anywhere]">
-                {subject.type}
-              </code>
-            </dd>
-          </div>
-        </dl>
-        <p className="text-sm text-muted-foreground">{m.literary_terms_help({}, o)}</p>
-      </details>
-      {session !== 'signed-in' ? (
-        <EditorFailure locale={locale} reason={session === 'signed-out' ? 'denied' : 'unavailable'} />
-      ) : (
-        <>
-          <section aria-label={m.literary_bibliography({}, o)} className="space-y-4">
-            <h2 className="text-xl font-semibold">{m.literary_bibliography({}, o)}</h2>
-            <SubjectFacts initial={current} locale={locale} transport={facts} review={review} />
-          </section>
-          {!!fields.relations.length && (
-            <details
-              onToggle={(event) => {
-                if (event.currentTarget.open) setOpened((previous) => ({ ...previous, relations: true }));
-              }}
-              className="min-w-0 rounded-xl border border-border bg-card p-4 sm:p-6"
+    <LiteraryCorrection
+      read={admitted}
+      locale={locale}
+      session={session}
+      facts={facts}
+      review={review}
+      relations={relations}
+      authored={authored}
+      heading={heading}
+      failure={query.isError ? 'unavailable' : query.data && !query.data.ok ? query.data.reason : undefined}
+      pending={query.isPending}
+      fetching={query.isFetching}
+      revision={id ?? ''}
+      reload={() => lifetime.active() && void query.refetch()}
+    />
+  );
+}
+
+/** Only the holders retain a previous reading, so drafts and sealed commands survive refusal. */
+function LiteraryCorrection({
+  read,
+  locale,
+  session,
+  facts,
+  review,
+  relations,
+  authored,
+  heading,
+  failure,
+  pending,
+  fetching,
+  revision,
+  reload,
+}: {
+  read: Ready | undefined;
+  locale: string;
+  session: string;
+  facts: FactsTransport;
+  review: (property: string, session?: string) => CandidateTransport;
+  relations: ReactNode;
+  authored: ReactNode;
+  heading: ReactNode;
+  failure: Parameters<typeof EditorFailure>[0]['reason'] | undefined;
+  pending: boolean;
+  fetching: boolean;
+  revision: string;
+  reload: () => void;
+}) {
+  const o = { locale: locale as never };
+  const retained = useRef<Ready | undefined>(undefined);
+  if (read) retained.current = read;
+  const privateRead = retained.current;
+  const [opened, setOpened] = useState({ relations: false, authored: false });
+  const current = read?.current;
+  const subject = current?.public.subject;
+  const title = pickText(subject?.labels ?? {}, locale);
+  const typeName = pickText(read?.release.types[subject?.type ?? '']?.labels ?? {}, locale);
+  const href = subject ? subjectHref({ id: subject.id, label: title.text }, locale).href : '';
+  const visible = !!current && session === 'signed-in';
+  const lifetime = useEditorLifetime();
+  const observation = useRef({ visible, token: {} });
+  if (observation.current.visible !== visible) observation.current = { visible, token: {} };
+  const token = observation.current.token;
+  const canOpen = () => lifetime.active() && visible && observation.current.token === token;
+  const privateFields = privateRead?.current
+    ? literaryFields(privateRead.release, privateRead.current.public.subject.type, locale)
+    : undefined;
+  return (
+    <CatalogueCurrentReading visible={visible} ready={visible} revision={revision}>
+      <article className="mx-auto min-w-0 w-full max-w-4xl space-y-6 py-6">
+        {heading}
+        {pending && <p role="status">{m.candidate_loading({}, o)}</p>}
+        {!current && !pending && <EditorFailure locale={locale} reason={failure ?? 'unavailable'} />}
+        <Button variant="outline" className={touchAction} disabled={fetching} onClick={reload}>
+          {m.correction_reload({}, o)}
+        </Button>
+        {subject && read && (
+          <>
+            <section
+              aria-label={m.literary_identity({}, o)}
+              className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6"
             >
-              <summary className={disclosureSummary}>{m.literary_relations({}, o)}</summary>
-              <p className="my-4 break-words text-sm text-muted-foreground [overflow-wrap:anywhere]">
-                {m.literary_relations_help({}, o)}
+              <h2 className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] font-sans text-2xl font-semibold">
+                <a
+                  lang={title.lang ?? undefined}
+                  href={href}
+                  className={`inline-flex min-h-8 min-w-0 items-center underline ${wrappingLink} ${keyboardFocus} [overflow-wrap:anywhere]`}
+                >
+                  {title.text || m.subject_value_unlabelled({}, o)}
+                </a>
+              </h2>
+              <p
+                className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]"
+                lang={typeName.lang ?? undefined}
+              >
+                {typeName.text || m.guide_missing({}, o)}
               </p>
-              {opened.relations && relations}
+              <p className="text-sm font-medium">{m.specialist_identity_scope({}, o)}</p>
+              <p className="text-muted-foreground">{m.literary_intro({}, o)}</p>
+              <p className="text-sm text-muted-foreground">{m.literary_grain({}, o)}</p>
+              <a
+                href={`${href}/terms`}
+                className={buttonVariants({ variant: 'outline', className: `${wrappingLink} ${keyboardFocus}` })}
+              >
+                {m.catalogue_terms_title({}, o)}
+              </a>
+            </section>
+            <nav className="flex min-w-0 flex-wrap gap-3">
+              <a className={buttonVariants({ variant: 'outline', className: wrappingLink })} href={href}>
+                {m.candidate_view_public({}, o)}
+              </a>
+              <a className={buttonVariants({ variant: 'outline', className: wrappingLink })} href={`${href}/changes`}>
+                {m.changes_title({}, o)}
+              </a>
+            </nav>
+            <details className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] space-y-3">
+              <summary className="min-h-8 cursor-pointer whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:min-h-11 pointer-coarse:min-h-11">
+                {m.specialist_identity_names({}, o)}
+              </summary>
+              <dl className="mt-3 min-w-0 space-y-3">
+                {Array.from(
+                  new Set([
+                    ...Object.keys(subject.labels),
+                    ...Object.keys(subject.descriptions),
+                    ...Object.keys(subject.aliases),
+                  ]),
+                ).map((language) => (
+                  <div key={language} className="min-w-0">
+                    <dt className="text-sm text-muted-foreground">{language}</dt>
+                    <dd
+                      lang={language}
+                      className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]"
+                    >
+                      {subject.labels[language]}
+                    </dd>
+                    {subject.descriptions[language] && (
+                      <dd
+                        lang={language}
+                        className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] text-sm"
+                      >
+                        {subject.descriptions[language]}
+                      </dd>
+                    )}
+                    {!!subject.aliases[language]?.length && (
+                      <dd
+                        lang={language}
+                        className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] text-sm text-muted-foreground"
+                      >
+                        {subject.aliases[language]!.join(' · ')}
+                      </dd>
+                    )}
+                  </div>
+                ))}
+              </dl>
             </details>
-          )}
-          {!!fields.authored.length && (
-            <details
-              onToggle={(event) => {
-                if (event.currentTarget.open) setOpened((previous) => ({ ...previous, authored: true }));
-              }}
-              className="min-w-0 rounded-xl border border-border bg-card p-4 sm:p-6"
-            >
-              <summary className={disclosureSummary}>{m.authored_title({}, o)}</summary>
-              <p className="my-4 break-words text-sm text-muted-foreground [overflow-wrap:anywhere]">
-                {m.literary_authored_help({}, o)}
-              </p>
-              {opened.authored && authored}
+            <details className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] space-y-3 rounded-xl border border-border p-4">
+              <summary className="min-h-8 cursor-pointer whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:min-h-11 pointer-coarse:min-h-11">
+                {m.specialist_identity_reference({}, o)}
+              </summary>
+              <dl className="mt-3 min-w-0 space-y-3">
+                <div className="min-w-0">
+                  <dt className="text-sm text-muted-foreground">{m.specialist_identity_subject_id({}, o)}</dt>
+                  <dd className="min-w-0">
+                    <code dir="ltr" className="select-text whitespace-normal break-words [overflow-wrap:anywhere]">
+                      {subject.id}
+                    </code>
+                  </dd>
+                </div>
+                <div className="min-w-0">
+                  <dt className="text-sm text-muted-foreground">{m.specialist_identity_type({}, o)}</dt>
+                  <dd className="min-w-0">
+                    <code dir="ltr" className="select-text whitespace-normal break-words [overflow-wrap:anywhere]">
+                      {subject.type}
+                    </code>
+                  </dd>
+                </div>
+              </dl>
+              <p className="text-sm text-muted-foreground">{m.literary_terms_help({}, o)}</p>
             </details>
-          )}
-        </>
-      )}
-    </article>
+          </>
+        )}
+        {current && session !== 'signed-in' && (
+          <EditorFailure locale={locale} reason={session === 'signed-out' ? 'denied' : 'unavailable'} />
+        )}
+        {session === 'signed-in' && privateRead?.current && (
+          <>
+            <section aria-label={visible ? m.literary_bibliography({}, o) : undefined} className="space-y-4">
+              {visible && <h2 className="text-xl font-semibold">{m.literary_bibliography({}, o)}</h2>}
+              <SubjectFacts initial={privateRead.current} locale={locale} transport={facts} review={review} />
+            </section>
+            {!!privateFields?.relations.length && (
+              <details
+                onToggle={(event) => {
+                  if (canOpen() && event.currentTarget.open)
+                    setOpened((previous) => ({ ...previous, relations: true }));
+                }}
+                className="min-w-0 rounded-xl border border-border bg-card p-4 sm:p-6"
+              >
+                {visible && (
+                  <>
+                    <summary className={disclosureSummary}>{m.literary_relations({}, o)}</summary>
+                    <p className="my-4 break-words text-sm text-muted-foreground [overflow-wrap:anywhere]">
+                      {m.literary_relations_help({}, o)}
+                    </p>
+                  </>
+                )}
+                {opened.relations && relations}
+              </details>
+            )}
+            {!!privateFields?.authored.length && (
+              <details
+                onToggle={(event) => {
+                  if (canOpen() && event.currentTarget.open) setOpened((previous) => ({ ...previous, authored: true }));
+                }}
+                className="min-w-0 rounded-xl border border-border bg-card p-4 sm:p-6"
+              >
+                {visible && (
+                  <>
+                    <summary className={disclosureSummary}>{m.authored_title({}, o)}</summary>
+                    <p className="my-4 break-words text-sm text-muted-foreground [overflow-wrap:anywhere]">
+                      {m.literary_authored_help({}, o)}
+                    </p>
+                  </>
+                )}
+                {opened.authored && authored}
+              </details>
+            )}
+          </>
+        )}
+      </article>
+    </CatalogueCurrentReading>
   );
 }

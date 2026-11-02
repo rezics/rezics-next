@@ -514,3 +514,63 @@ test('discard confirms only the active unsent field, preserves another draft and
     await view.close();
   }
 }, 15_000);
+
+test('a Literary reading refusal retains authored originals while retiring old callbacks and results', async () => {
+  const view = await mountedFamily();
+  const { host, render, AuthoredField, authoredFixture, m, compose, click, input } = view;
+  const { CatalogueCurrentReading } = await import('../src/features/catalogue/editor-lifetime');
+  try {
+    const fixture = authoredFixture();
+    const initial = await fixture.transport.read();
+    const read = mock(fixture.transport.read);
+    let settle!: (result: Awaited<ReturnType<typeof fixture.transport.propose>>) => void;
+    const propose = mock(async (command: Parameters<typeof fixture.transport.propose>[0]) =>
+      propose.mock.calls.length === 1
+        ? new Promise<Awaited<ReturnType<typeof fixture.transport.propose>>>((resolve) => {
+            settle = resolve;
+          })
+        : fixture.transport.propose(command),
+    );
+    const show = (visible: boolean) =>
+      render(
+        <CatalogueCurrentReading visible={visible} ready={visible} revision="literary">
+          <AuthoredField
+            initial={initial}
+            locale="en"
+            transport={{ ...fixture.transport, read, propose }}
+            confirm={fixture.confirm}
+          />
+        </CatalogueCurrentReading>,
+      );
+    await show(true);
+    await compose(host, 'Retained original literary prose.');
+    const form = host.querySelector('form')!;
+    const savedSubmit = Reflect.get(
+      form,
+      Object.keys(form).find((key) => key.startsWith('__reactProps$'))!,
+    ).onSubmit;
+    await click(host, m.correction_submit());
+    const original = structuredClone(propose.mock.calls[0]![0]);
+    await show(false);
+    expect(host.innerHTML).toBe('');
+    await act(async () => {
+      settle({ ok: true, candidate: 'retired-candidate', revision: 2 });
+    });
+    expect(host.innerHTML).toBe('');
+    await show(true);
+    expect(read.mock.calls).toEqual([[initial.ok ? initial.property : '', initial.ok ? initial.session : undefined]]);
+    expect(input(host, m.authored_text()).textContent).toContain('Retained original literary prose.');
+    expect(input(host, m.authored_language()).disabled).toBe(true);
+    expect(host.textContent).toContain(m.correction_unavailable());
+    expect(host.innerHTML).not.toContain('retired-candidate');
+    await act(async () => {
+      await savedSubmit({ preventDefault() {} });
+    });
+    expect(propose).toHaveBeenCalledTimes(1);
+    await click(host, m.correction_retry());
+    expect(propose.mock.calls.map(([command]) => command)).toEqual([original, original]);
+    expect(original.session).toBe(initial.ok ? initial.session : undefined);
+  } finally {
+    await view.close();
+  }
+});

@@ -1,3 +1,5 @@
+import { useEffect, useRef } from 'react';
+import { useCurrentReadingActive, useCurrentReadingVisible } from './editor-lifetime';
 import { editorRequest } from './editor-request';
 import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import { candidateSession, useCandidateWork } from '../../subject/candidate-lifetime';
@@ -25,11 +27,15 @@ import type { LiteraryCommand } from './literary-profile';
 function LiteraryAuthored({ id, locale }: { id: string; locale: string }) {
   const editorWork = useCatalogueLifetime('transport');
   const candidateWork = useCandidateWork(JSON.stringify([id, locale]));
+  const active = useCurrentReadingActive();
+  const visible = useCurrentReadingVisible();
   const read = async (property?: string, session?: string) => {
+    if (!active()) throw new Error('Retired catalogue editor');
     const result = await loadAuthoredField({
       data: editorRequest({ id, property, session }, editorWork),
       headers: csrfHeaders(),
     });
+    if (!active()) throw new Error('Retired catalogue editor');
     return editorWork.live() ? result : ({ ok: false, reason: 'denied' } as const);
   };
   const query = useQuery({
@@ -41,16 +47,22 @@ function LiteraryAuthored({ id, locale }: { id: string; locale: string }) {
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
-  if (query.isError)
-    return (
+  const wasVisible = useRef(visible);
+  useEffect(() => {
+    const resumed = visible && !wasVisible.current;
+    wasVisible.current = visible;
+    if (resumed && !query.data && active()) void query.refetch();
+  }, [visible]);
+  if (query.isError && !query.data)
+    return !visible ? null : (
       <div className="space-y-3">
         <EditorFailure locale={locale} reason="unavailable" />
-        <Button variant="outline" onClick={() => candidateWork.live() && void query.refetch()}>
+        <Button variant="outline" onClick={() => active() && candidateWork.live() && void query.refetch()}>
           {m.correction_reload({}, { locale: locale as never })}
         </Button>
       </div>
     );
-  if (!query.data) return <p role="status">{m.candidate_loading({}, { locale: locale as never })}</p>;
+  if (!query.data) return visible ? <p role="status">{m.candidate_loading({}, { locale: locale as never })}</p> : null;
   return (
     <AuthoredField
       initial={query.data}
