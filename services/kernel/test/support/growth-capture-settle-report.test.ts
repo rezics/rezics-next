@@ -1,11 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { Pool } from 'pg';
-import {
-  GrowthSettleInfrastructureError,
-  settle,
-  settleAdmin,
-  type GrowthDatabase,
-} from './growth-capture.ts';
+import { GrowthSettleInfrastructureError, settle, settleAdmin, type GrowthDatabase } from './growth-capture.ts';
 
 function vacuumAdmin(options: {
   readonly vacuumError: Error;
