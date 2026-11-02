@@ -1,23 +1,34 @@
 import { Link } from '@tanstack/react-router';
 import { m } from '../../paraglide/messages.js';
 import type { PageMessages } from './data';
-import type { LinkProps } from './shared';
+import { PlainLink, type LinkProps } from './shared';
 import type { ViewTabLabels } from './view-tabs';
 import { subjectHref } from '../../subject/subject-href';
 
+function subjectAddress(href: string) {
+  const match = /^\/([^/]+)\/subjects\/([^/?#]+)\/([^/?#]+)$/.exec(href);
+  if (!match) return null;
+  try {
+    return {
+      locale: decodeURIComponent(match[1]!),
+      id: decodeURIComponent(match[2]!),
+      slug: decodeURIComponent(match[3]!),
+    };
+  } catch {
+    return null;
+  }
+}
+
 /** A link to a subject page navigates in the client; any other address is a plain anchor. */
 export function SubjectLink({ href, lang, className, children }: LinkProps) {
-  const match = /^\/([^/]+)\/subjects\/([^/?#]+)\/([^/?#]+)$/.exec(href);
-  if (!match)
+  const address = subjectAddress(href);
+  if (!address)
     return (
-      <a href={href} lang={lang} className={className}>
+      <PlainLink href={href} lang={lang} className={className}>
         {children}
-      </a>
+      </PlainLink>
     );
-  const locale = decodeURIComponent(match[1]!);
-  const id = decodeURIComponent(match[2]!);
-  const slug = decodeURIComponent(match[3]!);
-  const target = subjectHref({ id, label: slug }, locale);
+  const target = subjectHref({ id: address.id, label: address.slug }, address.locale);
   return (
     <Link to={target.to} params={target.params} lang={lang} className={className}>
       {children}
