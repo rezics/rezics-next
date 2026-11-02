@@ -520,6 +520,11 @@ Explicit refresh replaces prior action assumptions: confirmed availability offer
 offers restoration, and an unconfirmed reading offers refresh alone; only a confirmed restore command reports
 restoration.
 
+Contribution withdrawal and restoration share their enclosing editor's departure decision: only a sent unresolved
+command protects route/search departure and browser unload; Stay keeps exact retry recovery without sending, and
+Leave retires local recovery and late callbacks without cancelling native work. Confirmed effects or refusals release
+that command before any clearing callback; reads and dismissed confirmations remain clean.
+
 Uncertain retries keep the exact operation, subject/candidate, consistency token and idempotency key. The original
 server thirty-day window applies; the interface creates no local deadline. Until the producer publishes a deadline
 DTO, it displays no invented date or countdown. The temporary typed port uses the generated client's existing runtime

@@ -13,6 +13,11 @@ import {
   AlertDialogTitle,
 } from '@rezics/ui/shadcn/alert-dialog';
 import { m } from '../../paraglide/messages.js';
+import {
+  AuthoringDepartureBoundary,
+  useAuthoringDeparture,
+  type AuthoringLocation,
+} from '../../threads/authoring-departure';
 import { confirmedContributionOperation } from './contribution-lifecycle';
 import type {
   ContributionAddress,
@@ -25,7 +30,17 @@ import type {
 /** Mounted only for the exact candidate returned by this session's successful native proposal.
  * The affordance is not authorization: both native operations recheck the original author and current grants.
  */
-export const ContributionLifecycle = catalogueEditor(ContributionLifecycleLive);
+export const ContributionLifecycle = catalogueEditor(ContributionLifecycleWorkspace);
+
+const contributionAddress = (location: AuthoringLocation) => JSON.stringify([location.pathname, location.search]);
+
+function ContributionLifecycleWorkspace(props: Parameters<typeof ContributionLifecycleLive>[0]) {
+  return (
+    <AuthoringDepartureBoundary sessionBound={false} navigationContext={contributionAddress}>
+      <ContributionLifecycleLive {...props} />
+    </AuthoringDepartureBoundary>
+  );
+}
 
 function ContributionLifecycleLive({
   address,
@@ -53,6 +68,27 @@ function ContributionLifecycleLive({
   // Captured controls must consult the latest observation, including a retired confirmation.
   const controls = useRef({ operation, confirmation });
   controls.current = { operation, confirmation };
+  // Reads and open confirmations carry no unresolved mutation. The sealed command alone owns recovery.
+  const unresolved = () => lifetime.active() && pending.current !== null;
+  const departure = useAuthoringDeparture(
+    unresolved,
+    unresolved,
+    pending.current?.key ?? 'settled',
+    undefined,
+    () => {
+      lifetime.retire();
+      pending.current = null;
+      running.current = false;
+      controls.current.confirmation = null;
+    },
+    undefined,
+    undefined,
+    contributionAddress,
+  );
+  function settle() {
+    pending.current = null;
+    departure.release();
+  }
   const action = operation === 'delete' ? m.contribution_withdraw({}, o) : m.contribution_restore({}, o);
 
   function observe(next: ContributionAvailability, effect?: ContributionCommand['operation']) {
@@ -99,7 +135,7 @@ function ContributionLifecycleLive({
       if (!result.ok) {
         setFailure(result.reason);
         if (result.reason !== 'unavailable') {
-          pending.current = null;
+          settle();
           setConfirmation(null);
         }
         if (result.reason === 'expired' || result.reason === 'denied') terminal.current = result.reason;
@@ -114,7 +150,7 @@ function ContributionLifecycleLive({
         }
         return;
       }
-      pending.current = null;
+      settle();
       setConfirmation(null);
       session.current = result.session ?? session.current;
       observe(result.current, result.operation);

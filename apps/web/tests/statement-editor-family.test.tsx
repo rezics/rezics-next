@@ -21,6 +21,8 @@ import {
 } from '../src/features/catalogue/statement-editor';
 import { statementFixture } from '../src/kernel/fake/catalogue-statements';
 import recorded from '../src/kernel/recorded/definitions-release.json';
+import { contributionFixture } from '../src/kernel/fake/contribution-lifecycle';
+import type { ContributionCommand, ContributionResult } from '../src/features/catalogue/contribution-lifecycle';
 
 // Authored UNRUN: one connected actual-component regression. Native HTTP is the existing
 // typed fixture seam; mounted DOM assertions are neither browser geometry nor native proof.
@@ -701,10 +703,105 @@ test('statement family owns labels, independent supplied parts, feedback, exact 
       departure.click();
     });
     await until(() => !!window.document.querySelector('[role="alertdialog"]'));
-    await click(window.document.querySelector('[role="alertdialog"]')!, m.thread_authoring_discard());
+    await click(window.document.querySelector('[role="alertdialog"]')!, m.thread_authoring_leave());
     await until(() => router.state.location.pathname === '/search');
     expect(arrivals).toBe(1);
     expect(unloadIsProtected()).toBe(false);
+
+    // The reachable scalar editor embeds lifecycle recovery under its single departure owner.
+    const lifecycle = contributionFixture('uncertain');
+    const commands: ContributionCommand[] = [];
+    let loseRestore = true;
+    let held: ((result: ContributionResult) => void) | undefined;
+    let hold = false;
+    let clears = 0;
+    const lifecyclePage = () => (
+      <StatementEditor
+        initial={navigationRead}
+        locale="en"
+        transport={navigationFixture.editor}
+        review={() => navigationFixture.review}
+        lifecycle={{
+          ...lifecycle.transport,
+          change: async (command) => {
+            commands.push(command);
+            if (hold) return new Promise<ContributionResult>((resolve) => { held = resolve; });
+            const result = await lifecycle.transport.change(command);
+            if (command.operation === 'restore' && loseRestore) {
+              loseRestore = false;
+              return { ok: false, reason: 'unavailable' };
+            }
+            return result;
+          },
+        }}
+        onLifecycleClear={() => { clears++; throw new Error('Clearing failed after confirmed effect'); }}
+      />
+    );
+    const dialogNow = () => window.document.querySelector('[role="alertdialog"]')!;
+    const depart = async () => {
+      await act(async () => host.querySelector<HTMLAnchorElement>('a[href="/search"]')!.click());
+      await until(() => !!dialogNow());
+      expect(window.document.querySelectorAll('[role="alertdialog"]')).toHaveLength(1);
+      expect(dialogNow().textContent).toContain(m.thread_authoring_leave_pending());
+    };
+    const send = async (action: string) => {
+      await click(host, action);
+      await until(() => !!dialogNow());
+      await click(dialogNow(), m.contribution_confirm());
+    };
+    await act(async () => { await router.navigate({ to: '/edit' }); });
+    await render(lifecyclePage());
+    expect(unloadIsProtected()).toBe(false);
+    await input(control(host, m.correction_year()), '1946');
+    await submit();
+    await until(() => buttons(host, m.contribution_withdraw()).length === 1);
+    await click(host, m.contribution_withdraw());
+    await until(() => !!dialogNow());
+    await click(dialogNow(), m.candidate_cancel());
+    expect(unloadIsProtected()).toBe(false);
+    for (const action of [m.contribution_withdraw(), m.contribution_restore()]) {
+      await send(action);
+      await until(() => buttons(host, m.contribution_retry()).some((button) => !button.disabled));
+      expect(unloadIsProtected()).toBe(true);
+      const original = structuredClone(commands.at(-1)!);
+      const request = structuredClone(lifecycle.calls.filter((call) => call.method !== 'GET').at(-1)!);
+      const count = commands.length;
+      await depart();
+      await click(dialogNow(), m.thread_authoring_stay());
+      await until(() => !dialogNow());
+      expect(router.state.location.pathname).toBe('/edit');
+      expect(commands).toHaveLength(count);
+      expect(unloadIsProtected()).toBe(true);
+      await click(host, m.contribution_retry());
+      await until(() => !host.querySelector('[aria-busy="true"]'));
+      expect(commands.at(-1)).toEqual(original);
+      expect(lifecycle.calls.filter((call) => call.method !== 'GET').at(-1)).toEqual(request);
+      expect(unloadIsProtected()).toBe(false);
+      expect(host.textContent).not.toContain(m.contribution_unavailable());
+    }
+    expect(clears).toBe(1);
+    hold = true;
+    await send(m.contribution_withdraw());
+    await until(() => !!held);
+    const retiredAction = queued(button(host, m.contribution_retry()), 'onClick');
+    await depart();
+    await click(dialogNow(), m.thread_authoring_leave());
+    await until(() => router.state.location.pathname === '/search');
+    await act(async () => { await router.navigate({ to: '/edit' }); });
+    await render(lifecyclePage());
+    outside.focus();
+    const before = host.textContent;
+    await act(async () => {
+      retiredAction();
+      held!({ ok: true, operation: 'delete', current: { subject: 'available', candidate: 'deleted', selected: false } });
+    });
+    await settle();
+    expect(host.textContent).toBe(before);
+    expect(clears).toBe(1);
+    expect(commands).toHaveLength(5);
+    expect(window.document.activeElement).toBe(outside);
+    expect(unloadIsProtected()).toBe(false);
+
   } finally {
     await act(async () => root.unmount());
     client.clear();

@@ -7,8 +7,8 @@ import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
-import { useBlocker, useRouter } from '@tanstack/react-router';
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../../threads/authoring-departure';
+import { useId, useLayoutEffect, useRef, useState } from 'react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -102,113 +102,22 @@ export function EditorFailure({ reason, locale }: { reason: string; locale: stri
   );
 }
 
-function StatementEditorNavigation({
-  dirty,
-  pending,
-  fallbackFocus,
-}: {
-  dirty: boolean;
-  pending: boolean;
-  fallbackFocus: RefObject<HTMLElement | null>;
-}) {
-  const protect = dirty || pending;
-  const router = useRouter({ warn: false });
-  useEffect(() => {
-    if (!protect) return;
-    const beforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = '';
-    };
-    window.addEventListener('beforeunload', beforeUnload);
-    return () => window.removeEventListener('beforeunload', beforeUnload);
-  }, [protect]);
-
-  return router ? <RouterStatementDeparture pending={pending} protect={protect} fallbackFocus={fallbackFocus} /> : null;
-}
-
-function RouterStatementDeparture({
-  pending,
-  protect,
-  fallbackFocus,
-}: {
-  pending: boolean;
-  protect: boolean;
-  fallbackFocus: RefObject<HTMLElement | null>;
-}) {
-  const returnFocus = useRef<HTMLElement | null>(null);
-  const stayButton = useRef<HTMLButtonElement>(null);
-  const resolved = useRef(false);
-  const leaving = useRef(false);
-  const shouldBlockFn = useCallback(() => {
-    if (!protect) return false;
-    returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    resolved.current = false;
-    leaving.current = false;
-    return true;
-  }, [protect]);
-  const blocker = useBlocker({
-    shouldBlockFn,
-    disabled: !protect,
-    enableBeforeUnload: false,
-    withResolver: true,
-  });
-  const blockerRef = useRef(blocker);
-  blockerRef.current = blocker;
-  useLayoutEffect(
-    () => () => {
-      const pendingBlocker = blockerRef.current;
-      if (pendingBlocker.status === 'blocked' && !resolved.current) {
-        resolved.current = true;
-        pendingBlocker.reset();
-      }
+function StatementEditorNavigation({ dirty, pending }: { dirty: boolean; pending: boolean }) {
+  const lifetime = useEditorLifetime();
+  useAuthoringDeparture(
+    () => lifetime.active() && (dirty || pending),
+    () => pending,
+    JSON.stringify([dirty, pending]),
+    undefined,
+    lifetime.retire,
+    undefined,
+    {
+      title: m.thread_authoring_discard_title(),
+      unsaved: m.thread_authoring_discard_unsaved(),
+      pending: m.thread_authoring_discard_pending(),
     },
-    [],
   );
-
-  useEffect(() => {
-    if (!protect && blocker.status === 'blocked' && !resolved.current) {
-      resolved.current = true;
-      blocker.reset();
-    }
-  }, [protect, blocker]);
-
-  function resolve(leave: boolean) {
-    if (blocker.status !== 'blocked' || resolved.current) return;
-    resolved.current = true;
-    leaving.current = leave;
-    if (leave) blocker.proceed();
-    else blocker.reset();
-  }
-
-  return (
-    <AlertDialog open={blocker.status === 'blocked'} onOpenChange={(open) => !open && resolve(false)}>
-      <AlertDialogContent
-        initialFocus={stayButton}
-        finalFocus={() =>
-          leaving.current
-            ? false
-            : returnFocus.current?.isConnected
-              ? returnFocus.current
-              : fallbackFocus.current?.isConnected
-                ? fallbackFocus.current
-                : false
-        }
-      >
-        <AlertDialogHeader>
-          <AlertDialogTitle>{m.thread_authoring_discard_title()}</AlertDialogTitle>
-          <AlertDialogDescription>
-            {pending ? m.thread_authoring_discard_pending() : m.thread_authoring_discard_unsaved()}
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel ref={stayButton}>{m.thread_authoring_stay()}</AlertDialogCancel>
-          <AlertDialogAction variant="destructive" onClick={() => resolve(true)}>
-            {m.thread_authoring_discard()}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  );
+  return null;
 }
 
 /** A read-only part still participates in the submitted statement. It is never filtered away. */
@@ -881,7 +790,15 @@ export function StatementFields({
   );
 }
 
-export const StatementEditor = catalogueEditor(StatementEditorLive);
+export const StatementEditor = catalogueEditor(StatementEditorWorkspace);
+
+function StatementEditorWorkspace(props: Parameters<typeof StatementEditorLive>[0]) {
+  return (
+    <AuthoringDepartureBoundary sessionBound={false}>
+      <StatementEditorLive {...props} />
+    </AuthoringDepartureBoundary>
+  );
+}
 
 function StatementEditorLive({
   initial,
@@ -1020,7 +937,7 @@ function StatementEditorLive({
       className="mx-auto min-w-0 w-full max-w-4xl space-y-6 p-4 [overflow-wrap:anywhere] [&_[tabindex='-1']:focus]:outline-2 [&_[tabindex='-1']:focus]:outline-offset-2 [&_[tabindex='-1']:focus]:outline-ring sm:p-6"
       aria-busy={busy}
     >
-      <StatementEditorNavigation dirty={dirty} pending={pending.current !== null} fallbackFocus={form} />
+      <StatementEditorNavigation dirty={dirty} pending={pending.current !== null} />
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold">{m.correction_title({}, o)}</h1>
         {subject && (
