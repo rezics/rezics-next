@@ -149,3 +149,5 @@ is cleared by a status read, and an active editor or writer keeps the status ret
 Retained Members integration preserves native immutable-release byte validation and empty/stale caller semantics alongside selected-runtime provenance.
 
 Runtime integration extends the existing native Members tables; unpositioned retained candidates remain disposable and are drained by subject identity during retirement and erasure without granting completion authority.
+
+Collection command writer pools inherit the caller's trusted receipt key ring; native fixtures supply dedicated test receipt keys independently of token sealing keys.

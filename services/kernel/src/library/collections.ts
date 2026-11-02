@@ -15,6 +15,7 @@ import { initializeResourceGrants } from '../access/resource-initialization.ts';
 import { resourceAuthorization, resourceAuthorizationPage } from '../access/resource-authorization.ts';
 import { installResourceRoleCatalogue, resourceRoleCatalogue } from '../access/resource-roles.ts';
 import type { KernelClock } from '../clock.ts';
+import { configureReceiptKeys, receiptKeysFor } from '../command/receipt-key.ts';
 import {
   authoritativeTimeValue,
   currentCommand,
@@ -179,6 +180,7 @@ function writerPool(pool: Pool): Pool {
     allowExitOnIdle: true,
   } as PoolConfig);
   writer.on('error', () => {});
+  configureReceiptKeys(writer, receiptKeysFor(pool));
   writers.set(pool, writer);
   return writer;
 }
