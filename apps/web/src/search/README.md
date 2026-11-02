@@ -38,6 +38,9 @@ Response admission copies that escaping and the 256 UTF-8-byte label bound on th
 envelope; it does not reimplement parseText, and a malformed page is unavailable as a whole.
 A successful manual retry keeps keyboard focus on Retry when that control remains, otherwise the first term or the named
 trending region, using the request's currentness callback and without stealing focus if the reader moved away.
+A keyboard Search result Retry that disappears while loading restores focus to that action when it remains, otherwise
+the named results region of the same query, locale and session (omitted session is null), and leaves focus where the
+reader moved.
 
 Native Trending may repeat a query when distinct sources share a public label; `literalQuery` is the quoted display,
 so a repeated query repeats that display, and each delivered `{query, display}` occurrence keeps its own row identity.

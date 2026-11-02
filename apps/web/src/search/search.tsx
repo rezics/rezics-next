@@ -35,6 +35,7 @@ import {
   type SearchRecoveryState,
 } from './search-recovery';
 import { SearchRecovery } from './search-recovery-view';
+import { useSearchRetryFocus } from './search-retry-focus';
 import { discoverySearchHref, searchParams, type SearchLoaderDeps } from './search-params';
 import { hasResultSearchIntent } from './search-intent';
 import { DiscoveryKinds } from './discovery-kinds';
@@ -407,6 +408,7 @@ export function SearchPage({
   realmDiscoveryRead,
   onRetry,
   locale: localeProp,
+  session = null,
 }: {
   query: string;
   cursor?: string;
@@ -417,6 +419,7 @@ export function SearchPage({
   realmDiscoveryRead?: RealmDiscoveryReader;
   onRetry?: (() => void) | undefined;
   locale?: string;
+  session?: string | null;
 }) {
   const sourceData = data;
   const currentData = useRef(data);
@@ -572,6 +575,10 @@ export function SearchPage({
   );
   useRegisterHeaderSearchFilters(hasFilterPanel, filterRegion);
   const revertStatus = useRef<HTMLParagraphElement>(null);
+  const retryFocus = useSearchRetryFocus(
+    { query, locale, session },
+    data?.recovery?.status !== 'loading',
+  );
   const results = renderResults(
     query,
     result,
@@ -583,6 +590,7 @@ export function SearchPage({
     localIssues.length > 0,
     onRetry,
     committedState,
+    retryFocus,
   );
   const navigate = (href: string, removingCondition = false) => {
     setDraft((previous) => ({ ...previous, attempted: true }));
@@ -960,6 +968,7 @@ function renderResults(
   invalid = false,
   onRetry?: (() => void) | undefined,
   retryState = data?.queryState,
+  retryFocus?: ReturnType<typeof useSearchRetryFocus>,
 ) {
   if (!result && !data?.discovery && !data?.recovery) return null;
   const options = messageOptions(locale);
@@ -1018,39 +1027,49 @@ function renderResults(
           </a>
         </p>
       )}
-      {data?.recovery && data.recovery.status !== 'ready' && data.queryState ? (
-        <SearchRecovery
-          state={data.recovery}
-          retryHref={discoverySearchHref(locale, retryState ?? data.queryState)}
-          restartHref={discoverySearchHref(locale, { ...data.queryState, cursor: undefined })}
-          onRetry={onRetry}
-          locale={locale}
-        />
-      ) : data?.discovery ? (
-        <DiscoveryResults
-          state={data.discovery}
-          locale={locale}
-          yearProperties={data.yearProperties}
-          restartHref={
-            data.queryState ? discoverySearchHref(locale, { ...data.queryState, cursor: undefined }) : undefined
-          }
-        />
-      ) : result?.subjects.length === 0 ? (
-        <Empty className="border">
-          <EmptyHeader>
-            <EmptyTitle className="text-base font-normal">{m.search_no_results({}, options)}</EmptyTitle>
-          </EmptyHeader>
-        </Empty>
-      ) : (
-        <>
-          <ResultList
-            hits={result?.subjects ?? []}
+      <section
+        ref={retryFocus?.regionRef}
+        tabIndex={-1}
+        aria-label={m.search_results({}, options)}
+        data-search-results
+      >
+        {data?.recovery && data.recovery.status !== 'ready' && data.queryState ? (
+          <SearchRecovery
+            state={data.recovery}
+            retryHref={discoverySearchHref(locale, retryState ?? data.queryState)}
+            restartHref={discoverySearchHref(locale, { ...data.queryState, cursor: undefined })}
+            onRetry={onRetry}
             locale={locale}
-            hitTypes={data?.hitTypes ?? {}}
-            yearProperties={data?.yearProperties ?? []}
+            {...(retryFocus
+              ? { retryRef: retryFocus.retryRef, onRetryFocus: retryFocus.captureRetryFocus }
+              : {})}
           />
-        </>
-      )}
+        ) : data?.discovery ? (
+          <DiscoveryResults
+            state={data.discovery}
+            locale={locale}
+            yearProperties={data.yearProperties}
+            restartHref={
+              data.queryState ? discoverySearchHref(locale, { ...data.queryState, cursor: undefined }) : undefined
+            }
+          />
+        ) : result?.subjects.length === 0 ? (
+          <Empty className="border">
+            <EmptyHeader>
+              <EmptyTitle className="text-base font-normal">{m.search_no_results({}, options)}</EmptyTitle>
+            </EmptyHeader>
+          </Empty>
+        ) : (
+          <>
+            <ResultList
+              hits={result?.subjects ?? []}
+              locale={locale}
+              hitTypes={data?.hitTypes ?? {}}
+              yearProperties={data?.yearProperties ?? []}
+            />
+          </>
+        )}
+      </section>
       {next && (
         <Link
           to="/search"

@@ -1,3 +1,4 @@
+import { type Ref } from 'react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Empty, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import { m } from '../paraglide/messages.js';
@@ -46,12 +47,16 @@ export function SearchRecovery({
   restartHref,
   onRetry,
   locale,
+  retryRef,
+  onRetryFocus,
 }: {
   state: SearchRecoveryState;
   retryHref: string;
   restartHref: string;
   onRetry?: (() => void) | undefined;
   locale?: string;
+  retryRef?: Ref<HTMLButtonElement | null> | undefined;
+  onRetryFocus?: ((source: HTMLButtonElement) => void) | undefined;
 }) {
   const retryAt = state.status !== 'ready' ? state.retryAt : undefined;
   const waiting = useSearchRetryWait(retryAt);
@@ -72,7 +77,16 @@ export function SearchRecovery({
       {waiting && retry && <p className="text-sm text-muted-foreground">{m.search_recovery_wait({}, options)}</p>}
       {retry &&
         (onRetry ? (
-          <Button type="button" variant="outline" disabled={waiting} onClick={onRetry}>
+          <Button
+            ref={retryRef}
+            type="button"
+            variant="outline"
+            disabled={waiting}
+            onClick={(event) => {
+              onRetryFocus?.(event.currentTarget);
+              onRetry();
+            }}
+          >
             {m.search_facet_retry({}, options)}
           </Button>
         ) : (
