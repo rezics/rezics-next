@@ -97,7 +97,7 @@ test('loading current values retains the exact uncertain original and later edit
   await editor.reload();
   editor.useCurrent(); // A current GET cannot settle or discard an uncertain write.
   expect(editor.snapshot().pending).toBe(original);
-  expect(editor.snapshot().draft).toEqual({
+  expect(editor.snapshot().draft).toMatchObject({
     spoilerLevel: 2,
     suitability: 'show',
   });

@@ -118,8 +118,8 @@ their guards. No unseen category starts its producer; selection adds no native I
 Reading saves spoiler level and cover suitability when chosen, with the version it read; a stale version keeps the
 choice on screen and offers a reload. Reload keeps the draft for review; only “Use confirmed settings” replaces it,
 and an unresolved write still requires its separate exact retry. Privacy reads the signed-in person's Collections
-after selection and hydration, one page at a time, and lets them change visibility. Account links to security settings on the Auth site and offers
-sign-out. Controls stay disabled until the page hydrates.
+after selection and hydration, one page at a time, and lets them change visibility. Account links to security settings
+on the Auth site and offers sign-out. Controls stay disabled until the page hydrates.
 
 `pages-account-settings--focused-categories` is the default `PageStory` regression for “Settings shows one selected
 category and retains the same viewer's drafts and unresolved commands across category navigation”. It edits the
