@@ -52,7 +52,9 @@ test.each([
         value={value}
         sources={{
           credit: { rightsHolder: 'Cover Artist', via: { name: 'Cover Archive', url }, license: 'Cover permission' },
-          records: [{ name: 'Original Archive', url, licence: { id: 'CC-BY-4.0', url }, attribution: '© Archive Curators' }],
+          records: [
+            { name: 'Original Archive', url, licence: { id: 'CC-BY-4.0', url }, attribution: '© Archive Curators' },
+          ],
           urls: [url],
           identifiers: [],
         }}
@@ -61,9 +63,19 @@ test.each([
     const anchors = [...window.document.querySelectorAll('a')];
     expect(anchors.map((anchor) => anchor.getAttribute('href'))).toEqual(linked ? [url, url, url, url] : []);
     if (linked)
-      expect(anchors.map((anchor) => anchor.textContent)).toEqual(['Cover Archive', 'Original Archive', 'CC-BY-4.0', url]);
+      expect(anchors.map((anchor) => anchor.textContent)).toEqual([
+        'Cover Archive',
+        'Original Archive',
+        'CC-BY-4.0',
+        url,
+      ]);
     for (const text of [
-      'Cover Artist', 'Cover Archive', 'Cover permission', 'Original Archive', 'Licence: CC-BY-4.0', '© Archive Curators',
+      'Cover Artist',
+      'Cover Archive',
+      'Cover permission',
+      'Original Archive',
+      'Licence: CC-BY-4.0',
+      '© Archive Curators',
     ])
       expect(window.document.body.textContent).toContain(text);
   } finally {
