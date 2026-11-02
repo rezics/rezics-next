@@ -306,9 +306,7 @@ for (const initial of [{ kind: 'signed-out' }, { kind: 'failure', message: 'Pres
     const host = await mount(initial);
     expect(host.querySelector('form')).toBeNull();
     const recovery =
-      initial.kind === 'signed-out'
-        ? host.querySelector('a[href="/login"]')!
-        : host.querySelector('[role="alert"]')!;
+      initial.kind === 'signed-out' ? host.querySelector('a[href="/login"]')! : host.querySelector('[role="alert"]')!;
     expect(visible(recovery)).toBe(true);
     before(recovery, guide(host));
     await disclosure(host);
