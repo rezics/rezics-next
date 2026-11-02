@@ -101,9 +101,8 @@ function PublicationFactRemoval({
     const section = holder.current?.closest('fieldset');
     if (!canRemove() || !section?.isConnected) return;
     const controls = [
-      ...(section.closest('form')?.querySelectorAll<HTMLElement>(
-        'button, input, select, textarea, [tabindex="0"]',
-      ) ?? []),
+      ...(section.closest('form')?.querySelectorAll<HTMLElement>('button, input, select, textarea, [tabindex="0"]') ??
+        []),
     ];
     const first = controls.findIndex((control) => section.contains(control));
     const last = controls.findLastIndex((control) => section.contains(control));
@@ -726,7 +725,8 @@ function PublicationEditorLive({
                           property={property}
                           locale={locale}
                           populated={
-                            value.type !== 'value' || hasFactContent(value.content) ||
+                            value.type !== 'value' ||
+                            hasFactContent(value.content) ||
                             (property === 'schema:publisher' && publisher.length > 0)
                           }
                           disabled={disabled}
