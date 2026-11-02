@@ -18,6 +18,11 @@ languages and drafts survive language switches, denials and stale responses. Rem
 native limits. Current authority and derived-term eligibility belong to the server; server refusal details remain
 visible, and a profile link appears only when the existing canonical account lookup supplies it.
 
+Discard restores only the selected language's local draft; an added language without stored terms stays removable,
+even after discard. The unsaved-language review lists explicit field choices, including invalid or unchanged-value
+replacements, and lets the contributor return to each language. Both local reset actions lock during submission,
+uncertain delivery and stale comparison; they never delete stored terms or send a request.
+
 The session BFF preserves identity, CSRF, concurrency, idempotency and native session headers. Uncertain delivery
 freezes the payload, ETag and key for retry. Stale revisions or conflicting keys require reload, comparison and an
 explicit new confirmation. A successful write is followed by a native read of the same returned ID; only that read

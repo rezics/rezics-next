@@ -115,6 +115,7 @@ test('independent Terms forms retain stable associations, multilingual drafts an
     expect(a.textContent).toContain(typeLabels['schema:Movie']);
     expect(a.querySelectorAll('fieldset')).toHaveLength(3);
     expect(a.querySelectorAll('li')).toHaveLength(0); // A form keeps native form semantics.
+    expect(a.textContent).toContain(m.catalogue_terms_no_edits());
     expect(a.textContent).toContain(m.catalogue_terms_original());
     expect(a.textContent).toContain(m.creator_editions_draft());
     associations(a);
@@ -188,7 +189,41 @@ test('independent Terms forms retain stable associations, multilingual drafts an
     const helpId = aliases.getAttribute('aria-describedby')!;
     expect(a.contains(document.getElementById(helpId))).toBe(true);
     expect(document.getElementById(helpId)!.textContent).toBe(m.catalogue_terms_alias_limits());
+    const review = () => [...a.querySelectorAll('section')]
+      .find((section) => section.textContent?.includes(m.catalogue_terms_unsaved_languages()))!;
+    expect(review().textContent).toContain(`en: ${m.catalogue_create_label()}`);
+    expect(review().textContent).toContain(`it: ${m.catalogue_create_aliases()}`);
+    await click(a, m.catalogue_terms_discard_language({ language: 'it' }));
+    expect(control(aliasesA, m.catalogue_terms_action()).value).toBe('keep');
+    expect(review().textContent).not.toContain('it:');
+    expect(review().textContent).toContain('en:');
+    expect(button(a, m.catalogue_create_remove_language()).disabled).toBe(false);
+    await click(a, m.catalogue_create_remove_language());
+    expect([...a.querySelectorAll('option')].some((option) => option.value === 'it')).toBe(false);
+    expect(control(nameA, m.catalogue_create_label()).value).toBe('First draft');
+    expect(first.calls).toHaveLength(1);
+    // Even an untouched new language remains present across switches and can be removed.
+    await replace(a, m.catalogue_terms_new_language(), 'fr');
+    await click(a, m.catalogue_create_add_language());
     await select(a, m.catalogue_create_language(), 'en');
+    await select(a, m.catalogue_create_language(), 'fr');
+    await click(a, m.catalogue_create_remove_language());
+    expect([...a.querySelectorAll('option')].some((option) => option.value === 'fr')).toBe(false);
+    // Discarding a stored language restores its original and leaves another language's edits intact.
+    await replace(a, m.catalogue_terms_new_language(), 'it');
+    await click(a, m.catalogue_create_add_language());
+    await select(aliasesA, m.catalogue_terms_action(), 'set');
+    await replace(aliasesA, m.catalogue_create_aliases(), 'Primo\nSecondo');
+    await click(a, `en: ${m.catalogue_create_label()}`);
+    await click(a, m.catalogue_terms_discard_language({ language: 'en' }));
+    expect(control(nameA, m.catalogue_terms_action()).value).toBe('keep');
+    expect(nameA.textContent).toContain(longName);
+    expect(review().textContent).not.toContain('en:');
+    expect(review().textContent).toContain('it:');
+    expect(button(a, m.catalogue_terms_discard_language({ language: 'en' })).disabled).toBe(true);
+    expect(button(a, m.catalogue_create_remove_language())).toBeUndefined();
+    await select(nameA, m.catalogue_terms_action(), 'set');
+    await replace(nameA, m.catalogue_create_label(), 'First draft');
     expect(control(nameA, m.catalogue_create_label()).value).toBe('First draft');
     expect(control(nameA, m.catalogue_create_label()).id).toBe(nameId);
     await select(fieldset(a, m.catalogue_create_description()), m.catalogue_terms_action(), 'remove');
@@ -216,6 +251,7 @@ test('independent Terms forms retain stable associations, multilingual drafts an
     expect(first.calls).toHaveLength(2);
     expect(second.calls).toHaveLength(1);
     expect(nameA.disabled).toBe(true);
+    expect(button(a, m.catalogue_terms_discard_language({ language: 'en' })).disabled).toBe(true);
     expect(nameB.disabled).toBe(false);
     await click(a, m.catalogue_terms_compare());
     expect(first.calls).toHaveLength(3);
@@ -225,6 +261,7 @@ test('independent Terms forms retain stable associations, multilingual drafts an
     expect(nameA.textContent).toContain(longName);
     expect(control(nameA, m.catalogue_create_label()).value).toBe('First draft');
     await select(a, m.catalogue_create_language(), 'it');
+    expect(button(a, m.catalogue_create_remove_language()).disabled).toBe(true);
     expect(control(aliasesA, m.catalogue_create_aliases()).value).toBe('Primo\nSecondo');
     await select(a, m.catalogue_create_language(), 'en');
     associations(a);
@@ -243,6 +280,7 @@ test('independent Terms forms retain stable associations, multilingual drafts an
     await click(b, m.catalogue_terms_save());
     expect(b.textContent).toContain(m.catalogue_terms_uncertain());
     expect(nameB.disabled).toBe(true);
+    expect(button(b, m.catalogue_terms_discard_language({ language: 'en' })).disabled).toBe(true);
     const uncertainCommand = structuredClone(second.calls[1]!);
     expect(uncertainCommand).toMatchObject({
       method: 'PATCH',

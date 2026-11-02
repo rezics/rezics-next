@@ -238,11 +238,15 @@ function SubjectTermsPageLive({
     ]),
   ];
   const row = base ? (drafts[language] ?? languageDraft(base.subject, language)) : undefined;
-  // Explicit field choices are the edits that will enter the submitted patch.
-  const editedLanguages = Object.keys(drafts).filter((tag) =>
-    termFields.some((field) => drafts[tag]![field].mode !== 'keep'),
-  );
+  const editedLanguages = Object.entries(drafts).flatMap(([tag, draft]) => {
+    const fields = termFields.filter((field) => draft[field].mode !== 'keep');
+    return fields.length ? [{ tag, fields }] : [];
+  });
+  const original = base ? languageDraft(base.subject, language) : undefined;
+  const canDiscard =
+    row && original && termFields.some((field) => row[field].mode !== 'keep' || row[field].value !== original[field].value);
   const storedLanguage = !!base && termFields.some((field) => Object.hasOwn(base.subject[field], language));
+  const canRemoveLanguage = !storedLanguage && addedLanguages.includes(language);
   const typeLabel = base ? typeLabels?.[base.subject.type] : undefined;
   const errors = failure?.errors ?? [];
   const guidance = (field: TermField) => (row ? termsFieldGuidance(errors, field, language, row[field], locale) : []);
@@ -405,29 +409,36 @@ function SubjectTermsPageLive({
                 </div>
               </FieldGroup>
               {!storedLanguage && <p role="status">{m.catalogue_terms_empty({}, options)}</p>}
-              <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap">
-                <Button
-                  className={actionClassName}
-                  type="button"
-                  variant="outline"
-                  disabled={locked || !Object.hasOwn(drafts, language)}
-                  onClick={() => discardLanguage()}
-                >
-                  {m.catalogue_terms_discard_language({ language }, options)}
-                </Button>
-                {!storedLanguage && addedLanguages.includes(language) && (
+              <ContentItemHeading className="font-semibold">{m.creator_editions_draft({}, options)}</ContentItemHeading>
+              <div className="flex min-w-0 flex-col gap-3">
+                <div className="flex flex-wrap gap-3">
                   <Button
                     className={actionClassName}
                     type="button"
                     variant="outline"
-                    disabled={locked}
-                    onClick={() => discardLanguage(true)}
+                    disabled={locked || !canDiscard}
+                    aria-describedby={domId('discard-help')}
+                    onClick={() => discardLanguage()}
                   >
-                    {m.catalogue_create_remove_language({}, options)}
+                    {m.catalogue_terms_discard_language({ language }, options)}
                   </Button>
-                )}
+                  {canRemoveLanguage && (
+                    <Button
+                      className={actionClassName}
+                      type="button"
+                      variant="outline"
+                      disabled={locked}
+                      aria-describedby={domId('discard-help')}
+                      onClick={() => discardLanguage(true)}
+                    >
+                      {m.catalogue_create_remove_language({}, options)}
+                    </Button>
+                  )}
+                </div>
+                <p id={domId('discard-help')} className="text-sm text-muted-foreground">
+                  {m.catalogue_terms_discard_help({}, options)}
+                </p>
               </div>
-              <ContentItemHeading className="font-semibold">{m.creator_editions_draft({}, options)}</ContentItemHeading>
               <FieldGroup>
                 {termFields.map((field) => {
                   const messages = guidance(field);
@@ -513,6 +524,29 @@ function SubjectTermsPageLive({
                   );
                 })}
               </FieldGroup>
+              <section aria-labelledby={domId('unsaved')} className="flex min-w-0 flex-col gap-3">
+                <ContentItemHeading id={domId('unsaved')} className="font-semibold">
+                  {m.catalogue_terms_unsaved_languages({}, options)}
+                </ContentItemHeading>
+                {editedLanguages.length ? (
+                  <ul className="flex min-w-0 flex-col gap-2">
+                    {editedLanguages.map(({ tag, fields }) => (
+                      <li key={tag}>
+                        <Button
+                          className={actionClassName}
+                          type="button"
+                          variant="outline"
+                          disabled={busy}
+                          aria-pressed={language === tag}
+                          onClick={() => setLanguage(tag)}
+                        >
+                          {tag}: {fields.map(fieldLabel).join(', ')}
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : <p>{m.catalogue_terms_no_edits({}, options)}</p>}
+              </section>
               {failure && (
                 <ContentItemFrame as="div" role="alert" className={frameClassName}>
                   <p>{failureText(failure.reason)}</p>
@@ -561,31 +595,6 @@ function SubjectTermsPageLive({
                   )}
                 </ContentItemFrame>
               )}
-              <section aria-labelledby={domId('unsaved')} className="flex min-w-0 flex-col gap-2">
-                <ContentItemHeading id={domId('unsaved')} className="font-semibold">
-                  {m.catalogue_terms_unsaved_languages({}, options)}
-                </ContentItemHeading>
-                {editedLanguages.length ? (
-                  <ul className="flex min-w-0 flex-wrap gap-2">
-                    {editedLanguages.map((tag) => (
-                      <li key={tag}>
-                        <Button
-                          className={actionClassName}
-                          type="button"
-                          variant="outline"
-                          disabled={busy}
-                          aria-pressed={language === tag}
-                          onClick={() => setLanguage(tag)}
-                        >
-                          {tag}
-                        </Button>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p>{m.catalogue_terms_no_edits({}, options)}</p>
-                )}
-              </section>
               <Button
                 className={actionClassName}
                 type="submit"

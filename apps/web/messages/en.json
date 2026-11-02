@@ -2547,6 +2547,7 @@
   "catalogue_terms_alias_limits": "One alias per line, up to 32 distinct aliases of 250 characters each. Blank lines are invalid.",
   "catalogue_terms_save": "Save terms",
   "catalogue_terms_saved": "Terms saved.",
+  "catalogue_terms_discard_help": "Discarding or removing a draft language only clears local edits for the selected language. Stored terms and edits in other languages are kept; no request is sent.",
   "catalogue_terms_stale": "These terms changed. Reload and compare before confirming again. Your draft is kept.",
   "catalogue_terms_conflict": "This request key was used for different changes. Reload and compare before a new confirmation.",
   "catalogue_terms_uncertain": "The result is uncertain. Retry the same request; your draft and request key are kept.",

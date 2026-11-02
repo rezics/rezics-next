@@ -196,6 +196,7 @@ export const UncertainRetry: Story = {
     const canvas = await submit(canvasElement);
     expect(await canvas.findByRole('alert')).toHaveTextContent(m.catalogue_terms_uncertain());
     expect(canvas.getByRole('textbox', { name: m.catalogue_create_label() })).toBeDisabled();
+    expect(canvas.getByRole('button', { name: m.catalogue_terms_discard_language({ language: 'en' }) })).toBeDisabled();
     await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_retry() }));
     expect(await canvas.findByText(m.catalogue_terms_saved())).toBeVisible();
   },
@@ -222,12 +223,12 @@ export const TwoEditedLanguages: Story = {
       'remove',
     );
     const summary = within(canvas.getByRole('region', { name: m.catalogue_terms_unsaved_languages() }));
-    await expect(summary.getByRole('button', { name: 'en' })).toBeVisible();
-    await expect(summary.getByRole('button', { name: 'ja' })).toHaveAttribute('aria-pressed', 'true');
-    await userEvent.click(summary.getByRole('button', { name: 'en' }));
+    await expect(summary.getByRole('button', { name: `en: ${m.catalogue_create_label()}` })).toBeVisible();
+    await expect(summary.getByRole('button', { name: `ja: ${m.catalogue_create_description()}` })).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.click(summary.getByRole('button', { name: `en: ${m.catalogue_create_label()}` }));
     await userEvent.click(canvas.getByRole('button', { name: m.catalogue_terms_discard_language({ language: 'en' }) }));
-    await expect(summary.queryByRole('button', { name: 'en' })).toBeNull();
-    await expect(summary.getByRole('button', { name: 'ja' })).toBeVisible();
+    await expect(summary.queryByRole('button', { name: `en: ${m.catalogue_create_label()}` })).toBeNull();
+    await expect(summary.getByRole('button', { name: `ja: ${m.catalogue_create_description()}` })).toBeVisible();
     await expect(canvas.queryByRole('button', { name: m.catalogue_create_remove_language() })).toBeNull();
     await userEvent.type(canvas.getByRole('textbox', { name: m.catalogue_terms_new_language() }), 'it');
     await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_add_language() }));
@@ -239,7 +240,7 @@ export const TwoEditedLanguages: Story = {
     );
     await userEvent.type(canvas.getByRole('textbox', { name: m.catalogue_create_aliases() }), 'Primo');
     await userEvent.click(canvas.getByRole('button', { name: m.catalogue_terms_discard_language({ language: 'it' }) }));
-    await expect(summary.queryByRole('button', { name: 'it' })).toBeNull();
+    await expect(summary.queryByRole('button', { name: `it: ${m.catalogue_create_aliases()}` })).toBeNull();
     await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_remove_language() }));
     await expect(canvas.queryByRole('option', { name: 'it' })).toBeNull();
     await userEvent.click(canvas.getByRole('button', { name: m.catalogue_terms_save() }));
