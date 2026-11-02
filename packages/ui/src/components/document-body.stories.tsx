@@ -186,12 +186,7 @@ const selectedText = (root: Node): string => {
   return text;
 };
 
-const expectConcealed = async (
-  button: HTMLElement,
-  secret: string,
-  canvas: HTMLElement,
-  label = 'Reveal spoiler',
-) => {
+const expectConcealed = async (button: HTMLElement, secret: string, canvas: HTMLElement, label = 'Reveal spoiler') => {
   const hidden = secretOf(button, secret);
   const paragraph = button.closest('p');
   const lead = paragraph?.firstChild;
@@ -448,7 +443,11 @@ function DisclosureReplacementReader() {
         <button type="button" data-testid="disclosure-show-b" onClick={() => setDocument(disclosureRevisionB)}>
           Show revision B
         </button>
-        <button type="button" data-testid="disclosure-remove-spoilers" onClick={() => setDocument(disclosureWithoutSpoilers)}>
+        <button
+          type="button"
+          data-testid="disclosure-remove-spoilers"
+          onClick={() => setDocument(disclosureWithoutSpoilers)}
+        >
           Remove spoilers
         </button>
         <button type="button" data-testid="disclosure-unmount" onClick={() => setMounted(false)}>
@@ -526,19 +525,26 @@ export const DisclosureReplacement: Story = {
     await runControlWithOneImageRender('disclosure-options');
     await expectRevealed(canvas, secondSecret, canvasElement);
     await expect(canvas.getByRole('link', { name: '@reader' })).toHaveAttribute('href', '/fr/@reader');
-    await expect(canvas.getByRole('link', { name: 'ordinary link' })).toHaveAttribute('href', 'https://example.com/read');
+    await expect(canvas.getByRole('link', { name: 'ordinary link' })).toHaveAttribute(
+      'href',
+      'https://example.com/read',
+    );
     await runControlWithOneImageRender('disclosure-equal-snapshot');
     await expectRevealed(canvas, secondSecret, canvasElement);
     await expect(canvas.getByText('Revision A context')).toBeVisible();
 
     await runControlWithOneImageRender('disclosure-show-b');
     const replacementButtons = canvas.getAllByRole('button', { name: 'Afficher le spoiler' });
-    if (!replacementButtons[0] || !replacementButtons[1]) throw new Error('revision B did not mount two fresh spoilers');
+    if (!replacementButtons[0] || !replacementButtons[1])
+      throw new Error('revision B did not mount two fresh spoilers');
     await expectConcealed(replacementButtons[0], firstSecret, canvasElement, 'Afficher le spoiler');
     await expectConcealed(replacementButtons[1], secondSecret, canvasElement, 'Afficher le spoiler');
     await expect(canvas.getByText('Revision B context')).toBeVisible();
     await expect(canvas.getByRole('link', { name: '@reader' })).toHaveAttribute('href', '/fr/@reader');
-    await expect(canvas.getByRole('link', { name: 'ordinary link' })).toHaveAttribute('href', 'https://example.com/read');
+    await expect(canvas.getByRole('link', { name: 'ordinary link' })).toHaveAttribute(
+      'href',
+      'https://example.com/read',
+    );
     expect(canvasElement.querySelector('img, source, [src], [srcset]')).toBeNull();
     expect(canvasElement.innerHTML).not.toContain('/media/');
 

@@ -21,7 +21,9 @@ test('independently serialized document snapshots keep SSR semantics and standal
   };
   const serialized = serializeDocument(document);
   const parsed = parseDocument(JSON.parse(serialized));
-  const first = renderToStaticMarkup(createElement(DocumentBody, { document, labels: { revealSpoiler: 'Show secret' } }));
+  const first = renderToStaticMarkup(
+    createElement(DocumentBody, { document, labels: { revealSpoiler: 'Show secret' } }),
+  );
   const second = renderToStaticMarkup(
     createElement(DocumentBody, { document: parsed, labels: { revealSpoiler: 'Show secret' } }),
   );
