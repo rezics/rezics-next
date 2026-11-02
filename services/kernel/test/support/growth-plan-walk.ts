@@ -112,11 +112,7 @@ export class PlanWalkSession {
     this.#total = { used: 0, limit };
   }
 
-  *walk(
-    root: unknown,
-    location: string,
-    order: 'preorder' | 'postorder',
-  ): IterableIterator<PlanWalkEntry> {
+  *walk(root: unknown, location: string, order: 'preorder' | 'postorder'): IterableIterator<PlanWalkEntry> {
     const cached = this.#compiled.get(location);
     if (cached !== undefined && cached.root === root) {
       yield* cached[order];
@@ -148,8 +144,7 @@ export function* walkPlanTree(
     return;
   }
   const total: NodeBudget = { used: 0, limit: MAX_PLAN_NODES };
-  for (const { entry, phase } of traversePlanTree(root, location, total))
-    if (phase === order) yield entry;
+  for (const { entry, phase } of traversePlanTree(root, location, total)) if (phase === order) yield entry;
 }
 
 /** Admit one auto_explain JSON document: a Plan object, or a nonempty array of them. */
