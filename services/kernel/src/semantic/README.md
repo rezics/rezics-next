@@ -1044,6 +1044,10 @@ The additive migration stores a maximum 16 KiB binding, 16 KiB dependency body a
 preserves immutable records; deletion still belongs to native retirement/erasure,
 not a public evidence operation. The full contribution/progress envelope remains
 4096 bytes. Unknown/oversized evidence is unavailable, never false, EOF or a vote.
+Retained disclosure projections must be exactly readable or denied. A present
+anchor requires a native visibility value and a valid release digest; unknown
+headers cannot become an exclusion or a contribution. Hidden and taken-down
+subjects keep their existing exclusion meaning.
 
 `kindTypeEvidenceBodyFootprint` declares only these literal SQL statements and
 returns undefined for everything else. It includes encoded SQL/parameters, native

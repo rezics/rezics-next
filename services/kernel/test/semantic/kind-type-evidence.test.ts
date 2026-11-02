@@ -223,6 +223,19 @@ test('local Type body quote includes every repeated anchor lock and retained rec
   expect(quote.bytes).toBeGreaterThan(2 * 6 * (16384 + 16384 + 4096));
 });
 
+test('unknown native anchor state cannot become an excluded dependency or a Type contribution', () => {
+  const id = newId(0xc100);
+  const reference = { canonicalSubjectId: id, key: { driver: 'member' as const, storedSubjectId: id, factId: newId(0xc100) } };
+  const original = { ...structuralAnchor(id), type: null };
+  const terminal = structuralAnchor(id);
+  for (const patch of [{ visibility: null }, { visibility: 'unknown' }, { current_release: 'unknown' }]) {
+    expect(selectNativeKindTypeDependency({ reference, original: { ...original, ...patch }, terminal }).state).toBe('unavailable');
+    expect(selectNativeKindTypeDependency({ reference, original, terminal: { ...terminal, ...patch } }).state).toBe('unavailable');
+  }
+  expect(selectNativeKindTypeDependency({ reference, original: { ...original, visibility: 'taken_down' }, terminal }).state).toBe('excluded');
+  expect(selectNativeKindTypeDependency({ reference, original, terminal: { ...terminal, visibility: 'taken_down', type: null } }).state).toBe('excluded');
+});
+
 test('native dependency bodies cannot bypass original admission with a structural home', async () => {
   let io = 0;
   const pool = { connect() { io++; throw new Error('Unadmitted checkout'); } } as unknown as Pool;

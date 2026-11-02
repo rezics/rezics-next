@@ -211,6 +211,7 @@ const jsonData = (value: unknown): unknown =>
 const sha256 = /^sha256:[0-9a-f]{64}$/;
 const decimal = /^(0|[1-9][0-9]{0,18})$/;
 const drivers = ['member', 'entry', 'label', 'session', 'copy', 'output'];
+const validDisclosure = (value: KindTypeDisclosureProjection): boolean => value === 'readable' || value === 'denied';
 
 /** SQL limits are measured on jsonb::text. JSON string escaping is at most six
  * bytes per source byte; allow PostgreSQL's separators and fixed scalar keys too.
@@ -350,7 +351,7 @@ export async function captureNativeKindTypeDependency(
   const invocation = new KindTypeBodyInvocation(pool, context, work, deadline);
   const snapshot = structuredClone(input);
   if (context.kind !== 'collection-kind-preparation' || !validReference(snapshot.reference) || !sha256.test(snapshot.releaseDigest) ||
-    !['readable', 'denied'].includes(snapshot.originalDisclosure) || !['readable', 'denied'].includes(snapshot.terminalDisclosure))
+    !validDisclosure(snapshot.originalDisclosure) || !validDisclosure(snapshot.terminalDisclosure))
     throw new ProblemError('dependency_unavailable');
   // Preflight BOTH homes before the first lock or observation. An excluded
   // original cannot silently drop a foreign/unsupported terminal dependency.
@@ -389,6 +390,7 @@ function validateRetainedBody(value: NativeKindTypeRetainedBody): void {
   const locator = binding.locator;
   const source = binding.definition.sourceIdentity;
   if (!validLocator(locator) || !validReference(body.dependencies.reference) ||
+    !validDisclosure(body.originalDisclosure) || !validDisclosure(body.terminalDisclosure) ||
     !isDeepStrictEqual(binding.audience.origin.locator, locator) || !isDeepStrictEqual(binding.audience.input.locator, locator) ||
     binding.audience.origin.kind !== 'collection-kind-audience-origin' || !uuid.test(binding.audience.origin.id) ||
     binding.audience.input.kind !== 'collection-kind-audience-input' || !uuid.test(binding.audience.input.id) ||
@@ -583,11 +585,12 @@ function completeProvenance(anchor: NativeKindTypeAnchor): boolean {
   if (!anchor.writer_enrolled || !decimal.test(anchor.writer_version) || BigInt(anchor.writer_version) > 9_223_372_036_854_775_807n) return false;
   if (!anchor.present) return true;
   return (
+    (anchor.visibility === 'visible' || anchor.visibility === 'hidden' || anchor.visibility === 'taken_down') &&
     anchor.revision !== null &&
     anchor.revision_transaction !== null &&
     anchor.revision_epoch !== null &&
     anchor.revision_position !== null &&
-    anchor.current_release !== null &&
+    anchor.current_release !== null && sha256.test(anchor.current_release) &&
     (anchor.redirect === null ||
       (anchor.redirect_sequence !== null &&
         anchor.redirect_transaction !== null &&
