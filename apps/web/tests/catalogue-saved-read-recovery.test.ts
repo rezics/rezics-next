@@ -48,9 +48,23 @@ test('A contributor retries only the failed reading after a confirmed save', asy
     expect(found, `Expected the actual ${label} action`).toBeDefined();
     return found as HTMLButtonElement;
   };
+  const termsControl = (part: string) => {
+    const field = part.replace(/^terms-/, '').replace(/-mode$/, '');
+    const label = field === 'language' ? m.catalogue_create_language()
+      : field === 'new-language' ? m.catalogue_terms_new_language()
+      : field === 'labels' ? m.catalogue_create_label()
+      : field === 'descriptions' ? m.catalogue_create_description()
+      : m.catalogue_create_aliases();
+    const scope = ['labels', 'descriptions', 'aliases'].includes(field)
+      ? [...host.querySelectorAll('fieldset')].find((fieldset) => fieldset.querySelector('legend')?.textContent === label)!
+      : host;
+    const associated = [...scope.querySelectorAll('label')].find((element) =>
+      element.textContent === (part.endsWith('-mode') ? m.catalogue_terms_action() : label))!;
+    return window.document.getElementById(associated.htmlFor)!;
+  };
   const input = async (id: string, value: string) => {
     await act(async () => {
-      const element = host.querySelector(`#${id}`)!;
+      const element = id.startsWith('terms-') ? termsControl(id) : host.querySelector(`#${id}`)!;
       // Use the native setter so React observes an actual input change.
       Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(element, value);
       element.dispatchEvent(new window.Event('input', { bubbles: true }));
@@ -85,7 +99,7 @@ test('A contributor retries only the failed reading after a confirmed save', asy
       await Bun.sleep(10);
     });
     await act(async () => {
-      const mode = host.querySelector('#terms-labels-mode')!;
+      const mode = termsControl('terms-labels-mode');
       mode.value = 'set';
       mode.dispatchEvent(new window.Event('change', { bubbles: true }));
     });
@@ -153,7 +167,7 @@ test('A contributor retries only the failed reading after a confirmed save', asy
     });
     const select = async (id: string, value: string) => {
       await act(async () => {
-        const control = host.querySelector(`#${id}`)!;
+        const control = termsControl(id);
         control.value = value;
         control.dispatchEvent(new window.Event('change', { bubbles: true }));
       });
@@ -163,10 +177,10 @@ test('A contributor retries only the failed reading after a confirmed save', asy
     await select('terms-descriptions-mode', 'remove');
     await input('terms-new-language', 'it');
     await act(async () => button(m.catalogue_create_add_language()).click());
-    expect(host.querySelector('#terms-language')!.value).toBe('it');
+    expect(termsControl('terms-language').value).toBe('it');
     await select('terms-aliases-mode', 'set');
     await act(async () => {
-      const aliases = host.querySelector('#terms-aliases')!;
+      const aliases = termsControl('terms-aliases');
       expect(aliases.tagName).toBe('TEXTAREA');
       expect(aliases.getAttribute('rows')).toBe('3');
       Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!.call(
@@ -176,10 +190,10 @@ test('A contributor retries only the failed reading after a confirmed save', asy
       aliases.dispatchEvent(new window.Event('input', { bubbles: true }));
     });
     await select('terms-language', 'en');
-    expect(host.querySelector('#terms-labels')!.value).toBe('Phone draft');
+    expect(termsControl('terms-labels').value).toBe('Phone draft');
     await act(async () => button(m.catalogue_terms_save()).click());
     expect(host.querySelector('form')!.getAttribute('aria-busy')).toBe('true');
-    expect(host.querySelector('#terms-language')!.disabled).toBe(true);
+    expect(termsControl('terms-language').disabled).toBe(true);
     expect(host.querySelector('fieldset')!.disabled).toBe(true);
     expect(button(m.catalogue_create_add_language()).disabled).toBe(true);
     await act(async () => {
@@ -194,7 +208,7 @@ test('A contributor retries only the failed reading after a confirmed save', asy
     expect(button(m.catalogue_terms_save()).disabled).toBe(true);
     expect(host.querySelector('fieldset')!.disabled).toBe(true);
     expect(button(m.catalogue_create_add_language()).disabled).toBe(true);
-    expect(host.querySelector('#terms-language')!.disabled).toBe(false);
+    expect(termsControl('terms-language').disabled).toBe(false);
     expect(submitStale).toHaveBeenCalledTimes(1);
     const firstCommand = structuredClone(submitStale.mock.calls[0]![0]);
     expect(firstCommand).toMatchObject({
@@ -208,9 +222,9 @@ test('A contributor retries only the failed reading after a confirmed save', asy
     expect(readStale.mock.calls.at(-1)).toEqual([termsSubjectId, 'terms-read']);
     expect(submitStale).toHaveBeenCalledTimes(1);
     await select('terms-language', 'it');
-    expect(host.querySelector('#terms-aliases')!.value).toBe('Primo\nSecondo');
+    expect(termsControl('terms-aliases').value).toBe('Primo\nSecondo');
     await select('terms-language', 'en');
-    expect(host.querySelector('#terms-labels')!.value).toBe('Phone draft');
+    expect(termsControl('terms-labels').value).toBe('Phone draft');
     staleTerms.setScenario('uncertain');
     await act(async () => button(m.catalogue_terms_confirm()).click());
     expect(host.textContent).toContain(m.catalogue_terms_uncertain());

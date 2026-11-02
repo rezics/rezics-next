@@ -1,8 +1,17 @@
 import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useQuery } from '@tanstack/react-query';
-import { useRef, useState, type FormEvent } from 'react';
+import { useId, useRef, useState, type FormEvent } from 'react';
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
-import { Field, FieldDescription, FieldError, FieldLabel } from '@rezics/ui/shadcn/field';
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+} from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
@@ -30,8 +39,10 @@ import {
 const actionClassName =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 text-center md:pointer-fine:min-h-8 md:pointer-fine:py-1';
 const inputClassName = 'min-h-11 md:pointer-fine:min-h-8';
+// Leave room for the shared frame's focus/hover surface within the phone column.
+const frameClassName = 'm-1 flex min-w-0 flex-col gap-4 p-3 sm:p-4';
 // NativeSelect applies className to its wrapper; enlarge the actual select inside it.
-const selectClassName = 'min-w-0 max-w-full [&_select]:min-h-11 md:pointer-fine:[&_select]:min-h-8';
+const selectClassName = 'min-w-0 max-w-full [&_select]:min-h-11 [&_select]:min-w-11 md:pointer-fine:[&_select]:min-h-8';
 const linkClassName =
   'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm underline [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8';
 
@@ -50,6 +61,8 @@ function SubjectTermsPageLive({
   transport: TermsTransport;
   typeLabels?: Record<string, string>;
 }) {
+  const formId = useId();
+  const domId = (part: string) => `${formId}-${part}`;
   const lifetime = useEditorLifetime();
   const options = { locale: locale as never };
   const query = useQuery({
@@ -178,15 +191,17 @@ function SubjectTermsPageLive({
 
   function values(snapshot: TermsSnapshot, languages: string[]) {
     return (
-      <dl className="space-y-3 break-words">
+      <dl className="flex min-w-0 flex-col gap-4 [overflow-wrap:anywhere]">
         {languages.map((tag) => (
-          <div key={tag} className="space-y-1">
+          <div key={tag} className="flex min-w-0 flex-col gap-1">
             <dt className="font-medium">{tag}</dt>
             {termFields.map((field) => (
               <dd key={field} className="text-sm">
                 <span className="text-muted-foreground">{fieldLabel(field)}: </span>
                 <span lang={tag} className="whitespace-pre-wrap">
-                  {termValue(snapshot, field, tag) || m.catalogue_terms_absent({}, options)}
+                  {Object.hasOwn(snapshot.subject[field], tag)
+                    ? termValue(snapshot, field, tag)
+                    : m.catalogue_terms_absent({}, options)}
                 </span>
               </dd>
             ))}
@@ -210,14 +225,14 @@ function SubjectTermsPageLive({
   const guidance = (field: TermField) => (row ? termsFieldGuidance(errors, field, language, row[field], locale) : []);
 
   return (
-    <article className="mx-auto min-w-0 w-full max-w-3xl space-y-6 text-foreground [overflow-wrap:anywhere]">
-      <header className="space-y-3">
-        <PageHeading>{m.catalogue_terms_title({}, options)}</PageHeading>
+    <article className="mx-auto flex min-w-0 w-full max-w-3xl flex-col gap-6 text-foreground [overflow-wrap:anywhere]">
+      <header className="flex min-w-0 flex-col gap-3">
+        <PageHeading id={domId('title')}>{m.catalogue_terms_title({}, options)}</PageHeading>
         {base && (
-          <p className="break-words font-medium">
+          <ContentItemHeading className="min-w-0 text-lg font-semibold [overflow-wrap:anywhere]">
             {pickText(base.subject.labels, locale).text || m.subject_value_unlabelled({}, options)}
             {typeLabel && <span className="ml-3 text-sm text-muted-foreground">{typeLabel}</span>}
-          </p>
+          </ContentItemHeading>
         )}
         <p className="text-muted-foreground">{m.catalogue_terms_intro({}, options)}</p>
         {base && !saved && (
@@ -228,7 +243,7 @@ function SubjectTermsPageLive({
       </header>
       {query.isPending && <p role="status">{m.candidate_loading({}, options)}</p>}
       {!base && !query.isPending && (
-        <section role="alert" className="space-y-3">
+        <section role="alert" className="flex min-w-0 flex-col gap-3">
           <p>
             {query.data?.state === 'concealed'
               ? m.catalogue_create_concealed({}, options)
@@ -264,8 +279,8 @@ function SubjectTermsPageLive({
             </p>
           )}
           {saved ? (
-            <section role="status" className="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6">
-              <p className="font-medium">{m.catalogue_terms_saved({}, options)}</p>
+            <ContentItemFrame as="div" role="status" className={frameClassName}>
+              <ContentItemHeading className="font-semibold">{m.catalogue_terms_saved({}, options)}</ContentItemHeading>
               {saved.reader.state === 'ready' ? (
                 <>
                   {values(saved.reader.snapshot, termLanguages(saved.reader.snapshot))}
@@ -287,148 +302,173 @@ function SubjectTermsPageLive({
                   </Button>
                 </>
               )}
-            </section>
+            </ContentItemFrame>
           ) : (
             <form
-              className="space-y-6"
+              className="flex min-w-0 flex-col gap-6"
+              aria-labelledby={domId('title')}
               noValidate
               aria-busy={busy}
               onSubmit={(event) => void submit(event, comparison?.state === 'ready' ? comparison.snapshot : undefined)}
             >
-              <Field>
-                <FieldLabel htmlFor="terms-language">{m.catalogue_create_language({}, options)}</FieldLabel>
-                <NativeSelect
-                  className={selectClassName}
-                  id="terms-language"
-                  aria-describedby="terms-language-help"
-                  value={language}
-                  disabled={busy}
-                  onChange={(event) => setLanguage(event.target.value)}
-                >
-                  {languages.map((tag) => (
-                    <NativeSelectOption key={tag} value={tag}>
-                      {tag}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
-                <FieldDescription id="terms-language-help">
-                  {m.catalogue_create_language_help({}, options)}
-                </FieldDescription>
-              </Field>
-              <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end">
-                <Field className="min-w-0 flex-1">
-                  <FieldLabel htmlFor="terms-new-language">{m.catalogue_terms_new_language({}, options)}</FieldLabel>
-                  <Input
-                    className={inputClassName}
-                    id="terms-new-language"
-                    value={newLanguage}
-                    disabled={locked}
-                    maxLength={64}
-                    aria-invalid={languageError}
-                    aria-describedby={languageError ? 'terms-new-language-error' : undefined}
-                    onChange={(event) => {
-                      setNewLanguage(event.target.value);
-                      setLanguageError(false);
-                    }}
-                  />
-                  {languageError && (
-                    <FieldError id="terms-new-language-error">
-                      {m.catalogue_terms_validation_language({}, options)}
-                    </FieldError>
-                  )}
+              <FieldGroup>
+                <Field data-disabled={busy || undefined}>
+                  <FieldLabel htmlFor={domId('language')}>{m.catalogue_create_language({}, options)}</FieldLabel>
+                  <NativeSelect
+                    className={selectClassName}
+                    id={domId('language')}
+                    aria-describedby={domId('language-help')}
+                    value={language}
+                    disabled={busy}
+                    onChange={(event) => setLanguage(event.target.value)}
+                  >
+                    {languages.map((tag) => (
+                      <NativeSelectOption key={tag} value={tag}>
+                        {tag}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                  <FieldDescription id={domId('language-help')}>
+                    {m.catalogue_create_language_help({}, options)}
+                  </FieldDescription>
                 </Field>
-                <Button
-                  className={actionClassName}
-                  type="button"
-                  variant="outline"
-                  disabled={locked}
-                  onClick={() => {
-                    if (!/^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(newLanguage)) {
-                      setLanguageError(true);
-                      return;
-                    }
-                    setLanguage(newLanguage);
-                    setNewLanguage('');
-                  }}
-                >
-                  {m.catalogue_create_add_language({}, options)}
-                </Button>
-              </div>
+                <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end">
+                  <Field
+                    className="min-w-0 flex-1"
+                    data-invalid={languageError || undefined}
+                    data-disabled={locked || undefined}
+                  >
+                    <FieldLabel htmlFor={domId('new-language')}>
+                      {m.catalogue_terms_new_language({}, options)}
+                    </FieldLabel>
+                    <Input
+                      className={inputClassName}
+                      id={domId('new-language')}
+                      value={newLanguage}
+                      disabled={locked}
+                      maxLength={64}
+                      aria-invalid={languageError}
+                      aria-describedby={languageError ? domId('new-language-error') : undefined}
+                      onChange={(event) => {
+                        setNewLanguage(event.target.value);
+                        setLanguageError(false);
+                      }}
+                    />
+                    {languageError && (
+                      <FieldError id={domId('new-language-error')}>
+                        {m.catalogue_terms_validation_language({}, options)}
+                      </FieldError>
+                    )}
+                  </Field>
+                  <Button
+                    className={actionClassName}
+                    type="button"
+                    variant="outline"
+                    disabled={locked}
+                    onClick={() => {
+                      if (!/^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(newLanguage)) {
+                        setLanguageError(true);
+                        return;
+                      }
+                      setLanguage(newLanguage);
+                      setNewLanguage('');
+                    }}
+                  >
+                    {m.catalogue_create_add_language({}, options)}
+                  </Button>
+                </div>
+              </FieldGroup>
               {!termFields.some((field) => Object.hasOwn(base.subject[field], language)) && (
                 <p role="status">{m.catalogue_terms_empty({}, options)}</p>
               )}
-              {termFields.map((field) => {
-                const messages = guidance(field);
-                const invalid = messages.length > 0;
-                const errorId = invalid ? `terms-${field}-error` : undefined;
-                return (
-                  <fieldset
-                    key={field}
-                    disabled={locked}
-                    className="min-w-0 space-y-3 rounded-xl border border-border bg-card p-4 sm:p-6"
-                  >
-                    <legend className="px-1 text-sm font-semibold">{fieldLabel(field)}</legend>
-                    <p className="whitespace-pre-wrap break-words text-sm">
-                      <span className="text-muted-foreground">{m.catalogue_terms_original({}, options)}: </span>
-                      <span lang={language}>
-                        {termValue(base, field, language) || m.catalogue_terms_absent({}, options)}
-                      </span>
-                    </p>
-                    <Field>
-                      <FieldLabel htmlFor={`terms-${field}-mode`}>{m.catalogue_terms_action({}, options)}</FieldLabel>
-                      <NativeSelect
-                        className={selectClassName}
-                        id={`terms-${field}-mode`}
-                        value={row[field].mode}
-                        aria-invalid={invalid}
-                        aria-describedby={errorId}
-                        onChange={(event) =>
-                          update(field, { mode: event.target.value as LanguageDraft[TermField]['mode'] })
-                        }
-                      >
-                        <NativeSelectOption value="keep">{m.catalogue_terms_keep({}, options)}</NativeSelectOption>
-                        <NativeSelectOption value="set">{m.catalogue_terms_replace({}, options)}</NativeSelectOption>
-                        <NativeSelectOption value="remove">{m.catalogue_terms_remove({}, options)}</NativeSelectOption>
-                      </NativeSelect>
-                    </Field>
-                    {row[field].mode === 'set' && (
-                      <Field data-invalid={invalid || undefined}>
-                        <FieldLabel htmlFor={`terms-${field}`}>{fieldLabel(field)}</FieldLabel>
-                        {field === 'aliases' ? (
-                          <Textarea
-                            id={`terms-${field}`}
-                            lang={language}
-                            value={row[field].value}
-                            rows={3}
-                            aria-invalid={invalid}
-                            aria-describedby={['terms-aliases-help', errorId].filter(Boolean).join(' ')}
-                            onChange={(event) => update(field, { value: event.target.value })}
-                          />
-                        ) : (
-                          <Input
-                            className={inputClassName}
-                            id={`terms-${field}`}
-                            lang={language}
-                            value={row[field].value}
-                            maxLength={250}
-                            aria-invalid={invalid}
-                            aria-describedby={errorId}
-                            onChange={(event) => update(field, { value: event.target.value })}
-                          />
-                        )}
-                        {field === 'aliases' && (
-                          <FieldDescription id="terms-aliases-help">
-                            {m.catalogue_terms_alias_limits({}, options)}
-                          </FieldDescription>
-                        )}
-                      </Field>
-                    )}
-                    {invalid && <FieldError id={errorId} errors={messages.map((message) => ({ message }))} />}
-                  </fieldset>
-                );
-              })}
+              <ContentItemHeading className="font-semibold">{m.creator_editions_draft({}, options)}</ContentItemHeading>
+              <FieldGroup>
+                {termFields.map((field) => {
+                  const messages = guidance(field);
+                  const invalid = messages.length > 0;
+                  const errorId = invalid ? domId(`${field}-error`) : undefined;
+                  return (
+                    <FieldSet key={field} disabled={locked} className="min-w-0 gap-0">
+                      <FieldLegend className="px-1">{fieldLabel(field)}</FieldLegend>
+                      <ContentItemFrame as="div" className={frameClassName}>
+                        <dl className="min-w-0 text-sm">
+                          <dt className="text-muted-foreground">{m.catalogue_terms_original({}, options)}</dt>
+                          <dd lang={language} className="mt-1 whitespace-pre-wrap [overflow-wrap:anywhere]">
+                            <span lang={language}>
+                              {Object.hasOwn(base.subject[field], language)
+                                ? termValue(base, field, language)
+                                : m.catalogue_terms_absent({}, options)}
+                            </span>
+                          </dd>
+                        </dl>
+                        <FieldGroup>
+                          <Field data-invalid={invalid || undefined} data-disabled={locked || undefined}>
+                            <FieldLabel htmlFor={domId(`${field}-mode`)}>
+                              {m.catalogue_terms_action({}, options)}
+                            </FieldLabel>
+                            <NativeSelect
+                              className={selectClassName}
+                              id={domId(`${field}-mode`)}
+                              value={row[field].mode}
+                              aria-invalid={invalid}
+                              aria-describedby={errorId}
+                              onChange={(event) =>
+                                update(field, { mode: event.target.value as LanguageDraft[TermField]['mode'] })
+                              }
+                            >
+                              <NativeSelectOption value="keep">
+                                {m.catalogue_terms_keep({}, options)}
+                              </NativeSelectOption>
+                              <NativeSelectOption value="set">
+                                {m.catalogue_terms_replace({}, options)}
+                              </NativeSelectOption>
+                              <NativeSelectOption value="remove">
+                                {m.catalogue_terms_remove({}, options)}
+                              </NativeSelectOption>
+                            </NativeSelect>
+                          </Field>
+                          {row[field].mode === 'set' && (
+                            <Field data-invalid={invalid || undefined} data-disabled={locked || undefined}>
+                              <FieldLabel htmlFor={domId(field)}>{fieldLabel(field)}</FieldLabel>
+                              {field === 'aliases' ? (
+                                <Textarea
+                                  className="min-w-0 [overflow-wrap:anywhere]"
+                                  id={domId(field)}
+                                  lang={language}
+                                  value={row[field].value}
+                                  rows={3}
+                                  aria-invalid={invalid}
+                                  aria-describedby={[domId('aliases-help'), errorId].filter(Boolean).join(' ')}
+                                  onChange={(event) => update(field, { value: event.target.value })}
+                                />
+                              ) : (
+                                <Input
+                                  className={inputClassName}
+                                  id={domId(field)}
+                                  lang={language}
+                                  value={row[field].value}
+                                  maxLength={250}
+                                  aria-invalid={invalid}
+                                  aria-describedby={errorId}
+                                  onChange={(event) => update(field, { value: event.target.value })}
+                                />
+                              )}
+                              {field === 'aliases' && (
+                                <FieldDescription id={domId('aliases-help')}>
+                                  {m.catalogue_terms_alias_limits({}, options)}
+                                </FieldDescription>
+                              )}
+                            </Field>
+                          )}
+                          {invalid && <FieldError id={errorId} errors={messages.map((message) => ({ message }))} />}
+                        </FieldGroup>
+                      </ContentItemFrame>
+                    </FieldSet>
+                  );
+                })}
+              </FieldGroup>
               {failure && (
-                <section role="alert" className="space-y-3 rounded-xl border border-destructive/40 p-4">
+                <ContentItemFrame as="div" role="alert" className={frameClassName}>
                   <p>{failureText(failure.reason)}</p>
                   {failure.detail && <p>{failure.detail}</p>}
                   {failure.reason === 'denied' && base.profileHref && (
@@ -447,11 +487,13 @@ function SubjectTermsPageLive({
                       {m.catalogue_terms_compare({}, options)}
                     </Button>
                   )}
-                </section>
+                </ContentItemFrame>
               )}
               {comparison && (
-                <section className="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6" aria-live="polite">
-                  <h2 className="font-semibold">{m.catalogue_terms_latest({}, options)}</h2>
+                <ContentItemFrame as="div" className={frameClassName} aria-live="polite">
+                  <ContentItemHeading className="font-semibold">
+                    {m.catalogue_terms_latest({}, options)}
+                  </ContentItemHeading>
                   {comparison.state === 'ready' ? (
                     <>
                       {values(comparison.snapshot, [
@@ -471,7 +513,7 @@ function SubjectTermsPageLive({
                           : m.catalogue_result_read_unavailable({}, options)}
                     </p>
                   )}
-                </section>
+                </ContentItemFrame>
               )}
               <Button
                 className={actionClassName}

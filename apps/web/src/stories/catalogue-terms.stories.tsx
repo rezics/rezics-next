@@ -211,3 +211,146 @@ export const ReaderDenied: Story = {
     expect(canvas.getByText(m.catalogue_terms_saved())).toBeVisible();
   },
 };
+
+// Additive mounted examples; all original scenarios and plays above remain canonical.
+function IndependentTermsStory() {
+  const locale = getLocale();
+  const fixtures = useMemo(() => {
+    const first = catalogueTermsFixture('ready', locale);
+    first.subject.labels.en = `A supplied name ${'星'.repeat(225)}`;
+    first.subject.descriptions.en = 'A long description that remains available while the draft is edited. '.repeat(3);
+    first.subject.aliases.en = [`LongAlias${'x'.repeat(230)}`, 'Second alias', '第三の別名'];
+    return [first, catalogueTermsFixture('ready', locale)] as const;
+  }, [locale]);
+  return (
+    <PatternStory path={`/subjects/${termsSubjectId}/original-film/terms`} visitor="Signed In">
+      <AppShell>
+        <div className="flex min-w-0 flex-col gap-12">
+          {fixtures.map((fixture, index) => (
+            <SubjectTermsPage
+              key={`${index}:${locale}`}
+              id={termsSubjectId}
+              locale={locale}
+              session="signed-in"
+              transport={fixture.transport}
+              typeLabels={
+                index === 0 ? { 'schema:Movie': `Movie / ${'supplied-type-reference:'.repeat(12)}` } : undefined
+              }
+            />
+          ))}
+        </div>
+      </AppShell>
+    </PatternStory>
+  );
+}
+
+function independentArticles(canvasElement: HTMLElement) {
+  const articles = [...canvasElement.querySelectorAll<HTMLElement>('article')];
+  expect(articles).toHaveLength(2);
+  const ids = [...canvasElement.querySelectorAll('[id]')].map((element) => element.id);
+  expect(new Set(ids).size).toBe(ids.length);
+  for (const article of articles) {
+    for (const label of article.querySelectorAll('label')) {
+      expect(article.contains(document.getElementById(label.htmlFor))).toBe(true);
+    }
+    for (const control of article.querySelectorAll('[aria-describedby]')) {
+      for (const id of control.getAttribute('aria-describedby')!.split(' ').filter(Boolean)) {
+        expect(article.contains(document.getElementById(id))).toBe(true);
+      }
+    }
+  }
+  return articles as [HTMLElement, HTMLElement];
+}
+
+export const IndependentForms: Story = {
+  render: () => <IndependentTermsStory />,
+  play: async ({ canvasElement }) => {
+    await within(canvasElement).findAllByRole('combobox', { name: m.catalogue_create_language() });
+    const [left, right] = independentArticles(canvasElement);
+    const a = await fill(left, 'First independent draft');
+    const b = await fill(right, 'Second independent draft');
+    await userEvent.type(a.getByRole('textbox', { name: m.catalogue_terms_new_language() }), 'it');
+    await userEvent.click(a.getByRole('button', { name: m.catalogue_create_add_language() }));
+    await expect(b.getByRole('combobox', { name: m.catalogue_create_language() })).toHaveValue('en');
+    await expect(b.getByRole('textbox', { name: m.catalogue_create_label() })).toHaveValue('Second independent draft');
+    const aliases = within(a.getByRole('group', { name: m.catalogue_create_aliases() }));
+    await userEvent.selectOptions(aliases.getByRole('combobox'), 'set');
+    await userEvent.type(aliases.getByRole('textbox'), 'Primo{Enter}Secondo');
+    await expect(aliases.getByRole('textbox')).toHaveAccessibleDescription(m.catalogue_terms_alias_limits());
+    await userEvent.selectOptions(a.getByRole('combobox', { name: m.catalogue_create_language() }), 'en');
+    await expect(a.getByRole('textbox', { name: m.catalogue_create_label() })).toHaveValue('First independent draft');
+    independentArticles(canvasElement);
+    await userEvent.click(a.getByRole('button', { name: m.catalogue_terms_save() }));
+    await expect(await a.findByText(m.catalogue_terms_saved())).toBeVisible();
+    await expect(b.getByRole('textbox', { name: m.catalogue_create_label() })).toHaveValue('Second independent draft');
+    await expect(b.getByRole('button', { name: m.catalogue_terms_save() })).toBeEnabled();
+  },
+};
+
+export const LongTextPhone: Story = {
+  render: () => <IndependentTermsStory />,
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  play: async ({ canvasElement }) => {
+    const languages = await within(canvasElement).findAllByRole('combobox', { name: m.catalogue_create_language() });
+    const [left] = independentArticles(canvasElement);
+    const canvas = within(left);
+    await userEvent.selectOptions(languages[0]!, 'en');
+    for (const name of [m.catalogue_create_label(), m.catalogue_create_description(), m.catalogue_create_aliases()]) {
+      await userEvent.selectOptions(within(canvas.getByRole('group', { name })).getByRole('combobox'), 'set');
+    }
+    await expect(canvas.getByRole('textbox', { name: m.catalogue_create_label() })).toHaveValue(
+      `A supplied name ${'星'.repeat(225)}`,
+    );
+    await expect(canvas.getByRole('textbox', { name: m.catalogue_create_aliases() })).toHaveValue(
+      `LongAlias${'x'.repeat(230)}\nSecond alias\n第三の別名`,
+    );
+    await phoneControls(canvasElement);
+    for (const content of left.querySelectorAll<HTMLElement>('h1, h2, legend, dd, textarea')) {
+      await expect(content.scrollWidth).toBeLessThanOrEqual(content.clientWidth);
+    }
+    for (const original of canvas.getAllByText(m.catalogue_terms_original(), { exact: true }))
+      await expect(original).toBeVisible();
+  },
+};
+
+export const KeyboardLabelAndErrorAssociations: Story = {
+  render: () => <IndependentTermsStory />,
+  play: async ({ canvasElement }) => {
+    await within(canvasElement).findAllByRole('combobox', { name: m.catalogue_create_language() });
+    const [left, right] = independentArticles(canvasElement);
+    const a = await fill(left, '');
+    const b = await fill(right, 'Independent value');
+    await userEvent.click(a.getByRole('button', { name: m.catalogue_terms_save() }));
+    const input = a.getByRole('textbox', { name: m.catalogue_create_label() });
+    await expect(input).toHaveAttribute('aria-invalid', 'true');
+    await expect(input).toHaveAccessibleDescription(m.catalogue_terms_validation_name());
+    await expect(b.getByRole('textbox', { name: m.catalogue_create_label() })).toHaveAttribute('aria-invalid', 'false');
+    const inputLabel = [...left.querySelectorAll('label')].find((label) => label.htmlFor === input.id)!;
+    await userEvent.click(inputLabel);
+    await expect(input).toHaveFocus();
+    await expect(getComputedStyle(input).boxShadow).not.toBe('none');
+    const language = a.getByRole('combobox', { name: m.catalogue_create_language() });
+    language.focus();
+    await userEvent.tab();
+    const newLanguage = a.getByRole('textbox', { name: m.catalogue_terms_new_language() });
+    await expect(newLanguage).toHaveFocus();
+    await userEvent.type(newLanguage, 'english!');
+    await userEvent.tab();
+    await expect(a.getByRole('button', { name: m.catalogue_create_add_language() })).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    await expect(newLanguage).toHaveAccessibleDescription(m.catalogue_terms_validation_language());
+    await expect(b.queryByText(m.catalogue_terms_validation_language())).toBeNull();
+    independentArticles(canvasElement);
+    await userEvent.click([...left.querySelectorAll('label')].find((label) => label.htmlFor === newLanguage.id)!);
+    await expect(newLanguage).toHaveFocus();
+    await userEvent.clear(newLanguage);
+    await userEvent.type(newLanguage, 'it');
+    await userEvent.tab();
+    await userEvent.keyboard('{Enter}');
+    await expect(language).toHaveValue('it');
+    await expect(b.getByRole('combobox', { name: m.catalogue_create_language() })).toHaveValue('en');
+    await userEvent.selectOptions(language, 'en');
+    await expect(a.getByRole('textbox', { name: m.catalogue_create_label() })).toHaveValue('');
+    independentArticles(canvasElement);
+  },
+};

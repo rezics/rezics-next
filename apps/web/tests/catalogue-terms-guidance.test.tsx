@@ -101,7 +101,20 @@ test('Multilingual terms show actionable field-specific corrections without chan
           </QueryClientProvider>,
         ),
       );
-      const control = (id: string) => host.querySelector(`#${id}`)! as unknown as HTMLInputElement;
+      const control = (part: string) => {
+        const field = part.replace(/^terms-/, '').replace(/-mode$/, '');
+        const label = field === 'language' ? m.catalogue_create_language({}, options)
+          : field === 'new-language' ? m.catalogue_terms_new_language({}, options)
+          : field === 'labels' ? m.catalogue_create_label({}, options)
+          : field === 'descriptions' ? m.catalogue_create_description({}, options)
+          : m.catalogue_create_aliases({}, options);
+        const scope = ['labels', 'descriptions', 'aliases'].includes(field)
+          ? [...host.querySelectorAll('fieldset')].find((fieldset) => fieldset.querySelector('legend')?.textContent === label)!
+          : host;
+        const associated = [...scope.querySelectorAll('label')].find((element) =>
+          element.textContent === (part.endsWith('-mode') ? m.catalogue_terms_action({}, options) : label));
+        return window.document.getElementById(associated?.htmlFor ?? '') as unknown as HTMLInputElement;
+      };
       const button = (text: string) =>
         [...host.querySelectorAll('button')].find((button) => button.textContent === text)!;
       const click = (text: string) =>
@@ -125,7 +138,7 @@ test('Multilingual terms show actionable field-specific corrections without chan
         expect(ids.length).toBeGreaterThan(0);
         return ids
           .map((id) => {
-            const element = host.querySelector(`#${id}`);
+            const element = window.document.getElementById(id);
             expect(element).not.toBeNull();
             return element!.textContent;
           })
@@ -139,9 +152,10 @@ test('Multilingual terms show actionable field-specific corrections without chan
       await replace('terms-new-language', 'english!');
       await click(m.catalogue_create_add_language({}, options));
       correction('terms-new-language', m.catalogue_terms_validation_language({}, options));
+      const languageErrorId = control('terms-new-language').getAttribute('aria-describedby')!;
       await replace('terms-new-language', 'en-US');
       await click(m.catalogue_create_add_language({}, options));
-      expect(host.querySelector('#terms-new-language-error')).toBeNull();
+      expect(window.document.getElementById(languageErrorId)).toBeNull();
       await mode('labels', 'set');
       await save();
       correction('terms-labels', m.catalogue_terms_validation_name({}, options));
@@ -188,7 +202,7 @@ test('Multilingual terms show actionable field-specific corrections without chan
       expect(control('terms-descriptions').value).toBe('日本語の草稿');
       await mode('labels', 'remove');
       await save();
-      expect(host.querySelector('#terms-labels')).toBeNull();
+      expect(control('terms-labels')).toBeNull();
       correction('terms-labels-mode', m.catalogue_terms_validation_name_required({}, options));
       expect(commands).toHaveLength(0);
       await mode('labels', 'keep');

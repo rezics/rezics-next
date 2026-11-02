@@ -360,6 +360,14 @@ test('catalogue editors retain only their original live reader, exact address an
       element.dispatchEvent(new ui.window.Event(element.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true }));
     });
   };
+  const termsControl = (part: 'labels' | 'labels-mode') => {
+    const fieldset = [...ui.host.querySelectorAll('fieldset')].find((element) =>
+      element.querySelector('legend')?.textContent === m.catalogue_create_label());
+    const label = [...(fieldset?.querySelectorAll('label') ?? [])].find((element) =>
+      element.textContent === (part === 'labels-mode' ? m.catalogue_terms_action() : m.catalogue_create_label()));
+    return ui.window.document.getElementById(label?.htmlFor ?? '');
+  };
+  const termsSelector = (part: 'labels' | 'labels-mode') => `[id="${termsControl(part)!.id}"]`;
   const submitTerms = async () => {
     const submit = ui.queued(ui.host.querySelector('form')!);
     await act(async () => {
@@ -368,9 +376,9 @@ test('catalogue editors retain only their original live reader, exact address an
   };
   const terms = async (fixture: ReturnType<typeof catalogueTermsFixture>, title = 'Private original draft') => {
     await ui.render(createElement(SubjectTermsSession, { id: termsSubjectId, locale: 'en' }));
-    await ui.until(() => !!ui.host.querySelector('#terms-labels-mode'));
-    await input('#terms-labels-mode', 'set');
-    await input('#terms-labels', title);
+    await ui.until(() => !!termsControl('labels-mode'));
+    await input(termsSelector('labels-mode'), 'set');
+    await input(termsSelector('labels'), title);
   };
   const relation = async (fixture: ReturnType<typeof relationFixture>) => {
     await ui.render(createElement(ComposedRelation, { fixture, locale: 'en' }));
@@ -567,7 +575,7 @@ test('catalogue editors retain only their original live reader, exact address an
     await activate(uncertainTerms);
     await terms(uncertainTerms);
     await ui.render(createElement(SubjectTermsSession, { id: termsSubjectId, locale: 'en' }));
-    expect((ui.host.querySelector('#terms-labels') as HTMLInputElement).value).toBe('Private original draft');
+    expect((termsControl('labels') as HTMLInputElement).value).toBe('Private original draft');
     await submitTerms();
     await ui.until(() => ui.buttons(m.catalogue_create_retry()).length > 0);
     const frozenSubmit = ui.queued(ui.host.querySelector('form')!);
@@ -637,7 +645,7 @@ test('catalogue editors retain only their original live reader, exact address an
       await ui.render(createElement(SubjectTermsSession, { id: termsSubjectId, locale: 'en' }));
       await held.entered.promise;
       await ui.update(signedIn(replacement));
-      await ui.until(() => !!ui.host.querySelector('#terms-labels-mode'));
+      await ui.until(() => !!termsControl('labels-mode'));
       const count = fixture.calls.length;
       await deliver(held, delivery);
       expect(fixture.calls).toHaveLength(count);
@@ -658,14 +666,14 @@ test('catalogue editors retain only their original live reader, exact address an
     await ui.until(() => ui.buttons(m.catalogue_create_retry()).length > 0);
     const retiredRetry = ui.queued(ui.host.querySelector('form')!);
     await ui.update(signedIn(replacement));
-    await ui.until(() => !!ui.host.querySelector('#terms-labels-mode'));
+    await ui.until(() => !!termsControl('labels-mode'));
     const retiredCount = retiredUncertain.calls.length;
     await act(async () => {
       void retiredRetry('onSubmit');
     });
     expect(retiredUncertain.calls).toHaveLength(retiredCount);
     expect(ui.buttons(m.catalogue_create_retry())).toHaveLength(0);
-    expect((ui.host.querySelector('#terms-labels-mode') as HTMLSelectElement).value).toBe('keep');
+    expect((termsControl('labels-mode') as HTMLSelectElement).value).toBe('keep');
     await ui.update(signedIn());
     expect(ui.buttons(m.catalogue_create_retry())).toHaveLength(0);
 
@@ -695,9 +703,9 @@ test('catalogue editors retain only their original live reader, exact address an
     await ui.until(() => ui.host.textContent!.includes('Original film'));
     expect(publicTerms.calls.every((call) => call.authorization === null)).toBe(true);
     await ui.update(signedIn(replacement));
-    await ui.until(() => !!ui.host.querySelector('#terms-labels-mode'));
-    await input('#terms-labels-mode', 'set');
-    await input('#terms-labels', 'Fresh reader title');
+    await ui.until(() => !!termsControl('labels-mode'));
+    await input(termsSelector('labels-mode'), 'set');
+    await input(termsSelector('labels'), 'Fresh reader title');
     await submitTerms();
     await ui.until(() => ui.host.textContent!.includes(m.catalogue_terms_saved()));
     expect(publicTerms.calls.find((call) => call.method === 'PATCH')!.body).toEqual({
