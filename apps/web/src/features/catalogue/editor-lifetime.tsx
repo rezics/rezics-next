@@ -131,10 +131,14 @@ export function catalogueEditor<Props extends object>(Component: ComponentType<P
 }
 
 export function useEditorLifetime() {
+  return useReadingLifetime(useEditorWorkspaceLifetime());
+}
+
+/** Holder state survives a retired public reading, but never its caller's retirement. */
+export function useEditorWorkspaceLifetime() {
   const work = useContext(Work);
-  const reading = useReadingLifetime(work!);
   if (!work) throw new Error('Missing catalogue editor lifetime');
-  return reading;
+  return work;
 }
 
 /** The transport belongs to this mount, including factories for an independent embedded holder.

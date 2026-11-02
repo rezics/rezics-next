@@ -380,6 +380,8 @@ Refresh retains a still-selected source; a withdrawn choice requires an explicit
 
 Generic and Manga scalar corrections always confirm local discard, including empty additions; Cancel or Escape preserves the full assertion, while confirmation removes only the original unsent draft, releases its slot and focuses the retained source choice or staging control under current-reading, busy and sealed-command guards.
 
+Generic fact corrections protect pathname and search-address departure and browser unload for all changed private drafts, including excluded drafts and drafts retained during read recovery, and pending or unknown proposals; Stay preserves exact retries and siblings, while Leave retires local recovery without undoing sent proposals. Confirmed results alone do not block departure, and their inline candidate review remains available without leaving the workspace.
+
 The workspace reuses the scalar editor's native value, qualifier and grouped-citation controls and validators.
 Existing unsupported parts stay intact. Names and descriptions use the separate actual terms PATCH editor;
 relations/credits use their exact-slot editor. Types with document fields link to the existing

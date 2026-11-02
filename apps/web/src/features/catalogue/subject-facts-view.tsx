@@ -1,12 +1,18 @@
 import {
   catalogueEditor,
   useEditorLifetime,
+  useEditorWorkspaceLifetime,
   useCurrentReadingVisible,
   useCurrentReadingActive,
 } from './editor-lifetime';
 import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import type { ReactNode } from 'react';
+import {
+  AuthoringDepartureBoundary,
+  useAuthoringDeparture,
+  type AuthoringLocation,
+} from '../../threads/authoring-departure';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
@@ -463,7 +469,20 @@ function FactField({
   );
 }
 
-export const SubjectFacts = catalogueEditor(SubjectFactsLive);
+export const SubjectFacts = catalogueEditor(SubjectFactsWorkspace);
+
+// A same-route address change can replace this workspace with a single-field editor.
+const factWorkspaceAddress = (location: AuthoringLocation) =>
+  JSON.stringify([location.pathname, location.search]);
+
+function SubjectFactsWorkspace(props: Parameters<typeof SubjectFactsLive>[0]) {
+  if (props.profile) return <SubjectFactsLive {...props} />;
+  return (
+    <AuthoringDepartureBoundary sessionBound={false} navigationContext={factWorkspaceAddress}>
+      <SubjectFactsLive {...props} />
+    </AuthoringDepartureBoundary>
+  );
+}
 
 function SubjectFactsLive({
   initial,
@@ -490,6 +509,7 @@ function SubjectFactsLive({
   onReload?: () => void;
 }) {
   const lifetime = useEditorLifetime();
+  const workspace = useEditorWorkspaceLifetime();
   const visible = useCurrentReadingVisible();
   const o = { locale: locale as never };
   const [read, setRead] = useState(initial);
@@ -532,6 +552,35 @@ function SubjectFactsLive({
   discardState.current = { current, busy, staleDraft };
   const changed = drafts.filter((draft) => draft.included && factChanged(draft) && !draft.result?.ok);
   const success = drafts.filter((draft) => draft.result?.ok).length;
+  // Inclusion controls the next batch, never ownership of an unfinished assertion.
+  // Observing these drafts must not validate, seal or send a proposal.
+  const unresolved = () =>
+    drafts.some(
+      (draft) =>
+        !!draft.command &&
+        (!draft.result ||
+          (!draft.result.ok && ['uncertain', 'unavailable'].includes(draft.result.reason))),
+    );
+  useAuthoringDeparture(
+    () =>
+      !profile &&
+      workspace.active() &&
+      (unresolved() || drafts.some((draft) => !draft.result?.ok && factChanged(draft))),
+    unresolved,
+    String(workspace.generation),
+    undefined,
+    () => {
+      if (profile) return;
+      workspace.retire();
+      running.current = false;
+      setBusy(false);
+      setDrafts([]);
+      setReviewing(undefined);
+    },
+    undefined,
+    undefined,
+    factWorkspaceAddress,
+  );
   function change(next: FactDraft) {
     if (!lifetime.active()) return;
     setDrafts((previous) => previous.map((item) => (item.property === next.property ? next : item)));
@@ -583,7 +632,7 @@ function SubjectFactsLive({
     }
   }
   const groupLabels = { text: m.facts_text({}, o), time: m.facts_dates({}, o), quantity: m.facts_quantities({}, o) };
-  if (!visible) return null;
+  if (!visible || !workspace.active()) return null;
   return (
     <article
       className="mx-auto w-full min-w-0 max-w-4xl space-y-6 p-4 sm:p-6 [overflow-wrap:anywhere]"
