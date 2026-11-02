@@ -132,3 +132,45 @@ test('Native Kind audience origin and current evidence have one original-evaluat
     await pool.end();
   }
 });
+
+// Authored for integration; kept separate from the five-closure positive ABI above.
+test('pre-Type Kind input is a committed raw operand and does not require a positive work definition', async () => {
+  type InputBinding = import('../../src/library/collection-kind-input.ts').CollectionKindInputBinding;
+  type Resolved = Extract<import('../../src/access/kind-audience.ts').ResolveKindAudienceResult, { status: 'resolved' }>;
+  expectTypeOf<Resolved['binding']>().toEqualTypeOf<InputBinding>();
+  expectTypeOf<Extract<keyof InputBinding, 'actor' | 'jwt' | 'definition' | 'repairReceipt'>>().toEqualTypeOf<never>();
+  expectTypeOf<InputBinding['body']['rows'][number]['key']>().toEqualTypeOf<
+    import('../../src/library/canonical-source-store.ts').CanonicalRawKey
+  >();
+  const { COLLECTION_KIND_INPUT_RAW_LIMIT, COLLECTION_KIND_INPUT_BYTE_LIMIT } =
+    await import('../../src/library/collection-kind-input.ts');
+  expect(COLLECTION_KIND_INPUT_RAW_LIMIT).toBe(100);
+  expect(COLLECTION_KIND_INPUT_BYTE_LIMIT).toBe(4096);
+});
+
+test('a raw-input locator and constructor-funded work cannot replace private live native admission', async () => {
+  const { resolveCollectionKindRawInput, collectionKindInputWork } =
+    await import('../../src/library/collection-kind-input.ts');
+  const { NativeCollectionWork } = await import('../../src/library/collection-source-work.ts');
+  const locator = {
+    route: 0xc100,
+    ownerAccountId: newId(0xc100),
+    collectionId: newId(0xc100),
+    preparationId: crypto.randomUUID(),
+  };
+  let queries = 0;
+  const copied = {
+    async query() {
+      queries++;
+      throw new Error('Unadmitted raw input reached SQL');
+    },
+  };
+  const native = new NativeCollectionWork({
+    reservationId: crypto.randomUUID(), remaining: collectionKindInputWork(),
+  }, Date.now() + 5000);
+  // @ts-expect-error A structural SQL client cannot supply the native operational admission.
+  await expect(resolveCollectionKindRawInput(copied, locator, 'sha256:' + '0'.repeat(64), native))
+    .rejects.toMatchObject({ code: 'semantic_not_ready' });
+  expect(queries).toBe(0);
+  expect(Object.values(native.receipt().used).every((value) => value === 0)).toBe(true);
+});

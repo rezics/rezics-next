@@ -22,7 +22,9 @@ import {
 } from './collection-source.ts';
 import readObservation from './collection-kind-read.sql';
 import { createCollectionKindPreparation } from './collection-kind-preparation.ts';
+import type { KindAudienceAccess } from '../access/kind-audience.ts';
 import type { WorkClient } from '../work/client.ts';
+import type { KindConsentConsumer, KindConsentReference } from '@rezics/auth-contract';
 
 /** Presentation arithmetic only. These values are not Source, identity or disclosure evidence. */
 export type AutomaticCollectionKind =
@@ -30,6 +32,78 @@ export type AutomaticCollectionKind =
   | { presentationKind: null; presentationKindSource: 'empty' | 'pending' };
 
 export type CollectionKind = AutomaticCollectionKind | { presentationKind: string; presentationKindSource: 'owner' };
+
+/** A declaration's native predicate result for one canonical item. Unknown is
+ * retained explicitly: it can only be ignored when a proven higher-ranked
+ * declaration already wins that item. */
+export type ConfiguredKindMatch = Readonly<{
+  id: string;
+  eligible: boolean;
+  precedence: number;
+  result: 'match' | 'no-match' | 'unknown';
+}>;
+export type ConfiguredKindVote = Readonly<{ subjectId: string; matches: readonly ConfiguredKindMatch[] }>;
+export type ConfiguredKindReduction =
+  | Readonly<{ status: 'selected'; kindId: string }>
+  | Readonly<{ status: 'empty' }>
+  | Readonly<{ status: 'unavailable' }>;
+
+/** Apply the versioned Kind policy after native evidence has classified each
+ * declaration for every unique canonical item. Each item casts at most one
+ * vote. A possibly winning unknown predicate makes the whole reduction
+ * unavailable instead of silently falling back to a lower-ranked result. */
+export function reduceConfiguredCollectionKinds(votes: readonly ConfiguredKindVote[]): ConfiguredKindReduction {
+  const seenSubjects = new Set<string>();
+  const counts = new Map<string, number>();
+  for (const vote of votes) {
+    if (!vote.subjectId || vote.subjectId.includes('\0') || seenSubjects.has(vote.subjectId))
+      return { status: 'unavailable' };
+    seenSubjects.add(vote.subjectId);
+    let bestMatch: ConfiguredKindMatch | undefined;
+    let bestUnknown: ConfiguredKindMatch | undefined;
+    const seenKinds = new Set<string>();
+    for (const candidate of vote.matches) {
+      if (
+        !candidate.id ||
+        candidate.id.includes('\0') ||
+        seenKinds.has(candidate.id) ||
+        !Number.isInteger(candidate.precedence) ||
+        candidate.precedence < -2_147_483_648 ||
+        candidate.precedence > 2_147_483_647 ||
+        !['match', 'no-match', 'unknown'].includes(candidate.result)
+      )
+        return { status: 'unavailable' };
+      seenKinds.add(candidate.id);
+      if (!candidate.eligible || candidate.result === 'no-match') continue;
+      const current = candidate.result === 'match' ? bestMatch : bestUnknown;
+      if (
+        !current ||
+        candidate.precedence > current.precedence ||
+        (candidate.precedence === current.precedence && candidate.id < current.id)
+      ) {
+        if (candidate.result === 'match') bestMatch = candidate;
+        else bestUnknown = candidate;
+      }
+    }
+    if (
+      bestUnknown &&
+      (!bestMatch ||
+        bestUnknown.precedence > bestMatch.precedence ||
+        (bestUnknown.precedence === bestMatch.precedence && bestUnknown.id < bestMatch.id))
+    )
+      return { status: 'unavailable' };
+    if (bestMatch) counts.set(bestMatch.id, (counts.get(bestMatch.id) ?? 0) + 1);
+  }
+  let winner: string | undefined;
+  let maximum = 0;
+  for (const [id, count] of counts) {
+    if (count > maximum || (count === maximum && winner !== undefined && id < winner)) {
+      winner = id;
+      maximum = count;
+    }
+  }
+  return winner === undefined ? { status: 'empty' } : { status: 'selected', kindId: winner };
+}
 
 /** A constant-size projection of an already admitted observation; an override needs no observation. */
 export function collectionKind(override: string | null, observation: AutomaticCollectionKind): CollectionKind {
@@ -73,6 +147,13 @@ export type CollectionKindCapture = Readonly<{
   audience: string;
   sourceGeneration: string;
   token: string;
+  /** Auth enrollment lookup plus the exact Source generation; never ordinary authorization. */
+  consent?: Readonly<{
+    reference: KindConsentReference;
+    consumer: KindConsentConsumer;
+    captureGeneration: string;
+    catalogueRoot: string;
+  }>;
 }>;
 export type CollectionKindVote = Readonly<{ subjectId: string; typeId: string }>;
 type NativeUnavailable = Readonly<{ status: 'unavailable'; reason: 'source_unready' }>;
@@ -94,6 +175,8 @@ export type CollectionKindPage = Readonly<{
  * Revalidation resolves retained native records, never trusts this locator or an old custody hold as fresh authority.
  */
 export interface CollectionKindNative {
+  /** Ephemeral original entry only; never part of a DBOS locator or restored Actor. */
+  prepareInput?: KindAudienceAccess['resolveInput'];
   prepare(input: {
     collectionId: string;
     accountId: string;
@@ -189,6 +272,8 @@ export function createCollectionKindNative(
   preparation: CollectionKindPreparation = createCollectionKindPreparation(sources),
 ): CollectionKindNative {
   return {
+    ...(sources.dependencies.access?.kindAudience
+      ? { prepareInput: sources.dependencies.access.kindAudience.resolveInput } : {}),
     prepare: (input) => preparation.prepare(input),
     select: (input) => preparation.select(input),
     revalidate: (input) => preparation.revalidate(input),

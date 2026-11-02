@@ -5227,6 +5227,7 @@ ALTER TABLE ONLY library.type_preparation_slot
 
 
 
+
 -- Native identity scope enrollment and retained seals.
 -- The manifest IS the native plan. No receiving outcome or count establishes its seal.
 CREATE TABLE library.identity_scope_plan (
@@ -5309,4 +5310,196 @@ CREATE INDEX canonical_source_identity_raw ON library.canonical_source_reference
  (route,collection_id,generation,driver,stored_subject_id,fact_id);
 CREATE INDEX canonical_source_identity_old_fact ON library.canonical_source_fact
  (route,collection_id,generation,basis_digest,driver,stored_subject_id,fact_id);
+
+CREATE TABLE library.collection_kind_consent_consumer (
+  route integer NOT NULL,
+  reference_id text NOT NULL,
+  owner_account_id uuid NOT NULL,
+  collection_id uuid NOT NULL,
+  preparation_id uuid NOT NULL,
+  origin_id text NOT NULL,
+  source_generation bigint NOT NULL,
+  capture_generation uuid NOT NULL,
+  source_capture text NOT NULL,
+  enrollment_generation uuid NOT NULL,
+  catalogue_root text NOT NULL,
+  restore_generation bigint NOT NULL DEFAULT 0,
+  invalidated boolean NOT NULL DEFAULT false,
+  last_transition_id text,
+  PRIMARY KEY (route, reference_id),
+  UNIQUE (route, owner_account_id, collection_id, preparation_id, origin_id),
+  CHECK (route BETWEEN 0 AND 65535),
+  CHECK (route = (get_byte(uuid_send(owner_account_id), 10) * 256 + get_byte(uuid_send(owner_account_id), 11))),
+  CHECK (route = (get_byte(uuid_send(collection_id), 10) * 256 + get_byte(uuid_send(collection_id), 11))),
+  CHECK (octet_length(reference_id) BETWEEN 1 AND 255),
+  CHECK (octet_length(origin_id) BETWEEN 1 AND 255),
+  CHECK (octet_length(source_capture) BETWEEN 1 AND 4096),
+  CHECK (octet_length(catalogue_root) BETWEEN 1 AND 128),
+  CHECK (source_generation >= 0),
+  CHECK (restore_generation >= 0),
+  CHECK (last_transition_id IS NULL OR octet_length(last_transition_id) BETWEEN 1 AND 255)
+);
+
+CREATE TABLE library.collection_kind_consent_transition (
+  route integer NOT NULL,
+  reference_id text NOT NULL,
+  transition_id text NOT NULL,
+  enrollment_generation uuid NOT NULL,
+  restore_generation bigint NOT NULL,
+  receipt_reference text NOT NULL,
+  status text NOT NULL,
+  PRIMARY KEY (route, reference_id, transition_id),
+  FOREIGN KEY (route, reference_id)
+    REFERENCES library.collection_kind_consent_consumer(route, reference_id) ON DELETE CASCADE,
+  CHECK (octet_length(transition_id) BETWEEN 1 AND 255),
+  CHECK (octet_length(receipt_reference) BETWEEN 1 AND 255),
+  CHECK (restore_generation >= 0),
+  CHECK (status IN ('committed'))
+);
+
+CREATE INDEX collection_kind_consent_consumer_owner
+  ON library.collection_kind_consent_consumer(route, owner_account_id, collection_id, preparation_id);
+
+CREATE INDEX collection_kind_consent_transition_pending
+  ON library.collection_kind_consent_transition(route, reference_id, transition_id)
+  WHERE status <> 'committed';
+
+-- Account erasure pages the owned receiving references in exact native-key order.
+CREATE INDEX collection_kind_consent_consumer_erasure
+  ON library.collection_kind_consent_consumer(route, owner_account_id, reference_id);
+
+
+CREATE INDEX collection_kind_consent_consumer_episode
+  ON library.collection_kind_consent_consumer(route,owner_account_id,collection_id,preparation_id,reference_id);
+-- Private original associations expire with the actual first request. They confer no read authority.
+CREATE TABLE library.collection_kind_audience_origin (
+  route integer NOT NULL CHECK (route BETWEEN 0 AND 65535),
+  origin_id text NOT NULL CHECK (octet_length(origin_id) BETWEEN 1 AND 255),
+  owner_account_id uuid NOT NULL,
+  collection_id uuid NOT NULL,
+  preparation_id uuid NOT NULL,
+  audience text NOT NULL CHECK (octet_length(audience) BETWEEN 1 AND 256),
+  original_digest text NOT NULL CHECK (original_digest ~ '^sha256:[0-9a-f]{64}$'),
+  formula_digest text NOT NULL CHECK (formula_digest ~ '^sha256:[0-9a-f]{64}$'),
+  source_generation bigint NOT NULL CHECK (source_generation >= 0),
+  source_capture text NOT NULL CHECK (octet_length(source_capture) BETWEEN 1 AND 4096),
+  origin_at timestamptz NOT NULL,
+  expires_at timestamptz NOT NULL,
+  deadline_at bigint NOT NULL CHECK (deadline_at > 0),
+  cancelled boolean NOT NULL DEFAULT false,
+  PRIMARY KEY (route,origin_id),
+  UNIQUE (route,collection_id,audience),
+  FOREIGN KEY (route,collection_id,audience)
+    REFERENCES library.collection_kind_observation(route,collection_id,audience) ON DELETE CASCADE,
+  CHECK (route=get_byte(uuid_send(collection_id),10)*256+get_byte(uuid_send(collection_id),11)),
+  CHECK (route=get_byte(uuid_send(owner_account_id),10)*256+get_byte(uuid_send(owner_account_id),11))
+);
+-- Account erasure already removes observations by their owner, cascading these controls.
+CREATE INDEX collection_kind_audience_origin_owner
+  ON library.collection_kind_audience_origin(route,owner_account_id,collection_id,preparation_id);
+
+CREATE FUNCTION library.collection_kind_original_immutable() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF (to_jsonb(NEW)-'cancelled') IS DISTINCT FROM (to_jsonb(OLD)-'cancelled')
+     OR (OLD.cancelled AND NOT NEW.cancelled) THEN
+    RAISE EXCEPTION 'Collection Kind original association is immutable';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER collection_kind_original_immutable
+BEFORE UPDATE ON library.collection_kind_audience_origin
+FOR EACH ROW EXECUTE FUNCTION library.collection_kind_original_immutable();
+
+CREATE FUNCTION library.collection_kind_original_cancel() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP='DELETE' OR NEW.invalidated
+     OR NEW.enrollment_generation IS DISTINCT FROM OLD.enrollment_generation
+     OR NEW.restore_generation IS DISTINCT FROM OLD.restore_generation THEN
+    UPDATE library.collection_kind_audience_origin SET cancelled=true
+    WHERE route=OLD.route AND origin_id=OLD.origin_id
+      AND owner_account_id=OLD.owner_account_id AND collection_id=OLD.collection_id
+      AND preparation_id=OLD.preparation_id;
+  END IF;
+  RETURN NULL;
+END;
+$$;
+CREATE TRIGGER collection_kind_original_cancel
+AFTER UPDATE OR DELETE ON library.collection_kind_consent_consumer
+FOR EACH ROW EXECUTE FUNCTION library.collection_kind_original_cancel();
+
+
+-- At most one outstanding interval and its immediate predecessor per original.
+-- No Type, permission, winner or identity-repair assertion is stored here.
+CREATE TABLE library.collection_kind_raw_input (
+  route integer NOT NULL,
+  origin_id text NOT NULL,
+  preparation_id uuid NOT NULL,
+  observation_version bigint NOT NULL CHECK (observation_version >= 0),
+  input_id text NOT NULL CHECK (input_id ~ '^sha256:[0-9a-f]{64}$'),
+  predecessor text CHECK (predecessor ~ '^sha256:[0-9a-f]{64}$'),
+  body text NOT NULL CHECK (octet_length(body) BETWEEN 1 AND 4096),
+  native_xid xid8 NOT NULL DEFAULT pg_current_xact_id(),
+  PRIMARY KEY (route,origin_id,observation_version),
+  UNIQUE (route,input_id),
+  FOREIGN KEY (route,origin_id) REFERENCES library.collection_kind_audience_origin(route,origin_id) ON DELETE CASCADE
+);
+CREATE FUNCTION library.collection_kind_raw_input_immutable() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  RAISE EXCEPTION 'Collection Kind raw input is immutable';
+END;
+$$;
+CREATE TRIGGER collection_kind_raw_input_immutable BEFORE UPDATE ON library.collection_kind_raw_input
+FOR EACH ROW EXECUTE FUNCTION library.collection_kind_raw_input_immutable();
+
+
+-- Validate on the actual commit boundary, after any awaited caller work. The
+-- original/consent/Source locks taken by admission remain held until this runs.
+CREATE FUNCTION library.collection_kind_raw_input_commit() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE value jsonb := NEW.body::jsonb;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM library.collection_kind_audience_origin original
+    JOIN library.collection_kind_observation observation
+      ON (observation.route,observation.collection_id,observation.audience)=
+         (original.route,original.collection_id,original.audience)
+    JOIN library.collection_kind_consent_consumer consumer
+      ON (consumer.route,consumer.reference_id)=(original.route,value->'enrollment'->>'reference')
+    JOIN library.collection collection
+      ON (collection.route,collection.collection_id,collection.curator_account_id)=
+         (original.route,original.collection_id,original.owner_account_id)
+    WHERE original.route=NEW.route AND original.origin_id=NEW.origin_id
+      AND original.preparation_id=NEW.preparation_id AND NOT original.cancelled
+      AND original.expires_at>clock_timestamp()
+      AND original.deadline_at>extract(epoch FROM clock_timestamp())*1000
+      AND observation.generation=NEW.preparation_id AND observation.version=NEW.observation_version
+      AND observation.capture=original.source_capture AND NOT observation.complete
+      AND collection.state='active' AND collection.presentation_kind IS NULL
+      AND collection.source_generation=original.source_generation
+      AND consumer.origin_id=NEW.origin_id AND consumer.preparation_id=NEW.preparation_id
+      AND NOT consumer.invalidated AND consumer.source_generation=original.source_generation
+      AND consumer.source_capture=original.source_capture
+      AND consumer.enrollment_generation::text=value->'enrollment'->>'generation'
+      AND consumer.restore_generation::text=value->'enrollment'->>'restore'
+      AND consumer.catalogue_root=value->'enrollment'->>'catalogue'
+      AND original.original_digest=value->'original'->>'digest'
+      AND original.formula_digest=value->'original'->>'formula'
+      AND original.audience=value->'original'->>'audience'
+      AND original.origin_id=value->'original'->>'id'
+      AND original.source_capture=value->'source'->>'capture'
+      AND NEW.preparation_id::text=value->'preparation'->>'id'
+      AND NEW.observation_version::text=value->'preparation'->>'version'
+      AND NEW.predecessor IS NOT DISTINCT FROM value->'preparation'->>'predecessor'
+  ) THEN RAISE EXCEPTION 'Collection Kind raw input commit is stale' USING ERRCODE='40001'; END IF;
+  RETURN NULL;
+END;
+$$;
+CREATE CONSTRAINT TRIGGER collection_kind_raw_input_commit
+AFTER INSERT ON library.collection_kind_raw_input DEFERRABLE INITIALLY DEFERRED
+FOR EACH ROW EXECUTE FUNCTION library.collection_kind_raw_input_commit();
+
 

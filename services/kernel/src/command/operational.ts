@@ -39,6 +39,10 @@ type CommonOptions = {
   accounts: readonly string[];
   workClient: WorkClient;
   deadline?: number;
+  /** Bound source-side continuation attempts for owners that report one finite native operation. */
+  attemptLimit?: number;
+  /** Exact in-memory declaration for a single accounted native operation. */
+  admission?: object;
   /** Trusted service configuration only. */
   clock?: () => Date;
   /** Separate native History producer admission. Existing callers keep their ordinary behaviour. */
@@ -63,12 +67,22 @@ type Live = {
   partition: number;
   mode: OperationalOptions['mode'];
   kind: string;
+  admission?: object;
 };
 const live = new WeakMap<OperationalTransaction, Live>();
 
 export function hasLiveOperationalTransaction(tx: Pick<PoolClient, 'query'>): tx is OperationalTransaction {
   const state = live.get(tx as OperationalTransaction);
   return state !== undefined && Date.now() < state.deadline;
+}
+
+/** Confirms the exact accounting declaration attached to this live native home. */
+export function hasOperationalAdmission(
+  tx: Pick<PoolClient, 'query'>,
+  admission: object,
+): tx is OperationalTransaction {
+  const state = live.get(tx as OperationalTransaction);
+  return state !== undefined && state.admission === admission && hasLiveOperationalTransaction(tx);
 }
 
 /** Server-only executor resources. The transaction remains the only usable query client. */
@@ -146,6 +160,10 @@ export async function runOperationalTransaction<T>(
     throw new TypeError(`Invalid request identity for ${kind}`);
   if (options.mode === 'work-step' && (authorization || options.principal || options.basis))
     throw new TypeError('Work steps have no actor or authorization');
+  if (options.admission !== undefined && (typeof options.admission !== 'object' || options.admission === null))
+    throw new TypeError(`Invalid native work admission for ${kind}`);
+  if (options.admission !== undefined && options.mode !== 'work-step')
+    throw new TypeError(`Native work admission is restricted to work steps for ${kind}`);
   const basis =
     options.mode === 'request'
       ? Object.freeze({
@@ -156,11 +174,15 @@ export async function runOperationalTransaction<T>(
       : null;
   const selected = options.selectedRuntime ? openSelectedOperationalPhase(pool, options) : undefined;
   const deadline = selected?.deadline ?? options.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
+  const attemptLimit = options.attemptLimit ?? Number.MAX_SAFE_INTEGER;
+  if (!Number.isSafeInteger(attemptLimit) || attemptLimit < 1) throw new TypeError(`Invalid attempt limit for ${kind}`);
   // One original, Pool, absolute deadline and cumulative local balance across contention.
   const historyOriginal = options.operationalHistory ? openOperationalWorkOriginal(pool, deadline) : undefined;
   let contentionAttempts = 0;
   let lastAccessContention: AccessUnavailableError | undefined;
-  while (Date.now() < deadline) {
+  let attempts = 0;
+  while (Date.now() < deadline && attempts < attemptLimit) {
+    attempts++;
     let time: AuthoritativeTime | undefined;
     try {
       if (historyOriginal) debitOperationalWorkAttempt(historyOriginal);
@@ -213,6 +235,7 @@ export async function runOperationalTransaction<T>(
                 partition,
                 mode: options.mode,
                 kind,
+                ...(options.admission ? { admission: options.admission } : {}),
               });
               if (selected) await selected.hold(tx, client);
               if (historyOriginal) beginOperationalHistoryAttempt(tx, historyOriginal);
@@ -257,6 +280,7 @@ export async function runOperationalTransaction<T>(
       if (error instanceof AccessUnavailableError && reason !== 'contention') throw error;
       if (reason === 'deadline') throw unavailable('deadline');
       if (reason === 'contention') {
+        if (attempts >= attemptLimit) throw lastAccessContention ?? unavailable('contention');
         if (Date.now() >= deadline) throw lastAccessContention ?? unavailable('contention');
         const maximum = Math.min(100, 5 * 2 ** contentionAttempts++);
         await pause(Math.min(Math.random() * maximum, Math.max(0, deadline - Date.now())));

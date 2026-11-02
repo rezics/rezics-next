@@ -199,6 +199,21 @@ Current implementation evidence is narrower than the capability:
   It runs the integrated entry/copy/follow purge pages, records explicit pending evidence and never mistakes those
   pages for a complete graph or no-data proof. Full graph cleanup and shared custody remain incomplete.
 
+### Kind original controls
+
+The additive `collection_kind_audience_origin` control is owned alongside the current Kind observation. It records
+one exact original/expiry/formula/Source generation and immutable request deadline per Collection/audience, without
+an Actor or permission verdict. The original Access factory captures it only after the installed evaluator allows
+the current Collection. Native admission joins that control to the exact consent consumer and current observation;
+a consumer alone cannot admit an original. Preparation generations are opaque producer UUIDs, unlike routed
+Collection and Account IDs. The forward migration removes only the obsolete generation route check.
+
+Consent changes cancel originals in the same home. Observation deletion cascades the bounded original control;
+existing migrations and ordinary Collection tables are unchanged. The full callable declarations and remaining raw
+interval/foreign receipt operands are documented in [Access](../access/README.md#native-kind-audience-contract).
+Source checkpoints are post-vote progress, not committed pre-Type raw input. Neither a capture, a consent enrollment
+nor a current scoped observation manufactures the Semantic committed repair receipt and all five owner closures.
+
 ### Native whole-query episode storage
 
 `collection-publication-episodes.ts` exports `createCollectionPublicationEpisodes({pool,access,clock?})`.
@@ -2484,6 +2499,7 @@ rows, statements, blocks and bytes remain independent inclusive bounds; no nativ
 raw-width cases. `collection-list-facts-growth.test.ts` measures the whole fixed native page and its actual helpers at
 64/512/4096 unrelated fact/history populations, including failed and private/source-change work.
 
+
 ### Native identity scope planning and current seals
 
 `createLibraryIdentityNativePlanner` in `module.ts` exposes the default native `advance`, `readPage` and
@@ -2571,3 +2587,50 @@ is local and fully spent, with Source/Library remainders still null. The whole a
 disjoint Accounts local, all reached Source/History, all reached Library and transfer-control terms before first
 IO, preserving original/position/Pool/WorkClient/SDK/registry/deadline and live callback. That complete parent
 price remains unknown; this native declaration supplies no guessed zero or replacement foreign producer.
+
+### Kind native admission and consent
+
+`collection-kind-work-admission.ts` now binds the exact live Core operational admission to its original
+`NativeCollectionWork`, Pool, deadline, owner and preparation. Admission reads the indexed enrolled episode and
+committed canonical capture, then resolves actual Source custody on that same transaction and remainder. The Kind
+context retains the work privately; structural contexts and work from another episode cannot use it. This changes
+only the Kind branch; ordinary Members and publication preparation retain their existing contracts.
+
+`collection-kind-consent.ts` implements insert-only enrollment, exact locked adoption checks, idempotent invalidation
+and receipt verification. The additive Kind controls retain Auth reference, Source/capture/enrollment generations
+and catalogue root. Invalidation and adoption use the same consumer lock. Account erasure pages references through
+the existing Library owned graph, cascading transition receipts; no new erasure participant is introduced.
+
+A complete pinned work definition still needs Semantic's committed identity-repair receipt and all five current
+audience closures. Its scoped revalidation result does not return these operands, and its Kind Type producer
+returns unavailable. Admission or consent cannot supply them. Positive automatic nonempty/authenticated selection
+remains pending at that exact boundary. The configured reduction helper only reduces already admitted canonical
+items, preserves potentially winning unknown predicates and uses stable exact IDs for ties; it grants no authority.
+
+The added focused cases remain unrun, and native/default-journey acceptance is deferred to controller integration.
+
+The Kind pre-Type input producer is `resolveCollectionKindRawInput` in
+[`collection-kind-input.ts`](collection-kind-input.ts). The original audience resolver and the ephemeral original
+entry of `stepCollectionKind` invoke it with the same privately admitted `NativeCollectionWork`. The input is
+independent of `CollectionKindWorkDefinition` and does not require completed Type or a repair receipt. Native
+Source metadata and raw drivers execute on the actual live operational transaction. The existing Source custody,
+owner, account, receiving and canonical-scope locks remain held through the immutable insert and deferred commit
+fence. Detached Type/Access work starts only after the caller commits and releases that Source transaction.
+
+Each interval retains the exact original/formula/audience, consent enrollment and restore generation, preparation
+version, Source identity/basis/capture/committed custody, predecessor, raw occurrences and bounded continuation.
+The producer uses one raw occurrence per quantum within the literal raw100 limit so the complete encoded record
+fits 4096 bytes. Excluded originals and canonical aliases are retained before any Type filtering; no vote or caller
+key list replaces them. An exact-limit read is followed by a charged boundary seek; unknown readiness never means
+EOF. A committed same-version replay returns the existing record after current native admission and Source-fence
+comparison. A new version requires its exact committed predecessor. Insert collisions require identical readback;
+only the consumed predecessor is retired, keeping at most one committed interval per original. Failed writes and
+commit-fence failures roll back adoption without producing a positive reference. Deleting the existing observation
+cascades through its bounded original control and raw interval, using the existing account-erasure inventory.
+
+`collectionKindInputWork()` supplies the complete eight-axis body declaration; the original Access resolver adds
+its own exact lookup and the original Core entry supplies its existing control declaration. Physical Source APIs
+and accounting remain unchanged. The raw interval cannot establish a pinned Kind definition, Type/disclosure,
+Semantic repair receipt or any of the five audience closures. Those dependent dispatches retain the precise
+Semantic refusal described in [Access](../access/README.md).
+

@@ -1,3 +1,4 @@
+import type { ResolveKindAudienceInput } from '../access/kind-audience.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { createHash } from 'node:crypto';
 import { readMembershipRouteKey } from '../access/membership-work-config.ts';
@@ -97,8 +98,20 @@ export async function stepCollectionKind(
   context: Context,
   input: CollectionKindWork,
   native: CollectionKindNative = createCollectionKindNative(collectionKindSourceBindings(context)),
+  original?: ResolveKindAudienceInput,
 ) {
   validate(input);
+  if (original) {
+    // Original request callers enter on their actual admitted Source transaction.
+    // Returning lets that caller commit the raw interval and RELEASE this home
+    // before any detached Type/Access phase; DBOS locators never contain it.
+    const locator = original.work.locator;
+    if (locator.collectionId !== input.collectionId || locator.ownerAccountId !== input.accounts[0] ||
+        locator.preparationId !== input.generation || !native.prepareInput ||
+        native.prepareInput.bound(original) === undefined)
+      throw new ProblemError('semantic_not_ready');
+    return native.prepareInput.run(original);
+  }
   const route = routeOf(input.collectionId)!;
   const accountId = input.accounts[0];
   const deadline = workStepDeadline();

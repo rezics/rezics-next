@@ -78,31 +78,14 @@ import {
   recordGovernanceReachUse,
 } from './governance-reach.ts';
 import { prepareAnonymousEligibility, type PreparedEligibilityVerify } from './eligibility.ts';
-import type { KindAudienceAccess, KindAudienceOperation } from './kind-audience.ts';
-
-/** Literal native seam only. Missing owner provenance/admission/currentness must
- * refuse before checkout, formula, owner callback or any other IO. No zero receipt
- * or successful origin is fabricated. Implement here using the original formula.
- */
-function createKindAudienceAccess(): KindAudienceAccess {
-  const unavailable = <I, R extends Readonly<{ work: import('../library/collection-source.ts').WorkReceipt }>>(
-    phase: string,
-  ): KindAudienceOperation<I, R> =>
-    Object.freeze({
-      bound: () => undefined,
-      actual: () => undefined,
-      async run() {
-        throw new AccessWorkUnavailableError(`Collection Kind audience ${phase} native body`);
-      },
-    });
-  const operations: KindAudienceAccess = {
-    capture: unavailable('origin capture'),
-    resolveInput: unavailable('committed input lookup'),
-    prepare: unavailable('evidence preparation'),
-    verifySource: unavailable('Source-local currentness'),
-  };
-  return Object.freeze(operations);
-}
+import { createHash } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { createKindAudienceOriginal, type KindOriginalProducer } from './kind-audience-original.ts';
+import { kindOriginalFormulaPlan } from './kind-audience-formula.ts';
+import { readExposure, GLOBAL_CONTEXT } from './gates/catalogue.ts';
+// Only the Kind original invocation needs a Source-eight-axis declaration for
+// foreign callbacks. Ordinary preparation retains its installed owner protocol.
+const kindOriginalInvocation = new AsyncLocalStorage<boolean>();
 
 /** Kernel-owned request evidence, populated by the one authoritative actor point read.
  * Identity and this record must come from verified Auth/Access, never request JSON.
@@ -110,6 +93,8 @@ function createKindAudienceAccess(): KindAudienceAccess {
 export type PermissionContext = AccessContext & { account?: Account | null };
 
 export type PermissionConfig = {
+  /** Private installed-authenticator association for Kind originals only. */
+  kindOriginal?: KindOriginalProducer;
   actions: ActionCatalogue;
   resourceRoles?: ResourceRoleCatalogue | undefined;
   /** Retrieve the already-read account from the request; do not query again here. */
@@ -1038,7 +1023,13 @@ export function createAccess(config: PermissionConfig): Access {
             'Content AccessRealmRoleReader.batch',
             config.realmRoleReader?.batchWork,
             realmInput,
-            () => config.realmRoleReader?.batch?.(pool, realmInput) ?? Promise.resolve(null),
+            () => {
+              if (kindOriginalInvocation.getStore())
+                throw new AccessWorkUnavailableError(
+                  'Content AccessRealmRoleReader.batch: original Kind Source-eight-axis callback declaration',
+                );
+              return config.realmRoleReader?.batch?.(pool, realmInput) ?? Promise.resolve(null);
+            },
           );
           if (!proofs || proofs.length !== realms.length * 2) throw new AccessUnavailableError('overloaded');
           const indexed = new Map(proofs.map((proof) => [`${proof.accountId}/${proof.realmId}/${proof.role}`, proof]));
@@ -1390,7 +1381,57 @@ export function createAccess(config: PermissionConfig): Access {
     }
   }
   const access: Access = {
-    kindAudience: createKindAudienceAccess(),
+    kindAudience: createKindAudienceOriginal({
+      ...(config.kindOriginal ? { identity: config.kindOriginal } : {}),
+      formulaDigest:
+        'sha256:' +
+        createHash('sha256')
+          .update(
+            JSON.stringify([
+              permissionRead.sql,
+              inverseRead.sql,
+              assignmentRead.sql,
+              membershipRead.sql,
+              [...actions],
+              [...catalogue.roles],
+              MEMBERSHIP_LIMIT,
+            ]),
+          )
+          .digest('hex'),
+      formulaBound: (request) =>
+        kindOriginalFormulaPlan(request.actor, request.context, actions, config.resourceRoles).access,
+      formulaOverhead: (request) =>
+        kindOriginalFormulaPlan(request.actor, request.context, actions, config.resourceRoles).overhead,
+      prepareFormula: (input) => kindOriginalInvocation.run(true, () => prepareReadDecisions(input)),
+      async gates(request, root) {
+        const state = await readExposure(
+          request.context.pool,
+          'collections',
+          request.context.time,
+          request.context.deadline,
+          request.context.work,
+          request.context.time,
+        );
+        if (state.open) return true;
+        if (request.actor.kind !== 'account') return false;
+        return accessCheckout(request.context.work, () =>
+          withConnection(request.context.pool, async (client) => {
+            for (const action of ['gate:collections', 'gate:any'])
+              if (
+                await authorizePreparedReadGate(
+                  root,
+                  deadlineClient(client, request.context.deadline),
+                  action,
+                  'collection:read',
+                  GLOBAL_CONTEXT,
+                )
+              )
+                return true;
+            return false;
+          }),
+        );
+      },
+    }),
     prepareReadDecisions,
     replayAuthorization: (action) => actions.get(action)?.replay,
     authenticate:

@@ -22,6 +22,7 @@ import { discardConnection, withConnection } from '../database/pool.ts';
 import { lookupEventType, sealEventTypes } from '../events/catalogue.ts';
 import { readPartition } from '../partition/partition.ts';
 import { commandPhase, countContentionRetry, measureCommandPhase } from './timing.ts';
+import { currentCommandWorkAssociation, type CommandWorkAssociation } from './work-context.ts';
 import { enterCommandGate } from './gate.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { bindReceiptKeys, receiptKeyCandidates, receiptKeysFor } from './receipt-key.ts';
@@ -189,6 +190,8 @@ export type CommandAttempt = Readonly<{
   partition: number;
   basis: Readonly<CommandAttribution> | null;
   time: AuthoritativeTime;
+  /** Optional trusted accounting context; it grants no request or authorization evidence. */
+  commandWork?: CommandWorkAssociation;
 }>;
 export type CommandAuthorizationMode = 'execute' | 'receipt-only';
 /** Trusted service binding, never operation JSON. prepare runs with no resource
@@ -606,7 +609,12 @@ async function executeCommand<T>(
   const receiptDigest = options.receipt ? Buffer.from(options.receipt.digest) : null;
   const basis = options.basis ? Object.freeze({ ...options.basis }) : null;
   const authorization = options.authorization;
-  const deadline = options.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
+  const commandWork = currentCommandWorkAssociation();
+  const deadline = commandWork
+    ? Math.min(options.deadline ?? commandWork.deadline, commandWork.deadline)
+    : (options.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS));
+  if (commandWork && commandWork.deadline !== deadline)
+    throw new TypeError('Command work association must use the original command deadline');
   let contentionAttempts = 0;
   let lastAccessContention: AccessUnavailableError | undefined;
   let singleAttemptCount = 0;
@@ -622,7 +630,7 @@ async function executeCommand<T>(
         time = await measureCommandPhase('time_mint', () =>
           withConnection(pool, (client) => boundedRead(client, deadline, () => mintTime(client, options.clock))),
         );
-        attempt = Object.freeze({ partition, basis, time });
+        attempt = Object.freeze({ partition, basis, time, ...(commandWork ? { commandWork } : {}) });
         attemptDeadlines.set(attempt, deadline);
         evidence = await measureCommandPhase('access_prepare', () => authorization.prepare!(attempt!));
       }
@@ -652,6 +660,7 @@ async function executeCommand<T>(
         try {
           dispatch?.checkpoint();
           if (dispatch) await dispatch.control('begin', () => client.query('BEGIN ISOLATION LEVEL SERIALIZABLE'));
+          else await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
           if (dispatch) await dispatch.control('lockTimeout', () => client.query("SET LOCAL lock_timeout = '200ms'"));
           else await client.query("SET LOCAL lock_timeout = '200ms'");
           if (dispatch)
@@ -660,7 +669,7 @@ async function executeCommand<T>(
             );
           else await client.query(`SET LOCAL statement_timeout = '${remaining(deadline)}ms'`);
           time ??= await measureCommandPhase('time_mint', () => mintTime(client, options.clock, dispatch));
-          attempt ??= Object.freeze({ partition, basis, time });
+          attempt ??= Object.freeze({ partition, basis, time, ...(commandWork ? { commandWork } : {}) });
           attemptDeadlines.set(attempt, deadline);
           attempts.set(tx, attempt);
           const mode = authorization ? await authorization.authorize(tx, attempt, evidence) : 'execute';

@@ -20,10 +20,12 @@ import { isDeepStrictEqual } from 'node:util';
 import { meterMembersDefinition } from './scope-members-work-cost.ts';
 import {
   admitCollectionKindPreparationStep,
+  bindCollectionKindPreparationStep,
   readCollectionKindWorkDefinition,
   type CollectionKindPreparationLocator,
   type CollectionKindWorkDefinition,
 } from '../library/collection-kind-work-admission.ts';
+import type { NativeCollectionWork } from '../library/collection-source-work.ts';
 import {
   admitCollectionPublicationStep,
   readCollectionPublicationWorkDefinition,
@@ -44,6 +46,51 @@ export type CollectionKindPreparationWorkContext = Readonly<{
   tx: OperationalTransaction;
   locator: CollectionKindPreparationLocator;
 }>;
+const kindContexts = new WeakMap<
+  object,
+  Readonly<{
+    tx: OperationalTransaction;
+    locator: CollectionKindPreparationLocator;
+    work: NativeCollectionWork;
+  }>
+>();
+
+/** Mint a context only from the live transaction's exact admitted native frame. */
+export function bindCollectionKindPreparationWorkContext(
+  tx: OperationalTransaction,
+  locator: CollectionKindPreparationLocator,
+  work: NativeCollectionWork,
+): CollectionKindPreparationWorkContext {
+  bindCollectionKindPreparationStep(tx, locator, work);
+  const context = Object.freeze({
+    kind: 'collection-kind-preparation' as const,
+    tx,
+    locator: Object.freeze({ ...locator }),
+  });
+  kindContexts.set(context, Object.freeze({ tx, locator: context.locator, work }));
+  return context;
+}
+
+function isBoundCollectionKindPreparationWorkContext(context: CollectionKindPreparationWorkContext): boolean {
+  const bound = kindContexts.get(context);
+  return (
+    !!bound &&
+    bound.tx === context.tx &&
+    bound.locator.route === context.locator.route &&
+    bound.locator.ownerAccountId === context.locator.ownerAccountId &&
+    bound.locator.collectionId === context.locator.collectionId &&
+    bound.locator.preparationId === context.locator.preparationId
+  );
+}
+/** Accounts consumes the same private original Kind frame, never a structural context. */
+export function collectionKindPreparationNativeWork(
+  context: CollectionKindPreparationWorkContext,
+): NativeCollectionWork | undefined {
+  return isBoundCollectionKindPreparationWorkContext(context) && hasLiveOperationalTransaction(context.tx)
+    ? kindContexts.get(context)!.work
+    : undefined;
+}
+
 /** SERVER ONLY. Whole-query publication B consumes its own Collection's private working input. */
 export type CollectionPublicationWorkContext = Readonly<{
   kind: 'collection-publication';
@@ -217,7 +264,11 @@ export async function readCollectionKindPreparationWorkDefinition(
   options: WorkOptions,
 ): Promise<CollectionKindWorkDefinition> {
   const { tx } = work;
-  if (work.kind !== 'collection-kind-preparation' || !hasLiveOperationalTransaction(tx))
+  if (
+    work.kind !== 'collection-kind-preparation' ||
+    !isBoundCollectionKindPreparationWorkContext(work) ||
+    !hasLiveOperationalTransaction(tx)
+  )
     throw new ProblemError('semantic_not_ready');
   const resources = currentOperationalResources(tx);
   const locator = Object.freeze({ ...work.locator });
@@ -241,15 +292,15 @@ export async function readCollectionKindPreparationWorkDefinition(
   authoritativeTimeValue(time);
   // Library verifies the COMMITTED prepare/repair intent, current audience and exact custody.
   // Neither the Core fence nor the returned definition is a substitute for this admission.
-  if ((await admitCollectionKindPreparationStep(tx, locator)) !== true) throw new ProblemError('semantic_not_ready');
-  const native = await readCollectionKindWorkDefinition(tx, locator);
+  if ((await admitCollectionKindPreparationStep(tx, locator, kindContexts.get(work)!.work)) !== true)
+    throw new ProblemError('semantic_not_ready');
+  const native = await readCollectionKindWorkDefinition(tx, locator, kindContexts.get(work)!.work);
   if (!hasLiveOperationalTransaction(tx) || Date.now() >= Math.min(options.deadline, resources.deadline))
     throw new ProblemError('semantic_not_ready');
   authoritativeTimeValue(time);
   if (!native) throw new ProblemError('semantic_not_ready');
   const { sourceIdentity: source, observation, identityObservation, custody, repairReceipt } = native;
   if (
-    source.scope === 'curated' ||
     source.route !== locator.route ||
     source.collectionId !== locator.collectionId ||
     (source.scope !== 'public_output' && source.accountId !== locator.ownerAccountId) ||
@@ -273,8 +324,10 @@ export async function readCollectionKindPreparationWorkDefinition(
     (source.scope === 'public_output'
       ? (observation.authority.kind !== 'activated_output' && observation.authority.kind !== 'frozen_output') ||
         observation.authority.generation !== source.outputGeneration
-      : observation.authority.kind !== 'private_builtin' ||
-        observation.authority.curatorAccountId !== locator.ownerAccountId)
+      : source.scope === 'curated'
+        ? observation.authority.kind !== 'curated'
+        : observation.authority.kind !== 'private_builtin' ||
+          observation.authority.curatorAccountId !== locator.ownerAccountId)
   )
     throw new ProblemError('semantic_not_ready');
   return native;

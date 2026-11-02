@@ -1,5 +1,9 @@
 import { expect, test } from 'bun:test';
-import { collectionKind, dominantCollectionKind } from '../../src/library/collection-kind.ts';
+import {
+  collectionKind,
+  dominantCollectionKind,
+  reduceConfiguredCollectionKinds,
+} from '../../src/library/collection-kind.ts';
 
 test('dominant kind counts canonical subjects and resolves ties by exact TypeId', () => {
   const canonicalTypes = new Map<string, string>();
@@ -49,4 +53,74 @@ test('clearing an override preserves the distinction between complete zero and m
     presentationKind: 'schema:Book',
     presentationKindSource: 'members',
   });
+});
+
+test('configured reduction takes one highest-ranked vote per canonical item and uses exact stable ID ties', () => {
+  expect(
+    reduceConfiguredCollectionKinds([
+      {
+        subjectId: 'subject:one',
+        matches: [
+          { id: 'kind:low', eligible: true, precedence: 1, result: 'match' },
+          { id: 'kind:high', eligible: true, precedence: 2, result: 'match' },
+        ],
+      },
+      {
+        subjectId: 'subject:two',
+        matches: [{ id: 'kind:low', eligible: true, precedence: 1, result: 'match' }],
+      },
+      {
+        subjectId: 'subject:three',
+        matches: [{ id: 'kind:high', eligible: true, precedence: 2, result: 'match' }],
+      },
+    ]),
+  ).toEqual({ status: 'selected', kindId: 'kind:high' });
+
+  expect(
+    reduceConfiguredCollectionKinds([
+      {
+        subjectId: 'subject:one',
+        matches: [
+          { id: 'kind:Z', eligible: true, precedence: 3, result: 'match' },
+          { id: 'kind:a', eligible: true, precedence: 3, result: 'match' },
+        ],
+      },
+      {
+        subjectId: 'subject:two',
+        matches: [{ id: 'kind:Z', eligible: true, precedence: 3, result: 'match' }],
+      },
+      {
+        subjectId: 'subject:three',
+        matches: [{ id: 'kind:a', eligible: true, precedence: 3, result: 'match' }],
+      },
+    ]),
+  ).toEqual({ status: 'selected', kindId: 'kind:Z' });
+});
+
+test('configured reduction preserves unknown possible winners as unavailable without admitting unknown ineligible kinds', () => {
+  expect(
+    reduceConfiguredCollectionKinds([
+      {
+        subjectId: 'subject:one',
+        matches: [
+          { id: 'kind:known', eligible: true, precedence: 1, result: 'match' },
+          { id: 'kind:unknown', eligible: true, precedence: 2, result: 'unknown' },
+        ],
+      },
+    ]),
+  ).toEqual({ status: 'unavailable' });
+
+  expect(
+    reduceConfiguredCollectionKinds([
+      {
+        subjectId: 'subject:one',
+        matches: [
+          { id: 'kind:known', eligible: true, precedence: 2, result: 'match' },
+          { id: 'kind:unknown', eligible: true, precedence: 1, result: 'unknown' },
+          { id: 'kind:ineligible', eligible: false, precedence: 10, result: 'unknown' },
+        ],
+      },
+    ]),
+  ).toEqual({ status: 'selected', kindId: 'kind:known' });
+  expect(reduceConfiguredCollectionKinds([])).toEqual({ status: 'empty' });
 });

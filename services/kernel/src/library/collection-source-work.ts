@@ -48,6 +48,11 @@ export class NativeCollectionWork {
     this.remaining = Object.freeze({ ...allowance.remaining });
   }
 
+  /** The native caller binds this exact frame to its live operational transaction and deadline. */
+  get deadlineAt(): number {
+    return this.deadline;
+  }
+
   receipt(): WorkReceipt {
     return Object.freeze({ reservationId: this.allowance.reservationId, used: Object.freeze({ ...this.used }) });
   }

@@ -251,7 +251,12 @@ function accountAttempt(tx: CommandTransaction): CommandAttempt {
   const live = currentCommand(tx);
   const basis = live.basis;
   if (!basis || !('actorAccountId' in basis) || basis.actorAccountId === null) throw new GrantDeniedError();
-  return Object.freeze({ partition: live.partition, basis, time: live.time });
+  return Object.freeze({
+    partition: live.partition,
+    basis,
+    time: live.time,
+    ...(live.commandWork ? { commandWork: live.commandWork } : {}),
+  });
 }
 
 async function touchCollection(

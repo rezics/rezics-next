@@ -146,51 +146,84 @@ all six Access axes and the total eight Source axes, including the existing Acce
 reservation pays every phase, including control, failures, rollback and final verification. Raw100 and the full
 4096-byte page/progress envelope remain limits; unknown finite bounds refuse before IO.
 
-Only capture receives Actor, while the actual original request exists. The outer factory checks its own native
-authenticated object/pool/expiry provenance and rejects standing, copied and restored identities. Anonymous capture
-must establish the actual native floor and applicable denials. Capture resolves Library's exact committed intent
-and custody; a caller-supplied definition cannot establish that binding. Origin lifetime, current consent/client,
-authentication floor and formula operands must come from native producer provenance, never serialized claims,
-default expiry or an Actor reconstructed in a worker. No opaque identity brand is introduced.
+Capture receives only the original live authenticator's AccountActor and exact request AccessContext/accounting.
+Authenticated preparation, resolution and verification accept the private discriminated fresh request variant;
+anonymous native work and returned definitions contain no Actor. Bearer authentication privately retains the
+original context identity. Copies, restored identities, changed pools/accounting, expired/released times and extended
+deadlines cannot dispatch. Each quantum needs fresh authentication. The existing direct suspended-account 403 and
+delegated invalid-token 401 behavior remains with the original authenticator.
 
-`resolveInput` runs on the admitted Source home after Library commits bounded raw input and before Type completion;
-it resolves the matching native enrollment without foreign IO or requiring completed Type evidence.
-Detached preparation receives only native origin/input lookup keys, a pool/deadline and the existing allowance.
-`KindAudienceInputRef` names Accounts' enrollment of a Library-committed bounded raw interval; it is not a new
-Library input writer or a list of arbitrary Subject keys. `KindAudienceBinding` imports the original Library locator
-and complete definition without redefining them. Evidence requires native references for the current original formula,
-negative/excluded dependencies, temporal transitions, original/terminal Type/disclosure and writer-before-visibility
-closure. References and returned coverage are verification inputs, never ordinary Access identity or cached allows.
+The Kind Source context keeps its native work privately. Its binder requires the exact `NativeCollectionWork`
+attached to the live Core operational admission, pool, deadline, owner and episode. Source-local audience lookups use
+that same frame and never refresh through a second checkout while Source is held. Detached lookups require the
+original command association/accounting. Repeated and failed calls spend the same remainder, with one-shot actual
+receipts; bounds include the indexed two-row lookup and checkout. No caller UUID funds a new allowance.
 
-Each home uses original Core admission and its genuine live invocation T with the same ledger. Preparation has no
-held Source transaction or caller T. Release Source home before foreign IO; a closed invocation supplies no live T.
-`verifySource` takes Search's distinct original Kind context and resolves current maintained native closure on the
-Source home under Source/episode/control locks, without foreign callbacks or checkout. Currentness must hold through
-adoption/commit, including expiry. Repeated remote reads, TTL, relay lag and a new global epoch cannot supply this
-closure. Denied originals, duplicates and negatives stay enrolled; hidden Type/count/tie data cannot leak. Unknown is
-unavailable, never exclusion/EOF/empty. Final actual viewer authorization and exact audience selection stay independent.
+`permission.ts` composes the installed ReadDecisions root through `createKindAudienceOriginal` in
+`kind-audience-original.ts`. Capture checks the real Collection exposure and both borrowed-scope gates, evaluates
+`collection:read`, locks the active owner/home and exact current observation, then commits an immutable private
+original association. The persisted digest includes the actual authentication/account identity and expiry; it is
+not a restored Actor. Source generation, capture, formula digest, original time and the first deadline cannot be
+renewed. Consent invalidation, deletion or enrollment-generation change cancels that association under the same
+local locks. A new observation may retire its predecessor control, so storage is bounded to one original per
+Collection/audience. Account erasure cascades from the existing owned observation.
 
-**Staging status:** every installed operation currently returns an undefined bound/receipt and throws
-`AccessWorkUnavailableError` before IO. No native origin, evidence row, zero receipt or successful Kind result is
-minted. This delivers the callable contract only; automatic nonempty/authenticated Kind and native proof remain owed.
-The original Kind, Scope and prepared-work acceptance assertions remain unchanged.
+The pure `kindOriginalFormulaPlan` uses the installed native evaluator declarations, the full 1000 groups per
+member, both roles and both gate formulas. It never truncates membership to 64. A reached Content Realm callback
+refuses before dispatch because its existing Access-six-axis declaration does not supply its Kind Source-eight-axis
+callback declaration. Ordinary preparation keeps its existing callback protocol.
 
-The native implementation needs these exact original-owner seams; no undelivered callable is assumed:
+Source axis order below is candidate keys / native rows / native points / identity metadata rows / witness keys /
+empty seeks / statements / bytes. Let `J(sql,input,P)` be UTF8 SQL bytes plus JSON input bytes plus bounded projection
+`P`. Literal inputs and projections are in the exported operation's declaration, never measured result row counts.
 
-- Library: request-side resolution of the committed prepare/repair intent and exact custody; enrollment/lookup of
-  its committed bounded raw interval, predecessor/version and reservation before Type completion. The current
-  work-only admission/getter is unavailable and cannot serve request capture or manufacture a completed observation.
-- Core: native admission of each off-home producer phase against that committed input, before checkout, with its
-  own live T and the same reservation. Search's current Source-home validator cannot admit a foreign home.
-- Semantic: actual original/terminal Type, visibility, disclosure, identity, release and tuple proof, including
-  excluded/negative keys, bound to that interval. Accounts does not define a replacement Semantic producer ABI.
-- Accounts and those owners: gap-free native dependency enrollment, writer-before-visibility invalidation/repair,
-  temporal guards and final Source-local control state. Existing Source/account/identity fences cover only their
-  own facts. The current authenticator exposes a request-local identity, not durable native origin/consent provenance.
+| Owned operation | Source eight-axis envelope before the Access bridge |
+| --- | --- |
+| Exact observation/owner/home capture read | `4/4/4/0/0/1/1/J(sql,input,12*4096+1024)` |
+| Retire old original and insert immutable current original | `3/3/3/0/0/1/1/J(sql,input,6*4096+2048)` |
+| Exact original/observation/Collection/enrollment/revocation lookup | `6/6/6/0/0/1/1/J(sql,input,6*4096+2048)` |
+| Detached checkout, serializable controls and rollback | `0/0/1/0/0/0/6/1024` |
+| Original evaluator implicit checkouts and SQL/control text | `0/0/4/0/0/0/13/B`, where B sums the thirteen literal SQL/control texts in `kind-audience-formula.ts` |
 
-The next original-evaluator implementation must supply that provenance without restoring identity. If it cannot,
-the owner must report the precise contradiction for the selected fresh-Actor fallback; permanent refusal does not
-complete automatic Kind. The two investigations are evidence, not ABI:
+Capture and detached preparation declare the sum of these rows plus the installed Access-six-axis envelope mapped
+once to Source. Access receipts attribute the actual original invocation; dispatched Source row bounds cannot be
+refunded. Local resolution/verification reserve their exact lookup directly on the genuine admitted native frame,
+including failure. Native admission's two-row ambiguity sentinel declares `8/8/9/0/0/1/1/B`, and its Source scope
+read declares `3/3/3/0/0/1/1/B`; each B includes SQL/input and bounded projection bytes in
+`collection-kind-work-admission.ts`. Native custody retains its own unchanged original declaration. Consent
+invalidation additionally includes the original cancellation trigger's indexed lookup/update and SQL bytes.
+
+`resolveInput` now calls the installed `resolveCollectionKindRawInput` producer on its actual privately
+admitted native frame. The first invocation writes an immutable pre-Type interval and returns unavailable until
+that transaction commits. A subsequent fresh invocation resolves the committed input reference and genuine Source
+custody without requiring a Type result or identity-repair receipt. `ResolveKindAudienceResult.binding` therefore
+contains the independent `CollectionKindInputBinding`; the positive five-closure `KindAudienceBinding` is unchanged.
+Detached `prepare` reruns the original evaluator and reads that exact committed interval before reaching the
+receipt-dependent refusal. Neither the interval nor enrollment supplies permission or Type evidence.
+
+The parent declaration adds `collectionKindInputWork()` to the exact original lookup. In the axis order above,
+the raw producer reserves `29/289/47/0/0/17/24/B`. B is the sum of the literal SQL/input/projection plans in
+`collection-kind-input.ts`: complete native admission, one original/observation/consumer point, two predecessor
+readbacks, the two Source calls, immutable insert and deferred commit fence, and one bounded predecessor deletion.
+The native admission byte declaration is derived from its actual nine query literals and bounded parameters.
+The two installed Source reads have a combined ceiling of `1/48/9/0/0/9/9/65536`; their own size probe refuses
+an oversized projection before it is read. No new ledger, allowance, checkout or deadline is created by the raw
+producer. The existing Core entry must additionally fund its checkout, account/home/time locks and terminal
+commit/rollback on the same original reservation; this helper never creates a Core callback as authority.
+
+The exact foreign gap is `createIdentityScopedObservations(...).revalidate` in
+`semantic/identity-scoped-observations.ts`: `IdentityScopeRevalidateResult` returns currentness, observation and work,
+without an `IdentityNativeReceipt` or the five native audience closures. `createNativeKindTypeEvidence` exported by
+`semantic/scope-leaf-evidence.ts` also refuses positive read/verify. Semantic's
+`NativeDefinitionCatalogue.head/kinds/kindPage/kindCandidates` are the actual catalogue exports; their root pin,
+page cut and frontier do not provide the missing repair receipt or current Source-local closure. Accounts and Library
+must not synthesize those values from a brand, a status or Source custody. These Semantic modules remain unchanged.
+
+The original Kind, Scope and prepared-work acceptance assertions are preserved. Added focused cases are unrun;
+Kernel typing is separate from native journey proof.
+
+The independent original capture and committed raw interval do not complete automatic Kind while the foreign
+closure operands remain absent. The two investigations are evidence, not ABI:
 [`current`](../../../../docs/research/kind-type-audience-current.md) and
 [`independent`](../../../../docs/research/kind-type-audience-independent.md).
 

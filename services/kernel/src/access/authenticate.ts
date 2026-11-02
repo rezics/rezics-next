@@ -52,6 +52,9 @@ type Identity = IdentityExpiry & {
   pool: AccessContext['pool'];
   deadline: number;
   observedAt: number;
+  requestContext?: AccessContext;
+  requestWork?: AccessContext['work'];
+  requestTime?: AuthoritativeTime;
   durableTime?: AuthoritativeTime;
   durableAction?: string;
 };
@@ -494,6 +497,9 @@ export function createAuthenticator(configuration?: AuthenticationConfig, clock:
         expires,
         expiryClock: 'wall',
         observedAt,
+        requestContext: context,
+        ...(context.work ? { requestWork: context.work } : {}),
+        ...(context.time ? { requestTime: context.time } : {}),
       });
       bindAccountRateIdentity(actor, { ...context, actor }, account, expires, clock, 'wall');
       return actor;

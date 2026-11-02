@@ -2,6 +2,7 @@ import purgeCollectionKindRetired from './collection-kind-erase-retired.sql';
 import purgeCollectionKindObservation from './collection-kind-erase-observation.sql';
 import purgeCollectionKindCount from './collection-kind-erase-count.sql';
 import purgeCollectionKindSubject from './collection-kind-erase-subject.sql';
+import purgeCollectionKindConsentConsumer from './collection-kind-consent-erase-consumer.sql';
 import purgeOwnerIndexLabelRepair from './erasure-owned-owner-index-label-repair.sql';
 import purgeOwnerIndexState from './erasure-owned-owner-index-state.sql';
 import purgeOwnerMemberSupport from './erasure-owned-owner-member-support.sql';
@@ -35,6 +36,7 @@ export const ownedQueries: {
   readonly collection_kind_observation: typeof purgeCollectionKindObservation;
   readonly collection_kind_count: typeof purgeCollectionKindCount;
   readonly collection_kind_subject: typeof purgeCollectionKindSubject;
+  readonly collection_kind_consent_consumer: typeof purgeCollectionKindConsentConsumer;
   readonly owner_index_label_repair: typeof purgeOwnerIndexLabelRepair;
   readonly owner_index_state: typeof purgeOwnerIndexState;
   readonly owner_member_support: typeof purgeOwnerMemberSupport;
@@ -66,6 +68,7 @@ export const ownedQueries: {
   collection_kind_observation: purgeCollectionKindObservation,
   collection_kind_count: purgeCollectionKindCount,
   collection_kind_subject: purgeCollectionKindSubject,
+  collection_kind_consent_consumer: purgeCollectionKindConsentConsumer,
   owner_index_label_repair: purgeOwnerIndexLabelRepair,
   owner_index_state: purgeOwnerIndexState,
   owner_member_support: purgeOwnerMemberSupport,

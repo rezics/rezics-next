@@ -14,18 +14,13 @@ import { ProblemError } from '../http/problem.ts';
 import type { Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
-import { readSubjectSummaries } from '../semantic/summaries.ts';
 import { nativeSourceFence } from './canonical-source-store.ts';
 import {
   authorizeNativeCollectionMetadata,
   readNativeCollectionMetadata,
   type NativeCollectionMetadata,
 } from './collection-source-native.ts';
-import {
-  CollectionSourceLedger,
-  instrumentNativeCollectionWork,
-  NativeCollectionWork,
-} from './collection-source-work.ts';
+import { CollectionSourceLedger, NativeCollectionWork } from './collection-source-work.ts';
 import type { WorkAllowance } from './collection-source.ts';
 import type {
   CollectionKindCapture,
@@ -36,6 +31,7 @@ import type { NativeSourceFrontier, NativeSourceIdentity } from './native-source
 import scopeQuery from './collection-kind-preparation-scope.sql';
 import readObservation from './collection-kind-read.sql';
 import retiredCapture from './collection-kind-preparation-retired.sql';
+import { collectionKindConsentAdoptionCurrent } from './collection-kind-consent.ts';
 
 const anonymous: Actor = Object.freeze({ kind: 'anonymous' });
 const publicAudience = 'anonymous';
@@ -327,35 +323,11 @@ export function createCollectionKindPreparation(sources: CollectionKindSourceBin
             allowance: read.work.allowance(),
             readType: async (request) => {
               const work = new NativeCollectionWork(request.allowance, request.deadline);
-              // Actual shared native Type projection and verified current Actor. The summary owner has no
-              // finite retained Type footprint yet. Unknown native dispatch is refused BEFORE execution,
-              // carrying its actual receipt; it is never a raw-client/authorize:true/free hydration path.
-              try {
-                const values = await instrumentNativeCollectionWork(
-                  deps.pool,
-                  work,
-                  () => undefined,
-                  () =>
-                    readSubjectSummaries(
-                      {
-                        pool: deps.pool,
-                        access,
-                        actor: request.actor,
-                        routeKey: deps.routeKey!,
-                        deadline: request.deadline,
-                      },
-                      [request.subjectId],
-                    ),
-                );
-                const summary = values.get(request.subjectId);
-                return summary
-                  ? { status: 'current' as const, typeId: summary.type, work: work.receipt() }
-                  : { status: 'unavailable' as const, work: work.receipt() };
-              } catch (error) {
-                if (error instanceof ProblemError && error.code === 'dependency_unavailable')
-                  return { status: 'unavailable' as const, work: work.receipt() };
-                throw error;
-              }
+              // The existing Summary reader does not retain original+terminal Type, privacy, negative,
+              // and writer-before-visibility dependencies for this Kind episode. Refuse before any
+              // subject read; exposing a point-in-time Type here would turn an unclosed dependency into
+              // a false match and could not establish a complete prefix.
+              return { status: 'unavailable' as const, work: work.receipt() };
             },
           },
         };
@@ -373,8 +345,7 @@ export function createCollectionKindPreparation(sources: CollectionKindSourceBin
     adopt(input) {
       return guarded(async () => {
         const key = locator(input.capture);
-        if (!key || input.capture.audience !== publicAudience || !hasLiveOperationalTransaction(input.tx))
-          return unavailable();
+        if (!key || !hasLiveOperationalTransaction(input.tx)) return unavailable();
         const resources = currentOperationalResources(input.tx);
         if (
           resources.pool !== deps.pool ||
@@ -384,6 +355,11 @@ export function createCollectionKindPreparation(sources: CollectionKindSourceBin
           resources.accounts[0] !== input.capture.accountId
         )
           return unavailable();
+        if (input.capture.audience !== publicAudience) {
+          const consent = input.capture.consent;
+          if (!consent || !(await collectionKindConsentAdoptionCurrent(deps.pool, input.tx, consent)))
+            return { status: 'stale' as const };
+        }
         // SAME home only. No Source/Access/identity callback or foreign checkout while Core is held.
         const work = new CollectionSourceLedger(allowance(), Math.min(input.deadline, resources.deadline));
         const row = await work.bounded({ statements: 1, nativeRows: 16, nativePoints: 3, bytes: 12_288 }, () =>

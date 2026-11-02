@@ -2,7 +2,7 @@ export { createAccountPublicEligibility } from './account-authority.ts';
 export type { AccessCheck, PreparedAccessCheckInvocation, PreparedAccessCheckWork } from '../request/access.ts';
 export type * from './kind-audience.ts';
 import type { PermissionAccount } from './account-authority.ts';
-import { accessCheckout, accessTransaction, AccessWorkUnavailableError } from './work.ts';
+import { accessCheckout, accessTransaction, AccessWorkAccounting, AccessWorkUnavailableError } from './work.ts';
 export {
   AccessWorkAccounting,
   AccessWorkUnavailableError,
@@ -71,11 +71,18 @@ import type {
   ReadDecisions,
   ActionCatalogue,
 } from '../request/access.ts';
-import type { CaptureKindAudienceOriginInput } from './kind-audience.ts';
+import type {
+  CaptureKindAudienceOriginInput,
+  KindAudienceFreshRequest,
+  PrepareKindAudienceInput,
+  ResolveKindAudienceInput,
+  VerifyKindAudienceSourceInput,
+} from './kind-audience.ts';
 import { accessRoot } from './derived-access.ts';
 import { installResourceRoleCatalogue, resourceRoleCatalogue } from './resource-roles.ts';
 import { createAccess as permissionAccess, readDecisionTime, authorizePreparedReadGate } from './permission.ts';
 import { authoritativeTimeValue, releaseOperationalTime, type AuthoritativeTime } from '../command/command.ts';
+import { currentOperationalResources, hasLiveOperationalTransaction } from '../command/operational.ts';
 import timeRead from './permission-time.sql';
 import {
   createAuthenticator,
@@ -209,6 +216,43 @@ export function createAccess(config: AccessConfig): Access {
     resourceRoles: config.resourceRoles,
     standingAccounts,
     accountEvidence: (actor) => standingAccounts.get(actor) ?? authentication.identity(actor)?.account,
+    kindOriginal(actor, context) {
+      if (actor.kind === 'anonymous') {
+        if (
+          !context.time ||
+          !(context.work instanceof AccessWorkAccounting) ||
+          context.work.deadline !== context.deadline
+        )
+          return undefined;
+        authoritativeTimeValue(context.time);
+        return { expires: context.deadline, account: null };
+      }
+      const identity = authentication.identity(actor);
+      if (
+        !identity ||
+        identity.pool !== context.pool ||
+        identity.requestContext !== context ||
+        identity.requestWork !== context.work ||
+        identity.requestTime !== context.time ||
+        identity.deadline !== context.deadline ||
+        identity.durableTime ||
+        identity.expiryClock !== 'wall' ||
+        identityExpired(identity, clock) ||
+        Date.now() - identity.observedAt >= 180_000
+      )
+        return undefined;
+      return {
+        expires: identity.expires,
+        account: [
+          identity.account.accountId,
+          identity.account.kind,
+          identity.account.state,
+          identity.account.fenced,
+          identity.account.operatorAccountId,
+          String(identity.account.minimumAuthnEpoch),
+        ],
+      };
+    },
     ...(config.realmRoleReader ? { realmRoleReader: config.realmRoleReader } : {}),
     ...(config.contentEditionBuyerFactReader
       ? { contentEditionBuyerFactReader: config.contentEditionBuyerFactReader }
@@ -342,17 +386,159 @@ export function createAccess(config: AccessConfig): Access {
     AccessContext,
     { actor: Actor; handle: ReadDecisions; time: AuthoritativeTime; checks: Map<string, Promise<boolean>> }
   >();
+  const kindEpisodes = new WeakMap<
+    AccountActor,
+    Readonly<{
+      context: AccessContext;
+      locator: CaptureKindAudienceOriginInput['locator'];
+    }>
+  >();
+  function sameKindEpisode(
+    actor: Actor,
+    context: AccessContext,
+    locator: CaptureKindAudienceOriginInput['locator'],
+    bind = false,
+  ): boolean {
+    if (actor.kind === 'anonymous') return true;
+    const episode = kindEpisodes.get(actor);
+    if (episode && (episode.context !== context || !exactKindLocator(episode.locator, locator))) return false;
+    if (!episode && bind) kindEpisodes.set(actor, Object.freeze({ context, locator: Object.freeze({ ...locator }) }));
+    return true;
+  }
+  function sameKindRequestEpisode(
+    request: KindAudienceFreshRequest | undefined,
+    locator: CaptureKindAudienceOriginInput['locator'],
+    bind = false,
+  ): boolean {
+    return (
+      !!request && (request.kind === 'anonymous' || sameKindEpisode(request.actor, request.context, locator, bind))
+    );
+  }
   function hasKindRequestOrigin(input: CaptureKindAudienceOriginInput): boolean {
+    try {
+      authoritativeTimeValue(input.context.time);
+    } catch {
+      return false;
+    }
     // Anonymous is a request for native floor production, never asserted proof.
     if (input.actor.kind === 'anonymous') return true;
     const identity = authentication.identity(input.actor);
     return (
       !!identity &&
       identity.pool === input.context.pool &&
+      identity.requestContext === input.context &&
+      identity.requestWork === input.context.work &&
+      identity.requestTime === input.context.time &&
+      sameKindEpisode(input.actor, input.context, input.locator) &&
+      identity.deadline === input.context.deadline &&
+      input.context.work instanceof AccessWorkAccounting &&
+      input.context.work.deadline === input.context.deadline &&
+      input.context.time !== undefined &&
       !identity.durableTime &&
       identity.expiryClock === 'wall' &&
+      Date.now() - identity.observedAt < 180_000 &&
+      !identityExpired(identity, clock) &&
+      Date.now() < Math.min(identity.deadline, input.context.deadline)
+    );
+  }
+  function hasFreshKindRequest(
+    request: KindAudienceFreshRequest | undefined,
+    pool: AccessContext['pool'],
+    deadline: number,
+  ): boolean {
+    if (
+      !request ||
+      typeof request !== 'object' ||
+      Array.isArray(request) ||
+      !Number.isFinite(deadline) ||
+      Date.now() >= deadline
+    )
+      return false;
+    const requestKeys = Object.keys(request).sort().join(',');
+    if (request.kind === 'anonymous') {
+      if (requestKeys !== 'context,kind' || !request.context || typeof request.context !== 'object') return false;
+    } else if (request.kind === 'authenticated') {
+      if (requestKeys !== 'actor,context,kind' || !request.context || typeof request.context !== 'object') return false;
+    } else return false;
+    const context = request.context;
+    if (context.pool !== pool || context.deadline !== deadline || Date.now() >= context.deadline) return false;
+    if (request.kind === 'anonymous') return true;
+    try {
+      if (!context.time) return false;
+      authoritativeTimeValue(context.time);
+    } catch {
+      return false;
+    }
+    const identity = authentication.identity(request.actor);
+    return (
+      !!identity &&
+      identity.pool === context.pool &&
+      identity.requestContext === context &&
+      identity.requestWork === context.work &&
+      identity.requestTime === context.time &&
+      identity.deadline === context.deadline &&
+      context.work instanceof AccessWorkAccounting &&
+      context.work.deadline === context.deadline &&
+      context.time !== undefined &&
+      !identity.durableTime &&
+      identity.expiryClock === 'wall' &&
+      Date.now() - identity.observedAt < 180_000 &&
       !identityExpired(identity, clock) &&
       Date.now() < identity.deadline
+    );
+  }
+  function liveKindRequest(request: KindAudienceFreshRequest | undefined): boolean {
+    if (!request) return false;
+    // This is an invocation-lifetime check only. No positive permission is issued
+    // without the five native closures. In particular a Source-local verification
+    // must never refresh by checking out a second connection while its T is held.
+    return hasFreshKindRequest(request, request.context.pool, request.context.deadline);
+  }
+  /** Snapshot only invocation identity; this ephemeral guard conveys no permission. */
+  function originalKindRequest(request: KindAudienceFreshRequest | undefined) {
+    const context = request?.context;
+    const actor = request?.kind === 'authenticated' ? request.actor : undefined;
+    const kind = request?.kind;
+    const pool = context?.pool;
+    const deadline = context?.deadline;
+    const work = context?.work;
+    const time = context?.time;
+    return (candidate: KindAudienceFreshRequest | undefined): boolean =>
+      !!candidate &&
+      candidate === request &&
+      candidate.kind === kind &&
+      candidate.context === context &&
+      (candidate.kind === 'authenticated' ? candidate.actor === actor : actor === undefined) &&
+      candidate.context.pool === pool &&
+      candidate.context.deadline === deadline &&
+      candidate.context.work === work &&
+      candidate.context.time === time;
+  }
+  function exactKindLocator(
+    left: CaptureKindAudienceOriginInput['locator'],
+    right: CaptureKindAudienceOriginInput['locator'],
+  ): boolean {
+    return (
+      !!left &&
+      !!right &&
+      left.route === right.route &&
+      left.ownerAccountId === right.ownerAccountId &&
+      left.collectionId === right.collectionId &&
+      left.preparationId === right.preparationId
+    );
+  }
+  function hasKindOperationRequest(
+    request: KindAudienceFreshRequest | undefined,
+    work: ResolveKindAudienceInput['work'] | VerifyKindAudienceSourceInput['work'],
+    deadline: number,
+  ): boolean {
+    if (!request || request.context.deadline !== deadline || !hasLiveOperationalTransaction(work.tx)) return false;
+    const resources = currentOperationalResources(work.tx);
+    return (
+      resources.pool === request.context.pool &&
+      resources.deadline === deadline &&
+      sameKindRequestEpisode(request, work.locator) &&
+      hasFreshKindRequest(request, resources.pool, deadline)
     );
   }
   const access: Access = {
@@ -364,13 +550,161 @@ export function createAccess(config: AccessConfig): Access {
           return permissions.kindAudience!.capture.bound(input);
         },
         async run(input: CaptureKindAudienceOriginInput) {
+          const actor = input.actor;
+          const context = input.context;
+          const locator = Object.freeze({ ...input.locator });
           if (!hasKindRequestOrigin(input))
             throw new AccessWorkUnavailableError('Collection Kind audience actual native request origin');
-          // Anonymous requires native floor evidence in the original producer.
-          // The staged producer refuses before IO for both genuine origin kinds.
-          return permissions.kindAudience!.capture.run(input);
+          if (!sameKindEpisode(input.actor, input.context, input.locator, true))
+            throw new AccessWorkUnavailableError('Collection Kind audience original episode changed');
+          if (permissions.kindAudience!.capture.bound(input) === undefined)
+            throw new AccessWorkUnavailableError('Accounts Kind audience origin capture producer');
+          if (
+            input.actor.kind === 'account' &&
+            !liveKindRequest({ kind: 'authenticated', actor: input.actor, context: input.context })
+          )
+            throw new AccessWorkUnavailableError('Collection Kind audience current authenticated request');
+          const result = await permissions.kindAudience!.capture.run(input);
+          if (
+            input.actor !== actor ||
+            input.context !== context ||
+            !exactKindLocator(input.locator, locator) ||
+            !hasKindRequestOrigin(input) ||
+            (input.actor.kind === 'account' &&
+              !liveKindRequest({ kind: 'authenticated', actor: input.actor, context: input.context }))
+          ) {
+            input.context.work.fail(
+              new AccessWorkUnavailableError('Collection Kind audience request expired during capture'),
+            );
+            throw new AccessWorkUnavailableError('Collection Kind audience request expired during capture');
+          }
+          return result;
         },
         actual: permissions.kindAudience!.capture.actual,
+      }),
+      prepare: Object.freeze({
+        bound(input: PrepareKindAudienceInput) {
+          if (
+            !exactKindLocator(input.origin.locator, input.input.locator) ||
+            !sameKindRequestEpisode(input.request, input.origin.locator) ||
+            !hasFreshKindRequest(input.request, input.context.pool, input.context.deadline)
+          )
+            return undefined;
+          return permissions.kindAudience!.prepare.bound(input);
+        },
+        async run(input: PrepareKindAudienceInput) {
+          const sameRequest = originalKindRequest(input.request);
+          if (
+            !exactKindLocator(input.origin.locator, input.input.locator) ||
+            !sameKindRequestEpisode(input.request, input.origin.locator) ||
+            !hasFreshKindRequest(input.request, input.context.pool, input.context.deadline)
+          )
+            throw new AccessWorkUnavailableError('Collection Kind audience original fresh request');
+          if (!sameKindRequestEpisode(input.request, input.origin.locator, true))
+            throw new AccessWorkUnavailableError('Collection Kind audience original episode changed');
+          if (permissions.kindAudience!.prepare.bound(input) === undefined)
+            throw new AccessWorkUnavailableError('Accounts Kind audience evidence preparation producer');
+          if (!liveKindRequest(input.request))
+            throw new AccessWorkUnavailableError('Collection Kind audience original current formula');
+          const result = await permissions.kindAudience!.prepare.run(input);
+          if (
+            !sameRequest(input.request) ||
+            !exactKindLocator(input.origin.locator, input.input.locator) ||
+            !sameKindRequestEpisode(input.request, input.origin.locator) ||
+            !hasFreshKindRequest(input.request, input.context.pool, input.context.deadline) ||
+            !liveKindRequest(input.request)
+          ) {
+            if (input.request?.kind === 'authenticated')
+              input.request.context.work.fail(
+                new AccessWorkUnavailableError('Collection Kind audience request expired during preparation'),
+              );
+            throw new AccessWorkUnavailableError('Collection Kind audience request expired during preparation');
+          }
+          return result;
+        },
+        actual: permissions.kindAudience!.prepare.actual,
+      }),
+      resolveInput: Object.freeze({
+        bound(input: ResolveKindAudienceInput) {
+          if (
+            !exactKindLocator(input.origin.locator, input.work.locator) ||
+            !hasKindOperationRequest(input.request, input.work, input.deadline)
+          )
+            return undefined;
+          return permissions.kindAudience!.resolveInput.bound(input);
+        },
+        async run(input: ResolveKindAudienceInput) {
+          const sameRequest = originalKindRequest(input.request);
+          const originalWork = input.work;
+          if (
+            !exactKindLocator(input.origin.locator, input.work.locator) ||
+            !hasKindOperationRequest(input.request, input.work, input.deadline)
+          )
+            throw new AccessWorkUnavailableError('Collection Kind audience current request for input resolution');
+          if (!sameKindRequestEpisode(input.request, input.work.locator, true))
+            throw new AccessWorkUnavailableError('Collection Kind audience original episode changed');
+          if (permissions.kindAudience!.resolveInput.bound(input) === undefined)
+            throw new AccessWorkUnavailableError('Accounts Kind committed input resolver');
+          if (!liveKindRequest(input.request))
+            throw new AccessWorkUnavailableError('Collection Kind audience original formula for input resolution');
+          const result = await permissions.kindAudience!.resolveInput.run(input);
+          if (
+            !sameRequest(input.request) ||
+            input.work !== originalWork ||
+            !exactKindLocator(input.origin.locator, input.work.locator) ||
+            !hasKindOperationRequest(input.request, input.work, input.deadline) ||
+            !liveKindRequest(input.request)
+          ) {
+            if (input.request?.kind === 'authenticated')
+              input.request.context.work.fail(
+                new AccessWorkUnavailableError('Collection Kind request expired during input resolution'),
+              );
+            throw new AccessWorkUnavailableError('Collection Kind request expired during input resolution');
+          }
+          return result;
+        },
+        actual: permissions.kindAudience!.resolveInput.actual,
+      }),
+      verifySource: Object.freeze({
+        bound(input: VerifyKindAudienceSourceInput) {
+          if (
+            !exactKindLocator(input.evidence.locator, input.work.locator) ||
+            !hasKindOperationRequest(input.request, input.work, input.deadline)
+          )
+            return undefined;
+          return permissions.kindAudience!.verifySource.bound(input);
+        },
+        async run(input: VerifyKindAudienceSourceInput) {
+          const sameRequest = originalKindRequest(input.request);
+          const originalWork = input.work;
+          if (
+            !exactKindLocator(input.evidence.locator, input.work.locator) ||
+            !hasKindOperationRequest(input.request, input.work, input.deadline)
+          )
+            throw new AccessWorkUnavailableError('Collection Kind audience current request for Source verification');
+          if (!sameKindRequestEpisode(input.request, input.work.locator, true))
+            throw new AccessWorkUnavailableError('Collection Kind audience original episode changed');
+          if (permissions.kindAudience!.verifySource.bound(input) === undefined)
+            throw new AccessWorkUnavailableError('Accounts Kind audience Source currentness producer');
+          if (!liveKindRequest(input.request))
+            throw new AccessWorkUnavailableError('Collection Kind audience original formula for Source verification');
+          const result = await permissions.kindAudience!.verifySource.run(input);
+          if (
+            !sameRequest(input.request) ||
+            input.work !== originalWork ||
+            !exactKindLocator(input.evidence.locator, input.work.locator) ||
+            !hasKindOperationRequest(input.request, input.work, input.deadline) ||
+            !liveKindRequest(input.request)
+          ) {
+            if (input.request?.kind === 'authenticated')
+              input.request.context.work.fail(
+                new AccessWorkUnavailableError('Collection Kind request expired during Source verification'),
+              );
+            throw new AccessWorkUnavailableError('Collection Kind request expired during Source verification');
+          }
+          return result;
+        },
+        actual: permissions.kindAudience!.verifySource.actual,
       }),
     }),
     async prepareReadDecisions(input) {

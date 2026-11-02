@@ -56,6 +56,7 @@ export const OWNED_PHASES = [
   'collection_kind_count',
   'collection_kind_observation',
   'collection_kind_retired',
+  'collection_kind_consent_consumer',
 ] as const;
 const childQueries: {
   units: typeof units;
@@ -114,8 +115,19 @@ export async function purgeOwnedGraphPage(pool: Pool, input: OwnedGraphInput): P
   const { accountId, kind, parent, after, ordinal, segment } = input;
   const route = requireRoute(accountId);
   if (parent !== null && requireRoute(parent) !== route) throw new TypeError('Foreign graph parent');
-  if (after !== null && kind !== 'native_source_capture' && requireRoute(after) !== route)
+  if (
+    after !== null &&
+    kind !== 'native_source_capture' &&
+    kind !== 'collection_kind_consent_consumer' &&
+    requireRoute(after) !== route
+  )
     throw new TypeError('Foreign graph cursor');
+  if (
+    kind === 'collection_kind_consent_consumer' &&
+    after !== null &&
+    (Buffer.byteLength(after, 'utf8') > 255 || !after.isWellFormed() || /[\u0000-\u001f\u007f-\u009f]/u.test(after))
+  )
+    throw new TypeError('Invalid Collection Kind consent cursor');
   if (!Number.isSafeInteger(ordinal) || ordinal < 0 || !Number.isSafeInteger(segment) || segment < 0)
     throw new TypeError('Invalid graph checkpoint');
   const digest = createHash('sha256').update(JSON.stringify(input)).digest();
@@ -142,7 +154,7 @@ export async function purgeOwnedGraphPage(pool: Pool, input: OwnedGraphInput): P
       },
     },
     async (tx): Promise<CommandResult<OwnedGraphPage>> => {
-      const args = { route, account_id: accountId };
+      const args = { route, account_id: accountId, after_id: after };
       if (kind === 'native_source_capture') {
         const capture = await nativeCapture.run(tx, { ...args, after_id: after });
         if (!capture)

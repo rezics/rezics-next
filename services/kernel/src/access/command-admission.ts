@@ -20,7 +20,13 @@ import { accessRoot } from './derived-access.ts';
 const contexts = new WeakMap<AccessContext, CommandAttempt>();
 export function commandAccessContext(context: AccessContext, attempt: CommandAttempt): AccessContext {
   authoritativeTimeValue(attempt.time);
-  const bound = { ...context };
+  const commandWork = attempt.commandWork;
+  if (commandWork && context.work && context.work !== commandWork.access)
+    throw new TypeError('Command Access work must use the original request frame');
+  const bound: AccessContext = {
+    ...context,
+    ...(commandWork ? { deadline: Math.min(context.deadline, commandWork.deadline), work: commandWork.access } : {}),
+  };
   contexts.set(bound, attempt);
   return bound;
 }
