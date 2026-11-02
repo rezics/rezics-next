@@ -2619,7 +2619,7 @@ export function runWebCheckDriverProcess(
     let cancelled = false;
     let terminationStarted = false;
     let resolved = false;
-    let outputDeadlineStarted = false;
+    let finalSettlementDeadlineStarted = false;
     let signalHandler: (() => void) | undefined;
     const timers = new Set<unknown>();
     const schedule = (callback: () => void, delay: number) => {
@@ -2712,14 +2712,15 @@ export function runWebCheckDriverProcess(
         schedule(() => {
           if (isRecovery) probeGroup();
           if (allClosed()) finish(true);
-          else if (isRecovery) startOutputDeadline();
+          else if (isRecovery) startFinalSettlementDeadline();
           else finish(false);
         }, settle);
       }, grace);
     };
-    const startOutputDeadline = () => {
-      if (!limits || outputDeadlineStarted || outputClosed) return;
-      outputDeadlineStarted = true;
+    const startFinalSettlementDeadline = () => {
+      if (!limits || finalSettlementDeadlineStarted) return;
+      finalSettlementDeadlineStarted = true;
+      // Bound unresolved parent, output, or group custody independently of which stream closed first.
       schedule(() => {
         if (allClosed()) maybeFinish();
         else finish(false);
@@ -2731,9 +2732,9 @@ export function runWebCheckDriverProcess(
         if (groupClosed === false && !terminationStarted) beginTermination('cleanup');
         else if (groupClosed === null && !terminationStarted)
           schedule(() => finish(false), limits?.outputSettleMs ?? 5_000);
-        else if (groupClosed === true) startOutputDeadline();
+        else if (groupClosed === true) startFinalSettlementDeadline();
       }
-      else startOutputDeadline();
+      else startFinalSettlementDeadline();
       maybeFinish();
     };
     const onParentExit = (exitCode: number | null, exitSignal: NodeJS.Signals | null) => {

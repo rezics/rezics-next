@@ -482,6 +482,42 @@ function fixture(options: {
   };
 }
 
+function productionRecoveryFixture(probe: () => boolean | null, onSpawn: () => void = () => {}) {
+  const child = new EventEmitter() as EventEmitter & { pid: number; stdout: EventEmitter; stdio: unknown[]; kill: () => boolean };
+  const output = new EventEmitter();
+  child.pid = 7878;
+  child.stdout = output;
+  child.stdio = [null, output, null];
+  child.kill = () => true;
+  const timers: Array<{ callback: () => void; delayMs: number; cleared: boolean }> = [];
+  const signals: NodeJS.Signals[] = [];
+  const lifetimes: Array<Record<string, unknown>> = [];
+  let spawnCount = 0;
+  const processAdapter: WebCheckDriverProcessRuntime = {
+    spawn: () => { spawnCount += 1; onSpawn(); return child as never; },
+    setTimer(callback, delayMs) {
+      const timer = { callback, delayMs, cleared: false };
+      timers.push(timer);
+      return timer;
+    },
+    clearTimer(timer) {
+      (timer as { cleared: boolean }).cleared = true;
+    },
+    probeGroup: () => probe(),
+    signalGroup: (_pid, signal) => { signals.push(signal); return true; },
+    now: () => '2026-11-02T00:00:00.000Z',
+  };
+  return {
+    child,
+    output,
+    timers,
+    signals,
+    lifetimes,
+    processAdapter,
+    spawnCount: () => spawnCount,
+  };
+}
+
 test('prepare registers once, binds the prior Web request, then accepts the original FD 3 final', async () => {
   const f = fixture({ returns: ['apps/web/report.json'] });
   const result = await runPreparedWebCheck(f.input, f.runtime);
@@ -916,4 +952,134 @@ test('production helper timeout bounds group termination and never rearms timers
   output.emit('close');
   expect(timers).toHaveLength(timerCount);
   expect(lifetimes.at(-1)).toMatchObject({ parentClosed: true, outputClosed: true, groupClosed: true, timedOut: true });
+});
+
+test('closed output still gets final settlement, keeps one helper occupied, and journals late parent closure', async () => {
+  const f = fixture();
+  let markSpawned!: () => void;
+  const spawned = new Promise<void>((resolve) => { markSpawned = () => resolve(); });
+  const process = productionRecoveryFixture(() => false, markSpawned);
+  const originalInvoke = f.runtime.invoke.bind(f.runtime);
+  let statusCalls = 0;
+  f.runtime.invoke = (invocation) => {
+    if (invocation.phase === 'status' && ++statusCalls === 2)
+      return runWebCheckDriverProcess(invocation, process.processAdapter);
+    return originalInvoke(invocation);
+  };
+
+  const pending = runPreparedWebCheck(f.input, f.runtime);
+  await spawned;
+  process.output.emit('close');
+  const observation = process.timers.find((timer) => timer.delayMs === WEB_CHECK_RECOVERY_LIMITS.observationMs)!;
+  observation.callback();
+  expect(process.signals).toEqual(['SIGTERM']);
+  process.timers[1]!.callback();
+  expect(process.signals).toEqual(['SIGTERM', 'SIGKILL']);
+  process.timers[2]!.callback();
+  expect(process.timers[3]?.delayMs).toBe(WEB_CHECK_RECOVERY_LIMITS.outputSettleMs);
+  process.timers[3]!.callback();
+
+  const result = await pending;
+  expect(result).toMatchObject({ custody: 'occupied', privateCleanup: 'retained', code: 75 });
+  expect(process.spawnCount()).toBe(1);
+  let journal = JSON.parse(readFileSync(f.files.recordFile, 'utf8')) as {
+    recovery: Array<Record<string, unknown>>;
+  };
+  expect(journal.recovery).toHaveLength(1);
+  expect(journal.recovery[0]).toMatchObject({
+    state: 'unknown',
+    parentClosed: false,
+    outputClosed: true,
+    groupClosed: true,
+    timedOut: true,
+  });
+  expect(f.wasRemoved()).toBe(false);
+
+  const again = await reconcileWebCheckCustody(f.files.descriptorFile, f.runtime);
+  expect(again).toMatchObject({ custody: 'occupied', privateCleanup: 'retained' });
+  expect(process.spawnCount()).toBe(1);
+
+  const timerCount = process.timers.length;
+  process.child.emit('exit', 0, null);
+  expect(process.timers).toHaveLength(timerCount);
+  journal = JSON.parse(readFileSync(f.files.recordFile, 'utf8')) as {
+    recovery: Array<Record<string, unknown>>;
+  };
+  expect(journal.recovery[0]).toMatchObject({
+    state: 'closed',
+    parentClosed: true,
+    outputClosed: true,
+    groupClosed: true,
+  });
+  expect(f.exists()).toBe(true);
+  expect(f.wasRemoved()).toBe(false);
+});
+
+test('closed output and exited parent do not settle a live process group after the final deadline', async () => {
+  let groupPresent = true;
+  const process = productionRecoveryFixture(() => groupPresent);
+  const lifetimes = process.lifetimes;
+  const pending = runWebCheckDriverProcess({
+    phase: 'status',
+    command: ['bun', 'status'],
+    cwd: '/candidate',
+    env: {},
+    limits: WEB_CHECK_RECOVERY_LIMITS,
+    onLifetime: (lifetime) => lifetimes.push(lifetime),
+  }, process.processAdapter);
+
+  process.output.emit('close');
+  process.child.emit('exit', 0, null);
+  expect(process.signals).toEqual(['SIGTERM']);
+  process.timers[1]!.callback();
+  expect(process.signals).toEqual(['SIGTERM', 'SIGKILL']);
+  process.timers[2]!.callback();
+  expect(process.timers[3]?.delayMs).toBe(WEB_CHECK_RECOVERY_LIMITS.outputSettleMs);
+  process.timers[3]!.callback();
+
+  const result = await pending;
+  expect(result).toMatchObject({
+    closed: false,
+    parentClosed: true,
+    outputClosed: true,
+    groupClosed: false,
+  });
+  const timerCount = process.timers.length;
+  groupPresent = false;
+  process.child.emit('close', 0, null);
+  expect(process.timers).toHaveLength(timerCount);
+  expect(lifetimes.at(-1)).toMatchObject({ parentClosed: true, outputClosed: true, groupClosed: true });
+});
+
+test('closed output and parent with unknown group return boundedly and preserve late group evidence', async () => {
+  let groupPresent: boolean | null = null;
+  const process = productionRecoveryFixture(() => groupPresent);
+  const lifetimes = process.lifetimes;
+  const pending = runWebCheckDriverProcess({
+    phase: 'reconcile',
+    command: ['bun', 'reconcile'],
+    cwd: '/candidate',
+    env: {},
+    limits: WEB_CHECK_RECOVERY_LIMITS,
+    onLifetime: (lifetime) => lifetimes.push(lifetime),
+  }, process.processAdapter);
+
+  process.output.emit('close');
+  process.child.emit('exit', 0, null);
+  expect(process.signals).toEqual([]);
+  expect(process.timers[1]?.delayMs).toBe(WEB_CHECK_RECOVERY_LIMITS.outputSettleMs);
+  process.timers[1]!.callback();
+
+  const result = await pending;
+  expect(result).toMatchObject({
+    closed: false,
+    parentClosed: true,
+    outputClosed: true,
+    groupClosed: null,
+  });
+  const timerCount = process.timers.length;
+  groupPresent = false;
+  process.child.emit('close', 0, null);
+  expect(process.timers).toHaveLength(timerCount);
+  expect(lifetimes.at(-1)).toMatchObject({ parentClosed: true, outputClosed: true, groupClosed: true });
 });

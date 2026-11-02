@@ -20,13 +20,15 @@ immutable during later reconciliation.
 `reconcileWebCheckCustody(descriptorFile)` and the CLI
 `bun apps/web/scripts/check-placement-custody.ts reconcile --descriptor <absolute-private-descriptor>` operate only on
 that saved descriptor and evidence. Recovery helpers have a 30 second observation deadline, then a 5 second TERM grace,
-a 5 second KILL/closure settle deadline and an independent 5 second output settle deadline. An observation timeout
-therefore returns within 45 seconds at most. At most 16 helper attempts are journaled, and an unresolved helper PID,
-process group or output pipe stays occupied. Late close events update the journal but never dispose the Web private
-directory by themselves. Reconciliation cannot replace the invocation or turn a recovery timeout into disposal
-authority. When a timeout or caller cancellation leaves custody unresolved, Web preserves any original nonzero native
-code; otherwise it returns the caller's cancellation code or 75. It does not claim that a timer proves process or
-output closure. Observation buffers are bounded, and their overflow state does not reconstruct omitted output.
+a 5 second KILL/closure settle deadline and an unconditional 5 second final settlement deadline whenever any helper
+lifetime fact remains unresolved. Closed stdout does not suppress that final deadline. An observation timeout therefore
+returns within 45 seconds at most. At most 16 helper attempts are journaled, and an unresolved helper PID, process group
+or output pipe stays occupied even when another dimension is known closed. Late close events update the journal but
+never dispose the Web private directory by themselves. Reconciliation cannot replace the invocation or turn a recovery
+timeout into disposal authority. When a timeout or caller cancellation leaves custody unresolved, Web preserves any
+original nonzero native code; otherwise it returns the caller's cancellation code or 75. It does not claim that a timer,
+parent exit or closed output proves another process-lifetime dimension. Observation buffers are bounded, and their
+overflow state does not reconstruct omitted output.
 
 The actual `run-prepared` command has no elapsed observation cutoff, so a slow native check can finish under its own
 driver lifetime. Explicit cancellation sends TERM to the driver caller, escalates to KILL after 15 seconds and waits
