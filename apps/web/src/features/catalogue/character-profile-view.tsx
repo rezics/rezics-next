@@ -1,5 +1,5 @@
 import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
-import { useRef, useState, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ContentItemFrame } from '@rezics/ui/content-item';
 import { EntityPicker, type EntityPickerSearch } from '@rezics/ui/entity-picker';
@@ -68,6 +68,20 @@ function CharacterProfileLive({
   const [work, setWork] = useState(initialWork);
   const [created, setCreated] = useState<Extract<CreateResult, { ok: true }>>();
   const [reading, setReading] = useState(false);
+  const [reloadPending, setReloadPending] = useState(false);
+  const reloadInFlight = useRef(false);
+  const reloadButton = useRef<HTMLButtonElement>(null);
+  const reloadResult = useRef<HTMLDivElement>(null);
+  const reloadFailure = useRef<HTMLDivElement>(null);
+  const keyboardReloadActivation = useRef(false);
+  const reloadFocusIntent = useRef<{
+    id: typeof initialId;
+    work: typeof initialWork;
+    locale: string;
+    session: string;
+    generation: typeof lifetime.generation;
+  } | null>(null);
+  const mounted = useRef(false);
   const query = useQuery({
     queryKey: [...['character-profile', id, work, locale], lifetime.generation],
     queryFn: () => transport.load({ id, work }),
@@ -81,6 +95,68 @@ function CharacterProfileLive({
   const result = query.data;
   const currentRead = isCurrentCharacterRead(result, query, { id, work });
   if (currentRead) retained.current = result;
+  const reloadContext = { id, work, locale, session, generation: lifetime.generation };
+  const currentReloadContext = useRef(reloadContext);
+  currentReloadContext.current = reloadContext;
+  useLayoutEffect(() => {
+    mounted.current = true;
+    const cancelFocusIntent = () => {
+      keyboardReloadActivation.current = false;
+      reloadFocusIntent.current = null;
+    };
+    const cancelOnFocusMovement = (event: FocusEvent) => {
+      if (event.target !== reloadButton.current) cancelFocusIntent();
+    };
+    document.addEventListener('pointerdown', cancelFocusIntent, true);
+    document.addEventListener('focusin', cancelOnFocusMovement, true);
+    return () => {
+      mounted.current = false;
+      cancelFocusIntent();
+      document.removeEventListener('pointerdown', cancelFocusIntent, true);
+      document.removeEventListener('focusin', cancelOnFocusMovement, true);
+    };
+  }, []);
+  useLayoutEffect(() => {
+    keyboardReloadActivation.current = false;
+    reloadFocusIntent.current = null;
+  }, [id, work, locale, session, lifetime.generation]);
+  const reload = async (keyboard: boolean) => {
+    if (reloadInFlight.current || query.isFetching || !lifetime.active()) return;
+    reloadInFlight.current = true;
+    setReloadPending(true);
+    reloadFocusIntent.current =
+      keyboard && document.activeElement === reloadButton.current ? currentReloadContext.current : null;
+    try {
+      await query.refetch();
+    } catch {
+      // The query state renders the current failure.
+    } finally {
+      reloadInFlight.current = false;
+      if (!mounted.current) return;
+      setReloadPending(false);
+      const intent = reloadFocusIntent.current;
+      reloadFocusIntent.current = null;
+      const current = currentReloadContext.current;
+      if (
+        !intent ||
+        intent.id !== current.id ||
+        intent.work !== current.work ||
+        intent.locale !== current.locale ||
+        intent.session !== current.session ||
+        intent.generation !== current.generation ||
+        !lifetime.active()
+      )
+        return;
+      const button = reloadButton.current;
+      if (button?.isConnected && !button.disabled) {
+        button.focus();
+      } else {
+        const result = reloadResult.current;
+        const outcome = result && !result.hidden ? result : reloadFailure.current;
+        if (outcome?.isConnected && !outcome.closest('[hidden]')) outcome.focus();
+      }
+    }
+  };
   const current = retained.current;
   const character = current?.character;
   const label = pageText(character?.subject.labels, locale);
@@ -108,13 +184,33 @@ function CharacterProfileLive({
         }
       />
       <p className="text-muted-foreground">{m.character_intro({}, o)}</p>
-      {query.isFetching && !currentRead && <p role="status">{m.candidate_loading({}, o)}</p>}
+      {((query.isFetching && !currentRead) || reloadPending) && <p role="status">{m.candidate_loading({}, o)}</p>}
       {(query.isError ||
         (query.data && !query.data.ok) ||
         (query.isSuccess && !query.isFetching && query.data?.ok && !currentRead)) && (
-        <EditorFailure locale={locale} reason={query.data && !query.data.ok ? query.data.reason : 'unavailable'} />
+        <div ref={reloadFailure} tabIndex={-1}>
+          <EditorFailure locale={locale} reason={query.data && !query.data.ok ? query.data.reason : 'unavailable'} />
+        </div>
       )}
-      <Button variant="outline" onClick={() => void query.refetch()}>
+      <Button
+        ref={reloadButton}
+        variant="outline"
+        aria-busy={reloadPending}
+        aria-disabled={reloadPending || query.isFetching}
+        onKeyDown={(event) => {
+          if (!reloadInFlight.current && (event.key === 'Enter' || event.key === ' '))
+            keyboardReloadActivation.current = true;
+        }}
+        onBlur={() => {
+          keyboardReloadActivation.current = false;
+          reloadFocusIntent.current = null;
+        }}
+        onClick={(event) => {
+          const keyboard = keyboardReloadActivation.current || event.detail === 0;
+          keyboardReloadActivation.current = false;
+          void reload(keyboard);
+        }}
+      >
         {m.correction_reload({}, o)}
       </Button>
       {session === 'unavailable' ? (
@@ -127,7 +223,7 @@ function CharacterProfileLive({
         )
       )}
       {current && (
-        <div hidden={!currentRead} className="space-y-8">
+        <div ref={reloadResult} hidden={!currentRead} tabIndex={-1} className="space-y-8">
           <section className="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6">
             <h2 className="text-xl font-semibold">{m.character_identity({}, o)}</h2>
             <p lang={pageText(current.release.types[characterType]!.labels, locale).lang}>

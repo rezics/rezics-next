@@ -52,6 +52,9 @@ test('Character local choices preserve exact recovery on Stay and fence abandone
   const loads: { id?: string; work?: string }[] = [],
     creates: CharacterCommand[] = [],
     proposals: RelationProposal[] = [];
+  type ProfileRead = Awaited<ReturnType<typeof fixture.transport.load>>;
+  let deferNextLoad = false,
+    finishLoad: (value: ProfileRead) => void = () => {};
   let finishCreate: (value: CreateResult) => void = () => {};
   let finishRelation: (value: RelationResult) => void = () => {};
   let deferCreate = false,
@@ -60,6 +63,12 @@ test('Character local choices preserve exact recovery on Stay and fence abandone
     ...fixture.transport,
     load: async (address: { id?: string; work?: string }) => {
       loads.push(address);
+      if (deferNextLoad) {
+        deferNextLoad = false;
+        return new Promise<ProfileRead>((resolve) => {
+          finishLoad = resolve;
+        });
+      }
       return fixture.transport.load(address);
     },
     create: (command: CharacterCommand): Promise<CreateResult> => {
@@ -186,6 +195,60 @@ test('Character local choices preserve exact recovery on Stay and fence abandone
     expect(dialog()).toBeNull();
     await act(async () => oldWorkPicker([{ id: 'retired-work' }]));
     expect(loads.at(-1)?.work).toBe(fixture.work.id);
+
+    const reload = canvas.getByRole('button', { name: m.correction_reload() });
+    const pointerTarget = window.document.createElement('button');
+    host.append(pointerTarget);
+    let loadCount = loads.length;
+    deferNextLoad = true;
+    await act(async () => {
+      reload.focus();
+      await user.keyboard('{Enter}');
+    });
+    await waitFor(() => expect(loads).toHaveLength(loadCount + 1));
+    loadCount += 1;
+    expect(reload.getAttribute('aria-busy')).toBe('true');
+    expect(canvas.getByRole('status').textContent).toBe(m.candidate_loading());
+    await act(async () => user.keyboard('{Enter}'));
+    expect(loads).toHaveLength(loadCount);
+    await act(async () => finishLoad({ ok: false, reason: 'unavailable' }));
+    await waitFor(() => expect(reload.getAttribute('aria-busy')).toBe('false'));
+    expect(window.document.activeElement).toBe(reload);
+
+    deferNextLoad = true;
+    await act(async () => user.keyboard('{Enter}'));
+    await waitFor(() => expect(loads).toHaveLength(loadCount + 1));
+    loadCount += 1;
+    expect(reload.getAttribute('aria-busy')).toBe('true');
+    expect(canvas.getByRole('status').textContent).toBe(m.candidate_loading());
+    await act(async () => user.keyboard('{Enter}'));
+    expect(loads).toHaveLength(loadCount);
+    await act(async () => finishLoad(await fixture.transport.load(loads.at(-1)!)));
+    await waitFor(() => expect(reload.getAttribute('aria-busy')).toBe('false'));
+    expect(window.document.activeElement).toBe(reload);
+
+    deferNextLoad = true;
+    await act(async () => user.keyboard('{Enter}'));
+    await waitFor(() => expect(loads).toHaveLength(loadCount + 1));
+    loadCount += 1;
+    await act(async () => user.click(pointerTarget));
+    await act(async () => finishLoad(await fixture.transport.load(loads.at(-1)!)));
+    await waitFor(() => expect(reload.getAttribute('aria-busy')).toBe('false'));
+    expect(window.document.activeElement).toBe(pointerTarget);
+
+    deferNextLoad = true;
+    await act(async () => {
+      reload.focus();
+      await user.keyboard('{Enter}');
+    });
+    await waitFor(() => expect(loads).toHaveLength(loadCount + 1));
+    loadCount += 1;
+    const retiredAddress = loads.at(-1)!;
+    await show('retired-during-reload', characterProfileId, fixture.work.id);
+    await waitFor(() => expect(loads).toHaveLength(loadCount + 1));
+    pointerTarget.focus();
+    await act(async () => finishLoad(await fixture.transport.load(retiredAddress)));
+    expect(window.document.activeElement).toBe(pointerTarget);
   } finally {
     await act(async () => root.unmount());
     client.clear();
