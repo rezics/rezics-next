@@ -3,6 +3,7 @@ import type { FilterDocument, OwnerLeaf } from '@rezics/filter';
 import { parseFilter } from '@rezics/filter';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
+import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { Field, FieldLabel, FieldGroup, FieldDescription } from '@rezics/ui/shadcn/field';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { ConditionEditor, type ConditionExtension } from '../search/condition-editor';
@@ -696,11 +697,12 @@ function RuleForm({
                 </Field>
                 <Field>
                   <FieldLabel htmlFor={`${metadataId}-description`}>{m.library_collection_description()}</FieldLabel>
-                  <Input
+                  <Textarea
                     id={`${metadataId}-description`}
                     aria-describedby={`${metadataId}-description-limit`}
                     value={description}
                     maxLength={20000}
+                    rows={4}
                     onChange={(event) => {
                       if (isCurrent() && !captured.current) setDescription(event.currentTarget.value);
                     }}
