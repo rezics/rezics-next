@@ -71,6 +71,12 @@ import {
   type PublicationTransport,
 } from './curation-publish';
 import { type CurationAdmissionLease, CurationReaderAdmission } from './curation-reader-admission';
+import {
+  canDispatchCurationRead,
+  retireCurationReadWait,
+  useCurationReadWait,
+  waitAfterCurationRead,
+} from './curation-read-retry';
 import { CurationFailureNotice, CurationPublicationRecovery } from './curation-publish-view';
 import { CurationNavigationGuard } from './curation-navigation-guard';
 import { presentationMessageOptions } from './curate-view-editor-messages';
@@ -157,13 +163,30 @@ type FreshAdmissionResult = {
   lease?: CurationAdmissionLease;
 };
 
-type AdmissionReadRequest = { reader: string; version: number; promise: Promise<CurationRead> };
+type AdmissionReadRequest = { reader: string; version: number; promise: Promise<CurationRead | undefined> };
 
 function failureView(failure: CurationReadFailure) {
   if (failure.reason === 'forbidden') return <ErrorPage />;
   return (
     <div className="space-y-4">
       <CurationFailureNotice failure={failure} />
+    </div>
+  );
+}
+
+function retryableReadFailure(
+  failure: CurationReadFailure,
+  options: ReturnType<typeof presentationMessageOptions>,
+  retry?: { waiting: boolean; onRetry: () => void },
+) {
+  const retryable = failure.reason === 'unavailable' || failure.reason === 'rate-limited';
+  if (!retryable || !retry) return failureView(failure);
+  return (
+    <div className="space-y-4">
+      {failureView(failure)}
+      <Button className={editorControlClass} disabled={retry.waiting} onClick={retry.onRetry}>
+        {m.curation_reload({}, options)}
+      </Button>
     </div>
   );
 }
@@ -185,6 +208,8 @@ function ActualPresentationViewEditor({
   const snapshot = useSyncExternalStore(admission.subscribe, admission.getSnapshot, admission.getSnapshot);
   const lease = snapshot.lease;
   const reader = lease?.reader ?? (snapshot.session.state === 'signed-in' ? (snapshot.session.subject ?? null) : null);
+  const waitOwner = reader ? { reader, generation: snapshot.version } : null;
+  const { waitRef, waiting, replaceWait } = useCurationReadWait(waitOwner);
   const initialRead = useRef<{
     lease: CurationAdmissionLease;
     result: Extract<CurationRead, { ok: true }>;
@@ -199,14 +224,17 @@ function ActualPresentationViewEditor({
 
   const readCurrent = (expectedReader: string, version: number, invocationTransport: CurationEditorTransport) => {
     if (!admission.canRead(expectedReader, version)) return () => {};
+    const owner = { reader: expectedReader, generation: version };
+    if (!canDispatchCurationRead(waitRef.current, owner)) return () => {};
 
     let request = readRequest.current;
     if (!request || request.reader !== expectedReader || request.version !== version) {
-      const promise = Promise.resolve().then(() =>
-        admission.canRead(expectedReader, version)
+      const promise = Promise.resolve().then(() => {
+        if (!canDispatchCurationRead(waitRef.current, owner)) return;
+        return admission.canRead(expectedReader, version)
           ? invocationTransport.read(expectedReader)
-          : ({ ok: false, reason: 'unavailable' } as const),
-      );
+          : ({ ok: false, reason: 'unavailable' } as const);
+      });
       request = { reader: expectedReader, version, promise };
       readRequest.current = request;
       void promise.then(
@@ -222,8 +250,10 @@ function ActualPresentationViewEditor({
     let live = true;
     request.promise.then(
       (result) => {
-        if (!live || !admission.canRead(expectedReader, version)) return;
+        if (!live || result === undefined || !admission.canRead(expectedReader, version)) return;
         if (result.ok) {
+          retireCurationReadWait(waitRef.current);
+          replaceWait(null);
           if (result.reader !== expectedReader) {
             const refusal = { ok: false as const, reason: 'forbidden' as const, admissionChanged: true };
             setFreshResult((previous) =>
@@ -240,15 +270,18 @@ function ActualPresentationViewEditor({
           );
           return;
         }
+        replaceWait(waitAfterCurationRead(waitRef.current, owner, result));
         setFreshResult((previous) =>
           admission.canRead(expectedReader, version) ? { reader: expectedReader, version, result } : previous,
         );
       },
       () => {
         if (!live || !admission.canRead(expectedReader, version)) return;
+        const unavailable = { ok: false as const, reason: 'unavailable' as const };
+        replaceWait(waitAfterCurationRead(waitRef.current, owner, unavailable));
         setFreshResult((previous) =>
           admission.canRead(expectedReader, version)
-            ? { reader: expectedReader, version, result: { ok: false, reason: 'unavailable' } }
+            ? { reader: expectedReader, version, result: unavailable }
             : previous,
         );
       },
@@ -293,30 +326,15 @@ function ActualPresentationViewEditor({
       !freshResult.result.ok
         ? freshResult.result
         : null;
-    if (failedRead)
-      return failedRead.reason === 'unavailable' ? (
-        <div className="space-y-4">
-          {failureView(failedRead)}
-          <Button className={editorControlClass} onClick={retryAdmission}>
-            {m.curation_reload({}, options)}
-          </Button>
-        </div>
-      ) : (
-        failureView(failedRead)
-      );
+    if (failedRead) return retryableReadFailure(failedRead, options, { waiting, onRetry: retryAdmission });
     if (!needsRead) return !initial.ok ? failureView(initial) : failureView({ ok: false, reason: 'unavailable' });
     return <p role="status">{m.curation_loading({}, options)}</p>;
   }
   if (!currentAdmission.ok)
-    return currentAdmission.reason === 'unavailable' && needsRead ? (
-      <div className="space-y-4">
-        {failureView(currentAdmission)}
-        <Button className={editorControlClass} onClick={retryAdmission}>
-          {m.curation_reload({}, options)}
-        </Button>
-      </div>
-    ) : (
-      failureView(currentAdmission)
+    return retryableReadFailure(
+      currentAdmission,
+      options,
+      needsRead ? { waiting, onRetry: retryAdmission } : undefined,
     );
   if (currentAdmission.reader !== reader) return failureView({ ok: false, reason: 'forbidden' });
   if (!lease) return failureView({ ok: false, reason: 'unavailable' });
@@ -393,6 +411,8 @@ function StandalonePresentationViewEditor({
   const [admission, setAdmission] = useState<AdmissionResult | null>(null);
   const admissionRequest = useRef(0);
   const reader = lifecycle.reader;
+  const waitOwner = reader ? { reader, generation: lifecycle.epoch } : null;
+  const { waitRef, waiting, replaceWait } = useCurationReadWait(waitOwner);
   const initialAdmission = lifecycle.epoch === 0 && initial.ok && reader === initial.reader;
   const needsRead = lifecycle.epoch > 0 && reader !== null;
   const currentAdmission = initialAdmission
@@ -401,63 +421,44 @@ function StandalonePresentationViewEditor({
       ? admission.result
       : null;
 
-  useEffect(() => {
-    if (!needsRead || !reader) return;
-    let retired = false;
-    const epoch = lifecycle.epoch;
+  function applyAdmission(epoch: number, expectedReader: string, result: CurationRead) {
+    if (lifecycleRef.current.epoch !== epoch || lifecycleRef.current.reader !== expectedReader) return;
+    const owner = { reader: expectedReader, generation: epoch };
+    if (result.ok) {
+      retireCurationReadWait(waitRef.current);
+      replaceWait(null);
+    } else replaceWait(waitAfterCurationRead(waitRef.current, owner, result));
+    setAdmission({ epoch, reader: expectedReader, result });
+  }
+
+  function readAdmission(expectedReader: string, epoch: number, invocationTransport: CurationEditorTransport) {
+    const owner = { reader: expectedReader, generation: epoch };
+    if (!canDispatchCurationRead(waitRef.current, owner)) return 0;
     const serial = ++admissionRequest.current;
-    const invocationTransport = transport;
     void invocationTransport
-      .read(reader)
+      .read(expectedReader)
       .then((result) => {
-        if (
-          retired ||
-          admissionRequest.current !== serial ||
-          lifecycleRef.current.epoch !== epoch ||
-          lifecycleRef.current.reader !== reader
-        )
-          return;
-        setAdmission({ epoch, reader, result });
+        if (admissionRequest.current === serial) applyAdmission(epoch, expectedReader, result);
       })
       .catch(() => {
-        if (
-          retired ||
-          admissionRequest.current !== serial ||
-          lifecycleRef.current.epoch !== epoch ||
-          lifecycleRef.current.reader !== reader
-        )
-          return;
-        setAdmission({ epoch, reader, result: { ok: false, reason: 'unavailable' } });
+        if (admissionRequest.current === serial)
+          applyAdmission(epoch, expectedReader, { ok: false, reason: 'unavailable' });
       });
+    return serial;
+  }
+
+  useEffect(() => {
+    if (!needsRead || !reader) return;
+    const epoch = lifecycle.epoch;
+    const serial = readAdmission(reader, epoch, transport);
     return () => {
-      retired = true;
-      if (admissionRequest.current === serial) admissionRequest.current += 1;
+      if (serial && admissionRequest.current === serial) admissionRequest.current += 1;
     };
   }, [lifecycle.epoch, needsRead, reader]);
 
   function retryAdmission() {
     if (!needsRead || !reader) return;
-    const epoch = lifecycle.epoch;
-    const serial = ++admissionRequest.current;
-    const invocationTransport = transport;
-    void invocationTransport
-      .read(reader)
-      .then((result) => {
-        if (
-          admissionRequest.current === serial &&
-          lifecycleRef.current.epoch === epoch &&
-          lifecycleRef.current.reader === reader
-        )
-          setAdmission({ epoch, reader, result });
-      })
-      .catch(() => {
-        if (
-          admissionRequest.current === serial &&
-          lifecycleRef.current.epoch === epoch &&
-          lifecycleRef.current.reader === reader
-        )
-          setAdmission({ epoch, reader, result: { ok: false, reason: 'unavailable' } });
-      });
+    readAdmission(reader, lifecycle.epoch, transport);
   }
 
   if (observedSession.state === 'signed-out') return failureView({ ok: false, reason: 'signed-out' });
@@ -470,15 +471,10 @@ function StandalonePresentationViewEditor({
     return <p role="status">{m.curation_loading({}, options)}</p>;
   }
   if (!currentAdmission.ok)
-    return currentAdmission.reason === 'unavailable' && needsRead ? (
-      <div className="space-y-4">
-        {failureView(currentAdmission)}
-        <Button className={editorControlClass} onClick={retryAdmission}>
-          {m.curation_reload({}, options)}
-        </Button>
-      </div>
-    ) : (
-      failureView(currentAdmission)
+    return retryableReadFailure(
+      currentAdmission,
+      options,
+      needsRead ? { waiting, onRetry: retryAdmission } : undefined,
     );
   if (currentAdmission.reader !== reader) return failureView({ ok: false, reason: 'forbidden' });
 
@@ -525,6 +521,8 @@ function AdmittedPresentationViewEditor({
   const formId = useId();
   const [current, setCurrent] = useState<CurationRead>(initial);
   const [draft, setDraft] = useState(() => (initial.ok ? presentationDraft(initial) : null));
+  const waitOwner = { reader, generation: epoch };
+  const { waitRef, waiting, replaceWait } = useCurationReadWait(waitOwner);
   const [failure, setFailure] = useState<CurationFailure | null>(null);
   const [failureProfile, setFailureProfile] = useState(initial.ok ? initial.profile : null);
   const [message, setMessage] = useState('');
@@ -695,6 +693,7 @@ function AdmittedPresentationViewEditor({
       if (!isCurrent() || !currentVisit.isCurrent()) return;
       return;
     }
+    if (!canDispatchCurationRead(waitRef.current, waitOwner)) return;
     const invocationTransport = transport;
     inFlight.current = true;
     setOwned(setLoadingProfile, true);
@@ -705,6 +704,8 @@ function AdmittedPresentationViewEditor({
       const next = await invocationTransport.read(reader);
       if (!isCurrent()) return;
       if (next.ok) {
+        retireCurationReadWait(waitRef.current);
+        replaceWait(null);
         if (next.reader !== reader) {
           setOwned(setCurrent, { ok: false, reason: 'forbidden' });
           setOwned(setDraft, null);
@@ -715,12 +716,19 @@ function AdmittedPresentationViewEditor({
         setOwned(setGeneration, (value) => value + 1);
         setOwned(setMessage, m.curation_reloaded({}, options));
       } else if (next.reason === 'signed-out') {
+        retireCurationReadWait(waitRef.current);
+        replaceWait(null);
         setOwned(setCurrent, next);
         setOwned(setDraft, null);
-      } else setOwned(setFailure, next);
+      } else {
+        replaceWait(waitAfterCurationRead(waitRef.current, waitOwner, next));
+        setOwned(setFailure, next);
+      }
     } catch {
       if (!isCurrent()) return;
-      setOwned(setFailure, { ok: false, reason: 'unavailable' });
+      const unavailable = { ok: false as const, reason: 'unavailable' as const };
+      replaceWait(waitAfterCurationRead(waitRef.current, waitOwner, unavailable));
+      setOwned(setFailure, unavailable);
     } finally {
       if (isCurrent()) {
         inFlight.current = false;
@@ -863,7 +871,7 @@ function AdmittedPresentationViewEditor({
       <div className="space-y-4">
         {navigationGuard}
         <CurationFailureNotice failure={failure ?? (current.ok ? { ok: false, reason: 'unavailable' } : current)} />
-        <Button className={editorControlClass} disabled={busy} onClick={() => void reload()}>
+        <Button className={editorControlClass} disabled={busy || waiting} onClick={() => void reload()}>
           {m.curation_reload({}, options)}
         </Button>
       </div>
@@ -968,6 +976,7 @@ function AdmittedPresentationViewEditor({
           <Button
             className={editorControlClass}
             variant="outline"
+            disabled={waiting && !pendingPublication}
             onClick={() =>
               isCurrent() && (!pendingPublication && dirty ? setOwned(setConfirm, 'reload') : void reload())
             }
