@@ -730,6 +730,10 @@ refused for numeric or boolean fields, as are numbers for string fields, with `4
 JSON pointer. The app composition compiles each route's body check once and runs it before Elysia's coercing
 validation. Query and path parameters retain type coercion because their values arrive as strings.
 
+Shared `ProblemError` identity initializes in a dependency-free HTTP module so native command and Realm imports
+cannot prevent media admission or contract construction from loading. Error mapping and concealment use that
+identity; unrelated errors propagate.
+
 The shared bounded JSON wire parser rejects repeated decoded member names within any one object, including
 escaped equivalents and objects nested in arrays, with `400 invalid_request` before schema checks or route effects.
 Names compare exactly as native JSON strings, without case folding or Unicode normalization; separate object

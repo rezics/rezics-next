@@ -647,7 +647,10 @@ this change adds no deletion path.
 
 ## Covers
 
-When authorization is supplied, a cover claim requires execute authorization on the subject or `statement:propose` or `subject:create` on the Global Context, with the subject in the command partition.
+Semantic cover claims through `claimMedia` delegate authority to the native cover port.
+When authorization is supplied, a cover claim requires execute authorization on the subject or
+`statement:propose` or `subject:create` on the Global Context, with the subject in the command partition.
+Media, container and candidate retain their exact subject route binding.
 
 A cover is a media object with purpose `cover`, named by a `schema:image` statement on its subject. One subject can have several images; the preferred-rank statement is its cover. An edition's cover belongs to the edition. A work without its own cover shows the cover of its representative edition, which the work names with one statement, so choosing a cover is one indexed read and never a scan of the work's editions. A work may name one representative edition per language; the cover then follows the same language choice as the title, so a reader never sees a title in one language over a cover chosen for another.
 
@@ -1069,8 +1072,6 @@ still accepts at most 32 IDs and each chain at most 33 posts plus its thread;
 the second round adds O(ids × H) indexed point work and scans no unrelated media.
 The page and download routes retain their existing cache policy and read authority;
 Realm participation is not substituted for Realm reading.
-Semantic cover claims through `claimMedia` delegate authority to the native cover port, including `statement:propose` and `subject:create` on the Global Context; media, container and candidate retain their exact subject route binding.
-Shared `ProblemError` identity initializes in a dependency-free HTTP module so native command and Realm imports cannot prevent media admission or contract construction from loading.
 
 A post image belongs to the first post that claims it; that post's later revisions may name it again, any other reference is `media_unavailable`, and erasing the post erases it.
 
