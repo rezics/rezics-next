@@ -68,8 +68,7 @@ function readDeliveryJournal(path: string): Record<string, string> {
   try {
     const state: unknown = JSON.parse(readFileSync(path, 'utf8'));
     if (!state || typeof state !== 'object' || Array.isArray(state)) return delivered;
-    for (const [text, value] of Object.entries(state))
-      if (isRecordedOccurrence(value)) delivered[text] = value;
+    for (const [text, value] of Object.entries(state)) if (isRecordedOccurrence(value)) delivered[text] = value;
   } catch {
     /* A damaged record delivers again rather than never. */
   }
