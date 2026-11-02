@@ -337,7 +337,11 @@ export function HeaderSearchView({
                 {status}
               </p>
             )}
-            {retryWaiting && retryable && <p role="status" className="px-4 pb-2 text-sm text-muted-foreground">{m.settings_retry_wait()}</p>}
+            {retryWaiting && retryable && (
+              <p role="status" className="px-4 pb-2 text-sm text-muted-foreground">
+                {m.settings_retry_wait()}
+              </p>
+            )}
             {retryable && (
               <Button type="button" variant="outline" className="mx-4 w-fit" onClick={onRetry} disabled={retryWaiting}>
                 {m.search_facet_retry()}

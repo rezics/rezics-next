@@ -89,7 +89,8 @@ test('mounted manual retry waits for the current deadline, while replacement and
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-  for (const [key, value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { configurable: true, value });
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, value });
   const { createRoot } = await import('react-dom/client');
   const { HeaderSearch } = await import('../src/search/header-search/header-search');
   const host = window.document.createElement('div');
@@ -99,8 +100,7 @@ test('mounted manual retry waits for the current deadline, while replacement and
   const calls: string[] = [];
   const load: HeaderSuggestionLoader = async (query) => {
     calls.push(query);
-    if (calls.length === 1)
-      throw new MediaProblem(problemBody, { 'retry-after': '1' });
+    if (calls.length === 1) throw new MediaProblem(problemBody, { 'retry-after': '1' });
     if (calls.length === 2) return emptyResult;
     if (calls.length === 3) throw new MediaProblem(problemBody, { 'retry-after': '2' });
     if (calls.length === 4) throw new Error('injected failure without Retry-After');

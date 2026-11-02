@@ -26,7 +26,12 @@ export type HeaderSearchEvent =
   | { type: 'sync-query'; query: string }
   | { type: 'active'; index: number }
   | { type: 'invalidate' }
-  | { type: 'suggestions'; state: SuggestionState; result?: SuggestionResult | undefined; retryAt?: number | undefined };
+  | {
+      type: 'suggestions';
+      state: SuggestionState;
+      result?: SuggestionResult | undefined;
+      retryAt?: number | undefined;
+    };
 
 function retireRetryAt(state: HeaderSearchState): HeaderSearchState {
   const current = { ...state };
