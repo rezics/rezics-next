@@ -2,7 +2,9 @@ import { expect, test } from 'bun:test';
 import { act, createElement } from 'react';
 import { dirname } from 'node:path';
 
-const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+);
 const window = new Window({ url: 'https://site.test/en/inbox' });
 for (const [key, value] of Object.entries({
   window,
@@ -43,7 +45,12 @@ const isCurrent = () => admitted;
 const writes: string[] = [];
 Object.defineProperty(window.navigator, 'clipboard', {
   configurable: true,
-  value: { writeText: async (text: string) => { writes.push(text); throw new Error('Clipboard denied'); } },
+  value: {
+    writeText: async (text: string) => {
+      writes.push(text);
+      throw new Error('Clipboard denied');
+    },
+  },
 });
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
@@ -55,7 +62,10 @@ test('clipboard denial selects the exact current reference and retirement hides 
     expect(details.open).toBe(false);
     details.open = true;
     const copy = host.querySelector('button')!;
-    await act(async () => { copy.click(); await tick(); });
+    await act(async () => {
+      copy.click();
+      await tick();
+    });
     const expected = [
       `${m.reporter_status_report_id()}: ${currentReport.id}`,
       `${m.reporter_status_target()}: post post-1`,
@@ -69,7 +79,9 @@ test('clipboard denial selects the exact current reference and retirement hides 
     expect(document.activeElement).toBe(fallback);
     expect(fallback.selectionStart).toBe(0);
     expect(fallback.selectionEnd).toBe(expected.length);
-    const close = [...host.querySelectorAll('button')].find((button) => button.textContent?.trim() === m.board_feed_copy_close())!;
+    const close = [...host.querySelectorAll('button')].find(
+      (button) => button.textContent?.trim() === m.board_feed_copy_close(),
+    )!;
     await act(() => close.click());
     expect(fallback.isConnected).toBe(false);
     expect(document.activeElement).toBe(copy);
@@ -77,7 +89,10 @@ test('clipboard denial selects the exact current reference and retirement hides 
   const retiredReport = { ...report, id: 'report-retired', revisionId: null };
   await act(async () => root.render(createElement(ReporterStatusPage, { report: retiredReport, isCurrent })));
   host.querySelector('details')!.open = true;
-  await act(async () => { host.querySelector('button')!.click(); await tick(); });
+  await act(async () => {
+    host.querySelector('button')!.click();
+    await tick();
+  });
   expect(host.querySelector('textarea')).not.toBeNull();
   admitted = false;
   await act(() => root.render(createElement(ReporterStatusPage, { report: retiredReport, isCurrent })));
