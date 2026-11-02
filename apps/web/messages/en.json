@@ -4321,5 +4321,8 @@
   "fictional_work_work_reference": "Work reference",
   "fictional_work_subject_reference": "Subject reference",
   "fictional_work_type_reference": "Type reference",
-  "fictional_work_choose_another": "Choose another work"
+  "fictional_work_choose_another": "Choose another work",
+  "profile_work_reference_details": "Reference details",
+  "profile_work_reference_subject": "Subject reference",
+  "profile_work_reference_type": "Type reference"
 }

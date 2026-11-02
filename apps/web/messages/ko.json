@@ -4320,5 +4320,8 @@
   "fictional_work_work_reference": "작품 참조 ID",
   "fictional_work_subject_reference": "항목 참조 ID",
   "fictional_work_type_reference": "유형 참조 ID",
-  "fictional_work_choose_another": "다른 작품 선택"
+  "fictional_work_choose_another": "다른 작품 선택",
+  "profile_work_reference_details": "참조 세부 정보",
+  "profile_work_reference_subject": "대상 참조 ID",
+  "profile_work_reference_type": "유형 참조 ID"
 }

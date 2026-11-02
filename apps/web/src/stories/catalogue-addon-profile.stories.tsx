@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
 import { AddonProfile } from '../features/catalogue/addon-profile-view';
 import {
@@ -14,25 +14,52 @@ import { getLocale } from '../paraglide/runtime';
 import { m } from '../paraglide/messages.js';
 import { AppShell } from '../shell/shell';
 import { PageStory, PatternStory } from './page';
+import { CandidateReaderBoundary } from '../subject/candidate-lifetime';
+
+const longAddon = `Harbor: Northern lights 港：北の光 항구：북극광 ${'ExtensionSansEspaces'.repeat(12)}`;
+const longBase = `Harbor 港 항구 港灣 المرفأ ${'GrundspielOhneLeerzeichen'.repeat(12)}`;
 
 function Example({
   scenario = 'ready',
   existing = false,
   work = false,
+  reference,
+  session,
 }: {
   scenario?: AddonScenario;
   existing?: boolean;
   work?: boolean;
+  reference?: 'long' | 'reload-failure';
+  session?: 'signed-in' | 'signed-out' | 'unknown' | 'unavailable';
 }) {
   const locale = getLocale();
-  const fixture = useMemo(() => addonProfileFixture(scenario, locale), [scenario, locale]);
+  const fixture = useMemo(() => {
+    const fixture = addonProfileFixture(scenario, locale);
+    if (reference === 'long') {
+      fixture.current.subject.labels = { en: longAddon, ja: longAddon, ko: longAddon, 'zh-Hant': longAddon };
+      fixture.work.subject.labels = { en: longBase, ja: longBase, ko: longBase, 'zh-Hant': longBase };
+    }
+    // Illustrative failure injection retains the original production reader and fixture request seams.
+    const load = fixture.transport.load;
+    let reads = 0;
+    fixture.props = {
+      ...fixture.props,
+      transport: {
+        ...fixture.transport,
+        load: async (address) =>
+          reference === 'reload-failure' && reads++ > 0 ? { ok: false, reason: 'unavailable' } : load(address),
+      },
+    };
+    return fixture;
+  }, [scenario, locale, reference]);
   return (
-    <PatternStory visitor={scenario === 'signed-out' ? 'Signed Out' : 'Signed In'}>
+    <PatternStory visitor={scenario === 'signed-out' || session === 'signed-out' ? 'Signed Out' : 'Signed In'}>
       <AppShell>
         <AddonProfile
           key={`${scenario}:${existing}:${work}:${locale}`}
           locale={locale}
           {...fixture.props}
+          {...(session ? { session } : {})}
           {...(existing ? { id: addonProfileId } : {})}
           {...(work ? { work: addonWorkId } : {})}
         />
@@ -155,5 +182,93 @@ export const ConcealedReader: Story = {
   play: async ({ canvasElement }) => {
     const canvas = await create(canvasElement);
     await expect(canvas.findByText(m.catalogue_create_concealed())).resolves.toBeVisible();
+  },
+};
+
+// UNRUN: these production-composed fixtures do not establish native, browser or layout acceptance.
+export const LongWorkReferences: Story = {
+  args: { existing: true, work: true, reference: 'long' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByRole('heading', { name: longAddon, level: 2 });
+    const title = await canvas.findByRole('heading', { name: longBase, level: 3 });
+    const link = within(title).getByRole('link', { name: longBase });
+    const frame = title.closest<HTMLElement>('[data-slot="profile-work-reference"]')!;
+    const view = canvasElement.ownerDocument.defaultView!;
+    const touch = view.innerWidth < 768 || view.matchMedia('(pointer: coarse)').matches;
+    for (const action of [link, canvas.getByRole('link', { name: m.candidate_view_public() })]) {
+      const rect = action.getBoundingClientRect();
+      await expect(rect.height).toBeGreaterThanOrEqual(touch ? 44 : 32);
+      if (touch) await expect(rect.width).toBeGreaterThanOrEqual(44);
+      else if (action !== link) await expect(rect.height).toBeLessThan(44);
+      await expect(action.scrollWidth).toBeLessThanOrEqual(action.clientWidth + 1);
+    }
+    await expect(link.getBoundingClientRect().right).toBeLessThanOrEqual(frame.getBoundingClientRect().right + 1);
+    await expect(link.querySelector('a, button, input, details')).toBeNull();
+    link.focus();
+    await userEvent.tab();
+    const details = canvasElement.querySelector<HTMLDetailsElement>('details[aria-label]')!;
+    await expect(details.querySelector('summary')).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    for (const code of details.querySelectorAll('code')) {
+      await expect(code).toBeVisible();
+      await expect(code.scrollWidth).toBeLessThanOrEqual(code.clientWidth + 1);
+    }
+    await expect(details.textContent).toContain(addonWorkId);
+    await expect(canvas.getByRole('main').scrollWidth).toBeLessThanOrEqual(canvas.getByRole('main').clientWidth + 1);
+  },
+};
+export const CurrentWithBaseWork: Story = { args: { existing: true, work: true } };
+export const CurrentWithoutSuppliedWork: Story = { args: { existing: true } };
+export const CurrentSignedOut: Story = { args: { existing: true, work: true, session: 'signed-out' } };
+export const CurrentSessionUnknown: Story = { args: { existing: true, work: true, session: 'unknown' } };
+export const CurrentSessionUnavailable: Story = { args: { existing: true, work: true, session: 'unavailable' } };
+export const ReferenceReloadFailure: Story = {
+  args: { existing: true, work: true, reference: 'reload-failure' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByRole('heading', { name: 'Harbor: Northern lights' });
+    const root = canvasElement.querySelector('[data-slot="view-heading"]')!.closest('article')!;
+    await userEvent.click(within(root).getAllByRole('button', { name: m.correction_reload() }).at(-1)!);
+    await expect(canvas.findByText(m.correction_unavailable())).resolves.toBeVisible();
+    await expect(canvas.queryByRole('heading', { name: 'Harbor: Northern lights' })).toBeNull();
+    await expect(root.querySelector('div[hidden]')).not.toBeNull();
+  },
+};
+
+function RetiringReference() {
+  const [retired, setRetired] = useState(false);
+  return (
+    <>
+      <button type="button" onClick={() => setRetired(true)}>
+        {m.account_sign_out()}
+      </button>
+      <CandidateReaderBoundary
+        observed={
+          retired
+            ? { state: 'signed-out', csrfToken: null }
+            : { state: 'signed-in', subject: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10', csrfToken: 'story-csrf-token' }
+        }
+        address="addon-reference-story"
+      >
+        <Example
+          existing
+          work
+          scenario={retired ? 'unavailable' : 'ready'}
+          session={retired ? 'signed-out' : 'signed-in'}
+        />
+      </CandidateReaderBoundary>
+    </>
+  );
+}
+export const CurrentReadRetirement: Story = {
+  render: () => <RetiringReference />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByRole('heading', { name: 'Harbor: Northern lights' });
+    await userEvent.click(canvas.getByRole('button', { name: m.account_sign_out() }));
+    await expect(canvas.findByText(m.correction_unavailable())).resolves.toBeVisible();
+    for (const value of ['Harbor: Northern lights', addonProfileId, addonWorkId])
+      await expect(canvasElement.innerHTML).not.toContain(value);
   },
 };

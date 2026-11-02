@@ -3,6 +3,7 @@ import { useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { EntityPicker, type EntityPickerSearch } from '@rezics/ui/entity-picker';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { ContentItemFrame, ContentItemHeading, ContentItemTitleLink } from '@rezics/ui/content-item';
 import { m } from '../../paraglide/messages.js';
 import { coverSrc } from '../../media/cover-src';
 import { subjectHref } from '../../subject/subject-href';
@@ -29,6 +30,11 @@ export type AddonProfileProps = AddonAddress & {
   review: (id: string, property: string, session?: string) => CandidateTransport;
   relations: (id: string) => RelationTransport;
 };
+
+const addonActionTarget =
+  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere] md:pointer-fine:min-h-8 md:pointer-fine:min-w-0 md:pointer-fine:py-1';
+const addonLinkTarget =
+  'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal py-2 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8 md:pointer-fine:min-w-0 md:pointer-fine:py-1';
 
 export const AddonProfile = catalogueEditor(AddonProfileLive);
 
@@ -64,13 +70,13 @@ function AddonProfileLive({
   const href = read?.public ? subjectHref({ id: read.public.subject.id, label: label.text }, locale).href : undefined;
   const profileLabel = pageText(read?.release.types[addonType]?.labels, locale);
   return (
-    <article className="mx-auto w-full max-w-4xl space-y-6 px-4 py-8 sm:px-6">
+    <article className="mx-auto w-full min-w-0 max-w-4xl space-y-6 px-4 py-8 sm:px-6 [overflow-wrap:anywhere]">
       <ViewHeadingActions
         label={m.addon_title({}, o)}
         headingClassName="font-sans"
         actions={
           href && (
-            <a href={href} className={buttonVariants({ variant: 'outline' })}>
+            <a href={href} className={buttonVariants({ variant: 'outline', className: addonActionTarget })}>
               {m.candidate_view_public({}, o)}
             </a>
           )
@@ -82,36 +88,99 @@ function AddonProfileLive({
         <EditorFailure locale={locale} reason={query.data?.ok === false ? query.data.reason : 'unavailable'} />
       )}
       {read && (
-        <div hidden={!query.data?.ok} className="space-y-8">
-          <section className="space-y-2 rounded-xl border border-border p-4">
-            <p>
-              <span lang={profileLabel.lang}>{profileLabel.text}</span> <code>{addonType}</code>
+        <div hidden={!query.data?.ok} className="min-w-0 space-y-8">
+          <section className="min-w-0 space-y-3">
+            <p lang={profileLabel.lang} className="text-sm text-muted-foreground">
+              {profileLabel.text}
             </p>
             <p>
               <DefinitionMeaning values={read.release.types[addonType]?.descriptions} locale={locale} />
             </p>
             {read.public && (
-              <p lang={label.lang} className="font-medium">
-                {label.text}
-              </p>
+              <ContentItemFrame as="div" data-slot="profile-addon-reference" className="min-w-0 py-3 sm:py-4">
+                <ContentItemHeading
+                  level={2}
+                  lang={label.lang}
+                  className="min-w-0 text-lg leading-snug font-semibold md:text-xl"
+                >
+                  {label.text || m.subject_value_unlabelled({}, o)}
+                </ContentItemHeading>
+              </ContentItemFrame>
             )}
             {read.work && (
-              <p>
-                {m.addon_base({}, o)}:{' '}
-                <a
-                  className="underline"
-                  lang={pageText(read.work.subject.labels, locale).lang}
-                  href={
-                    subjectHref(
-                      { id: read.work.subject.id, label: pageText(read.work.subject.labels, locale).text },
-                      locale,
-                    ).href
-                  }
-                >
-                  {pageText(read.work.subject.labels, locale).text}
-                </a>
-              </p>
+              <section className="min-w-0 space-y-2">
+                <h2 className="font-semibold">{m.addon_base({}, o)}</h2>
+                <ContentItemFrame as="div" data-slot="profile-work-reference" className="min-w-0 py-3 sm:py-4">
+                  <ContentItemHeading level={3} className="min-w-0 text-lg leading-snug font-semibold md:text-xl">
+                    <ContentItemTitleLink
+                      stretch={false}
+                      className={addonLinkTarget + ' underline underline-offset-4'}
+                      lang={pageText(read.work.subject.labels, locale).lang}
+                      href={
+                        subjectHref(
+                          { id: read.work.subject.id, label: pageText(read.work.subject.labels, locale).text },
+                          locale,
+                        ).href
+                      }
+                    >
+                      {pageText(read.work.subject.labels, locale).text || m.subject_value_unlabelled({}, o)}
+                    </ContentItemTitleLink>
+                  </ContentItemHeading>
+                </ContentItemFrame>
+              </section>
             )}
+            <details
+              className="min-w-0 max-w-full text-sm"
+              aria-label={`${m.addon_title({}, o)} · ${m.profile_work_reference_details({}, o)}`}
+            >
+              <summary
+                className={
+                  addonActionTarget +
+                  ' cursor-pointer content-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
+                }
+              >
+                {m.profile_work_reference_details({}, o)}
+              </summary>
+              <dl className="grid min-w-0 gap-3 py-2">
+                <div className="min-w-0">
+                  <dt className="text-muted-foreground">{m.profile_work_reference_type({}, o)}</dt>
+                  <dd>
+                    <code
+                      tabIndex={0}
+                      className="block max-w-full select-text whitespace-normal [overflow-wrap:anywhere]"
+                    >
+                      {addonType}
+                    </code>
+                  </dd>
+                </div>
+                {read.public && (
+                  <div className="min-w-0">
+                    <dt className="text-muted-foreground">{m.profile_work_reference_subject({}, o)}</dt>
+                    <dd>
+                      <code
+                        tabIndex={0}
+                        className="block max-w-full select-text whitespace-normal [overflow-wrap:anywhere]"
+                      >
+                        {read.public.subject.id}
+                      </code>
+                    </dd>
+                  </div>
+                )}
+                {read.work && (
+                  <div className="min-w-0">
+                    <dt className="text-muted-foreground">{m.addon_base({}, o)}</dt>
+                    <dd>
+                      <code
+                        tabIndex={0}
+                        className="block max-w-full select-text whitespace-normal [overflow-wrap:anywhere]"
+                      >
+                        {read.work.subject.id}
+                      </code>
+                    </dd>
+                  </div>
+                )}
+              </dl>
+            </details>
           </section>
           {!id && (
             <>
@@ -137,7 +206,7 @@ function AddonProfileLive({
                 onCreated={setCreated}
               />
               {created?.reader.state === 'ready' && (
-                <a className={buttonVariants()} href={`${created.reader.href}/addon`}>
+                <a className={buttonVariants({ className: addonActionTarget })} href={`${created.reader.href}/addon`}>
                   {m.addon_correct({}, o)}
                 </a>
               )}
@@ -196,6 +265,7 @@ function AddonProfileLive({
       )}
       <Button
         variant="outline"
+        className={addonActionTarget}
         onClick={() => {
           void query.refetch();
         }}

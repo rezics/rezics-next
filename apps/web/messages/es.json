@@ -4320,5 +4320,8 @@
   "fictional_work_work_reference": "Referencia de la obra",
   "fictional_work_subject_reference": "Referencia de la entrada",
   "fictional_work_type_reference": "Referencia del tipo",
-  "fictional_work_choose_another": "Elegir otra obra"
+  "fictional_work_choose_another": "Elegir otra obra",
+  "profile_work_reference_details": "Detalles de referencia",
+  "profile_work_reference_subject": "Referencia de la entidad",
+  "profile_work_reference_type": "Referencia del tipo"
 }

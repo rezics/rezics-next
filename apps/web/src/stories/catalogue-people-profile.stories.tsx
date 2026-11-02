@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { pickText } from '@rezics/composition';
 import { PeopleProfileEditor } from '../features/catalogue/people-profile-view';
 import { RelationEditor } from '../features/catalogue/relation-editor';
@@ -20,25 +20,58 @@ import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime';
 import { AppShell } from '../shell/shell';
 import { PageStory, PatternStory } from './page';
+import { CandidateReaderBoundary } from '../subject/candidate-lifetime';
+
+const longPerson = `Mira 佐藤 미라 米拉 ميرا ${'PersonneSansEspaces'.repeat(12)}`;
+const longWork = `Lantern Songs 灯籠の歌 등불의노래 燈籠之歌 ${'WerkOhneLeerzeichen'.repeat(12)}`;
+type WorkReference = 'long' | 'missing' | 'no-credit' | 'reload-failure';
 
 function ProfileStory({
   scenario = 'ready',
   mode = 'create',
   signedOut = false,
+  session = 'signed-in',
+  reference,
 }: {
   scenario?: PeopleScenario;
   mode?: PeopleMode;
   signedOut?: boolean;
+  session?: 'signed-in' | 'signed-out' | 'unknown' | 'unavailable';
+  reference?: WorkReference;
 }) {
   const locale = getLocale();
-  const fixture = useMemo(() => peopleProfileFixture(scenario, locale, mode), [scenario, locale, mode]);
+  const fixture = useMemo(() => {
+    const fixture = peopleProfileFixture(scenario, locale, mode);
+    if (reference === 'long') {
+      fixture.current.subject.labels = { en: longPerson, ja: longPerson, ko: longPerson, 'zh-Hant': longPerson };
+      fixture.work.subject.labels = { en: longWork, ja: longWork, ko: longWork, 'zh-Hant': longWork };
+    }
+    // Explicit illustrative response variations over the existing fixture; no native proof.
+    const load = fixture.transport.load;
+    let reads = 0;
+    fixture.transport = {
+      ...fixture.transport,
+      load: async () => {
+        if (reference === 'reload-failure' && reads++ > 0) return { ok: false, reason: 'unavailable' };
+        const read = await load();
+        return read.ok
+          ? {
+              ...read,
+              ...(reference === 'missing' ? { work: null } : {}),
+              ...(reference === 'no-credit' ? { credits: [] } : {}),
+            }
+          : read;
+      },
+    };
+    return fixture;
+  }, [scenario, locale, mode, reference]);
   return (
-    <PatternStory visitor={signedOut ? 'Signed Out' : 'Signed In'} path="/catalogue/people">
+    <PatternStory visitor={signedOut || session === 'signed-out' ? 'Signed Out' : 'Signed In'} path="/catalogue/people">
       <AppShell>
         <PeopleProfileEditor
           locale={locale}
           {...(mode !== 'create' ? { id: fixture.id } : {})}
-          session={signedOut ? 'signed-out' : 'signed-in'}
+          session={signedOut ? 'signed-out' : session}
           transport={fixture.transport}
           propose={fixture.propose}
           review={fixture.review}
@@ -90,6 +123,12 @@ const meta = {
   tags: ['autodocs'],
   parameters: {
     layout: 'fullscreen',
+    viewport: {
+      options: {
+        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
+        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
+      },
+    },
     docs: {
       description: {
         component:
@@ -286,3 +325,99 @@ export const CreatedReadbackConcealed: Story = {
 export const CreateRoute: Story = { render: () => <ProfileRoute mode="create" /> };
 export const PersonRoute: Story = { render: () => <ProfileRoute mode="person" /> };
 export const OrganizationRoute: Story = { render: () => <ProfileRoute mode="organization" /> };
+
+// UNRUN: production-composed presentation fixtures, including browser geometry and keyboard assertions.
+export const LongWorkReference: Story = {
+  args: { reference: 'long' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const title = await canvas.findByRole('heading', { name: longWork, level: 3 });
+    const frame = title.closest<HTMLElement>('[data-slot="profile-work-reference"]')!;
+    const link = within(frame).getByRole('link', { name: longWork });
+    const correction = within(frame).getByRole('link', { name: m.relation_title() });
+    const view = canvasElement.ownerDocument.defaultView!;
+    const touch = view.innerWidth < 768 || view.matchMedia('(pointer: coarse)').matches;
+    const rect = link.getBoundingClientRect();
+    await expect(rect.height).toBeGreaterThanOrEqual(touch ? 44 : 32);
+    if (touch) await expect(rect.width).toBeGreaterThanOrEqual(44);
+    await expect(rect.left).toBeGreaterThanOrEqual(frame.getBoundingClientRect().left - 1);
+    await expect(rect.right).toBeLessThanOrEqual(frame.getBoundingClientRect().right + 1);
+    await expect(link.scrollWidth).toBeLessThanOrEqual(link.clientWidth + 1);
+    await expect(link.scrollHeight).toBeLessThanOrEqual(link.clientHeight + 1);
+    await assertPeopleTarget(correction, frame, canvasElement);
+    await expect(link.querySelector('a, button, input, details')).toBeNull();
+    link.focus();
+    await userEvent.tab();
+    await expect(correction).toHaveFocus();
+    await userEvent.tab();
+    const summary = frame.querySelector('summary')!;
+    await expect(summary).toHaveFocus();
+    await assertPeopleTarget(summary, frame, canvasElement);
+    await userEvent.keyboard('{Enter}');
+    const code = frame.querySelector('code')!;
+    await expect(code).toBeVisible();
+    await expect(code.textContent).toBe(peopleWorkId);
+    await expect(code.scrollWidth).toBeLessThanOrEqual(code.clientWidth + 1);
+    await expect(canvas.getByRole('main').scrollWidth).toBeLessThanOrEqual(canvas.getByRole('main').clientWidth + 1);
+  },
+};
+export const LongPersonReference: Story = { args: { mode: 'person', reference: 'long' } };
+export const MissingWorkReference: Story = { args: { reference: 'missing' } };
+export const WorkWithoutCreditField: Story = {
+  args: { reference: 'no-credit' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.findByText(m.people_profile_no_credit())).resolves.toBeVisible();
+    await expect(canvas.queryByRole('link', { name: m.relation_title() })).toBeNull();
+  },
+};
+export const CurrentSignedOut: Story = { args: { mode: 'person', session: 'signed-out' } };
+export const CurrentSessionUnknown: Story = { args: { mode: 'person', session: 'unknown' } };
+export const CurrentSessionUnavailable: Story = { args: { mode: 'person', session: 'unavailable' } };
+export const WorkSessionUnknown: Story = { args: { session: 'unknown' } };
+export const WorkSessionUnavailable: Story = { args: { session: 'unavailable' } };
+export const ReferenceReloadFailure: Story = {
+  args: { mode: 'person', reference: 'reload-failure' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByRole('link', { name: 'Mira Sato' });
+    await userEvent.click(canvas.getByRole('button', { name: m.correction_reload() }));
+    await expect(canvas.findByText(m.correction_unavailable())).resolves.toBeVisible();
+    await expect(canvas.queryByRole('link', { name: 'Mira Sato' })).toBeNull();
+  },
+};
+
+function RetiringReference() {
+  const [retired, setRetired] = useState(false);
+  return (
+    <>
+      <button type="button" onClick={() => setRetired(true)}>
+        {m.account_sign_out()}
+      </button>
+      <CandidateReaderBoundary
+        observed={
+          retired
+            ? { state: 'signed-out', csrfToken: null }
+            : { state: 'signed-in', subject: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10', csrfToken: 'story-csrf-token' }
+        }
+        address="people-reference-story"
+      >
+        <ProfileStory
+          mode="person"
+          scenario={retired ? 'unavailable' : 'ready'}
+          session={retired ? 'signed-out' : 'signed-in'}
+        />
+      </CandidateReaderBoundary>
+    </>
+  );
+}
+export const CurrentReadRetirement: Story = {
+  render: () => <RetiringReference />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByRole('link', { name: 'Mira Sato' });
+    await userEvent.click(canvas.getByRole('button', { name: m.account_sign_out() }));
+    await expect(canvas.findByText(m.correction_unavailable())).resolves.toBeVisible();
+    await expect(canvasElement.textContent).not.toContain('Mira Sato');
+  },
+};

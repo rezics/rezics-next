@@ -4320,5 +4320,8 @@
   "fictional_work_work_reference": "作品參照識別碼",
   "fictional_work_subject_reference": "條目參照識別碼",
   "fictional_work_type_reference": "類型參照識別碼",
-  "fictional_work_choose_another": "選擇其他作品"
+  "fictional_work_choose_another": "選擇其他作品",
+  "profile_work_reference_details": "參照詳情",
+  "profile_work_reference_subject": "條目參照",
+  "profile_work_reference_type": "類型參照"
 }

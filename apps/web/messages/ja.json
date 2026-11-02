@@ -4320,5 +4320,8 @@
   "fictional_work_work_reference": "作品の参照ID",
   "fictional_work_subject_reference": "項目の参照ID",
   "fictional_work_type_reference": "種類の参照ID",
-  "fictional_work_choose_another": "別の作品を選ぶ"
+  "fictional_work_choose_another": "別の作品を選ぶ",
+  "profile_work_reference_details": "参照の詳細",
+  "profile_work_reference_subject": "対象の参照ID",
+  "profile_work_reference_type": "種類の参照ID"
 }

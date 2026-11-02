@@ -4,6 +4,7 @@ import { useState, type ReactNode } from 'react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Field, FieldError, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
+import { ContentItemFrame, ContentItemHeading, ContentItemTitleLink } from '@rezics/ui/content-item';
 import { m } from '../../paraglide/messages.js';
 import { subjectHref } from '../../subject/subject-href';
 import type { CandidateTransport } from '../../subject/candidate-review';
@@ -120,26 +121,61 @@ function ProfileIntro({ read, locale }: { read: Current; locale: string }) {
       <p className="text-muted-foreground">{m.people_profile_terms({}, o)}</p>
       <p className="text-muted-foreground">{m.people_profile_disclosure({}, o)}</p>
       {work && (
-        <section className="min-w-0 space-y-2 rounded-xl border border-border bg-card p-4 [overflow-wrap:anywhere]">
+        <section className="min-w-0 space-y-2 [overflow-wrap:anywhere]">
           <h2 className="font-semibold">{m.people_profile_credit({}, o)}</h2>
-          <a
-            lang={workTitle.lang ?? undefined}
-            className={peopleLinkTarget + ' underline'}
-            href={subjectHref({ id: work.id, label: workTitle.text }, locale).href}
+          <ContentItemFrame
+            as="div"
+            data-slot="profile-work-reference"
+            className="flex min-w-0 flex-col gap-2 py-3 sm:py-4"
           >
-            {workTitle.text || m.subject_value_unlabelled({}, o)}
-          </a>
-          <p>{m.people_profile_credit_help({}, o)}</p>
-          {read.credits.length ? (
-            <a
-              className={buttonVariants({ variant: 'outline', className: peopleActionTarget })}
-              href={`${subjectHref({ id: work.id, label: workTitle.text }, locale).href}/relation-edit`}
+            <ContentItemHeading level={3} className="min-w-0 text-lg leading-snug font-semibold md:text-xl">
+              <ContentItemTitleLink
+                stretch={false}
+                lang={workTitle.lang ?? undefined}
+                className={peopleLinkTarget + ' underline underline-offset-4'}
+                href={subjectHref({ id: work.id, label: workTitle.text }, locale).href}
+              >
+                {workTitle.text || m.subject_value_unlabelled({}, o)}
+              </ContentItemTitleLink>
+            </ContentItemHeading>
+            <p>{m.people_profile_credit_help({}, o)}</p>
+            {read.credits.length ? (
+              <a
+                className={buttonVariants({ variant: 'outline', className: peopleActionTarget + ' self-start' })}
+                href={`${subjectHref({ id: work.id, label: workTitle.text }, locale).href}/relation-edit`}
+              >
+                {m.relation_title({}, o)}
+              </a>
+            ) : (
+              <p role="status">{m.people_profile_no_credit({}, o)}</p>
+            )}
+            <details
+              className="min-w-0 max-w-full text-sm"
+              aria-label={`${m.people_profile_credit({}, o)} · ${m.profile_work_reference_details({}, o)}`}
             >
-              {m.relation_title({}, o)}
-            </a>
-          ) : (
-            <p role="status">{m.people_profile_no_credit({}, o)}</p>
-          )}
+              <summary
+                className={
+                  peopleActionTarget +
+                  ' cursor-pointer content-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
+                }
+              >
+                {m.profile_work_reference_details({}, o)}
+              </summary>
+              <dl className="grid min-w-0 gap-2 py-2">
+                <div className="min-w-0">
+                  <dt className="text-muted-foreground">{m.profile_work_reference_subject({}, o)}</dt>
+                  <dd className="min-w-0">
+                    <code
+                      tabIndex={0}
+                      className="block max-w-full select-text whitespace-normal [overflow-wrap:anywhere]"
+                    >
+                      {work.id}
+                    </code>
+                  </dd>
+                </div>
+              </dl>
+            </details>
+          </ContentItemFrame>
         </section>
       )}
     </div>

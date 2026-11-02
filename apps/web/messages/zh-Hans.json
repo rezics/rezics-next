@@ -4321,5 +4321,8 @@
   "fictional_work_work_reference": "作品引用标识",
   "fictional_work_subject_reference": "条目引用标识",
   "fictional_work_type_reference": "类型引用标识",
-  "fictional_work_choose_another": "选择其他作品"
+  "fictional_work_choose_another": "选择其他作品",
+  "profile_work_reference_details": "引用详情",
+  "profile_work_reference_subject": "条目引用",
+  "profile_work_reference_type": "类型引用"
 }

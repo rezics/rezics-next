@@ -4320,5 +4320,8 @@
   "fictional_work_work_reference": "Werkreferenz",
   "fictional_work_subject_reference": "Eintragsreferenz",
   "fictional_work_type_reference": "Typreferenz",
-  "fictional_work_choose_another": "Anderes Werk auswählen"
+  "fictional_work_choose_another": "Anderes Werk auswählen",
+  "profile_work_reference_details": "Referenzdetails",
+  "profile_work_reference_subject": "Referenz des Eintrags",
+  "profile_work_reference_type": "Typreferenz"
 }
