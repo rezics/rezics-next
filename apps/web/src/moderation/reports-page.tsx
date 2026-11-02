@@ -1,4 +1,4 @@
-import { useContext, useId, useRef, useState, useSyncExternalStore } from 'react';
+import { useContext, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { QueryClientContext } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
@@ -52,6 +52,8 @@ export function ModerationReportsPage(props: {
   const client = useContext(QueryClientContext);
   const browserClient = typeof window !== 'undefined' ? client : undefined;
   const visit = useRef<ReturnType<typeof createVisit> | null>(null);
+  const continuation = useRef<{ generation: string; cursor: string } | null>(null);
+  const focusGeneration = useRef<string | null>(null);
   function createVisit() {
     const original = props;
     const page = original.page;
@@ -64,6 +66,7 @@ export function ModerationReportsPage(props: {
     let serial = 0;
     const listeners = new Set<() => void>();
     const retire = () => {
+      if (continuation.current?.generation === page.generation) continuation.current = null;
       if (retired) return;
       retired = true;
       serial++;
@@ -120,7 +123,11 @@ export function ModerationReportsPage(props: {
           });
         };
       },
-      next: (cursor: string) => leave(() => original.onNext?.(cursor)),
+      next: (cursor: string) =>
+        leave(() => {
+          continuation.current = { generation: page.generation, cursor };
+          original.onNext?.(cursor);
+        }),
       select: (selection: ReportSelection) =>
         leave(() => {
           void original.onSelection?.(selection);
@@ -143,6 +150,18 @@ export function ModerationReportsPage(props: {
   }
   const previous = visit.current;
   if (!previous || previous.page.generation !== props.page.generation) {
+    if (previous) {
+      const requested = continuation.current;
+      continuation.current = null;
+      focusGeneration.current =
+        requested?.generation === previous.page.generation &&
+        requested.cursor === props.page.input.cursor &&
+        props.page.state === 'ready' &&
+        props.active !== false &&
+        reportPageIsCurrent(props.page, props.input)
+          ? props.page.generation
+          : null;
+    }
     previous?.retire();
     visit.current = createVisit();
   }
@@ -163,6 +182,13 @@ export function ModerationReportsPage(props: {
     () => 0,
   );
   const retired = current.observe();
+  const focusContinuation =
+    focusGeneration.current === props.page.generation &&
+    !retired &&
+    props.page.state === 'ready' &&
+    props.active !== false &&
+    reportPageIsCurrent(props.page, props.input);
+  if (!focusContinuation && focusGeneration.current === props.page.generation) focusGeneration.current = null;
   // The browser cache is authoritative even before a session hook has hydrated. Standalone SSR
   // fixtures have no browser source; they retain only their explicit prepared native admission.
   if (retired || (typeof window !== 'undefined' && !browserClient) || (current.owner && !current.owner.available()))
@@ -197,6 +223,10 @@ export function ModerationReportsPage(props: {
         next={page.next}
         state={page.state}
         queueIdentity={page.generation}
+        focusContinuation={focusContinuation}
+        onContinuationFocused={() => {
+          if (focusGeneration.current === page.generation) focusGeneration.current = null;
+        }}
         isCurrent={current.isCurrent}
         onLeave={current.depart}
         onAction={current.submit}
@@ -212,6 +242,8 @@ export function ModerationReportsPage(props: {
 
 type ModerationReportsViewProps = {
   queueIdentity?: string;
+  focusContinuation?: boolean;
+  onContinuationFocused?: () => void;
   isCurrent?: () => boolean;
   boardId?: string;
   state?: ReportReadState;
@@ -266,6 +298,8 @@ function ReportsView({
   onRestart,
   viewerId,
   queueIdentity,
+  focusContinuation = false,
+  onContinuationFocused,
   isCurrent,
   onLeave,
 }: ModerationReportsViewProps) {
@@ -275,6 +309,23 @@ function ReportsView({
   const { requestNavigation } = useAuthoringDeparture(false, false, 'report-selectors');
   const controlsId = useId();
   const [retired, setRetired] = useState(false);
+  const continuationBoundary = useRef<HTMLElement>(null);
+  const continuationFocusHandled = useRef(false);
+  useLayoutEffect(() => {
+    if (
+      !focusContinuation ||
+      continuationFocusHandled.current ||
+      state !== 'ready' ||
+      retired ||
+      isCurrent?.() === false
+    )
+      return;
+    const boundary = continuationBoundary.current;
+    if (!boundary) return;
+    continuationFocusHandled.current = true;
+    boundary.focus();
+    onContinuationFocused?.();
+  }, [focusContinuation, state, retired, isCurrent, onContinuationFocused]);
   const select = (value: ReportSelection) => {
     if (retired || isCurrent?.() === false) return;
     requestNavigation(() => {
@@ -321,7 +372,10 @@ function ReportsView({
   }[selection.order];
   return (
     <article
-      className="mx-auto w-full min-w-0 max-w-4xl space-y-6 text-foreground [overflow-wrap:anywhere]"
+      ref={continuationBoundary}
+      tabIndex={-1}
+      aria-label={m.moderation_reports_heading()}
+      className="mx-auto w-full min-w-0 max-w-4xl space-y-6 text-foreground [overflow-wrap:anywhere] focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       onClick={(event) => {
         if (
           retired ||

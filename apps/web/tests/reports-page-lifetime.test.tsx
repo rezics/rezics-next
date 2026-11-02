@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, StrictMode, type ComponentProps } from 'react';
+import userEvent from '@testing-library/user-event';
 import { createKernelClient } from '@rezics/client';
 import { fromPlainText } from '@rezics/document';
 import * as start from '../.storybook/react-start';
@@ -23,6 +24,7 @@ const globals = {
   HTMLElement: window.HTMLElement,
   HTMLButtonElement: window.HTMLButtonElement,
   HTMLFormElement: window.HTMLFormElement,
+  KeyboardEvent: window.KeyboardEvent,
   Element: window.Element,
   Node: window.Node,
   Document: window.Document,
@@ -733,22 +735,34 @@ test('a new mount cannot reuse the old native read during the synchronous Strict
 test('confirmed report departure retires the original reader before continuation and fences late individual success', async () => {
   let queued!: HTMLButtonElement;
   let replacements = 0;
+  let continued = '';
   await paint({
-    onNext: () => {
+    onNext: (cursor) => {
       queued.click();
       replacements++;
+      continued = cursor;
     },
   });
   await review();
   queued = button(m.moderation_dismiss(), 1);
   await click(m.moderation_dismiss());
-  await click(m.threads_next_page());
+  const user = userEvent.setup({ document: window.document });
+  button(m.threads_next_page()).focus();
+  await act(async () => user.keyboard('{Enter}'));
   const dialog = window.document.querySelector<HTMLElement>('[role="alertdialog"]')!;
   expect(dialog.textContent).toContain(m.moderation_review_leave_pending());
   await chooseDeparture(m.thread_authoring_leave());
   expect(replacements).toBe(1);
+  expect(continued).toBe('opaque-next');
   expect(sends).toHaveLength(1);
   hidden();
+  rows = [];
+  next = null;
+  const continuationInput = { ...input, cursor: continued };
+  await paint({ input: continuationInput, page: await fresh(continuationInput) });
+  const boundary = host.querySelector('article');
+  expect(boundary?.tabIndex).toBe(-1);
+  expect(window.document.activeElement).toBe(boundary);
   await settle(0);
   expect(refreshes).toBe(0);
   hidden();
