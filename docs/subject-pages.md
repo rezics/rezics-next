@@ -765,7 +765,8 @@ other view. Sections a type does not support are left out; the rest keep this or
    narrow column. On larger screens the header's top right holds the reaction cluster (like, love, laugh, insightful and sad, each with its count; a
    subject has no upvote or downvote because its score is its rating) and an overflow menu that carries copy link
    and report. One reaction per reader; choosing another kind replaces it. Signed-out readers see the counts and a
-   sign-in link.
+   sign-in link. Signed-in readers can retry a failed own-reaction read from the header; each retry starts a fresh
+   page-scoped observation, stays disabled while pending and keeps public counts visible.
 2. **About.** The summary (spoiler-safe by default), a short set of key facts chosen by the type's template, genres
    and the most-used tags, and content warnings.
    When a subject has no summary, About shows its short description instead, and the header never shows one.

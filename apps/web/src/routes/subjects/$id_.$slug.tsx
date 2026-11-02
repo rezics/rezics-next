@@ -454,6 +454,11 @@ export function SubjectOverview({
                   signedIn={session === 'signed-in'}
                   personalReady={session !== 'signed-in' || subjectReaction.ready}
                   reactionOrigin={subjectReaction.origin}
+                  reactionRecovery={{
+                    failed: subjectReaction.recoveryFailed,
+                    pending: subjectReaction.recoveryPending,
+                    retry: subjectReaction.retryOwnReaction,
+                  }}
                   onPersonalChange={async (kind) => {
                     if (!subjectReaction.origin.isCurrent()) return;
                     subjectReaction.applyMutation(kind);

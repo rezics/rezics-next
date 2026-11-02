@@ -20,6 +20,7 @@ export function SubjectHeaderActions({
   personalReady = true,
   onPersonalChange,
   reactionOrigin,
+  reactionRecovery,
   children,
 }: {
   id: string;
@@ -30,6 +31,7 @@ export function SubjectHeaderActions({
   personalReady?: boolean;
   onPersonalChange?: (kind: SubjectReactionKind | null) => Promise<void>;
   reactionOrigin?: { key: string; reader: string | null; isCurrent(): boolean };
+  reactionRecovery?: { failed: boolean; pending: boolean; retry(): void };
   children?: ReactNode;
 }) {
   return (
@@ -58,6 +60,23 @@ export function SubjectHeaderActions({
             {m.subject_reactions_unavailable()}
           </p>
         )}
+        {reactionRecovery && (reactionRecovery.failed || reactionRecovery.pending) ? (
+          <div className="flex items-center gap-2">
+            <p className="text-sm text-muted-foreground" role="status">
+              {reactionRecovery.pending
+                ? m.subject_reaction_recovery_pending()
+                : m.subject_reaction_recovery_failure()}
+            </p>
+            <button
+              type="button"
+              className="rounded-md px-2 py-1 text-sm underline"
+              disabled={reactionRecovery.pending}
+              onClick={reactionRecovery.retry}
+            >
+              {m.subject_reaction_recovery_retry()}
+            </button>
+          </div>
+        ) : null}
         <div className="shrink-0">
           <PostActions target={{ kind: 'subject', id }} verification={verification} />
         </div>

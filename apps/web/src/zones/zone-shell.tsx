@@ -387,6 +387,11 @@ function ZoneSubjectPage({
         signedIn={session === 'signed-in'}
         personalReady={session !== 'signed-in' || privateReactionReady}
         reactionOrigin={reactionReader.origin}
+        reactionRecovery={{
+          failed: reactionReader.recoveryFailed,
+          pending: reactionReader.recoveryPending,
+          retry: reactionReader.retryOwnReaction,
+        }}
         onPersonalChange={async (kind) => {
           if (!privateReactionReady || !reactionReader.origin.isCurrent()) return;
           reactionReader.applyMutation(kind);

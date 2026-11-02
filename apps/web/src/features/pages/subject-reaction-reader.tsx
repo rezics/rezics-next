@@ -16,6 +16,7 @@ type ReactionScopeState = {
   owners: Map<number, () => boolean>;
   retirement: number;
   healthy: boolean;
+  recovering: boolean;
 };
 
 export type SubjectReactionOrigin = {
@@ -95,6 +96,10 @@ class SubjectReactionReaderRegistry {
     if (!scope || !this.hasDesiredOwner(scope) || scope.admission !== this.sessionAdmission) return;
     if (event.type === 'removed' || (event.type === 'updated' && event.action.type === 'error')) {
       scope.healthy = false;
+      scope.recovering = false;
+      this.notify();
+    } else if (event.type === 'updated' && event.action.type === 'success' && scope.recovering) {
+      scope.recovering = false;
       this.notify();
     }
   }
@@ -119,23 +124,59 @@ class SubjectReactionReaderRegistry {
   scope(base: string, admission: number, reader: string | null, view: string) {
     let scope = this.scopes.get(base);
     if (!scope) {
-      const generation = ++nextScopeId;
-      scope = {
-        base,
-        key: JSON.stringify([this.id, base, generation]),
-        view,
-        generation,
-        admission,
-        reader,
-        owners: new Map(),
-        retirement: 0,
-        healthy: true,
-      };
-      this.scopes.set(base, scope);
-      this.scopesByKey.set(scope.key, scope);
-      this.deferDelete(scope);
+      scope = this.createScope(base, admission, reader, view, false);
     }
     return scope;
+  }
+
+  private createScope(base: string, admission: number, reader: string | null, view: string, recovering: boolean) {
+    const generation = ++nextScopeId;
+    const scope: ReactionScopeState = {
+      base,
+      key: JSON.stringify([this.id, base, generation]),
+      view,
+      generation,
+      admission,
+      reader,
+      owners: new Map(),
+      retirement: 0,
+      healthy: true,
+      recovering,
+    };
+    this.scopes.set(base, scope);
+    this.scopesByKey.set(scope.key, scope);
+    this.deferDelete(scope);
+    return scope;
+  }
+
+  private hasAdmittedOwner(scope: ReactionScopeState, isDesired: () => boolean) {
+    if (
+      this.scopes.get(scope.base) !== scope ||
+      scope.admission !== this.sessionAdmission ||
+      !this.sessionHealthy ||
+      this.client.getQueryState(['session'])?.status !== 'success' ||
+      !isDesired()
+    )
+      return false;
+    const cached = this.client.getQueryData<SessionAdmission>(['session']);
+    if (scope.reader !== null && (cached?.state !== 'signed-in' || cached.subject !== scope.reader)) return false;
+    return [...scope.owners.values()].some((ownerIsDesired) => ownerIsDesired());
+  }
+
+  recoveryFailed(scope: ReactionScopeState, isDesired: () => boolean) {
+    return !scope.healthy && this.hasAdmittedOwner(scope, isDesired);
+  }
+
+  recoveryPending(scope: ReactionScopeState, isDesired: () => boolean) {
+    return scope.recovering && this.hasAdmittedOwner(scope, isDesired);
+  }
+
+  recover(scope: ReactionScopeState, isDesired: () => boolean) {
+    if (scope.healthy || !this.hasAdmittedOwner(scope, isDesired)) return false;
+    this.scopesByKey.delete(scope.key);
+    this.createScope(scope.base, scope.admission, scope.reader, scope.view, true);
+    this.notify();
+    return true;
   }
 
   private deferDelete(scope: ReactionScopeState) {
@@ -268,6 +309,10 @@ function useSubjectReactionAdmission(input: {
     }),
     [token, reader, registry, scope],
   );
+  const isDesired = useCallback(() => desired.current === token, [token]);
+  const retryOwnReaction = useCallback(() => {
+    if (scope && reader !== null && current.ready) registry.recover(scope, isDesired);
+  }, [current.ready, isDesired, reader, registry, scope]);
 
   return {
     key: token,
@@ -276,6 +321,9 @@ function useSubjectReactionAdmission(input: {
     active,
     origin,
     queryScope,
+    recoveryFailed: Boolean(scope && reader !== null && registry.recoveryFailed(scope, isDesired)),
+    recoveryPending: Boolean(scope && reader !== null && registry.recoveryPending(scope, isDesired)),
+    retryOwnReaction,
   };
 }
 
