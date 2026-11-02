@@ -17,34 +17,37 @@ type SubjectTermsNavigationGuardProps = {
   dirty: boolean;
   pending: boolean;
   locale: string;
+  isActive?: () => boolean;
+  leaveLabel?: string;
 };
 
 /** Keep a live Terms editor on the current route until its contributor stays or discards the draft. */
-export function SubjectTermsNavigationGuard({ active, dirty, pending, locale }: SubjectTermsNavigationGuardProps) {
+export function SubjectTermsNavigationGuard({ active, dirty, pending, locale, isActive, leaveLabel }: SubjectTermsNavigationGuardProps) {
   const protect = active && (dirty || pending);
   const router = useRouter({ warn: false });
 
   useEffect(() => {
     if (!protect) return;
     const beforeUnload = (event: BeforeUnloadEvent) => {
+      if (isActive && !isActive()) return;
       event.preventDefault();
       event.returnValue = '';
     };
     window.addEventListener('beforeunload', beforeUnload);
     return () => window.removeEventListener('beforeunload', beforeUnload);
-  }, [protect]);
+  }, [protect, isActive]);
 
-  return router ? createElement(RouterDepartureGuard, { protect, pending, locale }) : null;
+  return router ? createElement(RouterDepartureGuard, { protect, pending, locale, isActive, leaveLabel }) : null;
 }
 
-function RouterDepartureGuard({ protect, pending, locale }: { protect: boolean; pending: boolean; locale: string }) {
+function RouterDepartureGuard({ protect, pending, locale, isActive, leaveLabel }: Omit<SubjectTermsNavigationGuardProps, 'active' | 'dirty'> & { protect: boolean }) {
   const returnFocus = useRef<HTMLElement | null>(null);
   const stayButton = useRef<HTMLButtonElement>(null);
   const resolved = useRef(false);
   const leaving = useRef(false);
   const blocker = useBlocker({
     shouldBlockFn: () => {
-      if (!protect) return false;
+      if (!protect || (isActive && !isActive())) return false;
       returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       resolved.current = false;
       leaving.current = false;
@@ -106,7 +109,7 @@ function RouterDepartureGuard({ protect, pending, locale }: { protect: boolean; 
         createElement(
           AlertDialogAction,
           { variant: 'destructive', onClick: () => resolve(true) },
-          m.zone_editor_discard({}, options),
+          leaveLabel ?? m.zone_editor_discard({}, options),
         ),
       ),
     ),

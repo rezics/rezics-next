@@ -1,4 +1,5 @@
 import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
+import { CreateSubjectLifetime, CreateSubjectProfileDraft, hasInitialDraft } from './create-subject-lifetime';
 import { LiteraryProfileEntry } from './literary-profile-entry';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
@@ -184,12 +185,14 @@ function CreateSubjectFormLive({
   }
   const [busy, setBusy] = useState(false);
   const [created, setCreated] = useState<Created>();
+  const confirmed = useRef(false);
+  const [profileDirty, setProfileDirty] = useState(false);
   const outcome = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     if (!busy && (created || failure)) outcome.current?.focus();
   }, [busy, created, failure]);
   const running = useRef(false);
-  const unresolvedProfile = useRef(false);
+  const unresolvedDelivery = useRef(false);
   const request = useRef<CreateSubjectCommand | null>(null);
   const types = definitions.data?.ok
     ? definitions.data.types.filter((entry) => !profile?.type || entry.id === profile.type)
@@ -198,7 +201,7 @@ function CreateSubjectFormLive({
   const selectedTypeName = selectedType?.label.trim();
   const hasTypeName = !!selectedTypeName && selectedTypeName !== type;
   const uncertain =
-    (failure?.reason === 'unavailable' && request.current !== null) || (!!profile && unresolvedProfile.current);
+    (failure?.reason === 'unavailable' && request.current !== null) || (unresolvedDelivery.current);
   const locked = busy || uncertain || failure?.reason === 'conflict';
   const disabled = locked || session !== 'signed-in';
   const errors = failure?.errors ?? [];
@@ -256,7 +259,7 @@ function CreateSubjectFormLive({
         reject({ ok: false, reason: 'invalid', errors: draft.errors });
         return;
       }
-      request.current = { item: draft.item, key: crypto.randomUUID() };
+      request.current = { item: structuredClone(draft.item), key: crypto.randomUUID() };
     }
     running.current = true;
     setBusy(true);
@@ -265,14 +268,15 @@ function CreateSubjectFormLive({
       const result = await transport.submit(request.current);
       if (!lifetime.active()) return;
       if (result.ok) {
+        confirmed.current = true;
         setCreated(result);
         onCreated?.(result);
         if (result.reader.state === 'ready') onNavigate(result.reader.href);
       } else {
         reject(result);
-        if (profile && result.reason === 'unavailable') unresolvedProfile.current = true;
+        if (result.reason === 'unavailable') unresolvedDelivery.current = true;
         // Uncertain delivery and key conflicts retain the exact frozen command. Never silently create a second identity.
-        if (!unresolvedProfile.current && result.reason !== 'unavailable' && result.reason !== 'conflict')
+        if (!unresolvedDelivery.current && result.reason !== 'unavailable' && result.reason !== 'conflict')
           request.current = null;
         if (result.refreshDefinitions) {
           await reloadDefinitions();
@@ -280,7 +284,7 @@ function CreateSubjectFormLive({
       }
     } catch {
       if (!lifetime.active()) return;
-      if (profile) unresolvedProfile.current = true;
+      unresolvedDelivery.current = true;
       setFailure({ ok: false, reason: 'unavailable' });
     } finally {
       if (!lifetime.active()) return;
@@ -312,6 +316,13 @@ function CreateSubjectFormLive({
 
   return (
     <article className="mx-auto min-w-0 w-full max-w-3xl space-y-6 text-foreground [overflow-wrap:anywhere]">
+      <CreateSubjectLifetime
+        locale={locale}
+        dirty={profileDirty || hasInitialDraft(type, profile?.type ?? '', rows)}
+        pending={!created && request.current !== null}
+        confirmed={!!created}
+        isActive={() => lifetime.active() && !confirmed.current}
+      />
       {!profile?.hideHeading && (
         <header className="space-y-3">
           {profile ? (
@@ -558,7 +569,11 @@ function CreateSubjectFormLive({
                   <FieldError id="create-type-error">{guidance('create-type', 'type')}</FieldError>
                 )}
               </Field>
-              {profile?.fields(type, disabled)}
+              {profile && (
+                <CreateSubjectProfileDraft type={type} onDirty={setProfileDirty}>
+                  {profile.fields(type, disabled)}
+                </CreateSubjectProfileDraft>
+              )}
               {failure && (
                 <div
                   ref={outcome}
@@ -619,7 +634,7 @@ function CreateSubjectFormLive({
                     </ul>
                   )}
                   {failure.refreshDefinitions && <p>{m.catalogue_create_refresh({}, options)}</p>}
-                  {failure.reason === 'conflict' && !unresolvedProfile.current && (
+                  {failure.reason === 'conflict' && !unresolvedDelivery.current && (
                     <Button
                       type="button"
                       variant="outline"

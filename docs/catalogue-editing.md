@@ -90,6 +90,11 @@ interaction execution and phone/desktop visual review remain integration work.
 Recipe departure reuses the localized authoring prompt; uncertain retries preserve the exact command while bypassing
 local definition checks and still reaching current native authorization.
 
+Initial Subject creation uses the shared departure guard for entered terms, Type changes and profile controls;
+blank language rows and a preset profile Type remain clean, while pending or uncertain commands warn that leaving
+loses local retry recovery without cancelling the request. Profile controls are compared with their initial values
+per Type without invoking validation callbacks, so returning to unchanged values clears that draft's warning.
+
 ## Browser flow: fictional character identity and credits
 
 The catalogue creation entry, a fictional character's header and a work's Characters view offer **Character identity
