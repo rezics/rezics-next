@@ -492,9 +492,16 @@ test('the unprofiled story creates a generic label on its actual subject and kee
     );
     for (let index = 0; index < 2; index++) {
       if (!('step' in created)) throw new Error('Expected a captured label step');
-      created = await applySubjectLabelMutation(request('POST'), env, {
-        intent: 'label-step', subjectId: unprofiledSubjectId, token: created.step.token,
-      }, client);
+      created = await applySubjectLabelMutation(
+        request('POST'),
+        env,
+        {
+          intent: 'label-step',
+          subjectId: unprofiledSubjectId,
+          token: created.step.token,
+        },
+        client,
+      );
     }
     expect(created.ok).toBe(true);
     const after = await loadSubjectLibrarySlot(client, request(), env, unprofiledSubjectId);

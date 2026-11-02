@@ -342,10 +342,18 @@ test('a new label prepares separate creation and assignment steps with distinct 
   expect(requests).toHaveLength(1);
   for (let index = 0; index < 2; index++) {
     if (!('step' in result)) throw new Error('Expected the next native command');
-    result = await applySubjectLabelMutation(mutationRequest(), sessionEnv(), {
-      intent: 'label-step', subjectId, token: result.step.token,
-    }, client() as never);
-    if (index === 0) expect(result).toMatchObject({ ok: false, reason: 'continue', step: { created: true, label: { id: labelId } } });
+    result = await applySubjectLabelMutation(
+      mutationRequest(),
+      sessionEnv(),
+      {
+        intent: 'label-step',
+        subjectId,
+        token: result.step.token,
+      },
+      client() as never,
+    );
+    if (index === 0)
+      expect(result).toMatchObject({ ok: false, reason: 'continue', step: { created: true, label: { id: labelId } } });
   }
   expect(result).toMatchObject({
     ok: true,

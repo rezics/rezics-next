@@ -33,10 +33,17 @@ export const submitSubjectLabelForm = createServerOnlyFn(async (request: Request
     const client = kernelClient();
     if (intent === 'assign-by-name' || intent === 'label-step') {
       // Preparation sends no native write. Each following form submits its exact sealed command.
-      const input = validateSubjectLabelMutation(intent === 'label-step'
-        ? { intent, subjectId, token: one('token') }
-        : { intent: 'create-and-assign', subjectId, name: one('name'),
-            createKey: one('createKey'), idempotencyKey: one('idempotencyKey') });
+      const input = validateSubjectLabelMutation(
+        intent === 'label-step'
+          ? { intent, subjectId, token: one('token') }
+          : {
+              intent: 'create-and-assign',
+              subjectId,
+              name: one('name'),
+              createKey: one('createKey'),
+              idempotencyKey: one('idempotencyKey'),
+            },
+      );
       const result = await applySubjectLabelMutation(request, sessionEnv, input, client);
       const csrf = await csrfTokenFromRequest(request);
       if (!result.ok && result.reason === 'continue' && csrf) return subjectLabelStepForm(request, result.step, csrf);

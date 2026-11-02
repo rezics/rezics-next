@@ -417,8 +417,12 @@ function SubjectLibrarySlotView({
   }
   if (labelOrigin !== labelLifetime) {
     if (labelOrigin.seed !== labelLifetime.seed) {
-      if (uncertainLabel.current?.step || uncertainLabel.current?.input.intent === 'create-and-assign' ||
-        uncertainLabel.current?.input.intent === 'capture-assign') uncertainLabel.current = null;
+      if (
+        uncertainLabel.current?.step ||
+        uncertainLabel.current?.input.intent === 'create-and-assign' ||
+        uncertainLabel.current?.input.intent === 'capture-assign'
+      )
+        uncertainLabel.current = null;
       setLabelUndo(undefined);
       labelUndoKeys.current.clear();
       restoredLabelEpisodes.current.clear();
@@ -853,9 +857,15 @@ function SubjectLibrarySlotView({
       input.intent === 'unassign'
         ? labelLifetime.current('library_label.assignment_list', 'library_label.unassign')
         : input.intent === 'create-and-assign'
-          ? labelLifetime.current('library_label.assignment_list', 'library_label.list', 'library_label.create', 'library_label.assign')
+          ? labelLifetime.current(
+              'library_label.assignment_list',
+              'library_label.list',
+              'library_label.create',
+              'library_label.assign',
+            )
           : input.intent === 'label-step' && operation.step?.kind === 'create'
-            ? operation.seed === labelLifetime.seed && labelLifetime.current('library_label.assignment_list', 'library_label.create')
+            ? operation.seed === labelLifetime.seed &&
+              labelLifetime.current('library_label.assignment_list', 'library_label.create')
             : labelLifetime.current('library_label.assignment_list', 'library_label.assign');
     if (!hydrated || !data.csrfToken || !allowed() || labelFlight.current || operation.running) return;
     if (!uncertainLabel.current && input.intent !== 'restore' && input.intent !== 'label-step') {
@@ -879,14 +889,21 @@ function SubjectLibrarySlotView({
     try {
       let response: SubjectLabelMutationResult;
       while (true) {
-        response = operation.response ?? await operation.send({
-          data: input, headers: { 'X-CSRF-Token': operation.csrfToken },
-        });
+        response =
+          operation.response ??
+          (await operation.send({
+            data: input,
+            headers: { 'X-CSRF-Token': operation.csrfToken },
+          }));
         // Capture the next native operands before checking whether this UI can still advance.
         // A retired response may be retained, but never dispatches its next command automatically.
         if (!response.ok && response.reason === 'continue') {
           operation.step = response.step;
-          operation.input = input = { intent: 'label-step', subjectId: response.step.subjectId, token: response.step.token };
+          operation.input = input = {
+            intent: 'label-step',
+            subjectId: response.step.subjectId,
+            token: response.step.token,
+          };
           operation.response = undefined;
           if (!labelLifetime.current() || !allowed()) return;
           continue;
@@ -1487,7 +1504,11 @@ function SubjectLibrarySlotView({
                 ) : null}
               </details>
             </Exposure>
-            {uncertainLabel.current?.step?.created ? <p role="status" className="text-sm text-muted-foreground">{m.library_subject_label_steps_created()}</p> : null}
+            {uncertainLabel.current?.step?.created ? (
+              <p role="status" className="text-sm text-muted-foreground">
+                {m.library_subject_label_steps_created()}
+              </p>
+            ) : null}
             <SubjectLabelNotice {...(labelNotice !== undefined ? { result: labelNotice } : {})} />
             {uncertainLabel.current ? (
               <button

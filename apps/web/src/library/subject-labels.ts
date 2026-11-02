@@ -63,7 +63,10 @@ function problemCode(result: Result<unknown>): string | undefined {
   return typeof detail.code === 'string' ? detail.code : undefined;
 }
 
-export function refused(result: Result<unknown>, intent: SubjectLabelMutationInput['intent']): SubjectLabelMutationResult {
+export function refused(
+  result: Result<unknown>,
+  intent: SubjectLabelMutationInput['intent'],
+): SubjectLabelMutationResult {
   const status = statusOf(result);
   const code = problemCode(result);
   if (isPlatformClosedProblem(status, result.error?.value)) return { ok: false, reason: 'closed' };
