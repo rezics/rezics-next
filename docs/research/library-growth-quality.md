@@ -12,12 +12,15 @@ No native assertion failure, flakiness rate, successful population measurement o
 was observed in this attempt: the final launch policy prohibits acceptance, native, browser, root, worker-check
 and remote-check runs. Their status is **deferred / not run**, not passed or failed.
 
-The clean controller-retained source was `9c22ac533be07f70aa231b0f00895d969a7b3ad7`, also the attempt base and
-initial worktree HEAD. Its commit subject is `fix(web): distinguish retired and queued appearance caller controls`.
-The local `dev` ref observed during review was `2faf5ef76228791d6d742e045170c31cac3ed87a`; it differs from the
-retained source. No merge, cherry-pick or rebase was authorized or performed. Consequently this report neither
-substitutes that moving ref for the bound source nor establishes acceptance on it. Integration must record the
-actual checked dev SHA alongside results. Main promotion remains parked; no proof was registered.
+The initial review inspected `9c22ac533be07f70aa231b0f00895d969a7b3ad7`. The controller subsequently retained
+this report on source `6a08f2dd345e62daa2fbea3ebd65d6dfe2bce403`, with base and observed local `dev` both
+`1237cd46c4bea1ba795e153a57ff8031dc9b3558`. The retry began clean. A scoped `git diff --name-only` from the
+initial source to this base returned no changes in the cited Library owner contracts, kernel growth documentation,
+Library suites/drivers, six cited frozen outcome files or shared growth-bound source (exit 0). The retained
+source differs from this base only by this report. The source findings therefore remain applicable; this equality
+does not establish native acceptance on the new base. No worker merge, cherry-pick or rebase was performed.
+Integration must record the actual checked dev SHA alongside results. Main promotion remains parked;
+no proof was registered.
 
 Decision: inventory the retained source under deferred validation, keep every unmeasured clause open, and apply
 the maintainer's corrected C3 as derived static additive bounds without implementing allocation protocols.
@@ -179,6 +182,7 @@ The harness's inconclusive retry verdict is not an unconditional pass and cannot
 | Flakiness | No repeated executions; unknown | Preserve each run and forced contention schedule. Separate variable contention from consistent per-occurrence work violations; do not retry until green and discard failures. |
 | Missing producer/measurement | Explicit refusal strings and absent exported ports above, from source | Keep affected clause open; hand the exact missing native binding to its existing owner. These are source gaps, not observed thrown exceptions in this attempt. |
 | Infrastructure before assertions | No service/check was started | Retain exact first error and runner stage/exit; route environment failures to the existing check owner. Never describe zero assertions as a product pass. |
+| Earlier controller landing failure | The retained landing log begins `Error: The following paths are ignored by one of your .gitignore files:` and identifies `.temp`. Its original command and exit were not recorded. Retrying the supported scoped staging command `git add -- docs/research/library-growth-quality.md` exited 0. | This occurred in landing, outside Library assertions. Keep temporary artifacts ignored and uncommitted; any recurrence belongs to the existing controller/check owner. No ignore-rule or product change is justified, and the unknown original command has not been represented as reproduced. |
 | Deferred acceptance | All native/growth/persona cases | Preserve the deferral explicitly. Documentation delivery success supplies no native or Goal completion evidence. |
 
 ## Commands, exits and evidence custody
@@ -218,8 +222,10 @@ Useful diagnostic prefixes include `Native Library dependency_unavailable:`,
 actual case, captured phase and original error establish whether failure occurred before assertions.
 
 No code workspace, test file, package manifest or lockfile changed. Workspace typechecking and changed-test
-landing commands therefore do not apply. The report's nonempty-file validation is documentation validation only;
-native, growth, browser, visual, root, worker and remote acceptance remain deferred after integration.
+landing commands therefore do not apply. Focused report validation checks nonempty content, local citation targets,
+exact Goal quotations and inventoried suite paths using Python; whitespace validation uses
+`git diff 1237cd46c4bea1ba795e153a57ff8031dc9b3558 HEAD --check`. These documentation checks establish no native
+outcome. Native, growth, browser, visual, root, worker and remote acceptance remain deferred after integration.
 
 ## Earlier evidence and primary-source comparison
 
