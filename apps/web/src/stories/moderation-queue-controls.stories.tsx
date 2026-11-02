@@ -3,6 +3,7 @@ import { expect, fn, userEvent, within } from 'storybook/test';
 import { ModerationReportsView } from '../moderation/reports-page';
 import { DEFAULT_REPORT_SELECTION, type ReportSelection } from '../moderation/reports-read';
 import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
 import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
 import { postReport, queueViewports, selectedQueueFixture } from './patterns/board-report-queue/fixture';
@@ -58,7 +59,7 @@ async function observeControls(
   await expect(nav.querySelectorAll('[aria-current="page"]')).toHaveLength(1);
   await expect(links[tab === 'reports' ? 0 : 1]).toHaveClass('underline', 'border-primary');
   const back = view.getByRole('link', { name: m.moderation_queue_back() });
-  await expect(back).toHaveAttribute('href', '/en/boards/community');
+  await expect(back).toHaveAttribute('href', `/${getLocale()}/boards/community`);
   const group = view.getByRole('group', { name: m.moderation_filter_label() });
   const selects = [
     view.getByRole('combobox', { name: m.moderation_filter_status() }),
