@@ -43,7 +43,18 @@ test('selection refresh retains drafts, switches retire targets, and created rea
       loads.push(address);
       if (held) return held;
       if (failure) throw new Error('refresh unavailable');
-      return fixture.transport.load(address);
+      const read = await fixture.transport.load(
+        address.id === storyArcCreatedId ? { ...address, id: storyArcProfileId } : address,
+      );
+      if (read.ok && read.arc && address.id === storyArcCreatedId)
+        return {
+          ...read,
+          arc: {
+            ...read.arc,
+            subject: { ...read.arc.subject, id: storyArcCreatedId, labels: { en: 'A real arc' }, statements: {} },
+          },
+        };
+      return read;
     },
   };
   const settle = async (action: () => void) => {
@@ -102,13 +113,19 @@ test('selection refresh retains drafts, switches retire targets, and created rea
     await settle(() => button(m.catalogue_create_submit()).click());
     const posts = () => fixture.creation.calls.filter((call) => call.method === 'POST').length;
     expect(posts()).toBe(1);
+    fixture.creation.setScenario('ready');
     await settle(() => button(m.catalogue_create_retry()).click());
     const continuation = [...host.querySelectorAll('a')].find((node) => node.textContent === m.story_arc_continue())!;
     expect(continuation.href).toContain(`/subjects/${storyArcCreatedId}/a-real-arc/story-arc`);
     await settle(() => continuation.click());
     expect(loads.at(-1)?.id).toBe(storyArcCreatedId);
     expect(posts()).toBe(1);
-    expect(visible('form')).toHaveLength(0);
+    expect(
+      visible('a').some((link) =>
+        link.getAttribute('href')?.includes(`/subjects/${storyArcCreatedId}/a-real-arc/relation-edit`),
+      ),
+    ).toBe(true);
+    expect(visible('input').includes(input)).toBe(false);
   } finally {
     await act(async () => root.unmount());
     client.clear();
