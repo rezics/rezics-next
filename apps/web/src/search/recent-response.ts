@@ -36,8 +36,8 @@ const recentEntry = v.variant('kind', [
   v.strictObject({
     kind: v.literal('query'),
     text: v.pipe(v.string(), v.minLength(1), v.maxLength(256)),
-    languages: v.optional(v.pipe(v.array(language), v.maxLength(8))),
-    scope: v.optional(recentScope),
+    languages: v.exactOptional(v.pipe(v.array(language), v.maxLength(8))),
+    scope: v.exactOptional(recentScope),
   }),
   v.strictObject({ kind: v.literal('scope'), scope: recentScope }),
 ]);
