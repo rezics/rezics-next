@@ -35,7 +35,6 @@ test('normal stop ends exactly its owned detached check process tree with honest
   let controllerIdentity: ReturnType<typeof processIdentity> = null;
   let controller: ReturnType<typeof spawn> | undefined;
   let controllerClosed: Promise<void> | undefined;
-  let workerExited: Promise<unknown> | undefined;
   let recoveryStore: WorkerStore | undefined;
   try {
     const peer = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
@@ -51,7 +50,6 @@ test('normal stop ends exactly its owned detached check process tree with honest
 
     const task = h.tasks.dispatch(h.briefFile);
     const worker = await h.tasks.retry(task.id);
-    workerExited = worker.exited;
     const ref = worker.attempt;
     const attempt = h.store.attempt(ref);
     ownedIdentity = attempt.process;
@@ -111,9 +109,8 @@ test('normal stop ends exactly its owned detached check process tree with honest
     await controllerClosed?.catch(() => {});
     if (ownedIdentity) await terminateProcessGroup(ownedIdentity, 50).catch(() => {});
     if (peerIdentity) await terminateProcessGroup(peerIdentity, 50).catch(() => {});
-    await workerExited?.catch(() => {});
     recoveryStore?.db.close();
-    h.dispose();
+    await h.disposeAsync();
   }
 });
 
