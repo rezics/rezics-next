@@ -533,20 +533,9 @@ for (const [index, boundary] of boundaries.entries()) {
       await paint();
     }
 
-    oldWidget.options.callback('retained-old-token');
-    oldWidget.options['expired-callback']();
-    oldWidget.options['error-callback']();
     expect(api.resets).toEqual([]);
     expect(window.document.querySelector('[data-slot="dialog-content"]')).toBeNull();
     expect(statusLink()).toBeNull();
-
-    if (outcome === 'success') await settle(0, { ok: true, reportId: 'stale-private-report' });
-    if (outcome === 'refusal') await settle(0, { ok: false, reason: 'forbidden' });
-    if (outcome === 'rejection') await settle(0, new Error('transport failed'));
-    expect(calls).toHaveLength(1);
-    expect(statusLink()).toBeNull();
-    expect(window.document.querySelector('[role="alert"]')).toBeNull();
-    expect(api.resets).toEqual([]);
 
     if (boundary === 'target-id') expect(props.target).toEqual({ kind: 'post', id: 'post-two' });
     if (boundary === 'target-kind') expect(props.target).toEqual({ kind: 'thread', id: 'thread-two' });
@@ -559,6 +548,24 @@ for (const [index, boundary] of boundaries.entries()) {
     const freshWidget = activeWidget(api);
     await click(radio(m.report_spam()));
     await verify(freshWidget);
+    const freshFocus = window.document.activeElement;
+
+    oldWidget.options.callback('retained-old-token');
+    oldWidget.options['expired-callback']();
+    oldWidget.options['error-callback']();
+    expect(api.resets).toEqual([]);
+    expect(button(m.report_submit(), dialog()).hasAttribute('disabled')).toBe(false);
+
+    if (outcome === 'success') await settle(0, { ok: true, reportId: 'stale-private-report' });
+    if (outcome === 'refusal') await settle(0, { ok: false, reason: 'forbidden' });
+    if (outcome === 'rejection') await settle(0, new Error('transport failed'));
+    expect(calls).toHaveLength(1);
+    expect(window.document.querySelector('[data-slot="dialog-content"]')).not.toBeNull();
+    expect(window.document.activeElement).toBe(freshFocus);
+    expect(statusLink()).toBeNull();
+    expect(window.document.querySelector('[role="alert"]')).toBeNull();
+    expect(api.resets).toEqual([]);
+
     await click(button(m.report_submit(), dialog()));
     expect(calls).toHaveLength(2);
     expect(calls[1]!.data.target).toEqual(props.target);

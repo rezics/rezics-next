@@ -58,14 +58,10 @@ function observeSession(client: QueryClient | undefined): SessionObservation {
     subscribe(notify) {
       if (!client) return () => {};
       return client.getQueryCache().subscribe((event) => {
-        if (event.type === 'clear') {
-          revision += 1;
-          notify();
-          return;
-        }
         const query = 'query' in event ? event.query : undefined;
         if (!query || query.queryKey.length !== 1 || query.queryKey[0] !== sessionQuery.queryKey[0]) return;
         const ownershipEvent =
+          event.type === 'added' ||
           event.type === 'removed' ||
           (event.type === 'updated' &&
             (event.action.type === 'success' || event.action.type === 'setState' || event.action.type === 'error'));
@@ -179,7 +175,7 @@ export function PostActions({
       sessionRevision={sessionRevision}
       sessionFingerprint={authority.fingerprint}
       target={target}
-      {...(revisionId ? { revisionId } : {})}
+      {...(revisionId !== undefined ? { revisionId } : {})}
       verification={verification}
     />
   );
@@ -317,7 +313,7 @@ function ReportActionsVisit({
         result = await sendReport({
           data: {
             target: admittedTarget,
-            ...(admittedRevision ? { revisionId: admittedRevision } : {}),
+            ...(admittedRevision !== undefined ? { revisionId: admittedRevision } : {}),
             reason,
             ...(details ? { evidence: details } : {}),
             botToken: submittedToken,
