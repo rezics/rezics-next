@@ -1,17 +1,27 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { useCallback } from 'react';
 import { expect, within } from 'storybook/test';
 import { ErasureProgressView } from '../../accounts/erasure-progress/view';
 import { AccountErasurePage } from '../../accounts/erasure-progress/page';
 import type { ErasureStatus, Page } from '../../accounts/erasure-progress/data';
+import type { ErasureOperation, ErasureRead } from '../../threads/author-erasure';
+import { AuthorErasureOperationPage } from '../../threads/author-erasure-operation';
 import { m } from '../../paraglide/messages.js';
 import { AppShell } from '../../shell/shell';
 import { PatternStory } from '../page';
+import { erasureStoryOperation } from '../patterns/author-erasure/author-erasure-preview';
 
 const meta = {
   title: 'Pages/Account/Erasure progress',
   component: ErasureProgressView,
   parameters: {
     layout: 'fullscreen',
+    viewport: {
+      options: {
+        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
+        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
+      },
+    },
     docs: {
       description: {
         component: 'Illustrative consumer states only. These stories provide no native erasure or participant proof.',
@@ -139,3 +149,124 @@ export const SessionUnavailable: Story = {
     </PatternStory>
   ),
 };
+
+const authorOperationId = erasureStoryOperation('running').name.slice('operations/'.length);
+const authorRunning = erasureStoryOperation('running');
+const authorUnavailable: ErasureRead = { kind: 'unavailable' };
+
+function AuthorOperationProgressFixture({
+  initial,
+  visitor = 'Signed In',
+  holdRead = false,
+}: {
+  initial: ErasureRead;
+  visitor?: 'Signed In' | 'Signed Out';
+  holdRead?: boolean;
+}) {
+  const read = useCallback(
+    () => (holdRead ? new Promise<ErasureRead>(() => {}) : Promise.resolve(initial)),
+    [holdRead, initial],
+  );
+  const operationId = initial.kind === 'available' ? initial.operation.name.slice('operations/'.length) : authorOperationId;
+  return (
+    <PatternStory visitor={visitor} path={`/operations/${operationId}`}>
+      <AppShell>
+        <AuthorErasureOperationPage initial={initial} operationId={operationId} read={read} />
+      </AppShell>
+    </PatternStory>
+  );
+}
+
+function terminalOperation(code: number): ErasureRead {
+  const operation: ErasureOperation = {
+    name: authorRunning.name,
+    done: true,
+    metadata: authorRunning.metadata,
+    error: { code, message: 'Illustrative operation result' },
+  };
+  return { kind: 'available', operation };
+}
+
+function authorProgressStory(
+  initial: ErasureRead,
+  heading: string,
+  options: { visitor?: 'Signed In' | 'Signed Out'; defaultViewport?: 'phone390' | 'desktop1280'; holdRead?: boolean } = {},
+): Story {
+  return {
+    args: { page: { status: 'loading' } },
+    render: () => (
+      <AuthorOperationProgressFixture
+        initial={initial}
+        visitor={options.visitor}
+        holdRead={options.holdRead}
+      />
+    ),
+    parameters: {
+      ...(options.defaultViewport ? { viewport: { defaultViewport: options.defaultViewport } } : {}),
+      docs: {
+        description: {
+          story:
+            'Illustrative operation result rendered by the production author-erasure page. It is not native authorization or physical-cleanup proof.',
+        },
+      },
+    },
+    play: async ({ canvasElement }) => {
+      const canvas = within(canvasElement);
+      await expect(await canvas.findByRole('heading', { level: 2, name: heading })).toBeVisible();
+    },
+  };
+}
+
+export const AuthorQueued: Story = authorProgressStory(
+  { kind: 'available', operation: erasureStoryOperation('queued') },
+  m.author_erasure_queued(),
+);
+export const AuthorRunning: Story = authorProgressStory(
+  { kind: 'available', operation: authorRunning },
+  m.author_erasure_running(),
+);
+export const AuthorCompleted: Story = authorProgressStory(
+  { kind: 'available', operation: erasureStoryOperation('completed') },
+  m.author_erasure_completed(),
+);
+export const AuthorFailed: Story = authorProgressStory(terminalOperation(13), m.author_erasure_failed());
+export const AuthorPermissionStopped: Story = authorProgressStory(terminalOperation(7), m.author_erasure_failed());
+export const AuthorChangedSource: Story = authorProgressStory(terminalOperation(9), m.author_erasure_failed());
+export const AuthorDependencyUnavailable: Story = authorProgressStory(terminalOperation(14), m.author_erasure_failed());
+export const AuthorStatusUnavailable: Story = authorProgressStory(authorUnavailable, m.author_erasure_status_unavailable());
+export const AuthorSignedOut: Story = authorProgressStory(
+  { kind: 'signed-out' },
+  m.author_erasure_status_unavailable(),
+  { visitor: 'Signed Out' },
+);
+export const AuthorPermissionRefused: Story = authorProgressStory(
+  { kind: 'forbidden' },
+  m.author_erasure_status_unavailable(),
+);
+export const AuthorNotFound: Story = authorProgressStory(
+  { kind: 'not-found' },
+  m.author_erasure_status_unavailable(),
+);
+export const AuthorConflict: Story = authorProgressStory(
+  { kind: 'conflict' },
+  m.author_erasure_status_unavailable(),
+);
+export const AuthorStatusCheckPending: Story = {
+  ...authorProgressStory(authorUnavailable, m.author_erasure_status_unavailable(), { holdRead: true }),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('button', { name: m.author_erasure_check_again() })).toBeEnabled();
+    await canvas.getByRole('button', { name: m.author_erasure_check_again() }).click();
+    await expect(await canvas.findByRole('button', { name: m.author_erasure_checking() })).toBeDisabled();
+  },
+};
+export const AuthorPermissionPhone390: Story = authorProgressStory(
+  terminalOperation(7),
+  m.author_erasure_failed(),
+  { defaultViewport: 'phone390' },
+);
+export const AuthorDependencyDesktop1280: Story = authorProgressStory(
+  terminalOperation(14),
+  m.author_erasure_failed(),
+  { defaultViewport: 'desktop1280' },
+);

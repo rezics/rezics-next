@@ -1,4 +1,5 @@
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { QueryClientContext } from '@tanstack/react-query';
 import { Trash2 } from 'lucide-react';
 import { useContext, useLayoutEffect, useRef, useState, useSyncExternalStore, useId } from 'react';
@@ -168,19 +169,31 @@ function AuthorErasureEntryVisit({
 
   return (
     <section aria-label={m.author_erasure_action()} className="min-w-0 text-sm">
-      <Button variant="ghost" size="sm" aria-expanded={open} onClick={() => toggle(!open)} disabled={pending}>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-auto min-h-11 max-w-full whitespace-normal text-left"
+        aria-expanded={open}
+        onClick={() => toggle(!open)}
+        disabled={pending}
+      >
         <Trash2 aria-hidden="true" className="size-4" />
         {m.author_erasure_action()}
       </Button>
       {open ? (
-        <div className="mt-3 space-y-4 rounded-xl border border-border bg-card p-4 sm:p-5" aria-labelledby={heading}>
-          <h2 id={heading} className="font-semibold">
+        <ContentItemFrame
+          as="div"
+          data-slot="content-item-frame"
+          className="mt-3 min-w-0 space-y-4 p-4 sm:p-5"
+          aria-labelledby={heading}
+        >
+          <ContentItemHeading id={heading} level={2} className="font-semibold">
             {m.author_erasure_confirm_title()}
-          </h2>
-          <p className="max-w-prose leading-relaxed text-muted-foreground">{m.author_erasure_scope()}</p>
-          <p className="max-w-prose leading-relaxed">{m.author_erasure_irreversible()}</p>
+          </ContentItemHeading>
+          <p className="max-w-prose break-words leading-relaxed text-muted-foreground">{m.author_erasure_scope()}</p>
+          <p className="max-w-prose break-words leading-relaxed">{m.author_erasure_irreversible()}</p>
           {!allowed ? (
-            <p role="status" className="text-muted-foreground">
+            <p role="status" className="max-w-prose break-words leading-relaxed text-muted-foreground">
               {unavailable
                 ? m.author_erasure_admission_unavailable()
                 : admission.kind === 'current'
@@ -188,17 +201,24 @@ function AuthorErasureEntryVisit({
                   : erasureRefusal(admission.kind)}
             </p>
           ) : null}
-          {result && result.kind !== 'accepted' ? <p role="alert">{erasureRefusal(result.kind)}</p> : null}
+          {result && result.kind !== 'accepted' ? (
+            <p role="alert" className="max-w-prose break-words leading-relaxed">
+              {erasureRefusal(result.kind)}
+            </p>
+          ) : null}
           {accepted ? (
             <a
-              className={buttonVariants({ variant: 'outline' })}
+              className={buttonVariants({
+                variant: 'outline',
+                className: 'h-auto min-h-11 max-w-full whitespace-normal text-left',
+              })}
               href={`/${getLocale()}/operations/${encodeURIComponent(result.operationId)}`}
             >
               {m.author_erasure_view_progress()}
             </a>
           ) : (
             <>
-              <label className="flex items-start gap-3 leading-relaxed">
+              <label className="relative z-10 flex min-w-0 items-start gap-3 break-words leading-relaxed">
                 <input
                   type="checkbox"
                   className="mt-1 size-4 shrink-0 accent-primary"
@@ -211,6 +231,7 @@ function AuthorErasureEntryVisit({
               <div className="flex flex-wrap gap-2">
                 <Button
                   variant="destructive"
+                  className="h-auto min-h-11 max-w-full whitespace-normal text-left"
                   disabled={!canSubmit || !confirmed || pending || !!stopped}
                   onClick={submit}
                 >
@@ -221,17 +242,27 @@ function AuthorErasureEntryVisit({
                       : m.author_erasure_confirm()}
                 </Button>
                 {!suppliedAdmission ? (
-                  <Button variant="outline" disabled={pending || !viewerId} onClick={() => void refresh()}>
+                  <Button
+                    variant="outline"
+                    className="h-auto min-h-11 max-w-full whitespace-normal text-left"
+                    disabled={pending || !viewerId}
+                    onClick={() => void refresh()}
+                  >
                     {m.author_erasure_check_again()}
                   </Button>
                 ) : null}
-                <Button variant="outline" disabled={pending} onClick={() => toggle(false)}>
+                <Button
+                  variant="outline"
+                  className="h-auto min-h-11 max-w-full whitespace-normal text-left"
+                  disabled={pending}
+                  onClick={() => toggle(false)}
+                >
                   {m.author_erasure_close()}
                 </Button>
               </div>
             </>
           )}
-        </div>
+        </ContentItemFrame>
       ) : null}
     </section>
   );

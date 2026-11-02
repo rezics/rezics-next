@@ -1,4 +1,5 @@
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { QueryClientContext } from '@tanstack/react-query';
 import { ArrowLeft, CheckCircle2, Clock3, LoaderCircle, ShieldAlert } from 'lucide-react';
 import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
@@ -362,78 +363,93 @@ export function AuthorErasureOperationPage({
   return (
     <article className="mx-auto w-full min-w-0 max-w-3xl space-y-6" data-slot="author-erasure-operation">
       <header className="space-y-2">
-        <p className="text-sm font-medium text-muted-foreground">{m.author_erasure_operation_label()}</p>
+        <p className="break-words text-sm font-medium text-muted-foreground">{m.author_erasure_operation_label()}</p>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{m.author_erasure_operation_title()}</h1>
-        <p className="max-w-prose text-muted-foreground">{m.author_erasure_scope()}</p>
+        <p className="max-w-prose break-words text-muted-foreground">{m.author_erasure_scope()}</p>
       </header>
-      <section
-        className="space-y-5 rounded-xl border border-border bg-card p-5 sm:p-7"
-        aria-labelledby="erasure-status"
-      >
-        <div className="flex items-center gap-3" role="status" aria-live="polite">
-          <Icon aria-hidden="true" className="size-6 shrink-0 text-muted-foreground" />
-          <h2 id="erasure-status" className="text-xl font-semibold">
-            {title}
-          </h2>
-        </div>
-        {!available ? (
-          <p role="alert" className="leading-relaxed">
-            {erasureRefusal(state.kind)}
-          </p>
-        ) : null}
-        {operation ? (
-          <p className="max-w-prose leading-relaxed text-muted-foreground">
-            {operation.done
-              ? operation.error
-                ? terminalError(operation.error.code)
-                : m.author_erasure_success()
-              : stage === 'running'
-                ? m.author_erasure_running_copy()
-                : m.author_erasure_queued_copy()}
-          </p>
-        ) : null}
-        {counters && operation ? (
-          <dl className="grid grid-cols-1 gap-5 border-y border-border py-5 sm:grid-cols-3">
-            {[
-              [m.author_erasure_processed(), counters.processedPosts],
-              [m.author_erasure_revisions(), counters.erasedRevisions],
-              [m.author_erasure_steps(), operation.metadata.steps],
-            ].map(([label, value]) => (
-              <div key={label} className="space-y-1">
-                <dt className="text-sm text-muted-foreground">{label}</dt>
-                <dd className="text-2xl font-semibold tabular-nums">{value}</dd>
-              </div>
-            ))}
-          </dl>
-        ) : null}
-        {operation && !operation.done ? (
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            {manual ? m.author_erasure_manual() : m.author_erasure_bounded_refresh()}
-          </p>
-        ) : null}
-        {manual && !operation?.done ? (
-          <Button
-            variant="outline"
-            disabled={pending || !canManuallyRead}
-            onClick={() => {
-              visit.stopAutomatic();
-              void visit.refresh('manual');
-            }}
-          >
-            {pending ? m.author_erasure_checking() : m.author_erasure_check_again()}
-          </Button>
-        ) : null}
-        {operation ? (
-          <a
-            className={buttonVariants({ variant: 'ghost' })}
-            href={threadLocation(getLocale(), { id: operation.metadata.threadId, title: null })}
-          >
-            <ArrowLeft aria-hidden="true" className="size-4" />
-            {m.author_erasure_back_thread()}
-          </a>
-        ) : null}
+      <section className="min-w-0" aria-labelledby="erasure-status">
+        <ContentItemFrame as="div" data-slot="content-item-frame" className="min-w-0 space-y-5 p-5 sm:p-7">
+          <div className="flex min-w-0 items-center gap-3" role="status" aria-live="polite">
+            <Icon aria-hidden="true" className="size-6 shrink-0 text-muted-foreground" />
+            <ContentItemHeading id="erasure-status" level={2} className="min-w-0 break-words text-xl font-semibold">
+              {title}
+            </ContentItemHeading>
+          </div>
+          {!available ? (
+            <p role="alert" className="max-w-prose break-words leading-relaxed">
+              {erasureRefusal(state.kind)}
+            </p>
+          ) : null}
+          {operation ? (
+            <p className="max-w-prose break-words leading-relaxed text-muted-foreground">
+              {operation.done
+                ? operation.error
+                  ? terminalError(operation.error.code)
+                  : m.author_erasure_success()
+                : stage === 'running'
+                  ? m.author_erasure_running_copy()
+                  : m.author_erasure_queued_copy()}
+            </p>
+          ) : null}
+          {counters && operation ? (
+            <dl className="grid min-w-0 grid-cols-1 gap-5 border-y border-border py-5 sm:grid-cols-3">
+              {[
+                [m.author_erasure_processed(), counters.processedPosts],
+                [m.author_erasure_revisions(), counters.erasedRevisions],
+                [m.author_erasure_steps(), operation.metadata.steps],
+              ].map(([label, value]) => (
+                <div key={label} className="space-y-1">
+                  <dt className="text-sm text-muted-foreground">{label}</dt>
+                  <dd className="text-2xl font-semibold tabular-nums">{value}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : null}
+          {counters && operation ? (
+            <details className="min-w-0 text-sm leading-relaxed">
+              <summary className="relative z-10 w-fit max-w-full cursor-pointer break-words rounded-sm font-medium underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                {m.author_erasure_interface_count_details()}
+              </summary>
+              <p className="mt-2 max-w-prose break-words text-muted-foreground">
+                {m.author_erasure_interface_count_details_copy()}
+              </p>
+            </details>
+          ) : null}
+          {operation && !operation.done ? (
+            <p className="max-w-prose break-words text-sm leading-relaxed text-muted-foreground">
+              {manual ? m.author_erasure_manual() : m.author_erasure_bounded_refresh()}
+            </p>
+          ) : null}
+          {manual && !operation?.done ? (
+            <Button
+              variant="outline"
+              className="h-auto min-h-11 max-w-full whitespace-normal text-left"
+              disabled={pending || !canManuallyRead}
+              onClick={() => {
+                visit.stopAutomatic();
+                void visit.refresh('manual');
+              }}
+            >
+              {pending ? m.author_erasure_checking() : m.author_erasure_check_again()}
+            </Button>
+          ) : null}
+          {operation ? (
+            <a
+              className={buttonVariants({
+                variant: 'ghost',
+                className: 'h-auto min-h-11 max-w-full whitespace-normal text-left',
+              })}
+              href={threadLocation(getLocale(), { id: operation.metadata.threadId, title: null })}
+            >
+              <ArrowLeft aria-hidden="true" className="size-4" />
+              {m.author_erasure_back_thread()}
+            </a>
+          ) : null}
+        </ContentItemFrame>
       </section>
-      <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.author_erasure_irreversible()}</p>
+      <p className="max-w-prose break-words text-sm leading-relaxed text-muted-foreground">
+        {m.author_erasure_irreversible()}
+      </p>
     </article>
   );
 }
