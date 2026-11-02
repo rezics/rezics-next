@@ -114,6 +114,9 @@ async function exportSource(pool: Pool, exported: IdentityNativeReceipt, row: Te
         current.owner_epoch === exported.epoch && current.closure_immediate === (current.immediate ?? row.original))
       return { ...current, closure_export_generation: recovered.generation };
     if (current.closure_successor_ticket) return null;
+    // A cancelled fill still owns its exact outgoing ticket until the native
+    // successor has receipted its release. Do not overwrite that recovery key.
+    if (current.closure_cancelled_successor) return null;
     if (current.closure_state === 'withdrawn' && current.closure_claim && current.revision === current.source_revision) return null;
     if (current.closure_state === 'exporting' || current.closure_state === 'installed') {
       if (current.closure_enrollment !== recovered.closure_enrollment) return null;
@@ -287,8 +290,9 @@ async function releaseSuccessor(pool: Pool, original: Source): Promise<void> {
   await native(pool, home(original.closure_immediate), async (tx) => {
     const held = await source(tx, original.closure_immediate);
     const released = await tx.query(`UPDATE semantic.identity_epoch_mapping SET closure_successor_ticket=NULL,closure_ticket_reservation=NULL,closure_successor_original=NULL
-      WHERE route=$1 AND original=$2 AND closure_successor_ticket=$3 RETURNING closure_export_transaction`,
-    [key(original.closure_immediate), original.closure_immediate, original.closure_enrollment]);
+      WHERE route=$1 AND original=$2 AND closure_successor_ticket=$3 AND closure_successor_original=$4
+      RETURNING closure_export_transaction`,
+    [key(original.closure_immediate), original.closure_immediate, original.closure_enrollment, original.original]);
     if (released.rowCount && held?.closure_ticket_reservation) await releaseCopies(tx, held.closure_ticket_reservation, 1);
     return null;
   });
@@ -465,6 +469,7 @@ export async function drainIdentityTerminalClosure(pool: Pool, terminal: string,
         await tx.query(`UPDATE semantic.identity_epoch_mapping SET source_revision=$5,closure_state='withdrawn' ,closure_claim=$3,
           closure_successor_ticket=NULL,closure_successor_original=NULL,closure_ticket_reservation=NULL,closure_source_reservation=NULL,closure_withdraw_transaction=$4,closure_withdraw_xid=pg_current_xact_id()::xid::text,
           closure_generation=$6,closure_incarnation=$7,closure_immediate=coalesce(closure_immediate,$8::uuid),
+          closure_cancelled_successor=closure_enrollment IS NOT NULL AND coalesce(closure_immediate,$8::uuid)<>original,
           closure_mutation_xid=NULL WHERE route=$1 AND original=$2`,
         [key(member.original), member.original, claim, transactionId, revision, group.generation, group.closure_incarnation, current.immediate ?? member.original]);
         if (current.closure_source_reservation) await releaseCopies(tx, current.closure_source_reservation, 1);
@@ -561,9 +566,12 @@ async function cancelUnpublished(tx: CommandTransaction, current: Source, claim:
   const command = currentCommand(tx);
   await tx.query(`UPDATE semantic.identity_epoch_mapping SET closure_state='withdrawn',closure_claim=$3,
     closure_source_reservation=NULL,closure_mutation_xid=pg_current_xact_id()::text,
+    closure_cancelled_successor=closure_immediate IS NOT NULL AND closure_immediate<>original,
     closure_withdraw_transaction=$4,closure_withdraw_xid=pg_current_xact_id()::xid::text
     WHERE route=$1 AND original=$2`, [current.route, current.original, claim, command.transactionId]);
   if (current.closure_source_reservation) await releaseCopies(tx, current.closure_source_reservation, 1);
+  await tx.query(`UPDATE semantic.identity_epoch_bootstrap_home SET needs_work=true,sealed_generation=NULL,
+    sealed_transaction_id=NULL,sealed_epoch=NULL,sealed_position=NULL WHERE partition_no=$1`, [command.partition]);
 }
 
 /** An export with no chosen directory has never been positive. Cancellation
@@ -578,10 +586,7 @@ export async function cancelUnregisteredIdentityTerminalCapture(tx: CommandTrans
 }
 
 async function recoverSuccessorTickets(pool: Pool, partition: number) {
-  const tickets = await withReadTransaction(pool, async (tx) => (await tx.query(`SELECT original,
-      closure_successor_original AS parent,closure_successor_ticket AS enrollment
-    FROM semantic.identity_epoch_mapping WHERE route BETWEEN $1*16 AND $1*16+15
-      AND closure_successor_ticket IS NOT NULL ORDER BY route,original LIMIT 100`, [partition])).rows);
+  const tickets = await recoveryPage(pool, partition, 'incoming');
   for (const ticket of tickets) {
     if (!ticket.parent) throw unavailable();
     const resolved = await withReadTransaction(pool, async (tx) => {
@@ -602,6 +607,65 @@ async function recoverSuccessorTickets(pool: Pool, partition: number) {
         closure_successor_original=NULL,closure_ticket_reservation=NULL WHERE route=$1 AND original=$2`,
       [key(ticket.original), ticket.original]);
       if (current.closure_ticket_reservation) await releaseCopies(tx, current.closure_ticket_reservation, 1);
+      return true;
+    });
+  }
+}
+
+/** These cursors enumerate existing native locator rows, never ancestors. An
+ * unresolved ticket cannot hide a later cancelled ticket on the same home.
+ * The home is already installed before it can own any closure enrollment.
+ */
+async function recoveryPage(pool: Pool, partition: number, kind: 'incoming' | 'cancelled'): Promise<Source[]> {
+  const incoming = kind === 'incoming';
+  const predicate = incoming ? 'closure_successor_ticket IS NOT NULL' : 'closure_cancelled_successor';
+  const pending = await withReadTransaction(pool, async (tx) => (await tx.query(`SELECT 1
+    FROM semantic.identity_epoch_mapping WHERE route BETWEEN $1*16 AND $1*16+15 AND ${predicate} LIMIT 1`, [partition])).rowCount);
+  if (!pending) return [];
+  // Both column pairs and the predicate are a closed private choice above.
+  const routeColumn = incoming ? 'closure_ticket_after_route' : 'closure_cancel_after_route';
+  const originalColumn = incoming ? 'closure_ticket_after_original' : 'closure_cancel_after_original';
+  return (await native(pool, partition, async (tx) => {
+    const cursor = (await tx.query(`SELECT ${routeColumn} AS route,${originalColumn} AS original
+      FROM semantic.identity_epoch_bootstrap_home WHERE partition_no=$1 FOR UPDATE`, [partition])).rows[0];
+    if (!cursor) throw unavailable();
+    const rows = (await tx.query(`SELECT *,closure_successor_original AS parent,closure_successor_ticket AS enrollment
+      FROM semantic.identity_epoch_mapping WHERE route BETWEEN $1*16 AND $1*16+15
+        AND ${predicate} AND (route,original)>($2::integer,$3::uuid) ORDER BY route,original LIMIT 100`,
+    [partition, cursor.route, cursor.original])).rows;
+    const last = rows.length === 100 ? rows.at(-1) : null;
+    await tx.query(`UPDATE semantic.identity_epoch_bootstrap_home SET ${routeColumn}=$2,${originalColumn}=$3
+      WHERE partition_no=$1`, [partition, last?.route ?? partition*16-1,
+      last?.original ?? '00000000-0000-0000-0000-000000000000']);
+    return rows;
+  })).value;
+}
+
+/** Cancellation keeps the outgoing enrollment in the original native locator.
+ * Its own dirty home releases the successor even if that successor has no work
+ * scheduled. A lost response repeats the exact release; a later enrollment is
+ * forbidden until this source commits the resolved disposition.
+ */
+async function recoverCancelledSuccessors(pool: Pool, partition: number): Promise<void> {
+  for (const candidate of await recoveryPage(pool, partition, 'cancelled')) {
+    const current = await withReadTransaction(pool, async (tx) => {
+      const owner = await readPartition(tx, partition);
+      if (!owner || owner.writeState !== 'active') throw unavailable();
+      return (await tx.query(`SELECT m.* FROM semantic.identity_epoch_mapping m
+        JOIN semantic.identity_epoch_native_commit n ON n.partition_no=m.route/16
+          AND n.transaction_id=m.closure_withdraw_transaction AND n.xmin::text=m.closure_withdraw_xid
+        WHERE m.route=$1 AND m.original=$2 AND m.closure_enrollment=$3 AND m.closure_cancelled_successor
+          AND m.closure_state='withdrawn' AND m.owner_epoch=$4 AND n.epoch=$4`,
+      [candidate.route, candidate.original, candidate.closure_enrollment, owner.epoch])).rows[0];
+    });
+    if (!current) continue;
+    await releaseSuccessor(pool, current);
+    await native(pool, partition, async (tx) => {
+      const actual = await source(tx, current.original);
+      if (!actual || !actual.closure_cancelled_successor || actual.closure_state !== 'withdrawn' ||
+          actual.closure_enrollment !== current.closure_enrollment) return false;
+      await tx.query(`UPDATE semantic.identity_epoch_mapping SET closure_cancelled_successor=false
+        WHERE route=$1 AND original=$2 AND closure_enrollment=$3`, [current.route, current.original, current.closure_enrollment]);
       return true;
     });
   }
@@ -688,6 +752,7 @@ export async function releaseIdentityTerminalClaim(pool: Pool, drained: DrainCla
  * attempt whose response was lost. Only one indexed local group is selected.
  */
 export async function recoverIdentityTerminalClosure(pool: Pool, partition: number): Promise<void> {
+  await recoverCancelledSuccessors(pool, partition);
   await recoverSuccessorTickets(pool, partition);
   const row = await withReadTransaction(pool, async (tx) => (await tx.query(
     `SELECT g.*,n.epoch AS native_epoch,n.position AS native_position FROM semantic.identity_epoch_group g
