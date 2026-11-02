@@ -25,7 +25,7 @@ const cost = {
   frontierWrites: 0,
 };
 const digest = `sha256:${'a'.repeat(64)}`;
-const release = { types: { 'schema:Thing': {} } } as Release;
+const release = { types: { 'schema:Thing': {} } } as unknown as Release;
 const context = () => ({ deadline: Date.now() + 10_000 });
 const plan = { filterDocument: undefined, text: undefined, sort: 'id' as const, size: 1, pageSize: 1 };
 
@@ -70,7 +70,7 @@ const factory = spyOn(consumer, 'createPublicFilterConsumerOperations').mockImpl
         queried,
         execution: 'execution',
         start: { observation: 'start' },
-        result: { hits: [], total: { value: 0, relation: 'eq' as const } },
+        result: { hits: [], total: { value: 0, relation: 'exact' as const } },
         window: { positions: [], examined: 0, exhausted: false },
         cost,
       };
