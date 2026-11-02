@@ -209,6 +209,7 @@ test('Consume the applicable task priority grant after a manager-parent change.'
     const current = updated.priorityGrants?.find((grant) => grant.id === currentGrant.id);
     expect(updated.brief.criticalPath).toBe(true);
     expect(updated.priorityGrants).toHaveLength(2);
+    expect(updated.priorityGrants?.filter((grant) => grant.consumedAt)).toHaveLength(1);
     expect(stale).toMatchObject({ grantor: 'old-super' });
     expect(stale?.consumedAt).toBeUndefined();
     expect(current).toMatchObject({ grantor: 'new-super', consumedBy: owner });
