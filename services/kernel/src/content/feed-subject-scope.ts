@@ -45,6 +45,7 @@ export async function openSpaceSubjectPopulation(
   at: string,
   expected?: SpaceSubjectObservation,
 ) {
+  expected = expected === undefined ? undefined : structuredClone(expected);
   const selected = await openFollowingSpace(deps, actor, spaceId, deadline, at);
   const route = routeOf(spaceId)!;
   const partitionNo = partitionOf(route);

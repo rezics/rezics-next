@@ -16,8 +16,15 @@ test('native Space Subject scope retains complete publication membership and rej
       contentAccess: world.system.access,
       tokens: world.system.tokenKeys,
     };
-    const open = (id = spaceId, expected?: Parameters<typeof openSpaceSubjectPopulation>[6]) =>
-      openSpaceSubjectPopulation(deps, { kind: 'anonymous' }, id, Date.now() + 30_000, new Date().toISOString(), expected);
+    const open = (id = spaceId, expected?: Parameters<typeof openSpaceSubjectPopulation>[5]) =>
+      openSpaceSubjectPopulation(
+        deps,
+        { kind: 'anonymous' },
+        id,
+        Date.now() + 30_000,
+        new Date().toISOString(),
+        expected,
+      );
     const publish = (realmId: string, subjectId: string) =>
       world.command('POST', `/v1/realms/${realmId}/publications`, { subjectId });
     const first = await publish(selected.realmId, world.conceptId);
@@ -31,7 +38,8 @@ test('native Space Subject scope retains complete publication membership and rej
     // Actual committed unrelated heads must not consume this scope's prefix or invalidate its observation.
     for (let index = 0; index < 12; index++) {
       const subject = await world.command('POST', '/v1/subjects', {
-        type: 'schema:Book', labels: { en: `Unrelated scope book ${index}` },
+        type: 'schema:Book',
+        labels: { en: `Unrelated scope book ${index}` },
       });
       await publish(unrelated.realmId, subject.subject.id);
     }
@@ -41,20 +49,32 @@ test('native Space Subject scope retains complete publication membership and rej
     expect(next.subjects.map((row) => row.subjectId)).toEqual(expected.slice(1));
     expect(next.exhausted).toBe(true);
     expect(next.examined).toBe(1);
-    await world.command('POST', `/v1/realms/${selected.realmId}/publications/${world.conceptId}:withdraw`, undefined, {
-      headers: { 'if-match': JSON.stringify(first.publication.publicationId) }, expectedStatus: 200,
-    });
+    await world.command(
+      'POST',
+      `/v1/realms/${selected.realmId}/publications/${world.conceptId}:withdraw`,
+      undefined,
+      {
+        headers: { 'if-match': JSON.stringify(first.publication.publicationId) },
+        expectedStatus: 200,
+      },
+    );
     await expect(scope.finish()).rejects.toMatchObject({ code: 'stale_cursor' });
     await expect(scope.prefix(1, prefix.coveredThrough)).rejects.toMatchObject({ code: 'stale_cursor' });
     await expect(open(spaceId, scope.observation)).rejects.toMatchObject({ code: 'stale_cursor' });
     expect((await (await open()).prefix(2)).subjects.map((row) => row.subjectId)).toEqual([world.schemeId]);
-    const emptySpace = await world.command('POST', '/v1/spaces', { title: 'Empty population', summary: '' });
+    const emptySpace = await world.command('POST', '/v1/spaces', {
+      title: 'Empty population',
+      summary: 'A Space without a Realm',
+    });
     const emptyId = emptySpace.space.spaceId as string;
     const empty = await open(emptyId);
     expect(await empty.prefix(1)).toMatchObject({ subjects: [], exhausted: true, examined: 0 });
-    await world.command('PUT', `/v1/spaces/${emptyId}`, { title: 'Changed empty population' }, {
-      headers: { 'if-match': JSON.stringify(emptySpace.space.headRevisionId) },
-    });
+    await world.command(
+      'PUT',
+      `/v1/spaces/${emptyId}`,
+      { title: 'Changed empty population' },
+      { headers: { 'if-match': JSON.stringify(emptySpace.space.headRevisionId) } },
+    );
     await expect(empty.finish()).rejects.toMatchObject({ code: 'stale_cursor' });
     await expect(empty.prefix(1)).rejects.toMatchObject({ code: 'stale_cursor' });
   } finally {
