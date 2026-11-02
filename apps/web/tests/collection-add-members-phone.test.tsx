@@ -223,9 +223,7 @@ async function mounted() {
     await settle(() => {
       input().focus();
       Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input(), query);
-      input().dispatchEvent(
-        new window.InputEvent('input', { bubbles: true, inputType: 'insertText', data: query }),
-      );
+      input().dispatchEvent(new window.InputEvent('input', { bubbles: true, inputType: 'insertText', data: query }));
     });
     await until(() => !!document.querySelector('[role="option"]'));
     await settle(() => document.querySelector<HTMLElement>('[role="option"]')!.click());
