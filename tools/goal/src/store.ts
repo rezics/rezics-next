@@ -1675,10 +1675,7 @@ export class WorkerStore implements AttemptFence {
   recordOwnerDecisionDelivery(ref: AttemptRef, receipt: unknown): void {
     this.event(ref, 'owner-contract-decision-delivery', receipt);
   }
-  events(
-    taskId?: string,
-    attempt?: number,
-  ): WorkerEvent[] {
+  events(taskId?: string, attempt?: number): WorkerEvent[] {
     return (
       taskId && attempt !== undefined
         ? this.db

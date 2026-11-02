@@ -43,7 +43,11 @@ function record(value: unknown): Record<string, unknown> | undefined {
 
 function stableId(decisionId: string, managerId: string): string {
   const id = `${managerId}:${decisionId}`;
-  return id.length <= 128 ? id : createHash('sha256').update(JSON.stringify([managerId, decisionId])).digest('hex');
+  return id.length <= 128
+    ? id
+    : createHash('sha256')
+        .update(JSON.stringify([managerId, decisionId]))
+        .digest('hex');
 }
 
 function safeDocumentReference(value: unknown): DocumentReference | undefined {
@@ -68,12 +72,7 @@ function safeDocumentReference(value: unknown): DocumentReference | undefined {
 }
 
 /** Only this command ingress promotes caller data to a persisted owner decision. */
-export function submitOwnerDecision(
-  store: WorkerStore,
-  ref: AttemptRef,
-  input: unknown,
-  env: NodeJS.ProcessEnv,
-): void {
+export function submitOwnerDecision(store: WorkerStore, ref: AttemptRef, input: unknown, env: NodeJS.ProcessEnv): void {
   store.write(ref, () => {
     const actor = authenticatedManager(store.db, env);
     const task = store.task(ref.taskId);
@@ -84,13 +83,17 @@ export function submitOwnerDecision(
     if (
       !body ||
       Object.keys(body).some((key) => !['decisionId', 'summary', 'documentRefs'].includes(key)) ||
-      typeof body.decisionId !== 'string' || !body.decisionId.trim() || body.decisionId.length > 128 ||
-      typeof body.summary !== 'string' || !body.summary.trim() ||
+      typeof body.decisionId !== 'string' ||
+      !body.decisionId.trim() ||
+      body.decisionId.length > 128 ||
+      typeof body.summary !== 'string' ||
+      !body.summary.trim() ||
       body.summary.trim().length > MANAGER_SEND_MAX_CHARACTERS ||
       (body.documentRefs !== undefined && !Array.isArray(body.documentRefs)) ||
       (Array.isArray(body.documentRefs) && body.documentRefs.some((item) => !safeDocumentReference(item))) ||
       Buffer.byteLength(JSON.stringify(body)) > MAX_BRIEF_BYTES
-    ) throw new Error('owner decision requires decisionId, summary and optional repository-relative documentRefs');
+    )
+      throw new Error('owner decision requires decisionId, summary and optional repository-relative documentRefs');
     const accepted = {
       decisionId: body.decisionId.trim(),
       summary: body.summary.trim(),
@@ -107,8 +110,13 @@ export function submitOwnerDecision(
 }
 
 function decisionFromEvent(event: WorkerEvent, task: Task, ref: AttemptRef): OwnerDecision | undefined {
-  if (event.kind !== DECISION_EVENT || event.task_id !== task.id || event.attempt !== ref.attempt ||
-      Buffer.byteLength(event.body) > MAX_BRIEF_BYTES) return undefined;
+  if (
+    event.kind !== DECISION_EVENT ||
+    event.task_id !== task.id ||
+    event.attempt !== ref.attempt ||
+    Buffer.byteLength(event.body) > MAX_BRIEF_BYTES
+  )
+    return undefined;
   let body: Record<string, unknown> | undefined;
   try {
     body = record(JSON.parse(event.body));
@@ -125,7 +133,8 @@ function decisionFromEvent(event: WorkerEvent, task: Task, ref: AttemptRef): Own
     managerId !== task.brief.manager ||
     typeof senderSessionId !== 'string' ||
     !senderSessionId.trim() ||
-    typeof body.decisionId !== 'string' || !body.decisionId.trim() ||
+    typeof body.decisionId !== 'string' ||
+    !body.decisionId.trim() ||
     (body.kind !== undefined && body.kind !== 'decision') ||
     body.senderProvenance !== undefined ||
     body.taskId !== task.id ||
@@ -178,8 +187,12 @@ function deliveredState(events: readonly WorkerEvent[], decision: OwnerDecision)
     } catch {
       continue;
     }
-    if (body?.decisionId !== decision.id || body.decisionSequence !== decision.sequence ||
-        event.sequence <= decision.sequence) continue;
+    if (
+      body?.decisionId !== decision.id ||
+      body.decisionSequence !== decision.sequence ||
+      event.sequence <= decision.sequence
+    )
+      continue;
     if (body.summaryDelivered === true) summaryDelivered = true;
     if (Array.isArray(body.documentRefs)) {
       for (const reference of body.documentRefs) {
@@ -199,7 +212,9 @@ function latestDecision(events: readonly WorkerEvent[], task: Task, ref: Attempt
     const previous = unique.get(decision.id);
     if (!previous || decision.sequence < previous.sequence) unique.set(decision.id, decision);
   }
-  return [...unique.values()].sort((left, right) => left.decidedAt - right.decidedAt || left.sequence - right.sequence).at(-1);
+  return [...unique.values()]
+    .sort((left, right) => left.decidedAt - right.decidedAt || left.sequence - right.sequence)
+    .at(-1);
 }
 
 export function prepareOwnerDecisionPrompt(
@@ -244,7 +259,8 @@ export function prepareOwnerDecisionPrompt(
     documentRefs.push({ path: reference.path, status });
   }
   if (omitted) {
-    const notice = () => `- ${omitted} document reference(s) remain pending because this prompt reached its total input limit.`;
+    const notice = () =>
+      `- ${omitted} document reference(s) remain pending because this prompt reached its total input limit.`;
     while (lines.length > (delivered.summaryDelivered ? 1 : 2) && !fits([...lines, notice()].join('\n'))) {
       lines.pop();
       documentRefs.pop();

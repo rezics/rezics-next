@@ -230,8 +230,11 @@ test('a resumed prompt supersedes a saved legacy check wait and states the bare 
     const task = {
       worktree,
       branch: 'worker/protocol',
-      brief: { markdown: 'Do the thing.', kind: 'implementation',
-        acceptance: { command: ['bun', 'test'], tests: ['x'] } },
+      brief: {
+        markdown: 'Do the thing.',
+        kind: 'implementation',
+        acceptance: { command: ['bun', 'test'], tests: ['x'] },
+      },
     } as unknown as Task;
     const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main');
     expect(prompt).toContain('bun scripts/worker-check.ts -- <command...>');
@@ -699,9 +702,16 @@ test('a normal prompt boundary includes a persisted owner decision on the same w
       'implementation',
       'task-a',
     );
-    db.query("UPDATE worker_tasks SET current_attempt=1, body=json_set(body, '$.currentAttempt', 1) WHERE id=?").run(task.id);
-    const attempt = { taskId: task.id, attempt: 1, state: 'waiting', session: 'existing-worker-session',
-      checks: ['existing-check-identity'] } as Attempt;
+    db.query("UPDATE worker_tasks SET current_attempt=1, body=json_set(body, '$.currentAttempt', 1) WHERE id=?").run(
+      task.id,
+    );
+    const attempt = {
+      taskId: task.id,
+      attempt: 1,
+      state: 'waiting',
+      session: 'existing-worker-session',
+      checks: ['existing-check-identity'],
+    } as Attempt;
     db.query('INSERT INTO worker_attempts(task_id, attempt, body) VALUES (?, ?, ?)').run(
       task.id,
       1,
@@ -709,17 +719,31 @@ test('a normal prompt boundary includes a persisted owner decision on the same w
     );
     store = new WorkerStore(db);
     db.exec('CREATE TABLE manager_sessions (id TEXT PRIMARY KEY, state TEXT NOT NULL)');
-    db.query('INSERT INTO manager_sessions VALUES (?, ?)').run('accounts', JSON.stringify({
-      status: 'running', threadId: 'authenticated-owner-session',
-    }));
-    await runWorkerCommand('event', [task.id, '1', 'owner-contract-decision', JSON.stringify({
-      decisionId: 'clarification-1',
-      summary: 'Use the existing contributor-to-work composition rule.',
-      documentRefs: [{ path: 'docs/composition.md', change: 'Clarified contributor ownership.' }],
-    })], {
-      settings: loadSettings({ cwd: directory.path, env: { GOAL_MAIN_CHECKOUT: directory.path } }), store,
-      env: { CODEX_THREAD_ID: 'authenticated-owner-session' },
-    });
+    db.query('INSERT INTO manager_sessions VALUES (?, ?)').run(
+      'accounts',
+      JSON.stringify({
+        status: 'running',
+        threadId: 'authenticated-owner-session',
+      }),
+    );
+    await runWorkerCommand(
+      'event',
+      [
+        task.id,
+        '1',
+        'owner-contract-decision',
+        JSON.stringify({
+          decisionId: 'clarification-1',
+          summary: 'Use the existing contributor-to-work composition rule.',
+          documentRefs: [{ path: 'docs/composition.md', change: 'Clarified contributor ownership.' }],
+        }),
+      ],
+      {
+        settings: loadSettings({ cwd: directory.path, env: { GOAL_MAIN_CHECKOUT: directory.path } }),
+        store,
+        env: { CODEX_THREAD_ID: 'authenticated-owner-session' },
+      },
+    );
     store = new WorkerStore(db);
     mkdirSync(join(directory.path, 'docs'), { recursive: true });
     writeFileSync(join(directory.path, 'docs/composition.md'), 'Composition rules.');
@@ -731,8 +755,9 @@ test('a normal prompt boundary includes a persisted owner decision on the same w
     expect(prepared.prompt).toContain('docs/composition.md');
     expect(prepared.prompt).toContain('Document reference delivered and available');
     expect(store.task(task.id).currentAttempt).toBe(1);
-    expect(store.attempts(task.id)).toMatchObject([{ attempt: 1, session: 'existing-worker-session',
-      checks: ['existing-check-identity'] }]);
+    expect(store.attempts(task.id)).toMatchObject([
+      { attempt: 1, session: 'existing-worker-session', checks: ['existing-check-identity'] },
+    ]);
     expect(store.attempts(task.id)).toHaveLength(1);
 
     store.recordOwnerDecisionDelivery({ taskId: task.id, attempt: 1 }, prepared.delivery!);

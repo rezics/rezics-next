@@ -195,32 +195,60 @@ test('the event command authenticates the current owner and reserves decision an
   const store = new WorkerStore(db);
   const settings = loadSettings({ cwd: directory.path, env: { GOAL_MAIN_CHECKOUT: directory.path } });
   try {
-    const task = store.createTask({ ...brief(), manager: 'accounts' }, {
-      briefPath: 'brief.md', worktree: directory.path, branch: 'worker/task-a', base: 'base',
-    }, 'implementation', 'task-a');
-    db.query("UPDATE worker_tasks SET current_attempt=1, body=json_set(body, '$.currentAttempt', 1) WHERE id=?").run(task.id);
-    const attempt = { taskId: task.id, attempt: 1, state: 'waiting', session: 'worker-session', checks: ['check-identity'] } as Attempt;
+    const task = store.createTask(
+      { ...brief(), manager: 'accounts' },
+      {
+        briefPath: 'brief.md',
+        worktree: directory.path,
+        branch: 'worker/task-a',
+        base: 'base',
+      },
+      'implementation',
+      'task-a',
+    );
+    db.query("UPDATE worker_tasks SET current_attempt=1, body=json_set(body, '$.currentAttempt', 1) WHERE id=?").run(
+      task.id,
+    );
+    const attempt = {
+      taskId: task.id,
+      attempt: 1,
+      state: 'waiting',
+      session: 'worker-session',
+      checks: ['check-identity'],
+    } as Attempt;
     db.query('INSERT INTO worker_attempts VALUES (?, ?, ?)').run(task.id, 1, JSON.stringify(attempt));
     db.exec('CREATE TABLE manager_sessions (id TEXT PRIMARY KEY, state TEXT NOT NULL)');
-    for (const id of ['accounts', 'foreign']) db.query('INSERT INTO manager_sessions VALUES (?, ?)').run(id,
-      JSON.stringify({ status: 'running', threadId: `${id}-session` }));
+    for (const id of ['accounts', 'foreign'])
+      db.query('INSERT INTO manager_sessions VALUES (?, ?)').run(
+        id,
+        JSON.stringify({ status: 'running', threadId: `${id}-session` }),
+      );
     const body = { decisionId: 'rule', summary: 'Apply the owner rule.' };
     const submit = (env: NodeJS.ProcessEnv, input: unknown = body, kind = 'owner-contract-decision', n = '1') =>
       runWorkerCommand('event', [task.id, n, kind, JSON.stringify(input)], { settings, store, env });
     const owner = { CODEX_THREAD_ID: 'accounts-session' };
-    for (const env of [{}, { GOAL_MANAGER: 'accounts' }, { CODEX_THREAD_ID: 'foreign-session' },
+    for (const env of [
+      {},
+      { GOAL_MANAGER: 'accounts' },
+      { CODEX_THREAD_ID: 'foreign-session' },
       { CODEX_THREAD_ID: 'unknown-session', GOAL_MANAGER: 'accounts' },
-      { CODEX_THREAD_ID: 'accounts-session', GOAL_MANAGER: 'foreign' }]) {
+      { CODEX_THREAD_ID: 'accounts-session', GOAL_MANAGER: 'foreign' },
+    ]) {
       await expect(submit(env)).rejects.toThrow('authenticated owning manager');
     }
-    for (const forged of [{ ...body, senderSessionId: 'accounts-session' }, { ...body, managerId: 'accounts' },
-      { ...body, attempt: 2 }, { ...body, decidedAt: '2099-01-01' }]) {
+    for (const forged of [
+      { ...body, senderSessionId: 'accounts-session' },
+      { ...body, managerId: 'accounts' },
+      { ...body, attempt: 2 },
+      { ...body, decidedAt: '2099-01-01' },
+    ]) {
       await expect(submit(owner, forged)).rejects.toThrow('owner decision requires');
     }
     await expect(submit(owner, body, 'owner-contract-decision', '2')).rejects.toThrow();
     for (const kind of ['owner-contract-decision-accepted', 'owner-contract-decision-delivery'])
-      await expect(submit(owner, { decisionId: 'accounts:rule', summaryDelivered: true }, kind))
-        .rejects.toThrow('controller-owned');
+      await expect(submit(owner, { decisionId: 'accounts:rule', summaryDelivered: true }, kind)).rejects.toThrow(
+        'controller-owned',
+      );
     expect(store.events(task.id)).toHaveLength(0);
 
     await submit(owner);
@@ -230,20 +258,33 @@ test('the event command authenticates the current owner and reserves decision an
     expect(prepared.prompt).toContain(body.summary);
     expect(prepared.prompt).not.toContain('A replay');
     expect(JSON.parse(persisted.ownerDecisionEvents(attempt)[0]!.body)).toMatchObject({
-      managerId: 'accounts', senderSessionId: 'accounts-session', taskId: task.id, attempt: 1,
+      managerId: 'accounts',
+      senderSessionId: 'accounts-session',
+      taskId: task.id,
+      attempt: 1,
     });
     expect(persisted.attempts(task.id)).toEqual([attempt]);
     expect(persisted.events(task.id).map((event) => event.kind)).toEqual([
-      'owner-contract-decision-accepted', 'owner-contract-decision-accepted',
+      'owner-contract-decision-accepted',
+      'owner-contract-decision-accepted',
     ]);
 
     let sweeps = 0;
     // Exercise the CLI wrapper too: recording an event cannot launch work through orphan recovery.
-    const code = await run(['event', task.id, '1', 'note', '{}'], () => ({
-      settings, db, store: { db, assertCurrent() {}, event: store.event.bind(store) },
-      tasks: { settings, store }, job: { async drain() {} },
-      recoverOrphans: async () => { sweeps++; },
-    }) as never);
+    const code = await run(
+      ['event', task.id, '1', 'note', '{}'],
+      () =>
+        ({
+          settings,
+          db,
+          store: { db, assertCurrent() {}, event: store.event.bind(store) },
+          tasks: { settings, store },
+          job: { async drain() {} },
+          recoverOrphans: async () => {
+            sweeps++;
+          },
+        }) as never,
+    );
     expect(code).toBe(0);
     expect(sweeps).toBe(0);
   } finally {
