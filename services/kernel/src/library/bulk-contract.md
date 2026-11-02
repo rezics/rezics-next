@@ -77,6 +77,7 @@ workflow ID. Each step attempts at most 100 stored targets, and each segment at 
 command admission applies; no funding or chunk ledger is added. Status effects, entry events, per-target command
 receipts and terminal evidence commit on the account home in one transaction. Private reconciliation verifies
 the exact committed receipt and its write basis without restoring authority or exposing results.
+Decision: existing action executors honor a legacy chunk admission hook when supplied; its absence does not replace or bypass native current-authority admission.
 A completed header with pending rows is an irreversible stop marker under the same lock as effects; pending
 outcomes drain in pages of 100. Cancellation never rolls back a completed effect. Expired execution cancels the
 remaining targets; result reads close at 48 hours. The indexed expiry workflow removes at most 100 manifest rows

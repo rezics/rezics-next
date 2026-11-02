@@ -319,13 +319,13 @@ export async function executeLibraryRemovalTarget(
           context: { pool: deps.pool, deadline: command.deadline, partition: receipt.partition },
         });
         const proof = await native.prepare!(attempt);
-        const spent = await deps.spendChunk(
+        const spent = await deps.spendChunk?.(
           { pool: deps.pool, actor, deadline: command.deadline },
           { operation: source, index: command.chunkIndex },
           'write',
           initial.chunkUnits,
         );
-        if (!spent.allowed) throw new ChunkRefused();
+        if (spent && !spent.allowed) throw new ChunkRefused();
         prepared.set(attempt.time, { native, proof, actor });
       },
       async authorize(tx, attempt) {
