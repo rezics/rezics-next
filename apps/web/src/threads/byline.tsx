@@ -35,7 +35,8 @@ export function fullDateTime(createdAt: string, locale: string): string {
   );
 }
 
-const personLink = 'underline-offset-4 hover:underline focus-visible:underline';
+const personLink =
+  'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm text-start whitespace-normal [overflow-wrap:anywhere] underline-offset-4 hover:underline focus-visible:underline focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 /** The author of a post or thread: avatar with initials, display name and handle linked to the person, and the time. */
 export function Byline({
@@ -84,7 +85,10 @@ export function Byline({
       <p className="min-w-0 flex-1">
         <span className="block min-w-0">
           {showAuthor ? (
-            <span className="block min-w-0 truncate" title={identityTitle}>
+            <span
+              className="block min-w-0 truncate overflow-visible! text-clip! whitespace-normal! [overflow-wrap:anywhere]"
+              title={identityTitle}
+            >
               {deleted ? (
                 <span>
                   {author?.kind === 'organization' ? m.thread_author_deleted_organization() : m.thread_author_deleted()}
