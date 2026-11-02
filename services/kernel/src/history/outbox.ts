@@ -4,6 +4,7 @@ import { classifyEvent } from './contracts.ts';
 import { decodeLocator } from './locator.ts';
 import { agentIdentityCopyRetentionGap } from './agent-identity-source.ts';
 import type { HistoryBarrier, HistoryRegistry } from './registry.ts';
+import type { HistoryReceivingContext } from './receiving.ts';
 
 /** One envelope slot, never the whole envelope. The owner's proof covers projections and all
  * remaining native consumers; persisted effect dispositions independently cover actual dispatch. */
@@ -13,6 +14,7 @@ export async function minimizeHistoryOutbox(
   locator: Buffer,
   registry?: HistoryRegistry,
   barrier?: HistoryBarrier,
+  context?: HistoryReceivingContext,
 ): Promise<string | null> {
   const record = 'authority' in job;
   if (record && !(await lockRecordHistoryCopy(tx, job, 'outbox-event/v1', locator))) return 'record-source-stale';
@@ -61,6 +63,7 @@ export async function minimizeHistoryOutbox(
           })),
         },
         barrier,
+        context,
       );
       if (!readiness.ready) return readiness.gap;
     }

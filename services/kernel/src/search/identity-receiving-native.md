@@ -18,23 +18,28 @@ consumer and physical index. Search aliases extract the canonical native unions;
 API remain Library-only. Common preparation and exact selection resolve committed native plan custody. A plan
 receipt still grants no complete Source or publication authority.
 
-Full composition remains incomplete. Source has not installed the writer prepare/copy/dispatch/visible/drain
-hooks, complete original-support/copy-directory closure operand or coordinator configuration. The adapter refuses
-terminal settlement without that genuine closure; structural close plus an empty local directory cannot mint it.
-The fixed participant can apply an existing accepted scope and retain a `more` step in the same transaction. Whole
-participant completion, cancellation and current-owner handoff remain unfinished. This is not native readiness.
-It now retires genuinely released scopes through a same-plan-transaction operational queue and committed fixed
-progress, rather than selecting the first already-applied scope indefinitely. Durable complete ACK replay verifies
-its original native commit/frontier and current owner. The queue is not a complete-support or closure witness.
+Terminal reconciliation reads the complete bounded original directory through the installed Source support reader,
+requires the selected origin and terminal mapping to appear across its pages, separately closes their native
+projections, settles each registered native copy through its current owner, and rechecks the immutable plan and
+original writer fence after released Source reads. The bounded continuation retains only the Source frontier;
+the final exact origin projection and native plan/fence checks run after the directory is complete. Empty local pages,
+structural closes, locators and Source projection receipts alone cannot establish copy completion. Existing writer
+prepare/copy/dispatch/visible/drain installation, coordinator
+configuration, whole-participant completion, cancellation and current-owner handoff remain separate composition
+work. This adapter does not claim those broader lifecycle operations are installed.
+The fixed participant can apply an existing accepted scope and retain a `more` step in the same transaction. It now
+retires genuinely released scopes through a same-plan-transaction operational queue and committed fixed progress,
+rather than selecting the first already-applied scope indefinitely. Durable complete ACK replay verifies its
+original native commit/frontier and current owner. The queue is not a complete-support or closure witness.
 
 Each reconciliation invalidates earlier private release observations immediately. An overlapping reconciliation
 or release also invalidates a terminal read still in flight; its eventual return cannot reinstall authority.
 Consumed observations remain revocable while native release waits for locks or late verification. Invocation end
 revokes unused and in-flight observations, and released replay checks revocation around its actual proof read.
-Continuations accept only the bounded canonical four-field versioned encoding. Completing a copy page returns
-an advancing progress cursor before attempting terminal Source closure on the next call, preserving that page
-even when closure is unavailable. Source selection rereads the committed native plan after released Source reads
-to detect owner or immutable-plan changes during resolution.
+Continuations accept only the bounded canonical versioned encoding, with an optional bounded Source directory
+frontier. Completing a copy page returns an advancing progress cursor before attempting terminal Source closure on
+the next call, preserving that page even when closure is unavailable. Source selection rereads the committed
+native plan after released Source reads to detect owner or immutable-plan changes during resolution.
 Definition resolution reads only the admitted immutable definition's release/type and configured Source route
 digest. It does not decode its capture body or register a fresh Source/read definition as a read side effect.
 The original Release and independent original/terminal Source projections are still required and separately funded.

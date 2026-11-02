@@ -28,6 +28,14 @@ import { deadlineFor } from '../request/deadline.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import { systemClock } from '../clock.ts';
 import {
+  readAgentIdentityRecoveryArtifactInTransaction,
+  type AgentIdentityRecoveryArtifactInspection,
+} from '../history/agent-identity-inventory.ts';
+import {
+  observeAccountErasureSearch,
+  type AccountErasureSearchObservation,
+} from '../search/account-erasure-source.ts';
+import {
   consumeSelectedHistoryOriginal,
   currentIdentityOriginalTransfer,
   identityOriginalRemainder,
@@ -57,6 +65,16 @@ type Job = {
   registry_digest: string;
   registry_generation: string | number;
 };
+type DeferredRecoveryReceiving = Readonly<{
+  receiving: Readonly<{
+    job: Job;
+    proof: HistoryBarrier;
+    type: Extract<HistoryArtifactType, 'command-receipt/v1' | 'outbox-event/v1'>;
+    locator: Buffer;
+    inspection: AgentIdentityRecoveryArtifactInspection;
+    deadline: number;
+  }>;
+}>;
 export type SharedHistoryResult = Readonly<{ state: 'more' | 'pending' | 'complete'; gap: string | null }>;
 const result = (state: SharedHistoryResult['state'], gap: string | null = null): SharedHistoryResult => ({
   state,
@@ -131,7 +149,10 @@ export async function advanceSharedHistory(
       if (!job) throw new TypeError('Shared history job unavailable');
       if (original) await lockSelectedHistoryOriginalPosition(deps, original, job, tx);
       const proof = await barrier(tx, job);
-      let answer: SharedHistoryResult | { work: Buffer; job: Job; proof: HistoryBarrier; identity: boolean };
+      let answer:
+        | SharedHistoryResult
+        | { work: Buffer; job: Job; proof: HistoryBarrier; identity: boolean }
+        | DeferredRecoveryReceiving;
       if (job.phase === 'pending' || job.phase === 'complete') answer = result(job.phase);
       else if (job.phase === 'verify') answer = await verifyHome(tx, job, deps.registry);
       else if (job.scan_partition === PARTITIONS) {
@@ -222,8 +243,41 @@ export async function advanceSharedHistory(
                   ])
                 ).rows[0]?.owner === 'access.agent-identity';
             }
+            let recoveryCandidate = false;
+            const selectedLocator = decodeLocator(first.artifact_type, first.locator);
+            if (selectedLocator.artifactType === 'command-receipt/v1')
+              recoveryCandidate =
+                commandHistoryKind(selectedLocator.commandKindId) === 'access.agent-identity.recover';
+            else if (selectedLocator.artifactType === 'outbox-event/v1') {
+              const event = (
+                await tx.query<{ type: string }>(
+                  'SELECT type FROM core.outbox WHERE partition_no=$1 AND position=$2 AND event_seq=$3 FOR SHARE',
+                  [selectedLocator.partitionNo, selectedLocator.position.toString(), selectedLocator.eventSeq],
+                )
+              ).rows[0];
+              recoveryCandidate = event?.type === 'com.rezics.access.account-updated.v1';
+            }
             if (original && !identity)
               answer = result('more', 'identity-history-original-artifact-declaration-unavailable');
+            else if (recoveryCandidate) {
+              const deadline = originalDeadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
+              const inspection = await readAgentIdentityRecoveryArtifactInTransaction(
+                tx,
+                { partition, locator: selectedLocator, accounts: [] },
+                deps.pool,
+                { deadline },
+              );
+              answer = {
+                receiving: {
+                  job,
+                  proof,
+                  type: selectedLocator.artifactType as Extract<HistoryArtifactType, 'command-receipt/v1' | 'outbox-event/v1'>,
+                  locator: first.locator,
+                  inspection,
+                  deadline,
+                },
+              };
+            }
             else if (first.artifact_type === 'durable-work/v1' && (first.state === 'pending' || identity))
               answer = { work: first.locator, job, proof, identity };
             else {
@@ -273,6 +327,7 @@ export async function advanceSharedHistory(
       throw error;
     }
   });
+  if ('receiving' in deferred) return continueRecoveryReceiving(deps, jobId, deferred.receiving);
   if (!('work' in deferred)) return deferred;
   // No source checkout survives SDK calls. Permanent native retirement makes either crash cut replayable.
   const { job, work, proof } = deferred;
@@ -394,6 +449,103 @@ export async function advanceSharedHistory(
           deps.pool,
         );
       await scannedArtifact(tx, job, 'durable-work/v1', work, gap);
+      await tx.query('COMMIT');
+      return result('more');
+    } catch (error) {
+      await tx.query('ROLLBACK');
+      throw error;
+    }
+  });
+}
+
+async function continueRecoveryReceiving(
+  deps: { pool: Pool; client: WorkClient; registry: HistoryRegistry } & Partial<Pick<WorkContext, 'env' | 'clock'>>,
+  jobId: string,
+  selected: DeferredRecoveryReceiving['receiving'],
+): Promise<SharedHistoryResult> {
+  let searchObservation: AccountErasureSearchObservation | undefined;
+  let recoveryReceivingReserved = false;
+  if (selected.inspection.state === 'sealed') {
+    const event = selected.inspection.recoveryEvent;
+    if (event.locator.artifactType !== 'outbox-event/v1' || event.locator.eventSeq !== 0) {
+      searchObservation = { state: 'pending', gap: 'agent-identity-recovery-event-cut-unavailable' };
+    } else {
+      try {
+        await reserveIdentityHistoryWork(
+          deps.pool,
+          IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.recoveryReceiving,
+          { deadline: selected.deadline },
+        );
+        recoveryReceivingReserved = true;
+        searchObservation = await observeAccountErasureSearch(
+          deps.pool,
+          {
+            accountId: selected.inspection.proof.key.accountId,
+            accountPartition: event.partition,
+            eventPosition: event.locator.position,
+            prefix: deps.env?.KERNEL_SEARCH_PREFIX,
+          },
+          selected.deadline,
+        );
+      } catch (error) {
+        if (!(error instanceof IdentityHistoryWorkUnavailable)) throw error;
+        searchObservation = { state: 'pending', gap: error.message };
+      }
+    }
+  }
+  const receivingContext: HistoryReceivingContext = {
+    deadline: selected.deadline,
+    ...(searchObservation ? { accountErasureSearchObservation: searchObservation } : {}),
+    recoveryReceivingReserved,
+  };
+  return withConnection(deps.pool, async (tx) => {
+    await tx.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
+    try {
+      await tx.query("SET LOCAL lock_timeout='200ms'");
+      await tx.query(
+        `SET LOCAL statement_timeout='${Math.max(1, Math.min(2000, selected.deadline - Date.now()))}ms'`,
+      );
+      const current = (
+        await tx.query<Job>('SELECT * FROM core.preference_history_job WHERE job_id=$1 FOR UPDATE', [jobId])
+      ).rows[0];
+      if (
+        !current ||
+        current.phase !== selected.job.phase ||
+        current.scan_partition !== selected.job.scan_partition ||
+        current.verify_partition !== selected.job.verify_partition ||
+        current.scan_type !== selected.job.scan_type ||
+        !sameLocator(current.scan_locator, selected.job.scan_locator) ||
+        current.registry_digest !== selected.job.registry_digest ||
+        String(current.registry_generation) !== String(selected.job.registry_generation) ||
+        current.account_route !== selected.job.account_route ||
+        current.account_id !== selected.job.account_id ||
+        current.barrier_id !== selected.job.barrier_id ||
+        current.barrier_version !== selected.job.barrier_version ||
+        current.barrier_at !== selected.job.barrier_at
+      ) {
+        await tx.query('COMMIT');
+        return result('more', 'identity-history-selected-cursor-changed');
+      }
+      const proof = await barrier(tx, current);
+      const key = {
+        partition_no: selected.job.scan_partition,
+        account_route: selected.job.account_route,
+        account_id: selected.job.account_id,
+      };
+      let gap =
+        selected.type === 'command-receipt/v1'
+          ? await minimizeHistoryReceipt(tx, key, selected.locator, deps.registry, proof, receivingContext)
+          : await minimizeHistoryOutbox(tx, key, selected.locator, deps.registry, proof, receivingContext);
+      if (!gap)
+        gap = await recordHistoryReceivingProof(
+          tx,
+          proof,
+          selected.job.scan_partition,
+          decodeLocator(selected.type, selected.locator),
+          deps.pool,
+          receivingContext,
+        );
+      await scannedArtifact(tx, current, selected.type, selected.locator, gap);
       await tx.query('COMMIT');
       return result('more');
     } catch (error) {

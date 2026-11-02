@@ -905,12 +905,12 @@ Recovery receipt and event retirement reuses the existing History/Work engine an
 It checks the exact `account_discovery_redrive` consumer, its derived workflow identity and completed native state,
 the effects checkpoint, the physical serializer rows, role digest, receiving proof, seal, owner epoch and restore
 domain. The recovery wakeup is not the original SDK verification/reversal handoff and creates no SDK workflow
-obligation. `verifyAgentIdentityRecoveryArtifactReadiness` keeps the event pending with
-`agent-identity-recovery-discovery-owner-unavailable`: installed composition has no Search owner capability that
-can return a released current-enrollment observation and verify it again in the source-home transaction. The
-former direct `search.discovery_generation` list and checkpoint scan were removed; neither an arbitrary active
-generation list nor a relay checkpoint can settle Search custody. The native trigger has the same precise
-fail-closed result, so a completed account-discovery effect alone cannot retire the recovery bytes.
+obligation. Shared History first commits its selected locator, reads current Search enrollment in a released
+Source snapshot, and compares the exact active generations, certified Account populations and settled copies
+again in the final same-home receiving transaction. Unsupported homes, empty enrollment, changed state and
+unfunded work keep their precise pending reason. Neither an arbitrary generation list, a relay checkpoint, a
+callback nor the released Source observation alone can settle Search custody; a completed account-discovery effect
+alone cannot retire the recovery bytes.
 
 The role transition is wired to require the original Source discharge/technical-transfer proof, actual original
 and recovery receiving copies, native erasure root, current owner/restore fences and all writer guards in the same

@@ -234,7 +234,7 @@ test('missing-source recovery seals its exact receipt and account-updated cut wi
   ).value;
   expect(recoveryReceiving.state).toBe('pending');
   expect(recoveryReceiving.gap).toMatch(
-    /^agent-identity-recovery-(effects-pending|effect-consumer-unavailable|discovery-owner-unavailable)$/,
+    /^agent-identity-recovery-(effects-pending|effect-consumer-unavailable|search-observation-unavailable)$/,
   );
   const retainedEvent = await fixture.pool.query<{ payload_state: string }>(
     `SELECT payload_state FROM core.outbox WHERE partition_no=$1 AND epoch=$2 AND position=$3 AND event_seq=0`,

@@ -3,6 +3,7 @@ import type { WorkModule } from '../work/registry.ts';
 import { verifyAgentIdentityRecoveryArtifactReadiness } from '../history/agent-identity-recovery-receiving.ts';
 import { admitSharedHistory } from './shared-history.ts';
 import { advancePendingContextRoleProvenance, type ContextRoleOccurrence } from './shared-history-context.ts';
+import type { HistoryReceivingContext } from '../history/receiving.ts';
 
 /** One native receiving worker. Its progress, barrier and errors are never a DBOS argument or
  * generic effect payload. Pending jobs sleep until an actual custody/registration change. */
@@ -31,8 +32,12 @@ export const sharedHistoryWorkModule: WorkModule = {
       name: 'access.agent-identity.recover',
       artifactType: 'command-receipt/v1',
       version: 1,
-      async readiness(tx, artifact, barrier) {
-        const recovery = await verifyAgentIdentityRecoveryArtifactReadiness(tx, artifact, barrier, context.pool);
+      async readiness(tx, artifact, barrier, receiving) {
+        const recovery = await verifyAgentIdentityRecoveryArtifactReadiness(tx, artifact, barrier, context.pool, {
+          deadline: receiving?.deadline,
+          searchObservation: receiving?.accountErasureSearchObservation,
+          recoveryReceivingReserved: receiving?.recoveryReceivingReserved,
+        });
         if (recovery.state === 'ready') return { ready: true };
         return {
           ready: false,
@@ -54,8 +59,12 @@ export const sharedHistoryWorkModule: WorkModule = {
       name: 'com.rezics.access.account-updated.v1',
       artifactType: 'outbox-event/v1',
       version: 1,
-      async readiness(tx, artifact, barrier) {
-        const recovery = await verifyAgentIdentityRecoveryArtifactReadiness(tx, artifact, barrier, context.pool);
+      async readiness(tx, artifact, barrier, receiving: HistoryReceivingContext | undefined) {
+        const recovery = await verifyAgentIdentityRecoveryArtifactReadiness(tx, artifact, barrier, context.pool, {
+          deadline: receiving?.deadline,
+          searchObservation: receiving?.accountErasureSearchObservation,
+          recoveryReceivingReserved: receiving?.recoveryReceivingReserved,
+        });
         if (recovery.state === 'ready') return { ready: true };
         if (recovery.state === 'pending') return { ready: false, gap: recovery.gap };
         return { ready: false, gap: 'account-updated-owner-currentness-unavailable' };

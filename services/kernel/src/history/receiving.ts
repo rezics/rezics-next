@@ -18,6 +18,7 @@ import { commandHistoryKind } from './record.ts';
 import { agentIdentityCopyRetentionGap } from './agent-identity-source.ts';
 import { encodeLocator, validateLocator, validateScope } from './locator.ts';
 import { lockNativeFamilyCoverage, type NativeFamilyCoverage } from './family-coverage-state.ts';
+import type { AccountErasureSearchObservation } from '../search/account-erasure-source.ts';
 import {
   HISTORY_PRODUCER_FAMILIES,
   type HistoryArtifact,
@@ -32,6 +33,8 @@ export type HistoryReceivingDependencies = Readonly<{
 export type HistoryReceivingContext = Readonly<{
   deadline: number;
   identityConsumerWork?: IdentitySourceConsumerMaintenanceWork;
+  accountErasureSearchObservation?: AccountErasureSearchObservation;
+  recoveryReceivingReserved?: boolean;
 }>;
 declare const ownerCoverage: unique symbol;
 declare const receivingReceipt: unique symbol;
@@ -155,7 +158,7 @@ export async function recordHistoryReceivingProof(
   }
   if (!(await lockHistoryBarrier(tx, barrier))) throw new TypeError('History barrier mismatch');
   const encoded = Buffer.from(encodeLocator(locator));
-  const custodyGap = await historyReceivingGap(tx, partition, locator, barrier, pool);
+  const custodyGap = await historyReceivingGap(tx, partition, locator, barrier, pool, context);
   if (custodyGap) return custodyGap;
   if (!(await historyPhysicalProof(tx, partition, locator))) throw new TypeError('History physical copy remains');
   const rows = await nativeScope(tx, partition, locator.artifactType, encoded);
@@ -200,9 +203,10 @@ export async function historyReceivingGap(
   locator: HistoryArtifact['locator'],
   barrier?: HistoryBarrier,
   pool?: Pool,
+  context?: HistoryReceivingContext,
 ): Promise<string | null> {
-  // The independent History job lease admits its cursor transaction, not a
-  // Source-funded native command. Refuse before any custody SQL in that context.
+  // Only a live native command may inspect the receiving union. Released Search
+  // observations are rechecked by the recovery owner inside that command.
   if (!hasLiveCommandTransaction(tx)) return 'history-receiving-command-resources-unavailable';
   if (currentCommand(tx).partition !== partition) return 'history-receiving-artifact-home-unavailable';
   if (barrier && partitionOf(barrier.accountRoute) !== partition) return 'history-receiving-barrier-home-unavailable';
@@ -248,6 +252,11 @@ export async function historyReceivingGap(
       { partition, locator, accounts: [] },
       barrier,
       resources.pool,
+      {
+        deadline: resources.deadline,
+        searchObservation: context?.accountErasureSearchObservation,
+        recoveryReceivingReserved: context?.recoveryReceivingReserved,
+      },
     );
     if (recovery.state === 'pending') return recovery.gap;
     if (recovery.state === 'ready') return null;
@@ -377,12 +386,13 @@ async function nativeReceipt(
   barrier: HistoryBarrier,
   artifact: HistoryArtifact,
   pool?: Pool,
+  context?: HistoryReceivingContext,
 ): Promise<ReceiptBinding | null> {
   // No foreign root read may occur while the artifact home is held. A released
   // observation cannot carry that root lock into this transaction.
   if (artifact.partition !== partitionOf(barrier.accountRoute)) return null;
   if (!(await lockHistoryBarrier(tx, barrier))) return null;
-  if (await historyReceivingGap(tx, artifact.partition, artifact.locator, barrier, pool)) return null;
+  if (await historyReceivingGap(tx, artifact.partition, artifact.locator, barrier, pool, context)) return null;
   const digest = scopeDigest(artifact);
   const encoded = Buffer.from(encodeLocator(artifact.locator));
   const rows = await nativeScope(tx, artifact.partition, artifact.locator.artifactType, encoded);
@@ -472,7 +482,7 @@ export async function readHistoryReceivingReceipt(
     async () =>
       (
         await runCommand(deps.pool, { partition: fixedArtifact.partition, deadline: context.deadline }, async (tx) => {
-          const current = await nativeReceipt(tx, fixedBarrier, fixedArtifact, deps.pool);
+          const current = await nativeReceipt(tx, fixedBarrier, fixedArtifact, deps.pool, context);
           historyDeadline(context, fixedArtifact.partition);
           return noEffect(current);
         })

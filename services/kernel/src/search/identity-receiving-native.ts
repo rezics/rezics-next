@@ -22,7 +22,10 @@ import {
   createSearchIdentityReceivingNativeStore,
   type SearchNativeReceivingReleaseObservation,
 } from './identity-receiving-native-store.ts';
-import type { SearchNativeReceivingStored } from './identity-receiving-native-internal.ts';
+import type {
+  SearchNativeReceivingPlan,
+  SearchNativeReceivingStored,
+} from './identity-receiving-native-internal.ts';
 import { SearchNativeReceivingError, SearchNativeReceivingWork } from './identity-receiving-native-work.ts';
 
 /** Derive the installed Source dependencies rather than maintaining a second configuration contract. */
@@ -47,12 +50,27 @@ const invocations = new WeakMap<
 >();
 const key = (locator: SearchIdentityReceivingLocator) => `${locator.partition}:${locator.planId}`;
 const hash = (value: unknown) => createHash('sha256').update(serializeIdentityValue(value)).digest('hex');
-type Cursor = Readonly<{ version: 1; identity: string; copy: number; terminal: boolean }>;
+type Cursor = Readonly<{
+  version: 1;
+  identity: string;
+  copy: number;
+  terminal: boolean;
+  support?: string;
+}>;
 function cursor(value: string | null): Cursor | null {
   if (value === null) return null;
   try {
-    if (typeof value !== 'string' || Buffer.byteLength(value, 'utf8') > 2048) throw new TypeError('Invalid cursor');
+    if (typeof value !== 'string' || Buffer.byteLength(value, 'utf8') > 4096) throw new TypeError('Invalid cursor');
     const c: Cursor = JSON.parse(value);
+    const base = { version: 1, identity: c?.identity, copy: c?.copy, terminal: c?.terminal };
+    const canonical =
+      c &&
+      (c.support === undefined ||
+        (typeof c.support === 'string' && Buffer.byteLength(c.support, 'utf8') <= 3500)) &&
+      JSON.stringify({
+        ...base,
+        ...(c.support === undefined ? {} : { support: c.support }),
+      }) === value;
     if (
       c &&
       c.version === 1 &&
@@ -62,7 +80,7 @@ function cursor(value: string | null): Cursor | null {
       c.copy >= -1 &&
       c.copy < 2147483647 &&
       typeof c.terminal === 'boolean' &&
-      JSON.stringify({ version: c.version, identity: c.identity, copy: c.copy, terminal: c.terminal }) === value
+      canonical
     )
       return c;
   } catch {
@@ -115,7 +133,7 @@ export function createSearchIdentityReceivingNative(
   configuration: SearchReceivingConfiguration,
 ): SearchIdentityReceivingNative {
   const config = Object.freeze({ ...configuration, routeKey: new Uint8Array(configuration.routeKey) });
-  createIdentitySourceSupportReader(config); // Validate the same installed Pool/Access/clock/route contract.
+  const sourceSupport = createIdentitySourceSupportReader(config);
   if (!config.search || typeof config.search.request !== 'function') throw new TypeError('Search is not configured');
   const store = createSearchIdentityReceivingNativeStore(config);
   const source = publicFilterSource(config);
@@ -182,10 +200,56 @@ export function createSearchIdentityReceivingNative(
       work.fail('unavailable', 'Original Source release is unavailable');
     return { digest: releaseDigest, release, type: row.subject_type };
   }
-  async function requireCompleteOriginalSource(work: SearchNativeReceivingWork): Promise<void> {
-    // Neither the Source support reader nor the writer's structural close supplies a retained
-    // complete-copy-directory witness. Refuse until that genuine Source operand is installed.
-    work.fail('unavailable', 'Complete Source original-support/copy-directory closure is not installed');
+  async function requireCompleteOriginalSource(
+    plan: SearchNativeReceivingPlan,
+    work: SearchNativeReceivingWork,
+    supportFrontier: string | null,
+  ): Promise<string | null> {
+    const own = await definition(plan.references.definition, plan.references.release, work);
+    const directory = await sourceSupport.readPage({
+      job: plan.selection.job,
+      definition: own,
+      frontier: supportFrontier,
+      inputLimit: 1000,
+      context: { deadline: work.context.deadline },
+    });
+    if (directory.status !== 'progress' && directory.status !== 'complete')
+      work.fail(
+        directory.status === 'changed' ? 'changed' : 'unavailable',
+        'Complete Source original directory is unavailable',
+      );
+    const selectedRecords = directory.records.filter((record) => record.original === plan.source.original);
+    if (selectedRecords.some((record) => record.terminal !== plan.source.terminal))
+      work.fail('changed', 'Complete Source directory changed the selected origin mapping');
+    if (directory.status === 'progress') {
+      if (Buffer.byteLength(directory.frontier, 'utf8') > 3500)
+        work.fail('unavailable', 'Complete Source directory frontier exceeds its bound');
+      return directory.frontier;
+    }
+    for (const [original, frontier] of [
+      [plan.source.original, plan.references.originalSupport],
+      [plan.source.terminal, plan.references.terminalSupport],
+    ] as const) {
+      const projection = await readIdentitySourceProjection(config, source, {
+        job: plan.selection.job,
+        original,
+        terminal: plan.source.terminal,
+        meaning: own,
+        frontier,
+        inputLimit: 1,
+        context: { deadline: work.context.deadline },
+      });
+      if (projection.status !== 'projected')
+        work.fail(
+          projection.status === 'changed' ? 'changed' : 'unavailable',
+          'Complete Source original-support closure is unavailable',
+        );
+      if (projection.projection?.status === 'progress')
+        work.fail('draining', 'Complete Source original-support closure is incomplete');
+      if (frontier && projection.projection && !isDeepStrictEqual(projection.projection.frontier, frontier))
+        work.fail('changed', 'Complete Source original-support frontier changed');
+    }
+    return null;
   }
   const native = Object.freeze<SearchIdentityReceivingNative>({
     resolvePlanned(selection, context) {
@@ -266,11 +330,36 @@ export function createSearchIdentityReceivingNative(
           work.fail('changed', 'Original reconciliation identity changed');
         await call((c) => store.observeOriginalFence(state.plan, c));
         if (retained?.terminal) {
-          // A structural close and the locally registered directory do not establish that Source
-          // discovered ALL original support/copies. The installed Source API currently supplies
-          // no retained complete-directory witness, including for an already released replay.
-          await requireCompleteOriginalSource(work);
           if (state.pending) work.fail('draining', 'Original copies prevent terminal revalidation');
+          const support = await requireCompleteOriginalSource(
+            state.plan,
+            work,
+            retained?.support ?? null,
+          );
+          if (support !== null)
+            return {
+              after: JSON.stringify({
+                version: 1,
+                identity,
+                copy: retained.copy,
+                terminal: false,
+                support,
+              } satisfies Cursor),
+              state: 'progress' as const,
+            };
+          const current = await call((c) => store.readOriginalState(locator, c));
+          if (
+            hash({
+              plan: current.plan,
+              holdId: current.holdId,
+              accepted: current.accepted,
+              applied: current.operation.applied,
+              frontier: current.operation.frontier,
+            }) !== identity
+          )
+            work.fail('changed', 'Original custody changed during Source closure');
+          if (current.pending) work.fail('draining', 'Original copies prevent terminal revalidation');
+          await call((c) => store.observeOriginalFence(current.plan, c));
           if (!invocation?.active) work.fail('unavailable', 'Terminal release requires its active common invocation');
           const observation = await call((c) => store.observeRelease(locator, c));
           if (!invocation.active || invocation.reconciliations.get(locatorKey) !== reconciliation)
@@ -310,7 +399,37 @@ export function createSearchIdentityReceivingNative(
         // Commit every advancing copy page before attempting terminal Source closure. A missing
         // closure operand must not discard the last durable copy continuation and repeat its work.
         const terminal = page.length === 0 && !current.pending;
-        if (terminal) await requireCompleteOriginalSource(work);
+        if (terminal) {
+          const support = await requireCompleteOriginalSource(
+            current.plan,
+            work,
+            retained?.support ?? null,
+          );
+          if (support !== null)
+            return {
+              after: JSON.stringify({
+                version: 1,
+                identity,
+                copy: last,
+                terminal: false,
+                support,
+              } satisfies Cursor),
+              state: 'progress' as const,
+            };
+          const closed = await call((c) => store.readOriginalState(locator, c));
+          if (
+            hash({
+              plan: closed.plan,
+              holdId: closed.holdId,
+              accepted: closed.accepted,
+              applied: closed.operation.applied,
+              frontier: closed.operation.frontier,
+            }) !== identity
+          )
+            work.fail('changed', 'Original custody changed during Source closure');
+          if (closed.pending) work.fail('draining', 'Original copies prevent terminal Source closure');
+          await call((c) => store.observeOriginalFence(closed.plan, c));
+        }
         return {
           after: JSON.stringify({ version: 1, identity, copy: last, terminal } satisfies Cursor),
           state: terminal ? ('settled' as const) : ('progress' as const),

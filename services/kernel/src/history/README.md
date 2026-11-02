@@ -189,11 +189,14 @@ status, local cleanup, EOF, publication and ACK are not all-copy completion. Foc
 `test/history/operational-work-position.test.ts` supplement the unchanged legacy suite; both remain UNRUN in this
 delivery pending controller integration.
 
-History validates the exact account-discovery effect row/workflow and effects checkpoint, then must also verify
-Search's current discovery enrollment through a released owner observation and a final same-home result. No such
-Search owner capability is installed in this composition. A checkpoint does not identify the current consumer
-set, and a Search generation list read while holding an Account home is not authority. Therefore the actual gap is
-`agent-identity-recovery-discovery-owner-unavailable` and the Recovery serializers remain pending for retention.
+History validates the exact account-discovery effect row/workflow and effects checkpoint, then observes Search's
+current Account enrollment in a released Source snapshot and compares it with the final same-home result. The
+worker commits its selected History cursor before the released observation, then locks and rechecks that cursor
+before final receiving. The supported local case requires active Account and Search homes, at least one active generation for the configured
+prefix, a certified Account population for each generation, and its exact non-deleted, settled copy at the current
+Account revision and recovery event position. Empty enrollment, unsupported homes, changed snapshots and genuine
+unsettled copies retain their specific pending gaps; a callback, relay checkpoint, empty page or Source observation
+alone is not a completion receipt. The Recovery serializers become ready only after the final locked rows match.
 The account-updated recovery event is not an original verification/reversal handoff and cannot create a new SDK
 obligation. This History module does not claim physical deletion, original SDK closure or whole Source completion.
 

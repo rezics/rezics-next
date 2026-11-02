@@ -6,6 +6,7 @@ import {
   currentCommand,
   currentCommandReceipt,
   currentCommandResources,
+  hasLiveCommandTransaction,
   type CommandTransaction,
 } from '../command/command.ts';
 import { partitionOf } from '../route/route.ts';
@@ -19,6 +20,7 @@ import { lockRecordedAgentIdentityHistory } from './agent-identity-sdk-fence.ts'
 import {
   reserveIdentityHistoryWork,
   nativeWork,
+  IdentityHistoryWorkUnavailable,
   addNativeWork,
   identityHistoryConnection,
   IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK,
@@ -764,16 +766,30 @@ export async function readAgentIdentityRecoveryArtifactInTransaction(
   tx: CommandTransaction,
   artifact: HistoryArtifact,
   pool?: Pool,
+  context?: Pick<HistoryReceivingContext, 'deadline' | 'identityConsumerWork'>,
 ): Promise<AgentIdentityRecoveryArtifactInspection> {
   const absent: AgentIdentityRecoveryArtifactInspection = { state: 'absent', gap: null, proof: null };
   const pending = (gap: string): AgentIdentityRecoveryArtifactInspection => ({ state: 'pending', gap, proof: null });
   if (artifact.locator.artifactType === 'durable-work/v1' || artifact.partition !== artifact.locator.partitionNo)
     return absent;
-  const resources = currentCommandResources(tx);
+  const commandResources = hasLiveCommandTransaction(tx) ? currentCommandResources(tx) : undefined;
+  const resources =
+    commandResources ??
+    (pool && context && Number.isFinite(context.deadline) && context.deadline > Date.now()
+      ? { pool, deadline: context.deadline }
+      : undefined);
+  if (!resources) return pending('agent-identity-recovery-command-resources-unavailable');
   if (pool && pool !== resources.pool) throw new TypeError('Recovery artifact pool differs from its command');
-  await reserveIdentityHistoryWork(resources.pool, IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.recoveryAssociation, {
-    deadline: resources.deadline,
-  });
+  try {
+    await reserveIdentityHistoryWork(
+      resources.pool,
+      IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.recoveryAssociation,
+      context ?? { deadline: resources.deadline },
+    );
+  } catch (error) {
+    if (error instanceof IdentityHistoryWorkUnavailable) return pending(error.message);
+    throw error;
+  }
   const matches = (
     await tx.query<{
       source_route: number;
@@ -802,9 +818,14 @@ export async function readAgentIdentityRecoveryArtifactInTransaction(
   ).rows;
   if (!matches.length) return absent;
   if (matches.length !== 1) return pending('agent-identity-recovery-copy-fanout-unavailable');
-  await reserveIdentityHistoryWork(resources.pool, AGENT_IDENTITY_RECOVERY_INVENTORY_READ_COST, {
-    deadline: resources.deadline,
-  });
+  try {
+    await reserveIdentityHistoryWork(resources.pool, AGENT_IDENTITY_RECOVERY_INVENTORY_READ_COST, context ?? {
+      deadline: resources.deadline,
+    });
+  } catch (error) {
+    if (error instanceof IdentityHistoryWorkUnavailable) return pending(error.message);
+    throw error;
+  }
   const key: AgentIdentitySourceKey = {
     route: matches[0]!.source_route,
     accountId: matches[0]!.source_account_id,

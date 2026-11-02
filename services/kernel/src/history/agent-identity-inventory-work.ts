@@ -163,7 +163,7 @@ export const IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK = Object.freeze({
   nativeInventory: accountHistoryWork(202, 202, 5, 65536, 7), // i/p/domain + copy range + 3 role ranges
   recoveryInventory: accountHistoryWork(135, 135, 6, 32768, 10), // i/p/domain/a/r + copy + 2 roles + receipt/event
   recoveryAssociation: accountHistoryWork(2, 2, 1, 512, 3), // copy -> inventory -> recovery
-  recoveryReceiving: accountHistoryWork(100, 100, 36, 24576, 3), // event, effects checkpoint, consumer range
+  recoveryReceiving: accountHistoryWork(100, 100, 36, 24576, 3), // event, effects, consumer, enrollment and copy recheck
   seal: accountHistoryWork(16, 16, 7, 64, 7), // erasure, upsert/FKs, family touch
   nativeGuardLocal: accountHistoryWork(71, 70, 5, 40960, 6), // m, partition/domain, work, roles, barrier; excludes Source/SDK
   nativeAbsence: accountHistoryWork(9, 9, 9, 0, 9), // m and eight independent SDK physical keys

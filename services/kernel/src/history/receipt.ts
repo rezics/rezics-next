@@ -8,6 +8,7 @@ import minimize from './receipt.sql';
 import { commandHistoryKind } from './record.ts';
 import { agentIdentityCopyRetentionGap } from './agent-identity-source.ts';
 import type { HistoryBarrier, HistoryRegistry } from './registry.ts';
+import type { HistoryReceivingContext } from './receiving.ts';
 
 /** Actual owner disposition: this response has no downstream workflow consumers. No other
  * receipt kind acquires readiness from age, DBOS state or this registration. */
@@ -42,6 +43,7 @@ export async function minimizeHistoryReceipt(
   locator: Buffer,
   registry?: HistoryRegistry,
   barrier?: HistoryBarrier,
+  context?: HistoryReceivingContext,
 ): Promise<string | null> {
   const record = 'authority' in job;
   if (record && !(await lockRecordHistoryCopy(tx, job, 'command-receipt/v1', locator))) return 'record-source-stale';
@@ -86,6 +88,7 @@ export async function minimizeHistoryReceipt(
         })),
       },
       barrier,
+      context,
     );
     if (!readiness.ready) return readiness.gap;
   } else if (kind !== 'access.account.preferences') return 'receipt-consumer-proof-unavailable';

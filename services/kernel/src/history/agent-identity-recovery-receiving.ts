@@ -1,7 +1,15 @@
 import type { Pool } from 'pg';
 import { currentCommandResources, hasLiveCommandTransaction, type CommandTransaction } from '../command/command.ts';
-import { reserveIdentityHistoryWork, IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK } from './agent-identity-inventory-work.ts';
+import {
+  IdentityHistoryWorkUnavailable,
+  reserveIdentityHistoryWork,
+  IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK,
+} from './agent-identity-inventory-work.ts';
 import { readAgentIdentityRecoveryArtifactInTransaction } from './agent-identity-inventory.ts';
+import {
+  verifyAccountErasureSearchObservation,
+  type AccountErasureSearchObservation,
+} from '../search/account-erasure-source.ts';
 import type { HistoryArtifact, HistoryBarrier } from './registry.ts';
 
 export type AgentIdentityRecoveryArtifactReadiness =
@@ -16,15 +24,25 @@ export async function verifyAgentIdentityRecoveryArtifactReadiness(
   artifact: HistoryArtifact,
   barrier?: HistoryBarrier,
   pool?: Pool,
+  source?: Readonly<{
+    deadline?: number;
+    searchObservation?: AccountErasureSearchObservation;
+    recoveryReceivingReserved?: boolean;
+  }>,
 ): Promise<AgentIdentityRecoveryArtifactReadiness> {
-  // The installed background History owner holds an operational transaction and job lease,
-  // not command resources or a native History budget. Keep that producer pending instead of
-  // treating missing Source context as permission or letting currentCommandResources throw.
-  if (!hasLiveCommandTransaction(tx))
-    return { state: 'pending', gap: 'agent-identity-recovery-command-resources-unavailable' };
-  const resources = currentCommandResources(tx);
+  // The background History worker supplies a bounded Pool/deadline after releasing its first
+  // transaction. Callers without that context stay pending; it grants no Search or completion truth.
+  const commandResources = hasLiveCommandTransaction(tx) ? currentCommandResources(tx) : undefined;
+  const resources =
+    commandResources ??
+    (pool && source?.deadline && Number.isFinite(source.deadline) && source.deadline > Date.now()
+      ? { pool, deadline: source.deadline }
+      : undefined);
+  if (!resources) return { state: 'pending', gap: 'agent-identity-recovery-command-resources-unavailable' };
   if (pool && pool !== resources.pool) throw new TypeError('Recovery receiving pool differs from its command');
-  const cut = await readAgentIdentityRecoveryArtifactInTransaction(tx, artifact, resources.pool);
+  const cut = await readAgentIdentityRecoveryArtifactInTransaction(tx, artifact, resources.pool, {
+    deadline: resources.deadline,
+  });
   if (cut.state === 'absent') return { state: 'not-recovery' };
   if (cut.state === 'pending') return { state: 'pending', gap: cut.gap };
   if (
@@ -49,9 +67,18 @@ export async function verifyAgentIdentityRecoveryArtifactReadiness(
   )
     return { state: 'pending', gap: 'agent-identity-recovery-barrier-role-unavailable' };
 
-  await reserveIdentityHistoryWork(resources.pool, IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.recoveryReceiving, {
-    deadline: resources.deadline,
-  });
+  if (!source?.recoveryReceivingReserved) {
+    try {
+      await reserveIdentityHistoryWork(
+        resources.pool,
+        IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.recoveryReceiving,
+        { deadline: resources.deadline },
+      );
+    } catch (error) {
+      if (error instanceof IdentityHistoryWorkUnavailable) return { state: 'pending', gap: error.message };
+      throw error;
+    }
+  }
   const event = cut.recoveryEvent;
   if (event.locator.artifactType !== 'outbox-event/v1' || event.locator.eventSeq !== 0)
     return { state: 'pending', gap: 'agent-identity-recovery-event-cut-unavailable' };
@@ -103,8 +130,12 @@ export async function verifyAgentIdentityRecoveryArtifactReadiness(
   )
     return { state: 'pending', gap: 'agent-identity-recovery-effect-consumer-unavailable' };
 
-  // The installed History/Work composition has no Search owner callback that can provide
-  // a released current-enrollment observation and its owner-verified same-home result.
-  // A partition-zero generation list or relay checkpoint is not receiving authority.
-  return { state: 'pending', gap: 'agent-identity-recovery-discovery-owner-unavailable' };
+  const searchInput = {
+    accountId: cut.proof.key.accountId,
+    accountPartition: event.partition,
+    eventPosition: event.locator.position,
+  };
+  if (!source?.searchObservation)
+    return { state: 'pending', gap: 'agent-identity-recovery-search-observation-unavailable' };
+  return verifyAccountErasureSearchObservation(tx, searchInput, source.searchObservation);
 }
