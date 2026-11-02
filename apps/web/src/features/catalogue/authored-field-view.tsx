@@ -424,13 +424,10 @@ function AuthoredFieldLive({
       if (!readingLive() || !comparisonLive() || !origin.live()) return { ok: false, reason: 'denied' };
       if (!proposed || !id || field !== property) return { ok: false, reason: 'invalid' };
       setProposalBody(undefined);
-      const result = await transport.review(
-        property,
-        proposed.candidate,
-        cursor,
-        continuity ?? session.current,
-        { reader: origin.reader, live: () => comparisonLive() && origin.live() },
-      );
+      const result = await transport.review(property, proposed.candidate, cursor, continuity ?? session.current, {
+        reader: origin.reader,
+        live: () => comparisonLive() && origin.live(),
+      });
       if (!comparisonLive() || !origin.live()) return { ok: false, reason: 'denied' };
       if (result.comparison.ok) session.current = result.comparison.session ?? session.current;
       if (readingLive() && result.current) setCurrent(result.current);
@@ -777,7 +774,11 @@ function AuthoredFieldLive({
           {proposed && id && comparisonReading && (
             <section className="space-y-4">
               {!reviewing ? (
-                <Button variant="outline" className={actionClassName} onClick={() => readingLive() && setReviewing(true)}>
+                <Button
+                  variant="outline"
+                  className={actionClassName}
+                  onClick={() => readingLive() && setReviewing(true)}
+                >
                   {m.correction_review({}, o)}
                 </Button>
               ) : (

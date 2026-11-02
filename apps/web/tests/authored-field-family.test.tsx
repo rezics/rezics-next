@@ -210,7 +210,10 @@ test('Authored uncertain, stale, current-read recovery and denied private conten
     let deferRead = false;
     let denyDecision = false;
     const read = mock(async (...args: Parameters<typeof fixture.transport.read>) => {
-      if (deferRead) return new Promise<AuthoredRead>((resolve) => { settleRead = resolve; });
+      if (deferRead)
+        return new Promise<AuthoredRead>((resolve) => {
+          settleRead = resolve;
+        });
       if (failRead) {
         failRead = false;
         throw new TypeError('Current text temporarily unavailable');
@@ -524,75 +527,87 @@ test('discard confirms only the active unsent field, preserves another draft and
   }
 }, 15_000);
 
-for (const action of ['reload', 'field']) test(`${action} retires current text before I/O and recovers private replacements after denial`, async () => {
-  const view = await mountedFamily();
-  const { host, render, user, within, AuthoredField, authoredFixture, authoredProperty, m, compose, click, input } = view;
-  try {
-    const fixture = authoredFixture();
-    const initial = await fixture.transport.read();
-    if (!initial.ok) throw new Error('Expected authored fixture');
-    const other = 'test:other-authored';
-    initial.release.properties[other] = structuredClone(initial.release.properties[authoredProperty]!);
-    initial.release.types[initial.public.subject.type]!.properties.push(other);
-    let settle!: (value: AuthoredRead) => void;
-    let defer = true;
-    const read = mock(async (property = authoredProperty) => defer
-      ? new Promise<AuthoredRead>((resolve) => { settle = resolve; })
-      : { ...initial, property });
-    const propose = mock(fixture.transport.propose);
-    const transport = { ...fixture.transport, read, propose };
-    const show = (value = initial) => render(
-      <AuthoredField initial={value} locale="en" transport={transport} confirm={fixture.confirm} />,
-    );
-    await show();
-    await compose(host, 'Private replacement survives a denied reload.');
-    const props = (element: Element) => Reflect.get(element,
-      Object.keys(element).find((key) => key.startsWith('__reactProps$'))!);
-    const savedSubmit = props(host.querySelector('form')!).onSubmit;
-    const savedReload = props(within(host).getByRole('button', { name: m.authored_reload_current_text() })).onClick;
-    const editor = host.querySelector('[contenteditable="true"]')!;
-    let fiber = Reflect.get(editor, Object.keys(editor).find((key) => key.startsWith('__reactFiber$'))!);
-    let savedChange!: (value: ReturnType<typeof fromPlainText>) => void;
-    for (; fiber; fiber = fiber.return)
-      if (fiber.memoizedProps?.label === m.authored_text() && fiber.memoizedProps.onChange)
-        savedChange = fiber.memoizedProps.onChange;
-    expect(savedChange).toBeFunction();
-    if (action === 'reload') await click(host, m.authored_reload_current_text());
-    else await act(async () => user.selectOptions(within(host).getByRole('combobox'), other));
-    expect(host.innerHTML).not.toContain('An aviator meets');
-    expect(host.innerHTML).not.toContain('Private replacement survives');
-    expect(host.querySelector('header a')).toBeNull();
-    expect(read.mock.calls[0]).toEqual([action === 'field' ? other : authoredProperty, initial.session]);
-    await act(async () => settle({ ok: false, reason: 'denied' }));
-    expect(host.textContent).toContain(m.catalogue_result_read_denied());
-    expect(host.innerHTML).not.toContain('An aviator meets');
-    defer = false;
-    await click(host, m.catalogue_retry_loading_result());
-    if (action === 'field') await act(async () => user.selectOptions(within(host).getByRole('combobox'), authoredProperty));
-    const reads = read.mock.calls.length;
-    await act(async () => {
-      savedReload();
-      savedSubmit({ preventDefault() {} });
-      savedChange(fromPlainText('Retired editor emission.'));
-    });
-    expect(read).toHaveBeenCalledTimes(reads);
-    expect(propose).not.toHaveBeenCalled();
-    expect(input(host, m.authored_text()).textContent).toContain('Private replacement survives a denied reload.');
-    expect(input(host, m.authored_language()).value).toBe('en');
-    expect(input(host, m.authored_licence()).value).toBe('CC-BY-4.0');
-    defer = true;
-    await click(host, m.authored_reload_current_text());
-    const fresh = structuredClone(initial);
-    if (!fresh.body?.ok) throw new Error('Expected current body');
-    fresh.body.document.body = fromPlainText('Fresh authoritative current text.');
-    await show(fresh);
-    await act(async () => settle(initial));
-    expect(host.textContent).toContain('Fresh authoritative current text.');
-    expect(host.innerHTML).not.toContain('An aviator meets');
-  } finally {
-    await view.close();
-  }
-});
+for (const action of ['reload', 'field'])
+  test(`${action} retires current text before I/O and recovers private replacements after denial`, async () => {
+    const view = await mountedFamily();
+    const { host, render, user, within, AuthoredField, authoredFixture, authoredProperty, m, compose, click, input } =
+      view;
+    try {
+      const fixture = authoredFixture();
+      const initial = await fixture.transport.read();
+      if (!initial.ok) throw new Error('Expected authored fixture');
+      const other = 'test:other-authored';
+      initial.release.properties[other] = structuredClone(initial.release.properties[authoredProperty]!);
+      initial.release.types[initial.public.subject.type]!.properties.push(other);
+      let settle!: (value: AuthoredRead) => void;
+      let defer = true;
+      const read = mock(async (property = authoredProperty) =>
+        defer
+          ? new Promise<AuthoredRead>((resolve) => {
+              settle = resolve;
+            })
+          : { ...initial, property },
+      );
+      const propose = mock(fixture.transport.propose);
+      const transport = { ...fixture.transport, read, propose };
+      const show = (value = initial) =>
+        render(<AuthoredField initial={value} locale="en" transport={transport} confirm={fixture.confirm} />);
+      await show();
+      await compose(host, 'Private replacement survives a denied reload.');
+      const props = (element: Element) =>
+        Reflect.get(
+          element,
+          Object.keys(element).find((key) => key.startsWith('__reactProps$'))!,
+        );
+      const savedSubmit = props(host.querySelector('form')!).onSubmit;
+      const savedReload = props(within(host).getByRole('button', { name: m.authored_reload_current_text() })).onClick;
+      const editor = host.querySelector('[contenteditable="true"]')!;
+      let fiber = Reflect.get(
+        editor,
+        Object.keys(editor).find((key) => key.startsWith('__reactFiber$'))!,
+      );
+      let savedChange!: (value: ReturnType<typeof fromPlainText>) => void;
+      for (; fiber; fiber = fiber.return)
+        if (fiber.memoizedProps?.label === m.authored_text() && fiber.memoizedProps.onChange)
+          savedChange = fiber.memoizedProps.onChange;
+      expect(savedChange).toBeFunction();
+      if (action === 'reload') await click(host, m.authored_reload_current_text());
+      else await act(async () => user.selectOptions(within(host).getByRole('combobox'), other));
+      expect(host.innerHTML).not.toContain('An aviator meets');
+      expect(host.innerHTML).not.toContain('Private replacement survives');
+      expect(host.querySelector('header a')).toBeNull();
+      expect(read.mock.calls[0]).toEqual([action === 'field' ? other : authoredProperty, initial.session]);
+      await act(async () => settle({ ok: false, reason: 'denied' }));
+      expect(host.textContent).toContain(m.catalogue_result_read_denied());
+      expect(host.innerHTML).not.toContain('An aviator meets');
+      defer = false;
+      await click(host, m.catalogue_retry_loading_result());
+      if (action === 'field')
+        await act(async () => user.selectOptions(within(host).getByRole('combobox'), authoredProperty));
+      const reads = read.mock.calls.length;
+      await act(async () => {
+        savedReload();
+        savedSubmit({ preventDefault() {} });
+        savedChange(fromPlainText('Retired editor emission.'));
+      });
+      expect(read).toHaveBeenCalledTimes(reads);
+      expect(propose).not.toHaveBeenCalled();
+      expect(input(host, m.authored_text()).textContent).toContain('Private replacement survives a denied reload.');
+      expect(input(host, m.authored_language()).value).toBe('en');
+      expect(input(host, m.authored_licence()).value).toBe('CC-BY-4.0');
+      defer = true;
+      await click(host, m.authored_reload_current_text());
+      const fresh = structuredClone(initial);
+      if (!fresh.body?.ok) throw new Error('Expected current body');
+      fresh.body.document.body = fromPlainText('Fresh authoritative current text.');
+      await show(fresh);
+      await act(async () => settle(initial));
+      expect(host.textContent).toContain('Fresh authoritative current text.');
+      expect(host.innerHTML).not.toContain('An aviator meets');
+    } finally {
+      await view.close();
+    }
+  });
 
 test('a Literary reading refusal retains authored originals while retiring old callbacks and results', async () => {
   const view = await mountedFamily();
