@@ -35,7 +35,7 @@ export function SubjectReadingState({
 }: {
   locale: string;
   href?: string;
-  onRetry?: MouseEventHandler<HTMLAnchorElement>;
+  onRetry?: MouseEventHandler<HTMLAnchorElement> | undefined;
   busy?: boolean;
 }) {
   return (

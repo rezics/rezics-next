@@ -125,7 +125,7 @@ export const OverviewContext = createContext<OverviewValue | null>(null);
 const SUMMARY_PROPERTY = 'schema:abstract';
 
 const readPublicSummaryDocument = createServerFn({ method: 'GET' })
-  .inputValidator((value: unknown) => {
+  .validator((value: unknown) => {
     if (!isRecord(value) || typeof value.documentId !== 'string' || typeof value.locale !== 'string')
       throw new TypeError('Invalid public summary document request');
     return { documentId: value.documentId, locale: value.locale };
