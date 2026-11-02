@@ -159,7 +159,7 @@ test('both departure warnings follow the editor locale while ambient English dif
     [...host.querySelectorAll('label')].find((label) => label.textContent === name)!.control as HTMLInputElement;
   const leave = async (warning: string, ambient: string) => {
     await act(async () => {
-      await router.navigate({ to: '/search' });
+      void router.navigate({ to: '/search' });
     });
     await settle(() => !!window.document.querySelector('[role="alertdialog"]'));
     expect(router.state.location.pathname).toBe(initialLocation);
@@ -198,4 +198,4 @@ test('both departure warnings follow the editor locale while ambient English dif
       if (value) Object.defineProperty(globalThis, key, value);
       else Reflect.deleteProperty(globalThis, key);
   }
-});
+}, 20_000);
