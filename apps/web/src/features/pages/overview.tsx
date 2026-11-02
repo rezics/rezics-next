@@ -1463,13 +1463,17 @@ export function SourcesSection({
                 level={3}
                 className="min-w-0 text-[17px] leading-snug font-semibold [overflow-wrap:anywhere] sm:text-lg md:text-xl"
               >
-                <ContentItemTitleLink
-                  stretch={false}
-                  className={`block min-h-11 content-center rounded-sm ${linkClass} ${linkColor} focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`}
-                  href={record.url}
-                >
-                  {record.name}
-                </ContentItemTitleLink>
+                {webUrl(record.url) ? (
+                  <ContentItemTitleLink
+                    stretch={false}
+                    className={`block min-h-11 content-center rounded-sm ${linkClass} ${linkColor} focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`}
+                    href={record.url}
+                  >
+                    {record.name}
+                  </ContentItemTitleLink>
+                ) : (
+                  record.name
+                )}
               </ContentItemHeading>
               {(record.licence || record.attribution) && (
                 <ListRowControl
@@ -1479,7 +1483,7 @@ export function SourcesSection({
                   {record.licence && (
                     <p>
                       {value.licence}:{' '}
-                      {record.licence.url ? (
+                      {record.licence.url && webUrl(record.licence.url) ? (
                         <a
                           className={`inline-block min-h-11 min-w-11 max-w-full content-center rounded-sm align-middle ${linkClass} ${linkColor} focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`}
                           href={record.licence.url}
