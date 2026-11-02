@@ -80,7 +80,7 @@ function Boards({
           {boards.map((board) => (
             <ListRow
               key={board.id}
-              ref={board.id === focus.firstId ? focus.itemRef : undefined}
+              ref={board.id === focus.firstId ? focus.itemRef : null}
               tabIndex={-1}
               aria-label={board.id === focus.firstId ? focus.regionLabel : undefined}
               className="flex items-start gap-4 rounded-xl px-4 py-3 focus-visible:outline-2 focus-visible:outline-ring"
