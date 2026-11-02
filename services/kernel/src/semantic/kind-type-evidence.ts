@@ -435,9 +435,10 @@ async function bodyQuery<R extends QueryResultRow>(
   const reservation = invocation.work.reserve(footprint);
   reservation.dispatch();
   try {
-    const result = await reservation.query(() => invocation.tx.query<R>({
+    const query = {
       text: statement.sql, values, query_timeout: Math.max(1, invocation.deadline - Date.now()),
-    }));
+    };
+    const result = await reservation.query(() => invocation.tx.query<R>(query));
     invocation.current();
     if (result.rows.length > 1) throw new ProblemError('dependency_unavailable');
     reservation.settle({ bytes: Buffer.byteLength(statement.sql) + bytes(values) + bytes(result.rows), emptySeeks: result.rows.length ? 0 : 1 });
