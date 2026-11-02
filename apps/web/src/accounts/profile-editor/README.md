@@ -6,6 +6,8 @@ immutable ID. `accountProfileHref` in `page.tsx` supplies that exact URL. A mana
 does not imply permission to edit. No handle or attribution/operator link supplies authority.
 
 The browser creates a new editor per target, viewer and session CSRF identity, without a shared profile cache.
+Each committed browser session result or query-client replacement retires the previous editor, even when viewer
+and token are unchanged; ordinary cache notifications preserve the draft.
 The cookie BFF uses the server-held authenticated viewer, rejects bearer replacement and binds every read/write
 to that viewer. Private native editable GET supplies the actual profile, including handleless targets and Content
 avatar summaries. Native GET and PATCH evaluate existing current profile authority; the website does not request
