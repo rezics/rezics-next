@@ -115,10 +115,10 @@ function PublishLog({
     }
     const headers = guard ? guard.headers() : csrfHeaders();
     if (!headers) return;
-    const attempt = beginPublication(lifetime);
+    const attempt = beginPublication(lifetime, headers);
     if (!attempt) return;
     try {
-      const result = await publishProgressLog({ data: attempt.intent, headers });
+      const result = await publishProgressLog({ data: attempt.intent, headers: attempt.credential });
       // Record the actual native outcome privately, even when this view has retired.
       // No replacement viewer can acquire this lifetime or its result.
       settlePublication(lifetime, attempt, result);

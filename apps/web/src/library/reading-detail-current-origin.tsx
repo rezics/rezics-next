@@ -19,7 +19,7 @@ const emptySubscribe = () => () => {};
 /** Only the actual successful scoped response grants authority. The durable viewer identity
  * survives healthy credential rotation; dispatch observations and operation episodes do not.
  */
-class ReadingAuthority {
+export class ReadingAuthority {
   private listeners = new Set<() => void>();
   private release: (() => void) | undefined;
   private users = 0;
@@ -49,9 +49,7 @@ class ReadingAuthority {
     const session = this.client.getQueryState(sessionQuery.queryKey);
     const data = session?.data;
     const viewer =
-      session?.status === 'success' && data?.state === 'signed-in' && data.subject && data.csrfToken
-        ? data.subject
-        : null;
+      session?.status === 'success' && data?.state === 'signed-in' && data.subject ? data.subject : null;
     const previous = this.snapshot;
     // Unavailable authority closes every old admission, but keeps private uncertainty
     // for the last actual owner. A successful sign-out or different subject replaces it.

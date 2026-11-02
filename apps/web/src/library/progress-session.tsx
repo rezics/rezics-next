@@ -313,7 +313,7 @@ type EditorLifetime = {
   custody: EditorCustody;
   history: symbol | null;
 };
-type EditorCustody = { retry?: CapturedIntent; flight?: object };
+type EditorCustody = { retry?: CapturedIntent; credential?: HeadersInit; flight?: object };
 const editors = new WeakMap<object, EditorCustody>();
 function editorLifetime(page: LoadedPage, originating?: ProgressDetailOrigin): EditorLifetime {
   const key = originating?.lifetime ?? originating;
@@ -702,6 +702,7 @@ function SessionEditor({
     if (!headers) return;
     origin.custody.retry ??= intent;
     const captured = origin.custody.retry;
+    const credential = (origin.custody.credential ??= headers);
     if (
       captured.kind !== intent.kind ||
       (captured.kind === 'finish' && intent.kind === 'finish' && captured.data.action !== intent.data.action)
@@ -716,8 +717,8 @@ function SessionEditor({
     try {
       const result =
         captured.kind === 'finish'
-          ? await finishProgressSession({ data: captured.data, headers })
-          : await recordProgressSession({ data: captured.data, headers });
+          ? await finishProgressSession({ data: captured.data, headers: credential })
+          : await recordProgressSession({ data: captured.data, headers: credential });
       // Native work may commit after retirement; its completion has no replacement UI authority.
       if (!currentAttempt()) return;
       if (!result.ok) {
@@ -730,6 +731,7 @@ function SessionEditor({
         return;
       }
       delete origin.custody.retry;
+      delete origin.custody.credential;
       setConflict(false);
       setReview(null);
       setDraftOpened(false);
@@ -813,6 +815,7 @@ function SessionEditor({
     if (!fresh || fresh.session.revision < session.revision) return;
     // Only an explicit conflict recovery retires the rejected operands. Uncertain retries keep them exactly.
     delete origin.custody.retry;
+    delete origin.custody.credential;
     const newKey = crypto.randomUUID();
     setKey(newKey);
     setConflict(false);

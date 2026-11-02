@@ -387,7 +387,7 @@ describe('Complete progress detail and published log owner episodes preserves cu
       await h.show(detail('A', address, 12));
       await h.click(m.library_progress_record());
       expect(writes[1]!.data).toEqual(first.data);
-      expect(writes[1]!.headers).toEqual({ 'x-csrf-token': 'rotated-credential' });
+      expect(writes[1]!.headers).toEqual({ 'x-csrf-token': 'A-csrf' });
       expect(first.data).toMatchObject({ revision: 7, amount: '0', idempotencyKey: initial.progress.idempotencyKey });
       await settle(() =>
         writes[1]!.work.resolve({ ok: true, session: { ...initial.progress.session, revision: 8, amount: '0' } }),
@@ -506,7 +506,7 @@ describe('Complete progress detail and published log owner episodes preserves cu
       expect(h.button(m.library_logs_publish()).disabled).toBe(false);
       await h.click(m.library_logs_publish());
       expect(writes[1]!.data).toEqual(first.data);
-      expect(writes[1]!.headers).toEqual({ 'x-csrf-token': 'rotated-publication-credential' });
+      expect(writes[1]!.headers).toEqual({ 'x-csrf-token': 'A-csrf' });
     } finally {
       await h.close();
     }
@@ -655,7 +655,7 @@ test('sparse completed-unit recording retains the exact batch, revision and key 
     await h.fill(m.library_progress_add_units(), 'part/99');
     await h.click(m.library_progress_add_units());
     expect(writes[1]!.data).toEqual(first.data);
-    expect(writes[1]!.headers).toEqual({ 'x-csrf-token': 'units-rotated-credential' });
+    expect(writes[1]!.headers).toEqual({ 'x-csrf-token': 'A-csrf' });
   } finally {
     await h.close();
   }
@@ -680,7 +680,7 @@ test('publication uncertainty settles during healthy rotation and resumes explic
     expect(writes).toHaveLength(2);
     expect(writes[1]!.data).toEqual(first.data);
     expect(writes[1]!.data.note).toBe('exact uncertain note');
-    expect(writes[1]!.headers).toEqual({ 'x-csrf-token': 'publication-rotated-credential' });
+    expect(writes[1]!.headers).toEqual({ 'x-csrf-token': 'A-csrf' });
     await h.click(m.library_logs_publish());
     expect(writes).toHaveLength(2);
   } finally {

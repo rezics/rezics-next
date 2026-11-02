@@ -197,6 +197,11 @@ and a few pins. State is a tile chip in profile wording and a filter; state Coll
 navigation tabs. Following holds subjects, Collections and Spaces, with no following feed or public follower totals.
 History contains consumption sessions and published logs while permitted by lifecycle policy.
 
+Authorized signed-in readers can load a private session detail, its changes and completed-units pages, and their
+published-log history without a CSRF token. Corrections, publication and withdrawal require a current mutation
+credential; an uncertain command retains its original credential, sender, request key and operands. Public log reads
+keep their existing public access rules.
+
 Continue uses active-session or profile-active-state eligibility, ranked by session activity through a bounded native
 read. It never loads the whole library for browser sorting. Until the dynamic runtime exists, an entry-only page is
 named **tracked entries**, never Everything.

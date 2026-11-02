@@ -1,13 +1,14 @@
 import type { PublishedLogWriteResult } from './logs-read';
 
 type PublicationIntent = { sessionId: string; note?: string; idempotencyKey: string };
-type PublicationAttempt = { intent: PublicationIntent };
+type PublicationAttempt = { intent: PublicationIntent; credential: HeadersInit };
 
 /** Private command custody, independent of a mounted read or operation admission. */
 export type PublicationDraft = {
   sessionId: string;
   note: string;
   intent?: PublicationIntent;
+  credential?: HeadersInit;
   flight?: PublicationAttempt;
   publishedId?: string;
   failure?: Extract<PublishedLogWriteResult, { ok: false }>['reason'];
@@ -31,7 +32,7 @@ export function editPublication(draft: PublicationDraft, note: string) {
   notifyPublication(draft);
 }
 
-export function beginPublication(draft: PublicationDraft): PublicationAttempt | undefined {
+export function beginPublication(draft: PublicationDraft, credential: HeadersInit): PublicationAttempt | undefined {
   if (draft.flight || draft.publishedId) return;
   const note = draft.note.trim();
   draft.intent ??= {
@@ -39,7 +40,8 @@ export function beginPublication(draft: PublicationDraft): PublicationAttempt | 
     ...(note ? { note } : {}),
     idempotencyKey: crypto.randomUUID(),
   };
-  const attempt = { intent: draft.intent };
+  const capturedCredential = (draft.credential ??= credential);
+  const attempt = { intent: draft.intent, credential: capturedCredential };
   draft.flight = attempt;
   delete draft.failure;
   notifyPublication(draft);
@@ -59,12 +61,16 @@ export function settlePublication(
     draft.publishedId = result.id;
     draft.note = '';
     delete draft.intent;
+    delete draft.credential;
     delete draft.failure;
   } else {
     draft.failure = result.reason;
     // Only an uncertain transport/server result retains the exact original command.
     // A definitive refusal lets the person correct their choice and submit anew.
-    if (result.reason !== 'unavailable') delete draft.intent;
+    if (result.reason !== 'unavailable') {
+      delete draft.intent;
+      delete draft.credential;
+    }
   }
   notifyPublication(draft);
 }
