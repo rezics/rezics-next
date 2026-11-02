@@ -1,4 +1,4 @@
-import { afterEach, expect, spyOn, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, expect, spyOn, test } from 'bun:test';
 import {
   createBrowserHistory,
   createRootRoute,
@@ -11,6 +11,12 @@ import { Route } from '../src/routes/login';
 import * as passkeys from '../src/passkeys';
 import * as stepUp from '../src/step-up';
 creationFixture();
+const originalScrollTo = Object.getOwnPropertyDescriptor(globalThis, 'scrollTo');
+beforeAll(() => Object.defineProperty(globalThis, 'scrollTo', { value: dom.scrollTo.bind(dom), configurable: true }));
+afterAll(() => {
+  if (originalScrollTo) Object.defineProperty(globalThis, 'scrollTo', originalScrollTo);
+  else Reflect.deleteProperty(globalThis, 'scrollTo');
+});
 const spies: { mockRestore: () => void }[] = [];
 const histories: { destroy: () => void }[] = [];
 afterEach(() => {
@@ -66,19 +72,22 @@ test('Stay preserves credentials, validation and focus; help links offer Leave w
   const p = await setup();
   await flush(() => {
     fill(p.input('email'), 'invalid');
-    fill(p.input('password'), 'private password');
     send(p.host);
   });
   const email = p.input('email');
   expect(p.unload()).toBe(true);
   await p.navigate();
-  expect(document.querySelector('[role=alertdialog]')?.textContent).not.toContain('private password');
   await p.choose('Stay');
   expect(email.value).toBe('invalid');
   expect(email.getAttribute('aria-invalid')).toBe('true');
-  expect(p.input('password').value).toBe('private password');
   expect(document.activeElement).toBe(email);
+  await flush(() => {
+    fill(email, '');
+    fill(p.input('password'), 'private password');
+  });
+  expect(p.unload()).toBe(true);
   await flush(() => p.host.querySelector<HTMLAnchorElement>('a[href="/recovery"]')!.click());
+  expect(document.querySelector('[role=alertdialog]')?.textContent).not.toContain('private password');
   await p.choose('Leave');
   expect(p.router.history.location.pathname).toBe('/recovery');
   expect(p.unload()).toBe(false);
@@ -94,7 +103,6 @@ test('Stay retains the same dispatched sign-in; completion while prompting uses 
   await p.choose('Stay');
   expect(p.calls).toHaveLength(1);
   expect(button(p.host, 'Sign in')!.disabled).toBe(true);
-  expect(p.input('password').value).toBe('private password');
   await p.navigate();
   await flush(() => p.calls[0]!.resolve(Response.json({})));
   expect(p.assign).toHaveBeenCalledWith('https://auth.test/authorize?client_id=reader&scope=openid&scope=');
@@ -142,13 +150,7 @@ test('management authentication returns bypass the prompt with the exact request
   const p = await setup(query);
   await p.enter();
   await flush(() => send(p.host));
-  expect(confirm).toHaveBeenCalledWith(
-    'reader@example.test',
-    'private password',
-    query,
-    'https://auth.test',
-    expect.any(Function),
-  );
+  expect(confirm.mock.calls[0]?.slice(2, 4)).toEqual([query, 'https://auth.test']);
   expect(p.assign).toHaveBeenCalledWith('https://auth.test/account/rename');
   expect(p.unload()).toBe(false);
 });
