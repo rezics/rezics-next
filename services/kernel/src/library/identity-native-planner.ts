@@ -37,8 +37,15 @@ import type {
   IdentityReceivingSelection,
 } from '../semantic/identity-receiving-effects-types.ts';
 import { instrumentNativeCollectionWork, NativeCollectionWork } from './collection-source-work.ts';
-import { createNativeLibrarySourceCustodyWithWork, readNativeIdentitySourceBasis, validateNativeIdentitySource } from './native-source-custody.ts';
-import { readNativeCollectionMetadataWithWork, readNativeCollectionRawPageWithWork } from './collection-source-native.ts';
+import {
+  createNativeLibrarySourceCustodyWithWork,
+  readNativeIdentitySourceBasis,
+  validateNativeIdentitySource,
+} from './native-source-custody.ts';
+import {
+  readNativeCollectionMetadataWithWork,
+  readNativeCollectionRawPageWithWork,
+} from './collection-source-native.ts';
 import { readOwnerNativeFactPage, type OwnerNativeFactDriver } from './owner-index.ts';
 import type { CanonicalBasis, CanonicalRawKey } from './canonical-source-store.ts';
 import type { WorkAllowance, WorkReceipt } from './collection-source.ts';
@@ -158,19 +165,22 @@ export async function readLibraryIdentityPlan(
   lock = false,
 ): Promise<LibraryIdentityPlan | null> {
   const row = (
-    await tx.query<LibraryIdentityPlan & { projection_valid: boolean }>(libraryIdentityBoundedPlanSQL.replace(/;\s*$/, lock ? ' FOR UPDATE' : ''), [
-      key.sourceIdentity.route,
-      key.sourceIdentity.collectionId,
-      libraryIdentityPlanKey(key),
-    ])
+    await tx.query<LibraryIdentityPlan & { projection_valid: boolean }>(
+      libraryIdentityBoundedPlanSQL.replace(/;\s*$/, lock ? ' FOR UPDATE' : ''),
+      [key.sourceIdentity.route, key.sourceIdentity.collectionId, libraryIdentityPlanKey(key)],
+    )
   ).rows[0];
   if (!row) return null;
-  if (!row.projection_valid || !row.capture_frontier ||
-      !Number.isSafeInteger(row.capture_frontier.version) || row.capture_frontier.version < 0 ||
-      row.capture_frontier.version > 2147483647 ||
-      typeof row.capture_frontier.scanned !== 'string' ||
-      !/^(0|[1-9][0-9]{0,18})$/.test(row.capture_frontier.scanned) ||
-      BigInt(row.capture_frontier.scanned) > 9223372036854775807n)
+  if (
+    !row.projection_valid ||
+    !row.capture_frontier ||
+    !Number.isSafeInteger(row.capture_frontier.version) ||
+    row.capture_frontier.version < 0 ||
+    row.capture_frontier.version > 2147483647 ||
+    typeof row.capture_frontier.scanned !== 'string' ||
+    !/^(0|[1-9][0-9]{0,18})$/.test(row.capture_frontier.scanned) ||
+    BigInt(row.capture_frontier.scanned) > 9223372036854775807n
+  )
     throw stale('Invalid native Library plan projection');
   if (
     !equalLibraryIdentityValue(row.source_identity, key.sourceIdentity) ||
@@ -236,11 +246,11 @@ export async function currentLibraryIdentityPlan(
       return false;
   }
   const job = (
-    await query<{ transaction_id: string; scope_digest: string; writer_fence: unknown }>(tx, libraryIdentityBoundedJobSQL, [
-      currentCommand(tx).partition,
-      key.job.jobId,
-      key.job.epoch.toString(),
-    ])
+    await query<{ transaction_id: string; scope_digest: string; writer_fence: unknown }>(
+      tx,
+      libraryIdentityBoundedJobSQL,
+      [currentCommand(tx).partition, key.job.jobId, key.job.epoch.toString()],
+    )
   )[0];
   return (
     !!job &&
@@ -273,12 +283,19 @@ export async function libraryIdentityCommand<T>(
       // Source binds Core's real lifetime to the private original and reserves
       // its disjoint controls. Only Library body SQL belongs to this partition.
       const result = await withIdentitySourceNoEffectCommand(pool, deadlineOf(ledger), () =>
-        withSingleCommandAttempt(() => runCommand(pool, { partition, deadline: deadlineOf(ledger) }, (tx) =>
-          libraryIdentityWorkFor(tx, ledger, () => instrumentNativeCollectionWork(
-            pool, ledger, (sql, values) => libraryIdentityFootprint(sql, values, ledger),
-            () => operation(tx), tx,
-          )),
-        )),
+        withSingleCommandAttempt(() =>
+          runCommand(pool, { partition, deadline: deadlineOf(ledger) }, (tx) =>
+            libraryIdentityWorkFor(tx, ledger, () =>
+              instrumentNativeCollectionWork(
+                pool,
+                ledger,
+                (sql, values) => libraryIdentityFootprint(sql, values, ledger),
+                () => operation(tx),
+                tx,
+              ),
+            ),
+          ),
+        ),
       );
       return result.value;
     }
@@ -311,11 +328,7 @@ async function plannedOriginal(
   const after =
     n > 0n ? `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}` : null;
   const page = await bounded(ledger, () =>
-    withReadTransaction(
-      pool,
-      (tx) => pageLibraryIdentityEpochChanges(tx, job, after),
-      deadlineOf(ledger),
-    ),
+    withReadTransaction(pool, (tx) => pageLibraryIdentityEpochChanges(tx, job, after), deadlineOf(ledger)),
   );
   const change: IdentityChange | undefined = page.changes.find((item) => item.original === key.storedSubjectId);
   if (change) return { key, change, terminal: change.terminal, mappingEpoch: null };
@@ -399,9 +412,15 @@ async function advanceNativePlan(
   if (input.scope !== 'collection-source' || s.scope === 'public_output') return result('unavailable');
   if (home !== identityJobPartition(input.job) || partitionOf(routeOf(s.accountId)!) !== home)
     return result('unavailable');
-  const initial = await readNativeCollectionMetadataWithWork(pool, s, {
-    allowance: remainingAllowance(l), deadline: input.deadline,
-  }, l);
+  const initial = await readNativeCollectionMetadataWithWork(
+    pool,
+    s,
+    {
+      allowance: remainingAllowance(l),
+      deadline: input.deadline,
+    },
+    l,
+  );
   const native = initial.metadata;
   if (
     !native ||
@@ -473,11 +492,11 @@ async function advanceNativePlan(
       return noEffect(null);
     }
     const job = (
-      await query<{ transaction_id: string; scope_digest: string; writer_fence: unknown }>(tx, libraryIdentityBoundedJobSQL, [
-        home,
-        input.job.jobId,
-        input.job.epoch.toString(),
-      ])
+      await query<{ transaction_id: string; scope_digest: string; writer_fence: unknown }>(
+        tx,
+        libraryIdentityBoundedJobSQL,
+        [home, input.job.jobId, input.job.epoch.toString()],
+      )
     )[0];
     if (!job || !job.scope_digest) return noEffect(null);
     if (prior) return noEffect(prior.state === 'invalidated' ? null : prior);
@@ -602,7 +621,10 @@ async function advanceNativePlan(
       const custody = createNativeLibrarySourceCustodyWithWork(pool, l);
       if (basis.frontier.driver === 'done') {
         const finished = await custody.finishCapture({
-          identity: s, frontier: basis.frontier, allowance: remainingAllowance(l), deadline: input.deadline,
+          identity: s,
+          frontier: basis.frontier,
+          allowance: remainingAllowance(l),
+          deadline: input.deadline,
         });
         return result(finished.status === 'complete' ? 'pending' : 'unavailable');
       }
@@ -618,9 +640,15 @@ async function advanceNativePlan(
     }
     return result('pending');
   }
-  const observed = await readNativeCollectionMetadataWithWork(pool, s, {
-    allowance: remainingAllowance(l), deadline: input.deadline,
-  }, l);
+  const observed = await readNativeCollectionMetadataWithWork(
+    pool,
+    s,
+    {
+      allowance: remainingAllowance(l),
+      deadline: input.deadline,
+    },
+    l,
+  );
   const metadata = observed.metadata;
   if (
     !metadata ||
@@ -668,7 +696,10 @@ async function advanceNativePlan(
                 ),
               ),
             )
-          : await readNativeCollectionRawPageWithWork(pool, metadata, {
+          : await readNativeCollectionRawPageWithWork(
+              pool,
+              metadata,
+              {
                 driver: plan!.driver as CanonicalRawKey['driver'],
                 after:
                   plan!.after_subject && plan!.after_fact
@@ -681,7 +712,9 @@ async function advanceNativePlan(
                 limit: Math.min(input.limit, l.available('candidateKeys')),
                 allowance: remainingAllowance(l),
                 deadline: input.deadline,
-              }, l);
+              },
+              l,
+            );
   const staged: LibraryIdentityPlannedOriginal[] = [];
   const originalPlans = new Map<string, LibraryIdentityPlannedOriginal>();
   for (const row of page?.rows ?? []) {

@@ -11,15 +11,33 @@ export const IDENTITY_SOURCE_ORIGINAL_SCHEDULE = Object.freeze({
   custodyAdvancements: 1,
   directoryPages: 1,
   source: Object.freeze({
-    retainedDiscovery: 1, original: 1, acceptedBinding: 1, published: 2,
-    participantReconcile: 3, prepare: 1, retainedFallback: 1, progress: 1,
-    directory: 1, directoryRecheck: 1, scopeAdmission: 1, receivingSelection: 1,
-    receivingReconcile: 1, receivingCommand: 1, checkpoint: 1, finish: 1,
-    terminalVerify: 1, historyAuthority: 1, historyHandoff: 1,
+    retainedDiscovery: 1,
+    original: 1,
+    acceptedBinding: 1,
+    published: 2,
+    participantReconcile: 3,
+    prepare: 1,
+    retainedFallback: 1,
+    progress: 1,
+    directory: 1,
+    directoryRecheck: 1,
+    scopeAdmission: 1,
+    receivingSelection: 1,
+    receivingReconcile: 1,
+    receivingCommand: 1,
+    checkpoint: 1,
+    finish: 1,
+    terminalVerify: 1,
+    historyAuthority: 1,
+    historyHandoff: 1,
   }),
   library: Object.freeze({
-    discovery: 0, plannerSteps: 0, effectPages: 1, currentVerifications: 1,
-    exhaustedPageRechecks: 1, finalFences: 0,
+    discovery: 0,
+    plannerSteps: 0,
+    effectPages: 1,
+    currentVerifications: 1,
+    exhaustedPageRechecks: 1,
+    finalFences: 0,
   }),
 });
 export type IdentitySourceLibraryOperation = keyof typeof IDENTITY_SOURCE_ORIGINAL_SCHEDULE.library;
@@ -175,11 +193,21 @@ export type IdentitySourceReachedDeclaration = Readonly<{
 /** Assemble disjoint reached calls, including repeated validators and alternative
  * failure/rollback controls. This arithmetic never authenticates or funds a child.
  * Call counts come from the owning bounded body, not a caller's claimed progress. */
-export function composeIdentitySourceReachedCosts(terms: readonly IdentitySourceReachedDeclaration[]):
+export function composeIdentitySourceReachedCosts(
+  terms: readonly IdentitySourceReachedDeclaration[],
+):
   | Readonly<{ state: 'missing'; missing: readonly string[] }>
   | Readonly<{ state: 'complete'; work: WorkDimensions; engineRequests: 0 }> {
-  const axes = ['candidateKeys', 'nativeRows', 'identityMetadataRows', 'nativePoints',
-    'witnessKeys', 'statements', 'bytes', 'emptySeeks'] as const;
+  const axes = [
+    'candidateKeys',
+    'nativeRows',
+    'identityMetadataRows',
+    'nativePoints',
+    'witnessKeys',
+    'statements',
+    'bytes',
+    'emptySeeks',
+  ] as const;
   const total = Object.fromEntries(axes.map((axis) => [axis, 0])) as Record<keyof WorkDimensions, number>;
   const names = new Set<string>();
   const missing: string[] = [];
@@ -187,13 +215,18 @@ export function composeIdentitySourceReachedCosts(terms: readonly IdentitySource
     if (!term.name || names.has(term.name) || !Number.isSafeInteger(term.calls) || term.calls < 1)
       throw new TypeError('Invalid reached Source cost term');
     names.add(term.name);
-    if (term.declaration === null) { missing.push(term.name); continue; }
+    if (term.declaration === null) {
+      missing.push(term.name);
+      continue;
+    }
     const declaration = term.declaration;
     if (declaration.engineRequests !== 0 || Reflect.ownKeys(declaration).length !== 2)
       throw new TypeError('Source work requires explicit zero engine requests');
     const work = { ...declaration.work };
-    if (Reflect.ownKeys(work).length !== axes.length || axes.some((axis) =>
-      !Object.hasOwn(work, axis) || !Number.isSafeInteger(work[axis]) || work[axis] < 0))
+    if (
+      Reflect.ownKeys(work).length !== axes.length ||
+      axes.some((axis) => !Object.hasOwn(work, axis) || !Number.isSafeInteger(work[axis]) || work[axis] < 0)
+    )
       throw new TypeError('Source work requires all eight explicit dimensions');
     for (const axis of axes) {
       const repeated = work[axis] * term.calls;

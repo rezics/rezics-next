@@ -7,8 +7,10 @@ import type { KernelClock } from '../clock.ts';
 import type { NativeStepWork } from './identity-epoch-contract.ts';
 import type { WorkDimensions, WorkAllowance } from '../library/collection-source.ts';
 import {
-  withCommandDispatchLifetime, COMMAND_DISPATCH_ALLOWANCE,
-  withSourceFenceCommandDispatchLifetime, SOURCE_FENCE_COMMAND_DISPATCH_ALLOWANCE,
+  withCommandDispatchLifetime,
+  COMMAND_DISPATCH_ALLOWANCE,
+  withSourceFenceCommandDispatchLifetime,
+  SOURCE_FENCE_COMMAND_DISPATCH_ALLOWANCE,
 } from '../command/dispatch-lifetime.ts';
 import {
   NativeCollectionWork,
@@ -28,8 +30,11 @@ import {
   type IdentityOriginalSourceContext,
 } from '../access/identity-original-admission.ts';
 import {
-  readIdentitySourceMaintenanceConfig, composeIdentitySourceReachedCosts,
-  IDENTITY_SOURCE_ORIGINAL_SCHEDULE, type IdentitySourceLibraryOperation, type IdentitySourceScheduledOperation,
+  readIdentitySourceMaintenanceConfig,
+  composeIdentitySourceReachedCosts,
+  IDENTITY_SOURCE_ORIGINAL_SCHEDULE,
+  type IdentitySourceLibraryOperation,
+  type IdentitySourceScheduledOperation,
 } from './identity-source-maintenance-config.ts';
 
 const identitySourceConsumerMaintenance: unique symbol = Symbol('identity-source-consumer-maintenance');
@@ -74,8 +79,10 @@ function live(frame: Frame, pool: Pool, deadline?: number): boolean {
     frame.pool === pool &&
     Number.isFinite(frame.deadline) &&
     Date.now() < frame.deadline &&
-    (deadline === undefined || (Number.isFinite(deadline) && deadline > Date.now() &&
-      (frame.original ? deadline === frame.deadline : deadline <= frame.deadline)))
+    (deadline === undefined ||
+      (Number.isFinite(deadline) &&
+        deadline > Date.now() &&
+        (frame.original ? deadline === frame.deadline : deadline <= frame.deadline)))
   );
 }
 
@@ -110,11 +117,21 @@ export function reserveIdentitySourceConsumerNativeWork(
     if (!declaration) return false;
     try {
       const vector = originalWorkVector(declaration);
-      declaration = Object.freeze(Object.fromEntries(ORIGINAL_AXES.map((axis, i) => [axis, vector[i]!])) as unknown as WorkDimensions);
-      if (declaration.nativeRows !== amount.rows || declaration.nativePoints !== amount.points ||
-          declaration.statements !== amount.statements || declaration.bytes !== amount.bytes) return false;
+      declaration = Object.freeze(
+        Object.fromEntries(ORIGINAL_AXES.map((axis, i) => [axis, vector[i]!])) as unknown as WorkDimensions,
+      );
+      if (
+        declaration.nativeRows !== amount.rows ||
+        declaration.nativePoints !== amount.points ||
+        declaration.statements !== amount.statements ||
+        declaration.bytes !== amount.bytes
+      )
+        return false;
       reserveIdentityOriginalSourceWork(
-        frame.original.deps, frame.original.parent.original, frame.original.parent.jobId, declaration,
+        frame.original.deps,
+        frame.original.parent.original,
+        frame.original.parent.jobId,
+        declaration,
       );
     } catch {
       return false;
@@ -165,12 +182,16 @@ export async function withIdentitySourceConsumerLibraryRemainder<T>(
 ): Promise<T | null> {
   const frame = frames.get(work);
   if (!frame || !live(frame, pool, deadline)) return null;
-  return withNativeCollectionWorkAllowance(frame.library, allowance, () => libraryRemainder.run(frame, async () => {
-    if (!live(frame, pool, deadline)) throw new IdentitySourceOriginalUnavailable(IDENTITY_SOURCE_ORIGINAL_TRANSFER_UNAVAILABLE);
-    const result = await body(frame.library);
-    if (!live(frame, pool, deadline)) throw new IdentitySourceOriginalUnavailable(IDENTITY_SOURCE_ORIGINAL_TRANSFER_UNAVAILABLE);
-    return result;
-  }));
+  return withNativeCollectionWorkAllowance(frame.library, allowance, () =>
+    libraryRemainder.run(frame, async () => {
+      if (!live(frame, pool, deadline))
+        throw new IdentitySourceOriginalUnavailable(IDENTITY_SOURCE_ORIGINAL_TRANSFER_UNAVAILABLE);
+      const result = await body(frame.library);
+      if (!live(frame, pool, deadline))
+        throw new IdentitySourceOriginalUnavailable(IDENTITY_SOURCE_ORIGINAL_TRANSFER_UNAVAILABLE);
+      return result;
+    }),
+  );
 }
 
 /** A durable scope fence must run inside the original page's cumulative plan. */
@@ -227,10 +248,18 @@ function authenticateOriginal(deps: HistoryOriginalDependencies, parent: Identit
   const transfer = currentIdentityOriginalTransfer(deps, parent.jobId);
   if (!transfer) throw new IdentitySourceOriginalUnavailable('identity-history-original-handle-unavailable');
   const actual = identityOriginalRemainder(deps, transfer, parent.jobId);
-  if (actual.originalId !== parent.originalId || actual.position !== parent.position ||
-      actual.position.job_id !== parent.jobId || actual.deadline !== parent.deadline ||
-      actual.source !== parent.native || actual.source === null || actual.library === null ||
-      library !== parent.library || !Number.isSafeInteger(parent.deadline) || Date.now() >= parent.deadline)
+  if (
+    actual.originalId !== parent.originalId ||
+    actual.position !== parent.position ||
+    actual.position.job_id !== parent.jobId ||
+    actual.deadline !== parent.deadline ||
+    actual.source !== parent.native ||
+    actual.source === null ||
+    actual.library === null ||
+    library !== parent.library ||
+    !Number.isSafeInteger(parent.deadline) ||
+    Date.now() >= parent.deadline
+  )
     throw new IdentitySourceOriginalUnavailable('identity-history-original-private-grant-changed');
   originalWorkVector(parent.native);
 }
@@ -251,10 +280,20 @@ export async function withPrepaidIdentitySourceConsumerMaintenance<T>(
   receivedOriginals.add(parent.original); // Failure/return never reopens this original.
   const token = Object.freeze({ [identitySourceConsumerMaintenance]: true }) as IdentitySourceConsumerMaintenanceWork;
   const frame: Frame = {
-    token, pool: deps.pool, deadline: parent.deadline, active: true,
-    native: Object.freeze({ rows: parent.native.nativeRows, points: parent.native.nativePoints,
-      statements: parent.native.statements, bytes: parent.native.bytes, engineRequests: 0 }),
-    used: emptyNative(), library: parent.library, original: Object.freeze({ deps, parent }),
+    token,
+    pool: deps.pool,
+    deadline: parent.deadline,
+    active: true,
+    native: Object.freeze({
+      rows: parent.native.nativeRows,
+      points: parent.native.nativePoints,
+      statements: parent.native.statements,
+      bytes: parent.native.bytes,
+      engineRequests: 0,
+    }),
+    used: emptyNative(),
+    library: parent.library,
+    original: Object.freeze({ deps, parent }),
   };
   frames.set(token, frame);
   const funded = Object.freeze({ deadline: frame.deadline, identityConsumerWork: token });
@@ -272,7 +311,11 @@ export async function withPrepaidIdentitySourceConsumerMaintenance<T>(
     } catch (error) {
       // Do not clear producer poison or refund any dispatched partition.
       if (error instanceof Error) {
-        try { frame.library.failure = error; } catch { /* Producer lifetime already ended. */ }
+        try {
+          frame.library.failure = error;
+        } catch {
+          /* Producer lifetime already ended. */
+        }
       }
       throw error;
     } finally {
@@ -312,9 +355,11 @@ export function withIdentitySourceConsumerMaintenance<T>(
   // the independent native Source admission, including on absent producer source.
   let selectedOriginal = false;
   try {
-    selectedOriginal = currentIdentityOriginalTransfer(
-      { pool: deps.pool, client: deps.client!, registry: deps.registry! }, deps.selectedHistoryJob ?? '',
-    ) !== null;
+    selectedOriginal =
+      currentIdentityOriginalTransfer(
+        { pool: deps.pool, client: deps.client!, registry: deps.registry! },
+        deps.selectedHistoryJob ?? '',
+      ) !== null;
   } catch {
     selectedOriginal = true; // Present but mismatched ancestry must never fund a fallback.
   }
@@ -374,16 +419,23 @@ export function isPrepaidIdentitySourceConsumerMaintenance(pool: Pool): boolean 
  * No new durable Source ledger or caller identifier participates in the claim.
  */
 export function claimIdentitySourceCustodyAdvancement(
-  pool: Pool, work: IdentitySourceConsumerMaintenanceWork, deadline: number,
+  pool: Pool,
+  work: IdentitySourceConsumerMaintenanceWork,
+  deadline: number,
   barrier: Readonly<{ accountId: string; accountRoute: number; version: number; at: string }>,
 ): boolean {
   const frame = frames.get(work);
   if (!frame || !live(frame, pool, deadline)) return false;
   if (!frame.original) return true;
   const position = frame.original.parent.position;
-  if (frame.custodyClaimed || position.account_id !== barrier.accountId ||
-      position.account_route !== barrier.accountRoute || position.barrier_version !== barrier.version ||
-      position.barrier_at !== barrier.at) return false;
+  if (
+    frame.custodyClaimed ||
+    position.account_id !== barrier.accountId ||
+    position.account_route !== barrier.accountRoute ||
+    position.barrier_version !== barrier.version ||
+    position.barrier_at !== barrier.at
+  )
+    return false;
   frame.custodyClaimed = true; // Unavailable, throw and rollback cannot cancel this claim.
   frame.reached = new Map();
   return true;
@@ -405,12 +457,16 @@ function claimBoundedCall(pool: Pool, name: string, maximum: number): void {
 
 /** Immutable accounting observation, never a scheduling claim or grant. */
 export function identitySourceConsumerScheduleReceipt(
-  pool: Pool, work: IdentitySourceConsumerMaintenanceWork, deadline: number,
+  pool: Pool,
+  work: IdentitySourceConsumerMaintenanceWork,
+  deadline: number,
 ): Readonly<{ claimed: boolean; calls: Readonly<Record<string, number>> }> | null {
   const frame = frames.get(work);
   if (!frame?.original || !live(frame, pool, deadline)) return null;
-  return Object.freeze({ claimed: frame.custodyClaimed === true,
-    calls: Object.freeze(Object.fromEntries(frame.reached ?? [])) });
+  return Object.freeze({
+    claimed: frame.custodyClaimed === true,
+    calls: Object.freeze(Object.fromEntries(frame.reached ?? [])),
+  });
 }
 
 export function claimIdentitySourceScheduledCall(pool: Pool, operation: IdentitySourceScheduledOperation): void {
@@ -430,34 +486,46 @@ export function claimIdentitySourceLibraryCall(pool: Pool, operation: IdentitySo
  * remains separately priced at its exact callsite. Never use the historical
  * aggregate control reservation for this same command.
  */
-export function withIdentitySourceNoEffectCommand<T>(
-  pool: Pool, deadline: number, body: () => Promise<T>,
-): Promise<T> {
+export function withIdentitySourceNoEffectCommand<T>(pool: Pool, deadline: number, body: () => Promise<T>): Promise<T> {
   const frame = current.getStore();
   if (!frame || !live(frame, pool, deadline))
     throw new IdentitySourceOriginalUnavailable('identity-source-original-ended');
   if (!frame.original) return body();
-  if (!frame.custodyClaimed)
-    throw new IdentitySourceOriginalUnavailable('identity-source-custody-step-not-claimed');
+  if (!frame.custodyClaimed) throw new IdentitySourceOriginalUnavailable('identity-source-custody-step-not-claimed');
   const { parent } = frame.original;
-  return withCommandDispatchLifetime(pool, deadline, Object.freeze({
-    original: parent.original,
-    validate() {
-      if (!live(frame, pool, deadline))
-        throw new IdentitySourceOriginalUnavailable('identity-source-original-ended');
-    },
-    reserve(allowance: typeof COMMAND_DISPATCH_ALLOWANCE) {
-      if (allowance !== COMMAND_DISPATCH_ALLOWANCE || !live(frame, pool, deadline))
-        throw new IdentitySourceOriginalUnavailable('identity-source-command-controls-changed');
-      // One atomic reserve includes the independently held rollback. It stays
-      // spent on expiry/revocation/failed COMMIT; Core owns same-client cleanup.
-      const cost = allowance.total.work;
-      if (!reserveIdentitySourceConsumerNativeWork(pool, frame.token, {
-        rows: cost.nativeRows, points: cost.nativePoints, statements: cost.statements,
-        bytes: cost.bytes, engineRequests: 0,
-      }, cost)) throw new IdentitySourceOriginalUnavailable('identity-source-command-controls-exhausted');
-    },
-  }), body);
+  return withCommandDispatchLifetime(
+    pool,
+    deadline,
+    Object.freeze({
+      original: parent.original,
+      validate() {
+        if (!live(frame, pool, deadline)) throw new IdentitySourceOriginalUnavailable('identity-source-original-ended');
+      },
+      reserve(allowance: typeof COMMAND_DISPATCH_ALLOWANCE) {
+        if (allowance !== COMMAND_DISPATCH_ALLOWANCE || !live(frame, pool, deadline))
+          throw new IdentitySourceOriginalUnavailable('identity-source-command-controls-changed');
+        // One atomic reserve includes the independently held rollback. It stays
+        // spent on expiry/revocation/failed COMMIT; Core owns same-client cleanup.
+        const cost = allowance.total.work;
+        if (
+          !reserveIdentitySourceConsumerNativeWork(
+            pool,
+            frame.token,
+            {
+              rows: cost.nativeRows,
+              points: cost.nativePoints,
+              statements: cost.statements,
+              bytes: cost.bytes,
+              engineRequests: 0,
+            },
+            cost,
+          )
+        )
+          throw new IdentitySourceOriginalUnavailable('identity-source-command-controls-exhausted');
+      },
+    }),
+    body,
+  );
 }
 
 /** The delivered event profile is distinct from noEffect. The selected immutable
@@ -465,7 +533,10 @@ export function withIdentitySourceNoEffectCommand<T>(
  * Accounts grant. Library body SQL remains on its existing Library partition.
  */
 export function withIdentitySourceFenceCommand<T>(
-  pool: Pool, deadline: number, accountId: string, body: () => Promise<T>,
+  pool: Pool,
+  deadline: number,
+  accountId: string,
+  body: () => Promise<T>,
 ): Promise<T> {
   const frame = current.getStore();
   if (!frame || !live(frame, pool, deadline))
@@ -473,22 +544,38 @@ export function withIdentitySourceFenceCommand<T>(
   if (!frame.original) return body();
   if (!frame.custodyClaimed || accountId !== frame.original.parent.position.account_id)
     throw new IdentitySourceOriginalUnavailable('identity-source-custody-step-not-claimed');
-  return withSourceFenceCommandDispatchLifetime(pool, deadline, Object.freeze({
-    original: frame.original.parent.original,
-    validate() {
-      if (!live(frame, pool, deadline))
-        throw new IdentitySourceOriginalUnavailable('identity-source-original-ended');
-    },
-    reserve(allowance: typeof SOURCE_FENCE_COMMAND_DISPATCH_ALLOWANCE) {
-      if (allowance !== SOURCE_FENCE_COMMAND_DISPATCH_ALLOWANCE || !live(frame, pool, deadline))
-        throw new IdentitySourceOriginalUnavailable('identity-source-command-controls-changed');
-      const cost = allowance.total.work;
-      if (!reserveIdentitySourceConsumerNativeWork(pool, frame.token, {
-        rows: cost.nativeRows, points: cost.nativePoints, statements: cost.statements,
-        bytes: cost.bytes, engineRequests: 0,
-      }, cost)) throw new IdentitySourceOriginalUnavailable('identity-source-command-controls-exhausted');
-    },
-  }), accountId, body);
+  return withSourceFenceCommandDispatchLifetime(
+    pool,
+    deadline,
+    Object.freeze({
+      original: frame.original.parent.original,
+      validate() {
+        if (!live(frame, pool, deadline)) throw new IdentitySourceOriginalUnavailable('identity-source-original-ended');
+      },
+      reserve(allowance: typeof SOURCE_FENCE_COMMAND_DISPATCH_ALLOWANCE) {
+        if (allowance !== SOURCE_FENCE_COMMAND_DISPATCH_ALLOWANCE || !live(frame, pool, deadline))
+          throw new IdentitySourceOriginalUnavailable('identity-source-command-controls-changed');
+        const cost = allowance.total.work;
+        if (
+          !reserveIdentitySourceConsumerNativeWork(
+            pool,
+            frame.token,
+            {
+              rows: cost.nativeRows,
+              points: cost.nativePoints,
+              statements: cost.statements,
+              bytes: cost.bytes,
+              engineRequests: 0,
+            },
+            cost,
+          )
+        )
+          throw new IdentitySourceOriginalUnavailable('identity-source-command-controls-exhausted');
+      },
+    }),
+    accountId,
+    body,
+  );
 }
 
 /** Actual owner receiving disposition. There is deliberately no successful
@@ -496,9 +583,13 @@ export function withIdentitySourceFenceCommand<T>(
  * lack compatible eight-axis declarations. Accounts treats absence as unavailable,
  * rather than accepting total:null or a local-only price as whole-child funding. */
 export async function readIdentitySourceOriginalCostDisposition() {
-  const { IDENTITY_SOURCE_HISTORY_GUARD_DECLARATION, IDENTITY_SOURCE_LOCAL_READ_DECLARATIONS,
-    IDENTITY_SOURCE_LOCAL_MUTATION_COMPONENTS, IDENTITY_SOURCE_LOCAL_CALLS,
-    IDENTITY_SOURCE_WIDER_COMMAND_REQUIREMENTS } = await import('./identity-source-consumer-custody.ts');
+  const {
+    IDENTITY_SOURCE_HISTORY_GUARD_DECLARATION,
+    IDENTITY_SOURCE_LOCAL_READ_DECLARATIONS,
+    IDENTITY_SOURCE_LOCAL_MUTATION_COMPONENTS,
+    IDENTITY_SOURCE_LOCAL_CALLS,
+    IDENTITY_SOURCE_WIDER_COMMAND_REQUIREMENTS,
+  } = await import('./identity-source-consumer-custody.ts');
   const { scopeConsumerFootprint } = await import('./identity-scoped-observations.ts');
   const history = await import('../history/agent-identity-inventory-work.ts');
   const retirement = await import('../history/agent-identity-retirement.ts');
@@ -509,40 +600,81 @@ export async function readIdentitySourceOriginalCostDisposition() {
     return field && 'value' in field ? field.value : undefined;
   };
   const libraryValue = ownValue(library, 'IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION');
-  const libraryDeclaration = libraryValue === undefined ? null : (() => {
-    const declaration = libraryValue as { work: WorkDimensions; engineRequests: 0 };
-    // Validate the actual installed owner export, never a caller quotation.
-    const checked = composeIdentitySourceReachedCosts([{ name: 'LibraryAllReachedCalls', calls: 1, declaration }]);
-    if (checked.state !== 'complete') throw new TypeError('Installed Library declaration is incomplete');
-    return Object.freeze({ work: checked.work, engineRequests: checked.engineRequests });
-  })();
+  const libraryDeclaration =
+    libraryValue === undefined
+      ? null
+      : (() => {
+          const declaration = libraryValue as { work: WorkDimensions; engineRequests: 0 };
+          // Validate the actual installed owner export, never a caller quotation.
+          const checked = composeIdentitySourceReachedCosts([
+            { name: 'LibraryAllReachedCalls', calls: 1, declaration },
+          ]);
+          if (checked.state !== 'complete') throw new TypeError('Installed Library declaration is incomplete');
+          return Object.freeze({ work: checked.work, engineRequests: checked.engineRequests });
+        })();
   const historyValue = ownValue(history, 'IDENTITY_HISTORY_ACCOUNTS_DECLARATION');
-  const historyComponents = historyValue === undefined ? null : (() => {
-    const value = historyValue as { version: number; interface: string; sourceReceiver: string;
-      engineRequests: number; axes: readonly string[];
-      local: Record<string, WorkDimensions>; sdk: Record<string, WorkDimensions>; multiplicities: object };
-    if (!value || value.version !== 1 || value.interface !== 'withPrepaidAgentIdentityHistoryUnit' ||
-        value.sourceReceiver !== 'withPrepaidIdentitySourceConsumerMaintenance' || value.engineRequests !== 0 ||
-        JSON.stringify(value.axes) !== JSON.stringify(ORIGINAL_AXES) || !value.local || !value.sdk)
-      throw new TypeError('Installed History component interface is incompatible');
-    const copy = (parts: Record<string, WorkDimensions>) => Object.freeze(Object.fromEntries(
-      Object.entries(parts).map(([name, work]) => {
-        const vector = originalWorkVector(work);
-        return [name, Object.freeze(Object.fromEntries(ORIGINAL_AXES.map((axis, i) => [axis, vector[i]!])) as unknown as WorkDimensions)];
-      }),
-    ));
-    return Object.freeze({ local: copy(value.local), sdk: copy(value.sdk),
-      // Delivered prose describes repetitions; it is not an executable maximum.
-      // Keep whole composition unavailable until those actual caller guards exist.
-      multiplicities: 'requires executable reached History caller multiplicities' as const });
-  })();
+  const historyComponents =
+    historyValue === undefined
+      ? null
+      : (() => {
+          const value = historyValue as {
+            version: number;
+            interface: string;
+            sourceReceiver: string;
+            engineRequests: number;
+            axes: readonly string[];
+            local: Record<string, WorkDimensions>;
+            sdk: Record<string, WorkDimensions>;
+            multiplicities: object;
+          };
+          if (
+            !value ||
+            value.version !== 1 ||
+            value.interface !== 'withPrepaidAgentIdentityHistoryUnit' ||
+            value.sourceReceiver !== 'withPrepaidIdentitySourceConsumerMaintenance' ||
+            value.engineRequests !== 0 ||
+            JSON.stringify(value.axes) !== JSON.stringify(ORIGINAL_AXES) ||
+            !value.local ||
+            !value.sdk
+          )
+            throw new TypeError('Installed History component interface is incompatible');
+          const copy = (parts: Record<string, WorkDimensions>) =>
+            Object.freeze(
+              Object.fromEntries(
+                Object.entries(parts).map(([name, work]) => {
+                  const vector = originalWorkVector(work);
+                  return [
+                    name,
+                    Object.freeze(
+                      Object.fromEntries(
+                        ORIGINAL_AXES.map((axis, i) => [axis, vector[i]!]),
+                      ) as unknown as WorkDimensions,
+                    ),
+                  ];
+                }),
+              ),
+            );
+          return Object.freeze({
+            local: copy(value.local),
+            sdk: copy(value.sdk),
+            // Delivered prose describes repetitions; it is not an executable maximum.
+            // Keep whole composition unavailable until those actual caller guards exist.
+            multiplicities: 'requires executable reached History caller multiplicities' as const,
+          });
+        })();
   const whole = composeIdentitySourceReachedCosts([
-    { name: 'AccountsLocalControl', calls: 1,
-      declaration: { work: HISTORY_ORIGINAL_LOCAL_ALLOWANCE, engineRequests: 0 } },
+    {
+      name: 'AccountsLocalControl',
+      calls: 1,
+      declaration: { work: HISTORY_ORIGINAL_LOCAL_ALLOWANCE, engineRequests: 0 },
+    },
     { name: 'SourceHistoryNativeAllReachedCalls', calls: 1, declaration: null },
     { name: 'LibraryAllReachedCalls', calls: 1, declaration: libraryDeclaration },
-    { name: 'AdditionalOriginalTransferControl', calls: 1,
-      declaration: { work: ADDITIONAL_ORIGINAL_TRANSFER_CONTROL, engineRequests: 0 } },
+    {
+      name: 'AdditionalOriginalTransferControl',
+      calls: 1,
+      declaration: { work: ADDITIONAL_ORIGINAL_TRANSFER_CONTROL, engineRequests: 0 },
+    },
   ]);
   return Object.freeze({
     state: 'missing' as const,
@@ -569,7 +701,11 @@ export async function readIdentitySourceOriginalCostDisposition() {
       'Source directory read and final cut: native population/preparePlan declarations',
       'History selected unit: initial stage, repeated H/G/A, inventory, released/current/final receiving, q<=2/c<=64 outbox and role-mutation declarations',
       'History SDK receiving/final progress: withPrepaidAgentIdentityHistoryUnit and SDK eight-axis declarations',
-      ...(!libraryDeclaration ? ['LibraryAllReachedCalls: readLibraryScopeEffectsPageWithWork on the exact original ledger; complete bounded page/current/locked-plan/seal/six-driver declarations; IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION'] : []),
+      ...(!libraryDeclaration
+        ? [
+            'LibraryAllReachedCalls: readLibraryScopeEffectsPageWithWork on the exact original ledger; complete bounded page/current/locked-plan/seal/six-driver declarations; IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION',
+          ]
+        : []),
       'Core wider executor profile: Source callback/association, custody preparation/checkpoint/finish',
     ]),
   });

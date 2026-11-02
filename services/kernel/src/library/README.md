@@ -2744,12 +2744,12 @@ The budget tests retain existing admission, concurrency, completion, failure and
 inherited-declaration refusal and terminal-control settlement after expiry. Numerical accounting does not prove
 native Source currentness. The producer, current physical Source binding, prepared readback and cleanup remain
 required before the funded journey can return useful results.
-  `identity-original-work.ts` exports strict owner-literal component declarations and
-  `assembleLibraryIdentityOriginalComponents`. Each component contains all eight axes and zero engine requests;
-  composition rejects foreign components, nonintegral/unbounded multiplicities and overflow. Literal bytes include
-  SQL and original serialized binds; dynamically admitted result projections remain required operands for unrestricted planning. Checkout
-  is exactly one native point and zero on the other seven axes. Component assembly grants no funding. The installed selected Library data declaration is derived from the guarded
-  composition below. `collection-source-work.ts` re-exports this additive declaration region.
+`identity-original-work.ts` exports strict owner-literal component declarations and
+`assembleLibraryIdentityOriginalComponents`. Each component contains all eight axes and zero engine requests;
+composition rejects foreign components, nonintegral/unbounded multiplicities and overflow. Literal bytes include
+SQL and original serialized binds; dynamically admitted result projections remain required operands for unrestricted planning. Checkout
+is exactly one native point and zero on the other seven axes. Component assembly grants no funding. The installed selected Library data declaration is derived from the guarded
+composition below. `collection-source-work.ts` re-exports this additive declaration region.
 
 `assembleLibraryIdentitySelectedBodies()` composes the actual native selected body components using the
 adopted Source schedule `discovery=0, plannerSteps=0, effectPages=1, currentVerifications=1,

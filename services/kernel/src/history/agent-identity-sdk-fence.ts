@@ -82,8 +82,7 @@ export async function readAgentIdentityReceivingArtifact(
   context: HistoryReceivingContext,
 ): Promise<HistoryArtifact | null> {
   historyDeadline(context, 0);
-  const { identityHistoryCommand, reserveIdentityHistoryWork } =
-    await import('./agent-identity-inventory-work.ts');
+  const { identityHistoryCommand, reserveIdentityHistoryWork } = await import('./agent-identity-inventory-work.ts');
   await reserveIdentityHistoryWork(pool, AGENT_IDENTITY_RECEIVING_ARTIFACT_COST, context);
   return identityHistoryCommand(pool, context, (tx) => lockAgentIdentityReceivingArtifact(tx, custodyId));
 }
@@ -298,11 +297,8 @@ async function receivingBinding(
   if (owner.currentIdentitySourceConsumerMaintenance(pool, context.deadline)) {
     return identityHistoryCommand(pool, context, read);
   }
-  return (
-    await runCommand(pool, { partition: 0, deadline: context.deadline }, async (tx) =>
-      noEffect(await read(tx)),
-    )
-  ).value;
+  return (await runCommand(pool, { partition: 0, deadline: context.deadline }, async (tx) => noEffect(await read(tx))))
+    .value;
 }
 
 /** Independently reread a previously bound receipt through the real SDK. This observation is

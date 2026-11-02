@@ -1,4 +1,8 @@
-import { nativeIdentityPartitionQuery, isNativeIdentitySourceBasisSQL, nativeIdentitySourceBasisFootprint } from './identity-native-planner-selected-pricing.ts';
+import {
+  nativeIdentityPartitionQuery,
+  isNativeIdentitySourceBasisSQL,
+  nativeIdentitySourceBasisFootprint,
+} from './identity-native-planner-selected-pricing.ts';
 import type { Pool, QueryResultRow } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import {
@@ -14,7 +18,11 @@ import { withConnection, discardConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { routeOf, partitionOf } from '../route/route.ts';
 import { NativeCollectionWork, instrumentNativeCollectionWork } from './collection-source-work.ts';
-import { assertLibraryIdentityResources, revalidateBoundLibraryIdentityWork, withLibraryIdentityWork } from './identity-native-planner-work.ts';
+import {
+  assertLibraryIdentityResources,
+  revalidateBoundLibraryIdentityWork,
+  withLibraryIdentityWork,
+} from './identity-native-planner-work.ts';
 import type { WorkAllowance, WorkDimensions, WorkReceipt } from './collection-source.ts';
 
 import type { NativePublicOutputIdentity } from './native-source-output-types.ts';
@@ -291,7 +299,9 @@ function validate(identity: NativeSourceIdentity): asserts identity is AccountSo
   }
 }
 /** Structural native bind validation only; this grants no Source or original authority. */
-export function validateNativeIdentitySource(identity: NativeSourceIdentity): void { validate(identity); }
+export function validateNativeIdentitySource(identity: NativeSourceIdentity): void {
+  validate(identity);
+}
 function parameters(identity: NativeSourceIdentity): Parameters {
   validate(identity);
   return {
@@ -320,33 +330,66 @@ function footprint(text: string, values: unknown[], rows: number, points: number
     identityMetadataRows: metadata,
     witnessKeys: 0,
     statements: 1,
-    bytes: Buffer.byteLength(text) + Buffer.byteLength(JSON.stringify(values)) + (rows || points ? 4096 : 0) + keys * 1024,
+    bytes:
+      Buffer.byteLength(text) + Buffer.byteLength(JSON.stringify(values)) + (rows || points ? 4096 : 0) + keys * 1024,
     // Native point probes can miss even without a returned raw key. Keep these
     // admitted slots inclusive; a positive outer join result cannot measure inner misses.
     emptySeeks: keys ? 1 : points,
   };
 }
-const sameSQL = (sql: string) => sql.replace(/--[^\n]*/g, '').replace(/\s+/g, ' ').trim().replace(/;$/, '');
-const boundId = 'f'.repeat(36), boundDecimal = '9'.repeat(20), boundText = String.fromCharCode(1);
-const captureProjectionBytes = Buffer.byteLength(JSON.stringify({
-  route: 65535, captureId: boundId, collectionId: boundId, accountId: boundId,
-  incarnation: boundText.repeat(128), generation: boundDecimal, scope: 'active_explicit_output',
-  ownerEpoch: 2147483647, receivingEpoch: boundDecimal, effectKey: boundText.repeat(256),
-  outputGeneration: boundId, publicationTransactionId: boundId, publicationPosition: boundDecimal,
-  collectionFence: boundDecimal, accountFence: boundDecimal, driver: 'entry_deleted',
-  after: boundText.repeat(512), tie: boundText.repeat(64), sessionId: boundId,
-  scanned: boundDecimal, version: 2147483647, complete: false,
-}));
+const sameSQL = (sql: string) =>
+  sql
+    .replace(/--[^\n]*/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/;$/, '');
+const boundId = 'f'.repeat(36),
+  boundDecimal = '9'.repeat(20),
+  boundText = String.fromCharCode(1);
+const captureProjectionBytes = Buffer.byteLength(
+  JSON.stringify({
+    route: 65535,
+    captureId: boundId,
+    collectionId: boundId,
+    accountId: boundId,
+    incarnation: boundText.repeat(128),
+    generation: boundDecimal,
+    scope: 'active_explicit_output',
+    ownerEpoch: 2147483647,
+    receivingEpoch: boundDecimal,
+    effectKey: boundText.repeat(256),
+    outputGeneration: boundId,
+    publicationTransactionId: boundId,
+    publicationPosition: boundDecimal,
+    collectionFence: boundDecimal,
+    accountFence: boundDecimal,
+    driver: 'entry_deleted',
+    after: boundText.repeat(512),
+    tie: boundText.repeat(64),
+    sessionId: boundId,
+    scanned: boundDecimal,
+    version: 2147483647,
+    complete: false,
+  }),
+);
 /** Literal reached capture/basis declarations; no table-prefix or arbitrary observer callback. */
 export function nativeSourceCustodyFootprint(sql: string, values: readonly unknown[]): WorkDimensions | undefined {
   const text = sameSQL(sql);
   if (isNativeIdentitySourceBasisSQL(sql)) return nativeIdentitySourceBasisFootprint(sql, values);
   if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(text)) return footprint(sql, [...values], 0, 0);
   for (const [query, rows, points, metadata] of [
-    [identityPartitionQuery, 16, 1, 1], [accountQuery, 16, 1, 0], [sourceQuery, 16, 1, 0],
-    [outputQuery, 56, 7, 1], [ensureQuery, 32, 2, 0], [fencesQuery, 32, 2, 0],
-    [readQuery, 16, 1, 0], [startQuery, 32, 1, 0], [advanceQuery, 32, 1, 0],
-    [identityCapture, 32, 1, 0], [proofQuery, 64, 3, 1], [finishQuery, 80, 3, 1],
+    [identityPartitionQuery, 16, 1, 1],
+    [accountQuery, 16, 1, 0],
+    [sourceQuery, 16, 1, 0],
+    [outputQuery, 56, 7, 1],
+    [ensureQuery, 32, 2, 0],
+    [fencesQuery, 32, 2, 0],
+    [readQuery, 16, 1, 0],
+    [startQuery, 32, 1, 0],
+    [advanceQuery, 32, 1, 0],
+    [identityCapture, 32, 1, 0],
+    [proofQuery, 64, 3, 1],
+    [finishQuery, 80, 3, 1],
   ] as const) {
     if (sameSQL(query.sql) === text && query.params.length === values.length) {
       const work = footprint(sql, [...values], rows, points, 0, metadata);
@@ -381,9 +424,9 @@ function executor(client: CommandTransaction, work: NativeCollectionWork, deadli
       query === partitionQuery || query === finishQuery || query === proofQuery || query === outputQuery ? 1 : 0;
     // Shared original descendants can only dispatch the owner's recognized literals.
     // The explicit reservation suppresses duplicate observation, never unknown SQL.
-    const admitted = work.reserve(strict
-      ? nativeSourceCustodyFootprint(query.sql, args)
-      : footprint(query.sql, args, rows, points, keys, metadata));
+    const admitted = work.reserve(
+      strict ? nativeSourceCustodyFootprint(query.sql, args) : footprint(query.sql, args, rows, points, keys, metadata),
+    );
     admitted.dispatch();
     try {
       const config = {
@@ -501,10 +544,16 @@ function compareOutputCount(state: State, fences: { outputMembers?: string }): v
 }
 
 /** Existing-owner raw dependency capture. No identity, canonical Source, permission or destination authority. */
-export function createNativeLibrarySourceCustody(options: { pool: Pool; clock?: KernelClock }): NativeLibrarySourceCustody {
+export function createNativeLibrarySourceCustody(options: {
+  pool: Pool;
+  clock?: KernelClock;
+}): NativeLibrarySourceCustody {
   return nativeLibrarySourceCustody(options);
 }
-export function createNativeLibrarySourceCustodyWithWork(pool: Pool, work: NativeCollectionWork): NativeLibrarySourceCustody {
+export function createNativeLibrarySourceCustodyWithWork(
+  pool: Pool,
+  work: NativeCollectionWork,
+): NativeLibrarySourceCustody {
   revalidateBoundLibraryIdentityWork(work);
   return nativeLibrarySourceCustody({ pool }, work);
 }
@@ -519,9 +568,7 @@ function nativeLibrarySourceCustody(
     const work = sharedWork ?? new NativeCollectionWork(input.allowance, input.deadline);
     try {
       if (sharedWork) assertLibraryIdentityResources(pool, work, input.deadline);
-      return sharedWork
-        ? await withLibraryIdentityWork(pool, work, () => operation(work))
-        : await operation(work);
+      return sharedWork ? await withLibraryIdentityWork(pool, work, () => operation(work)) : await operation(work);
     } catch (error) {
       if (error instanceof Refused) return { status: 'unavailable', reason: error.reason, work: work.receipt() };
       if (error instanceof ProblemError && error.code === 'dependency_unavailable')
@@ -539,47 +586,64 @@ function nativeLibrarySourceCustody(
     // Both terminal slots precede checkout. A rejected COMMIT never consumes rollback's slot.
     const commit = work.reserve(footprint('COMMIT', [], 0, 0), true);
     let rollback: ReturnType<NativeCollectionWork['reserve']>;
-    try { rollback = work.reserve(footprint('ROLLBACK', [], 0, 0), true); }
-    catch (error) { commit.cancel(); throw error; }
-    let committed = false, rolledBack = false;
     try {
-      return await instrumentNativeCollectionWork(pool, work, (sql, values) => {
-        revalidateBoundLibraryIdentityWork(work);
-        return nativeSourceCustodyFootprint(sql, values);
-      }, () => withConnection(pool, async (client) => {
-        revalidateBoundLibraryIdentityWork(work);
-        const run = executor(client, work, input.deadline, sharedWork !== undefined);
-        let begun = false;
-        try {
-          await run({ sql: 'BEGIN', params: [] }, {}, 0, 0);
-          begun = true;
-          const result = await operation(run);
+      rollback = work.reserve(footprint('ROLLBACK', [], 0, 0), true);
+    } catch (error) {
+      commit.cancel();
+      throw error;
+    }
+    let committed = false,
+      rolledBack = false;
+    try {
+      return await instrumentNativeCollectionWork(
+        pool,
+        work,
+        (sql, values) => {
           revalidateBoundLibraryIdentityWork(work);
-          if (Date.now() >= input.deadline) throw new Refused('allowance');
-          commit.dispatch();
-          committed = true;
-          try {
-            const request = { text: 'COMMIT', query_timeout: Math.max(1, input.deadline - Date.now()) };
-            await commit.query(() => client.query(request));
-          } finally { commit.settle(); }
-          begun = false;
-          revalidateBoundLibraryIdentityWork(work);
-          return result;
-        } catch (error) {
-          if (begun) {
+          return nativeSourceCustodyFootprint(sql, values);
+        },
+        () =>
+          withConnection(pool, async (client) => {
+            revalidateBoundLibraryIdentityWork(work);
+            const run = executor(client, work, input.deadline, sharedWork !== undefined);
+            let begun = false;
             try {
-              rollback.dispatch();
-              rolledBack = true;
-              await rollback.query(() => client.query('ROLLBACK'));
+              await run({ sql: 'BEGIN', params: [] }, {}, 0, 0);
+              begun = true;
+              const result = await operation(run);
+              revalidateBoundLibraryIdentityWork(work);
+              if (Date.now() >= input.deadline) throw new Refused('allowance');
+              commit.dispatch();
+              committed = true;
+              try {
+                const request = { text: 'COMMIT', query_timeout: Math.max(1, input.deadline - Date.now()) };
+                await commit.query(() => client.query(request));
+              } finally {
+                commit.settle();
+              }
+              begun = false;
+              revalidateBoundLibraryIdentityWork(work);
+              return result;
+            } catch (error) {
+              if (begun) {
+                try {
+                  rollback.dispatch();
+                  rolledBack = true;
+                  await rollback.query(() => client.query('ROLLBACK'));
+                } catch (cleanup) {
+                  discardConnection(
+                    client,
+                    cleanup instanceof Error ? cleanup : new Error('Native source rollback failed'),
+                  );
+                  throw cleanup;
+                } finally {
+                  if (rolledBack) rollback.settle();
+                }
+              }
+              throw error;
             }
-            catch (cleanup) {
-              discardConnection(client, cleanup instanceof Error ? cleanup : new Error('Native source rollback failed'));
-              throw cleanup;
-            } finally { if (rolledBack) rollback.settle(); }
-          }
-          throw error;
-        }
-      }));
+          }),
+      );
     } finally {
       if (!committed) commit.cancel();
       if (!rolledBack) rollback.cancel();

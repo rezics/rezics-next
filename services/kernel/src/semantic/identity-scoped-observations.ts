@@ -107,25 +107,45 @@ export async function readIdentityScopeConsumerWork(
   claimIdentitySourceScheduledCall(pool, 'scopeAdmission');
   return withRequestDeadline(context.deadline, async () => {
     try {
-      const current = prepaid ? (await withIdentitySourceNoEffectCommand(pool, context.deadline, () =>
-        runCommand(pool, { partition: identityScopeAddress(ticket.scope).partition, deadline: context.deadline }, async (tx) => {
-          const cost = scopeConsumerFootprint(consumerWork.sql, values);
-          if (!context.identityConsumerWork || !cost ||
-              !reserveIdentitySourceConsumerNativeWork(pool, context.identityConsumerWork, {
-                rows: cost.nativeRows, points: cost.nativePoints, statements: cost.statements,
-                bytes: cost.bytes, engineRequests: 0,
-              }, cost)) throw new IdentitySourceOriginalUnavailable('identity-source-scope-admission-literal-unavailable');
-          const row = (await tx.query<{ source_generation: string }>(consumerWork.sql, values)).rows[0];
-          if (!isLiveIdentitySourceConsumerMaintenance(pool, context.identityConsumerWork, context.deadline))
-            throw new IdentitySourceOriginalUnavailable('identity-source-scope-admission-ended');
-          return noEffect(row);
-        }),
-      )).value : await instrumentNativeCollectionWork(pool, budget, scopeConsumerFootprint, () =>
-        withReadTransaction(
-          pool,
-          async (tx) => (await tx.query<{ source_generation: string }>(consumerWork.sql, values)).rows[0],
-        ),
-      );
+      const current = prepaid
+        ? (
+            await withIdentitySourceNoEffectCommand(pool, context.deadline, () =>
+              runCommand(
+                pool,
+                { partition: identityScopeAddress(ticket.scope).partition, deadline: context.deadline },
+                async (tx) => {
+                  const cost = scopeConsumerFootprint(consumerWork.sql, values);
+                  if (
+                    !context.identityConsumerWork ||
+                    !cost ||
+                    !reserveIdentitySourceConsumerNativeWork(
+                      pool,
+                      context.identityConsumerWork,
+                      {
+                        rows: cost.nativeRows,
+                        points: cost.nativePoints,
+                        statements: cost.statements,
+                        bytes: cost.bytes,
+                        engineRequests: 0,
+                      },
+                      cost,
+                    )
+                  )
+                    throw new IdentitySourceOriginalUnavailable('identity-source-scope-admission-literal-unavailable');
+                  const row = (await tx.query<{ source_generation: string }>(consumerWork.sql, values)).rows[0];
+                  if (!isLiveIdentitySourceConsumerMaintenance(pool, context.identityConsumerWork, context.deadline))
+                    throw new IdentitySourceOriginalUnavailable('identity-source-scope-admission-ended');
+                  return noEffect(row);
+                },
+              ),
+            )
+          ).value
+        : await instrumentNativeCollectionWork(pool, budget, scopeConsumerFootprint, () =>
+            withReadTransaction(
+              pool,
+              async (tx) => (await tx.query<{ source_generation: string }>(consumerWork.sql, values)).rows[0],
+            ),
+          );
       if (!current || current.source_generation !== source.identity.generation) return null;
       // This immutable ceiling describes the same ledger. The consumer binds it once
       // across page transfer, receiving, both verifications and the durable fence.
@@ -178,13 +198,22 @@ export function scopeConsumerFootprint(sql: string, values: readonly unknown[]):
   // Exact positional operands are part of the proof. Reject extra, unbounded or
   // structurally different parameters before a connection can dispatch this SQL.
   const text = (max: number) => (v: unknown) => typeof v === 'string' && Buffer.byteLength(v) <= max;
-  const positive = (v: unknown) => typeof v === 'string' && /^[1-9][0-9]{0,18}$/.test(v) && BigInt(v) <= 9223372036854775807n;
-  const integer = (max: number, min = 0) => (v: unknown) => typeof v === 'number' && Number.isSafeInteger(v) && v >= min && v <= max;
+  const positive = (v: unknown) =>
+    typeof v === 'string' && /^[1-9][0-9]{0,18}$/.test(v) && BigInt(v) <= 9223372036854775807n;
+  const integer =
+    (max: number, min = 0) =>
+    (v: unknown) =>
+      typeof v === 'number' && Number.isSafeInteger(v) && v >= min && v <= max;
   const id = (v: unknown) => typeof v === 'string' && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(v);
   const hash = (v: unknown) => typeof v === 'string' && /^[0-9a-f]{64}$/.test(v);
   const document = (max: number) => (v: unknown) => {
     if (!text(max)(v)) return false;
-    try { const parsed: unknown = JSON.parse(v as string); return !!parsed && typeof parsed === 'object'; } catch { return false; }
+    try {
+      const parsed: unknown = JSON.parse(v as string);
+      return !!parsed && typeof parsed === 'object';
+    } catch {
+      return false;
+    }
   };
   const home = integer(4095);
   const epoch = integer(2147483647, 1);
@@ -195,13 +224,33 @@ export function scopeConsumerFootprint(sql: string, values: readonly unknown[]):
   let statements = 1;
   let emptySeeks = 1;
   if (sql === consumerCurrent.sql || sql === consumerWork.sql) {
-    operands = [home, hash, scope, id, id, id, positive, document(1024), document(4096), epoch, id, id, integer(2147483647)];
+    operands = [
+      home,
+      hash,
+      scope,
+      id,
+      id,
+      id,
+      positive,
+      document(1024),
+      document(4096),
+      epoch,
+      id,
+      id,
+      integer(2147483647),
+    ];
     rows = 7;
     // Both projections return only these two bigint strings, the <=256-byte
     // generation and <=4096-byte native JSON seal. Six bytes per generation byte
     // covers JSON escaping; no arbitrary capture or maintenance allowance leaves.
-    outputBytes = Buffer.byteLength(JSON.stringify([{ revision: '9'.repeat(19), version: '9'.repeat(19),
-      source_generation: 'f'.repeat(256), seal: null }])) + 5 * 256 + 4096;
+    outputBytes =
+      Buffer.byteLength(
+        JSON.stringify([
+          { revision: '9'.repeat(19), version: '9'.repeat(19), source_generation: 'f'.repeat(256), seal: null },
+        ]),
+      ) +
+      5 * 256 +
+      4096;
   } else if (sql === receivingSelectionRead.sql) {
     operands = [home, id, positive, scope, id, id];
     rows = 2; // One unique receiving record and its exact native commit.
@@ -246,11 +295,20 @@ export function scopeConsumerFootprint(sql: string, values: readonly unknown[]):
     operands = [home, hash, scope, id, id, positive, hash, id];
     rows = 3;
     outputBytes = 2048;
-  } else if (sql === consumerConflict.sql || sql === consumerNative.sql || sql === partitionRead.sql || sql === commandNoEffect.sql) {
-    operands = sql === consumerConflict.sql ? [home, hash, scope, id, id, positive]
-      : sql === consumerNative.sql ? [home, id]
-      : sql === partitionRead.sql ? [home]
-      : [home, id, (v) => v === null]; // A receipt write is a different native command.
+  } else if (
+    sql === consumerConflict.sql ||
+    sql === consumerNative.sql ||
+    sql === partitionRead.sql ||
+    sql === commandNoEffect.sql
+  ) {
+    operands =
+      sql === consumerConflict.sql
+        ? [home, hash, scope, id, id, positive]
+        : sql === consumerNative.sql
+          ? [home, id]
+          : sql === partitionRead.sql
+            ? [home]
+            : [home, id, (v) => v === null]; // A receipt write is a different native command.
     rows = 1;
     outputBytes = 1024;
   } else if (sql === commandTime.sql) {
@@ -2188,9 +2246,11 @@ export async function retainIdentityScopeConsumerFence(
   claimIdentitySourceLibraryCall(resources.pool, 'exhaustedPageRechecks');
   if (isPrepaidIdentitySourceConsumerMaintenance(resources.pool))
     return retainCurrentIdentityScopeConsumerFence(tx, ticket, seal);
-  return instrumentNativeCollectionWork(resources.pool, budget,
-    (sql, values) => libraryIdentityFootprint(sql, values, budget) ?? scopeConsumerFootprint(sql, values), () =>
-    retainCurrentIdentityScopeConsumerFence(tx, ticket, seal),
+  return instrumentNativeCollectionWork(
+    resources.pool,
+    budget,
+    (sql, values) => libraryIdentityFootprint(sql, values, budget) ?? scopeConsumerFootprint(sql, values),
+    () => retainCurrentIdentityScopeConsumerFence(tx, ticket, seal),
   );
 }
 
@@ -2208,10 +2268,23 @@ async function retainCurrentIdentityScopeConsumerFence(
   const reserve = (sql: string, values: readonly unknown[]) => {
     if (!prepaid) return;
     const cost = scopeConsumerFootprint(sql, values);
-    if (!token || !cost || !reserveIdentitySourceConsumerNativeWork(resources.pool, token, {
-      rows: cost.nativeRows, points: cost.nativePoints, statements: cost.statements,
-      bytes: cost.bytes, engineRequests: 0,
-    }, cost)) throw new IdentitySourceOriginalUnavailable('identity-source-fence-native-body-declaration-unavailable');
+    if (
+      !token ||
+      !cost ||
+      !reserveIdentitySourceConsumerNativeWork(
+        resources.pool,
+        token,
+        {
+          rows: cost.nativeRows,
+          points: cost.nativePoints,
+          statements: cost.statements,
+          bytes: cost.bytes,
+          engineRequests: 0,
+        },
+        cost,
+      )
+    )
+      throw new IdentitySourceOriginalUnavailable('identity-source-fence-native-body-declaration-unavailable');
   };
   if (command.basis !== null || Date.now() >= currentCommandResources(tx).deadline) return null;
   const source = ticket.scope.source;

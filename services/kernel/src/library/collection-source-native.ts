@@ -260,13 +260,22 @@ for (const query of [candidates, permissions])
       bytes: 256 * keys,
     };
   });
-export function nativeCollectionFootprint(sql: string, values: readonly unknown[], work?: NativeCollectionWork): WorkDimensions | undefined {
+export function nativeCollectionFootprint(
+  sql: string,
+  values: readonly unknown[],
+  work?: NativeCollectionWork,
+): WorkDimensions | undefined {
   if (work) revalidateBoundLibraryIdentityWork(work);
   // The existing shared native capture sends these two session SETs. They access no relation, but still cost
   // statements/bytes here; the capture deliberately omits its own setup from its measured statement list.
-  const control =
-    ['BEGIN', 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', 'COMMIT', 'ROLLBACK',
-      'SET auto_explain.log_min_duration = 0', 'SET auto_explain.log_min_duration = -1'].includes(sql.trim());
+  const control = [
+    'BEGIN',
+    'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY',
+    'COMMIT',
+    'ROLLBACK',
+    'SET auto_explain.log_min_duration = 0',
+    'SET auto_explain.log_min_duration = -1',
+  ].includes(sql.trim());
   const range = [outputPage, ordinalPage, membersQuery, factsQuery].find((query) => normal(query.sql) === normal(sql));
   if (range) {
     const n = values[range === outputPage || range === ordinalPage ? 4 : range.params.indexOf('limit')];
@@ -365,7 +374,8 @@ async function readOnly<T>(
           return result;
         } finally {
           reservation.settle({
-            emptySeeks: !result || bound!.emptySeeks > 1 ? bound!.emptySeeks : result.rows.length === 0 ? bound!.emptySeeks : 0,
+            emptySeeks:
+              !result || bound!.emptySeeks > 1 ? bound!.emptySeeks : result.rows.length === 0 ? bound!.emptySeeks : 0,
             candidateKeys: result ? Math.min(bound!.candidateKeys, result.rows.length) : bound!.candidateKeys,
             witnessKeys: result ? Math.min(bound!.witnessKeys, result.rows.length) : bound!.witnessKeys,
           });
@@ -413,9 +423,14 @@ async function observe(
     return null;
   }
   const home = partitionOf(ref.route);
-  const partition = (await client.query<{
-    partitionNo: number; writeState: string; epoch: number; position: string;
-  }>(nativeCollectionPartitionMetadataSQL, [home])).rows[0];
+  const partition = (
+    await client.query<{
+      partitionNo: number;
+      writeState: string;
+      epoch: number;
+      position: string;
+    }>(nativeCollectionPartitionMetadataSQL, [home])
+  ).rows[0];
   if (!partition || partition.writeState === 'moved') throw new ProblemError('partition_unavailable');
   const outputPublication =
     row.membershipKind === 'dynamic' && row.visibility !== 'private' && row.state === 'active'
@@ -503,24 +518,32 @@ export function readNativeCollectionMetadata(pool: Pool, ref: Ref, options: Opti
   return metadataCall(pool, ref, options);
 }
 export function readNativeCollectionMetadataWithWork(
-  pool: Pool, ref: Ref, options: Options, work: NativeCollectionWork,
+  pool: Pool,
+  ref: Ref,
+  options: Options,
+  work: NativeCollectionWork,
 ) {
   return withLibraryIdentityWork(pool, work, () => metadataCall(pool, ref, options, work));
 }
 function metadataCall(pool: Pool, ref: Ref, options: Options, sharedWork?: NativeCollectionWork) {
   const owner = admittedOwnerWorkingSource(pool, ref.collectionId);
-  return call(pool, options, async (work) => ({
-    metadata: await readOnly(pool, options, work, async (client) => {
-      const metadata = await (owner ? observeWorking(client, ref, work) : observe(client, ref, work));
-      if (
-        owner &&
-        metadata?.membershipKind === 'dynamic' &&
-        (owner.actor.kind !== 'account' || metadata.curatorAccountId !== owner.actor.accountId)
-      )
-        throw new ProblemError('not_found');
-      return metadata;
+  return call(
+    pool,
+    options,
+    async (work) => ({
+      metadata: await readOnly(pool, options, work, async (client) => {
+        const metadata = await (owner ? observeWorking(client, ref, work) : observe(client, ref, work));
+        if (
+          owner &&
+          metadata?.membershipKind === 'dynamic' &&
+          (owner.actor.kind !== 'account' || metadata.curatorAccountId !== owner.actor.accountId)
+        )
+          throw new ProblemError('not_found');
+        return metadata;
+      }),
     }),
-  }), sharedWork);
+    sharedWork,
+  );
 }
 /** Raw source discovery stays separate from Source.prepare and never executes the built-in query recursively. */
 export function readNativeCollectionScopeIdentity(pool: Pool, input: Ref & Options) {
@@ -706,7 +729,10 @@ export function readNativeCollectionRawPage(pool: Pool, metadata: NativeCollecti
   return rawPageCall(pool, metadata, input);
 }
 export function readNativeCollectionRawPageWithWork(
-  pool: Pool, metadata: NativeCollectionMetadata, input: RawPageInput, work: NativeCollectionWork,
+  pool: Pool,
+  metadata: NativeCollectionMetadata,
+  input: RawPageInput,
+  work: NativeCollectionWork,
 ) {
   return withLibraryIdentityWork(pool, work, () => rawPageCall(pool, metadata, input, work));
 }
@@ -725,53 +751,56 @@ function rawPageCall(
   if (!['member', 'entry', 'copy', 'session', 'label', 'output'].includes(input.driver))
     throw new TypeError('Invalid native source driver');
   keyInput(input.after, input.driver);
-  return call(pool, input, async (work) =>
-    readOnly(pool, input, work, async (client) => {
-      const current = await currentSource(client, metadata, work);
-      if (
-        (current.authority === 'curated' && input.driver !== 'member') ||
-        (current.authority === 'activated_output' && input.driver !== 'output') ||
-        (current.authority === 'private_builtin' && (input.driver === 'member' || input.driver === 'output')) ||
-        (current.authority === 'private_builtin' && current.builtinKind === 'state' && input.driver !== 'entry')
-      )
-        throw new ProblemError('dependency_unavailable');
-      if (input.driver === 'output') {
+  return call(
+    pool,
+    input,
+    async (work) =>
+      readOnly(pool, input, work, async (client) => {
+        const current = await currentSource(client, metadata, work);
+        if (
+          (current.authority === 'curated' && input.driver !== 'member') ||
+          (current.authority === 'activated_output' && input.driver !== 'output') ||
+          (current.authority === 'private_builtin' && (input.driver === 'member' || input.driver === 'output')) ||
+          (current.authority === 'private_builtin' && current.builtinKind === 'state' && input.driver !== 'entry')
+        )
+          throw new ProblemError('dependency_unavailable');
+        if (input.driver === 'output') {
+          const rows = (
+            await client.query<{ storedSubjectId: string; factId: string }>(outputPage.sql, [
+              current.route,
+              current.collectionId,
+              current.outputGeneration,
+              input.after?.storedSubjectId ?? '00000000-0000-0000-0000-000000000000',
+              input.limit,
+            ])
+          ).rows.map((row) => ({ key: { driver: 'output' as const, ...row } }));
+          return {
+            rows,
+            after: rows.at(-1)?.key ?? input.after,
+            exhausted: rows.length < input.limit,
+          };
+        }
+        const query = input.driver === 'member' ? membersQuery : factsQuery;
         const rows = (
-          await client.query<{ storedSubjectId: string; factId: string }>(outputPage.sql, [
-            current.route,
-            current.collectionId,
-            current.outputGeneration,
-            input.after?.storedSubjectId ?? '00000000-0000-0000-0000-000000000000',
-            input.limit,
-          ])
-        ).rows.map((row) => ({ key: { driver: 'output' as const, ...row } }));
+          await client.query<{ storedSubjectId: string; factId: string }>(
+            query.sql,
+            bind(query, {
+              route: current.route,
+              collection_id: current.collectionId,
+              account_id: current.curatorAccountId,
+              after_subject: input.after?.storedSubjectId ?? null,
+              after_fact: input.after?.factId ?? null,
+              limit: input.limit,
+              driver: input.driver,
+            }),
+          )
+        ).rows.map((row) => ({ key: { driver: input.driver, ...row } }));
         return {
           rows,
           after: rows.at(-1)?.key ?? input.after,
           exhausted: rows.length < input.limit,
         };
-      }
-      const query = input.driver === 'member' ? membersQuery : factsQuery;
-      const rows = (
-        await client.query<{ storedSubjectId: string; factId: string }>(
-          query.sql,
-          bind(query, {
-            route: current.route,
-            collection_id: current.collectionId,
-            account_id: current.curatorAccountId,
-            after_subject: input.after?.storedSubjectId ?? null,
-            after_fact: input.after?.factId ?? null,
-            limit: input.limit,
-            driver: input.driver,
-          }),
-        )
-      ).rows.map((row) => ({ key: { driver: input.driver, ...row } }));
-      return {
-        rows,
-        after: rows.at(-1)?.key ?? input.after,
-        exhausted: rows.length < input.limit,
-      };
-    }),
+      }),
     sharedWork,
   );
 }

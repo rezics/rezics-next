@@ -269,15 +269,15 @@ post-commit Account verification retain their original semantics.
 
 The current exact Source statement accounting remains:
 
-| Exact SQL import or control                                                          | Native rows / points | Statements | Returned-byte ceiling |
-| ------------------------------------------------------------------------------------ | -------------------: | ---------: | --------------------: |
+| Exact SQL import or control                                                          | Native rows / points | Statements |   Returned-byte ceiling |
+| ------------------------------------------------------------------------------------ | -------------------: | ---------: | ----------------------: |
 | scoped consumer current / work                                                       |                7 / 7 |          1 | closed projection below |
-| scoped consumer receipt                                                              |                3 / 3 |          1 |                  2048 |
-| scoped consumer conflict / native, partition read, command no-effect fence           |                1 / 1 |          1 |                  1024 |
-| command time                                                                         |                0 / 0 |          1 |                   128 |
-| native commit insert                                                                 |                2 / 2 |          1 |                   128 |
-| scoped consumer insert, including two FK points and seven deferred constraint inputs |              10 / 10 |          4 |                     0 |
-| existing literal BEGIN modes, COMMIT, ROLLBACK and bounded timeout configuration     |                0 / 0 |          1 |                     0 |
+| scoped consumer receipt                                                              |                3 / 3 |          1 |                    2048 |
+| scoped consumer conflict / native, partition read, command no-effect fence           |                1 / 1 |          1 |                    1024 |
+| command time                                                                         |                0 / 0 |          1 |                     128 |
+| native commit insert                                                                 |                2 / 2 |          1 |                     128 |
+| scoped consumer insert, including two FK points and seven deferred constraint inputs |              10 / 10 |          4 |                       0 |
+| existing literal BEGIN modes, COMMIT, ROLLBACK and bounded timeout configuration     |                0 / 0 |          1 |                       0 |
 
 Each byte reservation additionally includes the actual SQL and serialized parameter
 bytes; a checkout separately costs one native point. Cleanup is held before BEGIN.
@@ -914,20 +914,20 @@ an expected successful zero; controls and the native commit INSERT reserve zero.
 Bytes are exactly the SQL UTF-8 bytes plus serialized parameter bytes plus the stated
 bounded result envelope. Repeated invocations repeat the whole declaration.
 
-| Exact SQL                                                      | nativeRows | nativePoints | statements | Result bytes | emptySeeks |
-| -------------------------------------------------------------- | ---------: | -----------: | ---------: | -----------: | ---------: |
+| Exact SQL                                                      | nativeRows | nativePoints | statements |            Result bytes | emptySeeks |
+| -------------------------------------------------------------- | ---------: | -----------: | ---------: | ----------------------: | ---------: |
 | scoped consumer work/current                                   |          7 |            7 |          1 | closed projection below |          1 |
-| scoped consumer receipt                                        |          3 |            3 |          1 |         2048 |          1 |
-| scoped conflict/native, partition read, no-effect fence        |          1 |            1 |          1 |         1024 |          1 |
-| command time                                                   |          0 |            0 |          1 |          128 |          0 |
-| native commit INSERT/partition SELECT                          |          2 |            2 |          1 |          128 |          0 |
-| consumer fence INSERT, two FK probes, deferred seven-key fence |         10 |           10 |          4 |            0 |          1 |
-| receiving selection/native commit                              |          2 |            2 |          1 |          128 |          1 |
-| receiving lookup, including effect commit and exact step       |          7 |            7 |          1 |         8192 |          1 |
-| receiving plan/current commit/partition                        |          3 |            3 |          1 |         6144 |          1 |
-| exact receiving gate or expected-effect receipt                |          1 |            1 |          1 |          128 |          1 |
-| exact receiving custody/native commit                          |          2 |            2 |          1 |          128 |          1 |
-| BEGIN, settings, COMMIT, ROLLBACK                              |          0 |            0 |          1 |            0 |          0 |
+| scoped consumer receipt                                        |          3 |            3 |          1 |                    2048 |          1 |
+| scoped conflict/native, partition read, no-effect fence        |          1 |            1 |          1 |                    1024 |          1 |
+| command time                                                   |          0 |            0 |          1 |                     128 |          0 |
+| native commit INSERT/partition SELECT                          |          2 |            2 |          1 |                     128 |          0 |
+| consumer fence INSERT, two FK probes, deferred seven-key fence |         10 |           10 |          4 |                       0 |          1 |
+| receiving selection/native commit                              |          2 |            2 |          1 |                     128 |          1 |
+| receiving lookup, including effect commit and exact step       |          7 |            7 |          1 |                    8192 |          1 |
+| receiving plan/current commit/partition                        |          3 |            3 |          1 |                    6144 |          1 |
+| exact receiving gate or expected-effect receipt                |          1 |            1 |          1 |                     128 |          1 |
+| exact receiving custody/native commit                          |          2 |            2 |          1 |                     128 |          1 |
+| BEGIN, settings, COMMIT, ROLLBACK                              |          0 |            0 |          1 |                       0 |          0 |
 
 For receiving lookup, binding is limited to 4096 bytes, the actual writer constructs
 plan/source-hold as fixed native receipt locators, and the effect frontier is limited
@@ -1029,7 +1029,6 @@ they are not native proof or manufactured Library evidence. Original native, uni
 growth, browser, default-retirement and full acceptance remain unrun under the current
 execution boundary. Kernel typing is reported separately from these obligations.
 
-
 ### Selected original: one irreversible custody advancement
 
 The authentic receiver and whole-parent admission remain separate. Inside the
@@ -1048,8 +1047,8 @@ One directory item and one effect page use limit one. The Library maxima, in the
 owner's field order, are:
 
 | discovery | plannerSteps | effectPages | currentVerifications | exhaustedPageRechecks | finalFences |
-| --- | --- | --- | --- | --- | --- |
-| 0 | 0 | 1 | 1 | 1 | 0 |
+| --------- | ------------ | ----------- | -------------------- | --------------------- | ----------- |
+| 0         | 0            | 1           | 1                    | 1                     | 0           |
 
 `claimIdentitySourceLibraryCall` and `claimIdentitySourceScheduledCall` spend the
 operation slot before awaiting. Zero entries cannot dispatch. The exhausted-page
@@ -1088,12 +1087,12 @@ these bodies perform fixed native key joins, with no candidate enumeration, basi
 metadata sweep or witness expansion. engineRequests is separately zero. The other
 axes are:
 
-| Local read | nativeRows | nativePoints | statements | emptySeeks | bytes |
-| --- | --- | --- | --- | --- | --- |
-| retained custody | 6 | 6 | 1 | 1 | UTF8(literal) + bounded 13 binds + five-scalar result |
-| latest progress | 3 | 3 | 1 | 1 | UTF8(literal) + bounded two binds + scalar result + 2048-byte cursor JSON |
-| selected accepted binding | 5 | 5 | 1 | 1 | UTF8(literal) + bounded six binds + generation/digest/home/transaction result |
-| selected published state | 4 | 4 | 1 | 1 | UTF8(literal) + bounded three binds + bounded digest result |
+| Local read                | nativeRows | nativePoints | statements | emptySeeks | bytes                                                                         |
+| ------------------------- | ---------- | ------------ | ---------- | ---------- | ----------------------------------------------------------------------------- |
+| retained custody          | 6          | 6            | 1          | 1          | UTF8(literal) + bounded 13 binds + five-scalar result                         |
+| latest progress           | 3          | 3            | 1          | 1          | UTF8(literal) + bounded two binds + scalar result + 2048-byte cursor JSON     |
+| selected accepted binding | 5          | 5            | 1          | 1          | UTF8(literal) + bounded six binds + generation/digest/home/transaction result |
+| selected published state  | 4          | 4            | 1          | 1          | UTF8(literal) + bounded three binds + bounded digest result                   |
 
 The scoped work/current result bound is the UTF8 JSON projection of two
 19-digit bigint strings, a 256-byte generation, a null seal placeholder, plus

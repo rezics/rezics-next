@@ -105,19 +105,22 @@ export async function readLibraryScopeEffectsPage(
 }
 
 export type LibraryScopeEffectsPageInput<Source extends NativeSourceIdentity = NativeSourceIdentity> =
-  LibraryScopeEffectsKey & Readonly<{
-    sourceIdentity: Source;
-    after: LibraryExpectedEffectAfter | null;
-    limit: number;
-    deadline: number;
-  }>;
+  LibraryScopeEffectsKey &
+    Readonly<{
+      sourceIdentity: Source;
+      after: LibraryExpectedEffectAfter | null;
+      limit: number;
+      deadline: number;
+    }>;
 export type LibraryScopeEffectsPageFor<Source extends NativeSourceIdentity> =
   | Exclude<LibraryScopeEffectsPage, { status: 'sealed' }>
-  | (Extract<LibraryScopeEffectsPage, { status: 'sealed' }> & Readonly<{
-      seal: LibraryScopeEffectSeal & Readonly<{
-        key: LibraryScopeEffectsKey & Readonly<{ sourceIdentity: Source }>;
-      }>;
-    }>);
+  | (Extract<LibraryScopeEffectsPage, { status: 'sealed' }> &
+      Readonly<{
+        seal: LibraryScopeEffectSeal &
+          Readonly<{
+            key: LibraryScopeEffectsKey & Readonly<{ sourceIdentity: Source }>;
+          }>;
+      }>);
 
 /** Use the live owner's exact prepaid ledger. The input carries no funding authority. */
 export function readLibraryScopeEffectsPageWithWork<Source extends NativeSourceIdentity>(
@@ -267,13 +270,21 @@ export async function verifyLibraryScopeEffectsSeal(
   if (!ledger) return false;
   const resources = currentCommandResources(tx);
   consumeLibraryIdentitySelectedCall(resources.pool, ledger, 'verification');
-  return withLibraryIdentityWork(resources.pool, ledger, () => instrumentNativeCollectionWork(
-    resources.pool, ledger, (sql, values) => libraryIdentityFootprint(sql, values, ledger),
-    () => verifyCurrentSeal(tx, key, seal, ledger), tx,
-  ));
+  return withLibraryIdentityWork(resources.pool, ledger, () =>
+    instrumentNativeCollectionWork(
+      resources.pool,
+      ledger,
+      (sql, values) => libraryIdentityFootprint(sql, values, ledger),
+      () => verifyCurrentSeal(tx, key, seal, ledger),
+      tx,
+    ),
+  );
 }
 async function verifyCurrentSeal(
-  tx: CommandTransaction, key: LibraryScopeEffectsKey, seal: LibraryScopeEffectSeal, ledger: NativeCollectionWork,
+  tx: CommandTransaction,
+  key: LibraryScopeEffectsKey,
+  seal: LibraryScopeEffectSeal,
+  ledger: NativeCollectionWork,
 ): Promise<boolean> {
   const plan = await readLibraryIdentityPlan(tx, key, true);
   if (

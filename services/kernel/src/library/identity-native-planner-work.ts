@@ -1,5 +1,7 @@
 import {
-  libraryIdentitySelectedFootprint, isNativeIdentitySourceBasisSQL, nativeIdentitySourceBasisFootprint,
+  libraryIdentitySelectedFootprint,
+  isNativeIdentitySourceBasisSQL,
+  nativeIdentitySourceBasisFootprint,
 } from './identity-native-planner-selected-pricing.ts';
 import type { Pool } from 'pg';
 import { ProblemError } from '../http/problem.ts';
@@ -36,8 +38,11 @@ import mapping from '../semantic/identity-epoch-read-current.sql';
 import facts from './collection-source-native-facts.sql';
 import labels from './owner-index-native-label-originals.sql';
 import {
-  libraryIdentityBoundedPlanSQL, libraryIdentityBoundedJobSQL, libraryIdentityBoundedEffectPageSQL,
-  libraryIdentitySelectedBindBound, LIBRARY_IDENTITY_PLAN_RESULT_BYTES,
+  libraryIdentityBoundedPlanSQL,
+  libraryIdentityBoundedJobSQL,
+  libraryIdentityBoundedEffectPageSQL,
+  libraryIdentitySelectedBindBound,
+  LIBRARY_IDENTITY_PLAN_RESULT_BYTES,
 } from './identity-native-planner-projection.ts';
 
 type Binding = { pool?: Pool; deadline: number; assertLive?: () => void };
@@ -49,7 +54,8 @@ const selectedCalls = new WeakMap<NativeCollectionWork, Map<string, number>>();
  * reopen it. Ordinary independently admitted Library work keeps its existing API.
  */
 export function consumeLibraryIdentitySelectedCall(
-  pool: Pool, work: NativeCollectionWork,
+  pool: Pool,
+  work: NativeCollectionWork,
   operation: 'effectPages' | 'verification' | 'discovery' | 'plannerSteps',
 ): void {
   assertLibraryIdentityWork(work);
@@ -59,8 +65,7 @@ export function consumeLibraryIdentitySelectedCall(
   const used = selectedCalls.get(work) ?? new Map<string, number>();
   const names = operation === 'verification' ? ['currentVerifications', 'exhaustedPageRechecks'] : [operation];
   const name = names.find((name) => (receipt?.calls[`Library.${name}`] ?? 0) > (used.get(name) ?? 0));
-  if (!receipt?.claimed || !name)
-    throw new TypeError(`Missing unspent selected Library ${operation} claim`);
+  if (!receipt?.claimed || !name) throw new TypeError(`Missing unspent selected Library ${operation} claim`);
   used.set(name, (used.get(name) ?? 0) + 1);
   selectedCalls.set(work, used);
 }
@@ -70,9 +75,11 @@ export function bindLibraryIdentityPrepaidWork(pool: Pool, work: NativeCollectio
   const active = activeIdentitySourceConsumerMaintenance(pool);
   const assertLive = () => {
     if (
-      !active || active.deadline !== deadline ||
+      !active ||
+      active.deadline !== deadline ||
       identitySourceConsumerLibraryWork(pool, active.identityConsumerWork, deadline) !== work
-    ) throw new TypeError('Missing live prepaid Library partition');
+    )
+      throw new TypeError('Missing live prepaid Library partition');
     work.assertReady(); // The Accounts proxy also validates the original grant around method calls.
   };
   assertLive();
@@ -268,7 +275,10 @@ export function libraryIdentityFootprint(
   }
   if (equal(sql, commit.sql) && values[2] === 'library-private-follow-counts') return point(2, 2, 1, 64);
   if (equal(sql, plan.sql) || equal(sql, plan.sql.replace(/;\s*$/, ' FOR UPDATE'))) return point(1, 1, 0, 12288, 1);
-  if (equal(sql, libraryIdentityBoundedPlanSQL) || equal(sql, libraryIdentityBoundedPlanSQL.replace(/;\s*$/, ' FOR UPDATE')))
+  if (
+    equal(sql, libraryIdentityBoundedPlanSQL) ||
+    equal(sql, libraryIdentityBoundedPlanSQL.replace(/;\s*$/, ' FOR UPDATE'))
+  )
     return point(1, 1, 0, LIBRARY_IDENTITY_PLAN_RESULT_BYTES, 1);
   if (equal(sql, current.sql)) return point(7, 7, 1, 64, 1);
   // Admission input cardinality is contractually <=2. EXISTS and NOT EXISTS each use that prefix.

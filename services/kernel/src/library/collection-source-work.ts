@@ -54,7 +54,9 @@ export function bindNativeCollectionWorkLifetime(work: NativeCollectionWork, ass
  * its private target, while every operation and callback still uses that SAME object
  * and its original producer checks. No new proxy, ledger, receipt or allowance. */
 export function withNativeCollectionWorkAllowance<T>(
-  work: NativeCollectionWork, allowance: WorkAllowance, operation: () => Promise<T>,
+  work: NativeCollectionWork,
+  allowance: WorkAllowance,
+  operation: () => Promise<T>,
 ): Promise<T> {
   const ledger = receivedLedger(work);
   return ledger.withinAllowance(allowance, async () => {
@@ -110,7 +112,10 @@ export class NativeCollectionWork {
   }
 
   receipt(): WorkReceipt {
-    const receipt = Object.freeze({ reservationId: this.allowance.reservationId, used: Object.freeze({ ...this.used }) });
+    const receipt = Object.freeze({
+      reservationId: this.allowance.reservationId,
+      used: Object.freeze({ ...this.used }),
+    });
     receiptLedgers.set(receipt, this);
     return receipt;
   }
@@ -361,7 +366,9 @@ export class NativeCollectionWork {
           // manually held amount must cover the actual literal on all eight axes.
           let dispatched = false;
           const required = {
-            pool: active.pool, work: active.work, active: true,
+            pool: active.pool,
+            work: active.work,
+            active: true,
             footprint: (sql: string, values: readonly unknown[]) => {
               const literal = active.footprint(sql, values);
               if (dispatched || !literal || !axes.every((axis) => literal[axis] <= bound[axis])) return undefined;
@@ -373,7 +380,8 @@ export class NativeCollectionWork {
           while (parent && ledgerAliases.get(parent.work) === this) parent = parent.parent;
           try {
             result = await requiredFootprints.run([...(requiredFootprints.getStore() ?? []), required], () =>
-              manuallyObserved.run(active, () => observing.run(parent, operation)));
+              manuallyObserved.run(active, () => observing.run(parent, operation)),
+            );
           } finally {
             required.active = false;
           }
@@ -464,7 +472,8 @@ function observeNativeCollectionClient(client: NativeQueryClient, pool: Pool, de
     const invokeQuery = () =>
       delegated
         ? manuallyObserved.run(active ?? manuallyObserved.getStore(), () =>
-            requiredFootprints.run([], () => observing.run(undefined, () => invoke.apply(this, args))))
+            requiredFootprints.run([], () => observing.run(undefined, () => invoke.apply(this, args))),
+          )
         : invoke.apply(this, args);
     const config = args[0] as string | QueryConfig;
     const sql = typeof config === 'string' ? config : config.text;
@@ -531,7 +540,10 @@ function observeNativeCollectionClient(client: NativeQueryClient, pool: Pool, de
       if (settled) return;
       settled = true;
       if ((finishing || beginning) && error && 'release' in client)
-        discardConnection(client as PoolClient, error instanceof Error ? error : new Error('Native transaction cleanup failed'));
+        discardConnection(
+          client as PoolClient,
+          error instanceof Error ? error : new Error('Native transaction cleanup failed'),
+        );
       reservation.settle({
         emptySeeks:
           !result || bound!.emptySeeks > 1 ? bound!.emptySeeks : result.rows.length === 0 ? bound!.emptySeeks : 0,
@@ -614,7 +626,11 @@ export async function instrumentNativeCollectionWork<T>(
   const ledger = receivedLedger(work);
   // A local observer cannot silently replace a parent's charge. Transfer first or
   // use the existing ledger; the transferred parent's literal policy remains active.
-  if (parent && ledgerAliases.get(parent.work) !== ledger && !(composing.getStore() ?? []).includes(ledgerAliases.get(parent.work)!))
+  if (
+    parent &&
+    ledgerAliases.get(parent.work) !== ledger &&
+    !(composing.getStore() ?? []).includes(ledgerAliases.get(parent.work)!)
+  )
     throw new TypeError('Nested native ledger has no parent transfer');
   const observation = { pool, work, footprint, active: true, parent };
   // A delegated CommandTransaction was acquired by Core, outside this body
@@ -625,19 +641,21 @@ export async function instrumentNativeCollectionWork<T>(
   const requirements = parent
     ? [...inherited, { pool, work: parent.work, footprint: parent.footprint, active: true }]
     : inherited;
-  return requiredFootprints.run(requirements, () => observing.run(observation, async () => {
-    try {
-      const result = await operation();
-      work.assertReady();
-      return result;
-    } catch (error) {
-      if (error instanceof Error)
-        Object.defineProperty(error, 'work', { value: ledger.receipt(), configurable: true });
-      throw error;
-    } finally {
-      observation.active = false;
-    }
-  }));
+  return requiredFootprints.run(requirements, () =>
+    observing.run(observation, async () => {
+      try {
+        const result = await operation();
+        work.assertReady();
+        return result;
+      } catch (error) {
+        if (error instanceof Error)
+          Object.defineProperty(error, 'work', { value: ledger.receipt(), configurable: true });
+        throw error;
+      } finally {
+        observation.active = false;
+      }
+    }),
+  );
 }
 
 function observePool(pool: Pool): void {

@@ -3,15 +3,24 @@ import type { NativeCollectionWork } from './collection-source-work.ts';
 import { libraryIdentityFootprint } from './identity-native-planner-work.ts';
 import { nativeCollectionFootprint } from './collection-source-native.ts';
 import { nativeSourceCustodyFootprint } from './native-source-custody.ts';
-import { declareNativeIdentitySourceBasisStatements, libraryIdentitySelectedFootprint } from './identity-native-planner-selected-pricing.ts';
+import {
+  declareNativeIdentitySourceBasisStatements,
+  libraryIdentitySelectedFootprint,
+} from './identity-native-planner-selected-pricing.ts';
 import { LIBRARY_IDENTITY_SELECTED_STATEMENTS } from './identity-native-planner-projection.ts';
 import { COMMAND_DISPATCH_ALLOWANCE } from '../command/dispatch-lifetime.ts';
 
 /** Producer composition only. A component is neither an allowance nor an original grant. */
 export type LibraryIdentityStatementOwner = 'planner' | 'native-collection' | 'native-custody';
 const axes = [
-  'candidateKeys', 'nativeRows', 'identityMetadataRows', 'nativePoints',
-  'witnessKeys', 'statements', 'bytes', 'emptySeeks',
+  'candidateKeys',
+  'nativeRows',
+  'identityMetadataRows',
+  'nativePoints',
+  'witnessKeys',
+  'statements',
+  'bytes',
+  'emptySeeks',
 ] as const satisfies readonly (keyof WorkDimensions)[];
 const component: unique symbol = Symbol('Library original work component');
 export type LibraryIdentityOriginalComponent = Readonly<{
@@ -22,10 +31,16 @@ export type LibraryIdentityOriginalComponent = Readonly<{
 const components = new WeakSet<LibraryIdentityOriginalComponent>();
 
 function declared(work: WorkDimensions): LibraryIdentityOriginalComponent {
-  if (Reflect.ownKeys(work).length !== axes.length || axes.some((axis) =>
-    !Object.hasOwn(work, axis) || !Number.isSafeInteger(work[axis]) || work[axis] < 0,
-  )) throw new TypeError('Invalid Library native declaration');
-  const result = Object.freeze({ [component]: true as const, work: Object.freeze({ ...work }), engineRequests: 0 as const });
+  if (
+    Reflect.ownKeys(work).length !== axes.length ||
+    axes.some((axis) => !Object.hasOwn(work, axis) || !Number.isSafeInteger(work[axis]) || work[axis] < 0)
+  )
+    throw new TypeError('Invalid Library native declaration');
+  const result = Object.freeze({
+    [component]: true as const,
+    work: Object.freeze({ ...work }),
+    engineRequests: 0 as const,
+  });
   components.add(result);
   return result;
 }
@@ -40,16 +55,27 @@ export function declareLibraryIdentityStatement(
   values: readonly unknown[],
   work?: NativeCollectionWork,
 ): LibraryIdentityOriginalComponent | undefined {
-  const bound = owner === 'planner' ? libraryIdentityFootprint(sql, values, work)
-    : owner === 'native-collection' ? nativeCollectionFootprint(sql, values, work)
-      : owner === 'native-custody' ? nativeSourceCustodyFootprint(sql, values) : undefined;
+  const bound =
+    owner === 'planner'
+      ? libraryIdentityFootprint(sql, values, work)
+      : owner === 'native-collection'
+        ? nativeCollectionFootprint(sql, values, work)
+        : owner === 'native-custody'
+          ? nativeSourceCustodyFootprint(sql, values)
+          : undefined;
   return bound ? declared(bound) : undefined;
 }
 
 /** Pool checkout itself has no SQL, result projection, candidate or witness. */
 export const LIBRARY_IDENTITY_CHECKOUT_WORK = declared({
-  candidateKeys: 0, nativeRows: 0, identityMetadataRows: 0, nativePoints: 1,
-  witnessKeys: 0, statements: 0, bytes: 0, emptySeeks: 0,
+  candidateKeys: 0,
+  nativeRows: 0,
+  identityMetadataRows: 0,
+  nativePoints: 1,
+  witnessKeys: 0,
+  statements: 0,
+  bytes: 0,
+  emptySeeks: 0,
 });
 
 /** Inclusive component algebra. A caller cannot splice an arbitrary vector into it.
@@ -61,8 +87,14 @@ export function assembleLibraryIdentityOriginalComponents(
   terms: readonly Readonly<{ component: LibraryIdentityOriginalComponent; multiplicity: number }>[],
 ): LibraryIdentityOriginalComponent {
   const work: Record<keyof WorkDimensions, number> = {
-    candidateKeys: 0, nativeRows: 0, identityMetadataRows: 0, nativePoints: 0,
-    witnessKeys: 0, statements: 0, bytes: 0, emptySeeks: 0,
+    candidateKeys: 0,
+    nativeRows: 0,
+    identityMetadataRows: 0,
+    nativePoints: 0,
+    witnessKeys: 0,
+    statements: 0,
+    bytes: 0,
+    emptySeeks: 0,
   };
   for (const term of terms) {
     if (!components.has(term.component)) throw new TypeError('Foreign Library native declaration');
@@ -95,19 +127,33 @@ export type LibraryIdentityOriginalMultiplicities = Readonly<{
  * after the separately scheduled current verification, for THREE native current paths in total.
  */
 export const LIBRARY_IDENTITY_SELECTED_MULTIPLICITIES = Object.freeze({
-  discovery: 0, plannerSteps: 0, effectPages: 1, currentVerifications: 1,
-  exhaustedPageRechecks: 1, finalFences: 0,
+  discovery: 0,
+  plannerSteps: 0,
+  effectPages: 1,
+  currentVerifications: 1,
+  exhaustedPageRechecks: 1,
+  finalFences: 0,
 } as const satisfies LibraryIdentityOriginalMultiplicities);
 
 export type LibraryIdentitySelectedMissingOperand =
-  | Readonly<{ owner: 'Source'; operand: 'prepaid-receiver'; signature:
-      'withPrepaidIdentitySourceConsumerMaintenance(deps: HistoryOriginalDependencies, parent: IdentityOriginalSourceContext, body: (context: IdentitySourceConsumerMaintenanceContext) => Promise<T>): Promise<T>' }>
-  | Readonly<{ owner: 'Source'; operand: 'irreversible-selected-schedule'; signature:
-      'LibraryIdentityOriginalMultiplicities { discovery: 0; plannerSteps: 0; effectPages: 1; currentVerifications: 1; exhaustedPageRechecks: 1; finalFences: 0 }, enforced before IO for parent.original/job/native position/Pool/exact Library ledger/deadline, without refill' }>
-  | Readonly<{ owner: 'Accounts'; operand: 'authentic-command-dispatch-owner'; signature:
-      'CommandDispatchOwner { original: object; validate(): void; reserve(allowance: CommandDispatchAllowance): void | Promise<void> }, bound by the private selected-original owner to withCommandDispatchLifetime<T>(pool: Pool, deadline: number, owner: CommandDispatchOwner, body: () => Promise<T>): Promise<T>' }>;
+  | Readonly<{
+      owner: 'Source';
+      operand: 'prepaid-receiver';
+      signature: 'withPrepaidIdentitySourceConsumerMaintenance(deps: HistoryOriginalDependencies, parent: IdentityOriginalSourceContext, body: (context: IdentitySourceConsumerMaintenanceContext) => Promise<T>): Promise<T>';
+    }>
+  | Readonly<{
+      owner: 'Source';
+      operand: 'irreversible-selected-schedule';
+      signature: 'LibraryIdentityOriginalMultiplicities { discovery: 0; plannerSteps: 0; effectPages: 1; currentVerifications: 1; exhaustedPageRechecks: 1; finalFences: 0 }, enforced before IO for parent.original/job/native position/Pool/exact Library ledger/deadline, without refill';
+    }>
+  | Readonly<{
+      owner: 'Accounts';
+      operand: 'authentic-command-dispatch-owner';
+      signature: 'CommandDispatchOwner { original: object; validate(): void; reserve(allowance: CommandDispatchAllowance): void | Promise<void> }, bound by the private selected-original owner to withCommandDispatchLifetime<T>(pool: Pool, deadline: number, owner: CommandDispatchOwner, body: () => Promise<T>): Promise<T>';
+    }>;
 
-export const LIBRARY_IDENTITY_SELECTED_MISSING_OPERANDS: readonly LibraryIdentitySelectedMissingOperand[] = Object.freeze([]);
+export const LIBRARY_IDENTITY_SELECTED_MISSING_OPERANDS: readonly LibraryIdentitySelectedMissingOperand[] =
+  Object.freeze([]);
 
 /** Executable owner assembly of ALL Library SQL reached by the selected one-shot policy.
  * No caller quote, configured balance, observed row count, future planner work or foreign term enters it.
@@ -125,9 +171,12 @@ export function assembleLibraryIdentitySelectedBodies() {
     if (!value) throw new TypeError(`Unknown Library selected ${name} declaration`);
     return value;
   };
-  const basis = assembleLibraryIdentityOriginalComponents(declareNativeIdentitySourceBasisStatements().map((value) => ({
-    component: declared(value.work), multiplicity: 1,
-  })));
+  const basis = assembleLibraryIdentityOriginalComponents(
+    declareNativeIdentitySourceBasisStatements().map((value) => ({
+      component: declared(value.work),
+      multiplicity: 1,
+    })),
+  );
   const current = assembleLibraryIdentityOriginalComponents([
     { component: statement('current'), multiplicity: 1 },
     { component: statement('job'), multiplicity: 1 },
@@ -149,7 +198,10 @@ export function assembleLibraryIdentitySelectedBodies() {
   ]);
   return Object.freeze({
     multiplicities: LIBRARY_IDENTITY_SELECTED_MULTIPLICITIES,
-    page, currentVerification: verification, exhaustedPageRecheck: verification, total,
+    page,
+    currentVerification: verification,
+    exhaustedPageRecheck: verification,
+    total,
     coreDispatch: COMMAND_DISPATCH_ALLOWANCE,
     missing: LIBRARY_IDENTITY_SELECTED_MISSING_OPERANDS,
   });
@@ -192,10 +244,22 @@ export type LibraryIdentityOriginalMissingOperand =
  * Ordinary readJob/pageChanges remain unchanged and have no whole-intent ceiling.
  * The installed declaration above covers ONLY the guarded selected schedule.
  */
-export const LIBRARY_IDENTITY_ORIGINAL_MISSING_OPERANDS: readonly LibraryIdentityOriginalMissingOperand[] = Object.freeze([
-  Object.freeze({ owner: 'Source', operand: 'library-invocation-multiplicities', signature: 'LibraryIdentityOriginalMultiplicities' }),
-  Object.freeze({ owner: 'Core', operand: 'native-command-partition-projection', signature:
-    'runCommand partition read: bounded node/moved_to projection or same-command same-snapshot size admission' }),
-  Object.freeze({ owner: 'Library', operand: 'original-projection-bound', signature:
-    'saved IdentityJob intent and native partition projection maximum before original admission' }),
-]);
+export const LIBRARY_IDENTITY_ORIGINAL_MISSING_OPERANDS: readonly LibraryIdentityOriginalMissingOperand[] =
+  Object.freeze([
+    Object.freeze({
+      owner: 'Source',
+      operand: 'library-invocation-multiplicities',
+      signature: 'LibraryIdentityOriginalMultiplicities',
+    }),
+    Object.freeze({
+      owner: 'Core',
+      operand: 'native-command-partition-projection',
+      signature:
+        'runCommand partition read: bounded node/moved_to projection or same-command same-snapshot size admission',
+    }),
+    Object.freeze({
+      owner: 'Library',
+      operand: 'original-projection-bound',
+      signature: 'saved IdentityJob intent and native partition projection maximum before original admission',
+    }),
+  ]);

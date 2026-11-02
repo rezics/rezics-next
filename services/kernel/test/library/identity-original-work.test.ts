@@ -248,9 +248,7 @@ import {
   LIBRARY_IDENTITY_SELECTED_MULTIPLICITIES,
   LIBRARY_IDENTITY_SELECTED_MISSING_OPERANDS,
 } from '../../src/library/identity-original-work.ts';
-import {
-  LIBRARY_IDENTITY_PLAN_RESULT_BYTES,
-} from '../../src/library/identity-native-planner-projection.ts';
+import { LIBRARY_IDENTITY_PLAN_RESULT_BYTES } from '../../src/library/identity-native-planner-projection.ts';
 import { COMMAND_DISPATCH_ALLOWANCE } from '../../src/command/dispatch-lifetime.ts';
 import type { CommandTransaction } from '../../src/command/command.ts';
 import {

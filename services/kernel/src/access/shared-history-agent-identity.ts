@@ -3,10 +3,7 @@ import type { AgentIdentityRetirementStage } from '../history/agent-identity-ret
 import type { HistoryReceivingContext } from '../history/receiving.ts';
 import { lookupAgentIdentityReceivingCopies } from '../history/agent-identity-source.ts';
 import type { HistoryArtifact } from '../history/registry.ts';
-import {
-  reserveIdentityHistoryWork,
-  nativeWork,
-} from '../history/agent-identity-inventory-work.ts';
+import { reserveIdentityHistoryWork, nativeWork } from '../history/agent-identity-inventory-work.ts';
 import type { Pool } from 'pg';
 import { readAgentIdentityCopyReceiving, type AgentIdentitySourceKey } from '../history/agent-identity-source.ts';
 import {
