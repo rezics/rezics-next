@@ -8,7 +8,7 @@ import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
-import { useId, useRef, useState } from 'react';
+import { useId, useLayoutEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { albumCreateCorrections, type AlbumCorrection, type AlbumRow } from './album-create-guidance';
 import { coverSrc } from '../../media/cover-src';
@@ -282,7 +282,10 @@ function AlbumProfileCreateLive({
               if (statement.qualifiers?.length !== row.statement.qualifiers?.length) setFailure(undefined);
               setRows((previous) => previous.map((item) => (item.id === row.id ? { ...item, statement } : item)));
             }}
-            remove={() => setRows((previous) => previous.filter((item) => item.id !== row.id))}
+            remove={() => {
+              if (!lifetime.active() || locked || running.current || pending.current) return;
+              setRows((previous) => previous.filter((item) => item.id !== row.id));
+            }}
           />
         ))}
         <fieldset disabled={locked} className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end">
@@ -463,19 +466,117 @@ function AlbumInitialField({
   const [picked, setPicked] = useState<Record<string, EntityPickerSubject>>({});
   const statement = row.statement;
   const definition = release.properties[statement.property.id];
+  const lifetime = useEditorLifetime();
+  const section = useRef<HTMLFieldSetElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const cancel = useRef<HTMLButtonElement>(null);
+  const restoreFocus = useRef(false);
+  const [confirming, setConfirming] = useState(false);
+  const current = useRef({ disabled, remove });
+  current.current = { disabled, remove };
+  const editable = () => lifetime.active() && !current.current.disabled;
+  useLayoutEffect(() => {
+    if (!editable()) return;
+    if (confirming) cancel.current?.focus();
+    else if (restoreFocus.current) {
+      trigger.current?.focus();
+      restoreFocus.current = false;
+    }
+  }, [confirming, disabled]);
+  const cancelRemoval = () => {
+    restoreFocus.current = true;
+    setConfirming(false);
+  };
+  const removeRow = () => {
+    if (!editable() || !section.current?.isConnected) return;
+    const root = section.current;
+    const controls = [
+      ...(root
+        .closest('form')
+        ?.querySelectorAll<HTMLElement>('button, input, select, textarea, [tabindex="0"], [contenteditable="true"]') ??
+        []),
+    ];
+    const first = controls.findIndex((control) => root.contains(control));
+    const last = controls.findLastIndex((control) => root.contains(control));
+    const survivor = [...controls.slice(last + 1), ...controls.slice(0, first).reverse()].find(
+      (control) =>
+        !control.matches(':disabled, [aria-disabled="true"], [type="hidden"]') && !control.closest('[hidden], [inert]'),
+    );
+    current.current.remove();
+    survivor?.focus();
+  };
+  const hasValue = (value: unknown): boolean => {
+    if (typeof value === 'string') return !!value.trim();
+    if (value === null || value === undefined) return false;
+    if (typeof value === 'object') return Object.values(value).some(hasValue);
+    return true;
+  };
+  const meaningful = (part: StatementInput | NonNullable<StatementInput['qualifiers']>[number]) =>
+    part.value.type !== 'value' || hasValue(part.value.content);
+  const populated =
+    meaningful(statement) ||
+    statement.qualifiers?.some(meaningful) ||
+    statement.references.some((reference) => reference.parts.some(meaningful));
+  const removal = confirming ? (
+    <div
+      role="group"
+      aria-label={m.candidate_confirm_title({ action: m.recipe_remove_field({}, o) }, o)}
+      className="space-y-2"
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          cancelRemoval();
+        }
+      }}
+    >
+      <p>{m.candidate_confirm_title({ action: m.recipe_remove_field({}, o) }, o)}</p>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          ref={cancel}
+          className={actionClassName}
+          type="button"
+          variant="outline"
+          disabled={disabled}
+          onClick={cancelRemoval}
+        >
+          {m.candidate_cancel({}, o)}
+        </Button>
+        <Button className={actionClassName} type="button" variant="destructive" disabled={disabled} onClick={removeRow}>
+          {m.recipe_remove_field({}, o)}
+        </Button>
+      </div>
+    </div>
+  ) : (
+    <Button
+      ref={trigger}
+      className={actionClassName}
+      type="button"
+      variant="ghost"
+      disabled={disabled}
+      onClick={() => {
+        if (editable()) populated ? setConfirming(true) : removeRow();
+      }}
+    >
+      {m.recipe_remove_field({}, o)}
+    </Button>
+  );
   // Retired metadata cannot describe private values as current. Keep the complete assertion
   // inspectable, including qualifiers and citations, until it can be reconciled deliberately.
   if (!metadataReady || !definition || !release.types[albumType]?.properties.includes(statement.property.id))
     return (
-      <fieldset id={`album-row-${row.id}`} tabIndex={-1} disabled={disabled} className="min-w-0 space-y-3">
+      <fieldset
+        ref={section}
+        id={`album-row-${row.id}`}
+        tabIndex={-1}
+        disabled={disabled}
+        className="min-w-0 space-y-3"
+      >
         <legend>{statement.property.id}</legend>
         <p role="status">{m.correction_preserved({}, o)}</p>
         <pre className="whitespace-pre-wrap break-all text-sm" dir="ltr">
           {JSON.stringify(statement, null, 2)}
         </pre>
-        <Button className={actionClassName} type="button" variant="ghost" onClick={remove}>
-          {m.recipe_remove_field({}, o)}
-        </Button>
+        {removal}
       </fieldset>
     );
   const qualifiers = statement.qualifiers ?? [];
@@ -499,7 +600,7 @@ function AlbumInitialField({
     async (text, signal) =>
       (await search(text, signal)).filter((item) => albumTarget(release, property, item.types));
   return (
-    <fieldset id={`album-row-${row.id}`} tabIndex={-1} disabled={disabled} className="min-w-0">
+    <fieldset ref={section} id={`album-row-${row.id}`} tabIndex={-1} disabled={disabled} className="min-w-0">
       <legend className="sr-only">
         <DefinitionMeaning values={definition?.labels} locale={locale} />
       </legend>
@@ -655,9 +756,7 @@ function AlbumInitialField({
                 : ''}
             </p>
           </Field>
-          <Button className={actionClassName} type="button" variant="ghost" onClick={remove}>
-            {m.recipe_remove_field({}, o)}
-          </Button>
+          {removal}
         </div>
       </ContentItemFrame>
     </fieldset>

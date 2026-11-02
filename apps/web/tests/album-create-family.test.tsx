@@ -394,7 +394,10 @@ test('Album creation composes complete terms and initial facts while preserving 
       await click(panel, m.catalogue_create_review_new());
       expect(textbox(panel, m.catalogue_create_label()).value).toBe(longName);
       expect(panel.querySelector('fieldset')!.matches(':disabled')).toBe(false);
-      if (scenario === 'stale-metadata') await click(dateRow, m.recipe_remove_field());
+      if (scenario === 'stale-metadata') {
+        await click(dateRow, m.recipe_remove_field());
+        await click(dateRow, m.recipe_remove_field());
+      }
       failed.setScenario('ready');
       await click(panel, m.album_create());
       await until(() => panel.textContent!.includes(m.catalogue_create_created()));
