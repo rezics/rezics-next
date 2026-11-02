@@ -38,6 +38,7 @@ import { classifyGrowthSql } from './growth-sql-kind.ts';
 import {
   keyedRelationEntries,
   legacyRelationKey,
+  relationCatalogLookupRequests,
   relationIdentityKey,
   relationIdentityLabel,
   relationRecordKeys,
@@ -765,29 +766,49 @@ export function assertBackgroundBound(name: string, samples: readonly ReportSamp
   throw error;
 }
 
-async function readRelationSizes(db: GrowthDatabase): Promise<readonly RelationSizeEvidence[]> {
-  const result = await db.admin.query<{
-    database: string;
-    schema: string;
-    name: string;
-    kind: RelationIdentity['kind'];
-    reltuples: number;
-    relpages: number;
-  }>(
-    `SELECT current_database() AS database,
-            n.nspname AS schema,
-            c.relname AS name,
-            CASE WHEN c.relkind IN ('i', 'I') THEN 'index' ELSE 'relation' END AS kind,
-            c.reltuples,
-            c.relpages
-     FROM pg_class AS c
-     JOIN pg_namespace AS n ON n.oid = c.relnamespace`,
-  );
-  return result.rows.map(({ database, schema, name, kind, reltuples, relpages }) => ({
-    identity: { database, schema, name, kind },
-    reltuples,
-    relpages,
-  }));
+function legacyRelationLookupCandidates(key: string): readonly RelationIdentity[] {
+  const identities = new Map<string, RelationIdentity>();
+  const add = (identity: RelationIdentity) => identities.set(relationIdentityKey(identity), identity);
+  if (key.startsWith('index:')) add({ kind: 'index', name: key.slice('index:'.length) });
+  for (let separator = key.indexOf('.'); separator >= 0; separator = key.indexOf('.', separator + 1))
+    add({ kind: 'relation', schema: key.slice(0, separator), name: key.slice(separator + 1) });
+  return [...identities.values()];
+}
+
+function relationLookupIdentities(costs: readonly Cost[]): readonly RelationIdentity[] {
+  const identities = new Map<string, RelationIdentity>();
+  for (const cost of costs) {
+    for (const [key, relation] of Object.entries(cost.relations)) {
+      const candidates = relation.identity === undefined ? legacyRelationLookupCandidates(key) : [relation.identity];
+      for (const identity of candidates) identities.set(relationIdentityKey(identity), identity);
+    }
+  }
+  return [...identities.values()];
+}
+
+async function readRelationSizes(
+  db: GrowthDatabase,
+  identities: readonly RelationIdentity[],
+): Promise<readonly RelationSizeEvidence[]> {
+  const sizes: RelationSizeEvidence[] = [];
+  for (const lookup of relationCatalogLookupRequests(identities)) {
+    const result = await db.admin.query<{
+      database: string;
+      schema: string;
+      name: string;
+      kind: RelationIdentity['kind'];
+      reltuples: number;
+      relpages: number;
+    }>(lookup.text, [...lookup.values]);
+    sizes.push(
+      ...result.rows.map(({ database, schema, name, kind, reltuples, relpages }) => ({
+        identity: { database, schema, name, kind },
+        reltuples,
+        relpages,
+      })),
+    );
+  }
+  return sizes;
 }
 
 function sizesForMeasuredRelations(
@@ -1084,8 +1105,10 @@ async function runGrowthCheck(
         accepted = true;
       }
     }
+    const requestedRelationIdentities = relationLookupIdentities(costs);
     const availableRelationSizes: RelationSizeEvidence[] = [];
-    for (const target of measuredDatabases) availableRelationSizes.push(...(await readRelationSizes(target)));
+    for (const target of measuredDatabases)
+      availableRelationSizes.push(...(await readRelationSizes(target, requestedRelationIdentities)));
     const relationEvidence = sizesForMeasuredRelations(costs, availableRelationSizes);
     samples.push({
       scale,

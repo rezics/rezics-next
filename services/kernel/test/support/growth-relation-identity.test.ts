@@ -2,7 +2,12 @@ import assert from 'node:assert/strict';
 import { test } from 'bun:test';
 import { assertGrowthAccessPaths, type AccessPathSample } from './growth-access-path.ts';
 import { costOf, type Capture, type Cost } from './growth-cost.ts';
-import { keyedRelationEntries, type RelationIdentity } from './growth-relation-identity.ts';
+import {
+  keyedRelationEntries,
+  RELATION_CATALOG_LOOKUP_CHUNK_SIZE,
+  relationCatalogLookupRequests,
+  type RelationIdentity,
+} from './growth-relation-identity.ts';
 import { statementAttributions } from './growth-report.ts';
 
 const relations: readonly RelationIdentity[] = [
@@ -63,6 +68,35 @@ test('relation and index costs retain database and schema provenance', () => {
     ['kernel', 'content', 'report_idx'],
   ]);
   assert.equal(statementAttributions(capture)[0]?.relationIdentities?.length, 6);
+});
+
+test('relation catalog lookups request only distinct measured identities in bounded chunks', () => {
+  const requested: readonly RelationIdentity[] = [
+    { database: 'kernel', schema: 'content', kind: 'relation', name: 'report' },
+    { database: 'auth', schema: 'content', kind: 'relation', name: 'report' },
+    { database: 'kernel', schema: 'archive', kind: 'relation', name: 'report' },
+    { database: 'kernel', schema: 'content', kind: 'index', name: 'report_idx' },
+  ];
+  const [lookup] = relationCatalogLookupRequests([...requested, requested[0]!]);
+  assert.match(lookup!.text, /unnest\(\$1::text\[\], \$2::text\[\], \$3::text\[\], \$4::text\[\]\)/);
+  assert.match(lookup!.text, /wanted\.database IS NULL OR wanted\.database = current_database\(\)/);
+  assert.match(lookup!.text, /wanted\.schema IS NULL OR wanted\.schema = n\.nspname/);
+  assert.match(lookup!.text, /wanted\.kind = 'index'.*wanted\.kind = 'relation'/s);
+  assert.deepEqual(lookup!.values, [
+    ['kernel', 'auth', 'kernel', 'kernel'],
+    ['content', 'content', 'archive', 'content'],
+    ['relation', 'relation', 'relation', 'index'],
+    ['report', 'report', 'report', 'report_idx'],
+  ]);
+
+  const large = Array.from({ length: RELATION_CATALOG_LOOKUP_CHUNK_SIZE * 2 + 1 }, (_, index) => ({
+    database: 'kernel',
+    schema: 'content',
+    kind: 'relation' as const,
+    name: `table_${index}`,
+  }));
+  const chunks = relationCatalogLookupRequests([...large, large[0]!]);
+  assert.deepEqual(chunks.map(({ values }) => values[3].length), [128, 128, 1]);
 });
 
 test('access-path checks select the matching database and schema footprint', () => {

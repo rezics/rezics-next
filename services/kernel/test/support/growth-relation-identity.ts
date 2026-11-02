@@ -5,6 +5,61 @@ export type RelationIdentity = {
   readonly name: string;
 };
 
+export const RELATION_CATALOG_LOOKUP_CHUNK_SIZE = 128;
+
+export type RelationCatalogLookupRequest = {
+  readonly text: string;
+  readonly values: readonly [
+    readonly (string | null)[],
+    readonly (string | null)[],
+    readonly RelationIdentity['kind'][],
+    readonly string[],
+  ];
+};
+
+const RELATION_CATALOG_LOOKUP = `
+WITH requested(database, schema, kind, name) AS (
+  SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::text[])
+)
+SELECT DISTINCT current_database() AS database,
+       n.nspname AS schema,
+       c.relname AS name,
+       CASE WHEN c.relkind IN ('i', 'I') THEN 'index' ELSE 'relation' END AS kind,
+       c.reltuples,
+       c.relpages
+FROM requested AS wanted
+JOIN pg_class AS c ON c.relname = wanted.name
+JOIN pg_namespace AS n ON n.oid = c.relnamespace
+WHERE (wanted.database IS NULL OR wanted.database = current_database())
+  AND (wanted.schema IS NULL OR wanted.schema = n.nspname)
+  AND ((wanted.kind = 'index' AND c.relkind IN ('i', 'I'))
+    OR (wanted.kind = 'relation' AND c.relkind NOT IN ('i', 'I')))
+`;
+
+/** Builds bounded, parameterized catalog lookups for only the requested relation identities. */
+export function relationCatalogLookupRequests(
+  identities: readonly RelationIdentity[],
+): readonly RelationCatalogLookupRequest[] {
+  const distinct = new Map<string, RelationIdentity>();
+  for (const identity of identities) distinct.set(relationIdentityKey(identity), identity);
+
+  const requested = [...distinct.values()];
+  const lookups: RelationCatalogLookupRequest[] = [];
+  for (let offset = 0; offset < requested.length; offset += RELATION_CATALOG_LOOKUP_CHUNK_SIZE) {
+    const chunk = requested.slice(offset, offset + RELATION_CATALOG_LOOKUP_CHUNK_SIZE);
+    lookups.push({
+      text: RELATION_CATALOG_LOOKUP,
+      values: [
+        chunk.map(({ database }) => database ?? null),
+        chunk.map(({ schema }) => schema ?? null),
+        chunk.map(({ kind }) => kind),
+        chunk.map(({ name }) => name),
+      ],
+    });
+  }
+  return lookups;
+}
+
 export function relationIdentityKey(identity: RelationIdentity): string {
   return JSON.stringify([identity.database ?? null, identity.schema ?? null, identity.kind, identity.name]);
 }
