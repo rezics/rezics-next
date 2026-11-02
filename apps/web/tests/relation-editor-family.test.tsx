@@ -689,7 +689,6 @@ test('Relation Editor proposal/exact-slot family keeps independent native associ
   }
 }, 60_000);
 
-
 test('Relation candidate recovery repeats the failed page and explicitly restarts or retires the slot', async () => {
   const ui = await mounted();
   const { render, click, region, within, m, RelationEditor, relationFixture } = ui;
@@ -704,16 +703,24 @@ test('Relation candidate recovery repeats the failed page and explicitly restart
       ...fixture.transport,
       read: async (...args) => {
         calls.push(structuredClone(args));
-        if (outcome === 'late') return await new Promise((resolve) => { release = resolve; });
+        if (outcome === 'late')
+          return await new Promise((resolve) => {
+            release = resolve;
+          });
         if (outcome === 'denied') return { ok: false, reason: 'denied' };
         if (args[1] === 'next-page' && outcome === 'failed') throw new Error('Connection lost');
         return { ...ready, session: 'read-token', page: { ...ready.page!, candidates: [], next: 'next-page' } };
       },
     };
-    const editor = (slot = fixture.slot) => h(RelationEditor, {
-      id: fixture.id, locale: 'en', initial: ready, transport, search: async () => [],
-      composition: { statement: fixture.draft, slot, positionEditable: true, session: 'original-token' },
-    });
+    const editor = (slot = fixture.slot) =>
+      h(RelationEditor, {
+        id: fixture.id,
+        locale: 'en',
+        initial: ready,
+        transport,
+        search: async () => [],
+        composition: { statement: fixture.draft, slot, positionEditable: true, session: 'original-token' },
+      });
     await render(editor());
     await click(region(), m.candidate_review());
     await click(region(), m.relation_review_slot());
@@ -743,5 +750,7 @@ test('Relation candidate recovery repeats the failed page and explicitly restart
     outcome = 'empty';
     await click(region(), m.relation_review_slot());
     expect(calls.at(-1)).toEqual([nextSlot, undefined, 'original-token']);
-  } finally { await ui.close(); }
+  } finally {
+    await ui.close();
+  }
 });

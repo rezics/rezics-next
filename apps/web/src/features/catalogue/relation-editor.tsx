@@ -107,7 +107,9 @@ function RelationEditorLive({
   const request = useRef<RelationProposal | RelationConfirmation | undefined>(undefined);
   const pageCursor = useRef<string | undefined>(undefined);
   // Keep the attempted address before I/O, independently of the last successful page.
-  const reading = useRef<{ slot: RelationSlot | undefined; cursor: string | undefined; session: string | undefined } | undefined>(undefined);
+  const reading = useRef<
+    { slot: RelationSlot | undefined; cursor: string | undefined; session: string | undefined } | undefined
+  >(undefined);
   const readGeneration = useRef(0);
   const running = useRef(false);
   const proposedCandidate = useRef<string | undefined>(undefined);
@@ -639,7 +641,11 @@ function RelationEditorLive({
                           >
                             {m.relation_add_citation({}, options)}
                           </Button>
-                          <Button variant="outline" disabled={!draftSlot()} onClick={() => (slot ? reload() : load(draftSlot()))}>
+                          <Button
+                            variant="outline"
+                            disabled={!draftSlot()}
+                            onClick={() => (slot ? reload() : load(draftSlot()))}
+                          >
                             {m.relation_review_slot({}, options)}
                           </Button>
                           <Button
@@ -929,9 +935,7 @@ function RelationEditorLive({
       {(current || reading.current) && !uncertain && (
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" disabled={busy} onClick={reload}>
-            {failure && reading.current
-              ? m.statement_consent_retry_page({}, options)
-              : m.candidate_reload({}, options)}
+            {failure && reading.current ? m.statement_consent_retry_page({}, options) : m.candidate_reload({}, options)}
           </Button>
           {reading.current?.slot && (
             <Button variant="outline" disabled={busy} onClick={() => load(slot)}>
