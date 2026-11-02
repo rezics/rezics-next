@@ -113,7 +113,9 @@ function StatementConsentPageLive({
   const [reload, setReload] = useState(false);
   const request = useRef<ConsentCommand | null>(null);
   const running = useRef(false);
-  const page = useRef<{ cursor?: string; session?: string }>({ session: initial?.ok ? initial.session : undefined });
+  const page = useRef<{ cursor?: string; session: string | undefined }>({
+    session: initial?.ok ? initial.session : undefined,
+  });
   const session = useRef<string | undefined>(initial?.ok ? initial.session : undefined);
   const current = read?.ok ? read : undefined;
   const terminal = current?.terminal || result?.kind === 'retracted';
@@ -152,7 +154,7 @@ function StatementConsentPageLive({
     setConfirmation(operation);
   }
 
-  async function load(input: { cursor?: string; session?: string } = { session: session.current }) {
+  async function load(input: { cursor?: string; session: string | undefined } = { session: session.current }) {
     if (!lifetime.active()) return;
     if (running.current || request.current || terminal) return;
     running.current = true;
