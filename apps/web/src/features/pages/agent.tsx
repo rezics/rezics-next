@@ -137,13 +137,19 @@ export async function continueAgentList(
   };
 }
 
-/** The agent's name: its display name, else its handle. */
-export function agentTitle(page: SubjectPageData): string {
+/** The successful public projection of the resolved page account, regardless of descriptor order. */
+export function pageProfile(page: SubjectPageData) {
   const plan = planReads(platformRegistry, page.document as CompositionDocument, pageContext(page));
   for (const [key, read] of Object.entries(plan.reads)) {
-    const result = read.kind === 'account' ? page.reads[key] : undefined;
-    const profile = result?.status === 200 ? accountOf(result.body) : undefined;
-    if (profile) return profile.displayName ?? (profile.handle ? `@${profile.handle}` : '');
+    if (read.kind !== 'account' || page.reads[key]?.status !== 200) continue;
+    const profile = accountOf(page.reads[key]?.body);
+    if (profile?.id === page.account?.id) return profile;
   }
-  return page.account ? `@${page.account.handle}` : '';
+}
+
+/** The agent's name: its display name, else its handle. */
+export function agentTitle(page: SubjectPageData): string {
+  const profile = pageProfile(page);
+  const handle = profile?.handle || page.account?.handle;
+  return profile?.displayName || (handle ? `@${handle}` : '');
 }

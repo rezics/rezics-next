@@ -1,5 +1,5 @@
 import type { KernelClient } from '@rezics/client';
-import { planReads, platformRegistry, type CompositionDocument, type View } from '@rezics/composition';
+import type { View } from '@rezics/composition';
 import {
   AgentReadError,
   agentPath,
@@ -7,9 +7,9 @@ import {
   continueAgentList,
   formerHandleRedirect,
   loadAgentPage,
+  pageProfile,
 } from '../../features/pages/agent';
-import { accountOf, viewIsPublic } from '../../features/pages/account-read';
-import { pageContext, type SubjectPageData } from '../../features/pages/subject';
+import { viewIsPublic } from '../../features/pages/account-read';
 import { subjectTabs } from '../../features/pages/views';
 import { readPageAuthors } from '../../identity/read';
 import { keepSearch } from '../../subject/subject-href';
@@ -34,14 +34,7 @@ function overviewFallback(locale: string, handle: string, search = ''): string {
   return keepSearch(href, retained.join('&'), fragment);
 }
 
-export function pageProfile(page: SubjectPageData) {
-  const plan = planReads(platformRegistry, page.document as CompositionDocument, pageContext(page));
-  for (const [key, read] of Object.entries(plan.reads)) {
-    if (read.kind !== 'account' || page.reads[key]?.status !== 200) continue;
-    const profile = accountOf(page.reads[key]?.body);
-    if (profile?.id === page.account?.id) return profile;
-  }
-}
+export { pageProfile };
 
 /** Public reads always use anonymous authority, including continuations and optional operator hydration. */
 export async function loadPublicAccountJourney(

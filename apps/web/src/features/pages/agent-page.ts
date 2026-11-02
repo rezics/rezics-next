@@ -7,8 +7,8 @@ import type { Subject } from '../../subject/types';
 import { pageHead, type PagePaths } from '../../shell/head';
 import { shareCardImage } from '../../shell/share-card';
 import type { ShareCardProjection } from '../../media/share-card';
-import { accountOf, type AccountProfile } from './account-read';
-import { agentPath } from './agent';
+import type { AccountProfile } from './account-read';
+import { agentPath, pageProfile } from './agent';
 import { pageContext, type SubjectPageData } from './subject';
 import type { AccountView } from '../../accounts/public-profile/page-read';
 import { isRecord, pageText, webUrl } from './shared';
@@ -42,13 +42,6 @@ function subjectRead(page: AgentPage): { subject: Subject; body: Record<string, 
   const result = entry ? page.reads[entry[0]] : undefined;
   if (result?.status !== 200 || !isRecord(result.body) || !isRecord(result.body.subject)) return;
   return { subject: result.body.subject as unknown as Subject, body: result.body };
-}
-
-function profileRead(page: AgentPage): AccountProfile | undefined {
-  const reads = planReads(platformRegistry, page.document as CompositionDocument, pageContext(page)).reads;
-  const entry = Object.entries(reads).find(([, read]) => read.kind === 'account');
-  const result = entry ? page.reads[entry[0]] : undefined;
-  return result?.status === 200 ? accountOf(result.body) : undefined;
 }
 
 function displayName(page: AgentPage, profile: AccountProfile | undefined): string {
@@ -137,7 +130,7 @@ export function agentPageHead(
   cursor?: string,
   shareCard?: ShareCardProjection,
 ) {
-  const profile = profileRead(page);
+  const profile = pageProfile(page);
   const handle = profile?.handle ?? page.account.handle;
   const name = displayName(page, profile);
   const title = `${name} (@${handle})`;
