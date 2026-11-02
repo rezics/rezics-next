@@ -1922,7 +1922,6 @@ pin, captured total, lifecycle dates/state and other personal facts; it needs no
 Clearing a finished session preserves its lifecycle. Sparse clearing deletes only this exact session's keys,
 bounded by the native 20000-key cap, with no history scan; this adds one indexed DELETE to the record body.
 
-
 - Touches: Trusted preparation reads one owned session/pin in an owner snapshot, releases it, resolves the original
   immutable release and observes current subject/profile admission at the attempt's T. The body point-reads the
   immutable subject, ensures its head before the typed `(route, session_id)` `FOR UPDATE`, then rereads/CASes the

@@ -250,8 +250,7 @@ function readEligibility(identity: Resource, observe?: (row: RealmRow | null) =>
         const row = await dispatch(native.realmPlan, parameters, () => read.run(client, parameters));
         const binding = { ...resource, at, subject: null };
         const current = await dispatch(native.bindingPlan, binding, () => bindingRead.run(client, binding));
-        if (!row || !current || canonicalize(current) !== canonicalize(evidence.binding))
-          throw realmReadDeniedError();
+        if (!row || !current || canonicalize(current) !== canonicalize(evidence.binding)) throw realmReadDeniedError();
         if (row?.visibility === 'protected' && actor.kind === 'account') {
           // Auth/Access validates the assignment reference. Its principal is a
           // second fixed identity, never an expansion of grants or memberships.

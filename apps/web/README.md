@@ -1660,7 +1660,6 @@ Active corrections and clearing use a confirmation showing exact captured operan
 captured total and history. Drafts survive closing the editor; retries retain the original revision, key and
 operands. After a definite conflict, explicit latest-progress review retains the draft and creates a new intent.
 
-
 - **Touches:** One session credential read, then GET session, one changes page and one completed-units page started
   together (`view=FULL`). A record is one POST `:record` after that credential read.
 - **Bound:** Session view: 1 D and 3 K in parallel, 0 R, 0 A. Each history read is one page of at most 100. A record is
