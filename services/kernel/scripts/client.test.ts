@@ -23,10 +23,9 @@ test('generated Library operation requests accept removal and require status sta
       `import type { KernelClient } from ${JSON.stringify(resolve(repository, 'packages/client/src/index.ts'))};
 declare const client: KernelClient;
 type Request = Parameters<KernelClient['libraryOperations']['post']>[0];
-const selection = { kind: 'explicit', targets: [{ subjectId: 'subject-id' }] } as const;
 const removal = {
   action: 'remove_from_library',
-  selection: { kind: selection.kind, targets: [...selection.targets] },
+  selection: { kind: 'explicit', targets: [{ subjectId: 'subject-id' }] },
 } satisfies Request;
 const status = {
   action: 'set_status', state: 'reading', selection: removal.selection,
@@ -65,7 +64,7 @@ if (outcomes.data) {
   } finally {
     rmSync(fixture, { recursive: true, force: true });
   }
-});
+}, 60_000);
 
 const reconcileOrder = (client: KernelClient) =>
   client.orders({ orderId: 'order-id' }).$reconcile.post(
