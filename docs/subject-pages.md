@@ -667,6 +667,7 @@ separate from successful current reading. Ordinary subjects, contributions and G
 no page claims cascade deletion or completed cleanup. A failed request keeps its draft, exact action and key.
 An uncertain request remains sealed for exact retry; a definite refusal allows explicit review of a new request.
 Lifecycle controls admit only their current observed draft, target, action and confirmation; a retained retry may replay only its still-unresolved command with its original payload, key and session.
+Current keyboard commands keep a surviving opener or focus their local result/recovery summary after settlement, including confirmed success with an unavailable reread; pointer use, focus movement and retired workspace intent stay quiet.
 All actions preserve current session identity, CSRF, native response/session headers and current authority through
 the existing BFF. Lifecycle command responses carry identity and state; the lifecycle metadata read supplies the native deadline.
 

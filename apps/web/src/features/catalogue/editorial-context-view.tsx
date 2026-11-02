@@ -10,6 +10,7 @@ import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-selec
 import { locales } from '../../paraglide/runtime';
 import { m } from '../../paraglide/messages.js';
 import { EditorialContextNavigation } from './editorial-context-navigation';
+import { useEditorialCommandFocus } from './editorial-command-focus';
 import {
   editorialCommand,
   type EditorialCommand,
@@ -51,6 +52,7 @@ function EditorialContextWorkspaceLive({
   const [name, setName] = useState('');
   const [language, setLanguage] = useState(locale);
   const [busy, setBusy] = useState(false);
+  const commandFocus = useEditorialCommandFocus(lifetime.active, busy);
   const [pending, setPending] = useState<EditorialCommand>();
   const [failure, setFailure] = useState<EditorialFailure>();
   const [confirmation, setConfirmation] = useState<'delete' | 'restore'>();
@@ -139,6 +141,7 @@ function EditorialContextWorkspaceLive({
     void execute(command);
   }
   async function execute(command: EditorialCommand) {
+    const focus = commandFocus.begin();
     retireControls();
     running.current = true;
     setBusy(true);
@@ -172,6 +175,7 @@ function EditorialContextWorkspaceLive({
     } finally {
       if (!lifetime.active()) return;
       running.current = false;
+      if (mounted.current) focus?.finish();
       if (mounted.current) setBusy(false);
     }
   }
@@ -191,6 +195,10 @@ function EditorialContextWorkspaceLive({
   const commandUnsettled = !!pending && (busy || !!uncertain);
   return (
     <section
+      ref={commandFocus.workspace}
+      onKeyDownCapture={commandFocus.onKeyDownCapture}
+      onClickCapture={commandFocus.onClickCapture}
+      onPointerDownCapture={commandFocus.onPointerDownCapture}
       aria-label={m.editorial_title({}, o)}
       aria-busy={busy}
       className="min-w-0 space-y-6"
@@ -209,23 +217,34 @@ function EditorialContextWorkspaceLive({
           </ContentItemHeading>
           <p className="text-sm text-muted-foreground">{m.editorial_intro({}, o)}</p>
         </header>
-        {busy && <p role="status">{m.candidate_loading({}, o)}</p>}
-        {notice && (notice !== 'delete' || !knownDeleted) && (
-          <p role="status">
-            {notice === 'delete'
-              ? m.editorial_deleted({}, o)
-              : notice === 'restore'
-                ? m.editorial_restored({}, o)
-                : m.editorial_created({}, o)}
-          </p>
-        )}
-        {knownDeleted && !active && (
-          <div role="status">
-            <Tombstone shape="row" reason="deleted" labels={{ deleted: m.editorial_deleted({}, o) }} />
+        <div
+          ref={commandFocus.result}
+          role="group"
+          aria-label={m.editorial_title({}, o)}
+          aria-describedby={`${fieldId}-result`}
+          tabIndex={-1}
+          data-editorial-result
+        >
+          <div id={`${fieldId}-result`} className="space-y-6">
+            {busy && <p role="status">{m.candidate_loading({}, o)}</p>}
+            {notice && (notice !== 'delete' || !knownDeleted) && (
+              <p role="status">
+                {notice === 'delete'
+                  ? m.editorial_deleted({}, o)
+                  : notice === 'restore'
+                    ? m.editorial_restored({}, o)
+                    : m.editorial_created({}, o)}
+              </p>
+            )}
+            {knownDeleted && !active && (
+              <div role="status">
+                <Tombstone shape="row" reason="deleted" labels={{ deleted: m.editorial_deleted({}, o) }} />
+              </div>
+            )}
+            {failure && <p role="alert">{errorText(failure.reason)}</p>}
+            {reading && !reading.ok && <p role="status">{errorText(reading.reason)}</p>}
           </div>
-        )}
-        {failure && <p role="alert">{errorText(failure.reason)}</p>}
-        {reading && !reading.ok && <p role="status">{errorText(reading.reason)}</p>}
+        </div>
         {!currentId && (
           <form
             className="max-w-xl space-y-4"

@@ -42,6 +42,7 @@ test('Editorial Context family retains supplied comparison, independent controls
   const { createRoot } = await import('react-dom/client');
   const { userEvent } = await import('storybook/test');
   const { EditorialContextWorkspace } = await import('../src/features/catalogue/editorial-context-view');
+  const { CatalogueCurrentReading } = await import('../src/features/catalogue/editor-lifetime');
   const { ContextComparisonView } = await import('../src/features/catalogue/context-curation-view');
   const { CandidateReview } = await import('../src/subject/candidate-review');
   const { CandidateReaderBoundary } = await import('../src/subject/candidate-lifetime');
@@ -357,10 +358,13 @@ test('Editorial Context family retains supplied comparison, independent controls
     expect(host.querySelector('[data-review-entry]')).toBeNull();
     expect(host.querySelector('a[href^="/exact-review"]')).toBeNull();
     expect(host.textContent).toContain(m.editorial_deleted({}, o));
+    expect(document.activeElement).toBe(host.querySelector('[data-editorial-result]'));
     await click(m.editorial_restore({}, o));
     expect(host.textContent).toContain(m.editorial_confirm_restore({}, o));
-    await click(m.contribution_confirm({}, o));
+    button(m.contribution_confirm({}, o)).focus();
+    await act(async () => userEvent.keyboard('{Enter}'));
     await until(() => host.textContent!.includes(m.editorial_restored({}, o)));
+    expect(document.activeElement).toBe(host.querySelector('[data-editorial-result]'));
     expect(lifecycle.calls.map((call) => call.method)).toEqual(['GET', 'DELETE', 'GET', 'POST', 'GET']);
     expect(host.querySelector('[data-review-entry]')).not.toBeNull();
     expect(
@@ -430,11 +434,82 @@ test('Editorial Context family retains supplied comparison, independent controls
     expect(input.value).toBe(longName);
     expect(host.querySelector('select')!.disabled).toBe(true);
     expect(buttons(host, m.editorial_revise({}, o))).toHaveLength(0);
-    await click(m.editorial_retry({}, o));
+    const retryCreate = button(m.editorial_retry({}, o));
+    retryCreate.focus();
+    await act(async () => userEvent.keyboard('{Enter}'));
     await until(() => host.textContent!.includes(m.editorial_created({}, o)));
+    expect(document.activeElement).toBe(host.querySelector('[data-editorial-result]'));
     expect(uncertain.calls[0]!.body).toEqual(uncertain.calls[1]!.body);
     expect([...uncertain.calls[0]!.headers]).toEqual([...uncertain.calls[1]!.headers]);
     expect(uncertain.calls.map((call) => call.method)).toEqual(['POST', 'POST', 'GET']);
+
+    // Native creation is settled even when its ordinary read is unavailable; only current keyboard intent orients.
+    for (const intent of [
+      'current',
+      'pointer',
+      'moved away and back',
+      'retired away and back',
+      'replaced',
+      'unmounted',
+    ]) {
+      await render(null);
+      const sample = editorialContextFixture('create');
+      let deliver!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        deliver = resolve;
+      });
+      const transport: EditorialTransport = {
+        read: async (address) => {
+          await sample.transport.read(address);
+          throw new Error('Follow-up read unavailable');
+        },
+        submit: async (command) => {
+          const result = await sample.transport.submit(command);
+          await gate;
+          return result;
+        },
+      };
+      const view = (ready = true, id?: string) => (
+        <CatalogueCurrentReading visible ready={ready} revision="context">
+          <EditorialContextWorkspace locale="en" id={id} transport={transport} reviewHref={() => '/private-review'}>
+            {() => <span data-review-entry>Private comparison</span>}
+          </EditorialContextWorkspace>
+        </CatalogueCurrentReading>
+      );
+      await render(view());
+      await act(async () => userEvent.type(host.querySelector('input')!, 'Private draft'));
+      if (intent === 'pointer') await click(m.editorial_create({}, o));
+      else {
+        button(m.editorial_create({}, o)).focus();
+        await act(async () => userEvent.keyboard('{Enter}'));
+      }
+      await until(() => sample.calls.length === 1);
+      if (intent === 'moved away and back') {
+        const outside = document.createElement('button');
+        document.body.append(outside);
+        outside.focus();
+        outside.blur();
+        outside.remove();
+      }
+      if (intent === 'retired away and back') {
+        await render(view(false));
+        await render(view());
+      }
+      if (intent === 'replaced') await render(view(true, sample.id));
+      if (intent === 'unmounted') await render(null);
+      await act(async () => deliver());
+      await flush();
+      const boundary = host.querySelector('[data-editorial-result]');
+      if (intent === 'current') expect(document.activeElement).toBe(boundary);
+      else if (boundary) expect(document.activeElement).not.toBe(boundary);
+      expect(host.querySelector('[data-review-entry], a[href="/private-review"]')).toBeNull();
+      if (['current', 'pointer', 'moved away and back'].includes(intent)) {
+        expect(boundary!.textContent).toContain(m.editorial_created({}, o));
+        expect(boundary!.textContent).toContain(m.editorial_unavailable({}, o));
+        expect(host.querySelector('input')).toBeNull();
+        expect(sample.calls.map((call) => call.method)).toEqual(['POST', 'GET']);
+      } else expect(host.textContent).not.toContain(m.editorial_created({}, o));
+    }
 
     await render(null);
     const { createMemoryHistory, createRootRoute, createRoute, createRouter, Link, Outlet, RouterProvider } =
