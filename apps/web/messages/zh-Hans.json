@@ -4923,5 +4923,9 @@
   "library_bulk_recovery_cancel_retry": "重试同一取消命令",
   "library_bulk_recovery_cancel_uncertain": "取消结果尚不确定。请重试同一命令以确认结果。",
   "library_bulk_recovery_cancel_refused": "无法取消此操作。",
-  "library_bulk_recovery_cancel_accepted": "已取消剩余工作。已完成的目标仍按记录显示。"
+  "library_bulk_recovery_cancel_accepted": "已取消剩余工作。已完成的目标仍按记录显示。",
+  "library_bulk_add_destination": "将已加载的所选条目添加到收藏集",
+  "library_bulk_add_loaded": "已选择 {count} 个已加载的主题，不包含其他页面或匹配项。",
+  "library_bulk_add_review": "检查此目标收藏集",
+  "library_bulk_add_captured_destination": "已保存的目标收藏集：{title}"
 }

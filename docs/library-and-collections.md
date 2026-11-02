@@ -237,6 +237,8 @@ skipped individually as changed since preview while other targets continue. Dura
 results support navigation and retries without repeating completed effects. The
 [bulk owner contract](../services/kernel/src/library/bulk-contract.md) defines the native boundary.
 
+Decision: Web bulk add captures only the loaded selected canonical Subjects in first-selection order before destination choice; choosing a destination freezes its identity and revision independently of subsequent list refreshes.
+
 Web's public download controls admit a detached first-page capture of viewer, native metadata revision and exact
 occurrences, then compare it with current native FULL reads at admission and terminal delivery. Each read uses the
 existing 100-member page bound: two reads examine at most 200 returned members, two Collection headers and at most

@@ -4923,5 +4923,9 @@
   "library_bulk_recovery_cancel_retry": "同じキャンセルを再試行",
   "library_bulk_recovery_cancel_uncertain": "キャンセル結果を確認できません。同じコマンドを再試行してください。",
   "library_bulk_recovery_cancel_refused": "この操作をキャンセルできませんでした。",
-  "library_bulk_recovery_cancel_accepted": "残りの処理をキャンセルしました。完了済みの対象は記録どおり保持されます。"
+  "library_bulk_recovery_cancel_accepted": "残りの処理をキャンセルしました。完了済みの対象は記録どおり保持されます。",
+  "library_bulk_add_destination": "読み込み済みの選択項目をコレクションに追加",
+  "library_bulk_add_loaded": "読み込み済みの対象を{count}件選択しています。他のページや検索結果は含まれません。",
+  "library_bulk_add_review": "この追加先を確認",
+  "library_bulk_add_captured_destination": "保存した追加先：{title}"
 }

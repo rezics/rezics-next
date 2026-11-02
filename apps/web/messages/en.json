@@ -4984,5 +4984,9 @@
   "library_bulk_recovery_cancel_retry": "Retry the same cancellation",
   "library_bulk_recovery_cancel_uncertain": "The cancellation result is uncertain. Retry the same command to resolve it.",
   "library_bulk_recovery_cancel_refused": "This operation could not be cancelled.",
-  "library_bulk_recovery_cancel_accepted": "Remaining work was cancelled. Completed targets stay as recorded."
+  "library_bulk_recovery_cancel_accepted": "Remaining work was cancelled. Completed targets stay as recorded.",
+  "library_bulk_add_destination": "Add loaded selection to a Collection",
+  "library_bulk_add_loaded": "{count} selected loaded subjects. Other pages and matches are not included.",
+  "library_bulk_add_review": "Review this destination",
+  "library_bulk_add_captured_destination": "Captured destination: {title}"
 }

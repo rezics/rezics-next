@@ -4923,5 +4923,9 @@
   "library_bulk_recovery_cancel_retry": "같은 취소 다시 시도",
   "library_bulk_recovery_cancel_uncertain": "취소 결과를 확인할 수 없습니다. 같은 명령을 다시 시도해 확인하세요.",
   "library_bulk_recovery_cancel_refused": "이 작업을 취소하지 못했습니다.",
-  "library_bulk_recovery_cancel_accepted": "남은 작업이 취소되었습니다. 완료된 대상은 기록대로 유지됩니다."
+  "library_bulk_recovery_cancel_accepted": "남은 작업이 취소되었습니다. 완료된 대상은 기록대로 유지됩니다.",
+  "library_bulk_add_destination": "불러온 선택 항목을 컬렉션에 추가",
+  "library_bulk_add_loaded": "불러온 대상 {count}개를 선택했습니다. 다른 페이지와 검색 결과는 포함되지 않습니다.",
+  "library_bulk_add_review": "이 추가 위치 검토",
+  "library_bulk_add_captured_destination": "저장된 추가 위치: {title}"
 }

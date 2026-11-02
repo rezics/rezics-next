@@ -4923,5 +4923,9 @@
   "library_bulk_recovery_cancel_retry": "Reintentar la misma cancelación",
   "library_bulk_recovery_cancel_uncertain": "El resultado de la cancelación es incierto. Reintenta el mismo comando para resolverlo.",
   "library_bulk_recovery_cancel_refused": "No se pudo cancelar esta operación.",
-  "library_bulk_recovery_cancel_accepted": "Se canceló el trabajo pendiente. Los objetivos completados siguen registrados."
+  "library_bulk_recovery_cancel_accepted": "Se canceló el trabajo pendiente. Los objetivos completados siguen registrados.",
+  "library_bulk_add_destination": "Añadir la selección cargada a una colección",
+  "library_bulk_add_loaded": "{count} temas cargados seleccionados. No se incluyen otras páginas ni coincidencias.",
+  "library_bulk_add_review": "Revisar este destino",
+  "library_bulk_add_captured_destination": "Destino capturado: {title}"
 }

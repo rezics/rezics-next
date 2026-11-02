@@ -4923,5 +4923,9 @@
   "library_bulk_recovery_cancel_retry": "Réessayer la même annulation",
   "library_bulk_recovery_cancel_uncertain": "Le résultat de l’annulation est incertain. Réessayez la même commande pour le vérifier.",
   "library_bulk_recovery_cancel_refused": "Cette opération n’a pas pu être annulée.",
-  "library_bulk_recovery_cancel_accepted": "Le travail restant a été annulé. Les cibles terminées restent telles qu’enregistrées."
+  "library_bulk_recovery_cancel_accepted": "Le travail restant a été annulé. Les cibles terminées restent telles qu’enregistrées.",
+  "library_bulk_add_destination": "Ajouter la sélection chargée à une collection",
+  "library_bulk_add_loaded": "{count} sujets chargés sélectionnés. Les autres pages et résultats ne sont pas inclus.",
+  "library_bulk_add_review": "Vérifier cette destination",
+  "library_bulk_add_captured_destination": "Destination enregistrée : {title}"
 }

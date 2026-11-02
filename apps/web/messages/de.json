@@ -4923,5 +4923,9 @@
   "library_bulk_recovery_cancel_retry": "Denselben Abbruch erneut senden",
   "library_bulk_recovery_cancel_uncertain": "Das Ergebnis des Abbruchs ist unklar. Senden Sie denselben Befehl erneut, um es zu klären.",
   "library_bulk_recovery_cancel_refused": "Dieser Vorgang konnte nicht abgebrochen werden.",
-  "library_bulk_recovery_cancel_accepted": "Die verbleibende Arbeit wurde abgebrochen. Abgeschlossene Ziele bleiben wie aufgezeichnet."
+  "library_bulk_recovery_cancel_accepted": "Die verbleibende Arbeit wurde abgebrochen. Abgeschlossene Ziele bleiben wie aufgezeichnet.",
+  "library_bulk_add_destination": "Geladene Auswahl zu einer Sammlung hinzufügen",
+  "library_bulk_add_loaded": "{count} ausgewählte geladene Themen. Andere Seiten und Treffer sind nicht enthalten.",
+  "library_bulk_add_review": "Dieses Ziel prüfen",
+  "library_bulk_add_captured_destination": "Erfasstes Ziel: {title}"
 }

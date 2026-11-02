@@ -17,11 +17,14 @@ export function CollectionMoveChooser({
   disabled,
   current,
   onChange,
+  placement = true,
 }: {
   sourceId: string;
   disabled: boolean;
   current: () => boolean;
   onChange: (choice: CollectionMoveChoice | null) => void;
+  /** Bulk add captures a destination only; its native executor determines placement. */
+  placement?: boolean;
 }) {
   const [choices, setChoices] = useState<MoveChoices>({ collections: [], next: null });
   const [placements, setPlacements] = useState<MovePlacements>({ members: [], next: null });
@@ -83,6 +86,11 @@ export function CollectionMoveChooser({
       const target = next ? destination : await readCollectionDestination({ data: id });
       if (!retained(episode)) return;
       if (!target || target.id !== id || target.id === sourceId) throw new Error('Move destination unavailable');
+      if (!placement) {
+        setDestination(target);
+        callbacks.current.onChange({ destination: target, after: null });
+        return;
+      }
       const page = await readCollectionMovePlacements({
         data: { collectionId: id, revision: target.revision, cursor: next },
       });
@@ -130,7 +138,7 @@ export function CollectionMoveChooser({
           {m.library_collection_move_more_destinations()}
         </Button>
       ) : null}
-      {destination ? (
+      {destination && placement ? (
         <label className="min-w-0 basis-full space-y-1">
           <span className="text-sm">{m.library_collection_move_placement()}</span>
           <select
@@ -153,7 +161,7 @@ export function CollectionMoveChooser({
           </select>
         </label>
       ) : null}
-      {destination && placements.next ? (
+      {destination && placement && placements.next ? (
         <Button
           type="button"
           variant="outline"
