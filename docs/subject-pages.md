@@ -385,6 +385,7 @@ still governs the later whole-slot selection, not a client-side collapse of exis
 Refresh retains a still-selected source; a withdrawn choice requires an explicit current replacement before editing, even if only one remains or no values remain, while an explicit additional-value action stays separate and other drafts stay intact.
 
 Generic and Manga scalar corrections always confirm local discard, including empty additions; Cancel or Escape preserves the full assertion, while confirmation removes only the original unsent draft, releases its slot and focuses the retained source choice or staging control under current-reading, busy and sealed-command guards.
+Character classification uses one profile-level Stay/Leave decision across all holders; Stay retains authored assertions and exact unresolved commands through current-reading failures, while Leave retires only local recovery, and untouched empty additions, unchanged source copies or confirmed results alone do not block departure.
 
 Generic fact corrections protect pathname and search-address departure and browser unload for all changed private drafts, including excluded drafts and drafts retained during read recovery, and pending or unknown proposals; Stay preserves exact retries and siblings, while Leave retires local recovery without undoing sent proposals. Confirmed results alone do not block departure, and their inline candidate review remains available without leaving the workspace.
 
