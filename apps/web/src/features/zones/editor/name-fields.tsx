@@ -15,6 +15,7 @@ export function ZoneNameFields({
   locale,
   disabled,
   errors,
+  descriptions,
   onChange,
 }: {
   labels: ZoneConfiguration['labels'];
@@ -22,6 +23,8 @@ export function ZoneNameFields({
   locale: string;
   disabled: boolean;
   errors?: string[] | undefined;
+  /** Optional editor-only descriptions. Create retains its pointer/error contract. */
+  descriptions?: Readonly<Record<string, string>> | undefined;
   onChange: (names: Names) => void;
 }) {
   const options = { locale: locale as never };
@@ -37,14 +40,21 @@ export function ZoneNameFields({
     // An invalid translation must be reachable even when its optional section was closed.
     if (translationErrors && translations.current) translations.current.open = true;
   }, [translationErrors, errors]);
-  const describedBy = (language: string) => `zone-name-help${invalid(language) ? ` zone-label-${language}-error` : ''}`;
+  const describedBy = (language: string) =>
+    [
+      'zone-name-help',
+      invalid(language) ? `zone-label-${language}-error` : '',
+      descriptions?.[`zone-label-${language}`],
+    ]
+      .filter(Boolean)
+      .join(' ');
   const error = (language: string) =>
     invalid(language) ? (
       <FieldDescription id={`zone-label-${language}-error`} className="text-destructive">
         {m.zone_name_invalid({ language: languageName(language) }, options)}
       </FieldDescription>
     ) : null;
-  return (
+  const fields = (
     <fieldset disabled={disabled} className="min-w-0 space-y-4">
       <legend className="mb-3 text-lg font-semibold">{m.zones_create_names({}, options)}</legend>
       <p id="zone-name-help" className="text-sm text-muted-foreground">
@@ -52,12 +62,13 @@ export function ZoneNameFields({
       </p>
       <p className="text-sm text-muted-foreground">{m.zone_name_fallback({}, options)}</p>
       {!primaryLanguage ? <p className="text-sm text-muted-foreground">{m.zone_name_legacy({}, options)}</p> : null}
-      <Field>
+      <Field data-invalid={!!descriptions?.['zone-primary-language']}>
         <FieldLabel htmlFor="zone-primary-language">{m.zone_name_language({}, options)}</FieldLabel>
         <NativeSelect
           id="zone-primary-language"
           value={primary}
-          aria-describedby="zone-name-help"
+          aria-invalid={!!descriptions?.['zone-primary-language']}
+          aria-describedby={['zone-name-help', descriptions?.['zone-primary-language']].filter(Boolean).join(' ')}
           onChange={(event) => {
             const language = event.target.value as ZoneLanguage;
             change({ ...labels }, language);
@@ -135,5 +146,21 @@ export function ZoneNameFields({
         </Field>
       </details>
     </fieldset>
+  );
+  return descriptions ? (
+    <section
+      id="zone-names"
+      tabIndex={-1}
+      data-correction-section=""
+      aria-describedby={Object.entries(descriptions)
+        .filter(([id]) => id === 'zone-names' || id === 'zone-primary-language' || id.startsWith('zone-label-'))
+        .map(([, value]) => value)
+        .join(' ')}
+      className="min-w-0"
+    >
+      {fields}
+    </section>
+  ) : (
+    fields
   );
 }

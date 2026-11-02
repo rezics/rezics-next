@@ -35,7 +35,10 @@ type Mode =
   | 'validation'
   | 'saved'
   | 'published'
-  | 'read-only';
+  | 'read-only'
+  | 'validation-long'
+  | 'unknown'
+  | 'stale-target';
 
 function EditorStory({ mode = 'ready' }: { mode?: Mode }) {
   const [session] = useState(() => {
@@ -63,17 +66,56 @@ function EditorStory({ mode = 'ready' }: { mode?: Mode }) {
       fixture.initial.options.scopes = { kind: 'failure', status: 503, code: 'dependency_unavailable' };
       fixture.initial.options.collections = { kind: 'failure', status: 503, code: 'semantic_not_ready' };
     }
-    const value = new ZoneEditorSession(fixture.transport, fixture.initial);
-    if (['dirty', 'conflict', 'validation', 'saved', 'read-only'].includes(mode)) {
+    const transport =
+      mode === 'unknown' || mode === 'stale-target'
+        ? {
+            ...fixture.transport,
+            mutate: async () => ({
+              kind: 'failure' as const,
+              status: mode === 'unknown' ? 502 : 400,
+              code: mode === 'unknown' ? 'future_zone_outcome' : 'invalid_request',
+              retryAfter: '17',
+              ...(mode === 'stale-target'
+                ? {
+                    errors: [
+                      { pointer: '/configuration/pages/1/route', code: 'invalid_format' },
+                      { pointer: '/configuration/labels/unknown~1language', code: 'unknown_field' },
+                    ],
+                  }
+                : {}),
+            }),
+          }
+        : fixture.transport;
+    const value = new ZoneEditorSession(transport, fixture.initial);
+    if (
+      ['dirty', 'conflict', 'validation', 'saved', 'read-only', 'validation-long', 'unknown', 'stale-target'].includes(
+        mode,
+      )
+    ) {
       const draft = structuredClone(value.snapshot().draft!);
       draft.configuration.labels.en = mode === 'validation' ? '' : 'My Field Notes';
+      if (mode === 'validation-long') {
+        draft.configuration.primaryLanguage = 'de';
+        draft.configuration.labels.de = '';
+        draft.configuration.labels['zh-Hant'] = '';
+        draft.configuration.pages.push({
+          route: 'subjects/guide',
+          document: {
+            root: { props: {} },
+            content: [{ type: 'UnknownBlock', props: { id: 'invalid-block' } }],
+          },
+        });
+        draft.configuration.scope = ['unavailable/filter'];
+        draft.mounts = Array(2).fill('0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e88');
+      }
       value.edit(draft);
     }
     if (mode === 'conflict') fixture.externalChange();
     return value;
   });
   useEffect(() => {
-    if (mode === 'conflict' || mode === 'validation' || mode === 'saved') void session.save();
+    if (['conflict', 'validation', 'saved', 'validation-long', 'unknown', 'stale-target'].includes(mode))
+      void session.save();
     if (mode === 'source') void session.preview('');
     if (mode === 'published') void session.publish('unlisted');
   }, [mode, session]);
@@ -136,4 +178,46 @@ export const Loading: Story = {
       </AppShell>
     </PatternStory>
   ),
+};
+
+// UNRUN: actual editor states at both supported review widths; contract-shaped API outcomes only.
+export const ValidationPhone: Story = {
+  globals: { locale: 'de', viewport: { value: 'phone390' } },
+  render: () => <EditorStory mode="validation-long" />,
+};
+export const ValidationDesktop: Story = {
+  globals: { locale: 'de', viewport: { value: 'desktop1280' } },
+  render: () => <EditorStory mode="validation-long" />,
+};
+export const DeniedPhone: Story = {
+  globals: { viewport: { value: 'phone390' } },
+  render: () => <EditorStory mode="denied" />,
+};
+export const DeniedDesktop: Story = {
+  globals: { viewport: { value: 'desktop1280' } },
+  render: () => <EditorStory mode="denied" />,
+};
+export const ConflictPhone: Story = {
+  globals: { viewport: { value: 'phone390' } },
+  render: () => <EditorStory mode="conflict" />,
+};
+export const ConflictDesktop: Story = {
+  globals: { viewport: { value: 'desktop1280' } },
+  render: () => <EditorStory mode="conflict" />,
+};
+export const UnknownCodePhone: Story = {
+  globals: { viewport: { value: 'phone390' } },
+  render: () => <EditorStory mode="unknown" />,
+};
+export const UnknownCodeDesktop: Story = {
+  globals: { viewport: { value: 'desktop1280' } },
+  render: () => <EditorStory mode="unknown" />,
+};
+export const StaleTargetPhone: Story = {
+  globals: { viewport: { value: 'phone390' } },
+  render: () => <EditorStory mode="stale-target" />,
+};
+export const StaleTargetDesktop: Story = {
+  globals: { viewport: { value: 'desktop1280' } },
+  render: () => <EditorStory mode="stale-target" />,
 };

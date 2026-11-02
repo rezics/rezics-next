@@ -4,52 +4,25 @@ import { Input } from '@rezics/ui/shadcn/input';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldLabel, FieldDescription } from '@rezics/ui/shadcn/field';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
-import { lazy, Suspense, useEffect, useState, useSyncExternalStore } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { Alert, AlertTitle, AlertDescription } from '@rezics/ui/shadcn/alert';
 import { m } from '../../../paraglide/messages.js';
 import { PageHeading } from '../../../shell/page-heading';
-import { readerHref, type Failure, type Visibility, type ZoneEditorSession } from './model';
+import { readerHref, type Visibility, type ZoneEditorSession } from './model';
 
 import { ZoneNameFields } from './name-fields';
+import {
+  EditorFailure,
+  FieldGuidanceList,
+  TechnicalDetails,
+  fieldGuidance,
+  type CorrectionTarget,
+  type FailureContext,
+} from './error-guidance';
+export { EditorFailure } from './error-guidance';
 
 const CompositionEditor = lazy(() => import('./composition'));
 const SavedPreview = lazy(() => import('./preview'));
-
-export function EditorFailure({ failure }: { failure: Failure }) {
-  const message =
-    failure.status === 404
-      ? m.not_found_message()
-      : failure.status === 401
-        ? m.zone_editor_signed_out()
-        : failure.code === 'platform_closed'
-          ? m.zone_editor_closed()
-          : failure.status === 403
-            ? m.zone_editor_denied()
-            : failure.status === 412
-              ? m.zone_editor_conflict()
-              : failure.code === 'semantic_not_ready'
-                ? m.zone_editor_source_unavailable()
-                : m.error_message();
-  return (
-    <div role="alert" className="space-y-2 rounded-xl border border-border p-4">
-      <p>{message}</p>
-      <p className="break-words text-sm text-muted-foreground">
-        {failure.status} · {failure.code}
-      </p>
-      {failure.retryAfter ? <p>{m.zone_editor_retry_after({ seconds: failure.retryAfter })}</p> : null}
-      {failure.errors?.length ? (
-        <ul className="list-disc ps-5">
-          {failure.errors.map((error) => (
-            <li key={`${error.pointer}:${error.code}`}>
-              <code>
-                {error.pointer} · {error.code}
-              </code>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </div>
-  );
-}
 
 export function EditorLoading() {
   return (
@@ -71,19 +44,28 @@ export function ZoneConfigurationEditor({
   writeEnabled?: boolean;
 }) {
   const state = useSyncExternalStore(session.subscribe, session.snapshot, session.snapshot);
-  const [selected, setSelected] = useState('');
+  const editor = useRef<HTMLElement>(null);
+  const [operation, setOperation] = useState<FailureContext>('write');
+  const [focusRequest, setFocusRequest] = useState<{
+    target: CorrectionTarget;
+    draft: typeof state.draft;
+    generation: number;
+  } | null>(null);
+  const [selected, setSelected] = useState(0);
   const [newRoute, setNewRoute] = useState('');
   const [visibility, setVisibility] = useState<Visibility>(state.saved?.zone.visibility ?? 'private');
   const [composing, setComposing] = useState(false);
   const [copied, setCopied] = useState<'copied' | 'failed' | null>(null);
   const { saved, draft, loaded } = state;
   useEffect(() => {
-    if (!session.isCurrent()) return;
+    if (!current()) return;
+    setSelected(0);
     setComposing(false);
     setCopied(null);
+    setFocusRequest(null);
   }, [state.generation]);
   useEffect(() => {
-    if (session.isCurrent() && saved) setVisibility(saved.zone.visibility);
+    if (current() && saved) setVisibility(saved.zone.visibility);
   }, [saved?.zone.visibility]);
   useEffect(() => {
     const leave = (event: BeforeUnloadEvent) => {
@@ -95,13 +77,87 @@ export function ZoneConfigurationEditor({
   const dirty = session.dirty();
   const disabled = !enabled || state.busy || !!state.conflict;
   const editDisabled = disabled || !loaded.permissions.configure;
-  const page = draft?.configuration.pages.find((item) => item.route === selected) ?? draft?.configuration.pages[0];
+  const page = draft?.configuration.pages[selected] ?? draft?.configuration.pages[0];
   const route = page?.route ?? '';
   const href = saved
     ? readerHref(saved.zone.id, saved.configuration.pages.some((item) => item.route === route) ? route : '', locale)
     : '';
+  function current() {
+    return session.isCurrent() && session.snapshot().generation === state.generation;
+  }
+  function currentDraft() {
+    return current() && session.snapshot().draft === draft;
+  }
+  function canEdit() {
+    const latest = session.snapshot();
+    return currentDraft() && enabled && !latest.busy && !latest.conflict && latest.loaded.permissions.configure;
+  }
+  function correct(target: CorrectionTarget) {
+    if (!currentDraft() || !draft || !enabled || session.snapshot().busy) return;
+    if (target.pageIndex !== undefined) {
+      const targetPage = draft.configuration.pages[target.pageIndex];
+      if (!targetPage) return;
+      setSelected(target.pageIndex);
+      setComposing(false);
+    }
+    setFocusRequest({ target, draft, generation: state.generation });
+  }
+  useEffect(() => {
+    if (!focusRequest || !session.isCurrent()) return;
+    const latest = session.snapshot();
+    if (
+      latest.generation !== focusRequest.generation ||
+      latest.draft !== focusRequest.draft ||
+      latest.busy ||
+      !enabled
+    ) {
+      setFocusRequest(null);
+      return;
+    }
+    const { target } = focusRequest;
+    if (target.pageIndex !== undefined && draft?.configuration.pages[target.pageIndex] !== page) return;
+    const element = editor.current?.querySelector<HTMLElement>(`[id="${target.id}"]`);
+    if (!element) return;
+    // Reveal existing translations without synthesizing or changing a name.
+    const details = element.closest('details');
+    if (details) details.open = true;
+    // A disabled field stays disabled; focus its existing section for readable guidance.
+    const focusable = element.matches(':disabled, [aria-disabled="true"]')
+      ? element.parentElement?.closest<HTMLElement>('[data-correction-section]')
+      : element;
+    focusable?.focus();
+    setFocusRequest(null);
+  }, [focusRequest, page, draft, enabled, session]);
+  useEffect(() => {
+    if (!session.isCurrent() || session.snapshot().generation !== state.generation) return;
+    const id = state.violations.length ? 'zone-validation' : state.failure ? 'zone-mutation-failure' : undefined;
+    if (id) editor.current?.querySelector<HTMLElement>(`#${id}`)?.focus();
+  }, [state.violations, state.failure, state.generation, session]);
+  const issues = [
+    ...state.violations.map((issue, index) => ({ issue, id: `zone-local-error-${index}` })),
+    ...(state.failure?.errors ?? []).map((issue, index) => ({ issue, id: `zone-api-error-${index}` })),
+  ];
+  const descriptions: Record<string, string> = {};
+  for (const { issue, id } of issues) {
+    const target = fieldGuidance(issue, draft, locale).target;
+    if (!target || (target.pageIndex !== undefined && draft?.configuration.pages[target.pageIndex] !== page)) continue;
+    descriptions[target.id] = [descriptions[target.id], id].filter(Boolean).join(' ');
+  }
+  const invalid = (id: string) => !!descriptions[id];
+  async function readCurrent() {
+    if (!current()) return;
+    const previous = session.snapshot().failure;
+    await session.refresh();
+    if (current() && session.snapshot().failure !== previous) setOperation('read');
+  }
+  async function readMore() {
+    if (!current()) return;
+    const previous = session.snapshot().failure;
+    await session.moreCollections();
+    if (current() && session.snapshot().failure !== previous) setOperation('read');
+  }
   function changeDocument(document: CompositionDocument) {
-    if (!session.isCurrent()) return;
+    if (!canEdit()) return;
     const current = session.snapshot().draft;
     if (!current) return;
     session.edit({
@@ -113,17 +169,17 @@ export function ZoneConfigurationEditor({
     });
   }
   function changeRoute(value: string) {
-    if (!session.isCurrent() || !draft) return;
+    if (!canEdit() || !draft) return;
     if (!value || draft.configuration.pages.some((item) => item !== page && item.route === value)) return;
     const pages = draft.configuration.pages
       .map((item) => (item === page ? { ...item, route: value } : item))
       .sort((a, b) => (a.route < b.route ? -1 : a.route > b.route ? 1 : 0));
     session.edit({ ...draft, configuration: { ...draft.configuration, pages } });
-    setSelected(value);
+    setSelected(pages.findIndex((item) => item.route === value));
     setComposing(false);
   }
   function toggle(id: string, checked: boolean, scope: boolean) {
-    if (!session.isCurrent() || !draft) return;
+    if (!canEdit() || !draft) return;
     if (scope)
       session.edit({
         ...draft,
@@ -136,12 +192,12 @@ export function ZoneConfigurationEditor({
       session.edit({ ...draft, mounts: checked ? [...draft.mounts, id] : draft.mounts.filter((item) => item !== id) });
   }
   async function copy() {
-    if (!session.isCurrent()) return;
+    if (!current()) return;
     try {
       await navigator.clipboard.writeText(new URL(href, window.location.origin).href);
-      if (session.isCurrent()) setCopied('copied');
+      if (current()) setCopied('copied');
     } catch {
-      if (session.isCurrent()) setCopied('failed');
+      if (current()) setCopied('failed');
     }
   }
   if (!session.isCurrent()) return <EditorLoading />;
@@ -149,13 +205,14 @@ export function ZoneConfigurationEditor({
   const mountOptions = loaded.options.collections;
   return (
     <article
+      ref={editor}
       onClickCapture={(event) => {
-        if (!session.isCurrent()) {
+        if (!current()) {
           event.preventDefault();
           event.stopPropagation();
         }
       }}
-      className="min-w-0 space-y-6 text-foreground"
+      className="flex min-w-0 flex-col gap-6 text-foreground"
       aria-busy={state.busy}
     >
       <header className="space-y-3">
@@ -164,9 +221,23 @@ export function ZoneConfigurationEditor({
       </header>
       {!draft || !saved ? (
         <>
-          {loaded.resource.kind === 'failure' ? <EditorFailure failure={loaded.resource} /> : null}
-          {state.failure ? <EditorFailure failure={state.failure} /> : null}
-          <Button disabled={!enabled || state.busy} onClick={() => void session.refresh()}>
+          {loaded.resource.kind === 'failure' ? <EditorFailure failure={loaded.resource} locale={locale} /> : null}
+          {state.failure ? (
+            <EditorFailure
+              id="zone-mutation-failure"
+              failure={state.failure}
+              locale={locale}
+              context={operation}
+              draft={draft}
+              onCorrect={enabled ? correct : undefined}
+              issuePrefix="zone-api-error"
+            />
+          ) : null}
+          <Button
+            className="h-auto max-w-full whitespace-normal py-2 text-start"
+            disabled={!enabled || state.busy}
+            onClick={readCurrent}
+          >
             {m.zone_editor_retry()}
           </Button>
         </>
@@ -182,12 +253,24 @@ export function ZoneConfigurationEditor({
           {!loaded.permissions.available ? (
             <div className="space-y-2">
               <p role="alert">{m.zone_editor_actions_unavailable()}</p>
-              {loaded.permissions.failure ? <EditorFailure failure={loaded.permissions.failure} /> : null}
+              {loaded.permissions.failure ? (
+                <EditorFailure failure={loaded.permissions.failure} locale={locale} />
+              ) : null}
             </div>
           ) : !loaded.permissions.configure ? (
             <p role="note">{m.zone_editor_denied()}</p>
           ) : null}
-          {state.failure ? <EditorFailure failure={state.failure} /> : null}
+          {state.failure ? (
+            <EditorFailure
+              id="zone-mutation-failure"
+              failure={state.failure}
+              locale={locale}
+              context={operation}
+              draft={draft}
+              onCorrect={enabled ? correct : undefined}
+              issuePrefix="zone-api-error"
+            />
+          ) : null}
           {state.notice ? (
             <p role="status">{state.notice === 'saved' ? m.zone_editor_saved() : m.zone_editor_published()}</p>
           ) : null}
@@ -195,59 +278,86 @@ export function ZoneConfigurationEditor({
             <section className="space-y-3 rounded-xl border border-border p-4" aria-label={m.zone_editor_conflict()}>
               <p role="alert">{m.zone_editor_conflict()}</p>
               {state.conflict.resource.kind === 'failure' ? (
-                <EditorFailure failure={state.conflict.resource} />
+                <EditorFailure failure={state.conflict.resource} locale={locale} />
               ) : (
                 <p>{m.zone_editor_saved_head({ revision: state.conflict.resource.value.zone.revision })}</p>
               )}
               <div className="flex flex-wrap gap-2">
                 <Button
+                  className="h-auto max-w-full whitespace-normal py-2 text-start"
                   disabled={state.busy || state.conflict.resource.kind !== 'ready'}
-                  onClick={() => session.resolve('reload')}
+                  onClick={() => {
+                    if (current()) session.resolve('reload');
+                  }}
                 >
                   {m.zone_editor_reload()}
                 </Button>
                 <Button
+                  className="h-auto max-w-full whitespace-normal py-2 text-start"
                   variant="outline"
                   disabled={
                     state.busy || state.conflict.resource.kind !== 'ready' || !state.conflict.permissions.configure
                   }
-                  onClick={() => session.resolve('reapply')}
+                  onClick={() => {
+                    if (current()) session.resolve('reapply');
+                  }}
                 >
                   {m.zone_editor_reapply()}
                 </Button>
-                <Button variant="outline" disabled={state.busy} onClick={() => void session.refresh()}>
+                <Button
+                  className="h-auto max-w-full whitespace-normal py-2 text-start"
+                  variant="outline"
+                  disabled={state.busy}
+                  onClick={readCurrent}
+                >
                   {m.zone_editor_retry()}
                 </Button>
               </div>
             </section>
           ) : null}
           {state.violations.length ? (
-            <div role="alert" className="space-y-2">
-              <p>{m.zone_editor_validation()}</p>
-              <ul className="list-disc ps-5">
-                {state.violations.map(({ pointer, code }) => (
-                  <li key={`${pointer}:${code}`}>
-                    <code>
-                      {pointer} · {code}
-                    </code>
-                  </li>
-                ))}
-              </ul>
-            </div>
+            <Alert id="zone-validation" tabIndex={-1} aria-describedby="zone-validation-guidance">
+              <AlertTitle>{m.zone_editor_validation()}</AlertTitle>
+              <AlertDescription id="zone-validation-guidance" className="flex flex-col gap-3">
+                <FieldGuidanceList
+                  issues={state.violations}
+                  draft={draft}
+                  locale={locale}
+                  onCorrect={enabled ? correct : undefined}
+                  issuePrefix="zone-local-error"
+                />
+                <TechnicalDetails issues={state.violations} locale={locale} />
+              </AlertDescription>
+            </Alert>
           ) : null}
           <ZoneNameFields
             locale={locale}
             labels={draft.configuration.labels}
             primaryLanguage={draft.configuration.primaryLanguage}
             disabled={editDisabled}
-            errors={[
-              ...state.violations.map((error) => `/configuration${error.pointer}`),
-              ...(state.failure?.errors?.map((error) => error.pointer) ?? []),
-            ]}
-            onChange={(names) => session.edit({ ...draft, configuration: { ...draft.configuration, ...names } })}
+            descriptions={descriptions}
+            errors={issues.flatMap(({ issue }) => {
+              const target = fieldGuidance(issue, draft, locale).target;
+              return target?.language ? [`/configuration/labels/${target.language}`] : [];
+            })}
+            onChange={(names) => {
+              if (canEdit()) session.edit({ ...draft, configuration: { ...draft.configuration, ...names } });
+            }}
           />
-          <section className="min-w-0 space-y-4" aria-labelledby="zone-pages-heading">
-            <h2 id="zone-pages-heading" className="text-xl font-semibold">
+          <section
+            tabIndex={-1}
+            data-correction-section=""
+            className="min-w-0 space-y-4"
+            aria-labelledby="zone-pages-heading"
+            aria-describedby={descriptions['zone-pages-heading']}
+          >
+            <h2
+              tabIndex={-1}
+              data-correction-section=""
+              aria-describedby={descriptions['zone-pages-heading']}
+              id="zone-pages-heading"
+              className="text-xl font-semibold"
+            >
               {m.zone_editor_pages()}
             </h2>
             <p className="text-sm text-muted-foreground">{m.zone_editor_navigation_note()}</p>
@@ -256,16 +366,16 @@ export function ZoneConfigurationEditor({
               <NativeSelect
                 id="zone-page"
                 disabled={disabled}
-                value={route}
+                value={String(draft.configuration.pages.indexOf(page!))}
                 onChange={(event) => {
-                  if (!session.isCurrent()) return;
-                  setSelected(event.target.value);
+                  if (!currentDraft()) return;
+                  setSelected(Number(event.target.value));
                   setComposing(false);
                   session.clearPreview();
                 }}
               >
                 {draft.configuration.pages.map((item, index) => (
-                  <NativeSelectOption key={`${index}:${item.route}`} value={item.route}>
+                  <NativeSelectOption key={`${index}:${item.route}`} value={String(index)}>
                     {item.route || m.zone_home()}
                   </NativeSelectOption>
                 ))}
@@ -273,7 +383,7 @@ export function ZoneConfigurationEditor({
             </Field>
             {page ? (
               <div className="flex flex-wrap items-end gap-3">
-                <Field className="min-w-0 flex-1">
+                <Field className="min-w-0 flex-1" data-invalid={invalid('zone-route')}>
                   <FieldLabel htmlFor="zone-route">{m.zone_editor_route()}</FieldLabel>
                   <Input
                     id="zone-route"
@@ -281,15 +391,17 @@ export function ZoneConfigurationEditor({
                     disabled={editDisabled || route === ''}
                     onChange={(event) => changeRoute(event.target.value)}
                     maxLength={255}
-                    aria-describedby="zone-route-help"
+                    aria-invalid={invalid('zone-route')}
+                    aria-describedby={['zone-route-help', descriptions['zone-route']].filter(Boolean).join(' ')}
                   />
                   <FieldDescription id="zone-route-help">{m.zone_editor_route_help()}</FieldDescription>
                 </Field>
                 <Button
+                  className="h-auto max-w-full whitespace-normal py-2 text-start"
                   variant="outline"
                   disabled={editDisabled || route === ''}
                   onClick={() => {
-                    if (!session.isCurrent()) return;
+                    if (!canEdit()) return;
                     session.edit({
                       ...draft,
                       configuration: {
@@ -297,7 +409,7 @@ export function ZoneConfigurationEditor({
                         pages: draft.configuration.pages.filter((item) => item !== page),
                       },
                     });
-                    setSelected('');
+                    setSelected(0);
                     setComposing(false);
                   }}
                 >
@@ -312,13 +424,14 @@ export function ZoneConfigurationEditor({
                   id="zone-new-route"
                   value={newRoute}
                   onChange={(event) => {
-                    if (session.isCurrent()) setNewRoute(event.target.value);
+                    if (current()) setNewRoute(event.target.value);
                   }}
                   disabled={editDisabled || draft.configuration.pages.length >= 16}
                   maxLength={255}
                 />
               </Field>
               <Button
+                className="h-auto max-w-full whitespace-normal py-2 text-start"
                 variant="outline"
                 disabled={
                   editDisabled ||
@@ -327,13 +440,13 @@ export function ZoneConfigurationEditor({
                   draft.configuration.pages.some((item) => item.route === newRoute)
                 }
                 onClick={() => {
-                  if (!session.isCurrent()) return;
+                  if (!canEdit()) return;
                   const pages = [
                     ...draft.configuration.pages,
                     { route: newRoute, document: { root: { props: {} }, content: [] } },
                   ].sort((a, b) => (a.route < b.route ? -1 : a.route > b.route ? 1 : 0));
                   session.edit({ ...draft, configuration: { ...draft.configuration, pages } });
-                  setSelected(newRoute);
+                  setSelected(pages.findIndex((item) => item.route === newRoute));
                   setNewRoute('');
                   setComposing(false);
                 }}
@@ -343,11 +456,15 @@ export function ZoneConfigurationEditor({
             </div>
             <p className="text-sm text-muted-foreground">{m.zone_editor_composition_note()}</p>
             <Button
+              className="h-auto max-w-full whitespace-normal py-2 text-start"
               variant="outline"
               disabled={editDisabled}
               onClick={() => {
-                if (session.isCurrent()) setComposing(!composing);
+                if (canEdit()) setComposing(!composing);
               }}
+              id="zone-compose"
+              aria-invalid={invalid('zone-compose')}
+              aria-describedby={descriptions['zone-compose']}
               aria-expanded={composing}
             >
               {m.zone_editor_compose()}
@@ -355,7 +472,7 @@ export function ZoneConfigurationEditor({
             {composing && page && !editDisabled ? (
               <Suspense fallback={<EditorLoading />}>
                 <CompositionEditor
-                  key={`${state.generation}:${route}:${locale}`}
+                  key={`${state.generation}:${selected}:${route}:${locale}`}
                   document={page.document}
                   locale={locale}
                   onChange={changeDocument}
@@ -363,15 +480,31 @@ export function ZoneConfigurationEditor({
               </Suspense>
             ) : null}
           </section>
-          <section className="space-y-4" aria-labelledby="zone-sources-heading">
+          <section
+            tabIndex={-1}
+            data-correction-section=""
+            className="space-y-4"
+            aria-labelledby="zone-sources-heading"
+            aria-describedby={
+              [descriptions['zone-scopes'], descriptions['zone-mounts']].filter(Boolean).join(' ') || undefined
+            }
+          >
             <h2 id="zone-sources-heading" className="text-xl font-semibold">
               {m.zone_editor_sources()}
             </h2>
             <p className="max-w-3xl text-sm text-muted-foreground">{m.zone_editor_source_note()}</p>
-            <fieldset disabled={editDisabled} className="space-y-3">
+            <fieldset
+              id="zone-scopes"
+              tabIndex={-1}
+              data-correction-section=""
+              aria-invalid={invalid('zone-scopes')}
+              aria-describedby={descriptions['zone-scopes']}
+              disabled={editDisabled}
+              className="space-y-3"
+            >
               <legend className="font-semibold">{m.zone_editor_scopes()}</legend>
               {scopeOptions.kind === 'failure' ? (
-                <EditorFailure failure={scopeOptions} />
+                <EditorFailure failure={scopeOptions} locale={locale} />
               ) : (
                 <p className="break-all text-sm text-muted-foreground">
                   {m.zone_editor_release({ release: scopeOptions.value.release })}
@@ -405,9 +538,17 @@ export function ZoneConfigurationEditor({
                 </Field>
               ))}
             </fieldset>
-            <fieldset disabled={editDisabled} className="space-y-3">
+            <fieldset
+              id="zone-mounts"
+              tabIndex={-1}
+              data-correction-section=""
+              aria-invalid={invalid('zone-mounts')}
+              aria-describedby={descriptions['zone-mounts']}
+              disabled={editDisabled}
+              className="space-y-3"
+            >
               <legend className="font-semibold">{m.zone_editor_mounts()}</legend>
-              {mountOptions.kind === 'failure' ? <EditorFailure failure={mountOptions} /> : null}
+              {mountOptions.kind === 'failure' ? <EditorFailure failure={mountOptions} locale={locale} /> : null}
               {mountOptions.kind === 'ready' && !mountOptions.value.items.length ? (
                 <p>{m.zone_editor_no_options()}</p>
               ) : null}
@@ -435,26 +576,52 @@ export function ZoneConfigurationEditor({
               })}
             </fieldset>
             {mountOptions.kind === 'ready' && mountOptions.value.next ? (
-              <Button variant="outline" disabled={disabled} onClick={() => void session.moreCollections()}>
+              <Button
+                className="h-auto max-w-full whitespace-normal py-2 text-start"
+                variant="outline"
+                disabled={disabled}
+                onClick={() => void readMore()}
+              >
                 {m.zone_editor_more()}
               </Button>
             ) : null}
-            <Button variant="outline" disabled={disabled} onClick={() => void session.refresh()}>
+            <Button
+              className="h-auto max-w-full whitespace-normal py-2 text-start"
+              variant="outline"
+              disabled={disabled}
+              onClick={readCurrent}
+            >
               {m.zone_editor_refresh()}
             </Button>
           </section>
           <div className="flex flex-wrap items-end gap-3 border-t border-border pt-4">
-            <Button disabled={editDisabled || !writeEnabled || !dirty} onClick={() => void session.save()}>
+            <Button
+              className="h-auto max-w-full whitespace-normal py-2 text-start"
+              disabled={editDisabled || !writeEnabled || !dirty}
+              onClick={() => {
+                if (currentDraft()) {
+                  setOperation('save');
+                  void session.save();
+                }
+              }}
+            >
               {m.zone_editor_save()}
             </Button>
-            <Field className="w-auto">
+            <Field
+              className="w-auto min-w-0"
+              data-invalid={invalid('zone-visibility')}
+              tabIndex={-1}
+              data-correction-section=""
+            >
               <FieldLabel htmlFor="zone-visibility">{m.zone_editor_visibility()}</FieldLabel>
               <NativeSelect
                 id="zone-visibility"
+                aria-invalid={invalid('zone-visibility')}
+                aria-describedby={descriptions['zone-visibility']}
                 value={visibility}
                 disabled={disabled || !writeEnabled || !loaded.permissions.publish}
                 onChange={(event) => {
-                  if (session.isCurrent()) setVisibility(event.target.value as Visibility);
+                  if (current()) setVisibility(event.target.value as Visibility);
                 }}
               >
                 <NativeSelectOption value="private">{m.library_visibility_private()}</NativeSelectOption>
@@ -463,6 +630,7 @@ export function ZoneConfigurationEditor({
               </NativeSelect>
             </Field>
             <Button
+              className="h-auto max-w-full whitespace-normal py-2 text-start"
               variant="outline"
               disabled={
                 disabled ||
@@ -471,7 +639,12 @@ export function ZoneConfigurationEditor({
                 !loaded.permissions.publish ||
                 visibility === saved.zone.visibility
               }
-              onClick={() => void session.publish(visibility)}
+              onClick={() => {
+                if (current()) {
+                  setOperation('publish');
+                  void session.publish(visibility);
+                }
+              }}
             >
               {m.zone_editor_publish()}
             </Button>
@@ -482,13 +655,25 @@ export function ZoneConfigurationEditor({
             </h2>
             <p className="max-w-3xl text-sm text-muted-foreground">{m.zone_editor_preview_note()}</p>
             <div className="flex flex-wrap items-center gap-3">
-              <Button variant="outline" disabled={disabled || dirty} onClick={() => void session.preview(route)}>
+              <Button
+                className="h-auto max-w-full whitespace-normal py-2 text-start"
+                variant="outline"
+                disabled={disabled || dirty}
+                onClick={() => {
+                  if (current()) void session.preview(route);
+                }}
+              >
                 {m.zone_editor_preview()}
               </Button>
               <a className="text-primary underline" href={href} target="_blank" rel="noopener noreferrer">
                 {m.zone_editor_open()}
               </a>
-              <Button variant="outline" disabled={!enabled} onClick={() => void copy()}>
+              <Button
+                className="h-auto max-w-full whitespace-normal py-2 text-start"
+                variant="outline"
+                disabled={!enabled}
+                onClick={() => void copy()}
+              >
                 {m.zone_editor_copy()}
               </Button>
             </div>
@@ -497,8 +682,15 @@ export function ZoneConfigurationEditor({
             ) : null}
             {state.preview?.kind === 'failure' ? (
               <>
-                <EditorFailure failure={state.preview} />
-                <Button variant="outline" disabled={disabled || dirty} onClick={() => void session.preview(route)}>
+                <EditorFailure failure={state.preview} locale={locale} context="preview" />
+                <Button
+                  className="h-auto max-w-full whitespace-normal py-2 text-start"
+                  variant="outline"
+                  disabled={disabled || dirty}
+                  onClick={() => {
+                    if (current()) void session.preview(route);
+                  }}
+                >
                   {m.zone_editor_retry()}
                 </Button>
               </>
@@ -507,7 +699,14 @@ export function ZoneConfigurationEditor({
               <div role="status">
                 <p>{m.zone_preparing_message()}</p>
                 <p>{m.zone_editor_retry_after({ seconds: state.preview.retryAfter })}</p>
-                <Button variant="outline" disabled={disabled || dirty} onClick={() => void session.preview(route)}>
+                <Button
+                  className="h-auto max-w-full whitespace-normal py-2 text-start"
+                  variant="outline"
+                  disabled={disabled || dirty}
+                  onClick={() => {
+                    if (current()) void session.preview(route);
+                  }}
+                >
                   {m.zone_editor_retry()}
                 </Button>
               </div>
