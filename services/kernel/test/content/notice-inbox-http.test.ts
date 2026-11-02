@@ -142,12 +142,18 @@ test('retention preserves the precise seen frontier across delayed delivery and 
   expect(await count()).toEqual({ count: 100, capped: false });
   await mark(ids[102]!);
   expect(await count()).toEqual({ count: 100, capped: false });
-  expect((await flags()).filter((item) => !item.unread).map((item) => item.id))
-    .toEqual([ids[1]!, ids[0]!, ids[102]!, delayed]);
+  expect((await flags()).filter((item) => !item.unread).map((item) => item.id)).toEqual([
+    ids[1]!,
+    ids[0]!,
+    ids[102]!,
+    delayed,
+  ]);
   await db.admin.query('DELETE FROM content.notice_seen WHERE route=$1 AND account_id=$2', [r, fixture.accountId]);
   db.pool.options.max = 4;
   try {
-    expect((await Promise.all([mark(ids[2]!), mark(ids[1]!)])).map((result) => result.response.status)).toEqual([204, 204]);
+    expect((await Promise.all([mark(ids[2]!), mark(ids[1]!)])).map((result) => result.response.status)).toEqual([
+      204, 204,
+    ]);
     expect(await count()).toEqual({ count: 99, capped: false });
   } finally {
     db.pool.options.max = 1;
