@@ -1,5 +1,5 @@
 import { readLifecycleReview } from './lifecycle-review.ts';
-import type { LifecycleReview } from './lifecycle-review-contract.ts';
+import { lifecycleReviewSchema } from './lifecycle-review-schema.ts';
 import { createManagementRead, managedAccountsSchema, accountManagementSchema } from './account-management.ts';
 import { createHash } from 'node:crypto';
 import { withHeaders } from '@elysia/openapi';
@@ -1294,7 +1294,7 @@ export function accessRoutes(
           key: t.String({ minLength: 1, maxLength: 255 }),
           reason: t.Optional(t.String({ minLength: 1, maxLength: 2000 })),
         }, closed)) }, closed)),
-        response: { 200: t.Unsafe<LifecycleReview>(), ...failures, 404: problemSchema('not_found'),
+        response: { 200: lifecycleReviewSchema, ...failures, 404: problemSchema('not_found'),
           503: problemSchema('dependency_unavailable', 'deadline_exceeded', 'partition_unavailable', 'overloaded') },
         detail: {
           operationId: 'account.lifecycleReview', 'x-exposure': 'public', 'x-action': 'account:read',

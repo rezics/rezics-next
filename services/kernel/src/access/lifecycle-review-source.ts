@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
-import type { Pool, PoolClient } from 'pg';
+import type { Pool } from 'pg';
+import type { AccessClient } from '../request/access.ts';
 import { withConnection } from '../database/pool.ts';
 import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import type { Partition } from '../partition/partition.ts';
@@ -19,7 +20,7 @@ export const unknownOriginal = (): LifecycleOriginalResult => ({ status: 'unknow
 export function sameHome(a: Partition, b: Partition) {
   return a.node === b.node && a.epoch === b.epoch && b.writeState === 'active';
 }
-export async function activeHome(client: PoolClient, route: number) {
+export async function activeHome(client: AccessClient, route: number) {
   // Same native descriptor, with a finite wire projection; oversized descriptors are unavailable.
   const { rows } = await client.query<Omit<Partition, 'position'> & { position: string }>(
     `SELECT partition_no AS "partitionNo", node, write_state AS "writeState", moved_to AS "movedTo", epoch, position::text
@@ -32,7 +33,7 @@ export async function activeHome(client: PoolClient, route: number) {
 
 /** Bounded native receipt API projection: exact primary-key candidates from the real permanent ring.
  * The size predicate runs before private JSON crosses the database boundary. */
-export async function receipt(client: PoolClient, route: number, principal: string, kind: string, key: string) {
+export async function receipt(client: AccessClient, route: number, principal: string, kind: string, key: string) {
   const keys = nativeReceiptKeyCandidates(client, kind, principal, key);
   const { rows } = await client.query<{
     digest: Buffer; epoch: number; position: string; transactionId: string; response: unknown;
@@ -125,7 +126,7 @@ async function operatorEffects(pool: Pool, deadline: number, root: ContinuationS
     operatorPage: { state: complete ? 'complete' : 'pending', nextPageKey: page.next ? createHash('sha256').update(page.next).digest('hex') : null } }; 
 }
 
-export async function originalResult(client: PoolClient, input: {
+export async function originalResult(client: AccessClient, input: {
   route: number; accountId: string; principal: string; operationId: 'account.suspend' | 'account.reinstate'; key: string; digest: Buffer;
 }) {
   const home = await activeHome(client, input.route);

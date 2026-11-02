@@ -1,8 +1,8 @@
-import type { Pool, PoolClient } from 'pg';
+import type { Pool } from 'pg';
 import { mintReadTime, releaseOperationalTime } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
-import { accessCheck, type Access, type Actor } from '../request/access.ts';
+import { accessCheck, type Access, type Actor, type AccessClient } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { deadlineClient, within } from './authenticate.ts';
 import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
@@ -15,7 +15,7 @@ import { classifyUnavailability } from './unavailable.ts';
 
 const declarations = [suspensionDeclaration, reinstatementDeclaration] as const;
 type Target = LifecycleReview['account'] & LifecycleReview['current'] & { transactionId: string; fenceReceiptId: string | null };
-async function target(client: PoolClient, route: number, accountId: string) {
+async function target(client: AccessClient, route: number, accountId: string) {
   const { rows } = await client.query<Target>(
     `SELECT account_id AS id, kind, display_name AS "displayName", handle, state,
       minimum_authn_epoch::text AS "minimumAuthnEpoch", authn_fenced AS fenced,
