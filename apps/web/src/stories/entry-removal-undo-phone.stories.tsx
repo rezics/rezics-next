@@ -37,7 +37,8 @@ const subjects = {
   expired: '01a17a3b-6bab-705b-935e-d6dc0cacd82d',
 } as const;
 const backHref = () => `/${getLocale()}/library?state=planned&cursor=opaque%2Bnext`;
-let activeRequests: Request[] | undefined;
+type CapturedRequest = Pick<Request, 'method' | 'url' | 'headers' | 'json'>;
+let activeRequests: CapturedRequest[] | undefined;
 
 /** Story-only document host: retain the real form method/action and run the real POST handler. */
 function NativeDocumentJourney({ outcome }: { outcome: keyof typeof subjects }) {
@@ -45,7 +46,7 @@ function NativeDocumentJourney({ outcome }: { outcome: keyof typeof subjects }) 
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string>();
   const inFlight = useRef(false);
-  const [requests] = useState<Request[]>([]);
+  const [requests] = useState<CapturedRequest[]>([]);
   const [kernel] = useState(() => {
     const recorded = createRecordedKernelFetch({ 'library-entries': entriesRecording });
     return createKernelClient('https://kernel.test', {
@@ -206,7 +207,7 @@ function journey(outcome: keyof typeof subjects): Story {
       expect(writes.map((request) => request.method)).toEqual(
         outcome === 'occupied' ? ['DELETE', 'POST', 'GET'] : ['DELETE', 'POST'],
       );
-      expect(await writes[1]!.clone().json()).toEqual({
+      expect(await writes[1]!.json()).toEqual({
         deletionId: `undo-${outcome === 'success' ? 'ok' : outcome}`,
         revision: 12,
       });
