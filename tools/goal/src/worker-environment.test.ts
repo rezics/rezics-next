@@ -5,11 +5,11 @@ import { join } from 'node:path';
 import { attemptEnvironment } from './launch.ts';
 import { gateEnvironment } from './merge.ts';
 
-test("a worker's kernel check selects the tests its change affects since the task's base", () => {
+test('a worker environment leaves affected-test selection to the check runner and neutralizes the debuginfod path', () => {
   expect(attemptEnvironment({ id: 'task', base: 'abc123' }, { attempt: 2 })).toEqual({
     GOAL_TASK_ID: 'task',
     GOAL_ATTEMPT: '2',
-    KERNEL_CHECK_AFFECTED: 'abc123',
+    DEBUGINFOD_IMA_CERT_PATH: 'none',
   });
 });
 
@@ -28,7 +28,7 @@ test('worker and promotion gate environments carry KERNEL_CHECK_REMOTE when the 
     expect(attemptEnvironment({ id: 'task', base: 'abc123' }, { attempt: 2 }, present.directory)).toEqual({
       GOAL_TASK_ID: 'task',
       GOAL_ATTEMPT: '2',
-      KERNEL_CHECK_AFFECTED: 'abc123',
+      DEBUGINFOD_IMA_CERT_PATH: 'none',
       KERNEL_CHECK_REMOTE: hosts,
       GOAL_CHECK_WAIT_FILE: join(present.directory, 'runs', 'task', '2.check-wait'),
     });

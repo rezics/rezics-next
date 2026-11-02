@@ -363,7 +363,10 @@ export function attemptEnvironment(
     ...(task.proofRun?.native && task.proofRun.binding.attempt === attempt.attempt
       ? { GOAL_CHECK_REGISTRY: task.proofRun.native.registry }
       : {}),
-    KERNEL_CHECK_AFFECTED: task.base,
+    // The check runner selects affected tests itself and refuses a caller-supplied base.
+    // Fedora's /etc/profile.d/debuginfod.sh exports an absolute certificate path into every login shell unless the
+    // variable is already non-empty; Web checks refuse absolute host paths, so give it an inert relative value.
+    DEBUGINFOD_IMA_CERT_PATH: 'none',
     ...remoteCheckEnvironment(stateDirectory),
     // The worker check wrapper appends its full wait here, in milliseconds per line; the class limit adds it back.
     ...(stateDirectory
