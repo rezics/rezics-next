@@ -22,3 +22,9 @@ test('a hunk where both sides changed common text is left to a person', () => {
   expect(resolveInsertedSections(hunk('New wording.\n', 'Old wording.\n', 'Other wording.\n'))).toBeUndefined();
   expect(resolveInsertedSections('<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> worker\n')).toBeUndefined();
 });
+
+test('nested, unmatched or malformed conflict structure is left to a person', () => {
+  expect(resolveInsertedSections(hunk('## Ours\n\n<<<<<<< nested\n', '', '## Theirs\n'))).toBeUndefined();
+  expect(resolveInsertedSections(`${hunk('a\n', '', 'b\n')}>>>>>>> extra\n`)).toBeUndefined();
+  expect(resolveInsertedSections(hunk('Title\n=======\n', '', '## Next\n'))).toBeUndefined();
+});
