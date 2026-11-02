@@ -25,8 +25,11 @@ import {
 } from '../history/operational-work.ts';
 import { openOperationalWorkOriginal, debitOperationalWorkAttempt } from '../history/operational-work-budget.ts';
 
-import { openSelectedOperationalPhase, selectedOperationalEnqueue,
-  type SelectedOperationalPhase } from '../work/selected-runtime.ts';
+import {
+  openSelectedOperationalPhase,
+  selectedOperationalEnqueue,
+  type SelectedOperationalPhase,
+} from '../work/selected-runtime.ts';
 
 declare const operational: unique symbol;
 export type OperationalTransaction = Pick<PoolClient, 'query'> & { readonly [operational]: true };
@@ -95,10 +98,13 @@ export async function enqueueIntent(tx: OperationalTransaction, intent: WorkInte
     throw new TypeError('Operational intent must name exactly its fenced accounts');
   const selectedCapture = selectedOperationalEnqueue(tx, intent);
   const historyCapture = operationalHistoryEnqueueCapture(tx, intent);
-  const capture = selectedCapture || historyCapture ? (created: boolean) => {
-    historyCapture?.(created);
-    selectedCapture?.(created);
-  } : undefined;
+  const capture =
+    selectedCapture || historyCapture
+      ? (created: boolean) => {
+          historyCapture?.(created);
+          selectedCapture?.(created);
+        }
+      : undefined;
   await enqueueWorkIntent(state.workClient, state.client, intent, capture);
 }
 
@@ -241,7 +247,10 @@ export async function runOperationalTransaction<T>(
     } catch (error) {
       if (error instanceof Error && Object.isExtensible(error)) Object.assign(error, { operationKind: kind });
       // A selected invocation owns one prepaid attempt per phase; never retry/refill here.
-      if (selected) { selected.finish(); throw error; }
+      if (selected) {
+        selected.finish();
+        throw error;
+      }
       if (error instanceof CommandUnavailableError) throw error;
       const reason = classifyUnavailability(error);
       lastAccessContention = error instanceof AccessUnavailableError && reason === 'contention' ? error : undefined;

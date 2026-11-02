@@ -341,20 +341,20 @@ Every row below also has `candidateKeys=identityMetadataRows=witnessKeys=engineR
 `emptySeeks=nativePoints`. These are literal LOCAL bounds, not whole Members, Source, Access or physical prices.
 They are prepaid cumulatively; misses, collisions, failed prefixes, SQL exceptions and poison never refund.
 
-| Local dispatch | nativeRows | nativePoints | statements | bytes |
-| --- | ---: | ---: | ---: | ---: |
-| issue | 8 | 9 | 8 | 49152 |
-| release | 2 | 2 | 2 | 4096 |
-| durable consume | 9 | 9 | 8 | 24576 |
-| continuation lookup/association | 10 | 12 | 7 | 49152 |
-| SDK enqueue with exact-input capture | 10 | 10 | 9 | 18432 |
-| held native check | 7 | 7 | 6 | 24576 |
-| operational controls/fences | 7 | 3 | 12 | 1024 |
-| reserved two rollbacks | 0 | 0 | 2 | 128 |
-| immutable original verification | 5 | 5 | 5 | 2097152 |
-| actual native tuple verification | 4 | 4 | 3 | 6291456 |
-| durable selection association | 6 | 8 | 5 | 6291456 |
-| conditional result | 2 | 4 | 2 | 49152 |
+| Local dispatch                       | nativeRows | nativePoints | statements |   bytes |
+| ------------------------------------ | ---------: | -----------: | ---------: | ------: |
+| issue                                |          8 |            9 |          8 |   49152 |
+| release                              |          2 |            2 |          2 |    4096 |
+| durable consume                      |          9 |            9 |          8 |   24576 |
+| continuation lookup/association      |         10 |           12 |          7 |   49152 |
+| SDK enqueue with exact-input capture |         10 |           10 |          9 |   18432 |
+| held native check                    |          7 |            7 |          6 |   24576 |
+| operational controls/fences          |          7 |            3 |         12 |    1024 |
+| reserved two rollbacks               |          0 |            0 |          2 |     128 |
+| immutable original verification      |          5 |            5 |          5 | 2097152 |
+| actual native tuple verification     |          4 |            4 |          3 | 6291456 |
+| durable selection association        |          6 |            8 |          5 | 6291456 |
+| conditional result                   |          2 |            4 |          2 |   49152 |
 
 `SELECTED_LOCAL_DECLARATION` is issue + consume + enqueue + four continuation branches + three times
 (controls + two held checks + original + two tuple verifications + association + result) + cleanup.

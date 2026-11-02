@@ -4,16 +4,26 @@ export const SELECTED_AXES = [...OPERATIONAL_WORK_AXES, 'engineRequests'] as con
 export type SelectedCost = OperationalWorkCost & Readonly<{ engineRequests: number }>;
 /** Named fields, never positional conversion from a foreign declaration. */
 export const selectedCost = (rows: number, points: number, statements: number, bytes: number): SelectedCost =>
-  Object.freeze({ candidateKeys: 0, nativeRows: rows, identityMetadataRows: 0, nativePoints: points,
-    witnessKeys: 0, statements, bytes, emptySeeks: points, engineRequests: 0 });
+  Object.freeze({
+    candidateKeys: 0,
+    nativeRows: rows,
+    identityMetadataRows: 0,
+    nativePoints: points,
+    witnessKeys: 0,
+    statements,
+    bytes,
+    emptySeeks: points,
+    engineRequests: 0,
+  });
 export function sumSelectedCost(...parts: readonly SelectedCost[]): SelectedCost {
-  if (parts.some(part => SELECTED_AXES.some(axis => !Number.isSafeInteger(part[axis]) || part[axis] < 0)))
+  if (parts.some((part) => SELECTED_AXES.some((axis) => !Number.isSafeInteger(part[axis]) || part[axis] < 0)))
     throw new TypeError('Unknown or nonfinite selected work declaration');
-  const total=Object.fromEntries(SELECTED_AXES.map(axis => [axis, parts.reduce((n, part) => n + part[axis], 0)]));
-  if (SELECTED_AXES.some(axis => !Number.isSafeInteger(total[axis]))) throw new TypeError('Selected declaration overflow');
+  const total = Object.fromEntries(SELECTED_AXES.map((axis) => [axis, parts.reduce((n, part) => n + part[axis], 0)]));
+  if (SELECTED_AXES.some((axis) => !Number.isSafeInteger(total[axis])))
+    throw new TypeError('Selected declaration overflow');
   return Object.freeze(total) as SelectedCost;
 }
-const times = (n: number, part: SelectedCost) => sumSelectedCost(...Array.from({length: n}, () => part));
+const times = (n: number, part: SelectedCost) => sumSelectedCost(...Array.from({ length: n }, () => part));
 /** Literal complete LOCAL dispatch partitions. Child native SQL/Source prices are additional.
  * Full-key misses consume the same bound. No debit is undone by failure/rollback. */
 export const SELECTED_COST = Object.freeze({
@@ -44,8 +54,21 @@ export const SELECTED_COST = Object.freeze({
 });
 export const SELECTED_CLEANUP_DECLARATION = sumSelectedCost(SELECTED_COST.release, times(3, SELECTED_COST.rollback));
 /** One select, one apply and at most one reached failure; no transaction or SDK retry refills it. */
-export const SELECTED_LOCAL_DECLARATION = sumSelectedCost(SELECTED_COST.issue, SELECTED_COST.consume, SELECTED_COST.enqueue,
-  times(4,SELECTED_COST.continuation),
-  times(3, sumSelectedCost(SELECTED_COST.transaction, times(2, SELECTED_COST.hold),
-    SELECTED_COST.original, times(2, SELECTED_COST.tuple), SELECTED_COST.association, SELECTED_COST.result)),
-  SELECTED_CLEANUP_DECLARATION);
+export const SELECTED_LOCAL_DECLARATION = sumSelectedCost(
+  SELECTED_COST.issue,
+  SELECTED_COST.consume,
+  SELECTED_COST.enqueue,
+  times(4, SELECTED_COST.continuation),
+  times(
+    3,
+    sumSelectedCost(
+      SELECTED_COST.transaction,
+      times(2, SELECTED_COST.hold),
+      SELECTED_COST.original,
+      times(2, SELECTED_COST.tuple),
+      SELECTED_COST.association,
+      SELECTED_COST.result,
+    ),
+  ),
+  SELECTED_CLEANUP_DECLARATION,
+);

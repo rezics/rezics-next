@@ -2,36 +2,75 @@ import canonicalize from 'canonicalize';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { DBOS, DBOSClient } from '@dbos-inc/dbos-sdk';
 import type { Pool, PoolClient } from 'pg';
-import { currentOperationalResources, runOperationalTransaction, type OperationalOptions,
-  type OperationalTransaction } from '../command/operational.ts';
+import {
+  currentOperationalResources,
+  runOperationalTransaction,
+  type OperationalOptions,
+  type OperationalTransaction,
+} from '../command/operational.ts';
 import { assertSelectedWorkClient, type WorkClient, type WorkIntent } from './client.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { SELECTED_AXES, SELECTED_COST, SELECTED_LOCAL_DECLARATION, SELECTED_CLEANUP_DECLARATION,
-  sumSelectedCost, type SelectedCost } from './selected-runtime-cost.ts';
-import { associateSelectedEpisode, finishSelectedEpisode,
-  type SelectedEpisode, type SelectedLocator, type SelectedOutcome } from '../history/operational-work-selected.ts';
+import {
+  SELECTED_AXES,
+  SELECTED_COST,
+  SELECTED_LOCAL_DECLARATION,
+  SELECTED_CLEANUP_DECLARATION,
+  sumSelectedCost,
+  type SelectedCost,
+} from './selected-runtime-cost.ts';
+import {
+  associateSelectedEpisode,
+  finishSelectedEpisode,
+  type SelectedEpisode,
+  type SelectedLocator,
+  type SelectedOutcome,
+} from '../history/operational-work-selected.ts';
 
-export type SelectedIdentity = Readonly<{ workflowID: string; functionID: number; stepName: string;
-  attemptGeneration: string; restoreGeneration: string; workflowName: string; queueName: string | null;
-  creatorXid: string | null; serialization: string | null; inputs: string; stepArguments: string;
-  deadline: number; schema: string }>;
+export type SelectedIdentity = Readonly<{
+  workflowID: string;
+  functionID: number;
+  stepName: string;
+  attemptGeneration: string;
+  restoreGeneration: string;
+  workflowName: string;
+  queueName: string | null;
+  creatorXid: string | null;
+  serialization: string | null;
+  inputs: string;
+  stepArguments: string;
+  deadline: number;
+  schema: string;
+}>;
 type Claim = object;
-type Lifecycle = { open(): Promise<{deadline: number; reserve(dispatch: 'issue'|'release'): Promise<void>;
-  close(): Promise<void>; run<T>(body: () => Promise<T>): Promise<T>}> };
+type Lifecycle = {
+  open(): Promise<{
+    deadline: number;
+    reserve(dispatch: 'issue' | 'release'): Promise<void>;
+    close(): Promise<void>;
+    run<T>(body: () => Promise<T>): Promise<T>;
+  }>;
+};
 type NativeSdk = DBOSClient & {
   selectedExecutionIdentity(claim: Claim, pool: Pool): SelectedIdentity;
   consumeSelectedExecutionAdmission(claim: Claim, pool: Pool): Promise<boolean>;
   checkSelectedExecutionInTransaction(tx: Pick<PoolClient, 'query'>, pool: Pool, claim: Claim): Promise<void>;
 };
 type RuntimeSdk = typeof DBOS & {
-  registerSelectedStep<A extends unknown[], R>(body: (...args: A) => Promise<R>, config: {name: string},
-    lifecycle: Lifecycle): (...args: A) => Promise<R>;
+  registerSelectedStep<A extends unknown[], R>(
+    body: (...args: A) => Promise<R>,
+    config: { name: string },
+    lifecycle: Lifecycle,
+  ): (...args: A) => Promise<R>;
   getSelectedExecution(): Claim | undefined;
 };
 export class SelectedRuntimeUnavailable extends Error {
-  constructor(readonly gap: string) { super(gap); }
+  constructor(readonly gap: string) {
+    super(gap);
+  }
 }
-function refuse(gap: string): never { throw new SelectedRuntimeUnavailable(gap); }
+function refuse(gap: string): never {
+  throw new SelectedRuntimeUnavailable(gap);
+}
 /** Reviewed literal native statements, each with its complete child declaration and multiplicity.
  * This is a dispatch description, never a Source or user authorization capability. */
 export type SelectedNativeDeclaration = Readonly<{ sql: string; limit: number; cost: SelectedCost }>;
@@ -44,25 +83,55 @@ export type SelectedInvocation = Readonly<{
   deadline: number;
   select(locator: SelectedLocator): Promise<SelectedEpisode>;
   source<T>(body: (deadline: number) => Promise<T>): Promise<T>;
-  apply(episode: SelectedEpisode, body: (tx: OperationalTransaction) => Promise<SelectedOutcome>): Promise<SelectedOutcome>;
-  failure(episode: SelectedEpisode, body: (tx: OperationalTransaction) => Promise<SelectedOutcome>): Promise<SelectedOutcome>;
+  apply(
+    episode: SelectedEpisode,
+    body: (tx: OperationalTransaction) => Promise<SelectedOutcome>,
+  ): Promise<SelectedOutcome>;
+  failure(
+    episode: SelectedEpisode,
+    body: (tx: OperationalTransaction) => Promise<SelectedOutcome>,
+  ): Promise<SelectedOutcome>;
 }>;
 export type SelectedRuntime = Readonly<{
   /** Trusted Work registration. One invocation is ONE episode; cleanup has separate authority. */
-  registerMembersStep<R>(body: (invocation: SelectedInvocation, locator: SelectedLocator) => Promise<R>,
-    children?: SelectedChildren): (locator: SelectedLocator) => Promise<R>;
+  registerMembersStep<R>(
+    body: (invocation: SelectedInvocation, locator: SelectedLocator) => Promise<R>,
+    children?: SelectedChildren,
+  ): (locator: SelectedLocator) => Promise<R>;
 }>;
 type Balance = Record<(typeof SELECTED_AXES)[number], number>;
-type Original = { pool: Pool; work: NativeSdk; deadline: number; remaining: Balance; cleanup: Balance;
-  children: SelectedChildren | undefined; counts: Map<string, number>; claim?: Claim; identity?: SelectedIdentity;
-  revoked: boolean; phase: 'new'|'selecting'|'selected'|'source'|'read'|'applied'|'failed'; busy: boolean;
-  operations: Set<Promise<unknown>>; localQuery?: string | undefined; continuation?: string; locator?: SelectedLocator; attempted: Set<string> };
+type Original = {
+  pool: Pool;
+  work: NativeSdk;
+  deadline: number;
+  remaining: Balance;
+  cleanup: Balance;
+  children: SelectedChildren | undefined;
+  counts: Map<string, number>;
+  claim?: Claim;
+  identity?: SelectedIdentity;
+  revoked: boolean;
+  phase: 'new' | 'selecting' | 'selected' | 'source' | 'read' | 'applied' | 'failed';
+  busy: boolean;
+  operations: Set<Promise<unknown>>;
+  localQuery?: string | undefined;
+  continuation?: string;
+  locator?: SelectedLocator;
+  attempted: Set<string>;
+};
 const active = new AsyncLocalStorage<Original>();
-const balance = (cost: SelectedCost): Balance => ({...cost});
+const balance = (cost: SelectedCost): Balance => ({ ...cost });
 function debit(state: Original, cost: SelectedCost, cleanup = false): void {
-  if ((!cleanup && (state.revoked || Date.now() >= state.deadline)) ||
-      SELECTED_AXES.some(axis => !Number.isSafeInteger(cost[axis]) || cost[axis]<0 ||
-        cost[axis] > (cleanup ? state.cleanup : state.remaining)[axis])) refuse('selected-runtime-admission-exhausted');
+  if (
+    (!cleanup && (state.revoked || Date.now() >= state.deadline)) ||
+    SELECTED_AXES.some(
+      (axis) =>
+        !Number.isSafeInteger(cost[axis]) ||
+        cost[axis] < 0 ||
+        cost[axis] > (cleanup ? state.cleanup : state.remaining)[axis],
+    )
+  )
+    refuse('selected-runtime-admission-exhausted');
   for (const axis of SELECTED_AXES) (cleanup ? state.cleanup : state.remaining)[axis] -= cost[axis];
 }
 function identity(state: Original): SelectedIdentity {
@@ -71,71 +140,112 @@ function identity(state: Original): SelectedIdentity {
   return state.identity ?? observed;
 }
 function scope(state: Original, locator: SelectedLocator): void {
-  if (routeOf(locator.ownerAccountId) !== locator.route || routeOf(locator.collectionId) !== locator.route ||
-    routeOf(locator.episodeId) !== locator.route) throw new TypeError('Invalid selected episode locator');
-  if (state.locator && canonicalize(state.locator) !== canonicalize(locator)) refuse('selected-runtime-episode-changed');
-  state.locator ??= Object.freeze({...locator});
+  if (
+    routeOf(locator.ownerAccountId) !== locator.route ||
+    routeOf(locator.collectionId) !== locator.route ||
+    routeOf(locator.episodeId) !== locator.route
+  )
+    throw new TypeError('Invalid selected episode locator');
+  if (state.locator && canonicalize(state.locator) !== canonicalize(locator))
+    refuse('selected-runtime-episode-changed');
+  state.locator ??= Object.freeze({ ...locator });
 }
 declare const phase: unique symbol;
-export type SelectedOperationalPhase = {readonly [phase]: true};
-type Phase = {original: Original; locator: SelectedLocator; kind: 'select'|'apply'|'failure'; used: boolean};
+export type SelectedOperationalPhase = { readonly [phase]: true };
+type Phase = { original: Original; locator: SelectedLocator; kind: 'select' | 'apply' | 'failure'; used: boolean };
 const phases = new WeakMap<SelectedOperationalPhase, Phase>();
 const transactionSelections = new WeakMap<OperationalTransaction, Original>();
 /** Same executor enqueue, exactly once; SDK costs are paid independently of foreign native SQL. */
-export function selectedOperationalEnqueue(tx: OperationalTransaction, intent: WorkIntent): ((created: boolean) => void) | undefined {
+export function selectedOperationalEnqueue(
+  tx: OperationalTransaction,
+  intent: WorkIntent,
+): ((created: boolean) => void) | undefined {
   const state = transactionSelections.get(tx);
   if (!state) return;
   identity(state);
-  const l=state.locator!;
-  if (state.counts.has('sdk-enqueue') || intent.workflowName!=='library.membersPreparation' || intent.queue!=='workflows' ||
-    intent.arguments || Buffer.byteLength(JSON.stringify(intent.input))>4096 ||
-    JSON.stringify(intent.input)!==JSON.stringify({accounts:[l.ownerAccountId],route:l.route,
-      episodes:[{collectionId:l.collectionId,episodeId:l.episodeId}],cleanup:[]}))
+  const l = state.locator!;
+  if (
+    state.counts.has('sdk-enqueue') ||
+    intent.workflowName !== 'library.membersPreparation' ||
+    intent.queue !== 'workflows' ||
+    intent.arguments ||
+    Buffer.byteLength(JSON.stringify(intent.input)) > 4096 ||
+    JSON.stringify(intent.input) !==
+      JSON.stringify({
+        accounts: [l.ownerAccountId],
+        route: l.route,
+        episodes: [{ collectionId: l.collectionId, episodeId: l.episodeId }],
+        cleanup: [],
+      })
+  )
     refuse('selected-runtime-continuation-enqueue-refused');
   debit(state, SELECTED_COST.enqueue);
-  state.counts.set('sdk-enqueue',1);
-  return created => {
+  state.counts.set('sdk-enqueue', 1);
+  return (created) => {
     identity(state);
     if (!created) refuse('selected-runtime-continuation-not-new');
-    state.continuation=intent.workflowId;
+    state.continuation = intent.workflowId;
   };
 }
 /** History can dispatch owned SQL only with the exact private identity of this live transaction. */
 export function assertSelectedOperationalTransaction(tx: OperationalTransaction, expected: SelectedIdentity): void {
-  const state=transactionSelections.get(tx);
+  const state = transactionSelections.get(tx);
   if (!state || state.identity !== expected) refuse('selected-runtime-forged-association');
-  identity(state); currentOperationalResources(tx);
+  identity(state);
+  currentOperationalResources(tx);
 }
-export function selectedLocalQuery(tx: OperationalTransaction, expected: SelectedIdentity, sql: string, values?: unknown[]) {
-  assertSelectedOperationalTransaction(tx,expected);
-  const state=transactionSelections.get(tx)!;
+export function selectedLocalQuery(
+  tx: OperationalTransaction,
+  expected: SelectedIdentity,
+  sql: string,
+  values?: unknown[],
+) {
+  assertSelectedOperationalTransaction(tx, expected);
+  const state = transactionSelections.get(tx)!;
   if (state.localQuery) refuse('selected-runtime-nested-local-dispatch');
-  state.localQuery=sql;
-  try { return tx.query(sql,values); } finally { state.localQuery=undefined; }
+  state.localQuery = sql;
+  try {
+    return tx.query(sql, values);
+  } finally {
+    state.localQuery = undefined;
+  }
 }
-export function assertSelectedContinuation(tx: OperationalTransaction, expected: SelectedIdentity, workflow: string): void {
-  assertSelectedOperationalTransaction(tx,expected);
-  if (transactionSelections.get(tx)!.continuation !== workflow) refuse('selected-runtime-continuation-not-enqueued-here');
+export function assertSelectedContinuation(
+  tx: OperationalTransaction,
+  expected: SelectedIdentity,
+  workflow: string,
+): void {
+  assertSelectedOperationalTransaction(tx, expected);
+  if (transactionSelections.get(tx)!.continuation !== workflow)
+    refuse('selected-runtime-continuation-not-enqueued-here');
 }
 function phaseToken(state: Original, locator: SelectedLocator, kind: Phase['kind']): SelectedOperationalPhase {
-  identity(state); scope(state, locator);
+  identity(state);
+  scope(state, locator);
   if (state.busy || state.attempted.has(kind)) refuse('selected-runtime-repeated-phase');
   state.attempted.add(kind);
   const token = Object.freeze({}) as SelectedOperationalPhase;
-  phases.set(token, {original: state, locator, kind, used: false});
+  phases.set(token, { original: state, locator, kind, used: false });
   return token;
 }
 /** Executor-only optional lifecycle. Native transaction construction and live maps stay in operational.ts. */
 export function openSelectedOperationalPhase(pool: Pool, options: OperationalOptions) {
   const binding = options.selectedRuntime && phases.get(options.selectedRuntime);
   if (!binding || binding.used) refuse('selected-runtime-forged-phase');
-  const {original: state, locator, kind} = binding;
+  const { original: state, locator, kind } = binding;
   identity(state);
-  if (pool !== state.pool || options.workClient !== state.work || options.mode !== 'work-step' ||
-      options.operationalHistory || options.partition !== partitionOf(locator.route) ||
-      options.kind !== `library.membersPreparation.${kind === 'select' ? 'step' : kind}` ||
-      options.accounts.length !== 1 || options.accounts[0] !== locator.ownerAccountId ||
-      (options.deadline !== undefined && options.deadline !== state.deadline)) refuse('selected-runtime-foreign-transaction');
+  if (
+    pool !== state.pool ||
+    options.workClient !== state.work ||
+    options.mode !== 'work-step' ||
+    options.operationalHistory ||
+    options.partition !== partitionOf(locator.route) ||
+    options.kind !== `library.membersPreparation.${kind === 'select' ? 'step' : kind}` ||
+    options.accounts.length !== 1 ||
+    options.accounts[0] !== locator.ownerAccountId ||
+    (options.deadline !== undefined && options.deadline !== state.deadline)
+  )
+    refuse('selected-runtime-foreign-transaction');
   binding.used = true;
   // Usable controls/fences, plus disjoint rollback, are paid before gate/checkout/BEGIN.
   debit(state, SELECTED_COST.transaction);
@@ -145,122 +255,208 @@ export function openSelectedOperationalPhase(pool: Pool, options: OperationalOpt
   let held: OperationalTransaction | undefined;
   return {
     deadline: state.deadline,
-    assertLive() { identity(state); },
+    assertLive() {
+      identity(state);
+    },
     query(sql: unknown) {
       identity(state);
       if (!guarded) return;
       if (typeof sql !== 'string') refuse('selected-runtime-unknown-native-sql');
-      if (state.localQuery === sql) { state.localQuery=undefined; return; }
-      const declaration = state.children?.native.find(item => item.sql === sql);
+      if (state.localQuery === sql) {
+        state.localQuery = undefined;
+        return;
+      }
+      const declaration = state.children?.native.find((item) => item.sql === sql);
       if (!declaration) refuse('selected-runtime-unknown-native-sql');
       const count = state.counts.get(sql) ?? 0;
       if (count >= declaration.limit) refuse('selected-runtime-native-multiplicity-exhausted');
       debit(state, declaration.cost);
-      state.counts.set(sql, count+1);
+      state.counts.set(sql, count + 1);
     },
     async hold(tx: OperationalTransaction, raw: PoolClient) {
-      held=tx; transactionSelections.set(tx,state);
+      held = tx;
+      transactionSelections.set(tx, state);
       const current = currentOperationalResources(tx);
       if (current.pool !== state.pool || current.workClient !== state.work || current.deadline !== state.deadline)
         refuse('selected-runtime-foreign-client');
       debit(state, SELECTED_COST.hold);
       await state.work.checkSelectedExecutionInTransaction(raw, state.pool, state.claim!);
     },
-    guardBody() { guarded = true; },
-    finish() { if (held) transactionSelections.delete(held); state.busy = false; },
+    guardBody() {
+      guarded = true;
+    },
+    finish() {
+      if (held) transactionSelections.delete(held);
+      state.busy = false;
+    },
   };
 }
-async function transaction<T>(state: Original, locator: SelectedLocator, kind: Phase['kind'],
-  body: (tx: OperationalTransaction) => Promise<T>): Promise<T> {
+async function transaction<T>(
+  state: Original,
+  locator: SelectedLocator,
+  kind: Phase['kind'],
+  body: (tx: OperationalTransaction) => Promise<T>,
+): Promise<T> {
   const selectedRuntime = phaseToken(state, locator, kind);
-  const operation = runOperationalTransaction(state.pool, { mode: 'work-step', partition: partitionOf(locator.route),
-    kind: `library.membersPreparation.${kind === 'select' ? 'step' : kind}`, accounts: [locator.ownerAccountId],
-    workClient: state.work as WorkClient, deadline: state.deadline, selectedRuntime }, body);
+  const operation = runOperationalTransaction(
+    state.pool,
+    {
+      mode: 'work-step',
+      partition: partitionOf(locator.route),
+      kind: `library.membersPreparation.${kind === 'select' ? 'step' : kind}`,
+      accounts: [locator.ownerAccountId],
+      workClient: state.work as WorkClient,
+      deadline: state.deadline,
+      selectedRuntime,
+    },
+    body,
+  );
   state.operations.add(operation);
-  try { return await operation; } finally { state.operations.delete(operation); }
+  try {
+    return await operation;
+  } finally {
+    state.operations.delete(operation);
+  }
 }
 /** Trusted composition only. The genuine client binding is installed solely by createWorkClient. */
 export function composeSelectedRuntime(pool: Pool, work: WorkClient): SelectedRuntime {
   assertSelectedWorkClient(work, pool);
   const sdk = DBOS as RuntimeSdk;
-  if (typeof sdk.registerSelectedStep !== 'function' || typeof sdk.getSelectedExecution !== 'function' ||
-    !(work instanceof DBOSClient) || typeof (work as NativeSdk).selectedExecutionIdentity !== 'function')
+  if (
+    typeof sdk.registerSelectedStep !== 'function' ||
+    typeof sdk.getSelectedExecution !== 'function' ||
+    !(work instanceof DBOSClient) ||
+    typeof (work as NativeSdk).selectedExecutionIdentity !== 'function'
+  )
     refuse('selected-runtime-sdk-extension-unavailable');
   return Object.freeze({
-    registerMembersStep<R>(body: (invocation: SelectedInvocation, locator: SelectedLocator) => Promise<R>, children?: SelectedChildren) {
+    registerMembersStep<R>(
+      body: (invocation: SelectedInvocation, locator: SelectedLocator) => Promise<R>,
+      children?: SelectedChildren,
+    ) {
       // Capture a defensive immutable declaration once at registration, never from a workflow locator.
       const declarations = children && structuredClone(children);
-      if (declarations && (declarations.native.length > 64 || new Set(declarations.native.map(x=>x.sql)).size !== declarations.native.length ||
-          declarations.native.some(x => !x.sql || !Number.isSafeInteger(x.limit) || x.limit<1 || x.limit>64)))
+      if (
+        declarations &&
+        (declarations.native.length > 64 ||
+          new Set(declarations.native.map((x) => x.sql)).size !== declarations.native.length ||
+          declarations.native.some((x) => !x.sql || !Number.isSafeInteger(x.limit) || x.limit < 1 || x.limit > 64))
+      )
         throw new TypeError('Invalid selected native declaration');
-      const foreign = declarations ? sumSelectedCost(...declarations.native.flatMap(x =>
-        Array.from({length: x.limit}, () => x.cost)), ...(declarations.source ? [declarations.source] : [])) : undefined;
+      const foreign = declarations
+        ? sumSelectedCost(
+            ...declarations.native.flatMap((x) => Array.from({ length: x.limit }, () => x.cost)),
+            ...(declarations.source ? [declarations.source] : []),
+          )
+        : undefined;
       // The local original is allocated at the actual runtime body boundary, before native issuance IO.
       // This is the existing operational original convention, with a private fixed finite partition.
-      const lifecycle: Lifecycle = { async open() {
-        const usable = {...SELECTED_LOCAL_DECLARATION};
-        for (const axis of SELECTED_AXES) usable[axis] -= SELECTED_CLEANUP_DECLARATION[axis];
-        const state: Original = {pool, work: work as NativeSdk, deadline: Date.now()+5000,
-          remaining: balance(sumSelectedCost(usable, ...(foreign ? [foreign] : []))),
-          cleanup: balance(SELECTED_CLEANUP_DECLARATION), children: declarations,
-          counts: new Map(), revoked: false, phase: 'new', busy: false, operations: new Set(), attempted: new Set()};
-        // Native capability and held database owner locks supply execution authority.
-        // Async context only pairs the prepaid lifecycle with its registered body.
-        // The SDK calls run only at the actual registered body execution site.
-        return {deadline: state.deadline, run<T>(run: () => Promise<T>) { return active.run(state, run); }, async reserve(dispatch) {
-          if (dispatch === 'issue') debit(state, SELECTED_COST.issue);
-          else if (dispatch === 'release') debit(state, SELECTED_COST.release, true);
-          else refuse('selected-runtime-unpriced-sdk-dispatch');
-        }, async close() {
-          state.revoked = true;
-          await Promise.allSettled([...state.operations]);
-        }};
-      }};
-      return sdk.registerSelectedStep(async (locator: SelectedLocator) => {
-        const state = active.getStore();
-        const claim = sdk.getSelectedExecution();
-        if (!state || state.pool !== pool || !claim) refuse('selected-runtime-authentic-selection-unavailable');
-        state.claim = claim;
-        state.identity = identity(state);
-        if (state.identity.stepName !== 'library.membersPreparation.step' ||
-            state.identity.workflowName !== 'library.membersPreparation' || state.identity.schema !== 'dbos' ||
-            state.identity.stepArguments !== JSON.stringify([locator])) refuse('selected-runtime-registration-mismatch');
-        const invocation: SelectedInvocation = Object.freeze({ deadline: state.deadline,
-          async select(input) {
-            if (state.phase !== 'new') refuse('selected-runtime-repeated-selection');
-            scope(state, input);
-            state.phase='selecting';
-            debit(state,SELECTED_COST.consume);
-            const fresh=await state.work.consumeSelectedExecutionAdmission(claim,state.pool);
-            const episode = await transaction(state, input, 'select', tx => associateSelectedEpisode(tx, identity(state), input,
-              amount => debit(state, amount),fresh));
-            state.phase = episode.result ? 'applied' : 'selected';
-            return episode;
-          },
-          async source<T>(read: (deadline: number) => Promise<T>) {
-            if (state.phase !== 'selected' || state.busy || !declarations?.source) refuse('selected-runtime-source-declaration-unavailable');
-            identity(state); debit(state, declarations.source);
-            state.phase = 'source';
-            try { const result = await read(state.deadline); identity(state); state.phase = 'read'; return result; }
-            catch (error) { state.phase = 'read'; throw error; }
-          },
-          async apply(episode, apply) {
-            if (state.phase !== 'read') refuse('selected-runtime-apply-phase-unavailable');
-            const result = await transaction(state, state.locator!, 'apply', tx => finishSelectedEpisode(tx, identity(state),
-              episode, 'apply', apply, amount => debit(state, amount)));
-            state.phase = 'applied'; return result;
-          },
-          async failure(episode, fail) {
-            if (!['selected','read'].includes(state.phase)) refuse('selected-runtime-failure-phase-unavailable');
-            const result = await transaction(state, state.locator!, 'failure', tx => finishSelectedEpisode(tx, identity(state),
-              episode, 'failure', fail, amount => debit(state, amount)));
-            state.phase = 'failed'; return result;
-          },
-        });
-        const result=await body(invocation, locator);
-        if (!['applied','failed'].includes(state.phase)) refuse('selected-runtime-incomplete-invocation');
-        return result;
-      }, {name: 'library.membersPreparation.step'}, lifecycle);
+      const lifecycle: Lifecycle = {
+        async open() {
+          const usable = { ...SELECTED_LOCAL_DECLARATION };
+          for (const axis of SELECTED_AXES) usable[axis] -= SELECTED_CLEANUP_DECLARATION[axis];
+          const state: Original = {
+            pool,
+            work: work as NativeSdk,
+            deadline: Date.now() + 5000,
+            remaining: balance(sumSelectedCost(usable, ...(foreign ? [foreign] : []))),
+            cleanup: balance(SELECTED_CLEANUP_DECLARATION),
+            children: declarations,
+            counts: new Map(),
+            revoked: false,
+            phase: 'new',
+            busy: false,
+            operations: new Set(),
+            attempted: new Set(),
+          };
+          // Native capability and held database owner locks supply execution authority.
+          // Async context only pairs the prepaid lifecycle with its registered body.
+          // The SDK calls run only at the actual registered body execution site.
+          return {
+            deadline: state.deadline,
+            run<T>(run: () => Promise<T>) {
+              return active.run(state, run);
+            },
+            async reserve(dispatch) {
+              if (dispatch === 'issue') debit(state, SELECTED_COST.issue);
+              else if (dispatch === 'release') debit(state, SELECTED_COST.release, true);
+              else refuse('selected-runtime-unpriced-sdk-dispatch');
+            },
+            async close() {
+              state.revoked = true;
+              await Promise.allSettled([...state.operations]);
+            },
+          };
+        },
+      };
+      return sdk.registerSelectedStep(
+        async (locator: SelectedLocator) => {
+          const state = active.getStore();
+          const claim = sdk.getSelectedExecution();
+          if (!state || state.pool !== pool || !claim) refuse('selected-runtime-authentic-selection-unavailable');
+          state.claim = claim;
+          state.identity = identity(state);
+          if (
+            state.identity.stepName !== 'library.membersPreparation.step' ||
+            state.identity.workflowName !== 'library.membersPreparation' ||
+            state.identity.schema !== 'dbos' ||
+            state.identity.stepArguments !== JSON.stringify([locator])
+          )
+            refuse('selected-runtime-registration-mismatch');
+          const invocation: SelectedInvocation = Object.freeze({
+            deadline: state.deadline,
+            async select(input) {
+              if (state.phase !== 'new') refuse('selected-runtime-repeated-selection');
+              scope(state, input);
+              state.phase = 'selecting';
+              debit(state, SELECTED_COST.consume);
+              const fresh = await state.work.consumeSelectedExecutionAdmission(claim, state.pool);
+              const episode = await transaction(state, input, 'select', (tx) =>
+                associateSelectedEpisode(tx, identity(state), input, (amount) => debit(state, amount), fresh),
+              );
+              state.phase = episode.result ? 'applied' : 'selected';
+              return episode;
+            },
+            async source<T>(read: (deadline: number) => Promise<T>) {
+              if (state.phase !== 'selected' || state.busy || !declarations?.source)
+                refuse('selected-runtime-source-declaration-unavailable');
+              identity(state);
+              debit(state, declarations.source);
+              state.phase = 'source';
+              try {
+                const result = await read(state.deadline);
+                identity(state);
+                state.phase = 'read';
+                return result;
+              } catch (error) {
+                state.phase = 'read';
+                throw error;
+              }
+            },
+            async apply(episode, apply) {
+              if (state.phase !== 'read') refuse('selected-runtime-apply-phase-unavailable');
+              const result = await transaction(state, state.locator!, 'apply', (tx) =>
+                finishSelectedEpisode(tx, identity(state), episode, 'apply', apply, (amount) => debit(state, amount)),
+              );
+              state.phase = 'applied';
+              return result;
+            },
+            async failure(episode, fail) {
+              if (!['selected', 'read'].includes(state.phase)) refuse('selected-runtime-failure-phase-unavailable');
+              const result = await transaction(state, state.locator!, 'failure', (tx) =>
+                finishSelectedEpisode(tx, identity(state), episode, 'failure', fail, (amount) => debit(state, amount)),
+              );
+              state.phase = 'failed';
+              return result;
+            },
+          });
+          const result = await body(invocation, locator);
+          if (!['applied', 'failed'].includes(state.phase)) refuse('selected-runtime-incomplete-invocation');
+          return result;
+        },
+        { name: 'library.membersPreparation.step' },
+        lifecycle,
+      );
     },
   });
 }
