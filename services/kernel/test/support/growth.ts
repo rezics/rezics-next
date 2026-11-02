@@ -686,7 +686,7 @@ function assertCatalogBound(
   throw error;
 }
 
-function assertBackgroundBound(name: string, samples: readonly ReportSample[]): void {
+export function assertBackgroundBound(name: string, samples: readonly ReportSample[]): void {
   const statements = new Set(
     samples.flatMap(({ cost }) =>
       Object.entries(cost.backgroundCosts ?? {})
@@ -694,8 +694,15 @@ function assertBackgroundBound(name: string, samples: readonly ReportSample[]): 
         .map(([statement]) => statement),
     ),
   );
-  const failures: { statement: string; rows: number; metric: 'rows' | 'blocks'; values: number[]; allowed: number }[] =
-    [];
+  const failures: {
+    statement: string;
+    rows: number;
+    metric: 'rows' | 'blocks';
+    scale: number;
+    baseline: number;
+    value: number;
+    allowed: number;
+  }[] = [];
   for (const statement of statements) {
     const observed: { scale: number; rows: number; blocks: number }[] = [];
     for (const sample of samples) {
@@ -704,16 +711,19 @@ function assertBackgroundBound(name: string, samples: readonly ReportSample[]): 
     }
     if (observed.length < 2) continue;
     for (const metric of ['rows', 'blocks'] as const) {
-      const first = observed[0]![metric];
-      const last = observed.at(-1)![metric];
+      const baseline = observed[0]!;
+      let peak = baseline;
+      for (const item of observed.slice(1)) if (item[metric] > peak[metric]) peak = item;
       const tolerance = DEFAULT_SLACK[metric];
-      const allowed = Math.max(tolerance.absolute, tolerance.relative * first);
-      if (last - first > allowed)
+      const allowed = Math.max(tolerance.absolute, tolerance.relative * baseline[metric]);
+      if (peak[metric] - baseline[metric] > allowed)
         failures.push({
           statement,
-          rows: observed.at(-1)!.rows,
+          rows: peak.rows,
           metric,
-          values: observed.map((item) => item[metric]),
+          scale: peak.scale,
+          baseline: baseline[metric],
+          value: peak[metric],
           allowed,
         });
     }
@@ -722,7 +732,7 @@ function assertBackgroundBound(name: string, samples: readonly ReportSample[]): 
   failures.sort((left, right) => right.rows - left.rows);
   const largest = failures[0]!;
   const error = new GrowthBoundError([], samples);
-  error.message = `${name}: background statement with largest rows: ${largest.statement.slice(0, 160)}; ${largest.metric} per statement grows from ${largest.values[0]} to ${largest.values.at(-1)} beyond default slack ${largest.allowed}`;
+  error.message = `${name}: background statement with largest rows ${JSON.stringify(largest.statement)}; ${largest.metric} per statement grows from ${largest.baseline} to ${largest.value} at scale ${largest.scale}, beyond default slack ${largest.allowed}`;
   throw error;
 }
 
