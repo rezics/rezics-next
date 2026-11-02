@@ -1,9 +1,14 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { closeSync, fstatSync, openSync, readFileSync, readSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { expect } from 'bun:test';
 
 export type CostTableOptions = { testRoot: string; repositoryRoot: string };
 export type CostRow = { operation: string; touches: string; bound: string; check: string };
+
+export const COST_CITATION_SOURCE_LIMITS = {
+  sourceBytes: 1024 * 1024,
+  inspectionBytes: 8 * 1024 * 1024,
+} as const;
 
 type TableRow = { cells: string[]; line: number };
 type CostTable = { rows: TableRow[] };
@@ -55,6 +60,7 @@ export function costTableProblems(readmePath: string, options: CostTableOptions)
 
   const rows = parsed.tables[0]!.rows;
   const seenOperations = new Set<string>();
+  const inspection: CitationInspection = { snapshots: new Map(), inspectionBytes: 0 };
   for (let index = 0; index < rows.length; index++) {
     const { cells, line } = rows[index]!;
     const operation = cells[0]?.trim() ?? '';
@@ -80,7 +86,7 @@ export function costTableProblems(readmePath: string, options: CostTableOptions)
     }
 
     const check = cells.length === 4 ? (cells[3]?.trim() ?? '') : '';
-    if (check) rowProblems.push(...checkProblems(check, options));
+    if (check) rowProblems.push(...checkProblems(check, options, inspection));
 
     for (const reason of rowProblems) problems.push(problem(readmePath, operationLabel, reason));
   }
@@ -233,7 +239,20 @@ function formatHeader(): string {
   return `| ${COST_HEADER.join(' | ')} |`;
 }
 
-function checkProblems(check: string, options: CostTableOptions): string[] {
+type SourceSnapshot =
+  | { kind: 'missing' }
+  | { kind: 'unreadable'; detail: string }
+  | { kind: 'exceedsSourceBytes' }
+  | { kind: 'exceedsInspectionBytes' }
+  | { kind: 'changed' }
+  | { kind: 'titles'; titles: GrowthCheckTitle[] };
+
+type CitationInspection = {
+  snapshots: Map<string, SourceSnapshot>;
+  inspectionBytes: number;
+};
+
+function checkProblems(check: string, options: CostTableOptions, inspection: CitationInspection): string[] {
   const none = /^None:(.*)$/s.exec(check);
   if (none) {
     const reason = none[1]!.trim();
@@ -252,29 +271,85 @@ function checkProblems(check: string, options: CostTableOptions): string[] {
       problems.push(citation.problem);
       continue;
     }
-    const base = citation.path.startsWith('services/') ? options.repositoryRoot : options.testRoot;
-    const testPath = resolve(base, citation.path);
-    let source: string;
-    try {
-      if (!existsSync(testPath)) {
-        problems.push(`growth check file "${citation.path}" does not exist`);
-        continue;
-      }
-      source = readFileSync(testPath, 'utf8');
-    } catch (error) {
-      problems.push(`growth check file "${citation.path}" could not be read: ${errorMessage(error)}`);
+    const snapshot = admitCitedSource(citation.path, options, inspection);
+    const sourceProblem = citationSourceProblem(citation.path, snapshot);
+    if (sourceProblem) {
+      problems.push(sourceProblem);
       continue;
     }
-
-    const titles = scanGrowthCheckTitles(source);
+    if (snapshot.kind !== 'titles') continue;
     for (const name of citation.names) {
-      if (!titles.some((title) => growthCheckTitleMatches(title, name))) {
+      if (!snapshot.titles.some((title) => growthCheckTitleMatches(title, name))) {
         problems.push(`growth check name "${name}" was not found in a declared test in "${citation.path}"`);
       }
     }
   }
 
   return problems;
+}
+
+function citationSourceProblem(path: string, snapshot: SourceSnapshot): string | undefined {
+  switch (snapshot.kind) {
+    case 'titles':
+      return undefined;
+    case 'missing':
+      return `growth check file "${path}" does not exist`;
+    case 'unreadable':
+      return `growth check file "${path}" could not be read: ${snapshot.detail}`;
+    case 'exceedsSourceBytes':
+      return `growth check file "${path}" exceeds the ${COST_CITATION_SOURCE_LIMITS.sourceBytes} byte source limit`;
+    case 'exceedsInspectionBytes':
+      return `growth check file "${path}" exceeds the ${COST_CITATION_SOURCE_LIMITS.inspectionBytes} byte inspection-work limit`;
+    case 'changed':
+      return `growth check file "${path}" changed while being read`;
+  }
+}
+
+function admitCitedSource(
+  citationPath: string,
+  options: CostTableOptions,
+  inspection: CitationInspection,
+): SourceSnapshot {
+  const base = citationPath.startsWith('services/') ? options.repositoryRoot : options.testRoot;
+  const canonical = resolve(base, citationPath);
+  const cached = inspection.snapshots.get(canonical);
+  if (cached) return cached;
+
+  const snapshot = readCitedSourceSnapshot(canonical, inspection);
+  inspection.snapshots.set(canonical, snapshot);
+  return snapshot;
+}
+
+function readCitedSourceSnapshot(canonical: string, inspection: CitationInspection): SourceSnapshot {
+  let fd: number;
+  try {
+    fd = openSync(canonical, 'r');
+  } catch (error) {
+    return isNotFound(error) ? { kind: 'missing' } : { kind: 'unreadable', detail: errorMessage(error) };
+  }
+
+  try {
+    const stat = fstatSync(fd);
+    if (!stat.isFile()) return { kind: 'unreadable', detail: 'not a regular file' };
+    const size = stat.size;
+    if (!Number.isSafeInteger(size) || size < 0) return { kind: 'unreadable', detail: 'size is not a safe integer' };
+    if (size > COST_CITATION_SOURCE_LIMITS.sourceBytes) return { kind: 'exceedsSourceBytes' };
+    if (inspection.inspectionBytes + size > COST_CITATION_SOURCE_LIMITS.inspectionBytes) {
+      return { kind: 'exceedsInspectionBytes' };
+    }
+
+    const buffer = Buffer.alloc(size);
+    const bytesRead = size === 0 ? 0 : readSync(fd, buffer, 0, size, 0);
+    const later = fstatSync(fd);
+    if (bytesRead !== size || later.size !== size) return { kind: 'changed' };
+
+    inspection.inspectionBytes += size;
+    return { kind: 'titles', titles: scanGrowthCheckTitles(buffer.toString('utf8')) };
+  } catch (error) {
+    return { kind: 'unreadable', detail: errorMessage(error) };
+  } finally {
+    closeSync(fd);
+  }
 }
 
 type Citation = { path: string; names: string[]; problem?: string };
@@ -642,6 +717,10 @@ function problem(readmePath: string, operation: string, reason: string): string 
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function isNotFound(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT';
 }
 
 function escapeRegExp(value: string): string {

@@ -1,7 +1,12 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { expect, test } from 'bun:test';
-import { costTableProblems, expectCostTable, readCostTable } from './growth-cost-table';
+import {
+  COST_CITATION_SOURCE_LIMITS,
+  costTableProblems,
+  expectCostTable,
+  readCostTable,
+} from './growth-cost-table';
 
 const actualRepositoryRoot = resolve(import.meta.dir, '../../../../');
 const temporaryRoot = join(actualRepositoryRoot, '.temp');
@@ -41,6 +46,18 @@ function writeTestFile(f: Fixture, root: string, path: string, source: string): 
   mkdirSync(dirname(absolutePath), { recursive: true });
   writeFileSync(absolutePath, source, 'utf8');
   return absolutePath;
+}
+
+function writeCitedSource(f: Fixture, path: string, title: string, bytes: number): string {
+  const prefix = `test(${JSON.stringify(title)}, () => {});\n`;
+  return writeTestFile(f, f.testRoot, path, prefix + ' '.repeat(bytes - prefix.length));
+}
+
+function citationRows(count: number, check: string): string[] {
+  return Array.from(
+    { length: count },
+    (_, index) => `| Repeat ${index} | one request | constant work | ${check} |`,
+  );
 }
 
 function costReadme(
@@ -321,6 +338,67 @@ test('paths under services/ resolve from the repository root and other paths fro
     );
 
     expect(costTableProblems(readmePath, f.options)).toEqual([]);
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('repeated citations reuse one source snapshot for one validation', () => {
+  const f = fixture();
+  try {
+    const bytes = Math.floor(COST_CITATION_SOURCE_LIMITS.sourceBytes / 2);
+    writeCitedSource(f, 'shared.test.ts', 'shared title', bytes);
+    const sharedCheck = '`shared.test.ts`: “shared title” `./shared.test.ts`: “shared title”';
+    const first = writeReadme(f, 'shared-first', costReadme(citationRows(20, sharedCheck)));
+    expect(costTableProblems(first, f.options)).toEqual([]);
+
+    writeCitedSource(f, 'shared.test.ts', 'rewritten title', bytes);
+    expect(costTableProblems(first, f.options).join('\n')).toContain('shared title');
+    const second = writeReadme(f, 'shared-second', costReadme(citationRows(20, '`shared.test.ts`: “rewritten title”')));
+    expect(costTableProblems(second, f.options)).toEqual([]);
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('cited sources that exceed limits or cannot be read are named', () => {
+  const f = fixture();
+  try {
+    writeCitedSource(f, 'huge.test.ts', 'oversized title', COST_CITATION_SOURCE_LIMITS.sourceBytes + 1);
+    const oversized = writeReadme(
+      f,
+      'oversized',
+      costReadme(['| Oversized source | one request | constant work | `huge.test.ts`: “oversized title” |']),
+    );
+    const oversizedProblems = costTableProblems(oversized, f.options).join('\n');
+    expect(oversizedProblems).toContain('huge.test.ts');
+    expect(oversizedProblems).toContain(`${COST_CITATION_SOURCE_LIMITS.sourceBytes} byte source limit`);
+
+    const unreadablePath = writeCitedSource(f, 'locked.test.ts', 'locked title', 64);
+    chmodSync(unreadablePath, 0);
+    try {
+      const unreadable = writeReadme(
+        f,
+        'unreadable',
+        costReadme(['| Unreadable source | one request | constant work | `locked.test.ts`: “locked title” |']),
+      );
+      const unreadableProblems = costTableProblems(unreadable, f.options).join('\n');
+      expect(unreadableProblems).toContain('locked.test.ts');
+      expect(unreadableProblems).toContain('could not be read');
+    } finally {
+      chmodSync(unreadablePath, 0o644);
+    }
+
+    const distinctChecks = Array.from({ length: 9 }, (_, index) => {
+      const path = `bulk-${index}.test.ts`;
+      writeCitedSource(f, path, `bulk title ${index}`, COST_CITATION_SOURCE_LIMITS.sourceBytes);
+      return `| Bulk ${index} | one request | constant work | \`${path}\`: “bulk title ${index}” |`;
+    });
+    const inspection = writeReadme(f, 'inspection', costReadme(distinctChecks));
+    const inspectionProblems = costTableProblems(inspection, f.options).join('\n');
+    expect(inspectionProblems).toContain(`${COST_CITATION_SOURCE_LIMITS.inspectionBytes} byte inspection-work limit`);
+    expect(inspectionProblems).toContain('bulk-8.test.ts');
+    expect(inspectionProblems).not.toContain('Bulk 0');
   } finally {
     f.cleanup();
   }

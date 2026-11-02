@@ -677,6 +677,11 @@ source-only scan matches generated titles iteratively against their fixed text, 
 characters and nonempty substitutions, and never executes test code. It does not restate the scales, which the test
 owns and may change. Test titles do not name scales either, so a scale change does not break a citation.
 
+Each Cost-table validation admits one source and title snapshot per canonical cited path. It reads at most 1 MiB
+per source and 8 MiB of unique cited source bytes in total, before allocating the snapshot, and names a source
+that is missing, unreadable, changed during the read, or larger than those limits. Ordinary test sources stay
+within those limits. Snapshots are not kept across validations.
+
 Product code sets no planner method settings (`enable_seqscan`, `enable_bitmapscan` or any other `enable_*`).
 PostgreSQL documents them as a crude, temporary way to influence a plan. A sequential scan of a small relation is
 bounded by that relation's size, and the planner moves to an index as statistics follow growth. A pin would make
