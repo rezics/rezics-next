@@ -189,10 +189,7 @@ test('calibration refuses work above advertised capacity and names the input', (
     calibrateUncertainty([
       {
         check: 'heavy-reps',
-        runs: [
-          [{ scale: 1, repetitions: unread }],
-          [{ scale: 1, repetitions: [1] }],
-        ],
+        runs: [[{ scale: 1, repetitions: unread }], [{ scale: 1, repetitions: [1] }]],
       },
     ]),
   ).toThrow(
