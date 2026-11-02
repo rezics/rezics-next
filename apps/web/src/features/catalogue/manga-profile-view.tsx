@@ -213,6 +213,8 @@ function MangaCreate({
   const [terms, setTerms] = useState<MangaTermDraft[]>([
     { id: 0, language: locale, label: '', description: '', aliases: '' },
   ]);
+  const termsHolder = useRef(terms);
+  termsHolder.current = terms;
   const [drafts, setDrafts] = useState<Record<MangaType, MangaRow[]>>({
     'schema:ComicSeries': [],
     'schema:PublicationVolume': [],
@@ -257,6 +259,8 @@ function MangaCreate({
     },
   );
   const locked = disabled || busy || !!request.current || !read;
+  const latestTermWorkspace = useRef({ read, created });
+  latestTermWorkspace.current = { read, created };
   const rows = drafts[type];
   const activeTypeActivation = typeActivation.current;
   const groups = read ? mangaGroups(read.release, type, locale) : undefined;
@@ -272,6 +276,26 @@ function MangaCreate({
     !currentLocked.current &&
     !running.current &&
     !request.current;
+  const currentTermEdit = (holder: MangaTermDraft[], expectedType: MangaType, activation: number) => {
+    const latest = latestTermWorkspace.current;
+    return (
+      holder === termsHolder.current &&
+      expectedType === currentType.current &&
+      activation === typeActivation.current &&
+      latest.read === read &&
+      !!latest.read &&
+      !latest.created &&
+      removalAllowed()
+    );
+  };
+  const changeTerms = (holder: MangaTermDraft[], update: (previous: MangaTermDraft[]) => MangaTermDraft[]) => {
+    if (!currentTermEdit(holder, type, activeTypeActivation)) return false;
+    const next = update(termsHolder.current);
+    termsHolder.current = next;
+    setTerms(next);
+    setFailure(undefined);
+    return true;
+  };
   function editAllowed(expectedType: MangaType, activation: number) {
     return expectedType === currentType.current && activation === typeActivation.current && removalAllowed();
   }
@@ -319,7 +343,7 @@ function MangaCreate({
         read.release,
         type,
         locale,
-        terms,
+        termsHolder.current,
         rows.map((row) => row.statement),
       );
       if (type === 'schema:PublicationVolume' && !independent)
@@ -526,10 +550,9 @@ function MangaCreate({
                       .map((error) => error.id)
                       .join(' ') || undefined,
                   onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-                    setTerms((previous) =>
+                    changeTerms(terms, (previous) =>
                       previous.map((item) => (item.id === term.id ? { ...item, [field]: event.target.value } : item)),
                     );
-                    setFailure(undefined);
                   },
                 };
                 return (
@@ -547,10 +570,7 @@ function MangaCreate({
                   focusId={terms[index + 1] ? `${termsId}-language-${terms[index + 1]!.id}` : `${termsId}-add-language`}
                   disabled={locked}
                   onRemove={() => {
-                    if (locked || running.current || request.current) return false;
-                    setTerms((previous) => previous.filter((row) => row.id !== term.id));
-                    setFailure(undefined);
-                    return true;
+                    return changeTerms(terms, (previous) => previous.filter((row) => row.id !== term.id));
                   }}
                 />
               )}
@@ -563,11 +583,13 @@ function MangaCreate({
             variant="outline"
             disabled={locked}
             onClick={() => {
-              if (locked || running.current || request.current) return;
-              setTerms((previous) => [
-                ...previous,
+              if (!currentTermEdit(terms, type, activeTypeActivation)) return;
+              const next = [
+                ...termsHolder.current,
                 { id: nextTermId.current++, language: '', label: '', description: '', aliases: '' },
-              ]);
+              ];
+              termsHolder.current = next;
+              setTerms(next);
             }}
           >
             {m.catalogue_create_add_language({}, o)}

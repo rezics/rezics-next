@@ -82,6 +82,14 @@ test('Manga departure retains hidden and nested drafts, exact recovery, and fenc
       await user.clear(input);
       if (value) await user.type(input, value);
     });
+  const changeHandler = (element: HTMLElement) => {
+    const key = Object.keys(element).find((name) => name.startsWith('__reactProps$'))!;
+    return (
+      Reflect.get(element, key) as {
+        onChange: (event: { target: { value: string } }) => void;
+      }
+    ).onChange;
+  };
   const select = (name: string, value: string, scope: HTMLElement = host) =>
     act(async () => user.selectOptions(within(scope).getByRole('combobox', { name }), value));
   const blocked = () => !window.dispatchEvent(new window.Event('beforeunload', { cancelable: true }));
@@ -139,11 +147,45 @@ test('Manga departure retains hidden and nested drafts, exact recovery, and fenc
     await until(() => router.state.location.pathname === '/en/search');
     expect(dialog()).toBeNull();
 
+    const recovery = mangaFixture();
+    let rejectFirst = true;
+    router = await mount(recovery, async (command) => {
+      if (rejectFirst) {
+        rejectFirst = false;
+        return { ok: false, reason: 'invalid', errors: [] };
+      }
+      return recovery.transport.create(command);
+    });
+    await replace(m.catalogue_create_label(), 'Before recovery');
+    await replace(m.catalogue_create_aliases(), 'Sibling alias');
+    await click(m.manga_title());
+    await until(() => host.textContent!.includes(m.correction_invalid()));
+    const recoveredLabel = within(host).getByRole('textbox', { name: m.catalogue_create_label() });
+    await act(async () => changeHandler(recoveredLabel)({ target: { value: 'Recovered title' } }));
+    expect((within(host).getByRole('textbox', { name: m.catalogue_create_label() }) as HTMLInputElement).value).toBe(
+      'Recovered title',
+    );
+    expect((within(host).getByRole('textbox', { name: m.catalogue_create_aliases() }) as HTMLTextAreaElement).value).toBe(
+      'Sibling alias',
+    );
+    expect(host.textContent).not.toContain(m.correction_invalid());
+    await click(m.manga_title());
+    await until(() => host.textContent!.includes(m.manga_created()));
+
     const fixture = mangaFixture('uncertain');
     const commands: MangaCommand[] = [];
-    router = await mount(fixture, (command) => {
+    let enterCreate!: () => void;
+    let releaseCreate!: () => void;
+    const createEntered = new Promise<void>((resolve) => (enterCreate = resolve));
+    const createGate = new Promise<void>((resolve) => (releaseCreate = resolve));
+    router = await mount(fixture, async (command) => {
       commands.push(command);
-      return fixture.transport.create(command);
+      const result = await fixture.transport.create(command);
+      if (commands.length === 1) {
+        enterCreate();
+        await createGate;
+      }
+      return result;
     });
     await select(m.manga_grain(), 'schema:PublicationVolume');
     const isbnTitle = fixture.release.properties['schema:isbn']!.labels.en!;
@@ -200,11 +242,48 @@ test('Manga departure retains hidden and nested drafts, exact recovery, and fenc
       await user.type(languages[1]!, 'ja');
       await user.type(labels[1]!, '紙の天文台');
     });
+    const aliases = within(host).getAllByRole('textbox', { name: m.catalogue_create_aliases() });
+    await act(async () => user.type(aliases[1]!, 'Paper alias'));
+    await click(m.catalogue_create_add_language());
+    const thirdLabel = within(host).getAllByRole('textbox', { name: m.catalogue_create_label() })[2]!;
+    const removedLabel = changeHandler(thirdLabel);
+    const removeButtons = within(host).getAllByRole('button', { name: m.catalogue_create_remove_language() });
+    await act(async () => user.click(removeButtons.at(-1)!));
+    await act(async () => removedLabel({ target: { value: 'Removed row mutation' } }));
+    expect(within(host).getAllByRole('textbox', { name: m.catalogue_create_label() })).toHaveLength(2);
+
+    const retained = [
+      changeHandler(labels[1]!),
+      changeHandler(aliases[1]!),
+      changeHandler(languages[1]!),
+    ];
     expect(commands).toHaveLength(0);
     await click(m.manga_title());
+    await createEntered;
+    const submittedCommand = commands[0]!;
+    await act(async () => {
+      retained[0]!({ target: { value: 'Late label' } });
+      retained[1]!({ target: { value: 'Late alias' } });
+      retained[2]!({ target: { value: 'fr' } });
+    });
+    expect((labels[1] as HTMLInputElement).value).toBe('紙の天文台');
+    expect((aliases[1] as HTMLTextAreaElement).value).toBe('Paper alias');
+    expect((languages[1] as HTMLInputElement).value).toBe('ja');
+    expect(commands[0]).toBe(submittedCommand);
+    releaseCreate();
     await until(() => commands.length === 1 && host.textContent!.includes(m.correction_unavailable()));
     const posts = () => fixture.calls.filter((call) => call.method === 'POST');
     const exact = structuredClone(posts()[0]);
+    await act(async () => {
+      retained[0]!({ target: { value: 'Late label' } });
+      retained[1]!({ target: { value: 'Late alias' } });
+      retained[2]!({ target: { value: 'fr' } });
+    });
+    expect((labels[1] as HTMLInputElement).value).toBe('紙の天文台');
+    expect((aliases[1] as HTMLTextAreaElement).value).toBe('Paper alias');
+    expect((languages[1] as HTMLInputElement).value).toBe('ja');
+    expect(host.textContent).toContain(m.correction_unavailable());
+    expect(commands[0]).toBe(submittedCommand);
     await leaveAttempt();
     expect(dialog()!.textContent).toContain(m.thread_authoring_leave_pending());
     await click(m.thread_authoring_stay(), dialog()!);
@@ -254,11 +333,19 @@ test('Manga departure retains hidden and nested drafts, exact recovery, and fenc
     ]) {
       router = await mount(mangaFixture(), pending);
       await replace(m.catalogue_create_label(), 'Retiring');
+      const retiredLabelChange = changeHandler(
+        within(host).getByRole('textbox', { name: m.catalogue_create_label() }),
+      );
       await click(m.manga_title());
       await leaveAttempt();
       await act(async () => client.setQueryData(sessionQuery.queryKey, session));
       await until(() => !dialog());
       expect(blocked()).toBe(false);
+      await until(() => !!within(host).queryByRole('textbox', { name: m.catalogue_create_label() }));
+      await act(async () => retiredLabelChange({ target: { value: 'Retired reader mutation' } }));
+      expect(
+        (within(host).getByRole('textbox', { name: m.catalogue_create_label() }) as HTMLInputElement).value,
+      ).toBe('');
       await act(async () => finish({ ok: true, id: mangaSeriesId, reader: { state: 'ready', href } }));
       expect(host.textContent).not.toContain(m.manga_created());
       await act(async () => router.navigate({ to: '/en/search' }));
