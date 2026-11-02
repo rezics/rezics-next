@@ -13,7 +13,10 @@ import {
 import { shelfDisplay, shelfSort, validateShelfSearch } from '../src/library/shelf-params';
 import type { PersonalLibraryView } from '../src/library/entries-read';
 import { m } from '../src/paraglide/messages.js';
+import * as start from '../.storybook/react-start';
 
+mock.module('@tanstack/react-start', () => start);
+mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { PersonalLibraryPage } = await import('../src/library/entries-page');
 afterAll(() => mock.restore());
