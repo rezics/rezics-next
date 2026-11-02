@@ -2,48 +2,34 @@
 
 ## Result and reviewed source
 
-The route inventory and owner-bar mapping below cover source revision
-`88a6a9c65a15ad5314f9337a2ddf4362c9df9bed`, inspected on 2026-11-03. **Current visual quality remains
-unmeasured.** No screenshot was available in this worktree's configured `.temp/screenshots/` directory,
-and no shared capture with a bound revision was supplied to this attempt. No image was inspected.
-Consequently this report establishes no visual pass, visible product defect, keyboard pass or native API result.
+All **48 admitted historical Inbox PNGs were inspected** on 2026-11-03 at their absolute primary-checkout
+paths below. They cover 24 exports in English/light at phone390 and desktop1280. The captured content is
+legible at both widths; unavailable destinations, session gates and seen failures are visibly distinct from
+empty success. Several recovery-named captures show an initial state, and six continuation images omit the site
+shell. Those images do not establish their named recovery outcomes or integrated Page quality. No visible
+product defect class was established; no UI repair is justified by missing coverage or captured error counts.
+**Current visual quality remains unmeasured.** Historical observations never become current-dev acceptance.
 
-The launch policy defers browser checks and acceptance to integration. The configured screenshot runner exists;
-its runtime availability was not tested. This is unfinished measurement, not a missing-service diagnosis.
-Earlier screenshots described by [the owner status report](design-status-content.md) are not current evidence:
-that report explicitly leaves moderator queues, setup, reporter layouts and full journeys unproved.
+The source inventory remains pinned to `88a6a9c65a15ad5314f9337a2ddf4362c9df9bed`. The previous clean retained
+source was `f85b7a81cc54a0e1fa04ff99cd3381d2bf08150a`. This report-only review starts from clean retained source
+`cdd872a3c3f4b5b1f47191e7d24075ef37ee86ed`, incorporating the inventory at
+`1f524dcfc8d1400181614c622e46fb1e90df16e6` and the route/state/persona matrix and corrected source exports at
+`bfd50fef349601116449aabf5ec4f197d1d4b15e`. Those revisions are not the historical image source.
+The earlier attempts had no admitted images; the supplied manager handoff now supplies the Inbox package.
 
-Decision: retain the source inventory as a partial result and continue the screenshot review under the existing
-capture owners; infer neither defects nor passes from source, story plays or earlier reviews.
-The manager was sent this decision through the Goal inbox.
+Browser, native and acceptance execution remain deferred. No new Storybook build, running-index query,
+interaction or API result was produced. Historical index admission below is the producer's recorded observation.
+The retained appeals candidates are `Pending`, `Empty` and `IllustrativeCurrentTargetWithLongReferences` in
+`apps/web/src/stories/moderation-appeals.stories.tsx` under `pages-moderation-appeals--`; current runtime admission
+is still missing. Do not select the obsolete width/theme exports.
 
-### Retained-source continuation
+Decision: classify the six shell-free continuation images as supplied Inbox regions and recovery-named captures
+by their visible state; retain current-source and interaction coverage as unmeasured. Sent to the Content manager.
 
-The continuation starts from clean retained source
-`f85b7a81cc54a0e1fa04ff99cd3381d2bf08150a`, with the preceding inventory dependency integrated at
-`1f524dcfc8d1400181614c622e46fb1e90df16e6`. The route inventory below remains a source inventory of
-`88a6a9c65a15ad5314f9337a2ddf4362c9df9bed`; it is **not** a rendered catalogue of the retained source.
-No Storybook build was started, so there is no new build identity, running-index observation or rendering result.
+### Remaining route, state and persona measurement
 
-This continuation's launch policy also prohibits browser, native and acceptance execution. Only admitted existing
-images may be reused. The worktree's `.temp/` contains no PNG/JPEG images, screenshot manifest or `build.json`;
-no shared image with the required provenance was supplied. A request for the Performance, Web and Accounts
-handoffs was sent to the Content manager, rather than attempting another shared-inbox read. Until that manager
-relays the artifacts, their source/build, viewport, theme, locale, producer and recording basis remain unknown.
-No review URL, source export or fixture assertion fills those fields.
-
-Decision: preserve the existing capture assignments and continue measurement when admitted images or a
-browser-permitted launch are available; retain every visual and interaction verdict as unmeasured meanwhile.
-This decision was sent to the Content manager. No product repair is justified by this continuation.
-
-The retained appeals source declares `Pending`, `Empty` and `IllustrativeCurrentTargetWithLongReferences` in
-`apps/web/src/stories/moderation-appeals.stories.tsx`, titled `Pages/Moderation appeals`. These are source-only
-candidates under `pages-moderation-appeals--`; none was confirmed in a running index. The stale width/theme exports
-noted below must not be used as capture identifiers. Other inventory exports also await runtime confirmation.
-
-The remaining measurement is explicit for every route group. In this table, **missing** means no admitted image
-at any of `phone390` light/dark or `desktop1280` light/dark; it does not mean the Page or state fails to render.
-The existing owner-bar table supplies the authority for each row.
+The adopted missing-evidence matrix remains applicable. **Missing** covers all phone390/desktop1280,
+light/dark cells on the retained source, not a rendering failure. The Inbox exception is historical only.
 
 | Integrated Page group                                        | Capture handoff / owner bar still to observe                                                       | Evidence status                                   |
 | ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
@@ -53,63 +39,171 @@ The existing owner-bar table supplies the authority for each row.
 | Appearance and publications                                  | Current authority, pending/conflict preservation and disclosure                                    | Missing                                           |
 | Membership, follow, lifecycle, bans and claims               | Independent follow/member state, protected access and lifecycle outcomes                           | Missing                                           |
 | Private My Realms                                            | Private navigation, sparse/empty/unavailable results and current identity                          | Missing                                           |
-| Subject rating and review integration                        | Web frame handoff; private vote versus population, freshness and exact citation                    | Missing shared frame and supplied region          |
+| Subject rating and review integration                        | Web frame handoff; private vote versus population, freshness and exact citation                    | All 32 Web frame combinations unmeasured; supplied region missing          |
 | Report entry and receipt                                     | Submitted reference/reason versus current target; long evidence and unavailable target             | Missing                                           |
 | Board and catalogue queues                                   | Content board Pages and Web catalogue frame; selection, sparse continuation and current disclosure | Missing; catalogue frame handoff outstanding      |
 | Decision and appeal                                          | Legible reason, independent appeal outcome, deadline and unavailable target                        | Missing; runtime appeals exports unconfirmed      |
-| Private Inbox                                                | Performance images only; private recipient, unavailable links and explicit seen retry              | Missing shared capture; no Content recapture      |
+| Private Inbox                                                | Performance images only; private recipient, unavailable links and explicit seen retry              | 48 historical en/light images inspected below; current source missing      |
 | Settings notification region                                 | Accounts frame and supplied region; mandatory outcomes versus optional preferences                 | Missing shared capture; no second Settings writer |
 | Mixed Home                                                   | Content capture, then provenance handoff to Web; one mixed stream and bounded controls             | Missing; no captured artifacts to hand off        |
 
-For every row, long/populated, empty, loading, unavailable and error states and applicable reader, author, member,
-moderator, owner, banned and suspended personas remain uncovered. Locale coverage, hierarchy, density, legibility,
-wrapping/overflow, shared consistency, focus and keyboard behavior remain uncovered too. Future static-image
-findings must be distinguished from browser interaction observations and from native API proof. There is no
-observed defect class to consolidate and no failing image from which to write a UI repair brief.
+
+For every non-Inbox row, long/populated, empty, loading, unavailable and error states remain uncovered, as do
+all applicable reader, author, member, moderator, owner, banned and suspended personas. For Inbox, the historical
+state/persona coverage and its limits are itemized below; every current-source cell remains uncovered.
+No supplied Subject vote/review, Realm appearance/participation or Accounts Settings region image is admitted.
+The owner-bar table below continues to govern those comparisons, including revision/disclosure boundaries,
+private vote versus published figures, submitted versus current report target and independent appeal outcome.
 
 This report applies [Content's six completion clauses](../goals/content.md#done-when), the
 [interface review rule](../development/verification.md#review) and
 [Storybook's page/pattern distinction](../development/storybook.md#catalogue-and-ownership).
-It proposes no new design authority. The available `rezics-workflow` skill supplied the verification procedure;
-no separate frontend-testing or design-audit skill was present in the supplied skill catalogue. Web was asked for
-an applicable skill reference with its frame-capture handoff.
+The repository workflow and supplied frontend-testing skill inform inspection; launch deferral takes precedence
+over browser workflows. No new design authority or external survey is introduced.
 
 ## Evidence and capture coordination
 
-| Surface                                  | Capture responsibility and handoff                                                                                                                                 | Admitted screenshot artifacts / provenance                                                                        |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
-| Inbox, including entry and seen recovery | Performance retains the assigned Inbox capture. Requested its exact revision, Page IDs and four viewport/theme combinations; Content must reuse them.              | None supplied. Do not recapture Inbox or substitute a Content-owned fixture capture.                              |
-| Mixed Home                               | Content retains capture responsibility; supply the Home IDs below, source revision and resulting artifacts to Web for shared-pattern review.                       | None captured under this launch policy. The source/ID handoff is available; image provenance remains outstanding. |
-| Subject and catalogue page frames        | Web retains frame review; requested its existing images and exact revision. Content reviews its supplied rating/review and moderation regions within those frames. | None supplied. A shell-free rating Pattern cannot establish page-frame quality.                                   |
-| Settings notification preferences        | Accounts retains preference authority; requested the existing page-frame/region handoff. Content reviews notice semantics and mandatory outcomes only.             | None supplied. No second Settings writer or capture assignment is created.                                        |
-| Remaining Content pages                  | Use the configured Web screenshot runner with normal admission when browser review is permitted.                                                                   | No worktree artifacts available; service availability remains unknown.                                            |
+The manager handoff is
+`/home/edge/projects/rezics/rezics-next/.temp/goal/content/handoffs/content-interface-measurement.md`;
+its adjacent `content-interface-captures.json` supplies the admitted images, per-cell detail paths, SHA256 hashes,
+capture timestamps, URLs/globals, observed story IDs, status and errors. The package records matching hashes and
+existing files for all 48 cells. Inspection used the original PNGs in place; no recapture or evidence file is committed.
 
-Coordination requests were sent using `bun tools/goal/src/cli.ts inbox send` to Performance, Web and Accounts.
-Attempting to retrieve the named shared Inbox conversation returned
-`Error: workers cannot read the shared manager inbox`. No conversation content or capture provenance was obtained.
-This access restriction does not establish a browser failure; the capture handoff must come through the managers.
+| Surface | Capture responsibility and present evidence |
+| --- | --- |
+| Private Inbox and entry/seen recovery | Performance retains capture; the 48 historical images below are now inspected. Current-dev, dark and full launch-locale package absent. |
+| Subject and catalogue frames | Web retains capture. All 32 combinations at `88a6a9c65a15ad5314f9337a2ddf4362c9df9bed` remain unmeasured; no admitted image/build/fixture package. |
+| Settings notification region | Accounts retains the frame and writer. No admitted package; manager request pending. Mandatory outcomes versus optional preferences remain unmeasured. |
+| Mixed Home | Content retains capture and must supply Web exact source/build, Page IDs, artifacts and fixture/recording provenance. No admitted Home image exists; no artifact handoff is claimed. |
+| Final screenshot approval | Root retains approval; historical inspection establishes no approval or promotion. |
 
-The configured path is documented in [Web's recording runbook](../../apps/web/README.md#storybook-and-page-recordings)
-and implemented by [screenshots.ts](../../apps/web/scripts/screenshots.ts). It captures rendered, font-settled,
-full-page PNGs into `.temp/screenshots/` by default. The
-[Storybook review-build instructions](../../apps/web/.storybook/README.md#build-and-review-locally) describe
-`build.json` containing the full commit and build time. For each admitted image, the continuation must record
-producer, full source revision, build identity, exact story/export, locale, theme, viewport, fixture/recording basis
-and actual artifact path. A mutable review URL or a filename alone cannot bind an image to this source.
+The extra light sweep at `c2c7c63ffb6397f4bb6002f0b1b4a7b63f01732c` remains provenance-only: its separate
+metadata/artifact pair was not inspected or merged with this package. Web frame admission is described in the
+handoff at `/home/edge/projects/rezics/rezics-next/.temp/goal/web/quality/capture-admission-handoff.md`.
+Future permitted capture uses [the configured runner](../../apps/web/scripts/screenshots.ts),
+[the recording runbook](../../apps/web/README.md#storybook-and-page-recordings) and
+[build identity instructions](../../apps/web/.storybook/README.md#build-and-review-locally), confirming each export
+in the running index before capture. No runner was executed here.
 
-Review every selected Page at `phone390` and `desktop1280`, light and dark, using the existing globals. Include
-long text, populated/empty/loading/unavailable/error outcomes and applicable anonymous, author, member, moderator,
-owner, banned and suspended viewers. A nonexistent story or unprovided persona remains a missing cell.
-Interactive focus, tab order, keyboard actions and retry behavior also need browser evidence; static PNGs alone
-cannot establish them. No locale or theme result is inferred from English source.
+## Historical Inbox image measurement
+
+### Shared binding for every image verdict below
+
+Every row below has this complete common binding; neither the retained inventory nor current source substitutes
+for it. All routes are `/inbox` (English locale prefix); the capture URL is the public Storybook iframe, not a
+native service URL.
+
+- **Source/build:** `b29a80a0aad38c008125fb032f5fe1af96bd6164`, built `2026-10-31T08:32:54.450Z`,
+  Storybook `11.0.0-alpha.8`; index SHA256
+  `820bbb9d6a9e45f4aa7b19dab1fcdd4eb629d70eccf0faf2d8aae3fa1a1aaa9d`.
+- **Producer:** Web completeness audit, relayed by Performance through
+  `/home/edge/projects/rezics/rezics-next/.temp/goal/performance/evidence/inbox-historical-captures.json`.
+  Public-browser observation with Chrome `156.0.8078.47`; no local build or native/API acceptance.
+- **Viewport/globals:** desktop1280 = 1280×900, phone390 = 390×844; `locale=en`, `theme=light` throughout.
+  Full-page image height is recorded separately below; it is not a different viewport.
+- **Fixture basis:** pinned `apps/web/src/stories/inbox.stories.tsx` (I) and
+  `apps/web/src/stories/pages/inbox-entry.stories.tsx` (E). PageStory/PatternStory illustrative session transport,
+  recorded Inbox responses and `kernel/fake/notifications` recovery controls. Continuation uses illustrative
+  `loadPage` IO over mixed rows; entry uses local session failure/pending controls and the original session stub.
+  No native recording ID or privacy acceptance is supplied.
+- **Observed index/URL:** I = `Pages/Account/Inbox`, prefix `pages-account-inbox--`;
+  E = `Pages/Account/Inbox entry`, prefix `pages-account-inbox-entry--`. Combine the literal suffix in each row
+  with its prefix for the exact historically observed ID. URL for every cell is
+  `https://storybook.rezics.com/iframe.html?id=<ID>&viewMode=story&globals=locale:en;theme:light`.
+  These IDs were observed by the producer; this attempt did not reopen the running index.
+- **Capture status:** all 48 are `captured`, phase `finished`, `playStillRunning=false`, `stableFrames=3`,
+  `truncated=false`. Error counts are retained as desktop/phone pairs below, without treating finished play,
+  an error-free count or the export name as outcome proof. Recorded errors remain unresolved capture limitations.
+  The adjacent `cells/<image-basename>.json` file under the same audit root contains each cell's DOM/events.
+
+### Inspected artifacts and visible results
+
+Each desktop/phone link is the actual absolute image inspected. I/E, export and suffix together name the source
+and exact historical running story; the common binding above applies to each verdict. Heights and error counts
+are ordered desktop/phone. These are narrow static observations, not whole-Page passes.
+
+| Source / export / ID suffix | desktop1280 image | phone390 image | Image height; errors | Visible result at both widths |
+| --- | --- | --- | --- | --- |
+| I `Empty` / `empty` | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox--empty--1280.png) | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox--empty--390.png) | 1737/844; 1/0 | Heading and “You are all caught up.”; no rows or recovery controls. |
+| I `Mixed` / `mixed` | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox--mixed--1280.png) | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox--mixed--390.png) | 1737/844; 1/0 | Three rows distinguish reply, Actioned and unavailable target; title/actor/type/age hierarchy stays readable. |
+| I `Unavailable` / `unavailable` | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox--unavailable--1280.png) | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox--unavailable--390.png) | 1737/844; 0/0 | Neutral unavailable-item row with moderation metadata; no protected body shown. |
+| I `Preparing` / `preparing` | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox--preparing--1280.png) | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox--preparing--390.png) | 1737/844; 1/2 | Temporarily unavailable panel and Try again; not loading or empty success. |
+| I `RetryAfterRecovery` / `retry-after-recovery` | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox--retry-after-recovery--1280.png) | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox--retry-after-recovery--390.png) | 1737/844; 2/1 | Temporarily unavailable panel and Try again; recovered empty outcome and wait transition not visible. |
+| I `Closed` / `closed` | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox--closed--1280.png) | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox--closed--390.png) | 1737/844; 2/2 | Closed reason and Try again; phone reason wraps to two lines within its panel. |
+| I `UnavailableOperation` / `unavailable-operation` | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox--unavailable-operation--1280.png) | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox--unavailable-operation--390.png) | 1737/844; 2/2 | Temporarily unavailable panel and Try again; distinct from caught-up empty. |
+| I `MoreThanNinetyNine` / `more-than-ninety-nine` | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox--more-than-ninety-nine--1280.png) | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox--more-than-ninety-nine--390.png) | 1737/844; 1/0 | One reply; 99+ fits desktop rail and phone Inbox badge, with phone menu dot. |
+| I `RowOverlay` / `row-overlay` | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox--row-overlay--1280.png) | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox--row-overlay--390.png) | 1737/844; 1/0 | Highlighted reply and plain Actioned row; no overlay collision visible, hit area unproved. |
+| I `ReporterAvailable` / `reporter-available` | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox--reporter-available--1280.png) | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox--reporter-available--390.png) | 1737/844; 1/2 | Actioned row with moderation metadata; receipt destination/content not observed. |
+| I `ReporterUnavailable` / `reporter-unavailable` | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox--reporter-unavailable--1280.png) | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox--reporter-unavailable--390.png) | 1737/844; 1/1 | Dismissed row with moderation metadata; unavailable receipt outcome not visible in this frame. |
+| I `ViewerBecomesUnknown` / `viewer-becomes-unknown` | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox--viewer-becomes-unknown--1280.png) | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox--viewer-becomes-unknown--390.png) | 1773/880; 0/1 | Loading message and no notice rows. Story control above shell; desktop Home navigation is partly under its header. |
+| I `RejectedContinuation` / `rejected-continuation` | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox--rejected-continuation--1280.png) | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox--rejected-continuation--390.png) | 900/844; 1/1 | One reply and Load more only, without site shell; rejection, retry and first-page choice not visible. |
+| I `RestartAfterRejectedContinuation` / `restart-after-rejected-continuation` | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox--restart-after-rejected-continuation--1280.png) | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox--restart-after-rejected-continuation--390.png) | 900/844; 1/1 | One reply and Load more only, without site shell; restarted page outcome not visible. |
+| I `FirstPageRestartUnavailable` / `first-page-restart-unavailable` | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox--first-page-restart-unavailable--1280.png) | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox--first-page-restart-unavailable--390.png) | 900/844; 1/1 | One reply and Load more only, without site shell; restart failure/retry outcome not visible. |
+| I `SeenRetryAfterRecovery` / `seen-retry-after-recovery` | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox--seen-retry-after-recovery--1280.png) | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox--seen-retry-after-recovery--390.png) | 1737/844; 3/1 | Four readable rows, two unavailable; no seen failure/wait/retry panel at capture, command identity unproved. |
+| I `SeenUnavailable` / `seen-unavailable` | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox--seen-unavailable--1280.png) | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox--seen-unavailable--390.png) | 1737/844; 0/0 | Seen-not-confirmed message and Try again above retained three rows; phone message wraps cleanly. |
+| I `SeenClosed` / `seen-closed` | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox--seen-closed--1280.png) | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox--seen-closed--390.png) | 1737/844; 0/1 | Seen-not-confirmed plus closed reason and Try again above retained rows; phone reasons wrap without overlap. |
+| I `SeenDenied` / `seen-denied` | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox--seen-denied--1280.png) | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox--seen-denied--390.png) | 1737/844; 0/0 | Seen-not-confirmed plus permission reason and Try again above retained rows; phone reasons wrap without overlap. |
+| I `SeenViewerBecomesUnknown` / `seen-viewer-becomes-unknown` | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox--seen-viewer-becomes-unknown--1280.png) | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox--seen-viewer-becomes-unknown--390.png) | 1773/880; 1/1 | Loading message without notice rows; story control above shell and partial desktop Home/header collision. |
+| E `SignedOut` / `signed-out` | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox-entry--signed-out--1280.png) | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox-entry--signed-out--390.png) | 1737/844; 1/0 | Sign-in action without private notice rows; desktop shows a blue focus outline, phone does not. |
+| E `Pending` / `pending` | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox-entry--pending--1280.png) | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox-entry--pending--390.png) | 1737/844; 0/0 | Loading message without sign-in action, retry or notice rows. |
+| E `UnavailableRetryFails` / `unavailable-retry-fails` | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox-entry--unavailable-retry-fails--1280.png) | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox-entry--unavailable-retry-fails--390.png) | 1737/844; 1/1 | Session-check failure and Try again without private notice rows; phone explanation wraps to two lines. |
+| E `RecoveredSession` / `recovered-session` | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox-entry--recovered-session--1280.png) | [PNG](/home/edge/projects/rezics/rezics-next/.temp/goal/web/research-shots/web-completeness-audit/shots/pages-account-inbox-entry--recovered-session--390.png) | 1737/844; 1/1 | Three mixed rows visible, including neutral unavailable target; prior failure and recovery interaction not observed. |
+
+### Owner-bar assessment and uncovered cells
+
+**Hierarchy/density:** the shell-bearing pairs place one Inbox heading above compact notice rows or one honest
+status/recovery region. Icons, title/outcome and smaller actor/type/age metadata remain distinguishable. Sparse
+content leaves substantial space rather than invented rows. Seen errors precede, rather than cover, retained rows.
+This is an observation of these short fixtures, not a 20-row density or long-content verdict.
+
+**Legibility/wrapping/overflow:** English labels and metadata are readable in the inspected pixels. Phone closed,
+permission, seen and session-failure messages wrap within the content width; no clipped main text, overlapping
+retry button or content hidden by the phone bottom bar was observed. The 99+ badge fits. No long UUID, long reason,
+multilingual body, zoom or numeric contrast measurement is supplied; no accessibility conformance is inferred.
+
+**Shared consistency:** shell-bearing images reuse the same header/search, desktop rail, phone bottom navigation,
+heading placement and status/control style across states. Six continuation images omit that frame and are region
+supplements only despite their Pages title. Four session-transition images include an external “Session becomes
+unknown” story control; their desktop Home item is partly covered by the displaced header at the top left
+(approximately x20–85, y86–100). This fixture composition does not establish a product navigation defect or a
+successful full-frame review; compare a normally mounted Page before assigning a repair.
+
+**Private recovery:** mixed/unavailable pairs show neutral target wording; signed-out/pending/session-failure
+frames show no private rows. SeenUnavailable, SeenClosed and SeenDenied show explicit uncertainty and Try again,
+with different explanations, preserving the visible distinction between opened Inbox and confirmed seen state.
+These pixels do not prove recipient authorization, target link permissions, native writes or recovery semantics.
+Recovery-named exports that show initial rows or failure panels are not credited for later states.
+
+**Focus/keyboard:** the historical signed-out desktop image shows a focus ring around its sign-in action; the
+session-control images sometimes show an outline too. This only records visible styling at one instant.
+Tab order, keyboard activation, heading focus after continuation, disabled waits, focus retention on failure,
+return-to navigation and private recovery remain unmeasured. No browser interaction was permitted here.
+
+| Coverage dimension | Historical evidence actually inspected | Uncovered measurement |
+| --- | --- | --- |
+| Populated / empty | Mixed, MoreThanNinetyNine, RowOverlay, reporter rows; Empty, both widths | Long/populated maximum page, long references/reasons and all current-source cells |
+| Loading / unavailable / error | Pending and viewer-unknown loading; Preparing, Closed, UnavailableOperation, session failure and three seen failure states | Wait phases, sparse rejected-continuation/restart outcomes, native failure handling and current-source cells |
+| Reader / private recipient | Illustrative signed-in recipient and signed-out gate, reporter outcome rows | Author/member/moderator/owner recipient variants, banned/suspended viewers and native recipient/privacy proof; role labels in notice metadata are not viewer personas |
+| Viewport / theme / locale | 24 paired desktop1280/phone390 exports, en/light only | Both dark widths; full required launch locales, current source and Root approval |
+| Integrated Page / regions | 42 shell-bearing images (including four external-control compositions); six shell-free continuation regions | Normal integrated continuation frames and supplied Subject/Settings/Realm regions |
+| Interaction / native | None; recorded producer phase/error fields only | Focus, keyboard, navigation, retry, notice marking, privacy and all native/API acceptance |
+
+The [Inbox owner runbook](../../apps/web/README.md#notifications-inbox-inbox) requires the reference state in all
+eight launch locales at both widths in light, English/Japanese at both widths in dark, and other states in
+English/Simplified Chinese at both widths and themes. The historical en/light package covers only its listed
+cells; no unseen locale/theme/persona is inferred. Settings preference independence remains wholly unmeasured.
+
+No ready UI repair brief is created: no observed product defect can yet name a failing normally mounted Page
+image against an owner bar. The external-control collision and missing shell are capture-composition limitations;
+error counts and unobserved outcomes require evidence follow-up, not speculative UI changes.
 
 ## Route and Page inventory
 
 Routes below omit the locale prefix. `S/` means
-[`apps/web/src/stories/`](../../apps/web/src/stories/); file/export references identify current source exactly.
+[`apps/web/src/stories/`](../../apps/web/src/stories/); file/export references identify the retained inventory source.
 The displayed IDs follow the current CSF titles and exports. A running story index was not opened, so runtime
 index admission and successful rendering remain to be confirmed. A suffix list applies to the displayed prefix.
-Every row has **no admitted image** and **no visual verdict**.
+Every row remains unmeasured on the retained source. The separate historical Inbox images above do not update this source inventory or establish current runtime admission.
 
 | Actual route or integrated region                                           | Current Page story/export → ID                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | State/persona review inputs and evidence limits                                                                                                                                                                                                                                                                                                                                                                                             |
 | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -150,7 +244,7 @@ current source story is absent; conversely, additional source exports do not est
 
 ## Supplied regions and owner bars
 
-These are the concrete comparisons for the continuation. **None has been visually tested in this attempt.**
+These remain the owner comparisons. Only the historical Inbox subset above has been visually inspected; all other comparisons remain unmeasured.
 Patterns can supplement the Page images, never replace their integrated frame. The six research reports are
 historical design inputs; their old gap lists must not be treated as defects on the reviewed revision.
 
@@ -165,9 +259,9 @@ historical design inputs; their old gap lists must not be treated as defects on 
 | [Publication choice](../../apps/web/README.md#realm-publication-subject-choice)                                                                                                                                     | Publication Page `Selection`, `Chosen`; `S/realm-publications.stories.tsx#LaterItems/#Empty/#Loading/#Denied/#Unavailable/#CursorExpired/#Conflict/#Uncertain/#LongSelectedSubject`                                                                                                                          | Selection differs from Publish here; current subject label/type/cover and confirmation remain clear; unavailable differs from empty; sparse continuation survives and conflict preserves work. Content does not duplicate Semantic's Realm-bound subject writer. **Unmeasured.**                                                                      |
 | [Ratings/reviews research](content-ratings-reviews-design.md), [owner status boundaries](design-status-content.md#ratings-and-reviews)                                                                              | Subject Pages above; `S/subject-rating/subject-rating.stories.tsx#SaveClearZero/#PublishedZero/#BelowThreshold/#Pending/#PopulationChooser/#SparsePopulationPage/#IndependentSources` under `patterns-subjects-subject-rating--`; provenance `ChangedVote` under `patterns-community-revision-provenance--`  | Personal vote versus published mean, population/count/question/units/freshness and imported figures; zero differs from clear and suppressed figure. Exact citation is immutable; only author sees private current-vote comparison. Review destinations/list continuation preserve place and current disclosure. **Unmeasured; shared frame missing.** |
 | [Moderation research](content-moderation-appeals-design.md), [receipt](../../apps/web/README.md#report-receipt-moderationreportsid), [queues](../../apps/web/README.md#board-moderation-reports-boardsidmoderation) | Receipt `IllustrativeLongReferences`, board queue `RevisionDiffers`/`TargetUnavailable`/`EmptyWithNext`, catalogue queue, decision `Open`/`Expired`/`ReversedUnavailable`, appeals                                                                                                                           | Submitted target/revision/reason/evidence differ from current target and availability. Long reasons/references/dates wrap; one legible takedown reason, intentional target selection and independent appeal result. Resolution does not imply erased body recovery. **Unmeasured.**                                                                   |
-| [Notification research](content-notifications-design.md), [Web Inbox](../../apps/web/README.md#notifications-inbox-inbox)                                                                                           | Performance's Inbox images, especially mixed/withheld/session-change/seen retry; shared Settings region                                                                                                                                                                                                      | Private recipient presentation; honest unavailable destinations; explicit seen retry and distinct failure; mandatory notices remain independent of optional preferences. Opening a page does not imply every target was read. **Unmeasured; external capture handoff missing.**                                                                       |
+| [Notification research](content-notifications-design.md), [Web Inbox](../../apps/web/README.md#notifications-inbox-inbox)                                                                                           | Performance's Inbox images, especially mixed/withheld/session-change/seen retry; shared Settings region                                                                                                                                                                                                      | Private recipient presentation; honest unavailable destinations; explicit seen retry and distinct failure; mandatory notices remain independent of optional preferences. Opening a page does not imply every target was read. **Historical Inbox subset inspected above; current-source Inbox and Settings remain unmeasured.**                                                                       |
 | [Realm discovery research](content-realm-discovery-design.md), [current source status](design-status-content.md#realms-and-spaces)                                                                                  | Existing shared discovery section within the Space/Home navigation frame where applicable                                                                                                                                                                                                                    | Popular/Trending reflect declared completed windows, not people tracking or fabricated counts; sparse continuation and unavailable summaries remain honest. Confirm actual integrated frame before selecting captures. **Unmeasured.**                                                                                                                |
-| [Interface review rule](../development/verification.md#review), [catalogue rules](../development/storybook.md#catalogue-and-ownership)                                                                              | Every admitted Page and supplied region in all four viewport/theme combinations                                                                                                                                                                                                                              | Hierarchy, density, legible metadata/reasons, contrast, focus visibility, clipping/overflow, keyboard reachability and consistency with shared Web frames. Long UUIDs, multilingual text and pending/error controls must remain usable. **Unmeasured.**                                                                                               |
+| [Interface review rule](../development/verification.md#review), [catalogue rules](../development/storybook.md#catalogue-and-ownership)                                                                              | Every admitted Page and supplied region in all four viewport/theme combinations                                                                                                                                                                                                                              | Hierarchy, density, legible metadata/reasons, contrast, focus visibility, clipping/overflow, keyboard reachability and consistency with shared Web frames. Long UUIDs, multilingual text and pending/error controls must remain usable. **Historical Inbox static subset only; all other Pages and interaction remain unmeasured.** |
 
 Participation-region inputs also exist in `S/realm-participation.stories.tsx` under
 `patterns-realm-participation--`: `JoinAndLeave`, `StillPending`, `ManualRetry`, `ReadUnavailable`, `Protected`,
@@ -204,29 +298,23 @@ appearance with Content, shared frames with Web and preferences with Accounts. P
 consumer and single existing Space home. An attractive fixture result cannot establish real API, privacy,
 membership settlement, aggregate convergence or physical-cleanup behavior.
 
-## Ready continuation proposal
+## Recommendation for the manager
 
-**Outcome:** finish the Content page screenshot measurement on one retained revision and identify actual defects.
-**Pages:** all route rows above, including delegated Home and Content's supplied Subject/Settings regions.
-**Owner bars:** the linked comparison table; no policy adoption is needed to measure them.
-**Visible failing screenshot:** none available. This is a measurement proposal, not a product repair proposal.
-**Narrow scope:** obtain existing Performance Inbox and Web frame provenance, capture Content-owned Home and other
-Content Pages through normal admission when permitted, inspect all four viewport/theme combinations and exercise
-focused keyboard/recovery states. Supply Home revision/story/artifact identifiers to Web. Change only this report
-unless a separate owner authorizes a product repair.
-**Focused acceptance:** each route has an actual Page image or an explicit missing measurement; every verdict names
-the exact revision/story/artifact and tested owner bar. Report each visible defect once per defect class across
-affected pages, with page, failing image/location, owner bar, narrow repair and observable behavior acceptance.
-Keep uncovered personas/states/locales and fixture/native boundaries explicit. Missing shared captures require
-coordination, never duplicate capture ownership. No source inspection may be presented as a visual finding.
+Retain the existing React route, generated-client and recorded Page/Pattern workflow. Carry forward this historical
+Inbox assessment at its exact build only. Preserve the adopted route/state/persona matrix, and admit new images
+through existing capture owners before measuring remaining cells. No product repair brief or additional design
+authority follows from this package. Current-source Inbox belongs with Performance, Subject/catalogue frames with
+Web and Settings with Accounts; Content captures the single mixed Home and hands Web its exact Page/build/artifact
+and fixture provenance when permitted. Keep one Space home, sparse Next and bounded Home controls intact.
 
-No UI repair brief can yet name a visible failing screenshot. Inventing a repair before that observation would
-violate the contract. The continuation must replace these unmeasured results with image-based findings, rather than
-carry forward historical gap lists as current defects.
+Browser-permitted work must confirm actual exports in the running index, then distinguish integrated Pages from
+regions and observe keyboard/focus/recovery separately. No repetitive report-only continuation is created: the
+remaining work requires newly admitted source-bound captures or permission for browser measurement, not another
+inventory pass. The primary-source patterns, references and licences above remain the research basis.
 
 ## Validation limits
 
-This change adds research prose only and changes no typed workspace or test file. There is no focused test file to
+This change records historical image inspection and research prose only and changes no typed workspace or test file. There is no focused test file to
 run and no supplied landing acceptance command for this documentation outcome. Typechecking is inapplicable;
 acceptance, native, browser, screenshot and broader checks remain deferred under the launch policy. No test pass,
 completion of Content clauses 1–6, promotion or main claim is made.
