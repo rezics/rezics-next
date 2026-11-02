@@ -10,3 +10,6 @@ services/kernel/dist/
 apps/web/storybook-static/
 # Reference projects cloned by research tasks; see tools/goal/README.md, Research.
 .reference/
+
+# Generated kernel check diagnostics are evidence, not source.
+services/kernel/.temp/schema-diagnostics/
