@@ -48,12 +48,16 @@ async function setup(read: OrganizationDeletionReader = async ({ organizationId 
   return { ...page, router, view, navigate, choose, unload, input: page.host.querySelector<HTMLInputElement>('input')! };
 }
 
-test('clean review leaves freely; Stay keeps typed confirmation and Leave discards it', async () => {
+test('clean review leaves freely', async () => {
   const page = await setup();
   expect(page.unload()).toBe(false);
   await page.navigate();
   expect(page.router.history.location.pathname).toBe('/away');
-  await page.navigate('/organizations/delete');
+});
+
+test('Stay keeps typed confirmation and Leave discards it', async () => {
+  const page = await setup();
+  page.input.focus();
   await flush(() => fill(page.input, '@first'));
   expect(page.unload()).toBe(true);
   await page.navigate();
@@ -61,6 +65,7 @@ test('clean review leaves freely; Stay keeps typed confirmation and Leave discar
   await page.choose('Stay');
   expect(page.router.history.location.pathname).toBe('/organizations/delete');
   expect(page.input.value).toBe('@first');
+  expect(document.activeElement).toBe(page.input);
   expect(page.host.textContent).toContain(first);
   await page.navigate();
   await page.choose('Leave');
