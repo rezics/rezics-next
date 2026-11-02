@@ -614,7 +614,7 @@ test('Literary current refusal withdraws all old markup, fences pending work and
     };
     await render(h(LiteraryProfile, props));
     await until(() => !!host.querySelector('form'));
-    const field = host.querySelector<HTMLElement>('section[aria-label="Word count"]')!;
+    const field = host.querySelector<HTMLElement>('section[aria-label="word count"]')!;
     await click(m.facts_edit_field(), field);
     await input(labelledInput(field, m.correction_amount()), '+13000');
     const savedSubmit = queuedSubmit(host.querySelector('form')!);
@@ -671,6 +671,7 @@ test('Literary current refusal withdraws all old markup, fences pending work and
     await act(async () => {
       settleRead({ ok: false, reason: 'denied' });
     });
+    await until(() => !host.querySelector('a[href*="/subjects/"]'));
     withheld();
     await reload();
     await until(() => host.textContent!.includes('Final recovered identity'));
