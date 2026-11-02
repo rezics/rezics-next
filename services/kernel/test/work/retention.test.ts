@@ -187,7 +187,9 @@ for (const lostResult of [false, true]) {
         'streams',
       ]) {
         const keyColumn = table === 'notifications' ? 'destination_uuid' : 'workflow_uuid';
-        const result = await database.query(`SELECT 1 FROM dbos.${table} WHERE ${keyColumn} = $1 LIMIT 1`, [workflowID]);
+        const result = await database.query(`SELECT 1 FROM dbos.${table} WHERE ${keyColumn} = $1 LIMIT 1`, [
+          workflowID,
+        ]);
         expect(result.rowCount, `${table} still owns a row for ${workflowID}`).toBe(0);
       }
     }
@@ -202,30 +204,40 @@ test('cancellation precedes writer closure and retention deletes only its termin
   const foreign = id('foreign-application');
   for (const value of [workflowID, child, foreign]) await enqueue(value);
   await database.query('UPDATE dbos.workflow_status SET parent_workflow_id = $1 WHERE workflow_uuid = $2', [
-    workflowID, child,
+    workflowID,
+    child,
   ]);
   const old = Date.now() - 60 * 24 * 60 * 60 * 1000;
   await setTerminal(foreign, 'SUCCESS', old);
   await database.query('UPDATE dbos.workflow_status SET application_name = $2 WHERE workflow_uuid = $1', [
-    foreign, 'retention.foreign.fixture',
+    foreign,
+    'retention.foreign.fixture',
   ]);
 
   await client.cancelWorkflow(workflowID);
   expect((await client.getWorkflow(workflowID))?.status).toBe('CANCELLED');
   expect(await readSdkWorkflowRetirement(workflowID, client)).toBeNull();
-  expect((await database.query('SELECT 1 FROM dbos.workflow_input WHERE workflow_uuid = $1', [workflowID])).rowCount).toBe(1);
+  expect(
+    (await database.query('SELECT 1 FROM dbos.workflow_input WHERE workflow_uuid = $1', [workflowID])).rowCount,
+  ).toBe(1);
   await setTerminal(workflowID, 'CANCELLED', old);
 
   const closure = await retireSdkWorkflowWriters(workflowID, client);
   expect((await client.getWorkflow(workflowID))?.status).toBe('CANCELLED');
-  expect((await database.query('SELECT 1 FROM dbos.workflow_input WHERE workflow_uuid = $1', [workflowID])).rowCount).toBe(1);
+  expect(
+    (await database.query('SELECT 1 FROM dbos.workflow_input WHERE workflow_uuid = $1', [workflowID])).rowCount,
+  ).toBe(1);
   expect(await runWorkflowRetentionSweep(30, client)).toBe(1);
   expect(await client.getWorkflow(workflowID)).toBeUndefined();
-  expect((await database.query('SELECT 1 FROM dbos.workflow_input WHERE workflow_uuid = $1', [workflowID])).rowCount).toBe(0);
+  expect(
+    (await database.query('SELECT 1 FROM dbos.workflow_input WHERE workflow_uuid = $1', [workflowID])).rowCount,
+  ).toBe(0);
   expect(await readSdkWorkflowRetirement(workflowID, client)).toEqual(closure);
   for (const value of [child, foreign]) {
     expect(await client.getWorkflow(value)).toBeDefined();
-    expect((await database.query('SELECT 1 FROM dbos.workflow_input WHERE workflow_uuid = $1', [value])).rowCount).toBe(1);
+    expect((await database.query('SELECT 1 FROM dbos.workflow_input WHERE workflow_uuid = $1', [value])).rowCount).toBe(
+      1,
+    );
   }
   expect((await client.getWorkflow(child))?.status).toBe('ENQUEUED');
 });
