@@ -281,11 +281,7 @@ export function statementAttributions(capture: Capture): StatementAttribution[] 
   for (let index = 0; index < capture.plans.length; index++) {
     const owner = capture.planStatements?.[index];
     const ownedKey =
-      nativeOwners &&
-      owner !== undefined &&
-      Number.isInteger(owner) &&
-      owner >= 0 &&
-      owner < capture.statements.length
+      nativeOwners && owner !== undefined && Number.isInteger(owner) && owner >= 0 && owner < capture.statements.length
         ? normalizeStatement(capture.statements[owner]!)
         : undefined;
     if (nativeOwners && ownedKey === undefined) continue;
