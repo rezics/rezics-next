@@ -185,7 +185,8 @@ export const CreditAtSource: Story = {
     await expect(source).toHaveAttribute('href', covered.cover!.credit!.via!.url);
     source.focus();
     await expect(source).toHaveFocus();
-    await expect(within(list).getByRole('button', { name: m.thread_cover_reveal() })).toBeInTheDocument();
+    await expect(list.querySelector('button')).toHaveAttribute('aria-label', m.thread_cover_reveal());
+    await expect(list.querySelector('img, source')).toBeNull();
     await userEvent.keyboard('{Escape}');
     await expect(canvas.getByRole('button', { name: m.thread_cover_credit() })).toHaveFocus();
   },
