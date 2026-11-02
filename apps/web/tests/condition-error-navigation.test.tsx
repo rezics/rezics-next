@@ -37,7 +37,10 @@ test('summary navigation focuses the scoped qualifier field, then its group when
     window.document.body.append(host);
     root = createRoot(host as unknown as HTMLElement);
     const metadata = conditionMetadata(recording.release);
-    metadata.properties['schema:author'] = { ...metadata.properties['schema:author']!, qualifiers: ['schema:isPartOf'] };
+    metadata.properties['schema:author'] = {
+      ...metadata.properties['schema:author']!,
+      qualifiers: ['schema:isPartOf'],
+    };
     const tree: FilterDocument = {
       statement: {
         property: 'schema:author',
@@ -47,7 +50,10 @@ test('summary navigation focuses the scoped qualifier field, then its group when
     };
     const before = JSON.stringify(tree);
     const pointer = `${CONDITION_POINTER}/statement/qualifiers/0/in/0`;
-    const issues = [{ pointer, code: 'unsupported' }, { pointer: '/text', code: 'invalid' }];
+    const issues = [
+      { pointer, code: 'unsupported' },
+      { pointer: '/text', code: 'invalid' },
+    ];
     const changes = [0, 0, 0];
     const editor = (index: number, value: FilterDocument | undefined, errors = issues) =>
       createElement(ConditionEditor, {
@@ -66,7 +72,13 @@ test('summary navigation focuses the scoped qualifier field, then its group when
     const emptyPointer = `${CONDITION_POINTER}/and/0/statement/property`;
     await act(async () => {
       root!.render(
-        createElement('div', null, editor(0, tree), editor(1, tree), editor(2, undefined, [{ pointer: emptyPointer, code: 'required' }])),
+        createElement(
+          'div',
+          null,
+          editor(0, tree),
+          editor(1, tree),
+          editor(2, undefined, [{ pointer: emptyPointer, code: 'required' }]),
+        ),
       );
     });
 
@@ -114,7 +126,9 @@ test('summary navigation focuses the scoped qualifier field, then its group when
     group.append(fieldWrapper);
     expect(findConditionErrorTarget(synthetic, fieldWrapper.dataset.conditionFieldPointer!)?.element).toBe(control);
     control.hidden = true;
-    expect(findConditionErrorTarget(synthetic, `${fieldWrapper.dataset.conditionFieldPointer}/removed`)?.element).toBe(group);
+    expect(findConditionErrorTarget(synthetic, `${fieldWrapper.dataset.conditionFieldPointer}/removed`)?.element).toBe(
+      group,
+    );
 
     const sibling = window.document.createElement('fieldset');
     sibling.dataset.conditionPointer = `${CONDITION_POINTER}/and/1`;

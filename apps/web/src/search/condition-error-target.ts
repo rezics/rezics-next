@@ -43,9 +43,9 @@ function canFocus(element: HTMLElement, editor: HTMLElement) {
 
 function fieldControl(field: HTMLElement, editor: HTMLElement) {
   return (
-    Array.from(field.querySelectorAll<HTMLElement>('input:not([type="hidden"]), select, textarea, [contenteditable="true"]')).find(
-      (control) => canFocus(control, editor),
-    ) ?? undefined
+    Array.from(
+      field.querySelectorAll<HTMLElement>('input:not([type="hidden"]), select, textarea, [contenteditable="true"]'),
+    ).find((control) => canFocus(control, editor)) ?? undefined
   );
 }
 
@@ -56,7 +56,10 @@ export function isConditionEditorPointer(pointer: string) {
 }
 
 /** Resolve only within this editor, preferring an editable field and then the closest matching group. */
-export function findConditionErrorTarget(editor: HTMLElement | null, pointer: string): ConditionErrorTarget | undefined {
+export function findConditionErrorTarget(
+  editor: HTMLElement | null,
+  pointer: string,
+): ConditionErrorTarget | undefined {
   if (!editor?.matches('[data-condition-editor]')) return undefined;
   const path = pointerSegments(pointer);
   if (path) {
@@ -69,7 +72,12 @@ export function findConditionErrorTarget(editor: HTMLElement | null, pointer: st
     let nearest: { element: HTMLElement; depth: number } | undefined;
     for (const element of editor.querySelectorAll<HTMLElement>('[data-condition-pointer]')) {
       const candidate = pointerSegments(element.dataset.conditionPointer ?? '');
-      if (candidate && isPrefix(candidate, path) && (!nearest || candidate.length > nearest.depth) && canFocus(element, editor)) {
+      if (
+        candidate &&
+        isPrefix(candidate, path) &&
+        (!nearest || candidate.length > nearest.depth) &&
+        canFocus(element, editor)
+      ) {
         nearest = { element, depth: candidate.length };
       }
     }
