@@ -110,6 +110,7 @@ test('Mounted Subject ratings keep accessible disclosures and move revision meta
   host.style.width = '240px';
   window.document.body.append(host);
   const root = createRoot(host);
+  const english = { locale: 'en' } as const;
   const recoveries: RatingSource[] = [];
   const recover = (source: RatingSource) => recoveries.push(source);
   const subject = 'subject / 中文';
@@ -209,6 +210,7 @@ test('Mounted Subject ratings keep accessible disclosures and move revision meta
         m.subject_ratings_distribution({}, options),
       );
       const comparisons = disclosure('rating-comparisons', m.subject_ratings_comparisons({}, options));
+      expect(comparisons.closest('[dir]')).toBe(host);
       expect(titles(comparisons)).toEqual([2, 3, 5, 6, 4].map((index) => realms[index]!.name));
       expect(host.textContent).not.toContain('Duplicate Global');
       expect(host.textContent).not.toContain('Duplicate Realm');
@@ -236,13 +238,17 @@ test('Mounted Subject ratings keep accessible disclosures and move revision meta
       expect(titles(remaining as unknown as Element)).toEqual([0, 1, 7].map((index) => realms[index]!.name));
       expect(comparisons.querySelectorAll('[data-slot="rating-comparison"]')).toHaveLength(8);
       const preview = (name: string) =>
-        Array.from(comparisons.querySelectorAll('[data-slot="rating-comparison"]')).find(
-          (row) => row.querySelector('h3')?.textContent === name,
-        )!.querySelector('[data-content-item-slot="preview"]')!;
+        Array.from(comparisons.querySelectorAll('[data-slot="rating-comparison"]'))
+          .find((row) => row.querySelector('h3')?.textContent === name)!
+          .querySelector('[data-content-item-slot="preview"]')!;
       expect(preview(realms[0]!.name).textContent).toContain(m.subject_ratings_figure_unavailable({}, options));
       expect(preview(realms[1]!.name).textContent).toContain(m.subject_ratings_empty({}, options));
-      expect(preview(realms[3]!.name).querySelector('[role="status"]')?.textContent).toBe(m.rating_public_updating({}, options));
-      expect(preview(realms[4]!.name).textContent).toContain(m.subject_ratings_remaining({ count: number(2) }, options));
+      expect(preview(realms[3]!.name).querySelector('[role="status"]')?.textContent).toBe(
+        m.rating_public_updating({}, options),
+      );
+      expect(preview(realms[4]!.name).textContent).toContain(
+        m.subject_ratings_remaining({ count: number(2) }, options),
+      );
       await act(async () => more.click());
       expect(more.getAttribute('aria-expanded')).toBe('false');
       expect(remaining.hidden).toBe(true);
@@ -268,11 +274,11 @@ test('Mounted Subject ratings keep accessible disclosures and move revision meta
 
     const sources = suppliedRatingSources(data);
     for (const [kind, text] of [
-      ['idle', m.rating_population_loading()],
-      ['absent', m.rating_population_absent()],
-      ['unavailable', m.rating_population_unavailable()],
-      ['terminal', m.rating_population_terminal()],
-      ['failed', m.rating_population_failed()],
+      ['idle', m.rating_population_loading({}, english)],
+      ['absent', m.rating_population_absent({}, english)],
+      ['unavailable', m.rating_population_unavailable({}, english)],
+      ['terminal', m.rating_population_terminal({}, english)],
+      ['failed', m.rating_population_failed({}, english)],
     ] as const) {
       await paint({ ...sources, question: { kind } });
       expect(host.querySelector('[data-slot="rating-question"]')).toBeNull();
@@ -296,7 +302,11 @@ test('Mounted Subject ratings keep accessible disclosures and move revision meta
     expect(recoveries.at(-1)).toBe('statistics');
     expect(host.querySelector('[data-slot="rating-distribution"]')).not.toBeNull();
 
-    for (const [grain, count] of [['work', 4], ['episode', 9], ['character', 9]] as const) {
+    for (const [grain, count] of [
+      ['work', 4],
+      ['episode', 9],
+      ['character', 9],
+    ] as const) {
       await paint({
         ...sources,
         question: { kind: 'ready', value: { ...data.question, grain } },
@@ -305,15 +315,19 @@ test('Mounted Subject ratings keep accessible disclosures and move revision meta
       });
       expect(host.querySelector('[data-slot="rating-distribution"]')).toBeNull();
       expect(host.querySelector('[data-slot="rating-figures"]')?.textContent).toContain(
-        m.subject_ratings_remaining({ count: '1' }),
+        m.subject_ratings_remaining({ count: '1' }, english),
       );
     }
     await paint({ ...sources, figure: { kind: 'ready', value: { ...data.figure, state: 'updating', mean: null } } });
     expect(host.querySelector('[data-slot="rating-distribution"]')).toBeNull();
-    expect(host.querySelector('[data-slot="rating-figures"]')?.textContent).toContain(m.rating_public_updating());
+    expect(host.querySelector('[data-slot="rating-figures"]')?.textContent).toContain(
+      m.rating_public_updating({}, english),
+    );
     await paint({ ...sources, global: { kind: 'unavailable' } });
     expect(host.querySelector('[data-slot="rating-distribution"]')).toBeNull();
-    expect(host.querySelector('[data-source="global"] [role="status"]')?.textContent).toBe(m.rating_population_unavailable());
+    expect(host.querySelector('[data-source="global"] [role="status"]')?.textContent).toBe(
+      m.rating_population_unavailable({}, english),
+    );
     await paint({ ...sources, figure: { kind: 'failed' } });
     expect(host.querySelector('[data-slot="rating-distribution"]')).not.toBeNull();
     await paint({
@@ -322,12 +336,16 @@ test('Mounted Subject ratings keep accessible disclosures and move revision meta
       global: { kind: 'ready', value: { population: GLOBAL, count: 0 } },
     });
     expect(host.querySelector('[data-slot="rating-distribution"]')).toBeNull();
-    expect(host.querySelector('[data-slot="rating-figures"]')?.textContent).toContain(m.subject_ratings_empty());
+    expect(host.querySelector('[data-slot="rating-figures"]')?.textContent).toContain(
+      m.subject_ratings_empty({}, english),
+    );
 
     await paint(null, 'de');
     const retry = host.querySelector<HTMLAnchorElement>('[data-slot="retry"]')!;
     const reviews = host.querySelector<HTMLAnchorElement>('[data-slot="see-reviews"]')!;
-    expect(host.querySelector('[data-state="failed"] [role="status"]')?.textContent).toBe(m.subject_section_failed({}, { locale: 'de' }));
+    expect(host.querySelector('[data-state="failed"] [role="status"]')?.textContent).toBe(
+      m.subject_section_failed({}, { locale: 'de' }),
+    );
     expect(retry.getAttribute('href')).toBe('?');
     expect(reviews.getAttribute('href')).toBe('/de/subjects/subject%20%2F%20%E4%B8%AD%E6%96%87/reviews');
     expect(host.querySelectorAll('a')).toHaveLength(2);
@@ -339,14 +357,30 @@ test('Mounted Subject ratings keep accessible disclosures and move revision meta
     }
 
     // Mount the actual distribution independently too; never substitute a copied predicate.
-    for (const figure of [undefined, { ...global, remaining: 1 }, { ...global, freshness: { asOf: null, updating: true } }]) {
-      await act(async () => root.render(<RatingDistribution figure={figure} headline={data.figure} question={data.question} locale="en" />));
+    for (const figure of [
+      undefined,
+      { ...global, remaining: 1 },
+      { ...global, freshness: { asOf: null, updating: true } },
+    ]) {
+      await act(async () =>
+        root.render(<RatingDistribution figure={figure} headline={data.figure} question={data.question} locale="en" />),
+      );
       expect(host.children).toHaveLength(0);
     }
-    await act(async () => root.render(<RatingDistribution figure={{ ...global, histogram: global.histogram!.map(() => 0) }} headline={data.figure} question={data.question} locale="en" />));
-    const distribution = disclosure('rating-distribution', m.subject_ratings_distribution());
+    await act(async () =>
+      root.render(
+        <RatingDistribution
+          figure={{ ...global, histogram: global.histogram!.map(() => 0) }}
+          headline={data.figure}
+          question={data.question}
+          locale="en"
+        />,
+      ),
+    );
+    const distribution = disclosure('rating-distribution', m.subject_ratings_distribution({}, english));
     expect(distribution.querySelectorAll('ol > li')).toHaveLength(21);
-    for (const bar of distribution.querySelectorAll<HTMLElement>('[aria-hidden="true"] > span')) expect(bar.style.width).toBe('0%');
+    for (const bar of distribution.querySelectorAll<HTMLElement>('[aria-hidden="true"] > span'))
+      expect(bar.style.width).toBe('0%');
     expect(reads).toBe(0);
   } finally {
     await act(async () => root.unmount());
