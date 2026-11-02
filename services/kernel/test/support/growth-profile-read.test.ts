@@ -207,8 +207,14 @@ test('identified footprints follow relation identity when labels change and do n
   const oldClients = identity('archive', 'clients');
   const newClients = identity('main', 'clients');
   const relationSizes = [
-    footprint([{ identity: users, reltuples: 100 }, { identity: oldClients, reltuples: 80 }]),
-    footprint([{ identity: users, reltuples: 100 }, { identity: oldClients, reltuples: 80 }]),
+    footprint([
+      { identity: users, reltuples: 100 },
+      { identity: oldClients, reltuples: 80 },
+    ]),
+    footprint([
+      { identity: users, reltuples: 100 },
+      { identity: oldClients, reltuples: 80 },
+    ]),
     footprint([
       { identity: users, reltuples: 100 },
       { identity: lateUsers, reltuples: 5 },
