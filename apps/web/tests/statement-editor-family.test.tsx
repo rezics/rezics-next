@@ -345,7 +345,9 @@ test('statement family owns labels, independent supplied parts, feedback, exact 
     expect(window.document.activeElement).toBe(qualifierRemove);
     await click(first, m.correction_remove_qualifier());
     await act(async () =>
-      window.document.activeElement!.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
+      window.document.activeElement!.dispatchEvent(
+        new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+      ),
     );
     expect(survivingValue.value).toBe('Keep this ordinal');
     expect(window.document.activeElement).toBe(qualifierRemove);

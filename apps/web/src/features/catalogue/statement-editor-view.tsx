@@ -580,11 +580,9 @@ export function StatementFields({
   }
   function removalTarget(button: HTMLButtonElement, kind: StatementRemovalKind) {
     const scope = button.closest<HTMLElement>(kind === 'part' ? 'fieldset' : 'section');
-    return (
-      kind === 'reference'
-        ? addReference.current
-        : ((scope?.querySelector('[data-add-part] select') as HTMLSelectElement | null) ?? scope)
-    );
+    return kind === 'reference'
+      ? addReference.current
+      : ((scope?.querySelector('[data-add-part] select') as HTMLSelectElement | null) ?? scope);
   }
   function hasContent(value: unknown): boolean {
     if (typeof value === 'string') return value.trim().length > 0;
@@ -623,9 +621,7 @@ export function StatementFields({
         next = {
           ...draft,
           references: draft.references.map((item, i) =>
-            i === referenceIndex
-              ? revision(item, { parts: item.parts.filter((_, n) => n !== partIndex) })
-              : item,
+            i === referenceIndex ? revision(item, { parts: item.parts.filter((_, n) => n !== partIndex) }) : item,
           ),
         };
         break;
@@ -656,7 +652,8 @@ export function StatementFields({
     const pending = pendingRemoval;
     if (pending?.key !== key) return;
     setPendingRemoval(null);
-    if (lifetime.active() && pending.trigger.isConnected && !pending.trigger.matches(':disabled')) pending.trigger.focus();
+    if (lifetime.active() && pending.trigger.isConnected && !pending.trigger.matches(':disabled'))
+      pending.trigger.focus();
   }
   function choice(key: number, kind: StatementRemovalKind) {
     if (pendingRemoval?.key !== key || pendingRemoval.kind !== kind) return null;
