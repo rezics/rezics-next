@@ -13,7 +13,6 @@ import { useSearchRetryWait } from '../search-recovery-retry';
 import { FacetContinuationLedger, MAX_CACHED_FACET_PROPERTIES } from './facet-continuation';
 import { refinementHref, type RefinementConditions, type RefinementProperty } from './model';
 import { PropertyPicker } from './property-picker';
-import { type FacetPage, type FacetState, type RequestedFacet } from './request';
 import {
   createRangeDraftState,
   getRangeDraft,
@@ -21,6 +20,15 @@ import {
   type RangeDraft,
   type RangeDraftState,
 } from './range-draft';
+import { type FacetPage, type FacetState, type RequestedFacet } from './request';
+
+/** Native refusal, restart and Retry-After block every entry; expiry only admits an explicit recovery. */
+function admitFacetRead(state: FacetState | undefined, recovery: boolean, now = Date.now()): boolean {
+  if (!state || state.status === 'ready') return true;
+  if (state.status === 'refused' || state.status === 'restart') return false;
+  if (state.retryAt !== undefined && state.retryAt > now) return false;
+  return recovery;
+}
 
 export type RefinementData = {
   key: string;
@@ -188,7 +196,7 @@ function RefinementInstance({
     state?.status === 'restart' ||
     state?.status === 'preparing';
 
-  async function read(properties: string[], more?: string, focusId?: number) {
+  async function read(properties: string[], more?: string, focusId?: number, recovery = false) {
     const facets = properties
       .filter((property) =>
         data.properties.some(
@@ -203,7 +211,7 @@ function RefinementInstance({
       settleFocus(focusId);
       return;
     }
-    return readRequested(facets, more, focusId);
+    return readRequested(facets, more, focusId, recovery);
   }
 
   function stopContinuation(property: string, code = 'repeated_facet_continuation') {
@@ -212,8 +220,8 @@ function RefinementInstance({
     setState({ status: 'restart', code });
   }
 
-  async function readRequested(facets: RequestedFacet[], more?: string, focusId?: number) {
-    if (!isCurrent()) {
+  async function readRequested(facets: RequestedFacet[], more?: string, focusId?: number, recovery = false) {
+    if (!isCurrent() || !admitFacetRead(state, recovery)) {
       if (boundFocus.current?.id === focusId) boundFocus.current = null;
       return;
     }
@@ -448,7 +456,9 @@ function RefinementInstance({
                   const property = attempt?.more ?? attempt?.facets[0]?.property ?? shown[0];
                   if (!property) return;
                   const id = bindFocus(event.currentTarget, property, attempt?.more ? 'more' : 'load');
-                  void (attempt ? readRequested(attempt.facets, attempt.more, id) : read(shown, undefined, id));
+                  void (attempt
+                    ? readRequested(attempt.facets, attempt.more, id, true)
+                    : read(shown, undefined, id, true));
                 }}
               >
                 {m.search_facet_retry({}, options)}

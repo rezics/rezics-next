@@ -61,7 +61,10 @@ Facet More replaces the visible ten-value window while pending and failed reads 
 keeps windows and cursor progress only for the eight shown properties, then offers a restart after 64 successful
 continuations for one property. Explicit Load, More and Retry keep focus on a surviving usable control; a removed
 control or a disabled fieldset recovers to Retry or that property or status region, and never steals focus if the
-reader moved away.
+reader moved away. Picker, Load, More and Retry share one native facet-read admission: a current refusal or restart and
+a future Retry-After deadline withhold every read; expiry only enables an explicit Retry of the failed facets and
+cursor, never a queued request. Local property lookup and shown-set selection stay available during those states. A new
+query identity starts a fresh admitted state.
 
 Native GET sort submission uses an empty `sort` value for Relevance, parsed as the default; `rating` is the only
 explicit sort value.
