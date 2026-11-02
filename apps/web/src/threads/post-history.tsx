@@ -136,9 +136,7 @@ function HistoryDisclosure({
       continuationBoundary.current = undefined;
       return;
     }
-    const boundary = document
-      .getElementById(regionId)
-      ?.querySelector<HTMLElement>('[data-history-focus-boundary]');
+    const boundary = document.getElementById(regionId)?.querySelector<HTMLElement>('[data-history-focus-boundary]');
     if (!boundary) {
       continuationBoundary.current = undefined;
       return;
@@ -295,12 +293,7 @@ function HistoryDisclosure({
           </ol>
         ) : null}
         {continuationBoundary.current?.connection === connection && continuationBoundary.current.revisionId === null ? (
-          <ContentItemHeading
-            level={4}
-            tabIndex={-1}
-            data-history-focus-boundary
-            className="font-semibold"
-          >
+          <ContentItemHeading level={4} tabIndex={-1} data-history-focus-boundary className="font-semibold">
             {continuationStatus}
           </ContentItemHeading>
         ) : null}

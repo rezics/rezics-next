@@ -269,7 +269,9 @@ test('A transport failure keeps admitted revisions readable through close, reope
     await finish(page, { revisions: [first], next: cursor });
     await versions(page, 1);
     expect(
-      await page.getByRole('button', { name: m.thread_history_hide() }).evaluate((button) => button === document.activeElement),
+      await page
+        .getByRole('button', { name: m.thread_history_hide() })
+        .evaluate((button) => button === document.activeElement),
     ).toBe(true);
     expect(await page.locator('[data-history-focus-boundary]').count()).toBe(0);
     expect(
