@@ -1,14 +1,10 @@
 import type { ResolveKindAudienceInput } from '../access/kind-audience.ts';
-import { DBOS } from '@dbos-inc/dbos-sdk';
 import { createHash } from 'node:crypto';
-import { readMembershipRouteKey } from '../access/membership-work-config.ts';
-import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
 import { enqueueIntent, runOperationalTransaction, type OperationalTransaction } from '../command/operational.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { WorkContext } from '../work/registry.ts';
-import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import { workStepDeadline } from './command-support.ts';
 import {
   COLLECTION_KIND_BYTE_LIMIT,
@@ -19,7 +15,6 @@ import {
   type CollectionKindNative,
 } from './collection-kind.ts';
 import parentQuery from './collection-kind-parent.sql';
-import locatorQuery from './collection-kind-locator.sql';
 import readQuery from './collection-kind-read.sql';
 import seedQuery from './collection-kind-seed.sql';
 import lockQuery from './collection-kind-lock.sql';
@@ -280,73 +275,4 @@ export async function retireCollectionKindPage(
     await enqueueCollectionKindRepair(tx, { ...input, cleanup: (input.cleanup ?? 0) + 1 }, retired.generation);
     return 'progress';
   });
-}
-
-export function registerCollectionKindWork(context: WorkContext) {
-  const native = createCollectionKindNative(
-    collectionKindSourceBindings({
-      pool: context.pool,
-      clock: context.clock,
-      access: context.getAuthorization().access,
-      routeKey: readMembershipRouteKey(context.env),
-      workClient: context.client,
-    }),
-  );
-  const step = DBOS.registerStep(
-    async (input: CollectionKindWork) => {
-      try {
-        if (input.cleanup !== undefined) return retireCollectionKindPage(context, input, native);
-        const outcome = await stepCollectionKind(context, input, native);
-        // No unavailable retry loop. A genuine native readiness/repair notification resubmits the admitted locator.
-        await retireCollectionKindPage(context, input, native);
-        return outcome;
-      } catch (error) {
-        if (error instanceof LifecycleDeniedError) return 'terminal';
-        throw error;
-      }
-    },
-    { name: 'library.collectionKindPage', ...COMMAND_STEP_RETRIES },
-  );
-  DBOS.registerWorkflow((input: CollectionKindWork) => step(input), { name: COLLECTION_KIND_WORKFLOW });
-  context.addEffects([
-    {
-      name: 'library_collection_kind',
-      types: [
-        'com.rezics.library.collection.member.changed.v1',
-        'com.rezics.library.collection.updated.v1',
-        'com.rezics.library.collection.deleted.v1',
-        'com.rezics.library.collection.listing.changed.v1',
-      ],
-      async run(event) {
-        if (
-          typeof event.data !== 'object' ||
-          event.data === null ||
-          !('collectionId' in event.data) ||
-          typeof event.data.collectionId !== 'string' ||
-          routeOf(event.data.collectionId) === null
-        )
-          throw new TypeError('Collection kind event requires an exact Collection locator');
-        const collectionId = event.data.collectionId;
-        const row = await withConnection(context.pool, (client) =>
-          locatorQuery.run(client, { route: routeOf(collectionId)!, collection_id: collectionId }),
-        );
-        // Deidentified public graphs remain with their native Source; never mint an owner or public capture.
-        if (!row?.accountId) return;
-        const input: CollectionKindWork = {
-          accounts: [row.accountId],
-          collectionId,
-          audience: null,
-          generation: null,
-          version: null,
-        };
-        try {
-          await transaction(context, input, workStepDeadline(), (tx) =>
-            enqueueCollectionKindRepair(tx, input, event.id),
-          );
-        } catch (error) {
-          if (!(error instanceof LifecycleDeniedError)) throw error;
-        }
-      },
-    },
-  ]);
 }

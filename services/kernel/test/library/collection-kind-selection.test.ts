@@ -29,29 +29,11 @@ test('dominant kind counts canonical subjects and resolves ties by exact TypeId'
   });
 });
 
-test('owner override precedes observation access, including a Type retired from the current release', () => {
-  expect(
-    collectionKind('example:Retired', {
-      get presentationKind(): null {
-        throw new Error('An owner override must not read member observations');
-      },
-      presentationKindSource: 'pending',
-    }),
-  ).toEqual({ presentationKind: 'example:Retired', presentationKindSource: 'owner' });
-});
-
-test('clearing an override preserves the distinction between complete zero and missing observation', () => {
-  expect(collectionKind(null, dominantCollectionKind(new Map()))).toEqual({
-    presentationKind: null,
-    presentationKindSource: 'empty',
-  });
-  expect(collectionKind(null, { presentationKind: null, presentationKindSource: 'pending' })).toEqual({
-    presentationKind: null,
-    presentationKindSource: 'pending',
-  });
-  expect(collectionKind(null, dominantCollectionKind(new Map([['book', 'schema:Book']])))).toEqual({
-    presentationKind: 'schema:Book',
-    presentationKindSource: 'members',
+test('mixed default and retained owner choice need no member evidence', () => {
+  expect(collectionKind(null)).toEqual({ presentationKind: null, presentationKindSource: 'mixed' });
+  expect(collectionKind('example:Retired')).toEqual({
+    presentationKind: 'example:Retired',
+    presentationKindSource: 'owner',
   });
 });
 

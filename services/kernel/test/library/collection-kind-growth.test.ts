@@ -10,13 +10,13 @@ afterAll(async () => {
   await f?.close();
 });
 
-test('complete automatic kind reads stay bounded with native64/512/4096 changed and unrelated members', async () => {
+test('mixed kind reads stay bounded with native64/512/4096 changed and unrelated members', async () => {
   const selected = await f.collection({ visibility: 'public' });
   const unrelated = await f.collection();
   const duplicate = await f.subject('schema:Movie');
   await f.add(selected.id, await f.subject('schema:Book'));
   await checkGrowth(f.database, {
-    name: 'complete automatic Collection kind with native source growth',
+    name: 'mixed Collection kind with native source growth',
     scales: [64, 512, 4096],
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     byteBounds: { requestBytes: 'constant', responseBytes: 'constant' },
@@ -29,17 +29,17 @@ test('complete automatic kind reads stay bounded with native64/512/4096 changed 
         await f.add(selected.id, duplicate);
         await f.add(unrelated.id, book);
       }
-      // Waiting for genuine default work is outside the metadata read measurement. GET starts no repair.
-      expect(await f.complete(selected.id)).toMatchObject({
-        presentationKind: 'schema:Book',
-        presentationKindSource: 'members',
+      // Presentation is immediate regardless of member population.
+      expect(await f.read(selected.id)).toMatchObject({
+        presentationKind: null,
+        presentationKindSource: 'mixed',
       });
     },
     async operation() {
       for (const bearer of [f.owner.bearer, f.other.bearer, null]) {
         expect(await f.read(selected.id, bearer)).toMatchObject({
-          presentationKind: 'schema:Book',
-          presentationKindSource: 'members',
+          presentationKind: null,
+          presentationKindSource: 'mixed',
         });
       }
     },

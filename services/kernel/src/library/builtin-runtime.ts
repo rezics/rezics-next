@@ -49,8 +49,7 @@ function descriptor(accountId: string, key: BuiltinCollectionKey): BuiltinCollec
     description: null,
     revision: 0,
     presentationKind: null,
-    // A logical descriptor has no complete audience-specific native Type observation.
-    presentationKindSource: 'pending',
+    presentationKindSource: 'mixed',
     cover: null,
     coverSource: 'none',
   };

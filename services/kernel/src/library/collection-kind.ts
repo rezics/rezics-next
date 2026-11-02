@@ -2,7 +2,6 @@ import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import type { AuthoritativeTime } from '../command/command.ts';
 import type { OperationalTransaction } from '../command/operational.ts';
-import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { Access, Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
@@ -20,7 +19,6 @@ import {
   type WorkDimensions,
   type WorkReceipt,
 } from './collection-source.ts';
-import readObservation from './collection-kind-read.sql';
 import { createCollectionKindPreparation } from './collection-kind-preparation.ts';
 import type { KindAudienceAccess } from '../access/kind-audience.ts';
 import type { WorkClient } from '../work/client.ts';
@@ -31,7 +29,9 @@ export type AutomaticCollectionKind =
   | { presentationKind: string; presentationKindSource: 'members' }
   | { presentationKind: null; presentationKindSource: 'empty' | 'pending' };
 
-export type CollectionKind = AutomaticCollectionKind | { presentationKind: string; presentationKindSource: 'owner' };
+export type CollectionKind =
+  | { presentationKind: null; presentationKindSource: 'mixed' }
+  | { presentationKind: string; presentationKindSource: 'owner' };
 
 /** A declaration's native predicate result for one canonical item. Unknown is
  * retained explicitly: it can only be ignored when a proven higher-ranked
@@ -105,10 +105,11 @@ export function reduceConfiguredCollectionKinds(votes: readonly ConfiguredKindVo
   return winner === undefined ? { status: 'empty' } : { status: 'selected', kindId: winner };
 }
 
-/** A constant-size projection of an already admitted observation; an override needs no observation. */
-export function collectionKind(override: string | null, observation: AutomaticCollectionKind): CollectionKind {
-  if (override !== null) return { presentationKind: override, presentationKindSource: 'owner' };
-  return { ...observation };
+/** Unset presentation uses each member's Type hints; a stored owner choice needs no member evidence. */
+export function collectionKind(override: string | null): CollectionKind {
+  return override === null
+    ? { presentationKind: null, presentationKindSource: 'mixed' }
+    : { presentationKind: override, presentationKindSource: 'owner' };
 }
 
 /**
@@ -569,49 +570,4 @@ export function validateCollectionKindPage(
       throw new ProblemError('dependency_unavailable');
     previous = vote.subjectId;
   }
-}
-
-/** Fixed metadata/proof points only. Read callers retain their own Collection authorization and final reread. */
-export function createCollectionKindReads(
-  dependencies: CollectionKindPreparationDependencies,
-  native: CollectionKindNative = createCollectionKindNative(collectionKindSourceBindings(dependencies)),
-) {
-  return async (
-    actor: Actor,
-    row: {
-      id: string;
-      presentationKind: string | null;
-      sourceGeneration: string;
-      memberCount?: number;
-      membershipKind?: string;
-    },
-    deadline: number,
-  ): Promise<CollectionKind> => {
-    if (row.presentationKind !== null)
-      return { presentationKind: row.presentationKind, presentationKindSource: 'owner' };
-    const selected = await native.select({ collectionId: row.id, actor, deadline });
-    if (selected.status !== 'selected') return pendingCollectionKind();
-    const route = routeOf(row.id);
-    if (route === null) throw new ProblemError('not_found');
-    const observation = await withConnection(dependencies.pool, (client) =>
-      readObservation.run(client, { route, collection_id: row.id, audience: selected.audience }),
-    );
-    if (!observation || !observation.complete || observation.sourceGeneration !== row.sourceGeneration)
-      return pendingCollectionKind();
-    const current = await native.revalidate({
-      capture: {
-        collectionId: row.id,
-        accountId: observation.accountId,
-        audience: selected.audience,
-        sourceGeneration: observation.sourceGeneration,
-        token: observation.capture,
-      },
-      actor,
-      deadline,
-    });
-    if (current.status !== 'current') return pendingCollectionKind();
-    return observation.winner === null
-      ? { presentationKind: null, presentationKindSource: 'empty' }
-      : { presentationKind: observation.winner, presentationKindSource: 'members' };
-  };
 }

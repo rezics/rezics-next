@@ -31,8 +31,6 @@ export const libraryWorkModule: WorkModule = {
     registerLibraryProfileMigrationWork(context);
     const { registerMembersPreparationWork } = await import('./members-preparation-work.ts');
     await registerMembersPreparationWork(context);
-    const { registerCollectionKindWork } = await import('./collection-kind-work.ts');
-    registerCollectionKindWork(context);
     const { registerOwnerIndexWork } = await import('./owner-index-work.ts');
     await registerOwnerIndexWork(context);
     const { registerCollectionSourceWork } = await import('./collection-source-work.ts');

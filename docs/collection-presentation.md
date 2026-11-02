@@ -10,7 +10,7 @@ below introduces selected work, not evidence that the deferred runtime or public
 ## Model and definitions
 
 Collection `presentationKind` is a definitions TypeId, never a fixed vertical enum, Concept/public tag or private
-Label. Members keep their own actual Type. An owner override wins; null requests auto derivation. Presentation
+Label. Members keep their own actual Type. An owner override wins; null uses mixed presentation. Presentation
 changes no membership, profile pin, query predicate, source authority or permission. Grid/list/table remain client
 layout choices. The Collection kind guides Collection presentation; each member still uses its own Type's hints.
 
@@ -52,36 +52,22 @@ Selected list/detail read fields:
 
 ```ts
 presentationKind: string | null;
-presentationKindSource: 'owner' | 'members' | 'empty' | 'pending';
+presentationKindSource: 'owner' | 'mixed';
 ```
 
 POST and PATCH accept optional `presentationKind: string | null`. Absence preserves an existing override on PATCH
-and defaults to auto on create; null clears the override to auto. PATCH retains the **required current numeric
+and defaults to mixed on create; null clears the override to mixed. PATCH retains the **required current numeric
 revision** and native `collection:update` authorization. A newly selected override must name a Type actually
 present in the current release. If a later release lacks a stored choice, retain it as presentation data with
 source `owner` and render the explicit fallback. An override requires no membership sweep.
 
-Auto selects the most frequent actual Type among the **complete current admitted canonical visible members**,
-counting each canonical subject once. Duplicates remain separate curated editor occurrences, never extra votes.
-Ties use ascending exact TypeId order. Never sample the first page or three preview thumbnails, or infer a winner
-from partial/private/hidden rows. Source `members` means a complete proven winner. `empty` proves no eligible
-members. `pending` means complete observation/repair is unavailable and `presentationKind` is null.
-
-Derived observations bind the actual Collection source generation, complete selective query dependencies and
-current original **and** terminal disclosure. Native bounded repair/preparation and maintained observations must
-replace synchronous full-table/group scans per GET, stale cached winners or global job gates. List/detail GET
-remain pure under the Library contract; only the already authorized common-members preparation boundary may
-start retained work. Different viewers may receive different derived kinds because their eligible members differ;
-no hidden Type or curator-private count oracle is exposed. The Library consumer maintains generation-bound canonical
-votes and indexed Type counts through fenced operational work. Its default native binding now resolves existing
-Collection Source/capture/custody and scoped identity records through `collection-kind-preparation.ts`; selection
-uses the actual current reader, and anonymous work uses genuine anonymous authority. It retains exact source and
-Semantic observation/custody locators without an Actor or permission cache. Metadata reads create no retained
-preparation or work. The current Semantic scoped producer, complete retained Type/disclosure footprint, and
-Accounts/Search authenticated mutation-origin continuation still lack executable bodies. Nonempty/audience work
-therefore remains typed unavailable; complete zero requires a complete native population capture, never a count
-shortcut. This source delivery does not prove native/whole/main acceptance. The [Library owner contract](../services/kernel/src/library/README.md)
-records the actual composition and remaining producer obligations.
+An unset kind returns `presentationKind: null` and source `mixed` for empty, curated and logical dynamic
+Collections alike. Each member uses its own Type's released hints immediately. An explicitly selected kind supplies
+Collection presentation with source `owner`; it does not replace member Types or hints. Neither read nor selection
+waits for member enumeration, automatic derivation, per-viewer audience evidence, Kind preparation or kind
+currentness. No dominant Type is inferred from member counts, previews or complete populations. Real Collection
+and member disclosure and authorization, explicit Type/catalogue publication and independent cover readiness retain
+their existing contracts.
 
 ## FULL member key fact values
 
@@ -235,7 +221,7 @@ serialization or duplicate writers replace those whole producers. A source/type 
 neither full native/API/UI delivery nor integrated root/main behavior.
 
 Required outcomes include owner, other account, anonymous and suspended credentials; hidden original/member and
-terminal; Type ties and changes; override/clear and retired Type fallback; denied cover and current ordered fallback;
+terminal; mixed defaults across member Type changes; override/clear and retired Type fallback; denied cover and current ordered fallback;
 CAS, receipt replay, batch rollback, destination cap and cross-curator rejection; active/removal/Undo/public-source
 changes and terminal no-resurrection. Suspension uses actual invalidated bearer behavior under Library authority.
 Native growth evidence uses 1/8/64 homes, extending to 4,096 where the existing source/dependency contract requires,
@@ -259,15 +245,11 @@ replay, custody and minimization work, not only the visible response or a hidden
 - Growth check: 1/8/64 homes through applicable 4,096-home dependencies, denied/late readable covers, privacy changes,
   first/deep preview pages and unrelated history; include foreign visits, write rollback/replay and native receipts.
 
-### Complete dominant kind
+### Mixed or explicit kind
 
-- Touches: actual source generation, canonical admitted Type support, complete selective dependencies,
-  original/terminal disclosure and bounded native observation repair/preparation and custody.
-- Bound: owner override needs no sweep; derived kind needs complete maintained evidence, never raw100/three-preview
-  sampling, full-table/group scans per GET or a global job gate. Curated cap 5,000 is not a read-time scan allowance;
-  native steps and total finite work stay within existing source admission and Cost, without private read-time counts.
-- Growth check: native 1/8/64 up to applicable 4,096 homes, ties/duplicates/hidden types, Type/source changes,
-  excluded dependencies and disjoint identity churn; prove useful settlement and charge every repair/worker step.
+- Touches: the already authorized Collection metadata and, for a newly selected explicit kind, the active Type release.
+- Bound: constant-size metadata projection; no member sweep, observation, audience evidence or retained preparation.
+  Member Type hints and cover/fact producers keep their independent read and disclosure bounds.
 
 ### FULL fact batch
 

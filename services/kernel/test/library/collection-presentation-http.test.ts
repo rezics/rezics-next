@@ -50,6 +50,6 @@ test('curator persists and clears an actual TypeId presentation override with na
   const next = (await cleared.json()).collection;
   expect(next.revision).toBeGreaterThan(value.revision);
   expect(next.presentationKind).toBeNull();
-  expect(next.presentationKindSource).toBe('empty');
+  expect(next.presentationKindSource).toBe('mixed');
   expect((await f.send('anonymous', 'GET', path)).status).toBe(404);
 }, 120000);

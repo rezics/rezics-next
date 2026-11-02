@@ -179,7 +179,7 @@ Current implementation evidence is narrower than the capability:
   checkpoints and complete publication CAS. The sole default Library WorkModule supplies its operational client
   and maintenance queue. Missing Semantic scope/public capture remains retryable unavailability; the provisional
   Semantic factory returns `source_unready`, never current/ready-empty. Native useful outcomes remain pending.
-- `collection-kind.ts` and `collection-kind-work.ts` consume complete audience-specific native observations.
+- `collection-kind.ts` projects mixed defaults or stored explicit choices without member observations.
   Owner overrides bypass observation access. Metadata reads do not enqueue work; native mutation effects and the
   admitted repair boundary drive raw100/4096-byte steps, generation/version CAS, canonical unique votes, indexed
   Type winners and bounded retired-generation cleanup. Account-fenced operational transactions retain work with
@@ -2377,46 +2377,20 @@ The curator with update scope may also receive the configured ID. After foreign 
 Collection authorization, revision and source generation; a changed source returns unavailable rather than a stale
 positive. Metadata GET starts no work and creates no header, grant, receipt or event.
 
-The read seam is `collectionPresentation` plus `collection-reads.ts`'s `present`. `collection-kind.ts` separates
-constant-size override/observation projection from repair-side dominant-Type arithmetic over complete canonical
-visible support. The arithmetic supplies no Source, identity or disclosure proof. Owner overrides return `owner`.
-A complete admitted kind observation alone can return `empty`; the metadata member count is not native population
-proof. A source without that observation returns null/`pending`. Cover fallback keeps its own observation contract.
-The automatic kind binding is `collection-kind-preparation.ts`, composed by the default read factory and registered
-Collection-kind worker. Ordered member-cover derivation must connect here using the existing
-`collection-source-native.ts` `observe`/`page`/`probe` source generation and current-disclosure observations, including
-`collection-source-native-header.sql`; it must not sample the first page. The bounded FULL fact integration at
-`views.ts`'s `fullMembers` consumes Semantic's admitted batch through `attachCollectionListFacts`, as described below.
-The kind binding uses real anonymous Access only for a Source that authorizes anonymous; authenticated selection
-uses the verified request Actor and a separate private lookup namespace. Neither account/audience/token locators nor
-native custody replace current authority. Source readers are reused solely for native prepared-handle provenance;
-no Actor or allow verdict is cached. Every resume resolves `canonical_source_scope`, its exact native capture and
-committed receipt, and Semantic's scoped observation, including excluded/order/population originals. The token
-retains native capture, Semantic capture/revision and the observation's exact custody hold. Final current-reader
-checks follow foreign waits. Adoption uses the real same-home live Core client and account-T; custody accepts that
-operational context directly. Retirement requires the actual retired observation and releases only its exact hold.
-Existing kind observation/retired rows retain these private locators under their existing owner indexes and fixed
-Library cleanup inventory. An exact `(route,collection_id,account_id,capture)` partial index bounds retired
-native locators of at most 512 bytes; older oversized locators remain retained. No new retained store, participant,
-Source purge or destination acknowledgement is added.
+The read seam is `collectionPresentation` plus `collection-reads.ts`'s `present`. `collectionKind` projects stored
+metadata directly: an unset choice returns null/`mixed` and every member uses its own Type's hints immediately;
+a stored explicit choice returns `owner`, including a Type retired from the current release. Empty and logical
+dynamic Collections also return `mixed`. Neither path selects an audience, reads kind observations, prepares Kind
+work or checks kind currentness. Collection metadata authorization remains with the native reader; current cover
+checks after foreign waits remain independent. The default work module no longer registers the automatic Kind
+workflow or its mutation effects.
 
-This is source delivery, not complete native proof. `createIdentityScopedObservations` is still an unavailable
-Semantic producer. Its existing identity scope does not retain complete current Type/disclosure/Access provenance;
-nonzero native populations therefore remain unavailable rather than using a sampled Type or cached permission.
-The vacuous Type case requires an actually complete zero-population native capture, never `memberCount` zero.
-The selected Type reader is the real `readSubjectSummaries` with installed Access, verified Actor, server routeKey
-and deadline. Its unproved native footprint is refused before dispatch with an actual WorkReceipt; that is not a
-retained Type certificate. Accounts/Search still need to supply the registered audience-specific mutation-origin
-capability through Commerce; `MembersPreparation` currently provides no executable body for this use. Account
-locators never synthesize a principal or episode. A future mechanical curated continuation must use only the selected
-live Search/Core client and actual `admitStep`/`readWorkDefinition`. These precise gaps stay typed unavailable.
-
-The added native-default scenarios cover public completion versus pending, authenticated audience isolation, hidden
-original/source invalidation, complete empty and owner overrides. They are not run in this source-only attempt;
-whole/native/main acceptance remains unproved. Complete automatic kind and ordered member-cover derivation, and
-first-three previews, remain separate producers.
-Logical dynamic readers must consume these row fields and this response seam without another metadata table or writes
-on GET.
+The former automatic reduction, preparation, admission and evidence modules are retained only where shared native
+contracts or retained-data cleanup still reference them. They are not prerequisites for Collection presentation.
+Explicit Type/catalogue publication remains independent. Ordered member-cover derivation keeps its existing Source
+and disclosure contract. The bounded FULL fact integration at `views.ts`'s `fullMembers` consumes Semantic's admitted
+batch through `attachCollectionListFacts`, as described below. Logical dynamic readers share the same presentation
+fields without another metadata table or writes on GET.
 
 Retention inventory under the existing Library A5 and Accounts shared-history ownership:
 

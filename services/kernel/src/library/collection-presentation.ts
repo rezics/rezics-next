@@ -97,19 +97,14 @@ export async function preparePresentationSelection(
   return null;
 }
 
-/** Storage/response seam for the separate complete derivation and ordered preview producers.
- * Only a proved empty curated source certifies absence. No member sampling or read-time work is started here.
- */
+/** Kind presentation is immediate; ordered cover readiness keeps its independent contract. */
 export function collectionPresentation(
   row: { presentationKind: string | null; memberCount: number; membershipKind?: string },
   cover: CoverSummary | null = null,
 ): Omit<CollectionPresentation, 'coverMediaId'> {
   const empty = row.membershipKind !== 'dynamic' && row.memberCount === 0;
   return {
-    ...collectionKind(row.presentationKind, {
-      presentationKind: null,
-      presentationKindSource: empty ? 'empty' : 'pending',
-    }),
+    ...collectionKind(row.presentationKind),
     cover,
     coverSource: cover !== null ? 'owner' : empty ? 'none' : 'pending',
   };

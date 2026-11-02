@@ -120,7 +120,7 @@ test('native imported selection retains its original home and rechecks the actua
   collection = await patch(collection, { presentationKind: null, coverMediaId: null });
   expect(collection).toMatchObject({
     presentationKind: null,
-    presentationKindSource: 'pending',
+    presentationKindSource: 'mixed',
     cover: null,
     coverSource: 'pending',
     memberCount: 1,
@@ -202,7 +202,7 @@ test('metadata CAS and native receipt digests distinguish omission, null, values
   const reduced = await f.credential('ordinary', ['collection:read']);
   expect((await f.send(reduced.bearer, 'PATCH', path(row.id), body, key)).status).toBe(404);
   row = await patch(changed, { presentationKind: null });
-  expect(row.presentationKindSource).toBe('empty');
+  expect(row.presentationKindSource).toBe('mixed');
   const pure = await capture(f.database, () => read(row.id));
   expect(pure.value.presentationKind).toBeNull();
   for (const statement of pure.capture.statements) expect(statement).not.toMatch(/\b(?:INSERT|UPDATE|DELETE)\b/i);

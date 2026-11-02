@@ -24,7 +24,6 @@ import {
   readablePresentationCover,
   type CollectionPresentation,
 } from './collection-presentation.ts';
-import { createCollectionKindReads } from './collection-kind.ts';
 import { subjectCollections } from './listing.ts';
 import { isOrdinalKey } from './ordinal.ts';
 import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
@@ -299,12 +298,6 @@ export function createCollectionReads(
   const retainPreview = createCollectionPreviewPreparation(dependencies);
   const { pool, access, tokens } = dependencies;
   const anchors = { pool, access };
-  const readKind = createCollectionKindReads({
-    pool,
-    access,
-    ...(dependencies.routeKey ? { routeKey: dependencies.routeKey } : {}),
-    ...(dependencies.clock ? { clock: dependencies.clock } : {}),
-  });
   const builtins = createBuiltinRuntime(dependencies);
 
   return {
@@ -471,8 +464,7 @@ export function createCollectionReads(
       );
       editor = await withConnection(pool, (client) => check(deadlineClient(client, deadline)));
     }
-    const kind = await readKind(viewer, row, deadline);
-    if (row.coverMediaId !== null || row.presentationKind === null) {
+    if (row.coverMediaId !== null) {
       const final = await loadCollection(viewer, row.id, deadline);
       if (!final) throw notFound();
       if (
@@ -486,7 +478,6 @@ export function createCollectionReads(
     return {
       ...collectionView(row),
       ...collectionPresentation(row, cover),
-      ...kind,
       ...(editor && row.coverMediaId !== null ? { coverMediaId: row.coverMediaId } : {}),
     };
   }

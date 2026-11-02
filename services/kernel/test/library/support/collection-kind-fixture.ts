@@ -2,7 +2,7 @@ import { expect } from 'bun:test';
 import type { CollectionView } from '../../../src/library/collection-reads.ts';
 import { createCollectionPresentationFixture } from './collection-presentation-fixture.ts';
 
-/** Native Auth, subject/Collection commands and the default worker; no injected observations or Access verdicts. */
+/** Native Auth and subject/Collection commands; no injected observations or Access verdicts. */
 export async function createCollectionKindFixture() {
   const native = await createCollectionPresentationFixture();
   const path = (id: string) => `/v1/collections/${id}`;
@@ -28,19 +28,6 @@ export async function createCollectionKindFixture() {
     return ((await response.json()) as { collection: CollectionView }).collection;
   }
 
-  // GET is deliberately the only operation here: work must originate in native mutation/repair boundaries.
-  // A bounded wait permits real asynchronous delivery; it never fabricates completion or starts repair itself.
-  async function complete(collectionId: string, bearer: string | null = native.owner.bearer) {
-    const deadline = Date.now() + 30_000;
-    let row = await read(collectionId, bearer);
-    while (row.presentationKindSource === 'pending' && Date.now() < deadline) {
-      await Bun.sleep(50);
-      row = await read(collectionId, bearer);
-    }
-    expect(row.presentationKindSource).not.toBe('pending');
-    return row;
-  }
-
   async function patch(collectionId: string, selection: string | null) {
     const current = await read(collectionId);
     const response = await native.send(native.owner.bearer, 'PATCH', path(collectionId), {
@@ -58,7 +45,7 @@ export async function createCollectionKindFixture() {
     expect(response.status).toBe(200);
   }
 
-  return { ...native, path, subject, add, read, complete, patch, hide };
+  return { ...native, path, subject, add, read, complete: read, patch, hide };
 }
 
 export type CollectionKindFixture = Awaited<ReturnType<typeof createCollectionKindFixture>>;

@@ -281,7 +281,7 @@ test('curator creates replays updates conflicts and deletes with only the contra
     title: 'First',
     description: null,
     presentationKind: null,
-    presentationKindSource: 'empty',
+    presentationKindSource: 'mixed',
     cover: null,
     coverSource: 'none',
     visibility: 'private',
