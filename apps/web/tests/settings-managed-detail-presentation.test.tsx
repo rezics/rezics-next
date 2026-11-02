@@ -183,7 +183,8 @@ test('each feed retries its exact failed cursor and restarts only itself; first-
       result = ready();
       await settle(() => button(host, `${m.settings_managed_start_first_page()} · ${label}`).click());
       expect(calls[3]).toEqual({ viewerId: viewer, accountId: target, section });
-      expect(reader.snapshot()[sibling]).toBe(retained);
+      expect(reader.snapshot()[sibling].page).toBe(retained.page);
+      expect(reader.snapshot()[sibling].cursor).toBe(retained.cursor);
       result = { ok: false, failure: { status: 503, transient: true } };
       await settle(() => reader.load(section));
       result = ready();
@@ -192,7 +193,55 @@ test('each feed retries its exact failed cursor and restarts only itself; first-
       expect(calls[1]).toEqual({ viewerId: viewer, accountId: target, section, cursor });
       expect(calls).toHaveLength(6);
       expect(host.querySelector('[role="alert"]')).toBeNull();
-      expect(reader.snapshot()[sibling]).toBe(retained);
+      expect(reader.snapshot()[sibling].page).toBe(retained.page);
+      expect(reader.snapshot()[sibling].cursor).toBe(retained.cursor);
+    } finally {
+      await close();
+    }
+  }
+});
+
+test('nameless supplied identities remain distinct from unavailable identities', async () => {
+  const value = detail();
+  value.account = { ...value.account, displayName: null, handle: null };
+  const reader = new ManagedAccountReader(viewer, target, async () => ready(value));
+  await reader.load();
+  const { host, close } = await mount(reader);
+  try {
+    const region = host.querySelector(`[aria-label="${m.managed_target_title()}"]`)!;
+    expect(region.textContent).toContain(m.managed_unnamed());
+    expect(region.querySelector('dd')?.textContent).toBe(target);
+    expect(region.textContent).not.toContain(m.settings_managed_detail_identity_unavailable());
+  } finally {
+    await close();
+  }
+});
+
+test('each continuation retains its page during Retry-After and disables both recovery choices without automatic reads', async () => {
+  for (const section of ['members', 'responsibilities'] satisfies DetailSection[]) {
+    let result = ready();
+    const calls: DetailRequest[] = [];
+    const reader = new ManagedAccountReader(viewer, target, async (input) => {
+      calls.push(input);
+      return result;
+    });
+    await reader.load();
+    const retained = reader.snapshot()[section].page;
+    const { host, close } = await mount(reader);
+    const label = section === 'members' ? m.managed_holders_title() : m.managed_operated_title();
+    try {
+      result = { ok: false, failure: { status: 429, transient: true, retryAfter: '60' } };
+      await settle(() => button(host, `${m.managed_next()} · ${label}`).click());
+      for (const action of [m.settings_retry(), m.settings_managed_start_first_page()]) {
+        const control = button(host, `${action} · ${label}`);
+        expect(control.disabled).toBe(true);
+        for (const token of ['h-auto', 'min-h-11', 'min-w-11', 'max-w-full', 'whitespace-normal', 'wrap-anywhere']) {
+          expect(control.className.split(' ')).toContain(token);
+        }
+        await settle(() => control.click());
+      }
+      expect(reader.snapshot()[section].page).toBe(retained);
+      expect(calls).toHaveLength(2);
     } finally {
       await close();
     }

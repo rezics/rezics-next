@@ -132,7 +132,7 @@ export const LongIdentityPhone: Story = {
     const back = canvas.getByRole('link', { name: m.managed_back() });
     await expect(back.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
     await userEvent.click(back);
-    await canvas.findByRole('link', { name: organization.displayName });
+    await canvas.findByRole('link', { name: /^The International Association/ });
   },
 };
 
