@@ -166,7 +166,6 @@ function SubjectTermsPageLive({
   const readScope = useMemo(() => ({}), [id, locale, session, transport, lifetime]);
   const currentReadScope = useRef(readScope);
   currentReadScope.current = readScope;
-  const readResult = useRef<HTMLDivElement>(null);
   const readIntent = useRef<{
     scope: object;
     opener: HTMLButtonElement;
@@ -186,7 +185,10 @@ function SubjectTermsPageLive({
     intent.cancel();
     if (active === intent.opener && intent.opener.isConnected && !intent.opener.disabled) return;
     if (active !== intent.opener && active !== document.body && active !== document.documentElement) return;
-    const target = intent.opener.isConnected && !intent.opener.disabled ? intent.opener : readResult.current;
+    const target =
+      intent.opener.isConnected && !intent.opener.disabled
+        ? intent.opener
+        : document.getElementById(domId('read-result'));
     target?.focus();
   }, [busy, saved, comparison, readScope, lifetime]);
   const pending = useRef<TermsCommand | null>(null);
@@ -782,7 +784,7 @@ function SubjectTermsPageLive({
           {saved ? (
             <ContentItemFrame
               as="div"
-              ref={readResult}
+              id={domId('read-result')}
               role="status"
               tabIndex={-1}
               aria-labelledby={domId('saved')}
@@ -1094,7 +1096,7 @@ function SubjectTermsPageLive({
               {comparison && (
                 <ContentItemFrame
                   as="div"
-                  ref={readResult}
+                  id={domId('read-result')}
                   tabIndex={-1}
                   aria-labelledby={domId('comparison')}
                   className={`${frameClassName} rounded-sm focus:outline-2 focus:outline-offset-4 focus:outline-ring`}
