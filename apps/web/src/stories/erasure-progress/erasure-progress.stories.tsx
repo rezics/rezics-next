@@ -167,7 +167,8 @@ function AuthorOperationProgressFixture({
     () => (holdRead ? new Promise<ErasureRead>(() => {}) : Promise.resolve(initial)),
     [holdRead, initial],
   );
-  const operationId = initial.kind === 'available' ? initial.operation.name.slice('operations/'.length) : authorOperationId;
+  const operationId =
+    initial.kind === 'available' ? initial.operation.name.slice('operations/'.length) : authorOperationId;
   return (
     <PatternStory visitor={visitor} path={`/operations/${operationId}`}>
       <AppShell>
@@ -190,7 +191,11 @@ function terminalOperation(code: number): ErasureRead {
 function authorProgressStory(
   initial: ErasureRead,
   heading: string,
-  options: { visitor?: 'Signed In' | 'Signed Out'; defaultViewport?: 'phone390' | 'desktop1280'; holdRead?: boolean } = {},
+  options: {
+    visitor?: 'Signed In' | 'Signed Out';
+    defaultViewport?: 'phone390' | 'desktop1280';
+    holdRead?: boolean;
+  } = {},
 ): Story {
   return {
     args: { page: { status: 'loading' } },
@@ -233,7 +238,10 @@ export const AuthorFailed: Story = authorProgressStory(terminalOperation(13), m.
 export const AuthorPermissionStopped: Story = authorProgressStory(terminalOperation(7), m.author_erasure_failed());
 export const AuthorChangedSource: Story = authorProgressStory(terminalOperation(9), m.author_erasure_failed());
 export const AuthorDependencyUnavailable: Story = authorProgressStory(terminalOperation(14), m.author_erasure_failed());
-export const AuthorStatusUnavailable: Story = authorProgressStory(authorUnavailable, m.author_erasure_status_unavailable());
+export const AuthorStatusUnavailable: Story = authorProgressStory(
+  authorUnavailable,
+  m.author_erasure_status_unavailable(),
+);
 export const AuthorSignedOut: Story = authorProgressStory(
   { kind: 'signed-out' },
   m.author_erasure_status_unavailable(),
@@ -243,14 +251,8 @@ export const AuthorPermissionRefused: Story = authorProgressStory(
   { kind: 'forbidden' },
   m.author_erasure_status_unavailable(),
 );
-export const AuthorNotFound: Story = authorProgressStory(
-  { kind: 'not-found' },
-  m.author_erasure_status_unavailable(),
-);
-export const AuthorConflict: Story = authorProgressStory(
-  { kind: 'conflict' },
-  m.author_erasure_status_unavailable(),
-);
+export const AuthorNotFound: Story = authorProgressStory({ kind: 'not-found' }, m.author_erasure_status_unavailable());
+export const AuthorConflict: Story = authorProgressStory({ kind: 'conflict' }, m.author_erasure_status_unavailable());
 export const AuthorStatusCheckPending: Story = {
   ...authorProgressStory(authorUnavailable, m.author_erasure_status_unavailable(), { holdRead: true }),
   play: async ({ canvasElement }) => {
@@ -260,11 +262,9 @@ export const AuthorStatusCheckPending: Story = {
     await expect(await canvas.findByRole('button', { name: m.author_erasure_checking() })).toBeDisabled();
   },
 };
-export const AuthorPermissionPhone390: Story = authorProgressStory(
-  terminalOperation(7),
-  m.author_erasure_failed(),
-  { defaultViewport: 'phone390' },
-);
+export const AuthorPermissionPhone390: Story = authorProgressStory(terminalOperation(7), m.author_erasure_failed(), {
+  defaultViewport: 'phone390',
+});
 export const AuthorDependencyDesktop1280: Story = authorProgressStory(
   terminalOperation(14),
   m.author_erasure_failed(),

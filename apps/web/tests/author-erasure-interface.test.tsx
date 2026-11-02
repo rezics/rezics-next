@@ -24,7 +24,9 @@ test('author erasure production views keep their named shared anatomy, bounded c
     matchMedia: window.matchMedia.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
   };
-  const previous = new Map([...Object.keys(globals), 'fetch'].map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  const previous = new Map(
+    [...Object.keys(globals), 'fetch'].map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
+  );
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   const originalFetch = globalThis.fetch;
@@ -189,7 +191,9 @@ test('author erasure production views keep their named shared anatomy, bounded c
     const operationFrame = host.querySelector('[data-slot="content-item-frame"]');
     expect(operationFrame?.classList.contains('border')).toBe(false);
     expect(operationFrame?.classList.contains('bg-card')).toBe(false);
-    const headerScope = [...host.querySelectorAll('header p')].find((item) => item.textContent === m.author_erasure_scope());
+    const headerScope = [...host.querySelectorAll('header p')].find(
+      (item) => item.textContent === m.author_erasure_scope(),
+    );
     expect(headerScope?.classList.contains('break-words')).toBe(true);
     for (const width of [390, 1280]) {
       Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
