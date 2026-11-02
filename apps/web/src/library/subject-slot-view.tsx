@@ -843,6 +843,7 @@ function SubjectLibrarySlotView({
   }
 
   async function performLabel(command: SubjectLabelMutationInput, label?: LibraryLabelSummary | SubjectLabel) {
+    if (uncertainLabel.current && command !== uncertainLabel.current.input) return;
     if (!uncertainLabel.current && !data.csrfToken) return;
     const operation: NonNullable<typeof uncertainLabel.current> = uncertainLabel.current ?? {
       input: command,

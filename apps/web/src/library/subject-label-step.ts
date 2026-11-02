@@ -22,12 +22,17 @@ type Capture = {
   name: string;
   createKey: string;
   assignKey: string;
-  label?: LibraryLabelSummary;
+  label?: Pick<LibraryLabelSummary, 'id' | 'revision'>;
   created: boolean;
   authorization: string;
   session: string;
   viewer: string;
   csrf: string;
+  sender: string;
+};
+const sender = (request: Request) => {
+  const url = new URL(request.url);
+  return url.origin + url.pathname;
 };
 const domain = 'rezics.subject-label-step.v1';
 const tokenLimit = 3200;
@@ -70,7 +75,7 @@ async function seal(capture: Capture, env: Partial<SessionEnv>): Promise<Subject
     subjectId: capture.subjectId,
     name: capture.name,
     token,
-    ...(capture.label ? { label: capture.label } : {}),
+    ...(capture.label ? { label: { ...capture.label, name: capture.name } } : {}),
     created: capture.created,
   };
 }
@@ -119,12 +124,13 @@ export async function prepareSubjectLabelStep(
       name,
       createKey: input.intent === 'create-and-assign' ? input.createKey! : '',
       assignKey: input.idempotencyKey,
-      ...(label ? { label } : {}),
+      ...(label ? { label: { id: label.id, revision: label.revision } } : {}),
       created: false,
       authorization,
       session,
       viewer,
       csrf,
+      sender: sender(request),
     },
     env,
   );
@@ -143,6 +149,7 @@ export async function executeSubjectLabelStep(
 ): Promise<SubjectLabelMutationResult> {
   const capture = await open(input.token, env);
   if (
+    sender(request) !== capture.sender ||
     input.subjectId !== capture.subjectId ||
     cookie(request, SESSION_COOKIE) !== capture.session ||
     sessionSubject(request) !== capture.viewer ||
@@ -156,7 +163,7 @@ export async function executeSubjectLabelStep(
   if (capture.kind === 'create') {
     const result = await client.libraryLabels.post({ name: capture.name }, { headers });
     if (result.error || !result.data || (statusOf(result) ?? 500) >= 400) return refused(result, 'create-and-assign');
-    const label = { ...result.data.label, name: capture.name };
+    const label = result.data.label;
     const step = await seal({ ...capture, kind: 'assign', label, created: true }, env);
     return { ok: false, reason: 'continue', step };
   }
@@ -165,7 +172,7 @@ export async function executeSubjectLabelStep(
     .libraryLabels({ id: capture.label.id })
     .$assign.post({ subjectId: capture.subjectId }, { headers });
   if (result.error || !result.data || (statusOf(result) ?? 500) >= 400) return refused(result, 'assign');
-  return { ok: true, label: capture.label, assignment: result.data.assignment };
+  return { ok: true, label: { ...capture.label, name: capture.name }, assignment: result.data.assignment };
 }
 
 /** Reveal continuation display only to the same currently admitted session, without a command or catalogue read. */
@@ -180,6 +187,7 @@ export async function readSubjectLabelStep(
   try {
     const capture = await open(input.token, env);
     if (
+      sender(request) !== capture.sender ||
       input.subjectId !== capture.subjectId ||
       cookie(request, SESSION_COOKIE) !== capture.session ||
       sessionSubject(request) !== capture.viewer ||
@@ -191,7 +199,7 @@ export async function readSubjectLabelStep(
       subjectId: capture.subjectId,
       name: capture.name,
       token: input.token,
-      ...(capture.label ? { label: capture.label } : {}),
+      ...(capture.label ? { label: { ...capture.label, name: capture.name } } : {}),
       created: capture.created,
     };
   } catch {
