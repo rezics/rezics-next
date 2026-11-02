@@ -68,14 +68,20 @@ function Visits({ session = 'signed-in' }: { session?: 'signed-in' | 'signed-out
       {session === 'signed-in' ? (
         <div className="flex flex-wrap gap-3">
           <button type="button" className="min-h-11 rounded-sm border px-3 focus-visible:outline-2"
-            onClick={() => client.setQueryData(sessionQuery.queryKey, { ...current.data, subject: 'different-illustrative-reader' })}>
+            onClick={() => client.setQueryData(sessionQuery.queryKey, (prepared) =>
+              prepared ? { ...prepared, subject: 'different-illustrative-reader' } : prepared,
+            )}>
             Replace illustrative reader
           </button>
           <button type="button" className="min-h-11 rounded-sm border px-3 focus-visible:outline-2"
-            onClick={() => notifyManager.batch(() => {
-              client.setQueryData(sessionQuery.queryKey, { ...current.data, subject: 'different-illustrative-reader' });
-              client.setQueryData(sessionQuery.queryKey, { ...current.data });
-            })}>
+            onClick={() => {
+              const prepared = client.getQueryData(sessionQuery.queryKey);
+              if (!prepared) return;
+              notifyManager.batch(() => {
+                client.setQueryData(sessionQuery.queryKey, { ...prepared, subject: 'different-illustrative-reader' });
+                client.setQueryData(sessionQuery.queryKey, prepared);
+              });
+            }}>
             Replace illustrative reader and return
           </button>
         </div>
@@ -207,7 +213,7 @@ export const FailedBoards: Story = { beforeEach: fixture('failed-boards'), play:
 export const MismatchedReader: Story = {
   play: async ({ canvasElement }) => {
     await visits(canvasElement);
-    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Replace illustrative reader', exact: true }));
+    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Replace illustrative reader' }));
     await failed(canvasElement);
     await expect(boardReads()).toHaveLength(0);
   },
