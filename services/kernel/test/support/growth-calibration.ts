@@ -146,13 +146,32 @@ function requiredAbsolute(points: readonly CalibrationPoint[], relative: number,
   return required[count - 1]!;
 }
 
+function meanAllowance(points: readonly CalibrationPoint[], absolute: number, relative: number): number {
+  let scale = absolute;
+  for (const { reference } of points) scale = Math.max(scale, relative * reference);
+  if (scale === 0) return 0;
+
+  let sum = 0;
+  let correction = 0;
+  for (const { reference } of points) {
+    const normalized = Math.max(absolute, relative * reference) / scale;
+    const adjusted = normalized - correction;
+    const next = sum + adjusted;
+    correction = next - sum - adjusted;
+    sum = next;
+  }
+  const mean = scale * Math.min(1, sum / points.length);
+  if (!Number.isFinite(mean)) throw new TypeError(`Calibration fit objective for ${points.length} points is not finite`);
+  if (mean === 0) throw new TypeError(`Calibration fit objective for ${points.length} points is below numeric range`);
+  return mean;
+}
+
 function fit(points: readonly CalibrationPoint[], coverage: number): Fit {
   let best: Fit | undefined;
   for (let step = 0; step <= 100; step += 1) {
     const relative = step / 100;
     const absolute = requiredAbsolute(points, relative, coverage);
-    const mean =
-      points.reduce((sum, { reference }) => sum + Math.max(absolute, relative * reference), 0) / points.length;
+    const mean = meanAllowance(points, absolute, relative);
     if (!best || mean < best.mean) best = { absolute, relative, mean };
   }
   return best!;
@@ -252,29 +271,78 @@ export function detectableSlope(
   }
   if (firstScale <= 0) throw new TypeError('Growth scales must be positive');
 
+  const coordinates = scales.map((scale) => {
+    const ratio = scale / firstScale;
+    const coordinate = ratio - 1;
+    if (!Number.isFinite(ratio) || !Number.isFinite(coordinate) || (scale > firstScale && coordinate === 0))
+      throw new TypeError(`Growth scale coordinate at scale ${scale} is not representable`);
+    return coordinate;
+  });
+
   const outcomeAt = (slope: number): string => {
-    const points: SeriesPoint[] = [];
-    for (const scale of scales) {
-      const value = base + slope * (scale / firstScale - 1);
-      if (!Number.isFinite(value) || value < 0) return 'violation';
-      points.push({
+    const direct: SeriesPoint[] = [];
+    let directIsRepresentable = true;
+    for (const [index, scale] of scales.entries()) {
+      const value = base + slope * coordinates[index]!;
+      const pointUncertainty = Math.max(uncertainty.absolute, uncertainty.relative * value);
+      if (!Number.isFinite(value) || !Number.isFinite(pointUncertainty)) {
+        directIsRepresentable = false;
+        break;
+      }
+      direct.push({ scale, repetitions: [value, value, value], uncertainty: pointUncertainty });
+    }
+
+    if (directIsRepresentable) {
+      try {
+        return classifySeries(direct, bound).outcome;
+      } catch (error) {
+        if (!(error instanceof TypeError)) throw error;
+      }
+    }
+
+    const logOf = (value: number): number => (value === 0 ? Number.NEGATIVE_INFINITY : Math.log(value));
+    const addLogs = (left: number, right: number): number => {
+      if (left === Number.NEGATIVE_INFINITY) return right;
+      if (right === Number.NEGATIVE_INFINITY) return left;
+      const high = Math.max(left, right);
+      return high + Math.log1p(Math.exp(Math.min(left, right) - high));
+    };
+    const valueLogs = coordinates.map((coordinate) =>
+      addLogs(logOf(base), slope === 0 || coordinate === 0 ? Number.NEGATIVE_INFINITY : logOf(slope) + logOf(coordinate)),
+    );
+    const uncertaintyLogs = valueLogs.map((valueLog) =>
+      Math.max(logOf(uncertainty.absolute), uncertainty.relative === 0 ? Number.NEGATIVE_INFINITY : logOf(uncertainty.relative) + valueLog),
+    );
+    const scaleLog = Math.max(0, ...valueLogs, ...uncertaintyLogs);
+    const fromLog = (valueLog: number): number =>
+      valueLog === Number.NEGATIVE_INFINITY ? 0 : Math.exp(valueLog - scaleLog);
+    const scaled = scales.map((scale, index) => {
+      const value = fromLog(valueLogs[index]!);
+      return {
         scale,
         repetitions: [value, value, value],
-        uncertainty: Math.max(uncertainty.absolute, uncertainty.relative * value),
+        uncertainty: fromLog(uncertaintyLogs[index]!),
+      };
+    });
+    try {
+      return classifySeries(scaled, bound).outcome;
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      throw new TypeError(`Cannot classify slope ${slope} under the ${bound} growth bound: ${error.message}`, {
+        cause: error,
       });
     }
-    return classifySeries(points, bound).outcome;
   };
 
-  const maximum = 1e9;
+  const maximum = Number.MAX_VALUE;
   const breakpoints = new Set([0, maximum]);
   const addBreakpoint = (target: number, x: number): void => {
     if (x === 0 || !Number.isFinite(target)) return;
     const slope = (target - base) / x;
     if (slope > 0 && slope < maximum) breakpoints.add(slope);
   };
-  for (const scale of scales) {
-    const x = scale / firstScale - 1;
+  for (const [index, scale] of scales.entries()) {
+    const x = coordinates[index]!;
     // The pointwise envelope changes slope when the absolute and relative terms cross.
     if (uncertainty.relative > 0) addBreakpoint(uncertainty.absolute / uncertainty.relative, x);
     // The lower interval is clipped at zero while the absolute term dominates.

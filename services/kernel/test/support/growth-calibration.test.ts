@@ -111,6 +111,20 @@ test('calibration reports exact metrics and validates on held-out runs', () => {
   expect(calibrateUncertainty([twoRuns]).heldOutCoverage).toBe(0);
 });
 
+test('calibration keeps the fit objective finite for large finite measurements', () => {
+  const maximum = Number.MAX_VALUE;
+  const result = calibrateUncertainty([
+    {
+      check: 'large',
+      runs: Array.from({ length: 5 }, (_, run) => [
+        { scale: 1, repetitions: [run === 4 ? maximum / 2 : maximum] },
+        { scale: 4, repetitions: [maximum / 10] },
+      ]),
+    },
+  ]);
+  expect(result).toMatchObject({ absolute: 0, relative: 0.5, points: 10 });
+});
+
 test('the detectable effect is the smallest linear slope a constant or logarithmic bound rejects at the given scales', () => {
   const base = 100;
   const uncertainty = { absolute: 5, relative: 0 };
@@ -127,4 +141,8 @@ test('the detectable effect is the smallest linear slope a constant or logarithm
   expect(detectableSlope([1, 4, 16, 64, 256], { absolute: 10, relative: 0.95 }, 'logarithmic', base)).toBe(
     Number.POSITIVE_INFINITY,
   );
+
+  const beyondSearchCap = detectableSlope([1, 4, 16], { absolute: 1e12, relative: 0 }, 'constant', base);
+  expect(Number.isFinite(beyondSearchCap)).toBe(true);
+  expect(beyondSearchCap).toBeGreaterThan(1e9);
 });
