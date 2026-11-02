@@ -161,12 +161,13 @@ export function CoverCard({
         )}
       </span>
     ) : null;
+  // Cover tiles keep the focus ring while suppressing ListRow's hover fill.
   return (
     <ContentItemFrame
       as="article"
       onPointerDown={onPointerDown}
       data-slot="cover-card"
-      className={`flex min-w-0 text-foreground focus-within:ring-2 focus-within:ring-ring ${credit ? 'items-start gap-4' : 'h-full flex-col'}`}
+      className={`before:bg-transparent flex min-w-0 text-foreground focus-within:ring-2 focus-within:ring-ring ${credit ? 'items-start gap-4' : 'h-full flex-col'}`}
     >
       {credit ? (
         <div
