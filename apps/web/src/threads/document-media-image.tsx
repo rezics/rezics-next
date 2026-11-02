@@ -36,9 +36,15 @@ export function NativeDocumentImage({
     image
       ? values.map((variant) => `${coverSrc(image.id, variant.format, variant.width)} ${variant.width}w`).join(', ')
       : '';
-  const credit = image?.credit;
+  // A failed derivative may reflect a newer disclosure decision than the page summary. Do not keep
+  // source metadata visible once the image itself is unavailable.
+  const credit = available ? (image?.credit ?? null) : null;
   return (
-    <figure data-slot="document-image" data-state={available ? 'ready' : 'unavailable'} className="my-5 space-y-2">
+    <figure
+      data-slot="document-image"
+      data-state={available ? 'ready' : 'unavailable'}
+      className="my-5 min-w-0 max-w-full space-y-2"
+    >
       {available ? (
         <picture>
           {avif.length ? <source type="image/avif" srcSet={srcSet(avif)} sizes={sizes} /> : null}
@@ -52,24 +58,31 @@ export function NativeDocumentImage({
             alt={alt}
             loading="lazy"
             decoding="async"
-            className="h-auto max-w-full rounded-xl"
+            className="block h-auto max-w-full rounded-xl"
             onError={() => setFailed(identity)}
           />
         </picture>
       ) : (
         <div
           role="img"
-          aria-label={alt || unavailable}
-          className="rounded-xl bg-muted p-5 text-sm text-muted-foreground"
+          aria-label={alt ? `${unavailable}: ${alt}` : unavailable}
+          className="max-w-full rounded-xl bg-muted p-5 text-sm text-muted-foreground [overflow-wrap:anywhere]"
         >
-          {unavailable}
-          {alt ? ` — ${alt}` : ''}
+          <span className="block font-medium">{unavailable}</span>
+          {alt ? <span className="mt-1 block whitespace-pre-wrap [overflow-wrap:anywhere]">{alt}</span> : null}
         </div>
       )}
       {credit ? (
-        <figcaption className="text-sm text-muted-foreground" aria-label={m.document_image_credit({}, options)}>
+        <figcaption
+          className="max-w-full break-words text-sm text-muted-foreground [overflow-wrap:anywhere]"
+          aria-label={m.document_image_credit({}, options)}
+        >
           {credit.rightsHolder} · {m.document_image_via({}, options)}{' '}
-          <a href={credit.via.url} rel="noopener noreferrer nofollow ugc">
+          <a
+            href={credit.via.url}
+            rel="noopener noreferrer nofollow ugc"
+            className="break-words underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [overflow-wrap:anywhere]"
+          >
             {credit.via.name}
           </a>
           {' · '}
