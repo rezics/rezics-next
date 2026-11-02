@@ -445,7 +445,10 @@ test('closed joins recover only through an explicit current admission check and 
     expect(membershipCommands).toHaveLength(1);
     readMembership = async () => viewer('banned');
     await surface.setSessions(signedIn(subject, 'csrf-rotated'));
-    await surface.until(() => standingReads.length === 5 && !surface.hasText(m.realm_membership_loading()), 'new caller');
+    await surface.until(
+      () => standingReads.length === 5 && !surface.hasText(m.realm_membership_loading()),
+      'new caller',
+    );
     obsolete.resolve(viewer('none', 'obsolete-key'));
     await surface.settle();
     expect(surface.hasText(m.realm_change_closed())).toBe(true);
