@@ -407,8 +407,8 @@ test('Recipe creation and current correction share complete frames with independ
     expect(input(retainedMethod, m.subject_source_licence()).value).toBe('CC-BY-4.0');
     expect(input(retainedMethod, m.relation_citation()).value).toBe(longCitation);
     expect(
-      (within(retainedMethod).getByRole('checkbox', { name: m.recipe_original() }) as HTMLInputElement).checked,
-    ).toBe(true);
+      within(retainedMethod).getByRole('checkbox', { name: m.recipe_original() }).getAttribute('aria-checked'),
+    ).toBe('true');
     expect(retainedMethod.querySelector('[contenteditable]')!.textContent).toContain(
       'My original preparation, never copied from a recipe site.',
     );
