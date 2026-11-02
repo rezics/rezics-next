@@ -159,7 +159,6 @@ test('a private native Kind audience cannot be borrowed by anonymous or unrelate
   }
 }, 120000);
 
-
 // Additional regressions are authored for integrated native verification; UNRUN.
 import {
   captureNativeKindTypeDependency,
@@ -176,19 +175,35 @@ import { routeOf } from '../../src/route/route.ts';
 
 function structuralAnchor(subjectId: string): NativeKindTypeAnchor {
   return {
-    subject_id: subjectId, present: true, writer_enrolled: true, writer_version: '1',
-    visibility: 'visible', security_revision: '1', current_release: `sha256:${'a'.repeat(64)}`,
-    type: 'schema:Person', type_oversized: false, revision: 1,
-    revision_transaction: crypto.randomUUID(), revision_epoch: 1, revision_position: '1',
-    redirect: null, redirect_sequence: null, redirect_transaction: null, redirect_epoch: null,
-    redirect_position: null, account_id: null,
+    subject_id: subjectId,
+    present: true,
+    writer_enrolled: true,
+    writer_version: '1',
+    visibility: 'visible',
+    security_revision: '1',
+    current_release: `sha256:${'a'.repeat(64)}`,
+    type: 'schema:Person',
+    type_oversized: false,
+    revision: 1,
+    revision_transaction: crypto.randomUUID(),
+    revision_epoch: 1,
+    revision_position: '1',
+    redirect: null,
+    redirect_sequence: null,
+    redirect_transaction: null,
+    redirect_epoch: null,
+    redirect_position: null,
+    account_id: null,
   };
 }
 
 test('native Type dependency selection retains negative, one-hop and duplicate original semantics', () => {
   const id = newId(0xc100);
   const other = newId(0xc100);
-  const reference = { canonicalSubjectId: id, key: { driver: 'member' as const, storedSubjectId: id, factId: newId(0xc100) } };
+  const reference = {
+    canonicalSubjectId: id,
+    key: { driver: 'member' as const, storedSubjectId: id, factId: newId(0xc100) },
+  };
   const original = { ...structuralAnchor(id), type: null };
   const terminal = structuralAnchor(id);
   const select = (patch: Partial<NativeKindTypeAnchor>, target: NativeKindTypeAnchor | null = terminal) =>
@@ -217,38 +232,90 @@ test('native Type dependency selection retains negative, one-hop and duplicate o
 });
 
 test('local Type body quote includes every repeated anchor lock and retained record point', () => {
-  const quote = kindTypeEvidenceLocalFootprint({ anchorInputBytes: 1000, lockInputBytes: 200, writeValues: [], readValues: [] });
-  expect(quote).toMatchObject({ candidateKeys: 11, nativeRows: 58, nativePoints: 58,
-    identityMetadataRows: 0, witnessKeys: 0, statements: 11, emptySeeks: 11 });
+  const quote = kindTypeEvidenceLocalFootprint({
+    anchorInputBytes: 1000,
+    lockInputBytes: 200,
+    writeValues: [],
+    readValues: [],
+  });
+  expect(quote).toMatchObject({
+    candidateKeys: 11,
+    nativeRows: 58,
+    nativePoints: 58,
+    identityMetadataRows: 0,
+    witnessKeys: 0,
+    statements: 11,
+    emptySeeks: 11,
+  });
   expect(quote.bytes).toBeGreaterThan(2 * 6 * (16384 + 16384 + 4096));
 });
 
 test('unknown native anchor state cannot become an excluded dependency or a Type contribution', () => {
   const id = newId(0xc100);
-  const reference = { canonicalSubjectId: id, key: { driver: 'member' as const, storedSubjectId: id, factId: newId(0xc100) } };
+  const reference = {
+    canonicalSubjectId: id,
+    key: { driver: 'member' as const, storedSubjectId: id, factId: newId(0xc100) },
+  };
   const original = { ...structuralAnchor(id), type: null };
   const terminal = structuralAnchor(id);
   for (const patch of [{ visibility: null }, { visibility: 'unknown' }, { current_release: 'unknown' }]) {
-    expect(selectNativeKindTypeDependency({ reference, original: { ...original, ...patch }, terminal }).state).toBe('unavailable');
-    expect(selectNativeKindTypeDependency({ reference, original, terminal: { ...terminal, ...patch } }).state).toBe('unavailable');
+    expect(selectNativeKindTypeDependency({ reference, original: { ...original, ...patch }, terminal }).state).toBe(
+      'unavailable',
+    );
+    expect(selectNativeKindTypeDependency({ reference, original, terminal: { ...terminal, ...patch } }).state).toBe(
+      'unavailable',
+    );
   }
-  expect(selectNativeKindTypeDependency({ reference, original: { ...original, visibility: 'taken_down' }, terminal }).state).toBe('excluded');
-  expect(selectNativeKindTypeDependency({ reference, original, terminal: { ...terminal, visibility: 'taken_down', type: null } }).state).toBe('excluded');
+  expect(
+    selectNativeKindTypeDependency({ reference, original: { ...original, visibility: 'taken_down' }, terminal }).state,
+  ).toBe('excluded');
+  expect(
+    selectNativeKindTypeDependency({
+      reference,
+      original,
+      terminal: { ...terminal, visibility: 'taken_down', type: null },
+    }).state,
+  ).toBe('excluded');
 });
 
 test('native dependency bodies cannot bypass original admission with a structural home', async () => {
   let io = 0;
-  const pool = { connect() { io++; throw new Error('Unadmitted checkout'); } } as unknown as Pool;
-  const tx = { query() { io++; throw new Error('Unadmitted native body'); } } as unknown as OperationalTransaction;
-  const locator = { route: 0xc100, ownerAccountId: newId(0xc100), collectionId: newId(0xc100), preparationId: crypto.randomUUID() };
+  const pool = {
+    connect() {
+      io++;
+      throw new Error('Unadmitted checkout');
+    },
+  } as unknown as Pool;
+  const tx = {
+    query() {
+      io++;
+      throw new Error('Unadmitted native body');
+    },
+  } as unknown as OperationalTransaction;
+  const locator = {
+    route: 0xc100,
+    ownerAccountId: newId(0xc100),
+    collectionId: newId(0xc100),
+    preparationId: crypto.randomUUID(),
+  };
   const context = { kind: 'collection-kind-preparation' as const, tx, locator };
   const deadline = Date.now() + 10000;
   const work = new NativeCollectionWork(allowance(), deadline);
   const id = newId(0xc100);
-  await expect(captureNativeKindTypeDependency(pool, context, {
-    reference: { canonicalSubjectId: id, key: { driver: 'member', storedSubjectId: id, factId: newId(0xc100) } },
-    originalDisclosure: 'readable', terminalDisclosure: 'readable', releaseDigest: `sha256:${'a'.repeat(64)}`,
-  }, work, deadline)).rejects.toThrow();
+  await expect(
+    captureNativeKindTypeDependency(
+      pool,
+      context,
+      {
+        reference: { canonicalSubjectId: id, key: { driver: 'member', storedSubjectId: id, factId: newId(0xc100) } },
+        originalDisclosure: 'readable',
+        terminalDisclosure: 'readable',
+        releaseDigest: `sha256:${'a'.repeat(64)}`,
+      },
+      work,
+      deadline,
+    ),
+  ).rejects.toThrow();
   const ref = { locator, evidenceId: crypto.randomUUID() };
   // No projected source binding, including one copied from a retained record,
   // is consulted before rejecting the unadmitted native transaction.
@@ -271,12 +338,18 @@ test('Native Kind-Type original and terminal retained dependency read and final 
   await f.add(collection.id, original);
   await identities.merge(original, terminal);
   await identities.finishMove(original, terminal);
-  expect(await f.complete(collection.id, null)).toMatchObject({ presentationKind: 'schema:Person', presentationKindSource: 'members' });
+  expect(await f.complete(collection.id, null)).toMatchObject({
+    presentationKind: 'schema:Person',
+    presentationKindSource: 'members',
+  });
   const retained = await f.database.admin.query<{
     body: { dependencies: { original: NativeKindTypeAnchor; terminal: NativeKindTypeAnchor } };
     producer_transaction: string;
-  }>(`SELECT body, producer_transaction FROM semantic.kind_type_evidence_body
-      WHERE route=$1 AND collection_id=$2`, [route, collection.id]);
+  }>(
+    `SELECT body, producer_transaction FROM semantic.kind_type_evidence_body
+      WHERE route=$1 AND collection_id=$2`,
+    [route, collection.id],
+  );
   expect(retained.rows.length).toBeGreaterThan(0);
   const body = retained.rows.find((row) => row.body.dependencies.original.subject_id === original);
   expect(body).toBeDefined();
@@ -288,11 +361,23 @@ test('Native Kind-Type original and terminal retained dependency read and final 
   // verification. Neither an old retained body nor its readable terminal may
   // rescue the now-hidden original on the next native adoption.
   await identities.hide(original);
-  expect(await f.complete(collection.id, null)).toMatchObject({ presentationKind: null, presentationKindSource: 'empty' });
+  expect(await f.complete(collection.id, null)).toMatchObject({
+    presentationKind: null,
+    presentationKindSource: 'empty',
+  });
   await identities.hide(original, 'restore');
-  expect(await f.complete(collection.id, null)).toMatchObject({ presentationKind: 'schema:Person', presentationKindSource: 'members' });
+  expect(await f.complete(collection.id, null)).toMatchObject({
+    presentationKind: 'schema:Person',
+    presentationKindSource: 'members',
+  });
   await identities.hide(terminal);
-  expect(await f.complete(collection.id, null)).toMatchObject({ presentationKind: null, presentationKindSource: 'empty' });
+  expect(await f.complete(collection.id, null)).toMatchObject({
+    presentationKind: null,
+    presentationKindSource: 'empty',
+  });
   await identities.hide(terminal, 'restore');
-  expect(await f.complete(collection.id, null)).toMatchObject({ presentationKind: 'schema:Person', presentationKindSource: 'members' });
+  expect(await f.complete(collection.id, null)).toMatchObject({
+    presentationKind: 'schema:Person',
+    presentationKindSource: 'members',
+  });
 }, 120000);

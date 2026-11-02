@@ -100,8 +100,14 @@ export function kindTypeAnchorFootprint(inputBytes: number): WorkDimensions {
  */
 export function kindTypeAnchorLockFootprint(inputBytes: number): WorkDimensions {
   return {
-    candidateKeys: 1, nativeRows: 3, identityMetadataRows: 0, nativePoints: 3,
-    witnessKeys: 0, statements: 1, bytes: inputBytes + 128, emptySeeks: 1,
+    candidateKeys: 1,
+    nativeRows: 3,
+    identityMetadataRows: 0,
+    nativePoints: 3,
+    witnessKeys: 0,
+    statements: 1,
+    bytes: inputBytes + 128,
+    emptySeeks: 1,
   };
 }
 

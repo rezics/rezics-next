@@ -2,12 +2,19 @@
 import type { Pool, QueryResultRow } from 'pg';
 import type { Access } from '../request/access.ts';
 import type { PrepareKindAudienceInput } from '../access/kind-audience.ts';
-import type { CollectionKindWorkDefinition, CollectionKindPreparationLocator } from '../library/collection-kind-work-admission.ts';
+import type {
+  CollectionKindWorkDefinition,
+  CollectionKindPreparationLocator,
+} from '../library/collection-kind-work-admission.ts';
 import type { CanonicalDerivedRow, CanonicalGroupProgress } from '../library/canonical-source-store.ts';
 import type { WorkAllowance, WorkDimensions, WorkReceipt } from '../library/collection-source.ts';
 import { NativeCollectionWork } from '../library/collection-source-work.ts';
 import type { CollectionKindPreparationWorkContext } from '../search/scope-work-context.ts';
-import { currentOperationalResources, hasLiveOperationalTransaction, type OperationalTransaction } from '../command/operational.ts';
+import {
+  currentOperationalResources,
+  hasLiveOperationalTransaction,
+  type OperationalTransaction,
+} from '../command/operational.ts';
 import { authoritativeTimeValue, commandTime } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { isDeepStrictEqual } from 'node:util';
@@ -207,7 +214,9 @@ export type NativeKindTypeRetainedBody = Readonly<{
 
 const bytes = (value: unknown): number => Buffer.byteLength(JSON.stringify(value) ?? 'null');
 const jsonData = (value: unknown): unknown =>
-  JSON.parse(JSON.stringify(value, (_key, item: unknown) => (typeof item === 'bigint' ? item.toString() : item)) ?? 'null');
+  JSON.parse(
+    JSON.stringify(value, (_key, item: unknown) => (typeof item === 'bigint' ? item.toString() : item)) ?? 'null',
+  );
 const sha256 = /^sha256:[0-9a-f]{64}$/;
 const decimal = /^(0|[1-9][0-9]{0,18})$/;
 const drivers = ['member', 'entry', 'label', 'session', 'copy', 'output'];
@@ -226,8 +235,12 @@ function recordFootprint(sql: string, values: readonly unknown[], write: boolean
     nativePoints: 2,
     witnessKeys: 0,
     statements: 1,
-    bytes: Buffer.byteLength(sql) + bytes(values) +
-      (write ? 256 : 6 * (KIND_TYPE_BODY_MAX_BYTES + KIND_TYPE_BINDING_MAX_BYTES + KIND_TYPE_PROGRESS_MAX_BYTES) + 1024),
+    bytes:
+      Buffer.byteLength(sql) +
+      bytes(values) +
+      (write
+        ? 256
+        : 6 * (KIND_TYPE_BODY_MAX_BYTES + KIND_TYPE_BINDING_MAX_BYTES + KIND_TYPE_PROGRESS_MAX_BYTES) + 1024),
     emptySeeks: 1,
   };
 }
@@ -247,12 +260,14 @@ export function kindTypeEvidenceBodyFootprint(sql: string, values: readonly unkn
  * Parameter bytes include each repeated SQL text and its actual encoded values.
  * This is deliberately NOT a whole-parent/transaction admission declaration.
  */
-export function kindTypeEvidenceLocalFootprint(input: Readonly<{
-  anchorInputBytes: number;
-  lockInputBytes: number;
-  writeValues: readonly unknown[];
-  readValues: readonly unknown[];
-}>): WorkDimensions {
+export function kindTypeEvidenceLocalFootprint(
+  input: Readonly<{
+    anchorInputBytes: number;
+    lockInputBytes: number;
+    writeValues: readonly unknown[];
+    readValues: readonly unknown[];
+  }>,
+): WorkDimensions {
   for (const value of [input.anchorInputBytes, input.lockInputBytes])
     if (!Number.isSafeInteger(value) || value < 0 || value > 8192) throw new TypeError('Invalid Kind Type byte bound');
   const anchor = kindTypeAnchorFootprint(input.anchorInputBytes);
@@ -300,19 +315,28 @@ class KindTypeBodyInvocation {
   }
   current(): void {
     if (
-      !(this.work instanceof NativeCollectionWork) || !this.time ||
-      this.context.kind !== 'collection-kind-preparation' || this.context.tx !== this.tx ||
+      !(this.work instanceof NativeCollectionWork) ||
+      !this.time ||
+      this.context.kind !== 'collection-kind-preparation' ||
+      this.context.tx !== this.tx ||
       !isDeepStrictEqual(this.context.locator, this.locator) ||
-      !validLocator(this.locator) || !hasLiveOperationalTransaction(this.tx) ||
-      !Number.isFinite(this.deadline) || Date.now() >= this.deadline || commandTime(this.tx) !== this.time
-    ) throw new ProblemError('dependency_unavailable');
+      !validLocator(this.locator) ||
+      !hasLiveOperationalTransaction(this.tx) ||
+      !Number.isFinite(this.deadline) ||
+      Date.now() >= this.deadline ||
+      commandTime(this.tx) !== this.time
+    )
+      throw new ProblemError('dependency_unavailable');
     const resources = currentOperationalResources(this.tx);
     if (
-      resources.pool !== this.pool || resources.mode !== 'work-step' ||
+      resources.pool !== this.pool ||
+      resources.mode !== 'work-step' ||
       resources.partition !== partitionOf(this.locator.route) ||
-      resources.accounts.length !== 1 || resources.accounts[0] !== this.locator.ownerAccountId ||
+      resources.accounts.length !== 1 ||
+      resources.accounts[0] !== this.locator.ownerAccountId ||
       resources.deadline !== this.deadline
-    ) throw new ProblemError('dependency_unavailable');
+    )
+      throw new ProblemError('dependency_unavailable');
     authoritativeTimeValue(this.time);
     this.work.assertReady();
   }
@@ -326,8 +350,14 @@ class KindTypeBodyInvocation {
 }
 
 function validReference(reference: CanonicalDerivedRow): boolean {
-  return !!reference && routeOf(reference.canonicalSubjectId) !== null && !!reference.key &&
-    drivers.includes(reference.key.driver) && routeOf(reference.key.storedSubjectId) !== null && uuid.test(reference.key.factId);
+  return (
+    !!reference &&
+    routeOf(reference.canonicalSubjectId) !== null &&
+    !!reference.key &&
+    drivers.includes(reference.key.driver) &&
+    routeOf(reference.key.storedSubjectId) !== null &&
+    uuid.test(reference.key.factId)
+  );
 }
 
 /** Native data capture ONLY. Disclosure projections are decisions already made
@@ -350,26 +380,49 @@ export async function captureNativeKindTypeDependency(
 ): Promise<NativeKindTypeDependencyBody> {
   const invocation = new KindTypeBodyInvocation(pool, context, work, deadline);
   const snapshot = structuredClone(input);
-  if (context.kind !== 'collection-kind-preparation' || !validReference(snapshot.reference) || !sha256.test(snapshot.releaseDigest) ||
-    !validDisclosure(snapshot.originalDisclosure) || !validDisclosure(snapshot.terminalDisclosure))
+  if (
+    context.kind !== 'collection-kind-preparation' ||
+    !validReference(snapshot.reference) ||
+    !sha256.test(snapshot.releaseDigest) ||
+    !validDisclosure(snapshot.originalDisclosure) ||
+    !validDisclosure(snapshot.terminalDisclosure)
+  )
     throw new ProblemError('dependency_unavailable');
   // Preflight BOTH homes before the first lock or observation. An excluded
   // original cannot silently drop a foreign/unsupported terminal dependency.
   const originalRoute = invocation.home(snapshot.reference.key.storedSubjectId);
   const terminalRoute = invocation.home(snapshot.reference.canonicalSubjectId);
-  const original = await readNativeKindTypeAnchor(invocation.tx, {
-    route: originalRoute, subjectId: snapshot.reference.key.storedSubjectId, includeType: false,
-  }, work, deadline);
+  const original = await readNativeKindTypeAnchor(
+    invocation.tx,
+    {
+      route: originalRoute,
+      subjectId: snapshot.reference.key.storedSubjectId,
+      includeType: false,
+    },
+    work,
+    deadline,
+  );
   invocation.current();
-  const includeType = snapshot.originalDisclosure === 'readable' && original.present && original.visibility === 'visible' &&
+  const includeType =
+    snapshot.originalDisclosure === 'readable' &&
+    original.present &&
+    original.visibility === 'visible' &&
     snapshot.terminalDisclosure === 'readable';
-  const terminal = await readNativeKindTypeAnchor(invocation.tx, {
-    route: terminalRoute, subjectId: snapshot.reference.canonicalSubjectId, includeType,
-  }, work, deadline);
+  const terminal = await readNativeKindTypeAnchor(
+    invocation.tx,
+    {
+      route: terminalRoute,
+      subjectId: snapshot.reference.canonicalSubjectId,
+      includeType,
+    },
+    work,
+    deadline,
+  );
   invocation.current();
   const body: NativeKindTypeDependencyBody = {
     dependencies: { reference: snapshot.reference, original, terminal },
-    originalDisclosure: snapshot.originalDisclosure, terminalDisclosure: snapshot.terminalDisclosure,
+    originalDisclosure: snapshot.originalDisclosure,
+    terminalDisclosure: snapshot.terminalDisclosure,
     releaseDigest: snapshot.releaseDigest,
   };
   if (bytes(body) > KIND_TYPE_BODY_MAX_BYTES) throw new ProblemError('dependency_unavailable');
@@ -378,7 +431,11 @@ export async function captureNativeKindTypeDependency(
 
 function bodySelection(body: NativeKindTypeDependencyBody): KindTypeSelection {
   const dependencies = body.dependencies;
-  if (!completeProvenance(dependencies.original) || !dependencies.terminal || !completeProvenance(dependencies.terminal))
+  if (
+    !completeProvenance(dependencies.original) ||
+    !dependencies.terminal ||
+    !completeProvenance(dependencies.terminal)
+  )
     return { state: 'unavailable', dependencies };
   if (body.originalDisclosure === 'denied' || body.terminalDisclosure === 'denied')
     return { state: 'excluded', dependencies };
@@ -389,34 +446,52 @@ function validateRetainedBody(value: NativeKindTypeRetainedBody): void {
   const { binding, body, progress } = value;
   const locator = binding.locator;
   const source = binding.definition.sourceIdentity;
-  if (!validLocator(locator) || !validReference(body.dependencies.reference) ||
-    !validDisclosure(body.originalDisclosure) || !validDisclosure(body.terminalDisclosure) ||
-    !isDeepStrictEqual(binding.audience.origin.locator, locator) || !isDeepStrictEqual(binding.audience.input.locator, locator) ||
-    binding.audience.origin.kind !== 'collection-kind-audience-origin' || !uuid.test(binding.audience.origin.id) ||
-    binding.audience.input.kind !== 'collection-kind-audience-input' || !uuid.test(binding.audience.input.id) ||
-    !sha256.test(body.releaseDigest) || binding.definition.releaseDigest !== body.releaseDigest ||
-    source.route !== locator.route || source.collectionId !== locator.collectionId ||
+  if (
+    !validLocator(locator) ||
+    !validReference(body.dependencies.reference) ||
+    !validDisclosure(body.originalDisclosure) ||
+    !validDisclosure(body.terminalDisclosure) ||
+    !isDeepStrictEqual(binding.audience.origin.locator, locator) ||
+    !isDeepStrictEqual(binding.audience.input.locator, locator) ||
+    binding.audience.origin.kind !== 'collection-kind-audience-origin' ||
+    !uuid.test(binding.audience.origin.id) ||
+    binding.audience.input.kind !== 'collection-kind-audience-input' ||
+    !uuid.test(binding.audience.input.id) ||
+    !sha256.test(body.releaseDigest) ||
+    binding.definition.releaseDigest !== body.releaseDigest ||
+    source.route !== locator.route ||
+    source.collectionId !== locator.collectionId ||
     (source.scope !== 'public_output' && source.accountId !== locator.ownerAccountId) ||
     !isDeepStrictEqual(source, binding.definition.custody.identity) ||
     binding.definition.observation.incarnation !== source.incarnation ||
     !isDeepStrictEqual(binding.definition.identityObservation.key.source, { kind: 'library', identity: source }) ||
-    bytes(jsonData(binding)) > KIND_TYPE_BINDING_MAX_BYTES || bytes(body) > KIND_TYPE_BODY_MAX_BYTES ||
+    bytes(jsonData(binding)) > KIND_TYPE_BINDING_MAX_BYTES ||
+    bytes(body) > KIND_TYPE_BODY_MAX_BYTES ||
     bytes(progress) > KIND_TYPE_PROGRESS_MAX_BYTES ||
     (progress.settledSubjectId !== null && routeOf(progress.settledSubjectId) === null) ||
     (progress.group !== null && routeOf(progress.group.pendingSubjectId) === null) ||
     body.dependencies.original.subject_id !== body.dependencies.reference.key.storedSubjectId ||
-    !body.dependencies.terminal || body.dependencies.terminal.subject_id !== body.dependencies.reference.canonicalSubjectId ||
-    !decimal.test(body.dependencies.original.writer_version) || !decimal.test(body.dependencies.terminal.writer_version))
+    !body.dependencies.terminal ||
+    body.dependencies.terminal.subject_id !== body.dependencies.reference.canonicalSubjectId ||
+    !decimal.test(body.dependencies.original.writer_version) ||
+    !decimal.test(body.dependencies.terminal.writer_version)
+  )
     throw new ProblemError('dependency_unavailable');
   const selection = bodySelection(body);
-  const contributions = selection.state === 'candidate' ? [{ reference: body.dependencies.reference, typeId: selection.typeId }] : [];
-  if (bytes({ contributions, progress }) > KIND_TYPE_PROGRESS_MAX_BYTES) throw new ProblemError('dependency_unavailable');
+  const contributions =
+    selection.state === 'candidate' ? [{ reference: body.dependencies.reference, typeId: selection.typeId }] : [];
+  if (bytes({ contributions, progress }) > KIND_TYPE_PROGRESS_MAX_BYTES)
+    throw new ProblemError('dependency_unavailable');
   // Even denied originals retain only structural headers; terminal Type cannot
   // leak into durable data for an excluded/hidden/missing original.
-  if (body.dependencies.original.type !== null ||
-    ((body.originalDisclosure === 'denied' || body.terminalDisclosure === 'denied' ||
-      !body.dependencies.original.present || body.dependencies.original.visibility !== 'visible') &&
-      (body.dependencies.terminal.type !== null || body.dependencies.terminal.type_oversized)))
+  if (
+    body.dependencies.original.type !== null ||
+    ((body.originalDisclosure === 'denied' ||
+      body.terminalDisclosure === 'denied' ||
+      !body.dependencies.original.present ||
+      body.dependencies.original.visibility !== 'visible') &&
+      (body.dependencies.terminal.type !== null || body.dependencies.terminal.type_oversized))
+  )
     throw new ProblemError('dependency_unavailable');
 }
 
@@ -439,23 +514,31 @@ async function bodyQuery<R extends QueryResultRow>(
   reservation.dispatch();
   try {
     const query = {
-      text: statement.sql, values, query_timeout: Math.max(1, invocation.deadline - Date.now()),
+      text: statement.sql,
+      values,
+      query_timeout: Math.max(1, invocation.deadline - Date.now()),
     };
     const result = await reservation.query(() => invocation.tx.query<R>(query));
     invocation.current();
     if (result.rows.length > 1) throw new ProblemError('dependency_unavailable');
-    reservation.settle({ bytes: Buffer.byteLength(statement.sql) + bytes(values) + bytes(result.rows), emptySeeks: result.rows.length ? 0 : 1 });
+    reservation.settle({
+      bytes: Buffer.byteLength(statement.sql) + bytes(values) + bytes(result.rows),
+      emptySeeks: result.rows.length ? 0 : 1,
+    });
     return result.rows;
   } catch (error) {
     reservation.settle();
-    if (error instanceof Error) Object.defineProperty(error, 'work', { get: () => invocation.work.receipt(), configurable: true });
+    if (error instanceof Error)
+      Object.defineProperty(error, 'work', { get: () => invocation.work.receipt(), configurable: true });
     throw error;
   }
 }
 
 const recordKey = (reference: KindTypeEvidenceReference) => ({
-  route: reference.locator.route, owner_account_id: reference.locator.ownerAccountId,
-  collection_id: reference.locator.collectionId, preparation_id: reference.locator.preparationId,
+  route: reference.locator.route,
+  owner_account_id: reference.locator.ownerAccountId,
+  collection_id: reference.locator.collectionId,
+  preparation_id: reference.locator.preparationId,
   evidence_id: reference.evidenceId,
 });
 
@@ -476,20 +559,31 @@ export async function retainNativeKindTypeDependencyBody(
   const invocation = new KindTypeBodyInvocation(pool, context, work, deadline);
   const snapshot = structuredClone(value);
   const key = Object.freeze(recordKey(reference));
-  if (context.kind !== 'collection-kind-preparation' || !uuid.test(reference.evidenceId) ||
-    !isDeepStrictEqual(reference.locator, invocation.locator) || !isDeepStrictEqual(snapshot.binding.locator, invocation.locator))
+  if (
+    context.kind !== 'collection-kind-preparation' ||
+    !uuid.test(reference.evidenceId) ||
+    !isDeepStrictEqual(reference.locator, invocation.locator) ||
+    !isDeepStrictEqual(snapshot.binding.locator, invocation.locator)
+  )
     throw new ProblemError('dependency_unavailable');
   validateRetainedBody(snapshot);
   invocation.home(snapshot.body.dependencies.original.subject_id);
   invocation.home(snapshot.body.dependencies.terminal!.subject_id);
   await bodyQuery(invocation, bodyWrite, {
-    ...key, binding: JSON.stringify(jsonData(snapshot.binding)), body: JSON.stringify(snapshot.body),
+    ...key,
+    binding: JSON.stringify(jsonData(snapshot.binding)),
+    body: JSON.stringify(snapshot.body),
     progress: JSON.stringify(snapshot.progress),
   });
   const rows = await bodyQuery<RetainedRow>(invocation, bodyRead, key);
   const row = rows[0];
-  if (!row || !row.producer_transaction || !isDeepStrictEqual(row.binding, jsonData(snapshot.binding)) ||
-    !isDeepStrictEqual(row.body, snapshot.body) || !isDeepStrictEqual(row.progress, snapshot.progress))
+  if (
+    !row ||
+    !row.producer_transaction ||
+    !isDeepStrictEqual(row.binding, jsonData(snapshot.binding)) ||
+    !isDeepStrictEqual(row.body, snapshot.body) ||
+    !isDeepStrictEqual(row.progress, snapshot.progress)
+  )
     throw new ProblemError('dependency_unavailable');
 }
 
@@ -504,12 +598,20 @@ export async function readNativeKindTypeDependencyBody(
   binding: NativeKindTypeBodyBinding,
   work: NativeCollectionWork,
   deadline: number,
-): Promise<Readonly<{ body: NativeKindTypeDependencyBody; progress: KindTypeEvidenceProgress; producerTransaction: string }> | null> {
+): Promise<Readonly<{
+  body: NativeKindTypeDependencyBody;
+  progress: KindTypeEvidenceProgress;
+  producerTransaction: string;
+}> | null> {
   const invocation = new KindTypeBodyInvocation(pool, context, work, deadline);
   const snapshot = structuredClone(binding);
   const key = Object.freeze(recordKey(reference));
-  if (context.kind !== 'collection-kind-preparation' || !uuid.test(reference.evidenceId) ||
-    !isDeepStrictEqual(reference.locator, invocation.locator) || !isDeepStrictEqual(snapshot.locator, invocation.locator))
+  if (
+    context.kind !== 'collection-kind-preparation' ||
+    !uuid.test(reference.evidenceId) ||
+    !isDeepStrictEqual(reference.locator, invocation.locator) ||
+    !isDeepStrictEqual(snapshot.locator, invocation.locator)
+  )
     throw new ProblemError('dependency_unavailable');
   const rows = await bodyQuery<RetainedRow>(invocation, bodyRead, key);
   const row = rows[0];
@@ -537,8 +639,12 @@ export async function compareNativeKindTypeDependencyBody(
   const invocation = new KindTypeBodyInvocation(pool, context, work, deadline);
   const snapshot = structuredClone(expected);
   const key = Object.freeze(recordKey(reference));
-  if (context.kind !== 'collection-kind-preparation' || !uuid.test(reference.evidenceId) ||
-    !isDeepStrictEqual(reference.locator, invocation.locator) || !isDeepStrictEqual(snapshot.binding.locator, invocation.locator))
+  if (
+    context.kind !== 'collection-kind-preparation' ||
+    !uuid.test(reference.evidenceId) ||
+    !isDeepStrictEqual(reference.locator, invocation.locator) ||
+    !isDeepStrictEqual(snapshot.binding.locator, invocation.locator)
+  )
     throw new ProblemError('dependency_unavailable');
   validateRetainedBody(snapshot);
   const { original, terminal } = snapshot.body.dependencies;
@@ -547,18 +653,40 @@ export async function compareNativeKindTypeDependencyBody(
   const terminalRoute = invocation.home(terminal!.subject_id);
   const rows = await bodyQuery<RetainedRow>(invocation, bodyRead, key);
   const row = rows[0];
-  if (!row || !isDeepStrictEqual(row.binding, jsonData(snapshot.binding)) ||
-    !isDeepStrictEqual(row.body, snapshot.body) || !isDeepStrictEqual(row.progress, snapshot.progress)) return null;
-  const originalCurrent = await verifyNativeKindTypeAnchor(invocation.tx, {
-    route: originalRoute, expected: original, includeType: false,
-  }, work, deadline);
+  if (
+    !row ||
+    !isDeepStrictEqual(row.binding, jsonData(snapshot.binding)) ||
+    !isDeepStrictEqual(row.body, snapshot.body) ||
+    !isDeepStrictEqual(row.progress, snapshot.progress)
+  )
+    return null;
+  const originalCurrent = await verifyNativeKindTypeAnchor(
+    invocation.tx,
+    {
+      route: originalRoute,
+      expected: original,
+      includeType: false,
+    },
+    work,
+    deadline,
+  );
   invocation.current();
   // Always verify both, even after a stale/denied original, with the same paid
   // plan. A failed original cannot choose a cheaper unaccounted terminal branch.
-  const terminalCurrent = await verifyNativeKindTypeAnchor(invocation.tx, {
-    route: terminalRoute, expected: terminal!, includeType: snapshot.body.originalDisclosure === 'readable' &&
-      original.present && original.visibility === 'visible' && snapshot.body.terminalDisclosure === 'readable',
-  }, work, deadline);
+  const terminalCurrent = await verifyNativeKindTypeAnchor(
+    invocation.tx,
+    {
+      route: terminalRoute,
+      expected: terminal!,
+      includeType:
+        snapshot.body.originalDisclosure === 'readable' &&
+        original.present &&
+        original.visibility === 'visible' &&
+        snapshot.body.terminalDisclosure === 'readable',
+    },
+    work,
+    deadline,
+  );
   invocation.current();
   return originalCurrent && terminalCurrent ? bodySelection(snapshot.body) : null;
 }
@@ -582,7 +710,12 @@ export type KindTypeSelection =
     }>;
 
 function completeProvenance(anchor: NativeKindTypeAnchor): boolean {
-  if (!anchor.writer_enrolled || !decimal.test(anchor.writer_version) || BigInt(anchor.writer_version) > 9_223_372_036_854_775_807n) return false;
+  if (
+    !anchor.writer_enrolled ||
+    !decimal.test(anchor.writer_version) ||
+    BigInt(anchor.writer_version) > 9_223_372_036_854_775_807n
+  )
+    return false;
   if (!anchor.present) return true;
   return (
     (anchor.visibility === 'visible' || anchor.visibility === 'hidden' || anchor.visibility === 'taken_down') &&
@@ -590,7 +723,8 @@ function completeProvenance(anchor: NativeKindTypeAnchor): boolean {
     anchor.revision_transaction !== null &&
     anchor.revision_epoch !== null &&
     anchor.revision_position !== null &&
-    anchor.current_release !== null && sha256.test(anchor.current_release) &&
+    anchor.current_release !== null &&
+    sha256.test(anchor.current_release) &&
     (anchor.redirect === null ||
       (anchor.redirect_sequence !== null &&
         anchor.redirect_transaction !== null &&
