@@ -2,6 +2,7 @@ import type { KernelClient } from '@rezics/client';
 import type { SessionEnv } from '../../session/client';
 import { prepareSession, viewerCredential } from '../../session/request';
 import { GLOBAL, preparedRatingReader, ratingFailure, type Figure, type RatingOutcome } from './subject-ratings';
+import { admitRatingAggregate, admitRatingPopulationPage } from './rating-population-value';
 
 export const POPULATION_LIMIT = 20;
 export type PopulationInput = {
@@ -82,12 +83,19 @@ export async function readRatingPopulations(
           .catch(() => ({ response: undefined })),
       ]);
       const response = aggregate.response;
-      const body = response?.status === 200 ? response.data : null;
-      const matching = body?.question === input.question && body.subject === input.id;
+      const body =
+        response?.status === 200
+          ? admitRatingAggregate(response.data, {
+              subject: input.id,
+              question: input.question,
+              populations: selected,
+            })
+          : null;
+      if (response?.status === 200 && !body) return envelope({ kind: 'failed' });
       const items: PopulationItem[] = [];
       for (const label of currentLabels) {
         if (!label) continue;
-        const value = matching ? body.figures.find((figure) => figure.population === label.id) : undefined;
+        const value = body?.figures.find((figure) => figure.population === label.id);
         items.push({ ...label, figure: value ? { kind: 'ready', value } : ratingFailure(response?.status ?? 503) });
       }
       return envelope({
@@ -105,16 +113,16 @@ export async function readRatingPopulations(
       query: { question: input.question, ...(input.cursor !== undefined ? { cursor: input.cursor } : {}) },
       headers,
     });
-    if (result.status !== 200 || !result.data) return envelope(ratingFailure(result.status));
-    if (result.data.populations.length > POPULATION_LIMIT) return envelope({ kind: 'failed' });
-    const ids = result.data.populations.map((item) => item.population).filter((id) => id !== GLOBAL);
-    if (new Set(ids).size !== ids.length) return envelope({ kind: 'failed' });
+    if (result.status !== 200) return envelope(ratingFailure(result.status));
+    const page = admitRatingPopulationPage(result.data);
+    if (!page) return envelope({ kind: 'failed' });
+    const ids = page.populations.map((item) => item.population).filter((id) => id !== GLOBAL);
     const currentLabels = await labels(ids);
     return envelope({
       kind: 'ready',
       value: {
         items: currentLabels.flatMap((label) => (label ? [{ ...label, figure: { kind: 'idle' as const } }] : [])),
-        next: result.data.next,
+        next: page.next,
         incomplete: currentLabels.some((label) => label === null),
       },
     });
