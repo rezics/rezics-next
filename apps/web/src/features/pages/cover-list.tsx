@@ -123,7 +123,9 @@ export function CoverList({
         <div data-statement={item.statement}>{card}</div>
       </li>
     ) : (
-      card
+      <div key={`${item.id}-${index}`} role="listitem" data-statement={item.statement} className="min-w-0">
+        {card}
+      </div>
     );
   });
   if (credits) {
@@ -138,13 +140,13 @@ export function CoverList({
   return (
     <>
       {preview && (
-        <div data-layout="cover-row" className="sm:hidden">
+        <div data-layout="cover-row" role="list" aria-label={label} className="sm:hidden">
           <CoverRow ratio={ratio} label={label} role="group">
             {cards}
           </CoverRow>
         </div>
       )}
-      <div data-layout="cover-grid" className={preview ? 'hidden sm:block' : undefined}>
+      <div data-layout="cover-grid" role="list" aria-label={label} className={preview ? 'hidden sm:block' : undefined}>
         <CoverGrid ratio={ratio}>{cards}</CoverGrid>
       </div>
     </>
