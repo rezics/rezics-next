@@ -125,11 +125,7 @@ export type MembersPreparationBudgets = Readonly<Record<MembersPreparationChild,
  * every transfer consume their own exported prices; native retries cannot borrow siblings.
  * This original establishes accounting, never Source currentness or durable result authority.
  */
-export function fundMembersPreparationHistory(
-  children: MembersPreparationBudgets,
-  pool: Pool,
-  workClient: WorkClient,
-) {
+export function fundMembersPreparationHistory(children: MembersPreparationBudgets, pool: Pool, workClient: WorkClient) {
   return fundOperationalWorkChildren(
     {
       registration: children.historyRegistration,

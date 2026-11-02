@@ -177,11 +177,10 @@ const CHILD_PRICES = Object.freeze({
 type FundedPhase = keyof typeof CHILD_PRICES;
 /** Already allocated children of one caller original. Retry is additional work, never a refill. */
 export type OperationalWorkChildren = Readonly<Record<FundedPhase | 'retry', NativeCollectionWork>>;
-type Balance = { claimed: boolean } &
-  (
-    | { kind: 'local'; remaining: OperationalWorkCost; attempts: number }
-    | { kind: 'children'; children: OperationalWorkChildren; used: Set<FundedPhase> }
-  );
+type Balance = { claimed: boolean } & (
+  | { kind: 'local'; remaining: OperationalWorkCost; attempts: number }
+  | { kind: 'children'; children: OperationalWorkChildren; used: Set<FundedPhase> }
+);
 const originals = new WeakMap<OperationalWorkOriginal, Balance>();
 const fundedChildren = new WeakSet<NativeCollectionWork>();
 const transactionOriginals = new WeakMap<OperationalTransaction, OperationalWorkOriginal>();
@@ -201,7 +200,12 @@ export function openOperationalWorkOriginal(pool: Pool, deadline: number): Opera
   if (!Number.isFinite(deadline) || Date.now() >= deadline)
     throw new OperationalWorkUnavailable('operational-work-deadline');
   const original = Object.freeze({ pool, deadline });
-  originals.set(original, { kind: 'local', remaining: OPERATIONAL_WORK_LOCAL_DECLARATION, attempts: 0, claimed: false });
+  originals.set(original, {
+    kind: 'local',
+    remaining: OPERATIONAL_WORK_LOCAL_DECLARATION,
+    attempts: 0,
+    claimed: false,
+  });
   return original;
 }
 /** Trusted parent composition: the complete History child, including retries, transfers and rollback,
@@ -217,7 +221,12 @@ export function fundOperationalWorkOriginal(
   reservation.dispatch();
   reservation.settle();
   const original = Object.freeze({ pool, workClient, deadline });
-  originals.set(original, { kind: 'local', remaining: OPERATIONAL_WORK_LOCAL_DECLARATION, attempts: 0, claimed: false });
+  originals.set(original, {
+    kind: 'local',
+    remaining: OPERATIONAL_WORK_LOCAL_DECLARATION,
+    attempts: 0,
+    claimed: false,
+  });
   return original;
 }
 /** Bind the native executor to prepaid caller children without creating a balance from a subtotal.
