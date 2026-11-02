@@ -44,7 +44,9 @@ test('refused readings retire markup and callbacks, recovery retains sealed draf
     propose: async (command: Parameters<RelationTransport['propose']>[0]): Promise<RelationResult> => {
       relationCommands.push(command);
       if (relationCommands.length === 1) return { ok: false, reason: 'unavailable' };
-      return new Promise((resolve) => { finishRelation = resolve; });
+      return new Promise((resolve) => {
+        finishRelation = resolve;
+      });
     },
   });
   const client = new QueryClient();
@@ -120,10 +122,15 @@ test('refused readings retire markup and callbacks, recovery retains sealed draf
       ),
     );
     await settle(() => button(m.relation_open()).click());
-    await act(async () => user.selectOptions(within(host).getByRole('combobox', { name: m.relation_property() }), 'rezics:storyArc'));
-    await settle(() => [...host.querySelectorAll('button')].find((node) => node.textContent === m.relation_edit_existing())!.click());
+    await act(async () =>
+      user.selectOptions(within(host).getByRole('combobox', { name: m.relation_property() }), 'rezics:storyArc'),
+    );
+    await settle(() =>
+      [...host.querySelectorAll('button')].find((node) => node.textContent === m.relation_edit_existing())!.click(),
+    );
     await settle(() => button(m.relation_propose()).click());
-    const confirmRelation = () => [...host.querySelectorAll('button')].filter((node) => node.textContent === m.relation_propose()).at(-1)!;
+    const confirmRelation = () =>
+      [...host.querySelectorAll('button')].filter((node) => node.textContent === m.relation_propose()).at(-1)!;
     await settle(() => confirmRelation().click());
     expect(relationCommands).toHaveLength(1);
     const exactRelation = structuredClone(relationCommands[0]);
@@ -140,7 +147,10 @@ test('refused readings retire markup and callbacks, recovery retains sealed draf
     await settle(() => confirmRelation().click());
     expect(relationCommands[1]).toBe(relationCommands[0]);
     expect(relationCommands[1]).toEqual(exactRelation);
-    const retiredRelationSubmit = Reflect.get(confirmRelation(), Object.keys(confirmRelation()).find((key) => key.startsWith('__reactProps'))!).onClick;
+    const retiredRelationSubmit = Reflect.get(
+      confirmRelation(),
+      Object.keys(confirmRelation()).find((key) => key.startsWith('__reactProps'))!,
+    ).onClick;
     const url = [...host.querySelectorAll('section')].find(
       (node) => node.getAttribute('aria-label') === fixture.release.properties['schema:url']!.labels.en,
     )!;
@@ -208,6 +218,7 @@ test('refused readings retire markup and callbacks, recovery retains sealed draf
     });
     await settle(() => button(m.fictional_work_choose_another()).click());
     await decide(m.thread_authoring_leave());
+    expect(loads.at(-1)).toEqual({ id: storyArcProfileId, work: undefined });
     await settle(() => {
       retiredRelationSubmit();
       finishRelation({ ok: true, kind: 'proposed', candidate: 'retired-work-result', revision: 1 });
@@ -231,7 +242,11 @@ test('refused readings retire markup and callbacks, recovery retains sealed draf
       await user.type(picker, 'journey');
       await new Promise((resolve) => setTimeout(resolve, 300));
     });
-    await act(async () => user.click(within(window.document.body as unknown as HTMLElement).getByRole('option', { name: /The journey arc/ })));
+    await act(async () =>
+      user.click(
+        within(window.document.body as unknown as HTMLElement).getByRole('option', { name: /The journey arc/ }),
+      ),
+    );
     await decide(m.thread_authoring_stay());
     expect((input as HTMLInputElement).value).toBe('A real arc');
     expect(loads.at(-1)?.id).toBeUndefined();

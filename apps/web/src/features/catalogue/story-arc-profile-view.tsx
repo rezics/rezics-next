@@ -137,7 +137,8 @@ function StoryArcProfileLive({
     if (!lifetime.active() || observation.current.token !== token) return;
     if ('id' in destination ? destination.id === id : destination.work === work) return;
     requestNavigation(() => {
-      if (!lifetime.active() || observation.current.token !== token) return;
+      // A read may recover while the decision is open; the captured selection still owns the choice.
+      if (!lifetime.active() || observation.current.selection !== selection) return;
       // Retire selection callbacks synchronously, before React commits the replacement holders.
       observation.current = { readable: false, selection, token: {} };
       if ('id' in destination) {
