@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { newId } from '../../src/route/route.ts';
+import { historicalEdge } from './support/identity-terminal-closure.ts';
 import { runCommand } from '../../src/command/command.ts';
 import { IDENTITY_EPOCH_PROGRESS } from '../../src/semantic/events.ts';
 import { installIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap-install.ts';
@@ -16,6 +18,7 @@ test('pricing retirement preserves native reservations and unmatched provisional
   const db = await identityEpochDatabase();
   try {
     const original = await seedLegacyRoot(db, 0x7610);
+    await historicalEdge(db, original, newId(0x7620));
     await installIdentityEpochBootstrap(db.pool);
     await stepIdentityEpochBootstrap(db.pool, home(original));
     const inventory = async () => (await db.admin.query(`SELECT slot,generation,closure_copies
@@ -24,6 +27,7 @@ test('pricing retirement preserves native reservations and unmatched provisional
     await db.admin.query((await migration('20261102000300')).split('-- Point proofs')[0]!);
     await db.admin.query(await migration('20261102000400'));
     const before = await inventory();
+    expect(before.length).toBeGreaterThan(0);
     const allocation = await runCommand(db.pool, { partition: home(original) }, async tx => {
       bindSemanticProducerRoles(tx, []);
       // Two actual pricing rows and one still-provisional copy share native inventory.
