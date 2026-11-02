@@ -135,7 +135,9 @@ test('required Character metadata recovery fences retained term callbacks and pr
     expect(canvas.getAllByRole('textbox', { name: m.catalogue_create_label() })).toHaveLength(2);
     await click(m.catalogue_create_remove_language());
     await click(m.candidate_cancel());
-    expect(window.document.activeElement).toBe(canvas.getByRole('button', { name: m.catalogue_create_remove_language() }));
+    expect(window.document.activeElement).toBe(
+      canvas.getByRole('button', { name: m.catalogue_create_remove_language() }),
+    );
     await act(async () => {
       await user.selectOptions(canvas.getByRole('combobox', { name: m.character_initial_fact() }), 'schema:url');
       await user.click(canvas.getByRole('button', { name: m.character_add_fact() }));
@@ -183,9 +185,7 @@ test('required Character metadata recovery fences retained term callbacks and pr
     await act(async () => lockedTermChange({ target: { value: 'Pending mutation' } }));
     expect(input(m.catalogue_create_label(), 1).value).toBe('新しい旅人');
     expect(host.querySelector('[data-slot="character-create-recovery"]')!.textContent).toBe(pendingFeedback);
-    await act(async () =>
-      finishSecond!({ ok: false, reason: 'unavailable', refreshDefinitions: true }),
-    );
+    await act(async () => finishSecond!({ ok: false, reason: 'unavailable', refreshDefinitions: true }));
     const uncertainFeedback = host.querySelector('[data-slot="character-create-recovery"]')!.textContent;
     await act(async () => lockedTermChange({ target: { value: 'Uncertain mutation' } }));
     expect(input(m.catalogue_create_label(), 1).value).toBe('新しい旅人');

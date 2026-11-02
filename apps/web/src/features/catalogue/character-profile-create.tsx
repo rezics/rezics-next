@@ -218,8 +218,7 @@ function CharacterProfileCreateLive({
   const [busy, setBusy] = useState(false);
   const pending = useRef<CharacterCommand | null>(null);
   const running = useRef(false);
-  const termEditIsAdmitted = () =>
-    isCurrent() && !running.current && !refreshRunning.current && !pending.current;
+  const termEditIsAdmitted = () => isCurrent() && !running.current && !refreshRunning.current && !pending.current;
   const changeTerm = (id: number, key: keyof TermDraft, value: string) => {
     if (!termEditIsAdmitted()) return;
     setTerms((previous) => {
