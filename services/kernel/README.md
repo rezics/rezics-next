@@ -1010,6 +1010,28 @@ Import identity history: `test/imports/identity-growth.test.ts`, “fixed public
 
 Effect registration has no fan-out cap, so a fixed event can create an unbounded number of independently persisted workflows. The core callback interfaces do not establish bounds for authorization, mutation, projection or erasure; those bounds require the supplied implementations' SQL. Session and cursor input caps do not cap all encoding or binding work; constant request CPU assumes fixed byte widths and configuration. Ordinary PostgreSQL relations provide logarithmic B-tree access shapes, but planner choice, MVCC dead tuples and maintenance still affect examined work. Same-partition writers serialize at the partition position; same-process attempts queue without holding a connection, while other processes can retry contention until the deadline. Preparation may read a separately anchored parent, and arbitrary callbacks can add cross-partition work. DBOS uses shared system tables; logical queue partitioning does not prove physical partition placement or atomicity between enqueue and checkpoint transactions.
 
+### Replay authorization and aborted commands
+
+Measure revoked replay and aborted attempts separately from successful commands; trusted authorization fixtures
+isolate executor work while the owning Access checks retain their callback bounds.
+
+- Touches: each attempt mints time and authorizes before the full partition/principal/kind/key receipt seek.
+  Revoked account and anonymous authorization reads no receipt, even when the key has a committed outcome.
+  Anonymous `receipt-only` authorization also refuses before receipt access. Account `receipt-only` reads the
+  matching outcome or reports a digest conflict, without running the body or finalizer. Failed bodies and failed
+  finalizers seek a fresh receipt key, update one `core.partition` row by `partition_pkey`, then roll back. The
+  finalizer-failure fixture updates that same row twice. No failed attempt advances the partition or stores a receipt.
+- Bound: constant statements and examined rows, logarithmic receipt-index buffers. The fixtures grow 512, 4,096 and
+  32,768 same-principal receipts distributed across the anchor and unrelated partitions, holding the replay key,
+  response bytes and callback work fixed. Rollback work includes the attempted updates; application callback work
+  remains additional in real commands. No history scan, runtime funding protocol or invisible MVCC charge is added.
+- Growth check: `test/growth-command-edges.test.ts`: “account revoked command stays bounded as receipt history grows”;
+  “anonymous revoked command stays bounded as receipt history grows”; “account receipt-only command stays bounded as
+  receipt history grows”; “anonymous receipt-only command stays bounded as receipt history grows”; “account conflict
+  command stays bounded as receipt history grows”; “account body-failed command stays bounded as receipt history
+  grows”; “anonymous body-failed command stays bounded as receipt history grows”; “account finalizer-failed command
+  stays bounded as receipt history grows”; “anonymous finalizer-failed command stays bounded as receipt history grows”.
+
 ## Write rate deployment configuration
 
 Every kernel application installs the shared write rate stage after authentication and body validation,
