@@ -16,7 +16,9 @@ Viewport listeners exist only for the active search owner, with cleanup on dismi
 or listeners. Crossing the compact breakpoint while editing preserves the input and query.
 
 Result-kind traversal is keyed by the query, locale and initial discovery checkpoint (`as_of`); a changed checkpoint
-starts a fresh traversal. Global search accepts drafts up to 512 UTF-8 bytes; scoped inputs keep their existing
+starts a fresh traversal. Mixed DiscoveryResults copy (unnamed-account fallback, verified-as text, empty and recovery
+messages, and recovery actions) uses the region's supplied locale; DiscoveryKinds still calls `discoveryMessage`
+without one. Global search accepts drafts up to 512 UTF-8 bytes; scoped inputs keep their existing
 256 UTF-16-unit cap, and typeahead keeps its independent 64-code-point prefix bound.
 
 Header suggestions retire on an unsettled session or a change to its state, subject or CSRF observation; a settled
