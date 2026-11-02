@@ -21,6 +21,11 @@ export type WorkIntent = Readonly<{
   input: Readonly<{ accounts: readonly string[]; [locator: string]: unknown }>;
   /** Original positional SDK arguments, when the existing workflow predates scoped work. */
   arguments?: readonly unknown[];
+  /** Native queue controls; deduplication spans the entire queue, including partitions. */
+  queuePartitionKey?: string;
+  deduplicationID?: string;
+  priority?: number;
+  delaySeconds?: number;
 }>;
 
 /** Executor internals. The SDK uses this very connection; no pool checkout or relay. */
@@ -63,6 +68,10 @@ export async function enqueueWorkIntent(
       workflowName: intent.workflowName,
       workflowIDReusePolicy: 'return-existing',
       workflowID: intent.workflowId,
+      ...(intent.queuePartitionKey === undefined ? {} : { queuePartitionKey: intent.queuePartitionKey }),
+      ...(intent.deduplicationID === undefined ? {} : { deduplicationID: intent.deduplicationID }),
+      ...(intent.priority === undefined ? {} : { priority: intent.priority }),
+      ...(intent.delaySeconds === undefined ? {} : { delaySeconds: intent.delaySeconds }),
     },
     ...(intent.arguments ?? [intent.input]),
   );

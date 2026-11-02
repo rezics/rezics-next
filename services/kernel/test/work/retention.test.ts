@@ -2,7 +2,8 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import pg from 'pg';
 import { ConfigError } from '../../src/commerce/config.ts';
 import { readWorkflowRetentionConfig, runWorkflowRetentionSweep } from '../../src/work/retention.ts';
-import { createWorkClient } from '../../src/work/client.ts';
+import { createWorkClient, enqueueWorkIntent } from '../../src/work/client.ts';
+import { WORK_QUEUES } from '../../src/work/queues.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -28,6 +29,41 @@ function id(label: string): string {
   owned.add(value);
   return value;
 }
+
+test('transactional work preserves installed partition, deduplication, priority and delay controls', async () => {
+  await client.registerQueue('import', WORK_QUEUES.import);
+  const workflowId = id('native-controls');
+  const tx = await database.connect();
+  try {
+    await tx.query('BEGIN');
+    await enqueueWorkIntent(client, tx, {
+      queue: 'import',
+      workflowName: 'retention.test.workflow',
+      workflowId,
+      input: { accounts: [] },
+      queuePartitionKey: 'source-a',
+      deduplicationID: workflowId,
+      priority: 7,
+      delaySeconds: 60,
+    });
+    await tx.query('COMMIT');
+  } finally {
+    await tx.query('ROLLBACK');
+    tx.release();
+  }
+  expect(await client.getWorkflow(workflowId)).toMatchObject({
+    status: 'DELAYED',
+    queuePartitionKey: 'source-a',
+    priority: 7,
+  });
+  expect((await client.listQueues()).find((queue) => queue.name === 'import')?.partitionConcurrency).toBe(1);
+  const stored = await database.query(
+    'SELECT deduplication_id, delay_until_epoch_ms FROM dbos.workflow_status WHERE workflow_uuid=$1',
+    [workflowId],
+  );
+  expect(stored.rows[0].deduplication_id).toBe(workflowId);
+  expect(Number(stored.rows[0].delay_until_epoch_ms)).toBeGreaterThan(Date.now());
+});
 
 async function enqueue(workflowID: string, delaySeconds?: number): Promise<void> {
   await client.enqueue(

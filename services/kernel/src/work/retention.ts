@@ -25,6 +25,7 @@ export const TERMINAL_WORKFLOW_STATUSES = [
 type Environment = Readonly<Record<string, string | undefined>>;
 export type WorkflowRetentionConfig = Readonly<{ retentionDays: number }>;
 export type WorkflowRetentionSdk = Pick<typeof DBOS, 'listWorkflows' | 'deleteWorkflows'>;
+type RetentionBatchStep = (batch: () => Promise<number>) => Promise<number>;
 
 export function readWorkflowRetentionConfig(env: Environment): WorkflowRetentionConfig {
   const raw = env.KERNEL_WORKFLOW_RETENTION_DAYS;
@@ -86,10 +87,11 @@ export async function runWorkflowRetentionSweep(
   retentionDays: number,
   sdk: WorkflowRetentionSdk = DBOS,
   now = new Date(),
+  step: RetentionBatchStep = (batch) => batch(),
 ): Promise<number> {
   let deleted = 0;
   for (let batch = 0; batch < WORKFLOW_RETENTION_MAX_BATCHES; batch++) {
-    const removed = await runWorkflowRetentionBatch(retentionDays, sdk, now);
+    const removed = await step(() => runWorkflowRetentionBatch(retentionDays, sdk, now));
     deleted += removed;
     if (removed < WORKFLOW_RETENTION_BATCH_SIZE) break;
   }
@@ -101,9 +103,18 @@ export const workflowRetentionWorkModule: WorkModule = {
   async register({ client, env, queues }) {
     if (!Object.hasOwn(queues, 'maintenance')) throw new Error('Workflow retention requires the maintenance queue');
     const { retentionDays } = readWorkflowRetentionConfig(env);
-    DBOS.registerWorkflow(async () => runWorkflowRetentionSweep(retentionDays), {
-      name: WORKFLOW_RETENTION_WORKFLOW,
-    });
+    DBOS.registerWorkflow(
+      async () => {
+        // Freeze both configuration and time across worker replacement and replay.
+        const start = await DBOS.runStep(async () => ({ retentionDays, now: Date.now() }), {
+          name: 'kernel.workflowRetention.start',
+        });
+        return runWorkflowRetentionSweep(start.retentionDays, client, new Date(start.now), (batch) =>
+          DBOS.runStep(batch, { name: 'kernel.workflowRetention.batch', retriesAllowed: true, maxAttempts: 3 }),
+        );
+      },
+      { name: WORKFLOW_RETENTION_WORKFLOW },
+    );
     await client.applySchedules([
       {
         scheduleName: WORKFLOW_RETENTION_SCHEDULE,

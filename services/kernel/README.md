@@ -285,7 +285,8 @@ full-batch history plan is `Limit -> Index Scan using workflow_status_created_at
 status row by row. Short-batch work is O(long-lived workflows + batch + log N), independent of later retained history.
 `KERNEL_WORKFLOW_RETENTION_DAYS` defaults to 30 and accepts whole numbers from 7 through 365. A UTC schedule runs every
 10 minutes; each run deletes at most 60 batches of 1,000 workflows, oldest first, with each batch committed by the DBOS
-SDK in its own transaction. Children are retained independently. Rows kept are about workflow rate × (retention period
+SDK in its own transaction and checkpointed as a durable step. Recovery preserves the invocation's original time and
+retention configuration and skips checkpointed batches. Children are retained independently. Rows kept are about workflow rate × (retention period
 plus 10 minutes), provided the rate stays below the sweep capacity of 8.64 million workflows per day.
 
 ### Membership workflows

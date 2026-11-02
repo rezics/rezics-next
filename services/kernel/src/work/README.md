@@ -1,3 +1,28 @@
+# Installed queue controls and cleanup replay
+
+`WorkIntent` forwards `queuePartitionKey`, `deduplicationID`, `priority` and `delaySeconds` to the installed
+`DBOSClient.enqueueInTransaction` on the source transaction. The existing effects, locator-effects and import queues
+already set `partitionConcurrency: 1`; the installed SDK treats those as partitioned queues. Their worker-wide
+limits remain eight, eight and two respectively. Producers identify the source partition with `queuePartitionKey`.
+Priority and delay use the SDK's normal admission, execution-owner and recovery paths.
+
+Decision: keep installed queue-wide deduplication with rejection on collision; partition keys do not scope a
+deduplication ID, and a caller does not silently receive another partition's workflow.
+
+The production retention workflow records its starting time and retention configuration in one durable step. Each
+subsequent batch is a separate durable step using the registered `DBOSClient`; replay skips committed batch results.
+A batch that fails before its checkpoint reselects work and repeats the supported SDK deletion without descendants.
+There are at most 60 batch steps per scheduled invocation, each with at most three attempts, plus the starting step.
+The current selector still returns at most 1,000 workflows per batch. Its creation/completion filters are not the
+indexed retention traversal required by the cleanup contract; that conversion remains separate work. These constants
+bound dispatch and returned IDs, and do not certify the existing selector's examined rows.
+
+Sources inspected: the indexed `native-scheduler-funded-design/dbos-transact-ts` reference at
+`627990fc59619d3584ce88511ab546bc7483f4b9`, `src/enqueue_options.ts`, `src/client.ts`, the outcome/cancellation/deletion
+sections of `src/system_database.ts`, and migrations 108–112; installed SDK client/queue declarations, deletion and
+native migration implementation. The installed retention indexes are on payload timestamps, not a terminal-status
+projection. No new native discovery or retention reporting primitive is introduced.
+
 # Native workflow writer retirement
 
 The pinned SDK extension declares `DBOSClient.retireWorkflow(actualWorkflowId)` and
