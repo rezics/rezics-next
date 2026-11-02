@@ -218,10 +218,13 @@ type PreparedWorkFactory = (
   evidence: unknown,
   dispatch: (input: PreparedAccessCheckInvocation) => Promise<boolean>,
 ) => PreparedAccessCheckWork | undefined;
-const preparedWorkFactories = new WeakMap<Access, PreparedWorkFactory>();
+// The standalone native evaluator may install during cyclic module loading.
+// A hoisted, lazily initialized registry retains that installation without a TDZ
+// or a later module initializer replacing it.
+var preparedWorkFactories: WeakMap<Access, PreparedWorkFactory> | undefined;
 /** Installed only by the original native evaluator and its original wrapper. */
 export function installPreparedAccessCheckWork(access: Access, factory: PreparedWorkFactory): void {
-  preparedWorkFactories.set(access, factory);
+  (preparedWorkFactories ??= new WeakMap()).set(access, factory);
 }
 export function nativePreparedAccessCheckWork(
   access: Access,
@@ -231,7 +234,7 @@ export function nativePreparedAccessCheckWork(
   evidence: unknown,
   dispatch: (input: PreparedAccessCheckInvocation) => Promise<boolean>,
 ): PreparedAccessCheckWork | undefined {
-  return preparedWorkFactories.get(access)?.(actor, action, resource, evidence, dispatch);
+  return preparedWorkFactories?.get(access)?.(actor, action, resource, evidence, dispatch);
 }
 export type AccessCommandAuthorization = CommandAuthorization & { readonly check: AccessCheck };
 
