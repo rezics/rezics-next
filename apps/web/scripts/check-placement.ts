@@ -60,7 +60,8 @@ export function requireWebCheckCustody(workspace = root, cwd = workspace): void 
     );
 }
 
-// Transport controls belong to the driver, not the native command's semantic overlay.
+// Transport controls belong to the driver, not the native command's semantic overlay. Every inherited
+// KERNEL_CHECK_ name is omitted, including KERNEL_CHECK_AFFECTED.
 const transportEnvironment = /^(?:GOAL_|CODEX_|KERNEL_CHECK_|REMOTE_CHECK_|REZICS_CHECK_|REZICS_STACK_)/;
 const credentialEnvironment = /^(?:CLOUDFLARE_|CF_|AWS_|GH_|GITHUB_|OPENAI_|ANTHROPIC_)/;
 const hostEnvironment = new Set([

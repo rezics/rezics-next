@@ -1008,7 +1008,7 @@ test('absolute host-path settings are dropped while runtime option refusals stay
   }
 });
 
-test('inherited host runtimes and paths are omitted while kernel affected selection survives', () => {
+test('inherited host runtimes, paths and kernel-check controls are omitted', () => {
   expect(
     webCheckEnvironment(
       {
@@ -1028,7 +1028,7 @@ test('inherited host runtimes and paths are omitted while kernel affected select
       root,
       app,
     ),
-  ).toEqual({ KERNEL_CHECK_AFFECTED: revision });
+  ).toEqual({});
 });
 
 test('unsupported host dependencies and destinations fail before a driver or native process starts', async () => {

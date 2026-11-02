@@ -108,6 +108,8 @@ Web and Auth generated inputs are prepared from the frozen candidate after the r
 paths are cleared before transfer, bounded and checked on return, and restored only from the terminal physical run.
 The private environment overlay cannot replace host runtime, placement or task-custody authority; `NODE_OPTIONS`,
 `NODE_PATH`, Bun runtime controls, dynamic loader injection, and unsupported host-absolute file settings fail closed.
+Web routing omits every inherited `KERNEL_CHECK_` variable, including `KERNEL_CHECK_AFFECTED`. An explicit driver
+`--env-file` may still supply `KERNEL_CHECK_AFFECTED`; direct kernel `--affected` selection is unchanged.
 Each producer invocation is durably registered outside the candidate before remote admission. Its final binding covers
 the exact commit, index and source fingerprint, original argv and cwd, hashes of the semantic and relocated
 environment, trusted producer closure, selected host configuration, declared preparation and returns. Secret values

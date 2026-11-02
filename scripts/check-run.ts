@@ -592,7 +592,8 @@ export function readEnvironmentFile(file: string, workspace: string): Record<str
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) || typeof item !== 'string' || item.includes('\0'))
       throw new Error(`--env-file has an invalid string value for ${name}`);
     // Host-local, placement and session values never travel to the check host; they are dropped, not refused, so an
-    // inherited login environment cannot make a check unavailable.
+    // inherited login environment cannot make a check unavailable. Explicit --env-file may keep KERNEL_CHECK_AFFECTED;
+    // Web ambient routing omits every KERNEL_CHECK_ name and does not write this exception.
     if (
       FORBIDDEN_REMOTE_ENVIRONMENT.has(name) ||
       (name.startsWith('KERNEL_CHECK_') && name !== 'KERNEL_CHECK_AFFECTED') ||

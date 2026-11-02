@@ -8,8 +8,10 @@ then requires the producer's prepared status to register the exact snapshot befo
 prepared descriptor and its eleven-field binding stay tied to that original invocation. The native-terminal and
 final-settlement records arrive on FD 3 using closed message schemas; each message is limited to 64 KiB.
 
-The semantic overlay omits ambient desktop, shell and tooling paths and all `KERNEL_CHECK_` controls;
-the trusted driver retains its original placement environment, while unknown host dependencies remain errors.
+The semantic overlay omits ambient desktop, shell and tooling paths and all `KERNEL_CHECK_` controls,
+including `KERNEL_CHECK_AFFECTED`. Direct kernel `--affected` and an explicit driver `--env-file` remain the
+supported selectors. The trusted driver retains its original placement environment, while unknown host
+dependencies remain errors.
 
 The receiver fsyncs the original FD 3 bytes before validating each message and records their byte ranges plus raw,
 body and decoded-object SHA-256 digests in the private `web-custody.json` and append-only `receipts.ndjson` files.

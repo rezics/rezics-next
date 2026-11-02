@@ -1236,7 +1236,7 @@ test('closed output and parent with unknown group return boundedly and preserve 
   expect(lifetimes.at(-1)).toMatchObject({ parentClosed: true, outputClosed: true, groupClosed: true });
 });
 
-test('the check overlay keeps affected selection and prepared custody round-trips maximum inventories', async () => {
+test('an explicit driver environment file keeps affected selection and prepared custody round-trips maximum inventories', async () => {
   const parent = mkdtempSync(join(root, '.temp', 'check-run-bounds-'));
   fixtures.push(parent);
   const candidateWorkspace = join(parent, 'candidate');

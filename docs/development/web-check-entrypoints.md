@@ -38,8 +38,9 @@ Bun/frozen dependency preparation. Absent or unsupported producer source is unav
 A private per-invocation environment JSON lives outside candidate source and is removed after the driver settles.
 Semantic strings and newlines survive JSON; argv is never joined into shell text. Inherited Node, npm, nvm,
 desktop/debug settings and host-absolute paths are omitted; explicitly requested unsupported host-local settings and
-host-absolute environment assignments are refused. `KERNEL_CHECK_AFFECTED` remains available for affected-test
-selection. Host runtime/cache settings, Goal/session credentials, publication credentials and placement bypass
+host-absolute environment assignments are refused. Web omits every inherited `KERNEL_CHECK_` variable, including
+`KERNEL_CHECK_AFFECTED`. Direct kernel `--affected` and an intentionally supplied driver `--env-file` may still
+select affected tests. Host runtime/cache settings, Goal/session credentials, publication credentials and placement bypass
 controls are excluded from the native overlay.
 `STORYBOOK_OUTPUT_DIR`, `GROWTH_PROFILE`, `WEB_TEST_STATE_DIR` and `WEB_CHECK_EVENTS` are explicitly relocated from
 contained workspace paths relative to the native cwd. Growth profiles, named test state and event outputs are also

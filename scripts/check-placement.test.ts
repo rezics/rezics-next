@@ -133,6 +133,9 @@ test('discovery, preload, shell, native-stack, browser, server, database, and un
   expect(classifyCheck(['bun', 'run', '--cwd', 'services/kernel', 'check', 'test/a.test.ts'], root).placement).toBe(
     'remote',
   );
+  expect(
+    classifyCheck(['bun', 'run', '--cwd', 'services/kernel', 'check', '--affected', 'HEAD~1'], root).placement,
+  ).toBe('remote');
   expect(classifyCheck(['bun', 'run', 'heavy'], root).placement).toBe('remote');
   const large = join(root, 'packages/util/test/large.test.ts');
   writeFileSync(large, `// ${'x'.repeat(256 * 1024)}\n`);
