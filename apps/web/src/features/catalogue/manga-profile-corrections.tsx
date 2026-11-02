@@ -3,6 +3,12 @@ import { pickText } from '@rezics/composition';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
+import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
+import {
+  AuthoringDepartureBoundary,
+  useAuthoringDeparture,
+  type AuthoringLocation,
+} from '../../threads/authoring-departure';
 import { subjectHref } from '../../subject/subject-href';
 import { CandidateReview, type CandidateTransport } from '../../subject/candidate-review';
 import type { FactsTransport, FactDraft } from './subject-facts';
@@ -56,6 +62,8 @@ type CorrectionProps = {
   reload: () => Promise<unknown>;
 };
 
+const correctionAddress = (location: AuthoringLocation) => JSON.stringify([location.pathname, location.search]);
+
 export function MangaCorrections(props: CorrectionProps) {
   const original = useRef<{ id: string; type: string } | undefined>(undefined);
   const subject = props.read?.public?.subject;
@@ -64,14 +72,19 @@ export function MangaCorrections(props: CorrectionProps) {
   const visible =
     !!subject && !props.disabled && subject.id === original.current?.id && subject.type === original.current?.type;
   return (
-    <CatalogueCurrentReading visible={visible} ready={visible} revision={props.revision ?? ''}>
-      <MangaCorrectionsLive {...props} read={visible ? props.read : undefined} />
-    </CatalogueCurrentReading>
+    <AuthoringDepartureBoundary sessionBound={false} navigationContext={correctionAddress}>
+      <CatalogueCurrentReading visible={visible} ready={visible} revision={props.revision ?? ''}>
+        <MangaCorrectionsLive {...props} read={visible ? props.read : undefined} />
+      </CatalogueCurrentReading>
+    </AuthoringDepartureBoundary>
   );
 }
 
 function MangaCorrectionsLive({ read, locale, disabled, ports, reload }: CorrectionProps) {
-  const active = useCurrentReadingActive();
+  // Reading recovery keeps this holder; departure and caller retirement never do.
+  const workspace = useCatalogueLifetime('manga-corrections');
+  const readingActive = useCurrentReadingActive();
+  const active = () => workspace.active() && readingActive();
   const o = { locale: locale as never };
   const [drafts, setDrafts] = useState<FactDraft[]>([]);
   const [busy, setBusy] = useState(false);
@@ -101,6 +114,31 @@ function MangaCorrectionsLive({ read, locale, disabled, ports, reload }: Correct
     }
   }
   const changed = drafts.filter((draft) => draft.included && factChanged(draft) && !draft.result?.ok);
+  // Batch inclusion does not release private assertions. Inspection is pure: no
+  // validation, command preparation or sealing belongs in a departure predicate.
+  const unresolved = () =>
+    drafts.some(
+      (draft) =>
+        !!draft.command &&
+        (!draft.result || (!draft.result.ok && ['uncertain', 'unavailable'].includes(draft.result.reason))),
+    );
+  useAuthoringDeparture(
+    () => workspace.active() && (unresolved() || drafts.some((draft) => !draft.result?.ok && factChanged(draft))),
+    unresolved,
+    String(workspace.generation),
+    undefined,
+    () => {
+      // Release only local editing/retry recovery; native proposals may still finish.
+      workspace.retire();
+      running.current = false;
+      setBusy(false);
+      setDrafts([]);
+      setReviewing(undefined);
+    },
+    undefined,
+    undefined,
+    correctionAddress,
+  );
   const discardState = useRef({ read, disabled, ports, busy });
   discardState.current = { read, disabled, ports, busy };
   async function submit() {
@@ -112,7 +150,10 @@ function MangaCorrectionsLive({ read, locale, disabled, ports, reload }: Correct
     try {
       await sendFacts(
         sealed,
-        ports.facts.propose,
+        (command) => {
+          if (!active()) throw new Error('Retired Manga corrections');
+          return ports.facts.propose(command);
+        },
         (property, result) =>
           active() &&
           setDrafts((previous) =>
@@ -126,6 +167,7 @@ function MangaCorrectionsLive({ read, locale, disabled, ports, reload }: Correct
       }
     }
   }
+  if (!workspace.active()) return null;
   return (
     <div className="space-y-6">
       {subject && current && groups && (
