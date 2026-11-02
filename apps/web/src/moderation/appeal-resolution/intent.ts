@@ -11,9 +11,18 @@ export type ResolutionCommand = Readonly<{
 export function createAppealResolutionIntent(appealId: string) {
   let viewer: string | null = null;
   let admitted = false;
+  let statement = '';
   let command: ResolutionCommand | null = null;
   let phase: 'draft' | 'pending' | 'uncertain' | 'settled' | 'retired' = 'draft';
   let result: AppealResolutionResult | null = null;
+  const retire = () => {
+    if (phase === 'retired') return false;
+    phase = 'retired';
+    statement = '';
+    command = null;
+    result = null;
+    return true;
+  };
   return {
     get phase() {
       return phase;
@@ -24,21 +33,27 @@ export function createAppealResolutionIntent(appealId: string) {
     get result() {
       return result;
     },
+    get statement() {
+      return statement;
+    },
+    retire,
     synchronize(id: string, currentViewer: string | null, mayResolve: boolean) {
-      // Initial hydration may establish a viewer, but can never adopt a submitted fixture intent.
+      // Hydration may establish a viewer only before this form owns private input or a command.
       if (
         id !== appealId ||
-        ((viewer !== null || command !== null) && viewer !== currentViewer) ||
+        ((viewer !== null || statement !== '' || command !== null) && viewer !== currentViewer) ||
         (admitted && !mayResolve)
-      ) {
-        phase = 'retired';
-        command = null;
-        result = null;
-      }
+      )
+        retire();
       viewer = currentViewer;
       admitted ||= mayResolve;
     },
-    begin(outcome: ResolutionCommand['outcome'], statement: string): ResolutionCommand | null {
+    edit(value: string) {
+      if (phase !== 'draft' || !admitted) return false;
+      statement = value;
+      return true;
+    },
+    begin(outcome: ResolutionCommand['outcome']): ResolutionCommand | null {
       const trimmed = statement.trim();
       const count = Array.from(trimmed).length;
       if (phase !== 'draft' || !admitted || count < 1 || count > 2000) return null;

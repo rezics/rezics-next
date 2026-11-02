@@ -14,7 +14,7 @@ type Resolution = { outcome: 'upheld' | 'reversed'; statement: string };
 const resolveAppeal: ResolveAppeal = (data) => actionOnAppeal({ data, headers: csrfHeaders() });
 
 /**
- * One mounted form owns one private intent. Submission freezes the trimmed payload and UUID synchronously.
+ * One mounted form owns its private statement and intent. Submission freezes the trimmed payload and UUID synchronously.
  * A lost response permits only explicit exact retry; definitive refusals require a fresh authorized page read.
  * Viewer/session, appeal or admission retirement discards private presentation and fences late settlement.
  * Confirmation survives unrelated parent refreshes; this form never refreshes or automatically resumes a command.
@@ -33,24 +33,29 @@ export function AppealResolution({
   onResolve?: ResolveAppeal;
   isCurrent?: () => boolean;
 }) {
-  const [statement, setStatement] = useState('');
   const [intent] = useState(() => createAppealResolutionIntent(appealId));
   const [, redraw] = useReducer((version: number) => version + 1, 0);
   const mounted = useRef(true);
   const session = useSession();
   const viewer =
     session.state === 'unknown' ? null : JSON.stringify([session.state, session.subject, session.csrfToken]);
-  intent.synchronize(appealId, viewer, mayResolve);
+  const admitted =
+    mayResolve &&
+    isCurrent?.() !== false &&
+    ((session.state === 'signed-in' && Boolean(session.subject) && Boolean(session.csrfToken)) ||
+      (session.state === 'unknown' && onResolve !== resolveAppeal));
+  intent.synchronize(appealId, viewer, admitted);
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
+      // StrictMode can reconnect this owner synchronously; a final unmount discards its private memory.
+      queueMicrotask(() => {
+        if (!mounted.current) intent.retire();
+      });
     };
-  }, []);
-  const admitted =
-    mayResolve &&
-    ((session.state === 'signed-in' && Boolean(session.subject) && Boolean(session.csrfToken)) ||
-      (session.state === 'unknown' && onResolve !== resolveAppeal));
+  }, [intent]);
+  const statement = intent.statement;
   const pending = intent.phase === 'pending';
   const uncertain = intent.phase === 'uncertain';
   const terminal = intent.phase === 'settled';
@@ -68,19 +73,29 @@ export function AppealResolution({
         ? `${m.moderation_appeal_conflict()} ${m.moderation_appeal_intent_conflict_recovery()}`
         : '';
 
+  function current() {
+    if (!mounted.current) return false;
+    // A page can retire between render and an input, submit or transport callback.
+    if (isCurrent?.() === false) {
+      if (intent.retire()) redraw();
+      return false;
+    }
+    return intent.phase !== 'retired';
+  }
+
   async function resolve(outcome?: ResolutionCommand['outcome']) {
-    if (!mounted.current || !admitted || result || isCurrent?.() === false) return;
-    const command = outcome === undefined ? intent.retry() : intent.begin(outcome, statement);
+    if (!current() || !admitted || result) return;
+    const command = outcome === undefined ? intent.retry() : intent.begin(outcome);
     if (!command) return;
     redraw();
     try {
-      if (isCurrent?.() === false) return;
+      if (!current()) return;
       const response = await onResolve(command);
-      if (mounted.current && isCurrent?.() !== false) intent.settle(response);
+      if (current()) intent.settle(response);
     } catch {
-      if (mounted.current && isCurrent?.() !== false) intent.uncertain();
+      if (current()) intent.uncertain();
     } finally {
-      if (mounted.current && isCurrent?.() !== false) redraw();
+      if (current()) redraw();
     }
   }
 
@@ -108,7 +123,7 @@ export function AppealResolution({
               disabled={pending || uncertain || terminal || !admitted}
               aria-invalid={count > 2000}
               onChange={(event) => {
-                if (intent.phase === 'draft' && admitted) setStatement(event.target.value);
+                if (current() && admitted && intent.edit(event.target.value)) redraw();
               }}
             />
           </label>
