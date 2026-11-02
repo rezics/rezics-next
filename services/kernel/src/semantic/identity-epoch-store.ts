@@ -1,4 +1,6 @@
 import { assertIdentityTerminalGroupsOpen } from './identity-terminal-closure.ts';
+import { IdentityEpochStoreError } from './identity-terminal-closure-errors.ts';
+export { IdentityEpochStoreError } from './identity-terminal-closure-errors.ts';
 import { recordPreparedIdentityPrearm, sealColocatedEmptyIdentityPrearm } from './identity-epoch-prearm.ts';
 import admissionInsertJob from './identity-epoch-admission-insert-job.sql';
 import admissionInsertBases from './identity-epoch-admission-insert-bases.sql';
@@ -94,14 +96,6 @@ export const IDENTITY_EPOCH_CONTROL_PARTITION = 0;
 export const IDENTITY_EPOCH_HOME_CAPACITY = 1;
 export const identityJobPartition = (job: IdentityJobRef) => partitionOf(route(job.jobId));
 
-export class IdentityEpochStoreError extends Error {
-  constructor(
-    public readonly code: string,
-    detail: string,
-  ) {
-    super(detail);
-  }
-}
 const unavailable = () =>
   new IdentityEpochStoreError(
     'identity_epoch_unavailable',

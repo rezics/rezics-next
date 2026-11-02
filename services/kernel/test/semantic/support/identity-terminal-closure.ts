@@ -13,7 +13,8 @@ import { home, identityEpochDatabase, seedLegacyRoot } from './identity-epoch.ts
 
 export type Deployment = Awaited<ReturnType<typeof identityEpochDatabase>>;
 export type Boundary = 'export' | 'hold' | 'receive' | 'install' | 'promote' | 'ack' | 'withdraw'
-  | 'original-admission' | 'original-debit' | 'original-owner-read';
+  | 'original-admission' | 'original-debit' | 'original-owner-read'
+  | 'maintenance-grant' | 'maintenance-admission' | 'maintenance-debit' | 'maintenance-cleanup';
 const boundarySQL: Record<Boundary, RegExp> = {
   export: /INSERT INTO semantic\.identity_epoch_bootstrap_page\b/,
   hold: /SET closure_successor_ticket=\$3/,
@@ -25,6 +26,10 @@ const boundarySQL: Record<Boundary, RegExp> = {
   'original-admission': /INSERT INTO semantic\.identity_terminal_closure_original\(/,
   'original-debit': /UPDATE semantic\.identity_terminal_closure_original SET ordinal=1,/,
   'original-owner-read': /AND o\.original_id=\$3 AND o\.source_epoch=p\.epoch AND o\.deadline=\$4 AND o\.ordinal=1/,
+  'maintenance-grant': /SET closure_cleanup_original=\$3/,
+  'maintenance-admission': /VALUES[\s\S]*'bootstrap-original-maintenance'/,
+  'maintenance-debit': /SET ordinal=1,spent=\$3/,
+  'maintenance-cleanup': /SET closure_cleanup_complete=true/,
 };
 
 /** Historical input only: no mapping, ready bit, source ACK or custody is seeded. */

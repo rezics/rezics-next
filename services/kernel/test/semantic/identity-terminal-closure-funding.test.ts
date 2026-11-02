@@ -15,6 +15,10 @@ import { addIdentityTerminalCosts, IDENTITY_TERMINAL_AXES, IDENTITY_TERMINAL_OWN
   IDENTITY_TERMINAL_OWNER_READ_TOTAL, IDENTITY_TERMINAL_ORIGINAL_COSTS,
   requireIdentityTerminalExecutor } from '../../src/semantic/identity-terminal-closure-cost.ts';
 import { atBoundary, isolatedDeployment, seedChain, settle } from './support/identity-terminal-closure.ts';
+import { recordIdentityTerminalOriginalMaintenance, withIdentityTerminalMaintenanceOriginal,
+  cleanupIdentityTerminalMaintenanceOriginal, type IdentityTerminalMaintenanceOriginal } from '../../src/semantic/identity-terminal-closure-maintenance.ts';
+import { IDENTITY_TERMINAL_MAINTENANCE_PLAN, IDENTITY_TERMINAL_MAINTENANCE_TOTAL } from '../../src/semantic/identity-terminal-closure-maintenance-cost.ts';
+import { reserveIdentityTerminalClosure } from '../../src/semantic/identity-epoch-mapping.ts';
 
 async function inventory(db: Awaited<ReturnType<typeof isolatedDeployment>>) {
   const rows = (await db.admin.query(`SELECT partition_no,slot,generation,closure_copies
@@ -246,6 +250,239 @@ test('original identity rejects unbounded or invalid receipt shapes before nativ
       .rejects.toThrow('Invalid native original identity');
     expect((await f.db.admin.query(`SELECT 1 FROM semantic.identity_terminal_closure_original
       WHERE partition_no=$1`, [f.partition])).rows).toEqual([]);
+    expect(await inventory(f.db)).toEqual([]);
+  } finally { await f.db.close(); }
+});
+
+/** The ACK and its cleanup grant are produced by a real event-bearing source
+ * command, including its real native callback and fence. No grant is seeded.
+ * This fixture exercises the owned metadata body; it supplies no production
+ * funding or evidence that Core supports this event/callback selected profile.
+ */
+async function maintenanceGrant(f: Awaited<ReturnType<typeof originalFixture>>, deadline = Date.now() + 5000) {
+  const native = await runCommand(f.db.pool, { partition: f.partition, deadline }, async tx => {
+    bindSemanticProducerRoles(tx, []);
+    await tx.query(`UPDATE semantic.identity_epoch_bootstrap_page SET acknowledged=true
+      WHERE partition_no=$1 AND transaction_id=$2`, [f.partition, f.exported.transactionId]);
+    recordIdentityTerminalOriginalMaintenance(tx, f.exported);
+    return { value: null, events: [{ type: IDENTITY_EPOCH_BOOTSTRAP, data: { partition: f.partition, generation: '1' } }] };
+  });
+  return { ...native, deadline };
+}
+
+for (const ordinal of [0, 1, 2]) {
+  test(`native maintenance transfers ordinal ${ordinal} custody without refund or another physical reservation`, async () => {
+    const f = await originalFixture();
+    try {
+      let root = '';
+      await withIdentityTerminalBootstrapOriginal(f.db.pool, f.exported, f.deadline, async original => {
+        root = original.id;
+        if (ordinal >= 1) await readIdentityTerminalOriginalOwner(original);
+        if (ordinal === 2) await expect(retireIdentityTerminalOriginal(original)).rejects.toThrow('native page ACK');
+      });
+      const before = (await f.db.admin.query(`SELECT spent,price,reservation FROM semantic.identity_terminal_closure_original
+        WHERE partition_no=$1 AND original_id=$2`, [f.partition, root])).rows[0]!;
+      const native = await maintenanceGrant(f);
+      const ledger = await inventory(f.db);
+      let escaped: IdentityTerminalMaintenanceOriginal | undefined;
+      const deadline = native.deadline;
+      await withIdentityTerminalMaintenanceOriginal(f.db.pool, native, root, deadline, async original => {
+        escaped = original;
+        expect(await inventory(f.db)).toEqual(ledger);
+        const transferred = (await f.db.admin.query(`SELECT spent,price,reservation,cleanup_id,ordinal
+          FROM semantic.identity_terminal_closure_original WHERE partition_no=$1 AND original_id=$2`, [f.partition, root])).rows[0]!;
+        expect(transferred).toEqual({ ...before, cleanup_id: original.id, ordinal: 2 });
+        expect((await f.db.admin.query(`SELECT 1 FROM semantic.identity_terminal_closure_ticket
+          WHERE partition_no=$1 AND original_id=$2`, [f.partition, root])).rows).toEqual([]);
+        expect((await f.db.admin.query(`SELECT ordinal,spent,price FROM semantic.identity_terminal_closure_original
+          WHERE partition_no=$1 AND original_id=$2`, [f.partition, original.id])).rows[0]).toEqual({
+          ordinal: 0, spent: workVector(IDENTITY_TERMINAL_MAINTENANCE_PLAN.admission).map(String),
+          price: workVector(IDENTITY_TERMINAL_MAINTENANCE_TOTAL).map(String),
+        });
+        await expect(cleanupIdentityTerminalMaintenanceOriginal({ ...original })).rejects.toThrow('copied');
+        await cleanupIdentityTerminalMaintenanceOriginal(original);
+      });
+      await expect(cleanupIdentityTerminalMaintenanceOriginal(escaped!)).rejects.toThrow('escaped');
+      expect((await f.db.admin.query(`SELECT 1 FROM semantic.identity_terminal_closure_original WHERE partition_no=$1`, [f.partition])).rows).toEqual([]);
+      expect((await f.db.admin.query(`SELECT 1 FROM semantic.identity_terminal_closure_ticket WHERE partition_no=$1`, [f.partition])).rows).toEqual([]);
+      expect(await inventory(f.db)).toEqual([]);
+      expect((await f.db.admin.query(`SELECT closure_cleanup_complete FROM semantic.identity_epoch_bootstrap_page
+        WHERE partition_no=$1 AND transaction_id=$2`, [f.partition, f.exported.transactionId])).rows[0]?.closure_cleanup_complete).toBe(true);
+      await expect(withIdentityTerminalMaintenanceOriginal(f.db.pool, native, root, deadline, async () => null))
+        .rejects.toThrow('current native ACK');
+      await expect(withIdentityTerminalBootstrapOriginal(f.db.pool, f.exported, f.deadline, async () => null))
+        .rejects.toThrow('cannot admit');
+    } finally { await f.db.close(); }
+  });
+}
+
+for (const boundary of ['maintenance-admission', 'maintenance-debit', 'maintenance-cleanup'] as const) {
+  test(`${boundary} lost commit reply retains the same immutable producer and physical custody`, async () => {
+    const f = await originalFixture();
+    try {
+      let root = '';
+      await withIdentityTerminalBootstrapOriginal(f.db.pool, f.exported, f.deadline, async original => { root = original.id; });
+      const native = await maintenanceGrant(f);
+      const deadline = native.deadline;
+      const lost = new Error(`lost real ${boundary} reply`);
+      await expect(atBoundary(f.db, boundary, 'after-commit', async () => { throw lost; }, () =>
+        withIdentityTerminalMaintenanceOriginal(f.db.pool, native, root, deadline, original =>
+          cleanupIdentityTerminalMaintenanceOriginal(original)), f.partition)).rejects.toThrow(lost.message);
+      if (boundary === 'maintenance-cleanup') {
+        expect(await inventory(f.db)).toEqual([]);
+        await expect(withIdentityTerminalMaintenanceOriginal(f.db.pool, native, root, deadline, async () => null))
+          .rejects.toThrow('current native ACK');
+        return;
+      }
+      const prior = (await f.db.admin.query(`SELECT original_id,ordinal,spent FROM semantic.identity_terminal_closure_original
+        WHERE partition_no=$1 AND predecessor=$2`, [f.partition, root])).rows[0]!;
+      expect(prior.ordinal).toBe(boundary === 'maintenance-admission' ? 0 : 1);
+      await expect(withIdentityTerminalMaintenanceOriginal(f.db.pool, native, root, deadline + 1, async () => null))
+        .rejects.toThrow('current native ACK');
+      await withIdentityTerminalMaintenanceOriginal(f.db.pool, native, root, deadline, async original => {
+        expect(original.id).toBe(prior.original_id);
+        if (boundary === 'maintenance-admission') await cleanupIdentityTerminalMaintenanceOriginal(original);
+        else await expect(cleanupIdentityTerminalMaintenanceOriginal(original)).rejects.toThrow('spent');
+      });
+      if (boundary === 'maintenance-debit') {
+        expect((await f.db.admin.query(`SELECT original_id,ordinal,spent FROM semantic.identity_terminal_closure_original
+          WHERE partition_no=$1 AND predecessor=$2`, [f.partition, root])).rows[0]).toEqual(prior);
+        expect((await inventory(f.db)).reduce((sum, row) => sum + row.closure_copies, 0)).toBe(3);
+      }
+    } finally { await f.db.close(); }
+  });
+}
+
+test('a failed cleanup transfers only to a fresh actual native producer, never a refreshed callback', async () => {
+  const f = await originalFixture();
+  try {
+    let root = '';
+    await withIdentityTerminalBootstrapOriginal(f.db.pool, f.exported, f.deadline, async original => { root = original.id; });
+    const first = await maintenanceGrant(f);
+    const deadline = first.deadline;
+    const failure = new Error('rollback actual cleanup body');
+    await expect(atBoundary(f.db, 'maintenance-cleanup', 'before', async () => { throw failure; }, () =>
+      withIdentityTerminalMaintenanceOriginal(f.db.pool, first, root, deadline, original => cleanupIdentityTerminalMaintenanceOriginal(original)),
+    f.partition)).rejects.toThrow(failure.message);
+    const ledger = await inventory(f.db);
+    const previous = (await f.db.admin.query(`SELECT original_id,ordinal,spent FROM semantic.identity_terminal_closure_original
+      WHERE partition_no=$1 AND predecessor=$2`, [f.partition, root])).rows[0]!;
+    expect(previous.ordinal).toBe(1);
+    expect(numbers(previous.spent)).toEqual(workVector(IDENTITY_TERMINAL_MAINTENANCE_TOTAL));
+    await withIdentityTerminalMaintenanceOriginal(f.db.pool, first, root, deadline, async original => {
+      await expect(cleanupIdentityTerminalMaintenanceOriginal(original)).rejects.toThrow('spent');
+    });
+    const second = await maintenanceGrant(f);
+    expect(second.position).toBeGreaterThan(first.position);
+    expect(second.transactionId).not.toBe(first.transactionId);
+    await expect(withIdentityTerminalMaintenanceOriginal(f.db.pool, first, root, deadline, async () => null))
+      .rejects.toThrow('current native ACK');
+    await withIdentityTerminalMaintenanceOriginal(f.db.pool, second, root, second.deadline, async original => {
+      expect(original.id).not.toBe(previous.original_id);
+      expect(await inventory(f.db)).toEqual(ledger);
+      expect((await f.db.admin.query(`SELECT 1 FROM semantic.identity_terminal_closure_original WHERE partition_no=$1 AND original_id=$2`,
+      [f.partition, previous.original_id])).rows).toEqual([]);
+      await cleanupIdentityTerminalMaintenanceOriginal(original);
+    });
+    expect(await inventory(f.db)).toEqual([]);
+  } finally { await f.db.close(); }
+});
+
+test('admitted cleanup progresses with all four cohome slots full by transferring the same ticket roles', async () => {
+  const f = await originalFixture();
+  try {
+    let root = '';
+    await withIdentityTerminalBootstrapOriginal(f.db.pool, f.exported, f.deadline, async original => { root = original.id; });
+    // These are genuine reserved provisional copies, not hand-written counters.
+    for (const copies of [4093, 4096, 4096, 4096]) {
+      await runCommand(f.db.pool, { partition: f.partition }, async (tx, { transactionId }) => {
+        bindSemanticProducerRoles(tx, []);
+        await tx.query("SELECT set_config('semantic.erasure_native_transaction',$1,true)", [transactionId]);
+        await reserveIdentityTerminalClosure(tx, randomUUID(), root, copies);
+        return { value: null, events: [{ type: IDENTITY_EPOCH_BOOTSTRAP, data: { partition: f.partition, generation: '1' } }] };
+      });
+    }
+    const full = await inventory(f.db);
+    expect(full).toHaveLength(4);
+    expect(full.reduce((sum, row) => sum + row.closure_copies, 0)).toBe(16384);
+    const native = await maintenanceGrant(f);
+    await withIdentityTerminalMaintenanceOriginal(f.db.pool, native, root, native.deadline, async original => {
+      expect(await inventory(f.db)).toEqual(full);
+      await expect(f.db.admin.query(`UPDATE core.partition SET epoch=epoch+1 WHERE partition_no=$1`, [f.partition]))
+        .rejects.toThrow('identity_epoch_unavailable');
+      await f.db.admin.query(`UPDATE core.partition SET position=position+1 WHERE partition_no=$1`, [f.partition]);
+      await cleanupIdentityTerminalMaintenanceOriginal(original);
+    });
+    expect((await inventory(f.db)).reduce((sum, row) => sum + row.closure_copies, 0)).toBe(16381);
+    expect(await inventory(f.db)).toHaveLength(4);
+  } finally { await f.db.close(); }
+});
+
+test('preparing maintenance revokes a spent owner observation at its actual effect-home query', async () => {
+  const f = await originalFixture();
+  try {
+    let native: Awaited<ReturnType<typeof maintenanceGrant>> | undefined;
+    let root = '';
+    await withIdentityTerminalBootstrapOriginal(f.db.pool, f.exported, f.deadline, async original => {
+      root = original.id;
+      native = await maintenanceGrant(f);
+      await expect(atBoundary(f.db, 'original-owner-read', 'before', async () => {
+        await withIdentityTerminalMaintenanceOriginal(f.db.pool, native!, root, native!.deadline, async () => null);
+      }, () => readIdentityTerminalOriginalOwner(original), f.partition)).rejects.toThrow(/owner unavailable|contention/);
+    });
+    expect((await f.db.admin.query(`SELECT ordinal,cleanup_id FROM semantic.identity_terminal_closure_original
+      WHERE partition_no=$1 AND original_id=$2`, [f.partition, root])).rows[0]?.ordinal).toBe(2);
+    expect((await inventory(f.db)).reduce((sum, row) => sum + row.closure_copies, 0)).toBe(3);
+  } finally { await f.db.close(); }
+});
+
+test('an expired abandoned maintenance admission transfers its two roles without resetting either original', async () => {
+  const f = await originalFixture();
+  try {
+    let root = '';
+    await withIdentityTerminalBootstrapOriginal(f.db.pool, f.exported, f.deadline, async original => { root = original.id; });
+    const deadline = Date.now() + 1000;
+    const first = await maintenanceGrant(f, deadline);
+    await expect(atBoundary(f.db, 'maintenance-admission', 'after-commit', async () => {
+      await Bun.sleep(Math.max(1, deadline - Date.now() + 5));
+    }, () => withIdentityTerminalMaintenanceOriginal(f.db.pool, first, root, deadline, async () => null), f.partition))
+      .rejects.toThrow('arbiter');
+    const expired = (await f.db.admin.query(`SELECT original_id,ordinal,spent,deadline::text
+      FROM semantic.identity_terminal_closure_original WHERE partition_no=$1 AND predecessor=$2`, [f.partition, root])).rows[0]!;
+    expect(expired.ordinal).toBe(0);
+    expect(expired.deadline).toBe(String(deadline));
+    expect(numbers(expired.spent)).toEqual(workVector(IDENTITY_TERMINAL_MAINTENANCE_PLAN.admission));
+    const second = await maintenanceGrant(f);
+    const ledger = await inventory(f.db);
+    await withIdentityTerminalMaintenanceOriginal(f.db.pool, second, root, second.deadline, async original => {
+      expect(original.id).not.toBe(expired.original_id);
+      expect(await inventory(f.db)).toEqual(ledger);
+      await cleanupIdentityTerminalMaintenanceOriginal(original);
+    });
+    expect(await inventory(f.db)).toEqual([]);
+  } finally { await f.db.close(); }
+});
+
+test('a lost native grant reply recovers the actual committed receipt and cannot displace an unspent custodian', async () => {
+  const f = await originalFixture();
+  try {
+    let root = '';
+    await withIdentityTerminalBootstrapOriginal(f.db.pool, f.exported, f.deadline, async original => { root = original.id; });
+    const lost = new Error('lost native ACK grant commit');
+    await expect(atBoundary(f.db, 'maintenance-grant', 'after-commit', async () => { throw lost; }, () => maintenanceGrant(f), f.partition))
+      .rejects.toThrow(lost.message);
+    const committed = (await f.db.admin.query(`SELECT n.transaction_id,n.epoch,n.position::text,b.closure_cleanup_deadline::text AS deadline
+      FROM semantic.identity_epoch_bootstrap_page b JOIN semantic.identity_epoch_native_commit n
+        ON n.partition_no=b.partition_no AND n.transaction_id=b.closure_cleanup_transaction
+      WHERE b.partition_no=$1 AND b.transaction_id=$2 AND n.purpose='bootstrap'`, [f.partition, f.exported.transactionId])).rows[0]!;
+    const native = { partition: f.partition, transactionId: committed.transaction_id, epoch: committed.epoch, position: BigInt(committed.position), deadline: Number(committed.deadline) };
+    await withIdentityTerminalMaintenanceOriginal(f.db.pool, native, root, native.deadline, async original => {
+      await expect(maintenanceGrant(f)).rejects.toThrow('Unspent maintenance');
+      const stillCurrent = (await f.db.admin.query(`SELECT closure_cleanup_transaction FROM semantic.identity_epoch_bootstrap_page
+        WHERE partition_no=$1 AND transaction_id=$2`, [f.partition, f.exported.transactionId])).rows[0]!;
+      expect(stillCurrent.closure_cleanup_transaction).toBe(native.transactionId);
+      await cleanupIdentityTerminalMaintenanceOriginal(original);
+    });
     expect(await inventory(f.db)).toEqual([]);
   } finally { await f.db.close(); }
 });

@@ -1,6 +1,6 @@
 import { COMMAND_DISPATCH_ALLOWANCE } from '../command/dispatch-lifetime.ts';
 import type { WorkDimensions } from '../library/collection-source.ts';
-import { IdentityEpochStoreError } from './identity-epoch-store.ts';
+import { IdentityEpochStoreError } from './identity-terminal-closure-errors.ts';
 
 export const IDENTITY_TERMINAL_AXES = Object.freeze([
   'candidateKeys', 'nativeRows', 'identityMetadataRows', 'nativePoints',

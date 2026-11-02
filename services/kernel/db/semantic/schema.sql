@@ -1941,15 +1941,17 @@ CREATE FUNCTION semantic.guard_identity_terminal_original() RETURNS trigger
     AS $$
 BEGIN
  IF (NEW.partition_no,NEW.original_id,NEW.source_transaction,NEW.source_epoch,NEW.source_position,
-     NEW.source_generation,NEW.source_phase,NEW.operation,NEW.deadline,NEW.plan_digest,NEW.price,NEW.reservation)
+     NEW.source_generation,NEW.source_phase,NEW.operation,NEW.deadline,NEW.plan_digest,NEW.price,NEW.reservation,NEW.predecessor)
  IS DISTINCT FROM
     (OLD.partition_no,OLD.original_id,OLD.source_transaction,OLD.source_epoch,OLD.source_position,
-     OLD.source_generation,OLD.source_phase,OLD.operation,OLD.deadline,OLD.plan_digest,OLD.price,OLD.reservation)
+     OLD.source_generation,OLD.source_phase,OLD.operation,OLD.deadline,OLD.plan_digest,OLD.price,OLD.reservation,OLD.predecessor)
  OR NEW.ordinal<OLD.ordinal
  OR NEW.spent[1]<OLD.spent[1] OR NEW.spent[2]<OLD.spent[2]
  OR NEW.spent[3]<OLD.spent[3] OR NEW.spent[4]<OLD.spent[4]
  OR NEW.spent[5]<OLD.spent[5] OR NEW.spent[6]<OLD.spent[6]
  OR NEW.spent[7]<OLD.spent[7] OR NEW.spent[8]<OLD.spent[8]
+ OR (NEW.cleanup_id IS DISTINCT FROM OLD.cleanup_id
+   AND (NEW.predecessor IS NOT NULL OR NEW.cleanup_id IS NULL OR NEW.ordinal<>2))
  THEN RAISE EXCEPTION 'identity_epoch_unavailable: immutable original or refill'; END IF;
  RETURN NEW;
 END; $$;
@@ -5136,7 +5138,14 @@ CREATE TABLE semantic.identity_epoch_bootstrap_page (
     caught_up boolean DEFAULT false NOT NULL,
     acknowledged boolean DEFAULT false NOT NULL,
     closure_page_reservation uuid,
-    CONSTRAINT identity_epoch_bootstrap_page_phase_check CHECK ((phase = ANY (ARRAY['subjects'::text, 'members'::text, 'dirty'::text, 'member-dirty'::text])))
+    closure_cleanup_original uuid,
+    closure_cleanup_transaction uuid,
+    closure_cleanup_epoch integer,
+    closure_cleanup_position bigint,
+    closure_cleanup_deadline bigint,
+    closure_cleanup_complete boolean DEFAULT false NOT NULL,
+    CONSTRAINT identity_epoch_bootstrap_page_phase_check CHECK ((phase = ANY (ARRAY['subjects'::text, 'members'::text, 'dirty'::text, 'member-dirty'::text]))),
+    CONSTRAINT identity_terminal_cleanup_receipt CHECK ((((closure_cleanup_original IS NULL) AND (closure_cleanup_transaction IS NULL) AND (closure_cleanup_epoch IS NULL) AND (closure_cleanup_position IS NULL) AND (closure_cleanup_deadline IS NULL) AND (NOT closure_cleanup_complete)) OR ((closure_cleanup_original IS NOT NULL) AND (closure_cleanup_transaction IS NOT NULL) AND (closure_cleanup_epoch IS NOT NULL) AND (closure_cleanup_position IS NOT NULL) AND (closure_cleanup_deadline IS NOT NULL) AND (closure_cleanup_epoch > 0) AND (closure_cleanup_position > 0) AND (closure_cleanup_deadline > 0) AND acknowledged)))
 );
 
 
@@ -6764,9 +6773,10 @@ CREATE TABLE semantic.identity_terminal_closure_original (
     spent bigint[] NOT NULL,
     ordinal integer DEFAULT 0 NOT NULL,
     reservation uuid NOT NULL,
+    predecessor uuid,
+    cleanup_id uuid,
     CONSTRAINT identity_terminal_closure_original_check CHECK ((((spent[1] >= 0) AND (spent[1] <= price[1])) AND ((spent[2] >= 0) AND (spent[2] <= price[2])) AND ((spent[3] >= 0) AND (spent[3] <= price[3])) AND ((spent[4] >= 0) AND (spent[4] <= price[4])) AND ((spent[5] >= 0) AND (spent[5] <= price[5])) AND ((spent[6] >= 0) AND (spent[6] <= price[6])) AND ((spent[7] >= 0) AND (spent[7] <= price[7])) AND ((spent[8] >= 0) AND (spent[8] <= price[8])))),
     CONSTRAINT identity_terminal_closure_original_deadline_check CHECK ((deadline > 0)),
-    CONSTRAINT identity_terminal_closure_original_operation_check CHECK ((operation = 'bootstrap-owner-read'::text)),
     CONSTRAINT identity_terminal_closure_original_ordinal_check CHECK (((ordinal >= 0) AND (ordinal <= 2))),
     CONSTRAINT identity_terminal_closure_original_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
     CONSTRAINT identity_terminal_closure_original_plan_digest_check CHECK ((octet_length(plan_digest) = 32)),
@@ -6774,7 +6784,8 @@ CREATE TABLE semantic.identity_terminal_closure_original (
     CONSTRAINT identity_terminal_closure_original_source_epoch_check CHECK ((source_epoch > 0)),
     CONSTRAINT identity_terminal_closure_original_source_phase_check CHECK ((source_phase = ANY (ARRAY['subjects'::text, 'members'::text, 'dirty'::text, 'member-dirty'::text]))),
     CONSTRAINT identity_terminal_closure_original_source_position_check CHECK ((source_position > 0)),
-    CONSTRAINT identity_terminal_closure_original_spent_check CHECK (((array_ndims(spent) = 1) AND (array_lower(spent, 1) = 1) AND (cardinality(spent) = 8) AND (array_position(spent, NULL::bigint) IS NULL)))
+    CONSTRAINT identity_terminal_closure_original_spent_check CHECK (((array_ndims(spent) = 1) AND (array_lower(spent, 1) = 1) AND (cardinality(spent) = 8) AND (array_position(spent, NULL::bigint) IS NULL))),
+    CONSTRAINT identity_terminal_original_operation CHECK ((((operation = 'bootstrap-owner-read'::text) AND (predecessor IS NULL)) OR ((operation = 'bootstrap-original-maintenance'::text) AND (predecessor IS NOT NULL) AND (cleanup_id IS NULL))))
 );
 
 
@@ -6792,12 +6803,10 @@ CREATE TABLE semantic.identity_terminal_closure_ticket (
     cursor_transaction uuid NOT NULL,
     price bigint[] NOT NULL,
     reservation uuid NOT NULL,
-    CONSTRAINT identity_terminal_closure_ticket_check CHECK ((((ordinal = 1) AND (operation = 'owner-read'::text) AND (phase = 'observe-owner'::text)) OR ((ordinal = 2) AND (operation = 'retire-original'::text) AND (phase = 'retire-original'::text)))),
     CONSTRAINT identity_terminal_closure_ticket_effect_partition_check CHECK (((effect_partition >= 0) AND (effect_partition <= 4095))),
-    CONSTRAINT identity_terminal_closure_ticket_operation_check CHECK ((operation = ANY (ARRAY['owner-read'::text, 'retire-original'::text]))),
     CONSTRAINT identity_terminal_closure_ticket_ordinal_check CHECK (((ordinal >= 1) AND (ordinal <= 2))),
-    CONSTRAINT identity_terminal_closure_ticket_phase_check CHECK ((phase = ANY (ARRAY['observe-owner'::text, 'retire-original'::text]))),
-    CONSTRAINT identity_terminal_closure_ticket_price_check CHECK (((array_ndims(price) = 1) AND (array_lower(price, 1) = 1) AND (cardinality(price) = 8) AND (array_position(price, NULL::bigint) IS NULL) AND (price[1] >= 0) AND (price[2] >= 0) AND (price[3] >= 0) AND (price[4] >= 0) AND (price[5] >= 0) AND (price[6] >= 0) AND (price[7] >= 0) AND (price[8] >= 0)))
+    CONSTRAINT identity_terminal_closure_ticket_price_check CHECK (((array_ndims(price) = 1) AND (array_lower(price, 1) = 1) AND (cardinality(price) = 8) AND (array_position(price, NULL::bigint) IS NULL) AND (price[1] >= 0) AND (price[2] >= 0) AND (price[3] >= 0) AND (price[4] >= 0) AND (price[5] >= 0) AND (price[6] >= 0) AND (price[7] >= 0) AND (price[8] >= 0))),
+    CONSTRAINT identity_terminal_ticket_operation CHECK ((((ordinal = 1) AND (operation = 'owner-read'::text) AND (phase = 'observe-owner'::text)) OR ((ordinal = 2) AND (operation = 'retire-original'::text) AND (phase = 'retire-original'::text)) OR ((ordinal = 1) AND (operation = 'cleanup-predecessor'::text) AND (phase = 'cleanup-predecessor'::text))))
 );
 
 
@@ -11194,6 +11203,13 @@ CREATE INDEX identity_terminal_directory_allocation ON semantic.identity_epoch_o
 --
 
 CREATE INDEX identity_terminal_group_allocation ON semantic.identity_epoch_group USING btree (partition_no, closure_claim) WHERE (closure_claim IS NOT NULL);
+
+
+--
+-- Name: identity_terminal_original_predecessor; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX identity_terminal_original_predecessor ON semantic.identity_terminal_closure_original USING btree (partition_no, predecessor) WHERE (predecessor IS NOT NULL);
 
 
 --

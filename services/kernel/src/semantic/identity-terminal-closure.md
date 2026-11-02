@@ -113,9 +113,35 @@ cleanup checkout. Cleanup requires the actual source page ACK, current native
 owner and empty exported payload. It verifies both exact spent tickets, deletes
 their physical rows and the header, and only then releases their three reserved
 copies. SDK return and an accounting counter are not retirement evidence. An
-uncertain or unsuccessful cleanup remains spent and charged. The implementation
-does not yet supply a separate maintenance original and explicit liability
-transfer after that cleanup allowance is exhausted or its deadline expires.
+uncertain or unsuccessful cleanup remains spent and charged. `withIdentityTerminalMaintenanceOriginal` now supplies a separate native
+maintenance original after that allowance is exhausted or its deadline expires.
+Its proof is the actual source ACK/maintenance command, not the old callback.
+`recordIdentityTerminalOriginalMaintenance` registers this proof from the real
+executor callback and native commit at the source ACK boundary. It projects the
+captured export, locks its exact owner/page/predecessor, requires native ACK and
+empty exported payload, and records the actual producer transaction and next
+position and the actual command resource deadline. Admission cannot extend that
+deadline even if no header has yet committed. A still-unspent, unexpired maintenance custodian cannot be displaced.
+A later actual native invocation can replace a spent or expired custodian; merely
+changing a callback or deadline cannot. The selected Core profiles still refuse
+this event/callback producer; the hook is not a free or supported Core dispatch.
+
+Admission verifies both original export and maintenance native commits, the
+latest page grant, exact owner incarnation, advancing home generation, immutable
+header/price/deadline, nonpersonal provenance and actual reservation. It deletes
+the predecessor's exact spent tickets before creating its maintenance header.
+The old header's ordinal becomes 2, revoking late owner observation, while its
+price and spent vector remain unchanged. A lost admission response recovers the
+same immutable maintenance identity and its current spent state.
+
+`cleanupIdentityTerminalMaintenanceOriginal` commits one child ticket before its
+cleanup checkout. Its effect rechecks the current native grant and both headers
+under the actual owner lock, validates the exact spent ticket, deletes ticket and
+headers, records complete disposition on the exact page, then releases three
+copies and uses the indexed native empty-range proof. A failed or uncertain
+effect remains spent and charged. Replacement requires a different real native
+producer receipt; the old grant cannot become current again after replacement
+or successful cleanup. No cross-home transaction is held.
 
 ## Literal selected-operation declarations
 
@@ -149,6 +175,32 @@ state erasure hook are included. The admitted nonpersonal branch executes no
 role callbacks or domain authorization/receipt/publication work. No successful
 price is declared for absent foreign children.
 
+The separate immutable maintenance declarations are in
+`identity-terminal-closure-maintenance-cost.ts`. Each header projection is bounded
+by 1216 binding/result bytes: fixed UUIDs, int32/int64 strings, constrained phase
+and operation, 32 digest bytes and two exactly eight-element int64 vectors. The
+same SQL shapes apply on conflict/empty branches. Two original ticket PKs are the
+maximum delete range, and the predecessor partial unique index permits one live
+maintenance header. Owner, original, both native receipts, ACK, home, reservation,
+source-role/basis/copy-role exclusions and every reached FK/index/lock are charged.
+The native grant callback's local declaration remains separate from its missing
+Core event/callback executor operand.
+
+| Maintenance phase | candidateKeys/nativeRows/identityMetadataRows/nativePoints/witnessKeys/statements/bytes/emptySeeks |
+| --- | --- |
+| Native grant hook and native-commit callback bodies only | 0/37/12/13/8/4/2176/11 |
+| Admission, including transfer/replacement and failure rollback | 0/75/28/28/13/18/8068/21 |
+| Irreversible child debit | 0/46/17/18/11/15/5972/16 |
+| Cleanup effect and separately prepaid rollback | 0/106/45/44/12/28/7300/36 |
+| Complete metadata maintenance original | 0/227/90/90/36/61/21340/73 |
+
+The old owner-read plan and digest remain unchanged. A maintenance original has
+its own plan/digest, actual producer position and deadline. These declarations do
+not price the earlier source command or any authorization, event or callback
+executor outside the metadata arbiter. The shared store error now comes from the
+dependency-free `identity-terminal-closure-errors.ts`, preserving the store's
+existing exported class and eliminating cost/store/bootstrap initialization cycles.
+
 ## Same physical inventory
 
 `reserveIdentityTerminalOriginalCopies` authenticates the real native arbiter
@@ -165,6 +217,9 @@ Admission reserves the entire three-copy bundle before creating its header:
 | Admission committed | One header | Header + two provisional one-shot tickets = 3 |
 | Owner-read debit committed | Header + owner-read ticket | 3 |
 | Retirement debit committed, including abandoned/uncertain effect | Header + two spent tickets | 3 |
+| Transfer committed | Old revoked header + maintenance header | Same 3, including one provisional maintenance ticket |
+| Maintenance debit committed or failed cleanup | Both headers + one spent ticket | Same 3 |
+| Replacement by a fresh actual native producer | Old revoked header + replacement header; old maintenance rows deleted first | Same 3 |
 | Native ACK/empty-range cleanup committed | No header or tickets | 0 |
 
 All three roles use the same coalesced reservation, including at cohome
@@ -176,8 +231,14 @@ For this extension, `Cq = prior reserved copies + 3 * admitted originals` is at
 most `4 * 4096 = 16384`; metadata admission waits/refuses before allocation if a
 three-copy bundle cannot fit. Canonical rows remain in `Aq`, so this extension
 uses only the existing `Aq+16384` / `Gq+4` inventory. Failed or replayed tickets
-do not release the bundle. The native ACK cleanup can reclaim its already
-reserved bundle without acquiring a fifth slot. Empty bucket retirement uses
+do not release the bundle. Both normal retirement and maintenance can reclaim their already
+reserved bundle without acquiring a fifth slot. Transfer first removes zero to
+two actual predecessor tickets (or the old maintenance ticket/header), then
+creates the replacement header inside those same two provisional roles. Its
+single ticket is created only after committed transfer. At no statement boundary
+are there more than three actual rows in this bundle. It leaves the shared ledger
+counter unchanged until native cleanup deletes all three roles. The same schedule
+works when all four slots already contain 4096 charged copies. Empty bucket retirement uses
 seven indexed native reference ranges and both original/ticket FK checks under
 the same owner transaction. It never infers emptiness from the counter. Native
 page ACK clears its allocation pointer only after deleting its exact payload;
@@ -190,7 +251,11 @@ establish those obligations.
 
 ## Unsupported profiles and remaining source obligations
 
-The actual installed Core adapter supports `single-no-effect` only. Directory
+The installed Core adapter supports `single-no-effect` and a separate exact
+`single-source-fence` account erasure event profile. The latter requires one
+specific account erasure event and also rejects callbacks; it is incompatible
+with this directory's native producer. Neither supplies a general closure
+mutation/event/native callback or principal authorization/receipt profile. Directory
 native phases register both Semantic erasure and native-commit callbacks and
 emit bootstrap/progress events. They require an executor mutation/event/native
 callback profile that is not exported by `command/dispatch-lifetime.ts`.
@@ -206,8 +271,7 @@ The following owned work is still incomplete: literal inclusive compositions
 for all directory SQL bodies and initial-discovery/drain/second-source/claim
 release phases; authentic original admission/private transfer for all subject,
 bulk, merge, account birth, mapping member, workflow and Access delivery
-producers; separate maintenance admission and durable liability transfer; and
-the complete combined physical schedule. The supported owner-read original
+producers; and the complete combined physical schedule. The supported owner-read original
 cannot fund those independent operations. Existing receipt-free legacy wrapper
 calls are not claimed as funded receiving. No new dependency receipt, native
 pass or whole-product completion is asserted.
@@ -218,14 +282,21 @@ New production callables are `withIdentityTerminalBootstrapOriginal`,
 `readIdentityTerminalOriginalOwner`, `retireIdentityTerminalOriginal`,
 `withIdentityTerminalArbiter`, `identityTerminalArbiter`,
 `reserveIdentityTerminalOriginalCopies`, `addIdentityTerminalCosts` and
-`requireIdentityTerminalExecutor`. Existing bootstrap signatures, ordered
+`requireIdentityTerminalExecutor`. Maintenance adds
+`recordIdentityTerminalOriginalMaintenance`,
+`withIdentityTerminalMaintenanceOriginal` and
+`cleanupIdentityTerminalMaintenanceOriginal`, with its own literal plan and
+component exports. Existing bootstrap signatures, ordered
 mapping states, page100, group4096 and four-slot allocation remain unchanged.
 The source command wrapper now uses typed overloads and Core's actual default
 deadline; an inherited Access five-second deadline is retained.
 
 The forward migration `20261102000300_identity_terminal_closure_fresh.sql` adds
 immutable original/ticket metadata, monotonic spent state, reservation indexes
-and owner-incarnation custody protection. Position-only owner advancement still
+and owner-incarnation custody protection. The forward migration
+`20261102000400_identity_terminal_closure_fresh.sql` adds fixed native maintenance
+receipts, predecessor custody and the distinct maintenance ticket operation;
+there is no new physical ledger or member directory. Position-only owner advancement still
 returns before dependency IO. The Semantic snapshot includes the same changes.
 Historical migrations, Core executor, rating hooks, protected Library projection
 and frozen acceptance are unchanged. No file outside the declared paths was
@@ -236,15 +307,19 @@ actual Core allowance debit, lost admission/debit replies, failed effect
 rollback, copied/escaped handles, immutable deadline replay, owner refusal,
 native ACK retirement, retained failed cleanup and SQL refill refusal. Existing
 chain/race/shared-suffix/growth acceptance is preserved byte-for-byte. All
-native/unit/growth/full acceptance remains UNRUN.
+native/unit/growth/full acceptance remains UNRUN. New connected cases additionally
+cover old ordinals 0/1/2, unchanged predecessor price/spent, lost native-grant and
+admission/debit/cleanup commit replies, expired admission, failed effect rollback,
+fresh-native replacement, refusal to evict an unspent custodian, exact actual
+owner-query revocation, and four full cohome slots.
 
-The sole permitted `bun run --cwd services/kernel typecheck --emit-schema=semantic`
+The preceding source compiler `bun run --cwd services/kernel typecheck --emit-schema=semantic`
 ran on compiler host b against source commit b7466413b4 and exited 2. Its first
 reported error was `identity-terminal-closure-delete-empty-slot.sql(2,52): error
 reylo3: The parameter $2 appears more than once`; the remaining diagnostics were
 the same repeated-parameter defect for `$1` and `$2`. The query now projects each
-parameter once through a typed input CTE. No second compiler invocation was
-started, so this correction and final typing remain unverified. The compiler
+parameter once through a typed input CTE. That source invocation was not rerun. A new compiler receipt for the substantively
+changed maintenance source will replace this paragraph when it terminates. The compiler
 reported 237.723 seconds command time, 327.429 CPU seconds and 6947 MiB peak
 memory. It did not reach construct or schema emission. No passing typing or
 product completion is claimed.

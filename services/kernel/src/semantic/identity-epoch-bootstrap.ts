@@ -1,4 +1,5 @@
 import { stepIdentityTerminalClosure, retireIdentityTerminalPage, recoverIdentityTerminalClosure, advanceIdentityTerminalClosures } from './identity-terminal-closure.ts';
+import { recordIdentityTerminalOriginalMaintenance } from './identity-terminal-closure-maintenance.ts';
 import { reserveIdentityTerminalClosure } from './identity-epoch-mapping.ts';
 import { runIdentityTerminalCommand } from './identity-terminal-closure-command.ts';
 import { requireIdentityTerminalExecutor } from './identity-terminal-closure-cost.ts';
@@ -449,6 +450,9 @@ async function stepBootstrapHome(
     await query(tx, bootstrapUpdateBootstrapPage.sql, [partition, retained.native.transactionId]);
     await query(tx, bootstrapDeleteBootstrapRow.sql, [partition, retained.native.transactionId]);
     await retireIdentityTerminalPage(tx, retained.native, retained.rows.length);
+    // The actual source ACK event also produces the cleanup grant for any
+    // separately admitted original at this exact export. No response is custody.
+    recordIdentityTerminalOriginalMaintenance(tx, retained.native);
     let sealed = false;
     if (retained.caughtUp) {
       recordIdentityEpochNativeCommit(tx, 'bootstrap');
