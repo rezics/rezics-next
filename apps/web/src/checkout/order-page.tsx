@@ -62,7 +62,9 @@ export function OrderPage(props: OrderPageProps) {
     budget = { polls: { current: 0 }, accepted: false };
     budgets.current.set(props.order.id, budget);
   }
-  return <OrderReceipt key={props.order.id} {...props} locale={locale} session={session} benefit={benefit} budget={budget} />;
+  return (
+    <OrderReceipt key={props.order.id} {...props} locale={locale} session={session} benefit={benefit} budget={budget} />
+  );
 }
 
 function OrderReceipt(

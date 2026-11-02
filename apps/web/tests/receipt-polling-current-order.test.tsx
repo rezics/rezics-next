@@ -15,7 +15,9 @@ let accessRead: (input: { data: { id: string; locale: string } }) => Promise<Ord
 mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('../src/session/query', () => ({ useSession: () => viewer }));
 mock.module('../src/kernel/exposure', () => ({ useOperation: () => admitted, Exposure: () => null }));
-mock.module('../src/checkout/order', () => ({ readOrder: (input: { data: { id: string; locale: string } }) => accessRead(input) }));
+mock.module('../src/checkout/order', () => ({
+  readOrder: (input: { data: { id: string; locale: string } }) => accessRead(input),
+}));
 
 const firstId = '019a1b2c-3d4e-7f00-8a00-5b0000000061';
 const secondId = '019a1b2c-3d4e-7f00-8a00-5b0000000062';
@@ -460,10 +462,7 @@ test('Paid receipt retries unavailable current Access with a fresh read and no p
     await act(async () => recovery()!.click());
     expect(status(m.order_access_recovery_pending())).toBeDefined();
     expect(recovery()!.disabled).toBe(true);
-    expect(calls).toEqual([
-      { data: { id: firstId, locale: 'en' } },
-      { data: { id: firstId, locale: 'en' } },
-    ]);
+    expect(calls).toEqual([{ data: { id: firstId, locale: 'en' } }, { data: { id: firstId, locale: 'en' } }]);
     response.resolve({ ...initial, entitlement: { kind: 'current', active: true }, canUseBenefit: true });
     await act(async () => {
       await response.promise;
