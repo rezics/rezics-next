@@ -2,6 +2,12 @@ import { expect, test } from 'bun:test';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { chromium } from 'playwright';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { discoveryExample } from '../src/kernel/fake/search-discovery';
+import { DiscoveryResults } from '../src/search/discovery-results';
+import { isCatalogueHit } from '../src/search/discovery';
+import { ResultRow } from '../src/search/results';
 
 const app = join(import.meta.dir, '..');
 
@@ -176,5 +182,77 @@ test('default mixed SearchPage offers direct result-kind navigation that retains
     expect(await page.getByRole('button', { name: /^Filters \(/ }).getAttribute('aria-expanded')).toBe('false');
   } finally {
     await browser.close();
+  }
+});
+
+test('mixed discovery keeps subject and account destinations distinct while subject facts remain secondary links', () => {
+  const page = structuredClone(discoveryExample);
+  const subject = page.hits.find((hit) => hit.summary.kind === 'subject' && hit.key.kind === 'schema:Book')!;
+  if (!isCatalogueHit(subject)) throw new Error('Expected the public Book fixture');
+  subject.descriptions = { en: 'An atlas of reading journeys.' };
+  subject.aliases = { en: ['Reading atlas'] };
+  subject.facts = { 'schema:author': [{ kind: 'item', id: page.hits[0]!.key.id, labels: { en: 'Mira' } }] };
+  const html = renderToStaticMarkup(
+    createElement(DiscoveryResults, { state: { status: 'ready', page }, locale: 'en' }),
+  );
+  expect(html.match(/<li\b/g)).toHaveLength(4);
+  expect(html).toContain('href="/en/@mira"');
+  expect(html).toContain(`href="/en/subjects/${subject.key.id}/mira-s-atlas"`);
+  const bookRow = html.split('<li').find((row) => row.includes('Mira’s Atlas'))!;
+  expect(bookRow.match(/data-slot="list-row-link"/g)).toHaveLength(1);
+  const primary = bookRow.match(/<a\b[^>]*data-slot="list-row-link"[^>]*>[\s\S]*?<\/a>/)![0];
+  expect(primary).toContain('Mira’s Atlas');
+  expect(primary).not.toContain('Reading atlas');
+  expect(primary).not.toContain('An atlas of reading journeys.');
+  expect(primary.match(/<a\b/g)).toHaveLength(1);
+  expect(bookRow).toContain(`href="/en/subjects/${page.hits[0]!.key.id}/mira"`);
+  expect(bookRow).toContain('data-content-item-slot="metadata"');
+  expect(bookRow).toContain('data-content-item-slot="preview"');
+});
+
+test('actual result cover composition keeps released frame geometry and independent suitability controls', () => {
+  const id = '00000000-0000-4000-8000-000000000813';
+  for (const [imageAspect, ratio, width] of [
+    ['portrait', '5:7', 'w-[72px] sm:w-24'],
+    ['landscape', '16:9', 'w-32 sm:w-48'],
+    ['square', '1:1', 'w-[72px] sm:w-24'],
+  ] as const) {
+    const html = renderToStaticMarkup(
+      createElement(ResultRow, {
+        hit: {
+          id,
+          type: 'schema:Book',
+          labels: { en: 'Mira’s Atlas' },
+          listPresentation: { imageAspect, keyFacts: [] },
+          summary: {
+            id,
+            type: 'schema:Book',
+            cover: {
+              media: '00000000-0000-4000-8000-000000000999',
+              width: 900,
+              height: 1260,
+              placeholder: { color: '#465c72', thumbhash: '' },
+              variants: [{ format: 'webp', width: 640 }],
+              focalPoint: null,
+              credit: null,
+              withheld: 'suitability',
+            },
+          },
+        },
+        locale: 'en',
+        hitTypes: {},
+        yearProperties: [],
+      }),
+    );
+    expect(html).toContain(`data-ratio="${ratio}"`);
+    expect(html).toContain(width);
+    expect(html).toContain('data-state="withheld"');
+    expect(html).toContain('Show cover');
+    expect(html).toContain('[&amp;_button]:z-10');
+    expect(html).not.toContain('<img');
+    expect(html).not.toContain('<source');
+    const primary = html.match(/<a\b[^>]*data-slot="list-row-link"[^>]*>[\s\S]*?<\/a>/)![0];
+    expect(primary).not.toContain('<button');
+    expect(html.match(/<button\b/g)).toHaveLength(1);
   }
 });

@@ -3,6 +3,9 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { chromium, type Browser, type Page } from 'playwright';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { ResultList, type ResultHit } from '../src/search/results';
 
 const app = join(import.meta.dir, '..');
 const timeout = 300_000;
@@ -135,6 +138,34 @@ const fake = Bun.serve({
     if (url.pathname === '/v1/subjects:search' && request.method === 'POST') {
       const body = (await request.json()) as SearchBody;
       calls.push({ method: request.method, path: url.pathname, body });
+      if (body.text === 'Kokoro independent targets') {
+        // Current discovery wire for the row regression; legacy fixtures below keep their original meanings.
+        const projected = project(kokoro, body);
+        return json({
+          hits: [
+            {
+              key: { owner: 'semantic', kind: book, route: 0, id: kokoro.id },
+              summary: {
+                kind: 'subject',
+                value: {
+                  id: kokoro.id,
+                  type: book,
+                  types: [book],
+                  creativeWork: true,
+                  label: { value: 'Kokoro', language: 'en' },
+                  cover: null,
+                },
+              },
+              labels: projected.labels,
+              descriptions: projected.descriptions,
+              facts: projected.facts,
+            },
+          ],
+          kinds: { values: [{ id: book, labels: { en: 'Book' }, icon: 'book' }], next: null },
+          next: null,
+          as_of: asOf,
+        });
+      }
       const hits = body.cursor === cursor ? [later] : body.text === 'Untold' ? [bare] : [kokoro, kokoroTwo, bare];
       return json({
         subjects: hits.map((hit) => project(hit, body)),
@@ -467,6 +498,202 @@ test(
         } finally {
           await page.context().close();
         }
+      }
+    }
+  },
+  timeout,
+);
+
+// Authored production composition regressions; execution is deferred to integration.
+test('complete result rows separate metadata from the passive description and retain admitted budgets', () => {
+  const hit: ResultHit = {
+    ...kokoro,
+    facts: {
+      [author]: Array.from({ length: 4 }, (_, index) => ({
+        kind: 'item',
+        id: `00000000-0000-4000-8000-00000000020${index + 1}`,
+        labels: { en: `Writer ${index + 1}` },
+      })),
+      [published]: [{ kind: 'time', year: 1914 }],
+      [genre]: ['Fable', 'Fiction', 'Hidden fifth fact'].map((value) => ({ kind: 'code', value })),
+      'schema:omitted': [{ kind: 'code', value: 'Unselected property' }],
+    },
+    aliases: { en: ['The heart', 'Heart', 'Spirit', 'Hidden fourth alias'], ja: ['Unchosen alias language'] },
+    listPresentation: { imageAspect: 'portrait', keyFacts: [author, genre, published] },
+    storyOverlay: true,
+    figure: {
+      questionId: '00000000-0000-7000-8000-000000000001',
+      populationId: '00000000-0000-8000-8000-000000000000',
+      scale: { min: 0, max: 10, displayStep: 0.5 },
+      count: 5,
+      state: 'ready',
+      mean: 8,
+      score: 7.5,
+    },
+  };
+  const html = renderToStaticMarkup(
+    createElement(ResultList, {
+      hits: [hit],
+      locale: 'en',
+      hitTypes: { [book]: { en: 'Book' } },
+      yearProperties: [published],
+    }),
+  );
+  const metadata = html.slice(
+    html.indexOf('data-content-item-slot="metadata"'),
+    html.indexOf('data-content-item-slot="preview"'),
+  );
+  const preview = html.slice(
+    html.indexOf('data-content-item-slot="preview"'),
+    html.indexOf('data-content-item-slot="trailing"'),
+  );
+  expect(html).toMatch(/^<ul\b[^>]*><li\b/);
+  expect(html.match(/data-slot="list-row-link"/g)).toHaveLength(1);
+  expect(html).toMatch(
+    /<h2\b[^>]*data-content-item-slot="title"[^>]*><a\b[^>]*href="\/en\/subjects\/[^\"]+\/kokoro"[^>]*><span[^>]*>Kokoro<\/span><\/a><\/h2>/,
+  );
+  expect(metadata).toContain('Book');
+  expect(metadata).toContain('1914');
+  expect(metadata).toContain('The heart · Heart · Spirit');
+  expect(metadata.match(/data-property=/g)).toHaveLength(4);
+  expect(metadata.match(/<a\b/g)).toHaveLength(3);
+  expect(metadata).not.toContain('A student meets');
+  expect(preview).toContain('A student meets a reclusive teacher. &lt;em&gt;Not markup&lt;/em&gt;');
+  expect(preview).not.toContain('list-row-control');
+  expect(preview).not.toContain('z-10');
+  for (const hidden of [
+    'Writer 4',
+    'Fiction',
+    'Hidden fifth fact',
+    'Unselected property',
+    'Hidden fourth alias',
+    'Unchosen alias language',
+  ])
+    expect(html).not.toContain(hidden);
+  expect(html).toContain('data-overlay="visible"');
+  expect(html).toContain('data-ratio="5:7"');
+  expect(html).toContain('8 out of 10');
+  expect(html).toContain('5 ratings');
+  expect(html).not.toContain('7.5');
+});
+
+test('optional result data stays absent and long multilingual labels keep their language and wrapping', () => {
+  const title = 'رحلة طويلة عبر المدن والكتب واللغات '.repeat(6);
+  const alias = '長い別名と多言語の作品'.repeat(12);
+  const html = renderToStaticMarkup(
+    createElement(ResultList, {
+      hits: [
+        {
+          id: bare.id,
+          type: book,
+          labels: { ar: title },
+          aliases: { ja: [alias] },
+          descriptions: { ar: 'وصف طويل للكتاب يلتف داخل مساحة المعاينة. '.repeat(8) },
+          facts: {
+            [author]: [
+              {
+                kind: 'item',
+                id: '00000000-0000-4000-8000-000000000201',
+                labels: { de: 'EinsehrlangerAutorenname'.repeat(16) },
+              },
+            ],
+          },
+        },
+      ],
+      locale: 'en',
+      hitTypes: { [book]: { ja: '多言語の長い種類名'.repeat(12) } },
+      yearProperties: [],
+    }),
+  );
+  expect(html).toContain(title);
+  expect(html).toContain(alias);
+  expect(html).toMatch(/<h2\b[^>]*lang="ar"[^>]*dir="auto"/);
+  expect(html).toMatch(/<a\b[^>]*lang="ar"[^>]*data-slot="list-row-link"/);
+  expect(html).toContain('lang="ja" dir="auto"');
+  expect(html).toContain('lang="de" dir="auto"');
+  expect(html).toContain('wrap-anywhere');
+  expect(html).toContain('min-w-0');
+  expect(html).toContain('line-clamp-2');
+  expect(html).toContain('data-state="placeholder"');
+  expect(html).not.toContain('<img');
+  expect(html).not.toContain('data-slot="public-rating-figure"');
+  expect(html).not.toContain('data-content-item-slot="trailing"');
+  expect(html).not.toContain('data-slot="year"');
+  const unlabelled = renderToStaticMarkup(
+    createElement(ResultList, {
+      hits: [{ id: bare.id, type: 'catalogue:Unknown', labels: {} }],
+      locale: 'en',
+      hitTypes: {},
+      yearProperties: [],
+    }),
+  );
+  expect(unlabelled).toContain('Unlabelled');
+  expect(unlabelled).not.toContain('data-content-item-slot="metadata"');
+  expect(unlabelled).not.toContain('data-content-item-slot="preview"');
+});
+
+test(
+  'passive result previews activate the primary title while fact links keep independent pointer and keyboard targets',
+  async () => {
+    for (const width of [390, 1280]) {
+      const page = await open(searchPath('en', 'Kokoro independent targets', book), true, width);
+      try {
+        const first = row(page, 'Kokoro');
+        const primary = first.getByRole('link', { name: 'Kokoro', exact: true });
+        const description = first.locator('[data-slot="item-description"]');
+        const facts = first.locator('[data-slot="member-list-row-facts"] a');
+        const primaryHref = await primary.getAttribute('href');
+        expect(await first.locator('h2 a[data-slot="list-row-link"]').count()).toBe(1);
+        expect(await primary.innerText()).toBe('Kokoro');
+        expect(await first.locator('a a, a button, a input, a summary').count()).toBe(0);
+        expect(
+          await description.evaluate((element) =>
+            element.closest('[data-content-item-slot="metadata"], [data-slot="list-row-control"]'),
+          ),
+        ).toBeNull();
+        expect(await facts.count()).toBe(3);
+        // Capture the actual native anchor reached by pointer/Enter without leaving the current result page.
+        await page.evaluate(() => {
+          (window as any).resultActivations = [];
+          document.addEventListener(
+            'click',
+            (event) => {
+              const anchor = event.target instanceof Element ? event.target.closest('a[href]') : null;
+              if (!anchor) return;
+              (window as any).resultActivations.push(anchor.getAttribute('href'));
+              event.preventDefault();
+            },
+            { capture: true },
+          );
+        });
+        await description.scrollIntoViewIfNeeded();
+        const box = (await description.boundingBox())!;
+        await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+        expect(await page.evaluate(() => (window as any).resultActivations)).toEqual([primaryHref]);
+        await primary.focus();
+        await page.keyboard.press('Enter');
+        await page.keyboard.press('Tab');
+        expect(await facts.first().evaluate((element) => element === document.activeElement)).toBe(true);
+        const expected = [primaryHref, primaryHref];
+        for (let index = 0; index < (await facts.count()); index++) {
+          const fact = facts.nth(index);
+          const href = await fact.getAttribute('href');
+          expect(href).toContain(`/en/subjects/00000000-0000-4000-8000-00000000020${index + 1}/`);
+          const bounds = (await fact.boundingBox())!;
+          expect(bounds.height).toBeGreaterThanOrEqual(44);
+          expect(bounds.width).toBeGreaterThanOrEqual(44);
+          await page.keyboard.press('Enter');
+          await fact.click();
+          expected.push(href, href);
+          if (index < 2) {
+            await page.keyboard.press('Tab');
+            expect(await facts.nth(index + 1).evaluate((element) => element === document.activeElement)).toBe(true);
+          }
+        }
+        expect(await page.evaluate(() => (window as any).resultActivations)).toEqual(expected);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+      } finally {
+        await page.context().close();
       }
     }
   },

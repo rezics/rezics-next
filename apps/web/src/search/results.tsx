@@ -1,6 +1,7 @@
 import type { KernelClient } from '@rezics/client';
 import { pickText } from '@rezics/composition';
 import {
+  Cover,
   fallbackListFactProperties,
   fallbackListPresentation,
   parseListPresentation,
@@ -8,13 +9,17 @@ import {
   type CoverRatio,
   type ListPresentation,
 } from '@rezics/ui/cover';
-import { MemberListRow } from '@rezics/ui/list-presentation';
+import { ContentItemHeading, ContentItemTitleLink } from '@rezics/ui/content-item';
+import { ListRow, ListRowControl } from '@rezics/ui/list-row';
 import { MetaLine } from '@rezics/ui/meta-line';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { ItemDescription } from '@rezics/ui/shadcn/item';
+import { cn } from '@rezics/ui/utils';
 import { PublicRatingFigure } from '../features/pages/public-rating-figure';
 import { coverSrc } from '../media/cover-src';
 import { coverOf, coverSubject, type SubjectSummary } from '../media/summary';
 import { listKeyFacts } from '../media/type-presentation';
+import { m } from '../paraglide/messages.js';
 import { subjectHref } from '../subject/subject-href';
 
 type NativeHit = Extract<
@@ -93,6 +98,7 @@ type ResultPresentation = {
   listPresentationFor?: (types: readonly string[]) => ListPresentation | undefined;
 };
 
+/** Page-local ContentItem composition: visible title anchor, independent facts and a passive text preview. */
 export function ResultRow({
   hit,
   locale,
@@ -101,11 +107,12 @@ export function ResultRow({
   listPresentationFor,
 }: ResultPresentation & { hit: ResultHit }) {
   const label = localizedLabel(hit.labels, locale);
-  const subjectLink = subjectHref({ id: hit.id, label: label.text }, locale);
+  const title = label.text || m.subject_value_unlabelled({}, { locale: locale as never });
+  const subjectLink = subjectHref({ id: hit.id, label: title }, locale);
   const typeName = localizedLabel(Object.hasOwn(hitTypes, hit.type) ? (hitTypes[hit.type] ?? {}) : {}, locale);
   const description = localizedLabel(hit.descriptions ?? {}, locale);
   const year = hitYear(hit.facts, yearProperties);
-  const subject = coverSubject(hit.id, label.text, hit.summary, hit.type);
+  const subject = coverSubject(hit.id, title, hit.summary, hit.type);
   const releasedPresentation =
     parseListPresentation(hit.listPresentation) ?? parseListPresentation(listPresentationFor?.(subject.types));
   const listPresentation = releasedPresentation ?? fallbackListPresentation(subject.types);
@@ -127,60 +134,106 @@ export function ResultRow({
     Object.keys(hit.aliases ?? {}).find((language) => language === locale) ?? Object.keys(hit.aliases ?? {})[0];
   const aliases = aliasLanguage ? hit.aliases?.[aliasLanguage]?.slice(0, 3) : undefined;
   return (
-    <MemberListRow
-      href={subjectLink.href}
-      subject={subject}
-      cover={coverOf(hit.summary)}
-      src={coverSrc}
-      title={label.text}
-      {...(label.lang ? { titleLang: label.lang } : {})}
-      {...(listPresentation ? { listPresentation } : {})}
-      {...(hit.storyOverlay ? { storyOverlay: true } : {})}
-      trailing={
-        hit.figure ? (
-          <div className="max-w-48 shrink-0 text-right">
-            <PublicRatingFigure figure={hit.figure} locale={locale} />
-          </div>
-        ) : undefined
-      }
-    >
-      <SubjectMeta type={typeName} year={year} locale={locale} className="text-sm text-muted-foreground" />
-      {aliases?.length ? (
-        <p lang={aliasLanguage} className="text-sm text-muted-foreground">
-          {aliases.join(' · ')}
-        </p>
-      ) : null}
-      {facts.length > 0 && (
-        <p data-slot="member-list-row-facts" className="text-sm">
-          <MetaLine
-            items={facts.map((fact, index) => (
-              <span
-                key={index}
-                lang={fact.lang}
-                data-property={fact.property}
-                className={
-                  badgeProperties.includes(fact.property)
-                    ? 'rounded-sm bg-muted px-1.5 py-0.5 text-xs tabular-nums'
-                    : undefined
-                }
-              >
-                {fact.id ? (
-                  <a
-                    className="relative z-10 underline underline-offset-4"
-                    href={subjectHref({ id: fact.id, label: fact.text }, locale).href}
-                  >
-                    {fact.text}
-                  </a>
-                ) : (
-                  fact.text
-                )}
-              </span>
-            ))}
+    <ListRow forceOverlay={hit.storyOverlay ?? false} className="flex min-w-0 items-start gap-3 py-3 sm:gap-4 sm:py-4">
+      <div data-content-item-slot="visual" className="shrink-0 [&_button]:relative [&_button]:z-10">
+        <div
+          data-slot="member-list-row-cover"
+          className={listPresentation?.imageAspect === 'landscape' ? 'w-32 sm:w-48' : 'w-[72px] sm:w-24'}
+        >
+          <Cover
+            subject={subject}
+            cover={coverOf(hit.summary)}
+            src={coverSrc}
+            size="fill"
+            decorative
+            {...(listPresentation ? { listPresentation } : {})}
           />
-        </p>
-      )}
-      {description.text && <ItemDescription lang={description.lang}>{description.text}</ItemDescription>}
-    </MemberListRow>
+        </div>
+      </div>
+      <div
+        data-slot="item-content"
+        className="min-w-0 flex-1 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-x-4"
+      >
+        <div className="min-w-0 wrap-anywhere">
+          <ContentItemHeading
+            lang={label.lang}
+            dir="auto"
+            data-slot="member-list-row-title"
+            className="text-[17px] leading-snug font-semibold sm:text-lg md:text-xl"
+          >
+            <ContentItemTitleLink
+              href={subjectLink.href}
+              lang={label.lang}
+              data-slot="list-row-link"
+              className="block after:rounded-lg focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-ring"
+            >
+              <span className="line-clamp-2 sm:line-clamp-1">{title}</span>
+            </ContentItemTitleLink>
+          </ContentItemHeading>
+          {typeName.text || year !== undefined || aliases?.length || facts.length > 0 ? (
+            <ListRowControl
+              data-content-item-slot="metadata"
+              className="mt-2 flex min-w-0 flex-col gap-1 text-sm text-muted-foreground"
+            >
+              <SubjectMeta type={typeName} year={year} locale={locale} />
+              {aliases?.length ? (
+                <p data-slot="search-result-aliases" lang={aliasLanguage} dir="auto" className="line-clamp-2">
+                  {aliases.join(' · ')}
+                </p>
+              ) : null}
+              {facts.length > 0 ? (
+                <p data-slot="member-list-row-facts">
+                  <MetaLine
+                    items={facts.map((fact, index) => (
+                      <span
+                        key={index}
+                        lang={fact.lang}
+                        dir="auto"
+                        data-property={fact.property}
+                        className={
+                          badgeProperties.includes(fact.property)
+                            ? 'rounded-sm bg-muted px-1.5 py-0.5 text-xs tabular-nums'
+                            : undefined
+                        }
+                      >
+                        {fact.id ? (
+                          <a
+                            className={cn(
+                              buttonVariants({ variant: 'link' }),
+                              'h-auto min-h-11 min-w-11 max-w-full justify-start whitespace-normal px-1 py-1 text-start underline',
+                            )}
+                            href={subjectHref({ id: fact.id, label: fact.text }, locale).href}
+                          >
+                            {fact.text}
+                          </a>
+                        ) : (
+                          fact.text
+                        )}
+                      </span>
+                    ))}
+                  />
+                </p>
+              ) : null}
+            </ListRowControl>
+          ) : null}
+          {description.text ? (
+            <div data-content-item-slot="preview" className="mt-2 min-w-0 text-sm leading-relaxed">
+              <ItemDescription lang={description.lang} dir="auto" className="text-start">
+                {description.text}
+              </ItemDescription>
+            </div>
+          ) : null}
+        </div>
+        {hit.figure ? (
+          <ListRowControl
+            data-content-item-slot="trailing"
+            className="mt-3 min-w-0 max-w-48 sm:col-start-2 sm:row-start-1 sm:mt-0 sm:text-right"
+          >
+            <PublicRatingFigure figure={hit.figure} locale={locale} />
+          </ListRowControl>
+        ) : null}
+      </div>
+    </ListRow>
   );
 }
 
