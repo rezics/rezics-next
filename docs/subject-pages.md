@@ -52,6 +52,8 @@ Manga creation resolves rejection addresses by decoded property and assertion in
 supported inner controls; ambiguous or unsupported addresses stay at their named section with technical details,
 duplicate-language feedback targets the later row, and unavailable sessions offer a sign-in check retry.
 
+Screen creation resolves submitted assertion indices to stable row and nested-part identities, links only supported value, qualifier and citation controls with human field labels, and preserves sibling assertions and citation groups when correcting; unknown addresses remain technical details and uncertain commands stay sealed across metadata recovery.
+
 ## Create and correct a recipe
 
 `/{locale}/catalogue/recipe`, linked from catalogue creation, creates a released `schema:Recipe` with initial

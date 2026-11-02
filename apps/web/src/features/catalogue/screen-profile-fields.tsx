@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import type { Release } from '@rezics/definitions';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from '@rezics/ui/entity-picker';
@@ -10,6 +10,7 @@ import { coverSrc } from '../../media/cover-src';
 import { m } from '../../paraglide/messages.js';
 import { ScalarControl } from './statement-editor-view';
 import type { SnakInput, StatementInput } from './statement-editor';
+import { controlId, presentStatementViolations } from './statement-validation-presentation';
 import { screenFactId, screenGroups, screenName, screenTarget, type ScreenGroup } from './screen-profile';
 
 const screenActionClassName =
@@ -20,6 +21,62 @@ const screenInputClassName = 'min-w-0 max-w-full max-md:min-h-11 md:pointer-fine
 const screenLabelClassName = 'min-w-0 max-w-full flex-wrap whitespace-normal [overflow-wrap:anywhere]';
 
 export type ScreenRow = { key: string; statement: StatementInput };
+export const screenRowId = (row: ScreenRow) => `${screenFactId(row.statement.property.id)}-${row.key}`;
+// Nested addresses survive edits and removal of preceding parts without entering the native command.
+const partKeys = new WeakMap<SnakInput, string>();
+function partKey(part: SnakInput): string {
+  if (!partKeys.has(part)) partKeys.set(part, crypto.randomUUID());
+  return partKeys.get(part)!;
+}
+function partValue(part: SnakInput, value: SnakInput['value']): SnakInput {
+  const next = { ...part, value };
+  partKeys.set(next, partKey(part));
+  return next;
+}
+
+/** Decode only addresses for controls this local creation editor supports. */
+export function screenCreationControl(pointer: string, rows: ScreenRow[], release: Release, locale: string) {
+  const match = /^\/statements\/((?:[^/~]|~[01])+)\/(0|[1-9]\d*)(\/.*)$/.exec(pointer);
+  if (!match) return;
+  const property = match[1]!.replaceAll('~1', '/').replaceAll('~0', '~');
+  const row = rows.filter((entry) => entry.statement.property.id === property)[Number(match[2])];
+  if (!row) return;
+  let part: SnakInput | undefined = row.statement;
+  let id = screenRowId(row);
+  let path = match[3]!;
+  const qualifier = /^\/qualifiers\/(0|[1-9]\d*)(\/.*)$/.exec(path);
+  const reference = /^\/references\/(0|[1-9]\d*)\/parts\/(0|[1-9]\d*)(\/.*)$/.exec(path);
+  if (qualifier || reference) {
+    part = qualifier
+      ? row.statement.qualifiers?.[Number(qualifier[1])]
+      : row.statement.references[Number(reference![1])]?.parts[Number(reference![2])];
+    if (!part) return;
+    id += `-${partKey(part)}`;
+    path = qualifier ? qualifier[2]! : reference![3]!;
+  }
+  const definition = release.properties[part.property.id];
+  const name = screenName(release, property, locale).text;
+  const partName = screenName(release, part.property.id, locale).text;
+  const label = `${name} ${Number(match[2]) + 1} · ${partName}`;
+  if (reference) {
+    if (part.property.id !== 'schema:url' || definition?.datatype !== 'url' || path !== '/value/content') return;
+    return {
+      id: controlId(id, 'fact', 'value'),
+      label: `${label} · ${m.relation_citation({}, { locale: locale as never })}`,
+    };
+  }
+  if (definition?.datatype === 'wikibase-item')
+    return path === '/value/content' ? { id: controlId(id, 'fact', 'value'), label } : undefined;
+  const presented = presentStatementViolations(
+    [{ pointer: `/statement${path}`, code: 'invalid_format' }],
+    { ...part, references: [], qualifiers: [] },
+    release,
+    locale,
+    id,
+  )[0]!;
+  if (presented.target.startsWith(`${id}-fact-`))
+    return { id: presented.target, label: `${label} · ${presented.label}` };
+}
 export function screenGroupLabel(group: ScreenGroup, locale: string) {
   const o = { locale: locale as never };
   return {
@@ -33,6 +90,7 @@ export function screenGroupLabel(group: ScreenGroup, locale: string) {
   }[group];
 }
 function InitialValue({
+  id,
   part,
   release,
   locale,
@@ -40,6 +98,7 @@ function InitialValue({
   disabled,
   change,
 }: {
+  id: string;
   part: SnakInput;
   release: Release;
   locale: string;
@@ -52,39 +111,42 @@ function InitialValue({
   const content = part.value.type === 'value' && typeof part.value.content === 'string' ? part.value.content : '';
   if (definition?.datatype === 'wikibase-item')
     return (
-      <EntityPicker
-        label={screenName(release, part.property.id, locale).text}
-        disabled={disabled}
-        value={
-          picked.filter((item) => item.id === content).length
-            ? picked.filter((item) => item.id === content)
-            : content
-              ? [
-                  {
-                    id: content,
-                    title: m.subject_value_unlabelled({}, { locale: locale as never }),
-                    types: [],
-                    typeLabel: '',
-                    cover: null,
-                  },
-                ]
-              : []
-        }
-        src={coverSrc}
-        search={async (text, signal) =>
-          (await search(text, signal)).filter((item) =>
-            item.types.some((type) => screenTarget(release, part.property.id, type)),
-          )
-        }
-        onValueChange={(items) => {
-          setPicked(items);
-          change({ type: 'value', content: items[0]?.id ?? '' });
-        }}
-      />
+      <div id={controlId(id, 'fact', 'value')}>
+        <EntityPicker
+          label={screenName(release, part.property.id, locale).text}
+          disabled={disabled}
+          value={
+            picked.filter((item) => item.id === content).length
+              ? picked.filter((item) => item.id === content)
+              : content
+                ? [
+                    {
+                      id: content,
+                      title: m.subject_value_unlabelled({}, { locale: locale as never }),
+                      types: [],
+                      typeLabel: '',
+                      cover: null,
+                    },
+                  ]
+                : []
+          }
+          src={coverSrc}
+          search={async (text, signal) =>
+            (await search(text, signal)).filter((item) =>
+              item.types.some((type) => screenTarget(release, part.property.id, type)),
+            )
+          }
+          onValueChange={(items) => {
+            setPicked(items);
+            change({ type: 'value', content: items[0]?.id ?? '' });
+          }}
+        />
+      </div>
     );
   return (
     <div className="flex min-w-0 flex-col gap-3">
       <ScalarControl
+        feedback={{ id, address: 'fact', errors: [] }}
         part={part}
         definition={definition}
         read={{ release, public: { related: {} } }}
@@ -115,11 +177,15 @@ function InitialStatement({
   const o = { locale: locale as never };
   const statement = row.statement;
   const property = release.properties[statement.property.id]!;
-  const citation = statement.references[0]?.parts.find((part) => part.property.id === 'schema:url')?.value;
+  const emptyCitation = useRef<SnakInput>({ property: { id: 'schema:url' }, value: { type: 'value', content: '' } });
+  const citations = statement.references.flatMap((reference, group) =>
+    reference.parts.flatMap((part, index) => (part.property.id === 'schema:url' ? [{ part, group, index }] : [])),
+  );
   if (!property) return <p role="status">{m.correction_preserved({}, o)}</p>;
   return (
     <div className="min-w-0 space-y-4 [overflow-wrap:anywhere]">
       <InitialValue
+        id={screenRowId(row)}
         part={statement}
         release={release}
         locale={locale}
@@ -128,7 +194,7 @@ function InitialStatement({
         change={(value) => change({ ...statement, value })}
       />
       {(statement.qualifiers ?? []).map((part, index) => (
-        <div key={`${part.property.id}:${index}`} className="min-w-0 space-y-2 border-s-2 ps-3">
+        <div key={partKey(part)} className="min-w-0 space-y-2 border-s-2 ps-3">
           <p
             lang={screenName(release, part.property.id, locale).lang ?? undefined}
             className="min-w-0 max-w-full text-sm font-medium [overflow-wrap:anywhere]"
@@ -136,6 +202,7 @@ function InitialStatement({
             {screenName(release, part.property.id, locale).text}
           </p>
           <InitialValue
+            id={`${screenRowId(row)}-${partKey(part)}`}
             part={part}
             release={release}
             locale={locale}
@@ -144,7 +211,7 @@ function InitialStatement({
             change={(value) =>
               change({
                 ...statement,
-                qualifiers: statement.qualifiers!.map((item, at) => (at === index ? { ...item, value } : item)),
+                qualifiers: statement.qualifiers!.map((item, at) => (at === index ? partValue(item, value) : item)),
               })
             }
           />
@@ -189,31 +256,61 @@ function InitialStatement({
           </NativeSelect>
         </Field>
       )}
-      {release.properties['schema:url']?.datatype === 'url' && (
-        <Field className="min-w-0">
-          <FieldLabel className={screenLabelClassName} htmlFor={`screen-citation-${row.key}`}>
-            {m.relation_citation({}, o)}
-          </FieldLabel>
-          <Input
-            className={screenInputClassName}
-            id={`screen-citation-${row.key}`}
-            type="url"
-            value={citation?.type === 'value' && typeof citation.content === 'string' ? citation.content : ''}
-            onChange={(event) => {
-              const url = event.target.value;
-              change({
-                ...statement,
-                references: url.trim()
-                  ? [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: url.trim() } }] }]
-                  : [],
-              });
-            }}
-          />
-          <p className="min-w-0 max-w-full text-sm text-muted-foreground empty:hidden [overflow-wrap:anywhere]">
-            {citation?.type === 'value' && typeof citation.content === 'string' ? citation.content : ''}
-          </p>
-        </Field>
-      )}
+      {release.properties['schema:url']?.datatype === 'url' &&
+        (citations.length ? citations : [{ part: emptyCitation.current, group: -1, index: -1 }]).map(
+          (citation, index) => {
+            const id = controlId(`${screenRowId(row)}-${partKey(citation.part)}`, 'fact', 'value');
+            const value = citation.part.value;
+            return (
+              <Field key={index} className="min-w-0">
+                <FieldLabel className={screenLabelClassName} htmlFor={id}>
+                  {m.relation_citation({}, o)}
+                </FieldLabel>
+                <Input
+                  className={screenInputClassName}
+                  id={id}
+                  type="url"
+                  value={value?.type === 'value' && typeof value.content === 'string' ? value.content : ''}
+                  onChange={(event) => {
+                    const url = event.target.value.trim();
+                    if (!url)
+                      emptyCitation.current = { property: { id: 'schema:url' }, value: { type: 'value', content: '' } };
+                    change({
+                      ...statement,
+                      references:
+                        citation.group >= 0
+                          ? statement.references
+                              .map((reference, group) =>
+                                group !== citation.group
+                                  ? reference
+                                  : {
+                                      ...reference,
+                                      parts: reference.parts.flatMap((part, index) =>
+                                        index !== citation.index
+                                          ? [part]
+                                          : url
+                                            ? [partValue(part, { type: 'value', content: url })]
+                                            : [],
+                                      ),
+                                    },
+                              )
+                              .filter((reference) => reference.parts.length)
+                          : url
+                            ? [
+                                ...statement.references,
+                                { parts: [partValue(citation.part, { type: 'value', content: url })] },
+                              ]
+                            : statement.references,
+                    });
+                  }}
+                />
+                <p className="min-w-0 max-w-full text-sm text-muted-foreground empty:hidden [overflow-wrap:anywhere]">
+                  {value?.type === 'value' && typeof value.content === 'string' ? value.content : ''}
+                </p>
+              </Field>
+            );
+          },
+        )}
     </div>
   );
 }
@@ -311,14 +408,7 @@ export function ScreenInitialFields({
       {/* Keep each error anchor's heading a direct child of its native section. */}
       {rows.map((row) => (
         <ContentItemFrame as="div" key={row.key} className="min-w-0 py-4 sm:py-5">
-          <section
-            id={
-              rows.find((item) => item.statement.property.id === row.statement.property.id)?.key === row.key
-                ? screenFactId(row.statement.property.id)
-                : undefined
-            }
-            className="min-w-0 space-y-4 [overflow-wrap:anywhere]"
-          >
+          <section id={screenRowId(row)} className="min-w-0 space-y-4 [overflow-wrap:anywhere]">
             <ContentItemHeading
               level={3}
               lang={name(row.statement.property.id).lang ?? undefined}

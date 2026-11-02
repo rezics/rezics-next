@@ -19,10 +19,9 @@ import { SubjectFacts } from './subject-facts-view';
 import type { FactsTransport } from './subject-facts';
 import { RelationEditor } from './relation-editor';
 import { EditorFailure } from './statement-editor-view';
-import { ScreenInitialFields, screenGroupLabel, type ScreenRow } from './screen-profile-fields';
+import { ScreenInitialFields, screenCreationControl, screenGroupLabel, type ScreenRow } from './screen-profile-fields';
 import {
   screenCreateTypes,
-  screenFactId,
   screenGroups,
   screenInitialFacts,
   type ScreenCommand,
@@ -244,8 +243,7 @@ function ScreenProfileLive({
                 change={(rows) => setDrafts((previous) => ({ ...previous, [type]: rows }))}
               />
             ),
-            control: (pointer) =>
-              pointer.startsWith('/statements/') ? screenFactId(pointer.split('/')[2] ?? '') : undefined,
+            control: (pointer, type) => screenCreationControl(pointer, drafts[type] ?? [], read.release, locale),
           }}
         />
       </div>

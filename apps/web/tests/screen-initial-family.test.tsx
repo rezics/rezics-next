@@ -58,9 +58,10 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   const { createRoot } = await import('react-dom/client');
-  const { ScreenInitialFields } = await import('../src/features/catalogue/screen-profile-fields');
+  const { ScreenInitialFields, screenCreationControl, screenRowId } =
+    await import('../src/features/catalogue/screen-profile-fields');
   const { ScreenProfile } = await import('../src/features/catalogue/screen-profile-view');
-  const { screenFactId, screenInitialFacts, screenName } = await import('../src/features/catalogue/screen-profile');
+  const { screenInitialFacts, screenName } = await import('../src/features/catalogue/screen-profile');
   const { screenProfileFixture } = await import('../src/kernel/fake/catalogue-screen-profile');
   const { CandidateReaderBoundary, candidateSession } = await import('../src/subject/candidate-lifetime');
   const { sessionQuery } = await import('../src/session/query');
@@ -160,11 +161,13 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
   const observed: Record<string, ScreenRow[]> = {};
   let searches = 0;
   const person = '00000000-0000-4000-8000-000000000302';
+  const secondPerson = '00000000-0000-4000-8000-000000000304';
   const parent = '00000000-0000-4000-8000-000000000301';
   const search = async () => {
     searches++;
     return [
       { id: person, title: 'A. Observer', types: ['schema:Person'], typeLabel: 'Person', cover: null },
+      { id: secondPerson, title: 'B. Observer', types: ['schema:Person'], typeLabel: 'Person', cover: null },
       { id: parent, title: 'Observatory season', types: ['schema:TVSeason'], typeLabel: 'Season', cover: null },
       {
         id: '00000000-0000-4000-8000-000000000303',
@@ -261,14 +264,14 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
     expect(observed.first).toHaveLength(0);
     expect(observed.second).toHaveLength(1);
     const directorKey = observed.second![0]!.key;
-    expect(director.id).toBe(screenFactId('schema:director'));
+    expect(director.id).toBe(screenRowId(observed.second![0]!));
     expect(director.querySelector(':scope > h3')?.textContent).toBe(fieldName('schema:director'));
     expect(director.querySelector('h3')?.getAttribute('data-content-item-slot')).toBe('title');
     expect(director.parentElement!.classList.contains('isolate')).toBe(true);
     expect(director.classList.contains('border')).toBe(false);
     expect(director.closest('fieldset')!.querySelector('legend')!.textContent).toBe(m.screen_initial_facts());
     expect(select(director, m.correction_add_qualifier()).id).toBe(`screen-qualifier-${directorKey}`);
-    expect(textbox(director, m.relation_citation()).id).toBe(`screen-citation-${directorKey}`);
+    expect(textbox(director, m.relation_citation()).id).toStartWith(director.id);
     await choose(director, m.correction_add_qualifier(), 'schema:position');
     await replace(textbox(director, m.correction_value()), '2');
     await replace(textbox(director, m.relation_citation()), ` ${citation} `);
@@ -296,8 +299,9 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
     await add(fields('first'), 'schema:director');
     const credits = fields('first').querySelectorAll('section');
     expect(credits).toHaveLength(3);
-    expect(credits[1]!.id).toBe(screenFactId('schema:director'));
-    expect(credits[2]!.id).toBe('');
+    expect(credits[1]!.id).toBe(screenRowId(observed.first![1]!));
+    expect(credits[2]!.id).toBe(screenRowId(observed.first![2]!));
+    expect(credits[1]!.id).not.toBe(credits[2]!.id);
     expect([...a.options].some((option) => option.value === 'schema:director')).toBe(true);
     expect(fields('first').textContent).toContain(m.screen_authored_after());
 
@@ -318,6 +322,45 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
     initial[0]!.statement.references = [
       { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: citation } }] },
     ];
+    const preserved = structuredClone(initial);
+    preserved[0]!.statement.qualifiers!.push({
+      property: { id: 'schema:position' },
+      value: { type: 'value', content: '3' },
+    });
+    preserved[0]!.statement.references[0]!.parts.push({
+      property: { id: 'future:opaque' },
+      value: { type: 'novalue' },
+    });
+    preserved[0]!.statement.references.push({
+      parts: [
+        { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.org/second-group' } },
+      ],
+    });
+    await render(<Fields name="preserved" initial={preserved} />);
+    const resolve = (path: string) =>
+      screenCreationControl(`/statements/schema:director/0${path}`, observed.preserved!, release, 'en');
+    const nested = resolve('/qualifiers/1/value/content')!;
+    const citationTarget = resolve('/references/1/parts/0/value/content')!;
+    await replace(
+      window.document.getElementById(citationTarget.id)! as unknown as HTMLElement,
+      'https://example.org/revised',
+    );
+    expect(observed.preserved![0]!.statement.references[0]).toEqual(preserved[0]!.statement.references[0]);
+    expect(observed.preserved![0]!.statement.references).toHaveLength(2);
+    await act(async () =>
+      user.click(
+        within(section(fields('preserved'), longName)).getAllByRole('button', { name: m.relation_remove() })[0]!,
+      ),
+    );
+    expect(resolve('/qualifiers/0/value/content')!.id).toBe(nested.id);
+    expect(window.document.getElementById(nested.id)).not.toBeNull();
+    for (const path of [
+      '/future',
+      '/references/0/parts/1/value/content',
+      '/qualifiers/9/value/content',
+      '/value/content/future',
+    ])
+      expect(resolve(path)).toBeUndefined();
     for (const [width, locale, dir] of [
       [390, 'en', 'ltr'],
       [1280, 'en', 'ltr'],
@@ -437,10 +480,10 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
     await click(host, m.catalogue_create_submit());
     await until(() => host.textContent!.includes(m.catalogue_create_invalid()));
     expect(commands).toHaveLength(0);
-    const anchor = [...host.querySelectorAll<HTMLAnchorElement>('a[href^="#"]')].find(
-      (node) => decodeURIComponent(node.hash.slice(1)) === screenFactId('schema:duration'),
+    const anchor = [...host.querySelectorAll<HTMLAnchorElement>('a[href^="#"]')].find((node) =>
+      decodeURIComponent(node.hash.slice(1)).startsWith(invalid.id),
     )!;
-    expect(anchor.textContent).toBe(fieldName('schema:duration'));
+    expect(anchor.textContent).toContain(fieldName('schema:duration'));
     expect(host.textContent).toContain('/statements/schema:duration');
     await act(async () => user.click(anchor));
     expect(invalid.contains(window.document.activeElement as unknown as Node)).toBe(true);
@@ -556,6 +599,112 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
     expect(nativeWrites(staleRelease)).toHaveLength(1);
     await click(host, m.catalogue_create_submit());
     expect(nativeWrites(staleRelease)).toHaveLength(1);
+
+    // A rejected second credit resolves to its own inner controls through metadata failure and Type changes.
+    await render(null);
+    const recovery = screenProfileFixture('reader-unavailable');
+    const submitted: ScreenCommand[] = [];
+    const opened: string[] = [];
+    let metadataReads = 0;
+    const badPaths = ['/value/content', '/qualifiers/0/value/content', '/references/0/parts/0/value/content'];
+    await render(
+      <ScreenProfile
+        locale="en"
+        session="signed-in"
+        search={search}
+        onNavigate={(href) => opened.push(href)}
+        transport={{
+          ...recovery.transport,
+          load: async () => (++metadataReads === 2 ? { ok: false, reason: 'unavailable' } : recovery.transport.load()),
+          create: async (command) => {
+            submitted.push(structuredClone(command));
+            if (submitted.length <= 2)
+              return {
+                ok: false,
+                reason: 'invalid',
+                refreshDefinitions: true,
+                errors: [...badPaths, '/future/value', '/qualifiers/9/value/content'].map((path) => ({
+                  pointer: `/statements/schema:director/1${path}`,
+                  code: 'invalid_format',
+                })),
+              };
+            if (submitted.length === 3) return { ok: false, reason: 'unavailable' };
+            return recovery.transport.create(command);
+          },
+        }}
+      />,
+    );
+    await prepare();
+    await complete();
+    const firstCredit = section(host, fieldName('schema:director'));
+    let secondCredit = await add(host, 'schema:director');
+    await replace(select(secondCredit, fieldName('schema:director')), 'B. Observer');
+    await until(() => within(window.document.body).queryByRole('option', { name: /B\. Observer/ }) !== null);
+    await act(async () => user.click(within(window.document.body).getByRole('option', { name: /B\. Observer/ })));
+    await choose(secondCredit, m.correction_add_qualifier(), 'schema:position');
+    await replace(textbox(secondCredit, m.correction_value()), '3');
+    await replace(textbox(secondCredit, m.relation_citation()), citation);
+    await click(host, m.catalogue_create_submit());
+    await until(
+      () => metadataReads === 2 && !within(host).queryByRole('button', { name: m.catalogue_create_saving() }),
+    );
+    expect(textbox(host, m.catalogue_create_label()).value).toBe('The observatory');
+    const correctionLinks = () => [...host.querySelectorAll<HTMLAnchorElement>('[role="alert"] a[href^="#"]')];
+    expect(correctionLinks()).toHaveLength(3);
+    const rejectedTargets = correctionLinks().map((link) => decodeURIComponent(link.hash.slice(1)));
+    for (const link of correctionLinks()) {
+      expect(link.textContent).toContain(`${fieldName('schema:director')} 2`);
+      await act(async () => user.click(link));
+      expect(secondCredit.contains(window.document.activeElement as unknown as Node)).toBe(true);
+      expect(firstCredit.contains(window.document.activeElement as unknown as Node)).toBe(false);
+    }
+    await click(host, m.catalogue_create_retry()); // Recover metadata without replacing the draft.
+    await until(
+      () =>
+        metadataReads === 3 &&
+        !(within(host).getByRole('button', { name: m.catalogue_create_submit() }) as HTMLButtonElement).disabled,
+    );
+    await choose(host, m.catalogue_create_type(), 'schema:Movie');
+    expect(correctionLinks()).toHaveLength(0);
+    for (const id of rejectedTargets) expect(window.document.getElementById(id)).toBeNull();
+    await choose(host, m.catalogue_create_type(), 'schema:Episode');
+    secondCredit = section(host, fieldName('schema:director'), 1);
+    await click(host, m.catalogue_create_submit());
+    await until(() => submitted.length === 2 && correctionLinks().length === 3);
+    expect(correctionLinks().map((link) => decodeURIComponent(link.hash.slice(1)))).toEqual(rejectedTargets);
+    await replace(textbox(secondCredit, m.correction_value()), '4');
+    await replace(textbox(secondCredit, m.relation_citation()), 'https://example.org/corrected');
+    await replace(select(secondCredit, fieldName('schema:director')), 'A. Observer');
+    await until(() => within(window.document.body).queryByRole('option', { name: /A\. Observer/ }) !== null);
+    await act(async () => user.click(within(window.document.body).getByRole('option', { name: /A\. Observer/ })));
+    await click(host, m.catalogue_create_submit());
+    await until(() => host.textContent!.includes(m.catalogue_create_uncertain()));
+    expect(submitted[2]!.item.statements['schema:director']![0]).toEqual(
+      submitted[0]!.item.statements['schema:director']![0],
+    );
+    expect(submitted[2]!.item.statements['schema:director']![1]).toMatchObject({
+      value: { type: 'value', content: person },
+      qualifiers: [{ value: { type: 'value', content: '4' } }],
+      references: [{ parts: [{ value: { type: 'value', content: 'https://example.org/corrected' } }] }],
+    });
+    expect(select(host, m.catalogue_create_type()).disabled).toBe(true);
+    await click(host, m.catalogue_create_retry());
+    await until(() => host.textContent!.includes(m.catalogue_create_created()));
+    expect(submitted[3]).toEqual(submitted[2]);
+    expect(opened).toEqual([]);
+    const exactId = recovery.creation.calls
+      .find((call) => call.method === 'GET')!
+      .path.split('/')
+      .at(-1)!;
+    recovery.creation.setScenario('ready');
+    await click(host, m.catalogue_create_retry());
+    await until(() => opened.length === 1);
+    expect(opened[0]).toContain(exactId);
+    expect(recovery.creation.calls.filter((call) => call.method === 'GET').map((call) => call.path)).toEqual([
+      `/v1/subjects/${exactId}`,
+      `/v1/subjects/${exactId}`,
+    ]);
+    expect(submitted).toHaveLength(4);
 
     // Retired work cannot submit again, deliver success/failure, reread, navigate or steal focus.
     // The session case uses the production candidateSession observer, including batched A-B-A.
