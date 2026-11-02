@@ -131,9 +131,9 @@ test('replacing supplied spoiler facts and tags retires consent while unchanged 
     await render(first);
     expect(host.textContent).not.toContain('Fact first');
     expect(host.textContent).not.toContain('Tag first');
-    expect([...host.querySelectorAll('button')].filter((button) => button.textContent === 'Reveal spoilers')).toHaveLength(
-      2,
-    );
+    expect(
+      [...host.querySelectorAll('button')].filter((button) => button.textContent === 'Reveal spoilers'),
+    ).toHaveLength(2);
 
     await revealAll();
     expect(host.textContent).toContain('Fact first');
@@ -146,9 +146,9 @@ test('replacing supplied spoiler facts and tags retires consent while unchanged 
     expect(host.textContent).not.toContain('Fact accepted next');
     expect(host.textContent).not.toContain('Tag accepted next');
     expect(host.textContent).not.toContain('New accepted tag');
-    expect([...host.querySelectorAll('button')].filter((button) => button.textContent === 'Reveal spoilers')).toHaveLength(
-      2,
-    );
+    expect(
+      [...host.querySelectorAll('button')].filter((button) => button.textContent === 'Reveal spoilers'),
+    ).toHaveLength(2);
 
     await revealAll();
     await render(structuredClone(next));
