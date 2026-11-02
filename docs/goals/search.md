@@ -42,6 +42,8 @@ Owns `services/kernel/{src,db,test}/search/**`, OpenSearch development setup,
 [composition](../../packages/composition/README.md) own behavior.
 Coordinate `apps/web/src/features/pages/**` with web as a shared surface; sequence writers. Semantic owns source
 projections, definitions and Zone resources; content owns the safe public rating aggregate.
+When an open Subject cover changes incarnation, focus returns to its named cover group; ordinary dismissal returns to
+the opener.
 
 ## Dependencies
 

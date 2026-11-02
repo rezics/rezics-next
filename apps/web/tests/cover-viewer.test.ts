@@ -352,6 +352,10 @@ test('SubjectPageCover and overview Cover close on replacement and preserve only
       });
       await page.getByRole('dialog', { name: 'Withheld B' }).waitFor({ state: 'detached' });
       await page.locator('[data-slot="cover"][data-state="placeholder"]').waitFor();
+      if (wrapper === 'subject') {
+        const focusFallback = page.getByRole('group', { name: 'Missing B cover' });
+        expect(await focusFallback.evaluate((element) => element === document.activeElement)).toBe(true);
+      }
       expect(await page.getByRole('dialog').count()).toBe(0);
 
       // Removal and A-to-B-to-A do not revive the first A viewer activation.

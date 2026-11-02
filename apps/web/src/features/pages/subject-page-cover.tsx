@@ -10,7 +10,7 @@ import {
   useIncarnationState,
 } from '@rezics/ui/cover';
 import { CoverViewer } from '@rezics/ui/cover-viewer';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import type { Reader } from '../../subject/reader';
 
 export function SubjectPageCover({
@@ -45,12 +45,19 @@ export function SubjectPageCover({
   const resolved = useMemo(() => (cover ? resolveCoverVariants(cover, src) : []), [cover, src]);
   const incarnation = `${coverIncarnation(subject, cover, resolved)}:${suitability}`;
   const viewer = useIncarnationState(incarnation, () => false);
+  const focusFallback = useRef<HTMLDivElement>(null);
+  const previousViewer = useRef({ incarnation, open: false });
   const usable =
     cover && usableCoverVariants(cover.variants).length > 0 && resolved.some((variant) => variant.src.trim() !== '')
       ? cover
       : null;
+  useEffect(() => {
+    const previous = previousViewer.current;
+    previousViewer.current = { incarnation, open: viewer.value };
+    if (previous.open && previous.incarnation !== incarnation) focusFallback.current?.focus();
+  }, [incarnation, viewer.value]);
   return (
-    <>
+    <div ref={focusFallback} role="group" aria-label={`${subject.title} cover`} tabIndex={-1}>
       <Cover
         subject={subject}
         cover={cover}
@@ -73,6 +80,6 @@ export function SubjectPageCover({
           onOpenChange={viewer.setValue}
         />
       ) : null}
-    </>
+    </div>
   );
 }
