@@ -43,10 +43,12 @@ test('search controls use their supplied locale for interface copy and preserve 
     expect(sortHtml).toContain(m.search_sort_submit_button({}, messageLocale));
     expect(sortHtml).toContain('action="/zh-Hant/search"');
     expect(sortHtml).toContain(`for="${sortHtml.match(/<select id="([^"]+)"/)![1]}"`);
-    expect([...sortHtml.matchAll(/<input\b([^>]*type="hidden"[^>]*)>/g)].map(([, attrs]) => [
-      attrs!.match(/\bname="([^"]+)"/)![1],
-      attrs!.match(/\bvalue="([^"]*)"/)![1],
-    ])).toEqual([
+    expect(
+      [...sortHtml.matchAll(/<input\b([^>]*type="hidden"[^>]*)>/g)].map(([, attrs]) => [
+        attrs!.match(/\bname="([^"]+)"/)![1],
+        attrs!.match(/\bvalue="([^"]*)"/)![1],
+      ]),
+    ).toEqual([
       ['kinds', 'schema:Book'],
       ['kinds', 'catalogue:Manga'],
       ['language', 'ja'],
@@ -70,12 +72,16 @@ test('search controls use their supplied locale for interface copy and preserve 
       }),
     );
     expect(navigationHtml).toContain(`aria-label="${m.search_result_kinds({}, messageLocale)}"`);
-    expect(navigationHtml).toContain(`<span lang="${locale}">${m.search_kind_navigation_all({}, messageLocale)}</span>`);
+    expect(navigationHtml).toContain(
+      `<span lang="${locale}">${m.search_kind_navigation_all({}, messageLocale)}</span>`,
+    );
     expect(navigationHtml).toContain('<span lang="en">Book</span>');
     expect(navigationHtml).toContain('<span lang="en">Manga</span>');
     expect(navigationHtml).toContain(m.search_kind_navigation_selected({ kinds: 'Book, Manga' }, messageLocale));
     expect(navigationHtml).toContain(m.search_kind_navigation_more({}, messageLocale));
-    expect([...navigationHtml.matchAll(/<a\b[^>]*href="([^"]+)"/g)].map(([, href]) => href!.replaceAll('&amp;', '&'))).toEqual([
+    expect(
+      [...navigationHtml.matchAll(/<a\b[^>]*href="([^"]+)"/g)].map(([, href]) => href!.replaceAll('&amp;', '&')),
+    ).toEqual([
       '/zh-Hant/search?type=schema%3ABook&sort=rating&language=ja&language=en&f.schema%3Agenre=mystery&q=Reader',
       '/zh-Hant/search?type=schema%3ABook&sort=rating&kinds=schema%3ABook&language=ja&language=en&f.schema%3Agenre=mystery&q=Reader',
       '/zh-Hant/search?type=schema%3ABook&sort=rating&kinds=catalogue%3AManga&language=ja&language=en&f.schema%3Agenre=mystery&q=Reader',
