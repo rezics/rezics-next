@@ -353,6 +353,14 @@ test('statement family owns labels, independent supplied parts, feedback, exact 
     expect(survivingValue.value).toBe('Keep this ordinal');
     expect(window.document.activeElement).toBe(qualifierRemove);
     await click(first, m.correction_remove_qualifier());
+    const staleCancel = button(first, m.candidate_cancel());
+    const staleConfirm = button(first, m.contribution_confirm());
+    await act(async () => staleCancel.click());
+    await click(first, m.correction_remove_qualifier());
+    await act(async () => staleConfirm.click());
+    expect(buttons(first, m.contribution_confirm())).toHaveLength(1);
+    await act(async () => staleCancel.click());
+    expect(buttons(first, m.contribution_confirm())).toHaveLength(1);
     await click(first, m.contribution_confirm());
     expect(draftChanges.A).toEqual(original);
     await click(second, m.correction_remove_reference_part());
