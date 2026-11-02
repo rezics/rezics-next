@@ -40,7 +40,11 @@ const banner: RealmPresentationImage = {
   focalPoint: { x: 0.35, y: 0.6 },
 };
 
-function presentation(nextBanner: RealmPresentationImage | null, nextAvatar: RealmPresentationImage | null, owner = realmId) {
+function presentation(
+  nextBanner: RealmPresentationImage | null,
+  nextAvatar: RealmPresentationImage | null,
+  owner = realmId,
+) {
   return createElement(
     Fragment,
     null,
@@ -58,9 +62,7 @@ test('recovers banner and avatar with one explicit retry of the same admitted de
 
   for (const image of Array.from(host.querySelectorAll<HTMLImageElement>('img'))) {
     const isBanner = image.closest('[data-slot="media-image"]') !== null;
-    const container = image.closest(
-      isBanner ? '[data-slot="community-banner-image"]' : '[data-slot="avatar"]',
-    )!;
+    const container = image.closest(isBanner ? '[data-slot="community-banner-image"]' : '[data-slot="avatar"]')!;
     await act(async () => image.dispatchEvent(new window.Event('error')));
     const control = container.querySelector<HTMLButtonElement>('button[data-slot="community-image-retry"]')!;
     expect(control.textContent).toBe(m.realm_appearance_retry_image());
@@ -79,8 +81,9 @@ test('recovers banner and avatar with one explicit retry of the same admitted de
     expect(replacement).not.toBe(image);
     expect(replacement.getAttribute('src')).toBe(source);
     expect(replacement.getAttribute('srcset')).toBe(sourceSet);
-    expect(host.querySelectorAll(isBanner ? '[data-slot="media-image"] img' : '[data-slot="avatar-image"]'))
-      .toHaveLength(1);
+    expect(
+      host.querySelectorAll(isBanner ? '[data-slot="media-image"] img' : '[data-slot="avatar-image"]'),
+    ).toHaveLength(1);
     expect(control.getAttribute('aria-disabled')).toBe('true');
     expect(host.querySelector('[data-slot="participation-state"]')?.textContent).toBe('Joined');
     Object.defineProperty(replacement, 'naturalWidth', { configurable: true, value: 320 });
@@ -104,22 +107,25 @@ test('retires retry state on replacement or absence and leaves unavailable deriv
   await act(async () => root.render(presentation(replacementBanner, replacementAvatar)));
   await act(async () => oldImages.forEach((image) => image.dispatchEvent(new window.Event('error'))));
   expect(host.querySelectorAll('button[data-slot="community-image-retry"]')).toHaveLength(0);
-  expect(host.querySelector('[data-slot="community-banner-image"]')?.getAttribute('data-image-load-state'))
-    .toBe('loading');
+  expect(host.querySelector('[data-slot="community-banner-image"]')?.getAttribute('data-image-load-state')).toBe(
+    'loading',
+  );
   expect(host.querySelector('[data-slot="avatar"]')?.getAttribute('data-image-load-state')).toBe('loading');
 
   const retired = Array.from(host.querySelectorAll<HTMLImageElement>('img'));
   await act(async () => root.render(presentation(null, null)));
   await act(async () => retired.forEach((image) => image.dispatchEvent(new window.Event('error'))));
   expect(host.querySelectorAll('img, button[data-slot="community-image-retry"]')).toHaveLength(0);
-  expect(host.querySelector('[data-slot="board-banner-fallback"]')?.getAttribute('data-image-load-state'))
-    .toBe('absent');
+  expect(host.querySelector('[data-slot="board-banner-fallback"]')?.getAttribute('data-image-load-state')).toBe(
+    'absent',
+  );
 
   const unavailable = { ...banner, variants: [] };
   await act(async () => root.render(presentation(unavailable, { ...avatar, variants: [] })));
   expect(host.querySelectorAll('img, button[data-slot="community-image-retry"]')).toHaveLength(0);
-  expect(host.querySelector('[data-slot="community-banner-image"]')?.getAttribute('data-image-load-state'))
-    .toBe('unavailable');
+  expect(host.querySelector('[data-slot="community-banner-image"]')?.getAttribute('data-image-load-state')).toBe(
+    'unavailable',
+  );
   expect(host.querySelector('[data-slot="avatar"]')?.getAttribute('data-image-load-state')).toBe('unavailable');
 
   await act(async () => root.unmount());

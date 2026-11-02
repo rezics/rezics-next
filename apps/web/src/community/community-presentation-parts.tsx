@@ -9,7 +9,13 @@ import { initials } from '../threads/initials';
 import type { CommunityPresentation, RealmPresentationImage } from '../threads/board-community-source';
 
 /** Shared native presentation parts; no feed, personal session or source reader is mounted here. */
-export function CommunityBanner({ banner, realmId }: { banner: RealmPresentationImage | null; realmId: string | null }) {
+export function CommunityBanner({
+  banner,
+  realmId,
+}: {
+  banner: RealmPresentationImage | null;
+  realmId: string | null;
+}) {
   return banner ? (
     <CommunityBannerImage key={imageAttemptIdentity('banner', realmId, banner)} banner={banner} />
   ) : (
@@ -94,19 +100,14 @@ function CommunityAvatarImage({
   const retrying = recovery.attempt > 0 && recovery.state === 'loading';
   const imageState = !avatar ? 'absent' : !avatarVariant ? 'unavailable' : recovery.state;
   return (
-    <Avatar
-      className="-mt-9 size-20 border-4 border-card text-2xl sm:size-24"
-      data-image-load-state={imageState}
-    >
+    <Avatar className="-mt-9 size-20 border-4 border-card text-2xl sm:size-24" data-image-load-state={imageState}>
       {avatar && avatarVariant ? (
         <AvatarImage
           key={recovery.attempt}
           src={coverSrc(avatar.id, avatarVariant.format, avatarVariant.width)}
           alt=""
           style={{ objectPosition: imagePosition(avatar) }}
-          onLoad={(event) =>
-            event.currentTarget.naturalWidth > 0 ? recovery.loaded() : recovery.failed()
-          }
+          onLoad={(event) => (event.currentTarget.naturalWidth > 0 ? recovery.loaded() : recovery.failed())}
           onError={recovery.failed}
         />
       ) : null}
@@ -167,11 +168,7 @@ function useCommunityImageRetry() {
 }
 
 // A retry remains in the original frame and remounts only the admitted derivative.
-function imageAttemptIdentity(
-  slot: 'avatar' | 'banner',
-  realmId: string | null,
-  image: RealmPresentationImage | null,
-) {
+function imageAttemptIdentity(slot: 'avatar' | 'banner', realmId: string | null, image: RealmPresentationImage | null) {
   return JSON.stringify([
     realmId,
     slot,
