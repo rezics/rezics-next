@@ -45,10 +45,7 @@ export class RatingSubjectTargetPendingError extends Error {
   }
 }
 
-export type RatingIdentityEpochReader = (
-  tx: CommandTransaction,
-  partition: number,
-) => Promise<IdentityEpochState>;
+export type RatingIdentityEpochReader = (tx: CommandTransaction, partition: number) => Promise<IdentityEpochState>;
 type MergeMode = 'merge' | 'return';
 
 function validId(value: string): boolean {
@@ -300,7 +297,9 @@ export async function resolveSubjectTarget(
     throw new RatingSubjectTargetPendingError('identity_epoch_unavailable', targetId, 'A route is unavailable');
   // This runs inside the voter command's serializable transaction. Pass native subject homes explicitly;
   // Semantic's default partition zero is topology compatibility, not currentness for these identities.
-  const homes = [...new Set([partitionOf(targetRoute), partitionOf(terminalRoute)])].sort((left, right) => left - right);
+  const homes = [...new Set([partitionOf(targetRoute), partitionOf(terminalRoute)])].sort(
+    (left, right) => left - right,
+  );
   for (const home of homes) {
     const state = await readEpoch(client, home);
     if (state.state === 'pending')
