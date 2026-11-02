@@ -13,6 +13,7 @@ import {
   AlertDialogAction,
 } from '@rezics/ui/shadcn/alert-dialog';
 import { ContentItem } from '@rezics/ui/content-item';
+import { cn } from '@rezics/ui/utils';
 import { PageHeading } from '../../../shell/page-heading';
 import { m } from '../../../paraglide/messages.js';
 import { ZoneFeedback } from './feedback';
@@ -35,6 +36,12 @@ export type WorkspaceProps = {
   onChange: (command: LifecycleCommand, capture?: OwnerCapture) => Promise<CommandOutcome>;
   onReload: () => void | Promise<void>;
 };
+
+// Keep compact desktop navigation while allowing complete labels and touch targets.
+const ownerControlClassName =
+  'h-auto min-h-8 min-w-0 max-w-full whitespace-normal [overflow-wrap:anywhere] py-1 text-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:min-h-11 max-md:min-w-11 pointer-coarse:min-h-11 pointer-coarse:min-w-11';
+const ownerFeedbackClassName =
+  'min-w-0 [overflow-wrap:anywhere] [&_[role=alert]_:is(a,button)]:inline-flex [&_[role=alert]_:is(a,button)]:h-auto [&_[role=alert]_:is(a,button)]:max-w-full [&_[role=alert]_:is(a,button)]:items-center [&_[role=alert]_:is(a,button)]:whitespace-normal [&_[role=alert]_:is(a,button)]:focus-visible:outline-2 [&_[role=alert]_:is(a,button)]:focus-visible:outline-offset-2 [&_[role=alert]_:is(a,button)]:focus-visible:outline-ring max-md:[&_[role=alert]_:is(a,button)]:min-h-11 max-md:[&_[role=alert]_:is(a,button)]:min-w-11 pointer-coarse:[&_[role=alert]_:is(a,button)]:min-h-11 pointer-coarse:[&_[role=alert]_:is(a,button)]:min-w-11';
 
 function DeleteZone({
   zone,
@@ -59,16 +66,21 @@ function DeleteZone({
         if (isCurrent()) setOpen(value);
       }}
     >
-      <AlertDialogTrigger render={<Button variant="ghost" disabled={disabled} />}>
+      <AlertDialogTrigger render={<Button className={ownerControlClassName} variant="ghost" disabled={disabled} />}>
         {m.zones_owner_trash_action({}, options)}
       </AlertDialogTrigger>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>{m.zones_owner_confirm_title({ title }, options)}</AlertDialogTitle>
-          <AlertDialogDescription>{m.zones_owner_confirm_description({}, options)}</AlertDialogDescription>
+      <AlertDialogContent className="min-w-0">
+        <AlertDialogHeader className="min-w-0 *:min-w-0 *:max-w-full">
+          <AlertDialogTitle className="whitespace-normal [overflow-wrap:anywhere]">
+            {m.zones_owner_confirm_title({ title }, options)}
+          </AlertDialogTitle>
+          <AlertDialogDescription className="whitespace-normal [overflow-wrap:anywhere]">
+            {m.zones_owner_confirm_description({}, options)}
+          </AlertDialogDescription>
         </AlertDialogHeader>
-        <AlertDialogFooter>
+        <AlertDialogFooter className="min-w-0 sm:flex-wrap">
           <AlertDialogCancel
+            className={ownerControlClassName}
             onClick={(event) => {
               if (!isCurrent()) event.preventDefault();
             }}
@@ -76,6 +88,7 @@ function DeleteZone({
             {m.zones_owner_cancel({}, options)}
           </AlertDialogCancel>
           <AlertDialogAction
+            className={ownerControlClassName}
             variant="destructive"
             onClick={(event) => {
               if (!isCurrent()) {
@@ -206,7 +219,9 @@ function OwnerVisit({ locale, input, outcome, owner, onChange, onReload }: Works
   }
   if (owner && !owner.isCurrent(capture))
     return outcome?.kind === 'signed-out' ? (
-      <ZoneFeedback failure={{ kind: 'signed-out' }} locale={locale} />
+      <div className={ownerFeedbackClassName}>
+        <ZoneFeedback failure={{ kind: 'signed-out' }} locale={locale} />
+      </div>
     ) : (
       <p role="status">{m.zones_owner_loading({}, options)}</p>
     );
@@ -218,40 +233,50 @@ function OwnerVisit({ locale, input, outcome, owner, onChange, onReload }: Works
           event.stopPropagation();
         }
       }}
-      className="mx-auto w-full max-w-3xl space-y-6 text-foreground"
+      className={`mx-auto w-full max-w-3xl space-y-6 text-foreground ${ownerFeedbackClassName}`}
       aria-busy={busy}
     >
       <header className="flex flex-wrap items-start justify-between gap-4">
-        <div className="space-y-3">
+        <div className="min-w-0 space-y-3">
           <PageHeading>{m.zones_owner_title({}, options)}</PageHeading>
           <p className="text-muted-foreground">{m.zones_owner_intro({}, options)}</p>
         </div>
-        <a className={buttonVariants()} href={paths.create}>
+        <a className={cn(buttonVariants(), ownerControlClassName)} href={paths.create}>
           {m.zones_owner_create({}, options)}
         </a>
       </header>
       <nav aria-label={m.zones_owner_views({}, options)} className="flex flex-wrap gap-2">
         <a
-          className={buttonVariants({ variant: input.deleted ? 'ghost' : 'secondary' })}
+          className={cn(buttonVariants({ variant: input.deleted ? 'ghost' : 'secondary' }), ownerControlClassName)}
           href={listHref(locale, { deleted: false })}
           aria-current={!input.deleted ? 'page' : undefined}
         >
           {m.zones_owner_active({}, options)}
         </a>
         <a
-          className={buttonVariants({ variant: input.deleted ? 'secondary' : 'ghost' })}
+          className={cn(buttonVariants({ variant: input.deleted ? 'secondary' : 'ghost' }), ownerControlClassName)}
           href={listHref(locale, { deleted: true })}
           aria-current={input.deleted ? 'page' : undefined}
         >
           {m.zones_owner_trash({}, options)}
         </a>
-        <Button variant="ghost" disabled={busy || pending !== null} onClick={() => void refresh()}>
+        <Button
+          className={ownerControlClassName}
+          variant="ghost"
+          disabled={busy || pending !== null}
+          onClick={() => void refresh()}
+        >
           {m.zones_owner_refresh({}, options)}
         </Button>
       </nav>
       {input.deleted ? <p className="text-muted-foreground">{m.zones_owner_trash_help({}, options)}</p> : null}
       {result?.kind === 'saved' ? (
-        <p ref={confirmation} tabIndex={-1} role="status">
+        <p
+          className="rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          ref={confirmation}
+          tabIndex={-1}
+          role="status"
+        >
           {result.zone.deletedAt ? m.zones_owner_trashed({}, options) : m.zones_owner_restored({}, options)}
         </p>
       ) : null}
@@ -303,7 +328,7 @@ function OwnerVisit({ locale, input, outcome, owner, onChange, onReload }: Works
               return (
                 <ContentItem
                   key={zone.id}
-                  className="p-3"
+                  className="p-3 [&_[data-content-item-slot=title]]:line-clamp-none [&_[data-content-item-slot=title]]:[overflow-wrap:anywhere] [&_[data-content-item-slot=metadata]]:min-w-0 [&_[data-content-item-slot=metadata]>span]:min-w-0 [&_[data-content-item-slot=metadata]>span]:max-w-full [&_[data-content-item-slot=actions]]:max-w-full [&>div]:sm:grid-cols-[minmax(0,1fr)_minmax(0,auto)]"
                   title={title}
                   {...(name.lang ? { titleLang: name.lang } : {})}
                   {...(!input.deleted
@@ -313,9 +338,9 @@ function OwnerVisit({ locale, input, outcome, owner, onChange, onReload }: Works
                     <>
                       <span>{visibility({}, options)}</span>
                       {input.deleted && zone.restoreUntil ? (
-                        <span>
+                        <span className="[overflow-wrap:anywhere]">
                           {m.zones_owner_deadline({}, options)}{' '}
-                          <time dateTime={zone.restoreUntil}>
+                          <time className="whitespace-normal" dateTime={zone.restoreUntil}>
                             {new Intl.DateTimeFormat(locale, {
                               dateStyle: 'medium',
                               timeStyle: 'long',
@@ -329,6 +354,7 @@ function OwnerVisit({ locale, input, outcome, owner, onChange, onReload }: Works
                   actions={
                     input.deleted ? (
                       <Button
+                        className={ownerControlClassName}
                         variant="outline"
                         disabled={blocked || expired}
                         onClick={() =>
@@ -346,10 +372,16 @@ function OwnerVisit({ locale, input, outcome, owner, onChange, onReload }: Works
                       </Button>
                     ) : (
                       <>
-                        <a className={buttonVariants({ variant: 'outline' })} href={zoneLinks.reader}>
+                        <a
+                          className={cn(buttonVariants({ variant: 'outline' }), ownerControlClassName)}
+                          href={zoneLinks.reader}
+                        >
                           {m.zones_owner_open({}, options)}
                         </a>
-                        <a className={buttonVariants({ variant: 'ghost' })} href={zoneLinks.edit}>
+                        <a
+                          className={cn(buttonVariants({ variant: 'ghost' }), ownerControlClassName)}
+                          href={zoneLinks.edit}
+                        >
                           {m.zones_owner_configure({}, options)}
                         </a>
                         <DeleteZone
@@ -377,14 +409,17 @@ function OwnerVisit({ locale, input, outcome, owner, onChange, onReload }: Works
       )}
       {visibleOutcome?.kind === 'ready' && visibleOutcome.page.next ? (
         <a
-          className={buttonVariants({ variant: 'outline' })}
+          className={cn(buttonVariants({ variant: 'outline' }), ownerControlClassName)}
           href={listHref(locale, { deleted: input.deleted, cursor: visibleOutcome.page.next })}
         >
           {m.zones_owner_next({}, options)}
         </a>
       ) : null}
       {input.cursor ? (
-        <a className="block underline" href={listHref(locale, { deleted: input.deleted })}>
+        <a
+          className={`flex w-fit items-center rounded-sm underline ${ownerControlClassName}`}
+          href={listHref(locale, { deleted: input.deleted })}
+        >
           {m.zones_owner_start({}, options)}
         </a>
       ) : null}
