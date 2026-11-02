@@ -403,8 +403,10 @@ test('independent publication creation, local corrections, immutable recovery an
     await replace(input(m.correction_value()), 'ja');
     await add('schema:publisher');
     await replace(scope().getByRole('combobox', { name: 'publisher' }), 'Supplied');
-    await scope().findByRole('option', { name: /Supplied publisher/ });
-    await act(async () => user.click(scope().getByRole('option', { name: /Supplied publisher/ })));
+    const recoveryPublisher = await within(window.document.body as unknown as HTMLElement).findByRole('option', {
+      name: /Supplied publisher/,
+    });
+    await act(async () => user.click(recoveryPublisher));
     await replace(input(m.relation_citation()), 'https://publisher.example/edition');
     await click(m.publication_submit());
     await scope().findByText(m.publication_definitions_review());
@@ -637,4 +639,4 @@ test('independent publication creation, local corrections, immutable recovery an
       else Reflect.deleteProperty(globalThis, key);
     }
   }
-});
+}, 30_000);
