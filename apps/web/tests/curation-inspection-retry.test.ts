@@ -54,9 +54,16 @@ test('retained publication inspection honors its own native deadline across visi
   };
   const publication = new CurationPublication(reader, transport);
   const visit = publication.activate(transport);
-  const html = () => renderToStaticMarkup(createElement(CurationPublicationRecovery, {
-    publication, profile: draft, head: 7, onPublished: () => {}, onReviewed: () => {},
-  }));
+  const html = () =>
+    renderToStaticMarkup(
+      createElement(CurationPublicationRecovery, {
+        publication,
+        profile: draft,
+        head: 7,
+        onPublished: () => {},
+        onReviewed: () => {},
+      }),
+    );
 
   try {
     await visit.start(draft, 7);

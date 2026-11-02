@@ -227,8 +227,7 @@ export class CurationPublication {
           : {
               active: null,
               readFailure: result,
-              readRetryAt:
-                result.reason === 'rate-limited' ? curationInspectionRetryAt(result.retryAfter) : undefined,
+              readRetryAt: result.reason === 'rate-limited' ? curationInspectionRetryAt(result.retryAfter) : undefined,
             },
       );
     } catch {
@@ -238,11 +237,7 @@ export class CurationPublication {
   }
 
   async inspect(expectedIncarnation = this.incarnation) {
-    if (
-      !this.isCurrent(expectedIncarnation) ||
-      this.state.busy ||
-      !admitCurationInspection(this.state.readRetryAt)
-    )
+    if (!this.isCurrent(expectedIncarnation) || this.state.busy || !admitCurationInspection(this.state.readRetryAt))
       return;
     const incarnation = expectedIncarnation;
     const current = () => this.isCurrent(incarnation);
