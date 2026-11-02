@@ -364,10 +364,12 @@ test('default discovery owns hydration languages before activeRelease', async ()
       await gate.promise;
       return { digest: bundledDigest, head: 1, release: bundledRelease };
     }),
-    spyOn(accountDiscovery, 'nativeDiscoveryRegistry').mockImplementation(async (_pool, _routeKey, _subjects, options) => {
-      languages.push(options?.languages ? [...options.languages] : options?.languages);
-      throw new Error('owned languages recorded');
-    }),
+    spyOn(accountDiscovery, 'nativeDiscoveryRegistry').mockImplementation(
+      async (_pool, _routeKey, _subjects, options) => {
+        languages.push(options?.languages ? [...options.languages] : options?.languages);
+        throw new Error('owned languages recorded');
+      },
+    ),
     spyOn(hydration, 'createNativeDiscoveryRegistry').mockImplementation((options) => {
       languages.push(options.languages ? [...options.languages] : options.languages);
       throw new Error('owned languages recorded');
