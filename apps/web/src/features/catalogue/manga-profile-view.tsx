@@ -615,7 +615,7 @@ function MangaCreate({
                     <details>
                       <summary className="cursor-pointer">{m.catalogue_creation_technical_details({}, o)}</summary>
                       <pre className="mt-2 overflow-auto whitespace-pre-wrap break-all rounded bg-muted p-3 font-mono text-xs">
-                        {JSON.stringify(row.statement, null, 2)}
+                        {mangaRetiredAssertionSnapshot(row)}
                       </pre>
                     </details>
                     <MangaRowRemove
@@ -694,7 +694,11 @@ function MangaCreate({
   );
 }
 
-function retiredMangaRowPopulated(row: MangaRow): boolean {
+export function mangaRetiredAssertionSnapshot(row: MangaRow): string {
+  return JSON.stringify(row.statement, null, 2);
+}
+
+export function retiredMangaRowPopulated(row: MangaRow): boolean {
   const hasValue = (value: unknown): boolean => {
     if (typeof value === 'string') return !!value.trim();
     if (value === null || value === undefined) return false;
