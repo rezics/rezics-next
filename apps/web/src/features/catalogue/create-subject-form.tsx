@@ -156,13 +156,28 @@ function CreateSubjectFormLive({
   const client = useQueryClient();
   const queryKey = ['catalogue-create', 'definitions', locale, String(lifetime.generation)];
   if (profile) queryKey.push(profile.scope);
+  async function loadDefinitions(refresh = false) {
+    const result = await transport.definitions(refresh);
+    // A failed reload must not replace the last usable choices or unmount the draft's controls.
+    if (!result.ok) throw new Error('Creation definitions unavailable');
+    return result;
+  }
   // Definitions and the route's session read start independently.
-  const definitions = useQuery({ queryKey, queryFn: () => transport.definitions(), retry: false });
+  const definitions = useQuery({ queryKey, queryFn: () => loadDefinitions(), retry: false });
+  async function reloadDefinitions() {
+    await client
+      .fetchQuery({ queryKey, queryFn: () => loadDefinitions(true), retry: false, staleTime: 0 })
+      .catch(() => undefined);
+  }
   const [type, setType] = useState(profile?.type ?? '');
   const [rows, setRows] = useState<TermDraft[]>([{ language: locale, label: '', description: '', aliases: '' }]);
   const [failure, setFailure] = useState<CreateFailure>();
   const [busy, setBusy] = useState(false);
   const [created, setCreated] = useState<Created>();
+  const outcome = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (!busy && (created || failure)) outcome.current?.focus();
+  }, [busy, created, failure]);
   const running = useRef(false);
   const unresolvedProfile = useRef(false);
   const request = useRef<CreateSubjectCommand | null>(null);
@@ -178,6 +193,9 @@ function CreateSubjectFormLive({
   const disabled = locked || session !== 'signed-in';
   const errors = failure?.errors ?? [];
   const readOnlyType = !!profile?.type && profile.readOnlyType;
+  const hasDraft = !!type || rows.some((row) => !!(row.label || row.description || row.aliases));
+  // Retrying an uncertain command needs its original identity, even while definitions are unavailable.
+  const definitionsBlocked = !request.current && (definitions.isError || definitions.isFetching || types.length === 0);
 
   const termControl = createSubjectControls(rows);
   const control = (pointer: string) => profile?.control?.(pointer) || termControl(pointer);
@@ -210,7 +228,8 @@ function CreateSubjectFormLive({
   async function submit(event: FormEvent<HTMLFormElement>) {
     if (!lifetime.active()) return;
     event.preventDefault();
-    if (running.current || session !== 'signed-in' || created || failure?.reason === 'conflict') return;
+    if (running.current || session !== 'signed-in' || created || failure?.reason === 'conflict' || definitionsBlocked)
+      return;
     if (!request.current) {
       const draft = initialTerms(type, rows);
       if (profile) {
@@ -242,9 +261,7 @@ function CreateSubjectFormLive({
         if (!unresolvedProfile.current && result.reason !== 'unavailable' && result.reason !== 'conflict')
           request.current = null;
         if (result.refreshDefinitions) {
-          const refreshed = await transport.definitions(true).catch(() => ({ ok: false as const }));
-          if (!lifetime.active()) return;
-          client.setQueryData(queryKey, refreshed);
+          await reloadDefinitions();
         }
       }
     } catch {
@@ -292,7 +309,12 @@ function CreateSubjectFormLive({
         </header>
       )}
       {created ? (
-        <section role="status" className="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6">
+        <section
+          ref={outcome}
+          tabIndex={-1}
+          role="status"
+          className="space-y-4 rounded-xl border border-border bg-card p-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:p-6"
+        >
           <p className="font-medium">{m.catalogue_create_created({}, options)}</p>
           {created.reader.state === 'ready' ? (
             <a href={created.reader.href} className={buttonVariants()}>
@@ -327,14 +349,14 @@ function CreateSubjectFormLive({
               </a>
             </p>
           )}
-          {(session === 'unavailable' || definitions.isError || definitions.data?.ok === false) && (
+          {(session === 'unavailable' || definitions.isError) && (
             <div role="alert" className="space-y-3">
               <p>{m.catalogue_create_unavailable({}, options)}</p>
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => {
-                  void definitions.refetch();
+                  void reloadDefinitions();
                   void client.invalidateQueries({ queryKey: ['session'] });
                 }}
               >
@@ -343,7 +365,7 @@ function CreateSubjectFormLive({
             </div>
           )}
           {definitions.data?.ok && types.length === 0 && <p role="status">{m.catalogue_create_empty({}, options)}</p>}
-          {definitions.data?.ok && types.length > 0 && (
+          {definitions.data?.ok && (types.length > 0 || hasDraft) && (
             <form className="space-y-6" noValidate onSubmit={(event) => void submit(event)} aria-busy={busy}>
               {rows.map((row, index) => (
                 <fieldset
@@ -524,7 +546,12 @@ function CreateSubjectFormLive({
               </Field>
               {profile?.fields(type, disabled)}
               {failure && (
-                <div role="alert" className="space-y-3 rounded-xl border border-destructive/40 p-4">
+                <div
+                  ref={outcome}
+                  tabIndex={-1}
+                  role="alert"
+                  className="space-y-3 rounded-xl border border-destructive/40 p-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                >
                   <p>
                     {failure.reason === 'denied'
                       ? m.catalogue_create_denied({}, options)
@@ -593,7 +620,10 @@ function CreateSubjectFormLive({
                 </div>
               )}
               <div>
-                <Button type="submit" disabled={busy || session !== 'signed-in' || failure?.reason === 'conflict'}>
+                <Button
+                  type="submit"
+                  disabled={busy || session !== 'signed-in' || failure?.reason === 'conflict' || definitionsBlocked}
+                >
                   {busy
                     ? m.catalogue_create_saving({}, options)
                     : uncertain

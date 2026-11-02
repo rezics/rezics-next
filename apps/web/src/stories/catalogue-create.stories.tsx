@@ -1,8 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { pickText } from '@rezics/composition';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { useMemo } from 'react';
 import { CreateSubjectForm } from '../features/catalogue/create-subject-form';
+import type { CreateTransport } from '../features/catalogue/create-subject';
 import { catalogueCreateFixture, catalogueCreatedId, type CreateScenario } from '../kernel/fake/catalogue-create';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
@@ -10,9 +11,30 @@ import { AppShell } from '../shell/shell';
 import { subjectHref } from '../subject/subject-href';
 import { PatternStory } from './page';
 
-function CreateStory({ scenario = 'ready' }: { scenario?: CreateScenario }) {
+function CreateStory({
+  scenario = 'ready',
+  refreshUnavailable = false,
+}: {
+  scenario?: CreateScenario;
+  refreshUnavailable?: boolean;
+}) {
   const locale = getLocale();
   const fixture = useMemo(() => catalogueCreateFixture(scenario, locale), [scenario, locale]);
+  const transport = useMemo<CreateTransport>(() => {
+    let failRefresh = refreshUnavailable;
+    return {
+      ...fixture.transport,
+      definitions: async (refresh) => {
+        if (refresh && failRefresh) {
+          failRefresh = false;
+          return { ok: false };
+        }
+        const result = await fixture.transport.definitions(refresh);
+        if (refresh && scenario === 'invalid') fixture.setScenario('ready');
+        return result;
+      },
+    };
+  }, [fixture, scenario, refreshUnavailable]);
   return (
     <PatternStory path="/catalogue/new" visitor={scenario === 'signed-out' ? 'Signed Out' : 'Signed In'}>
       <AppShell>
@@ -20,7 +42,7 @@ function CreateStory({ scenario = 'ready' }: { scenario?: CreateScenario }) {
           key={`${scenario}:${locale}`}
           locale={locale}
           session={scenario === 'signed-out' ? 'signed-out' : 'signed-in'}
-          transport={fixture.transport}
+          transport={transport}
           onNavigate={() => {
             /* Keep the confirmed ordinary-reader link reviewable in this story. */
           }}
@@ -246,6 +268,30 @@ export const Conflict: Story = {
     expect(canvas.getByRole('button', { name: m.catalogue_create_submit() })).toBeDisabled();
   },
 };
+export const CorrectableRejection: Story = {
+  args: { scenario: 'invalid', refreshUnavailable: true },
+  play: async ({ canvasElement }) => {
+    const canvas = await submit(canvasElement);
+    const correction = await canvas.findByRole('link', { name: m.catalogue_create_label() });
+    await waitFor(() => expect(correction.closest('[role="alert"]')).toHaveFocus());
+    await userEvent.click(correction);
+    const name = canvas.getByRole('textbox', { name: m.catalogue_create_label() });
+    expect(name).toHaveFocus();
+    expect(name).toHaveValue('A new film');
+    expect(canvas.getByRole('textbox', { name: m.catalogue_create_description() })).toHaveValue('An independent film');
+    expect(canvas.getByRole('textbox', { name: m.catalogue_create_aliases() })).toHaveValue('Working title');
+    const create = canvas.getByRole('button', { name: m.catalogue_create_submit() });
+    expect(create).toBeDisabled();
+    await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_retry() }));
+    await userEvent.clear(name);
+    await userEvent.type(name, 'A corrected film');
+    await userEvent.click(create);
+    expect(await canvas.findByRole('link', { name: m.catalogue_create_open() })).toHaveAttribute(
+      'href',
+      `/${getLocale()}/subjects/${catalogueCreatedId}/a-corrected-film`,
+    );
+  },
+};
 export const UnavailableRetry: Story = {
   args: { scenario: 'definitions-unavailable' },
   play: async ({ canvasElement }) => {
@@ -280,6 +326,11 @@ export const CreatedReaderUnavailable: Story = {
     const canvas = await submit(canvasElement);
     expect(await canvas.findByText(m.catalogue_create_reader_unavailable())).toBeVisible();
     expect(canvas.queryByRole('link', { name: m.catalogue_create_open() })).toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_retry() }));
+    await waitFor(() =>
+      expect(canvas.getByText(m.catalogue_create_reader_unavailable()).closest('[role="status"]')).toHaveFocus(),
+    );
+    expect(canvas.queryByRole('button', { name: m.catalogue_create_submit() })).toBeNull();
   },
 };
 export const CreatedReaderConcealed: Story = {
