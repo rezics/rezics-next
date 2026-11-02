@@ -219,7 +219,11 @@ test('Progress-session published log readers bound long notes and distinguish em
             await act(async () => {
               h.click(more);
             });
-            expect(routerSearch(h.router)).toEqual({ changes: search.changes, units: search.units, logs: continuation });
+            expect(routerSearch(h.router)).toEqual({
+              changes: search.changes,
+              units: search.units,
+              logs: continuation,
+            });
           }
           expect(publish).not.toHaveBeenCalled();
         } finally {
