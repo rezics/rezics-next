@@ -40,6 +40,82 @@ Search owns composition and presentation templates; agree named slots and sequen
 Accounts owns Auth behavior; content owns media and communities; commerce owns library and checkout semantics;
 semantic owns definitions and Zones. Correct shared visual defects as a class across consuming surfaces.
 
+### Adopted quality round three requirements
+
+The [quality round three findings](../research/quality-round3-backlog.md) are adopted here and in the
+[shared-family migration contracts](../research/home-and-list-items.md#ordered-complete-implementation-slices).
+The research's [complete 91-class crosswalk](../research/quality-round3-backlog.md#disposition-of-every-retained-round-two-review-class)
+retains every review-class disposition and its original owning journey's acceptance; it is supporting evidence,
+not a second product authority or 91 new implementation tasks. The original Done when above remains unchanged.
+
+**Evidence boundary.** The research inspected source `4761a82e99595ca2cd4878ca26914e0f427bb634`, while publication
+was `d1d188d5316129d585a39bba43fca50eb358c0b3`. Its 1,354 published stories occupied 147 folders versus 151 in
+source; four source folders had no published counterpart. Of 294 folder/viewport capture cells at 1280×720 and
+390×720, 106 mechanically accepted images were inspected and six rejected: **100 usable images, 88 desktop and
+12 phone, with 11 usable pairs**. Fifty-eight published folders had no usable image. Wrong-viewport captures and
+exhausted historical CDP failures remain rejected; no historical image is reused as current evidence. The 97
+truncated accessibility-reporter failures are capture failures, not 97 established accessibility defects.
+Folder coverage proves neither all stories/states/locales/viewers nor keyboard, screen-reader, 320px reflow,
+native, full-suite or privacy acceptance. Source presence, integration, checks, native proof, visual review and
+publication remain separate. A matching page file alone does not prove equality of its renderer, shared UI,
+stories or deployed revision; stale publication must not recreate a source defect already repaired.
+
+**Identity and disclosure.** Recognizable supplied human identity leads; a missing label is honestly unavailable,
+never an invented name. Known, unknown and explicitly deleted records remain distinct; only an explicit deletion
+reason permits a deleted tombstone. Withheld identity must not enter markup or attributes, even inside a closed
+disclosure. Technical details may be optional, but essential warnings, permission/status, unknown outcomes and
+decision identity remain visible beside the action. Full exact dangerous operands must be inspectable before
+confirmation. Presentation changes add no row hydration, name lookup or fabricated richer fields.
+
+- **Resource access — Web consumer, Accounts authorization.** Deliver the complete identity presentation in
+  `accounts/resource-access/page.tsx` (including `identityName`, `subjectTitle`, `SubjectName` and the ready
+  resource/acting-as area), consistent `owner-transfer.tsx` labels, stories and regressions. Show a known resource
+  kind or an honest generic resource when the DTO has no title; lead with supplied recognizable account labels
+  and retain visible organization/Realm role meaning. Full resource ID, route/type and subject IDs belong in
+  labeled technical details, including exact transfer operands inspectable before confirmation. Use only the
+  existing 20-grant/22-identity DTO; add no identity lookup or I/O and preserve the existing explicit transfer
+  lookup. Keep adapters, native/API authorization, session/credentials, mutation and uncertain retry semantics
+  unchanged. New locale keys are confined to `access_identity_*`.
+- **Search selected labels — sequential Web consumer delivery.** Change only selected-filter presentation in
+  `search/search.tsx`, preserving delivered `results.tsx`. Missing kind/property/value labels use human unavailable
+  wording; exact selection, URL and constraint remain intact and inspectable in labeled technical details.
+  Preserve clear-one/all, existing local header authority, closed result rows, one bounded native request and SSR
+  fences. Add no per-chip fetch, substitute constraint or broadened query. New locale keys are confined to
+  `search_constraint_identity_*`; Search retains native scope without a competing writer.
+- **Progress index — Commerce handoff.** Carry `progress-page.tsx` `SessionRow`'s `!unitLabel` case and the plain
+  continuation anchor into the next complete current-source Progress index contract. Preserve the source-present
+  human unavailable-unit label and accessible mode/unit details; historical meaning stays honestly unavailable,
+  stored amount/position unchanged, with no invented percentage, total, rescaling or unit conversion. Require an
+  actual 44px phone/coarse-pointer target for the standalone Next anchor without changing its cursor. Do not
+  repeat completed index work; detail/helper/profile, native, Labels and buyer list/detail remain separate owners.
+- **Auth transfer — receive delivered hierarchy.** Entry forms already lead and the general walkthrough follows
+  in an accessible disclosure. Keep local-file, untrusted-file, approval, responsibility and unknown-outcome
+  warnings beside their actions. This source-present repair creates no new writer or native/browser proof.
+- **Catalogue creation — waiting complete journey.** Bundle the `create-subject-entry.tsx` target correction into
+  the next complete creation journey, never a standalone writer or retry of a completed delivery. Preserve its
+  ordinary SSR anchor and destination; require an explicit 44px phone/coarse-pointer target, full label wrapping
+  and visible focus without editing frozen generated button variants. This is a source-only geometry finding,
+  not a measured current visual result.
+
+**Waiting journeys and shared family.** Slices 4–10 consume the present `ContentItem` family and lower parts with
+real identity, independent actions, native order/budgets and truthful loading, partial, denied, unavailable,
+empty and recovery states. Retire parallel bodies only after actual default consumers demonstrate equivalence.
+Home/Realm/Space/question retain Search's Source/native, Content's predicate/choice and Web's sole renderer
+boundaries below: page ≤20, candidates ≤160, conjunctive exact kind/Space/question, signed selection/revision/viewer
+cursor, bounded real coverage/frontier, one retained page, cancellation/retirement and public/private SSR fences.
+A directory, helper or safe refusal is not positive installed default-feed proof. No browser qualification,
+hidden refill or history scan supplies missing authority. `RealmHomeHeader` source differs from stale publication;
+that image does not justify another hero rewrite.
+
+Source-present provider choices, independent ratings, Spoiler Show/Hide, adjacent candidate confirmation, human
+curation guidance, Search filter entrance, creator offer titles, edition terminal recovery, shelf sorting, exact
+MyZones navigation, richer moderation and shared slotted 44px controls supersede their historical repair claims.
+Their original owner verification remains owed. Sales' default 503/native Client generation, Source/Home/question,
+History, erasure, Library bulk/preparation and private SSR retain their producer owners and original acceptance.
+Accounts alone may reconcile its lifecycle transport fixture to delivered private review/readback ports; preserve
+all security, current credential/key, uncertainty, `not_applied`, effect-count and first native lifetime-cleanup
+assertions. No Web retry or competing lifecycle writer follows from this adoption.
+
 ### Shared navigation and subject purchase entry
 
 Journey owners supply leaves and creation links through `AppShellProps.navigation` in

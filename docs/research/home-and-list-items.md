@@ -1,6 +1,9 @@
 # Home and shared list items
 
-Research date: 2026-11-01. This report is evidence and a recommendation for adoption, not a change to the product contract.
+Research date: 2026-11-01. The inventory remains historical supporting evidence. The migration and waiting
+contracts below follow the [owning Web requirements](../goals/web.md#adopted-quality-round-three-requirements),
+including the adopted [quality round three findings](quality-round3-backlog.md); they do not create another
+product authority.
 
 ## Recommendation
 
@@ -24,11 +27,24 @@ success or turn an unavailable source into an empty list.
 
 ## Evidence boundary and method
 
-The source snapshot is `dev` at `127964eda28dc51151c2eba7c168db5fb9a7c328`, inspected through Git without changing
-branches. The research worktree starts at `c0e8f1222f9504762128c4e5e37170b6b72a5646`. The relevant difference is
-small but material: current `dev` has already removed the retired Home tagline, uses an accessible Home heading,
-and labels Home navigation with `nav_home`. It has **not** removed the horizon paragraph, source readiness list,
-or the independently implemented bordered `FeedRow`. UI package findings apply to both snapshots.
+The original source inventory inspected `127964eda28dc51151c2eba7c168db5fb9a7c328` against
+`c0e8f1222f9504762128c4e5e37170b6b72a5646`. At that snapshot the tagline was removed, Home had an accessible
+heading and `nav_home` navigation, but horizon/readiness prose and the bordered `FeedRow` remained. Those are
+historical observations: the [current Home presentation contract](../goals/web.md#home-content-item-presentation)
+now records `ContentItem`, compact controls and removal of successful scaffolding. The capability matrix,
+renderer inventories and copy appendix below describe the inspected snapshot, not a fresh defect queue. Apply
+the source reconciliation and waiting contracts below before treating any entry as missing work.
+
+Round three inspected source `4761a82e99595ca2cd4878ca26914e0f427bb634` against publication
+`d1d188d5316129d585a39bba43fca50eb358c0b3`: 147 published folders/1,354 stories versus 151 source folders,
+including four source-only folders. Its 294 capture cells yielded 106 mechanically accepted inspected images,
+six rejected and **100 usable images (88 desktop, 12 phone), 11 usable pairs**; 58 published folders have no
+usable image. Wrong-viewport captures and exhausted historical CDP failures remain rejected, and zero historical
+images are reused as current. The 97 truncated accessibility-reporter failures are capture failures, not proven
+accessibility defects. The [evidence ledger](quality-round3-backlog.md#evidence-custody-and-limits) supports folder
+observations, not all-state, keyboard/screen-reader, native, full-suite, privacy or 320px acceptance. Source,
+integration, checks, native, visual and publication evidence remain separate; equality of one page file cannot
+establish renderer/shared-UI/story/publication equality.
 
 The published [signed-in Home story](https://storybook.rezics.com/iframe?id=pages-discovery-home--signed-in&viewMode=story)
 was read on 2026-11-01. Its manager title identified build `f1883ee`, dated `2026-10-31T22:37:01.664Z`.
@@ -480,90 +496,148 @@ Conversely, moving an explanation to a popover does not authorize changing permi
 
 ## Ordered, complete implementation slices
 
-These slices are proposals for manager adoption and subsequent briefs. Each preserves existing contracts and can
-land independently. None depends on changing risk areas or copying reference code. Owner documents should receive
-the adopted design before dependent implementation; this report remains supporting evidence.
+These are migration contracts under the [Web owner requirements](../goals/web.md#adopted-quality-round-three-requirements),
+with [round-three source reconciliation](quality-round3-backlog.md#source-reconciliation-before-assigning-writers)
+and the [complete 91-class crosswalk](quality-round3-backlog.md#disposition-of-every-retained-round-two-review-class)
+as supporting evidence. Every class retains its original owning journey and acceptance; historical overlap is
+not a new all-class backlog. Source-present repairs are received rather than assigned again. Slices 4–10 remain
+waiting for complete consumer journeys and their actual prerequisites, not another family design or parallel
+native writer. No slice changes product scope, APIs or frozen files.
 
-1. **Adopt the family and Home presentation contract.** Record anatomy, visual states, exceptions, data boundaries,
-   state wording and desktop/phone behavior in the UI/web owner documents. Separate current-summary delivery from
-   richer-summary capability work. Define representative Subject, account, discussion, Collection and Continue
-   outcomes, including missing covers and denied metadata. Completion is an adopted contract and concrete scenarios.
-2. **Build the shared item family with compatibility adapters.** Extend `ListRow`/`MemberListRow`; align title,
-   cover, metadata, actions and states; adapt `ShelfListRow` and `CoverCard`. Add targeted component stories for rest,
-   hover, keyboard focus, press, selection, independent controls, long titles, missing imagery and narrow layout.
-   Completion is shared behavior with existing callers still compiling; do not migrate every page in this slice.
-3. **Migrate Home with current native summaries and remove its technical scaffolding.** Replace `FeedRow`, remove
-   horizon and successful readiness list, keep only conditional partial/error states, compact controls and implement
-   the desktop/phone hierarchy above. Keep native order, one-page replacement, exact filters and viewer fencing.
-   Completion is a genuinely useful current-summary mixed Home with signed-in/out, empty, sparse, loading and
-   recovery stories; no new summary data is invented. Preserve the tagline fix already present in `dev`.
-4. **Unify Search, discovery and catalogue membership/credits.** Move `results`, `discovery-results`, Realm discovery,
-   `CoverList` and qualified-credit renderers through the adapters. Cover every route/mount that delegates to them.
-   Completion retains multilingual labels, type presentation, facts, rating context and secondary source links in
-   the same row family. Keep suggestion controls separate.
-5. **Unify Library across list/grid and Collection workflows.** Migrate shelf, Continue, Collection browser/page/editor,
-   publication, My Collections/Following, copies/labels/logs/progress adapters. Keep semantic table view, reorder,
-   loaded-page selection, immutable logs, privacy and unknown progress. Completion includes public/unlisted/private
-   Collection and mounted Zone cases with no different item anatomy for the same underlying summary.
-6. **Unify community, identity and Inbox content lists.** Move board/Realm/Space summaries, `ThreadCard`, profile,
-   account, Context, Zone and notification rows. Remove persistent discussion-card backgrounds; retain document
-   reply layouts, unread state, anchors and real current actions. Completion includes independent reply/menu links
-   and unavailable/removed items without a duplicate phone renderer.
-7. **Unify commerce and review summaries.** Move orders, offer/access/sales summaries, statement summary rows,
-   editions and provider candidates. Preserve ledger/case bodies, fixed-edition/licence terms, current permissions
-   and uncertain-result recovery. Completion does not erase price, attribution or incomplete-state information in
-   pursuit of visual consistency.
-8. **Relocate the remaining technical text by workflow.** Apply the appendix to message source and callsites across
-   all eight locale variants. Keep field bounds, honest pending/error states and decision-critical consequences;
-   use existing details surfaces and real help destinations. Fix raw pointer/enum/identifier hierarchy. Completion
-   is a page-by-page copy inventory with each string removed, contextualized or explicitly retained, rather than a
-   blanket replacement of “native” with another technical word.
-9. **Add richer Home summary capabilities only where adopted and missing.** Brief bounded producer summaries for
-   discussion context/excerpts, Collection identity/preview or rating metadata that current ports do not supply.
-   Define disclosure, byte/count limits, absence and freshness. Then consume these through existing slots, one
-   capability at a time. Completion is producer-backed richness with recorded/native scenarios, not fixture-only
-   invented metadata or per-row fetches.
-10. **Retire parallel bodies and publish evidence.** Remove `MobileFeedCard` as an independent product path once its
-    consumers/examples use the family; remove compatibility implementations only after their callers migrate.
-    Publish the integrated Storybook revision and perform the adopted cross-surface keyboard, touch, responsive,
-    permission and native acceptance obligations. Completion records the actual deployed pin and distinguishes
-    visual evidence from producer proof. This research attempt does not execute those deferred checks.
+1. **Receive the adopted family and Home presentation contract.** The UI and Web owner documents now specify
+   anatomy, visual states, exceptions, data boundaries and current-summary Home. Keep Subject/account/discussion/
+   Collection/Continue identity, missing covers and denied metadata truthful. Richer summaries still need explicit
+   producer adoption; documentation does not establish their installation.
+2. **Consume the source-present family and compatibility adapters.** `ContentItem`, `MemberListRow`, shelf and
+   cover parts provide shared anatomy and independent controls. Preserve real headings, destinations, native
+   actions, selection and semantic table/form/document exceptions. Component/pattern source does not prove every
+   default consumer has migrated, nor that keyboard, phone, long-locale or permission acceptance passed.
+3. **Receive current-summary Home without repeating historical repairs.** Home now uses the family, compact
+   controls and no successful horizon/readiness scaffolding or retired tagline. Retain native order, one page,
+   exact filters and viewer fencing. Signed-in/out, empty, sparse, partial, loading and recovery remain original
+   journey obligations; source-present question controls and safe refusals do not establish positive default
+   producer coverage or installed question membership.
+4. **Unify Search, discovery and catalogue membership/credits.** Consume the existing result/member/cover adapters
+   across actual default routes, Realm discovery and qualified credits. Preserve multilingual identity, work/role/
+   language qualifiers, facts, citations, rating context and independent source links; suggestion controls remain
+   separate. Search owns native result/constraint semantics. The sequential Web selected-label consumer touches
+   only `search/search.tsx`, preserving delivered `results.tsx`: human unavailable kind/property/value labels,
+   exact selection/URL/constraint in labeled details, clear-one/all and the existing header authority. Closed rows,
+   one bounded native request and SSR fences remain intact; no chip fetch, substitute filter or broader query.
+5. **Unify Library across list/grid and Collection workflows.** Receive existing shelf/cover/table, selection,
+   sort, log and progress consumers rather than repeating the obsolete no-op sorting repair. Preserve reorder,
+   loaded-page selection, immutable logs, privacy and unknown progress. Public/unlisted/private Collections and
+   mounted Zones still need actual default-consumer evidence. Commerce retains whole-selection bulk/preparation
+   and native lifetimes. Its next complete Progress index contract receives the `SessionRow` missing-unit and
+   standalone Next-anchor obligations: preserve the current human unavailable label and accessible exact mode/unit
+   details, honest historical meaning and original amount/position; invent no percentage/total and perform no
+   rescaling or unit conversion. Require a real 44px phone/coarse-pointer anchor target with the cursor unchanged.
+   Detail/helper/profile, Labels and buyer list/detail stay with their existing owners; do not repeat completed work.
+6. **Unify community, identity and Inbox content lists.** Consume present ResourceAccess/public Realm rows and
+   `RealmHomeHeader` identity with distinct Space context; stale publication does not reopen a hero rewrite.
+   Preserve unread state, anchors, independent reply/menu controls and unavailable/removed states without a
+   duplicate phone renderer; reply document bodies remain documents. Web's complete resource-access consumer
+   covers ready resource/acting-as identity, `identityName`/`subjectTitle`/`SubjectName`, owner-transfer consistency,
+   stories and regressions under the owning requirements. It uses the existing 20-grant/22-identity DTO with no
+   added name lookup or I/O, preserving the explicit transfer lookup and all mutation/uncertainty behavior.
+   Accounts retains authorization; public-account, native moderation, Realm/Home and erasure owners stay separate.
+7. **Unify commerce and review summaries.** Receive creator offer/sales and provider/review family consumers,
+   recognizable offer titles and edition terminal recovery. Preserve ledger/case bodies, captured price,
+   attribution, fixed-edition/licence terms, current permissions and uncertain-result recovery. Buyer list/detail
+   remain Commerce deliveries; a family wrapper owns no business protocol. Sales' default 503/native Client
+   generation is a separate producer obligation, not solved by row presentation. Provider Context choices,
+   independent rating outcomes, Spoiler Show/Hide, adjacent candidate confirmation and human curation guidance
+   are source-present; preserve their original owning acceptance rather than assigning those repairs again.
+8. **Relocate remaining technical text by workflow.** Apply the historical appendix only to still-active callsites
+   and all eight locale source catalogues, never generated files. Auth transfer's forms-first hierarchy and
+   accessible general-walkthrough disclosure are delivered; local-file/untrusted-file, approval, responsibility
+   and unknown-outcome warnings stay beside actions. Resource-access and Search fallback consumers follow the
+   exact Web carve-outs above (`access_identity_*` and `search_constraint_identity_*` new keys only); Progress
+   remains Commerce-owned. Catalogue's ordinary SSR creation anchor keeps its destination and waits inside the
+   next complete creation journey for explicit 44px phone/coarse-pointer size, full wrapping and visible focus,
+   without editing frozen generated button variants. It is not a standalone writer or completed-delivery retry;
+   source geometry is not measured visual proof. Keep essential consequences, permission/status, unknown outcomes
+   and decision identity visible; optional technical details must not swallow safety copy. Unknown means
+   unavailable, explicit deletion alone permits a deleted tombstone, and withheld identity never enters DOM or
+   attributes, even closed details. Exact dangerous operands remain inspectable before confirmation.
+9. **Add richer Home summaries only with adopted producer capabilities.** Existing title/description/cover,
+   progress and resume are not permission to fabricate author/excerpt/rating fields or hydrate rows. Preserve
+   Search's retained Source/native, Content's predicate/choice and Web's sole Home renderer. Positive default
+   delivery needs real bounded coverage/frontier and current admission, not a directory/helper or safe refusal.
+   Keep page ≤20, candidates ≤160, exact conjunctive kind/Space/question, signed selection/revision/current-viewer
+   cursor, one retained page, cancellation/retirement and public-versus-private SSR. No browser filtering, hidden
+   refill, history scan or extra per-row reads. Define disclosure, freshness and byte/count bounds before consuming
+   missing summaries; preserve the full [Home/Source contract](../goals/web.md#mixed-home-delivery).
+10. **Retire parallel bodies and publish evidence only after consumer proof.** Actual default routes must consume
+    the family with real identity, independent actions, native order/budgets, states and recovery before old bodies
+    or compatibility paths retire, including `MobileFeedCard`. Connected patterns alone do not prove retirement.
+    Keep source/integration/check/native/visual/publication evidence distinct, record the actual deployed pin and
+    establish renderer/shared-UI/story closure before treating older images as current. Original keyboard, touch,
+    responsive, locale, permission and native acceptance remains owed; this adoption supplies none of it.
 
 ### Acceptance scenarios to carry into those briefs
 
-- The same work in Home, Search, Collection, Library list/grid and a mounted Zone has consistent identity, cover
-  presentation, primary destination and secondary-control behavior; the table remains a usable table.
+These are waiting obligations for the owning journeys, not results established by the research or this adoption.
+The crosswalk preserves all 91 review-class dispositions. Source-present shelf sorting, exact MyZones navigation,
+richer moderation and shared slotted 44px controls also retain their original owner verification. History,
+erasure, Library bulk/preparation and private SSR remain producer obligations. Accounts alone may reconcile its
+lifecycle transport fixture to delivered private review/readback ports, preserving every security, current
+credential/key, uncertainty, `not_applied`, effect-count and first native lifetime-cleanup assertion; no Web retry
+or competing writer is implied.
+
+- The same work in Home, Search, Collection, Library list/grid and a mounted Zone has consistent supplied identity,
+  cover presentation, primary destination and secondary controls; the table remains a usable table. Verify actual
+  default consumers before retirement, not just examples or adapters.
 - A keyboard reader reaches a named title and each independent action once; focus reveals the same row surface as
   hover. A phone reader can Continue or open overflow without hover, including at enlarged text and long locales.
+  Catalogue's plain creation anchor must actually reach 44px on phone/coarse pointers, wrap its entire label and
+  expose visible focus while retaining its SSR destination. Shared slotted-control CSS alone is insufficient.
 - Home shows one returned stream under combined kind/Space/question selection. Hundreds of Spaces and 200,000
   kinds do not create hundreds of sections or an unbounded client preload. A sparse page with Next is not called
-  empty, and no per-row request or browser qualification is introduced.
+  empty; page ≤20 and candidates ≤160 retain real frontier/coverage and signed cursor/revision/viewer authority.
+  There is no per-row request, browser qualification, hidden refill or history scan.
 - Signing out or changing viewer while a request is late removes private rows and selections as required; denied
-  question metadata stays selected/unavailable until refreshed or cleared. There is no fallback to All.
-- A successful Home contains no retention essay, Ready ledger or retired tagline. An incomplete Home still clearly
-  says that some updates are unavailable and offers recovery. An uncertain write still says unconfirmed and safely
-  reuses the retained operation; it never becomes a misleading success toast.
+  question metadata stays selected/unavailable until refreshed or cleared. There is no fallback to All. Public
+  SSR contains no private Following/Continue or selected private metadata; helper/directory success cannot replace
+  positive native default-feed membership, lifecycle and privacy proof.
+- A successful Home contains no retention essay, Ready ledger or retired tagline. An incomplete Home clearly says
+  some updates are unavailable and offers recovery. An uncertain write remains unconfirmed and safely reuses the
+  retained operation rather than becoming a success toast.
+- Resource access leads with supplied recognizable accounts and known-kind/generic resource identity, preserves
+  visible organization/Realm role meaning, and keeps full resource/route/type/subject IDs in labeled details.
+  Unknown, known and explicitly deleted cases differ; withheld identity appears nowhere in markup/attributes.
+  Exact transfer operands are inspectable before confirmation, with the same 20-grant/22-identity DTO, no extra
+  reads and unchanged authorization, payload, session/credentials and uncertain retry semantics.
+- Missing Search kind/property/value labels read as unavailable while exact selections, URL constraints and
+  technical details survive. Clear-one/all and the existing bounded request, closed rows, local header authority
+  and SSR fences work unchanged; no per-chip lookup or substitute selection appears.
+- Progress index known/unknown units preserve original stored amount/position, exact mode/unit details and honest
+  unavailable historical meaning; no percentage/total, rescaling or conversion is inferred. Its plain Next anchor
+  has an actual 44px phone/coarse-pointer target and preserves the native cursor. Detail and Labels remain separate.
+- Auth transfer entry forms precede general help; keyboard-accessible walkthrough details do not hide local-file,
+  untrusted-file, approval, responsibility or unknown-outcome warnings at the action.
 - Exact revision, fixed-edition purchase scope, licences, irreversible erasure, actual restore deadlines and
-  retention-incomplete states remain discoverable at the decision that needs them.
+  retention-incomplete states remain discoverable at the decision that needs them. Essential warnings/status and
+  decision identity stay visible even when technical references move to optional details.
 
 ## Decisions and limits of this report
 
-The recommendation keeps Home/Following as stream modes, treats Context on Home as the existing exact rating
-question selection, preserves the single displayed page and current native qualification, and adopts row/tile as
-one visual family while retaining table/form/document semantics. “Most content reuses it” is interpreted as most
-content **listings**, not every settings card or authored list. A substantial portrait is the default for Subjects;
-declared landscape presentation and avatars remain valid.
+The adopted contracts keep Home/Following as stream modes, Context as exact rating-question selection, a single
+retained page and native qualification. Row/tile is one family; tables/forms/documents keep their semantics.
+“Most content reuses it” means most content **listings**, not every settings card or authored list. Subjects use
+substantial portraits by default; declared landscape presentation and avatars remain valid.
 
-Richer summaries are identified as bounded owner capabilities, not presumed installed backend work. Recommendations,
-custom feeds, autoplay and an additional Home rail are outside the adopted scope. Source restyling can land before
-those capabilities. Current `dev` already fixes the tagline; published evidence should be refreshed after delivery
-instead of reintroducing that task as a source defect.
+Richer summaries are bounded owner capabilities, not presumed installed backend work. Personalized
+recommendations, custom feeds, autoplay and another Home rail remain outside scope. Existing source repairs,
+including Home scaffolding and Realm identity, supersede historical inventory defects; current Progress source
+already has a human missing-unit label and accessible enum details, so its next index contract preserves that
+work while receiving the remaining historical-meaning and anchor obligations. No completed consumer is reopened
+merely because publication is stale.
 
-Only this report changes the tracked repository. The shared reference index is updated outside this report's path
-to register the reused source clones as required by the research workflow. No source, frozen file, acceptance test,
-package manifest or lockfile is changed. This is documentation-only, so there is no changed workspace requiring
-typing. The original report-exists acceptance command and native/browser verification are deferred under the
-launch execution policy; manual source and published-page reading above are research, not acceptance results.
+Research is linked evidence, the Web Goal owns requirements, and the slices above retain complete original
+journeys and owner boundaries. Neither these documents nor folder observations establish all-state, keyboard,
+native, full-suite, privacy, 320px or publication acceptance. Those require their own actual evidence; source
+presence, integration, checks, native, visual and publication status must not be collapsed into one completion claim.
 
 ## Appendix: message-by-message placement inventory
 
