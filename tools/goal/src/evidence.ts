@@ -42,7 +42,9 @@ function hypothesis(attempt: Attempt): string | null {
 function worktreeStatus(task: Task): { summary: string; changedPaths: string[]; stat: string } {
   const status = git(task.worktree, ['status', '--porcelain=v1', '--untracked-files=normal']);
   const changed = git(task.worktree, ['diff', '--name-only', '-z', task.base, '--']).split('\0').filter(Boolean);
-  const untracked = git(task.worktree, ['ls-files', '--others', '--exclude-standard', '-z']).split('\0').filter(Boolean);
+  const untracked = git(task.worktree, ['ls-files', '--others', '--exclude-standard', '-z'])
+    .split('\0')
+    .filter(Boolean);
   const changedPaths = [...new Set([...changed, ...untracked])].sort();
   const staged = status.split('\n').filter((line) => line && line[0] !== ' ' && line[0] !== '?').length;
   const modified = status
