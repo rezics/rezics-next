@@ -713,6 +713,7 @@ test('The default admitted community management journey resolves a same-site ima
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
     cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
     matchMedia: window.matchMedia.bind(window),
+    scrollTo: window.scrollTo.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   const saved = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -803,7 +804,8 @@ test('The default admitted community management journey resolves a same-site ima
     const input = view.getByRole('textbox', { name: label });
     await act(async () => {
       await user.clear(input);
-      await user.type(input, value);
+      await user.click(input);
+      await user.paste(value);
     });
   };
   const preview = async (cost: number) => {
