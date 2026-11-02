@@ -75,7 +75,7 @@ function BoundProfile({ accountId, viewerId, csrfToken }: { accountId: string; v
         if (!current()) throw new Error('Profile selection changed');
         let next: ProfilePage;
         try {
-          next = await readAccountProfile({ data: { accountId, viewerId }, signal });
+          next = await readAccountProfile({ data: { accountId, viewerId }, ...(signal ? { signal } : {}) });
         } catch {
           next = { state: 'unavailable' };
         }
@@ -99,7 +99,7 @@ function BoundProfile({ accountId, viewerId, csrfToken }: { accountId: string; v
             confirmed: true,
           },
           headers: { 'X-CSRF-Token': csrfToken },
-          signal,
+          ...(signal ? { signal } : {}),
         });
         if (current() && !signal?.aborted && !result.ok && [401, 403, 404].includes(result.status))
           setPage({ state: result.status === 404 ? 'missing' : result.status === 401 ? 'signed-out' : 'denied' });

@@ -71,19 +71,17 @@ test('initial read, unknown PATCH and readback recover deliberately with the sam
   editor.retire();
 }));
 
-test('caller cancellation prevents dispatch and releases resources; retirement aborts an active observation', async () => {
+test('cancellation releases resources, prevents dispatch and retirement aborts observation', async () => {
   const caller = new AbortController();
   const remove = spyOn(caller.signal, 'removeEventListener');
   const clear = spyOn(globalThis, 'clearTimeout');
-  let dispatched = 0;
   let child!: AbortSignal;
   try {
-    const pending = withProfileDeadline((signal) => { dispatched++; child = signal; return never(); }, caller.signal);
+    const pending = withProfileDeadline((signal) => { child = signal; return never(); }, caller.signal);
     caller.abort(new Error('retired'));
     await expect(pending).rejects.toThrow('retired');
-    await expect(withProfileDeadline(async () => { dispatched++; }, caller.signal)).rejects.toThrow('retired');
+    await expect(withProfileDeadline(() => { throw new Error('dispatched'); }, caller.signal)).rejects.toThrow('retired');
     expect(child.aborted).toBe(true);
-    expect(dispatched).toBe(1);
     expect(await withProfileDeadline(async () => 'ready')).toBe('ready');
     expect(remove).toHaveBeenCalledTimes(2);
     expect(clear).toHaveBeenCalledTimes(3);
