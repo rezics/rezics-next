@@ -4,6 +4,7 @@ import type { CreateFailure, TermDraft } from './create-subject';
 import { createSubjectControls, createSubjectGuidance } from './create-subject-guidance';
 import type { MangaRow } from './manga-profile-field';
 import type { MangaReady } from './manga-profile-view';
+import { mangaFields, type MangaType } from './manga-profile';
 import { presentStatementViolations, type PresentedViolation } from './statement-validation-presentation';
 
 /** Resolve native assertion indices within each property to the retained draft's stable row. */
@@ -14,6 +15,7 @@ export function mangaCreateFeedback(
   read: MangaReady | undefined,
   locale: string,
   termsId: string,
+  type: MangaType,
 ): PresentedViolation[] {
   const o = { locale: locale as never };
   const termLabels = {
@@ -73,6 +75,8 @@ export function mangaCreateFeedback(
     const property = pickText(read.release.properties[path[1]!]?.labels ?? {}, locale).text;
     if (!row) return { ...fallback, label: property || fallback.label };
     const rowId = `manga-row-${row.id}`;
+    if (!mangaFields(read.release, type, locale).includes(row.statement.property.id))
+      return { ...fallback, target: rowId, label: property || row.label?.text || fallback.label };
     const suffix = path.slice(3);
     const pointer = `/statement${suffix.length ? `/${suffix.map((part) => part.replaceAll('~', '~0').replaceAll('/', '~1')).join('/')}` : ''}`;
     const presented = presentStatementViolations(

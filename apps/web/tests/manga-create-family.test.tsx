@@ -415,6 +415,8 @@ test('complete Manga creation keeps series and volume drafts, independent contro
       );
     }
     expect(rejectionLinks[3]!.getAttribute('href')).toBe('#manga-fields');
+    await act(async () => user.click(rejectionLinks[3]!));
+    expect(window.document.activeElement).toBe(b.querySelector('[id="manga-fields"]'));
     expect(rejectionLinks[0]!.textContent).toContain(m.relation_citation());
     expect(input(firstLanguage, m.relation_citation()).getAttribute('aria-invalid')).toBeNull();
     await replace(input(secondLanguage, m.relation_citation()), 'https://example.org/correct-citation');
@@ -512,6 +514,9 @@ test('complete Manga creation keeps series and volume drafts, independent contro
     expect(posts(stale)).toHaveLength(0);
     const stalePanel = window.document.getElementById(staleRow.id)! as unknown as HTMLElement;
     expect(stalePanel.textContent).toContain(title(stale, 'schema:inLanguage'));
+    const staleLink = host.querySelector<HTMLAnchorElement>(`a[href="#${staleRow.id}"]`)!;
+    await act(async () => user.click(staleLink));
+    expect(window.document.activeElement).toBe(stalePanel);
     await click(stalePanel, m.recipe_remove_field());
     expect(host.querySelector(`#${staleRow.id}`)).toBeNull();
     await click(host, m.manga_title());

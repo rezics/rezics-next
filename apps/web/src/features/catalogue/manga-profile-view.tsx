@@ -166,7 +166,7 @@ function MangaCreate({
   const rows = drafts[type];
   const groups = read ? mangaGroups(read.release, type, locale) : undefined;
   const labels = mangaGroupLabels(locale);
-  const feedback = mangaCreateFeedback(failure?.errors ?? [], rows, terms, read, locale, termsId);
+  const feedback = mangaCreateFeedback(failure?.errors ?? [], rows, terms, read, locale, termsId, type);
   function changeRows(next: MangaRow[]) {
     if (!locked) {
       setDrafts({ ...drafts, [type]: next });
