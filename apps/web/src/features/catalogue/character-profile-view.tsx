@@ -44,6 +44,23 @@ export type CharacterProfileProps = CharacterAddress & {
   relations: (id: string) => RelationTransport;
 };
 
+type SuccessfulCharacterRead = Extract<CharacterRead, { ok: true }>;
+
+export function currentCharacterRead(
+  read: CharacterRead | undefined,
+  address: CharacterAddress,
+  fetching: boolean,
+  error: boolean,
+): read is SuccessfulCharacterRead {
+  return (
+    read?.ok === true &&
+    !fetching &&
+    !error &&
+    read.character?.subject.id === address.id &&
+    read.work?.subject.id === address.work
+  );
+}
+
 export const CharacterProfile = catalogueEditor(CharacterProfileLive);
 
 function CharacterProfileLive({
@@ -75,11 +92,13 @@ function CharacterProfileLive({
     refetchOnReconnect: false,
   });
   const retained = useRef<Extract<CharacterRead, { ok: true }> | undefined>(undefined);
-  if (query.data?.ok) retained.current = query.data;
+  const currentRead = currentCharacterRead(query.data, { id, work }, query.isFetching, query.isError);
+  if (currentRead) retained.current = query.data;
   const current = retained.current;
   const character = current?.character;
   const label = pageText(character?.subject.labels, locale);
-  const href = character ? subjectHref({ id: character.subject.id, label: label.text }, locale).href : undefined;
+  const href =
+    currentRead && character ? subjectHref({ id: character.subject.id, label: label.text }, locale).href : undefined;
   const groups = current ? characterGroups(current.release) : undefined;
   const groupLabels = {
     identity: m.character_identity({}, o),
@@ -118,7 +137,7 @@ function CharacterProfileLive({
         )
       )}
       {current && (
-        <div hidden={!query.data?.ok} className="space-y-8">
+        <div hidden={!currentRead} className="space-y-8">
           <section className="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6">
             <h2 className="text-xl font-semibold">{m.character_identity({}, o)}</h2>
             <p lang={pageText(current.release.types[characterType]!.labels, locale).lang}>
@@ -327,7 +346,7 @@ function CharacterProfileLive({
             )}
             {current.work ? (
               <>
-                {query.data?.ok && (
+                {currentRead && (
                   <FictionalWorkReference
                     subject={current.work.subject}
                     locale={locale}

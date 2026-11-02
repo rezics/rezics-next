@@ -198,6 +198,19 @@ async function supplied(count = 1, scenario: 'ready' | 'uncertain' | 'denied' = 
   return { fixture, read, transport, review, reviews, reads, commands };
 }
 
+test('Character profile disclosure requires a settled successful read for its exact address', async () => {
+  const { currentCharacterRead } = await import('../src/features/catalogue/character-profile-view');
+  const read = { ok: true, character: { subject: { id: 'character' } }, work: { subject: { id: 'work' } } } as never;
+  expect([
+    currentCharacterRead(read, { id: 'character', work: 'work' }, false, false),
+    currentCharacterRead(read, { id: 'character', work: 'work' }, true, false),
+    currentCharacterRead(read, { id: 'character', work: 'work' }, false, true),
+    currentCharacterRead(read, { id: 'other', work: 'work' }, false, false),
+    currentCharacterRead(read, { id: 'character', work: 'other' }, false, false),
+    currentCharacterRead({ ok: false, reason: 'unavailable' }, { id: 'character', work: 'work' }, false, false),
+  ]).toEqual([true, false, false, false, false, false]);
+});
+
 test('empty, one and multiple current choices keep exact names, source baselines, labels and independent DOM addresses', async () => {
   await mounted(async ({ host, render, choose }) => {
     const { CharacterClassification } = await import('../src/features/catalogue/character-profile-classification');
