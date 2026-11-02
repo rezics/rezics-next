@@ -27,18 +27,46 @@ function OriginalDate({ value }: { value: string }) {
 }
 function Reference({ children }: { children: string }) {
   return (
-    <span dir="ltr" className="select-all break-all font-mono text-xs leading-6">
+    <span
+      dir="ltr"
+      className="inline-block max-w-full select-all whitespace-normal break-all font-mono text-xs leading-6"
+    >
       {children}
     </span>
   );
 }
+function ReferenceDetails({ realmId, requestId }: { realmId: string; requestId?: string }) {
+  return (
+    <details className="min-w-0 text-sm">
+      <summary className="min-h-11 min-w-11 cursor-pointer content-center rounded-md py-2 text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+        {m.realm_review_details_heading()}
+      </summary>
+      <dl className="min-w-0 space-y-3 py-3">
+        <div className="min-w-0">
+          <dt className="text-muted-foreground">{m.realm_review_realm()}</dt>
+          <dd>
+            <Reference>{realmId}</Reference>
+          </dd>
+        </div>
+        {requestId ? (
+          <div className="min-w-0">
+            <dt className="text-muted-foreground">{m.realm_review_request_reference()}</dt>
+            <dd>
+              <Reference>{requestId}</Reference>
+            </dd>
+          </div>
+        ) : null}
+      </dl>
+    </details>
+  );
+}
 function RequestDetails({ request }: { request: RealmClaimReviewRequest }) {
   return (
-    <dl className="grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2">
-      <div>
-        <dt className="text-muted-foreground">{m.realm_review_request_reference()}</dt>
+    <dl className="grid w-full min-w-0 gap-x-6 gap-y-4 text-sm sm:grid-cols-2">
+      <div className="min-w-0 sm:col-span-2">
+        <dt className="text-muted-foreground">{m.realm_review_claimant()}</dt>
         <dd>
-          <Reference>{request.requestId}</Reference>
+          <Reference>{request.claimantAccountId}</Reference>
         </dd>
       </div>
       <div>
@@ -114,7 +142,7 @@ export function RealmClaimReviewView({
   const receipt = page && state.outcome === 'approved' ? state.receipt : null;
   const editable = active && !state.busy && state.outcome === 'idle';
   return (
-    <article className="space-y-8 text-foreground" aria-busy={state.busy}>
+    <article className="min-w-0 space-y-8 text-foreground [overflow-wrap:anywhere]" aria-busy={state.busy}>
       <header className="flex flex-wrap items-start justify-between gap-5 border-b pb-6">
         <div className="max-w-2xl space-y-3">
           <p className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
@@ -126,7 +154,7 @@ export function RealmClaimReviewView({
         </div>
         <Button
           variant="outline"
-          className="min-h-10"
+          className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
           disabled={!active || state.busy}
           onClick={() => void control.refresh()}
         >
@@ -140,11 +168,7 @@ export function RealmClaimReviewView({
             <h2 id={`${id}-queue`} className="text-lg font-semibold">
               {m.realm_review_queue()}
             </h2>
-            {page ? (
-              <p className="text-sm text-muted-foreground">
-                {m.realm_review_realm()} <Reference>{realmId}</Reference>
-              </p>
-            ) : null}
+            {page ? <ReferenceDetails realmId={realmId} /> : null}
           </div>
           <div aria-live="polite" aria-atomic="true" className="space-y-4">
             {state.outcome === 'conflict' ? (
@@ -157,7 +181,7 @@ export function RealmClaimReviewView({
                 <p>{m.realm_review_uncertain()}</p>
                 <Button
                   variant="outline"
-                  className="min-h-10"
+                  className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
                   disabled={!active || state.busy}
                   onClick={() => void control.retry()}
                 >
@@ -184,12 +208,6 @@ export function RealmClaimReviewView({
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-muted-foreground">{m.realm_review_request_reference()}</dt>
-                    <dd>
-                      <Reference>{receipt.requestId}</Reference>
-                    </dd>
-                  </div>
-                  <div>
                     <dt className="text-muted-foreground">{m.realm_claim_orphaned_at()}</dt>
                     <dd>
                       <OriginalDate value={receipt.orphanedAt} />
@@ -203,6 +221,7 @@ export function RealmClaimReviewView({
                   </div>
                 </dl>
                 <p>{m.realm_review_success_help()}</p>
+                <ReferenceDetails realmId={receipt.realmId} requestId={receipt.requestId} />
               </ContentItemFrame>
             ) : null}
             {!page ? (
@@ -231,16 +250,22 @@ export function RealmClaimReviewView({
                   </ContentItemHeading>
                   <p className="text-sm leading-6">{m.realm_review_confirm_help()}</p>
                 </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">{m.realm_review_claimant()}</p>
-                  <Reference>{confirming.source.claimantAccountId}</Reference>
-                </div>
                 <RequestDetails request={confirming.source} />
+                <ReferenceDetails realmId={confirming.source.realmId} requestId={confirming.source.requestId} />
                 <div className="flex flex-wrap gap-3">
-                  <Button className="min-h-11" disabled={!active || state.busy} onClick={() => void control.confirm()}>
+                  <Button
+                    className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
+                    disabled={!active || state.busy}
+                    onClick={() => void control.confirm()}
+                  >
                     {m.realm_review_confirm()}
                   </Button>
-                  <Button variant="outline" className="min-h-11" disabled={state.busy} onClick={() => control.cancel()}>
+                  <Button
+                    variant="outline"
+                    className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
+                    disabled={state.busy}
+                    onClick={() => control.cancel()}
+                  >
                     {m.realm_review_cancel()}
                   </Button>
                 </div>
@@ -250,15 +275,15 @@ export function RealmClaimReviewView({
           {page && !confirming ? (
             <>
               {page.claimRequests.length ? (
-                <ul className="space-y-4">
+                <ul aria-labelledby={`${id}-queue`} className="min-w-0 space-y-4">
                   {page.claimRequests.map((request) => (
                     <ContentItem
                       key={request.requestId}
-                      title={request.claimantAccountId}
+                      title={m.realm_review_details_request_heading()}
                       headingLevel={3}
-                      className="[&_h3]:line-clamp-none [&_h3]:break-all [&_h3]:whitespace-normal"
-                      context={<span>{m.realm_review_claimant()}</span>}
+                      className="[&_h3]:line-clamp-none [&_h3]:whitespace-normal [&_h3]:[overflow-wrap:anywhere]"
                       metadata={<RequestDetails request={request} />}
+                      preview={<ReferenceDetails realmId={request.realmId} requestId={request.requestId} />}
                       state={
                         <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium">
                           {m.realm_review_pending()}
@@ -267,7 +292,7 @@ export function RealmClaimReviewView({
                       actions={
                         <Button
                           variant="outline"
-                          className="min-h-10"
+                          className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
                           disabled={!editable}
                           onClick={() => void control.prepare(request.requestId)}
                         >
@@ -287,7 +312,12 @@ export function RealmClaimReviewView({
                 </div>
               )}
               {page.next && state.outcome === 'idle' ? (
-                <Button variant="outline" className="min-h-10" disabled={!editable} onClick={() => void control.next()}>
+                <Button
+                  variant="outline"
+                  className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
+                  disabled={!editable}
+                  onClick={() => void control.next()}
+                >
                   {m.realm_review_next()}
                   <ArrowRight aria-hidden="true" />
                 </Button>
@@ -297,7 +327,7 @@ export function RealmClaimReviewView({
           {page && ['approved', 'conflict', 'refused'].includes(state.outcome) ? (
             <Button
               variant="outline"
-              className="min-h-10"
+              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start"
               disabled={state.busy}
               onClick={() => control.reviewCurrent()}
             >
