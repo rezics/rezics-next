@@ -22,9 +22,11 @@ test('Content publication next links identify the exact offer body edition witho
 });
 
 test('conflicting or malformed edition locators cannot silently select another published target', () => {
-  expect(() => creatorEditionSearch({ editionId, contentEditionId: anotherEdition })).toThrow();
+  expect(creatorEditionSearch({ editionId, contentEditionId: anotherEdition })).toEqual({
+    addressIssue: { requested: `editionId = ${JSON.stringify(editionId)}\ncontentEditionId = ${JSON.stringify(anotherEdition)}` },
+  });
   for (const invalid of [null, 123, ['not-a-single-edition'], 'published', ` ${editionId}`]) {
-    expect(() => creatorEditionSearch({ editionId: invalid })).toThrow();
-    expect(() => creatorEditionSearch({ editionId, contentEditionId: invalid })).toThrow();
+    expect(creatorEditionSearch({ editionId: invalid }).addressIssue).toBeDefined();
+    expect(creatorEditionSearch({ editionId, contentEditionId: invalid }).addressIssue).toBeDefined();
   }
 });

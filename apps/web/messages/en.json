@@ -4694,5 +4694,11 @@
   "library_progress_address_logs": "Published logs page position",
   "library_progress_address_apply": "Apply",
   "library_progress_address_clear": "Clear",
-  "library_progress_address_choose": "Choose a subject to see its progress history."
+  "library_progress_address_choose": "Choose a subject to see its progress history.",
+  "creator_offer_address_requested": "Requested address",
+  "creator_offer_address_invalid_cursor": "This page position is malformed. Return to the first page of your offers.",
+  "creator_offer_address_invalid_edition": "The edition address is malformed, repeated or conflicting. Enter the exact edition you intend to sell.",
+  "creator_offer_address_first_page": "First page of your offers",
+  "creator_offer_address_edition": "Edition ID",
+  "creator_offer_address_open_edition": "Open this edition"
 }

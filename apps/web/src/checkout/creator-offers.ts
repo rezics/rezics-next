@@ -1,7 +1,6 @@
 import type { KernelClient } from '@rezics/client';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
-import { notFound } from '@tanstack/react-router';
 import { env } from 'cloudflare:workers';
 import {
   createNativeEditionApi,
@@ -23,13 +22,15 @@ import {
   type MoneySchemaApi,
 } from './money-schema';
 import { UUID } from './price';
+import { creatorEditionSearch, creatorOffersSearch, type CreatorOffersSearch } from './creator-offer-address';
+export { creatorEditionSearch, creatorOffersSearch } from './creator-offer-address';
+export type { CreatorOffersSearch } from './creator-offer-address';
 
 type NativeCreatorOffer = NonNullable<Awaited<ReturnType<KernelClient['offers']['get']>>['data']>['offers'][number];
 /** Current native seller DTO, also accepting absence of nullable metadata in historical recordings. */
 export type CreatorOffer = Omit<NativeCreatorOffer, 'moneyUnit' | 'taxBehavior'> &
   Partial<Pick<NativeCreatorOffer, 'moneyUnit' | 'taxBehavior'>>;
 export const CREATOR_OFFERS_PAGE_SIZE = 20;
-export type CreatorOffersSearch = { cursor?: string };
 export type CreatorOffersData =
   | { kind: 'ready'; offers: CreatorOffer[]; next: string | null }
   | { kind: 'denied' | 'unavailable' | 'error' | 'stale' | 'preparing' | 'closed' | 'rejected' };
@@ -113,14 +114,15 @@ function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid creator offer input');
   return value as Record<string, unknown>;
 }
-export function creatorOffersSearch(value: Record<string, unknown>): CreatorOffersSearch {
-  if (value.cursor === undefined || value.cursor === '') return {};
-  if (typeof value.cursor !== 'string' || value.cursor.length > 4096) throw notFound();
-  return { cursor: value.cursor };
-}
 function input(value: unknown): CreatorOffersSearch {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw notFound();
-  return creatorOffersSearch('cursor' in value ? { cursor: value.cursor } : {});
+  const search = creatorOffersSearch(object(value));
+  if (search.addressIssue) throw new Error('Invalid creator offer address');
+  return search;
+}
+function editionInput(value: unknown) {
+  const search = creatorEditionSearch(object(value));
+  if (search.addressIssue) throw new Error('Invalid creator edition address');
+  return search;
 }
 function validOffer(row: CreatorOffer): boolean {
   return (
@@ -163,7 +165,7 @@ export async function loadCreatorOffers(
   search: CreatorOffersSearch,
 ): Promise<CreatorOffersData> {
   try {
-    const query = creatorOffersSearch(search);
+    const query = input(search);
     if (await prepareSession(request, sessionEnv)) return { kind: 'denied' };
     const authorization = viewerCredential(request);
     if (!authorization) return { kind: 'denied' };
@@ -259,16 +261,6 @@ async function loadPreparedCreatorOffers(
   }
 }
 
-export function creatorEditionSearch(search: Record<string, unknown>): { contentEditionId?: string } {
-  // Content's published next link names editionId; the offer write body names contentEditionId.
-  let selected: string | undefined;
-  for (const id of [search.editionId, search.contentEditionId]) {
-    if (id === undefined || id === '') continue;
-    if (typeof id !== 'string' || !UUID.test(id) || (selected !== undefined && selected !== id)) throw notFound();
-    selected = id;
-  }
-  return selected === undefined ? {} : { contentEditionId: selected };
-}
 export function validateCreatorOfferMutation(value: unknown): CreatorOfferMutation {
   const input = object(value);
   const { operation, idempotencyKey } = input;
@@ -480,7 +472,7 @@ async function offersPage(
 }
 
 export const readCreatorOfferEditor = createServerFn({ method: 'GET' })
-  .validator((value: unknown) => creatorEditionSearch(object(value)))
+  .validator(editionInput)
   .handler(async ({ data }): Promise<CreatorEditorPageData> => {
     privatePage();
     const empty = { csrfToken: '', createKey: crypto.randomUUID(), selling: false };
@@ -524,7 +516,7 @@ export const readCreatorOffersCurrent = createServerFn({ method: 'GET' })
   });
 
 export const readCreatorOfferEditorCurrent = createServerFn({ method: 'GET' })
-  .validator((value: unknown) => creatorEditionSearch(object(value)))
+  .validator(editionInput)
   .handler(async ({ data }): Promise<CreatorEditorCurrentRead> => {
     privatePage();
     const requested: CreatorEditorAddress = { kind: 'editor', contentEditionId: data.contentEditionId ?? null };

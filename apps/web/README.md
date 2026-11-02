@@ -2222,6 +2222,17 @@ Full subject views page through their owner list read with the first page's para
 - **Bound:** 1 K, ≤1 D, 0 R and 0 A for the page; ≤1 download per visit. Constant offer; no list
 - **Growth check:** `tests/checkout-cost.test.ts`: `offer page stays within its bound as s grows`, at s = 1, 8 and 64, asserts the one call and its `languages` query
 
+### Creator offer address recovery
+
+Malformed owned-offer cursors stop before a private read and offer an explicit first-page link. Malformed,
+repeated or conflicting edition selectors display all requested aliases and a blank edition correction form;
+submitting that GET form opens the exact chosen edition without issuing an offer command. Valid `editionId` and
+`contentEditionId` aliases, including equal aliases, retain their exact identity. Requested selectors remain
+visible during preparation and denied reads. Current read admission remains independent of CSRF; existing
+session/address retirement and captured uncertain command operands are unchanged.
+
+Decision: edition correction starts blank so resolving an ambiguous address always requires an explicit choice.
+
 ### Confirming creator offer availability
 
 After a successful reprice or delist response, the creator offer controls request one fresh, bounded owned-offer

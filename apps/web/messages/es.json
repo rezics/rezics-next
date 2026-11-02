@@ -4645,5 +4645,11 @@
   "library_progress_address_logs": "Posición de página de los registros publicados",
   "library_progress_address_apply": "Aplicar",
   "library_progress_address_clear": "Borrar",
-  "library_progress_address_choose": "Elige una obra para ver su historial de progreso."
+  "library_progress_address_choose": "Elige una obra para ver su historial de progreso.",
+  "creator_offer_address_requested": "Dirección solicitada",
+  "creator_offer_address_invalid_cursor": "Esta posición de página no es válida. Vuelve a la primera página de tus ofertas.",
+  "creator_offer_address_invalid_edition": "La dirección de la edición no es válida, está repetida o es contradictoria. Introduce la edición exacta que quieres vender.",
+  "creator_offer_address_first_page": "Primera página de tus ofertas",
+  "creator_offer_address_edition": "ID de la edición",
+  "creator_offer_address_open_edition": "Abrir esta edición"
 }

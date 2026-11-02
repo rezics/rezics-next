@@ -4645,5 +4645,11 @@
   "library_progress_address_logs": "公開ログのページ位置",
   "library_progress_address_apply": "適用",
   "library_progress_address_clear": "消去",
-  "library_progress_address_choose": "作品を選ぶと進捗履歴が表示されます。"
+  "library_progress_address_choose": "作品を選ぶと進捗履歴が表示されます。",
+  "creator_offer_address_requested": "指定されたアドレス",
+  "creator_offer_address_invalid_cursor": "ページ位置の形式が正しくありません。オファーの最初のページに戻ってください。",
+  "creator_offer_address_invalid_edition": "エディションの指定が不正、重複、または矛盾しています。販売するエディションの正確なIDを入力してください。",
+  "creator_offer_address_first_page": "オファーの最初のページ",
+  "creator_offer_address_edition": "エディションID",
+  "creator_offer_address_open_edition": "このエディションを開く"
 }

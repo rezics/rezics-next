@@ -118,8 +118,8 @@ test('unavailable binding, failed authority, stale cursor and source errors rema
       {},
     ),
   ).toEqual({ kind: 'unavailable' });
-  expect(() => creatorOffersSearch({ cursor: 123 })).toThrow();
-  expect(() => creatorOffersSearch({ cursor: 'x'.repeat(4097) })).toThrow();
+  expect(creatorOffersSearch({ cursor: 123 }).addressIssue).toBeDefined();
+  expect(creatorOffersSearch({ cursor: 'x'.repeat(4097) }).addressIssue).toBeDefined();
 });
 
 test('only sanitized seller fields cross the BFF and unknown historic mapping stays null', async () => {

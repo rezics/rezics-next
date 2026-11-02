@@ -4645,5 +4645,11 @@
   "library_progress_address_logs": "Seitenposition veröffentlichter Einträge",
   "library_progress_address_apply": "Anwenden",
   "library_progress_address_clear": "Leeren",
-  "library_progress_address_choose": "Wähle ein Werk aus, um seinen Fortschrittsverlauf zu sehen."
+  "library_progress_address_choose": "Wähle ein Werk aus, um seinen Fortschrittsverlauf zu sehen.",
+  "creator_offer_address_requested": "Angeforderte Adresse",
+  "creator_offer_address_invalid_cursor": "Diese Seitenposition ist ungültig. Kehre zur ersten Seite deiner Angebote zurück.",
+  "creator_offer_address_invalid_edition": "Die Editionsadresse ist ungültig, wiederholt oder widersprüchlich. Gib die genaue Edition ein, die du verkaufen möchtest.",
+  "creator_offer_address_first_page": "Erste Seite deiner Angebote",
+  "creator_offer_address_edition": "Editions-ID",
+  "creator_offer_address_open_edition": "Diese Edition öffnen"
 }

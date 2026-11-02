@@ -5,7 +5,7 @@ import { useOperation } from '../kernel/exposure';
 import { personalRead } from '../kernel/query';
 import { m } from '../paraglide/messages.js';
 import { useCreatorCurrentOrigin, useCreatorIntent } from './creator-current-origin';
-import { PendingPage } from '../shell/pending';
+import { CreatorOfferAddressPage, CreatorOfferRequested } from './creator-offer-address-page';
 import { CreatorOfferEditor } from './creator-offer-editor';
 import { CreatorOffersPage } from './creator-offers-page';
 import {
@@ -94,7 +94,7 @@ function Notice({
     return (
       <CreatorOffersPage page={{ kind }} locale={locale} {...(address.cursor ? { cursor: address.cursor } : {})} />
     );
-  if (kind === 'preparing') return <PendingPage />;
+  if (kind === 'preparing') return <CreatorOfferAddressPage kind="editor" locale={locale} />;
   return (
     <CreatorOfferEditor data={{ editor: { kind }, selling: false, csrfToken: '', createKey: '' }} locale={locale} />
   );
@@ -102,6 +102,11 @@ function Notice({
 
 /** Cache observation fences retained reads and commands before React commits a replacement. */
 function CreatorCurrent(props: Props) {
+  const requested = props.address.kind === 'list' ? props.address.cursor : props.address.contentEditionId;
+  return <><CreatorOfferRequested requested={requested ?? undefined} /><CreatorCurrentContent {...props} /></>;
+}
+
+function CreatorCurrentContent(props: Props) {
   const { initial, address, locale } = props;
   const current = useCreatorCurrentOrigin('offer.list', JSON.stringify([locale, address]));
   const { hydrated, origin, seed } = current;

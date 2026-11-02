@@ -4645,5 +4645,11 @@
   "library_progress_address_logs": "已發布日誌分頁位置",
   "library_progress_address_apply": "套用",
   "library_progress_address_clear": "清除",
-  "library_progress_address_choose": "請選擇作品以查看進度歷史。"
+  "library_progress_address_choose": "請選擇作品以查看進度歷史。",
+  "creator_offer_address_requested": "請求的位址",
+  "creator_offer_address_invalid_cursor": "頁面位置格式不正確。請返回你的報價首頁。",
+  "creator_offer_address_invalid_edition": "版本位址格式不正確、重複或存在衝突。請輸入你打算出售的確切版本。",
+  "creator_offer_address_first_page": "你的報價首頁",
+  "creator_offer_address_edition": "版本 ID",
+  "creator_offer_address_open_edition": "開啟此版本"
 }
