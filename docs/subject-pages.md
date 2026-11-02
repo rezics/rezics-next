@@ -279,9 +279,10 @@ upload or Source-metadata writer. A returned candidate means proposed and awaiti
 Draft, validation, saving, denied, conflict and unavailable outcomes remain distinct. An uncertain retry freezes the
 exact document, statement and idempotency key. A key conflict requires explicit draft review before a new request.
 Refreshing definitions or public reading retains the draft. Discard clears only the selected unsent replacement,
-including its original-work declaration, and focuses a fresh composer with empty undo history; text or nonblank
+including its original-work declaration, and resets the composer with empty undo history; text or nonblank
 language, licence or citation requires confirmation with a keep-editing option. Other drafts and public text stay
 intact; submitted, uncertain and stale commands awaiting explicit review cannot be discarded locally.
+Each discard question binds its original unsent replacement and retires synchronously on Cancel, Confirm, replacement, edit or reading retirement; only a current keyboard action whose question holds focus returns focus to the discard control or fresh composer, while pointer and background actions make no forced focus handoff.
 
 Review opens the existing candidate comparison for the exact returned candidate and field. Its actual statement's
 document locator is read through `GET /v1/documents/{id}` with the viewer identity and native session position.

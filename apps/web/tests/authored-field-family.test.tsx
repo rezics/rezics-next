@@ -448,7 +448,7 @@ test('Authored full supplied bodies, names, citations and provenance grow only w
   }
 });
 
-test('discard confirms only the active unsent field, preserves another draft and public provenance, and focuses a fresh composer', async () => {
+test('only the current discard question resets its original replacement, preserving siblings, public text and keyboard focus', async () => {
   const view = await mountedFamily();
   const {
     host,
@@ -463,6 +463,7 @@ test('discard confirms only the active unsent field, preserves another draft and
     input,
     compose,
     click,
+    replace,
   } = view;
   try {
     const fixture = authoredFixture();
@@ -483,6 +484,11 @@ test('discard confirms only the active unsent field, preserves another draft and
     );
     const field = async (property: string) =>
       act(async () => user.selectOptions(within(host).getByRole('combobox'), property));
+    const retainedClick = (name: string) => {
+      const node = within(host).getByRole('button', { name });
+      const key = Object.keys(node).find((key) => key.startsWith('__reactProps$'))!;
+      return Reflect.get(node, key).onClick as (event: { detail: number }) => void;
+    };
     await compose(host, 'First field retained.');
     await field(other);
     await compose(host, 'Second field discarded.');
@@ -491,11 +497,30 @@ test('discard confirms only the active unsent field, preserves another draft and
     const calls = structuredClone(fixture.calls);
     await click(host, m.authored_discard());
     expect(host.textContent).toContain(m.authored_discard_warning());
-    await click(host, m.authored_keep_draft());
+    expect(window.document.activeElement).toBe(within(host).getByRole('button', { name: m.authored_discard() }));
+    const oldConfirm = retainedClick(m.authored_discard_confirm());
+    const oldCancel = retainedClick(m.authored_keep_draft());
+    await act(async () => user.tab());
+    await act(async () => {
+      oldCancel({ detail: 0 });
+      oldConfirm({ detail: 0 });
+    });
     expect(input(host, m.authored_text()).textContent).toContain('Second field discarded.');
     expect(window.document.activeElement).toBe(within(host).getByRole('button', { name: m.authored_discard() }));
+    await replace(input(host, m.authored_citation()), 'https://example.org/new-private-notes');
     await click(host, m.authored_discard());
-    await click(host, m.authored_discard_confirm());
+    const confirmed = retainedClick(m.authored_discard_confirm());
+    await act(async () => {
+      oldConfirm({ detail: 0 });
+      oldCancel({ detail: 0 });
+    });
+    expect(host.textContent).toContain(m.authored_discard_warning());
+    expect(input(host, m.authored_citation()).value).toBe('https://example.org/new-private-notes');
+    await act(async () => {
+      await user.tab();
+      await user.tab();
+      await user.keyboard('{Enter}');
+    });
     await act(async () => {
       await Bun.sleep(20);
     });
@@ -509,6 +534,13 @@ test('discard confirms only the active unsent field, preserves another draft and
     expect(selected.innerHTML).toBe(publicMarkup);
     expect(fixture.calls).toEqual(calls);
     expect(read).toHaveBeenCalledTimes(1);
+    await compose(host, 'New second field retained.');
+    await act(async () => confirmed({ detail: 0 }));
+    expect(input(host, m.authored_text()).textContent).toContain('New second field retained.');
+    await click(host, m.authored_discard());
+    await click(host, m.authored_discard_confirm());
+    expect(input(host, m.authored_text()).textContent).toBe('');
+    expect(window.document.activeElement).not.toBe(input(host, m.authored_text()));
     await field(authoredProperty);
     expect(input(host, m.authored_text()).textContent).toContain('First field retained.');
     expect(input(host, m.authored_language()).value).toBe('en');

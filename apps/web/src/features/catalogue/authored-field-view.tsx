@@ -42,6 +42,8 @@ const linkClassName =
 const summaryClassName =
   'min-h-11 min-w-11 cursor-pointer py-3 text-sm [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
+type DiscardQuestion = { property: string; draft: AuthoredDraft; editor: number; keyboard: boolean };
+
 function Provenance({ body, locale }: { body: AuthoredBody | null | undefined; locale: string }) {
   if (!body?.ok || body.document.availability !== 'available' || !body.document.body) return null;
   const o = { locale: locale as never };
@@ -151,7 +153,10 @@ function AuthoredFieldLive({
   const [reviewing, setReviewing] = useState(false);
   const [proposalBody, setProposalBody] = useState<AuthoredBody | null>();
   const [comparisonCurrent, setComparisonCurrent] = useState<Extract<AuthoredRead, { ok: true }>>();
-  const [discarding, setDiscarding] = useState<string>();
+  const [discarding, setDiscarding] = useState<DiscardQuestion>();
+  const discardQuestion = useRef<DiscardQuestion | undefined>(undefined);
+  const discardGroup = useRef<HTMLDivElement>(null);
+  const focusEditor = useRef(false);
   const [editorVersion, setEditorVersion] = useState(0);
   const editorGeneration = useRef(0);
   const discardButton = useRef<HTMLButtonElement>(null);
@@ -164,7 +169,13 @@ function AuthoredFieldLive({
   const comparisonVersion = comparisonGeneration.current;
   const readingLive = () => work.live() && readGeneration.current === readVersion;
   const comparisonLive = () => work.live() && comparisonGeneration.current === comparisonVersion;
+  function retireDiscard() {
+    discardQuestion.current = undefined;
+    setDiscarding(undefined);
+  }
   function retireReading(retireComparison = true) {
+    retireDiscard();
+    focusEditor.current = false;
     const generation = ++readGeneration.current;
     setCurrent(undefined);
     if (retireComparison) {
@@ -213,6 +224,8 @@ function AuthoredFieldLive({
   }, [visible]);
   const property = current?.property ?? requestedProperty.current;
   const draft = drafts[property];
+  const currentDraft = useRef(draft);
+  currentDraft.current = draft;
   const failure = submissionFailure ?? (!current ? 'unavailable' : undefined);
   const proposalSelected =
     !!proposed &&
@@ -226,7 +239,7 @@ function AuthoredFieldLive({
     );
   const locked = busy || !!command || !!proposed || !current || failure === 'denied';
   const canDiscard = !locked && failure !== 'stale' && !!draft;
-  const confirmingDiscard = canDiscard && discarding === property;
+  const confirmingDiscard = canDiscard && discarding?.property === property && discarding.draft === draft;
   const title = current ? pageText(current.public.subject.labels, locale).text : '';
   const comparisonReading = comparisonCurrent ?? current;
   const id = comparisonReading?.public.subject.id;
@@ -240,30 +253,48 @@ function AuthoredFieldLive({
       editorGeneration.current !== editorVersion
     )
       return;
+    retireDiscard();
+    currentDraft.current = undefined;
     dispatch({ type: 'edit', property, change });
     setErrors([]);
   };
-  function discard() {
-    if (!readingLive() || !canDiscard || running.current) return;
-    dispatch({ type: 'discard', property });
+  function questionLive(question: DiscardQuestion | undefined): question is DiscardQuestion {
+    return !!question && discardQuestion.current === question && readingLive() && canDiscard &&
+      !running.current && currentDraft.current === question.draft &&
+      editorGeneration.current === question.editor;
+  }
+  function questionFocused() {
+    return !!discardGroup.current?.contains(discardGroup.current.ownerDocument.activeElement);
+  }
+  function discard(question: DiscardQuestion | undefined, keyboard: boolean) {
+    if (!questionLive(question)) return;
+    focusEditor.current = keyboard && (questionFocused() ||
+      discardButton.current?.ownerDocument.activeElement === discardButton.current);
+    // Consume synchronously: callbacks retained by this question cannot act again before React commits.
+    retireDiscard();
+    dispatch({ type: 'discard', property: question.property });
     setErrors([]);
-    setDiscarding(undefined);
     // Remount the composer to clear undo history and retire delayed emissions from the discarded editor.
     setEditorVersion(++editorGeneration.current);
   }
-  function cancelDiscard() {
-    if (!readingLive()) return;
-    setDiscarding(undefined);
-    discardButton.current?.focus();
+  function cancelDiscard(question: DiscardQuestion | undefined, keyboard: boolean) {
+    if (!questionLive(question)) return;
+    const restoreFocus = keyboard && questionFocused();
+    retireDiscard();
+    if (restoreFocus) discardButton.current?.focus();
   }
-  function requestDiscard() {
-    if (!readingLive() || !canDiscard || running.current || !draft) return;
+  function requestDiscard(keyboard: boolean) {
+    if (!readingLive() || !canDiscard || running.current || !draft ||
+      currentDraft.current !== draft || editorGeneration.current !== editorVersion) return;
+    const question = { property, draft, editor: editorVersion,
+      keyboard: keyboard && discardButton.current?.ownerDocument.activeElement === discardButton.current };
+    discardQuestion.current = question;
     if (
       hasDocumentContent(draft.document) ||
       [draft.language, draft.licence, draft.citation].some((text) => text.trim())
     )
-      setDiscarding(property);
-    else discard();
+      setDiscarding(question);
+    else discard(question, keyboard);
   }
 
   async function refresh(
@@ -360,7 +391,7 @@ function AuthoredFieldLive({
       !current ||
       !draft ||
       failure === 'stale' ||
-      confirmingDiscard ||
+      discardQuestion.current ||
       failure === 'denied'
     )
       return;
@@ -632,7 +663,7 @@ function AuthoredFieldLive({
                   >
                     <RichTextEditor
                       key={`${property}:${editorVersion}`}
-                      autoFocus={editorVersion > 0}
+                      autoFocus={focusEditor.current}
                       value={draft.document}
                       label={labels.document}
                       labels={editorLabels()}
@@ -737,19 +768,20 @@ function AuthoredFieldLive({
                       variant="outline"
                       className={actionClassName}
                       disabled={!canDiscard}
-                      onClick={requestDiscard}
+                      onClick={(event) => requestDiscard(event.detail === 0)}
                     >
                       {m.authored_discard({}, o)}
                     </Button>
                     {confirmingDiscard && (
                       <div
+                        ref={discardGroup}
                         role="group"
                         aria-labelledby={ids.discard}
                         className="space-y-3"
                         onKeyDown={(event) => {
                           if (event.key === 'Escape') {
                             event.preventDefault();
-                            cancelDiscard();
+                            cancelDiscard(discarding, true);
                           }
                         }}
                       >
@@ -759,12 +791,13 @@ function AuthoredFieldLive({
                             type="button"
                             variant="outline"
                             className={actionClassName}
-                            autoFocus
-                            onClick={cancelDiscard}
+                            autoFocus={discarding?.keyboard}
+                            onClick={(event) => cancelDiscard(discarding, event.detail === 0)}
                           >
                             {m.authored_keep_draft({}, o)}
                           </Button>
-                          <Button type="button" className={actionClassName} onClick={discard}>
+                          <Button type="button" className={actionClassName}
+                            onClick={(event) => discard(discarding, event.detail === 0)}>
                             {m.authored_discard_confirm({}, o)}
                           </Button>
                         </div>
