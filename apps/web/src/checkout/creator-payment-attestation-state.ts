@@ -6,17 +6,15 @@ export type PaymentAttestationInput = {
 };
 export type PaymentEvidence = {
   id: string;
-  state: "paid";
+  state: 'paid';
   paidAt: string;
   paidReference: string;
   revision: number;
 };
 export type PaymentAttestationResult =
-  | { kind: "saved"; statement: PaymentEvidence }
-  | { kind: "uncertain" | "denied" | "conflict" | "rejected" };
+  { kind: 'saved'; statement: PaymentEvidence } | { kind: 'uncertain' | 'denied' | 'conflict' | 'rejected' };
 
-export const validPaymentReference = (value: string) =>
-  value.length <= 256 && value.trim().length > 0;
+export const validPaymentReference = (value: string) => value.length <= 256 && value.trim().length > 0;
 // One native write + the reader's one detail and one bounded line-page refresh.
 export const PAYMENT_ATTESTATION_REQUEST_BOUND = 1 + 2;
 
@@ -46,17 +44,10 @@ export class CreatorPaymentAttempt {
 
   async submit(
     reference: string,
-    execute: (
-      input: PaymentAttestationInput,
-    ) => Promise<PaymentAttestationResult>,
+    execute: (input: PaymentAttestationInput) => Promise<PaymentAttestationResult>,
     isCurrent: () => boolean,
   ): Promise<void> {
-    if (
-      this.busy ||
-      !isCurrent() ||
-      this.result?.kind === "saved" ||
-      this.result?.kind === "conflict"
-    )
+    if (this.busy || !isCurrent() || this.result?.kind === 'saved' || this.result?.kind === 'conflict')
       return;
     if (!this.request) {
       if (!validPaymentReference(reference)) return;
@@ -69,7 +60,7 @@ export class CreatorPaymentAttempt {
     }
     this.busy = true;
     // A lost completion or an obsolete authority leaves this exact original unresolved.
-    this.result = { kind: "uncertain" };
+    this.result = { kind: 'uncertain' };
     this.publish();
     try {
       const result = await execute(this.request);

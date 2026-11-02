@@ -789,8 +789,9 @@ statement evidence, which the existing reader refreshes, and from provider payou
 The form's static native HTTP ceiling is **3**: one `markPaid` call plus the existing reader's one full-ID statement
 read and one line-page read. Each explicit retry repeats that finite operation; no automatic write retry, cursor walk,
 per-line fan-out or new producer query is added. The producer uses full `(route, statement_id)` seeks; its line page
-uses the full owner/statement prefix, an exclusive transaction key and `limit + 1` (Web limit 20, at most 21 raw rows).
-Thus refresh examines at most one selected statement and 21 selected line rows independent of unrelated history.
+uses the full route/statement prefix, an exclusive transaction key and `limit + 1` (Web limit 20, at most 21 raw rows).
+Thus refresh makes two point-read observations of the selected statement and examines at most 21 selected line rows,
+independent of unrelated history.
 The producer's existing Access/session and command-receipt bounds remain inside each native operation.
 
 ### Provider money observations

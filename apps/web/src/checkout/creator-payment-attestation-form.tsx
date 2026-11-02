@@ -1,23 +1,14 @@
-import {
-  useEffect,
-  useId,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
-import { Button } from "@rezics/ui/shadcn/button";
-import { Input } from "@rezics/ui/shadcn/input";
-import { Field, FieldLabel } from "@rezics/ui/shadcn/field";
-import { m } from "../paraglide/messages.js";
-import { useCreatorIntent } from "./creator-current-origin";
-import type { CreatorOfferGuard } from "./creator-offers";
-import type { CreatorStatement } from "./creator-statements";
-import { StatementPayment, StatementTime } from "./creator-statements-page";
-import { attestCreatorPayment } from "./creator-payment-attestation";
-import {
-  CreatorPaymentAttempt,
-  validPaymentReference,
-} from "./creator-payment-attestation-state";
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
+import { Button } from '@rezics/ui/shadcn/button';
+import { Input } from '@rezics/ui/shadcn/input';
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { m } from '../paraglide/messages.js';
+import { useCreatorIntent } from './creator-current-origin';
+import type { CreatorOfferGuard } from './creator-offers';
+import type { CreatorStatement } from './creator-statements';
+import { StatementPayment, StatementTime } from './creator-statements-page';
+import { attestCreatorPayment } from './creator-payment-attestation';
+import { CreatorPaymentAttempt, validPaymentReference } from './creator-payment-attestation-state';
 
 /** This region shares the statement reader's current origin; it starts no parallel reader. */
 export function CreatorPaymentAttestation({
@@ -33,17 +24,10 @@ export function CreatorPaymentAttestation({
   guard: CreatorOfferGuard;
   refresh(): Promise<boolean>;
 }) {
-  const memory = useCreatorIntent<CreatorPaymentAttempt>(
-    guard,
-    "payment-attestation",
-  );
-  const [attempt] = useState(
-    () => memory.value ?? new CreatorPaymentAttempt(statement.id, subject),
-  );
+  const memory = useCreatorIntent<CreatorPaymentAttempt>(guard, 'payment-attestation');
+  const [attempt] = useState(() => memory.value ?? new CreatorPaymentAttempt(statement.id, subject));
   memory.value = attempt;
-  const [reference, setReference] = useState(
-    attempt.request?.paidReference ?? "",
-  );
+  const [reference, setReference] = useState(attempt.request?.paidReference ?? '');
   useSyncExternalStore(attempt.subscribe, attempt.snapshot, attempt.snapshot);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshFailed, setRefreshFailed] = useState(false);
@@ -59,7 +43,7 @@ export function CreatorPaymentAttestation({
   const result = attempt.result;
   const admitted = guard.isCurrent() && !!guard.csrfToken();
   const locked = !!attempt.request;
-  const canRetry = result && !["saved", "conflict"].includes(result.kind);
+  const canRetry = result && !['saved', 'conflict'].includes(result.kind);
 
   async function refreshEvidence() {
     if (!current() || refreshing) return;
@@ -77,27 +61,21 @@ export function CreatorPaymentAttestation({
 
   async function submit() {
     const csrfToken = guard.csrfToken();
-    if (
-      !current() ||
-      !csrfToken ||
-      (!attempt.request && statement.state !== "open")
-    )
-      return;
+    if (!current() || !csrfToken || (!attempt.request && statement.state !== 'open')) return;
     const pending = attempt.submit(
       reference,
-      (data) =>
-        attestCreatorPayment({ data, headers: { "X-CSRF-Token": csrfToken } }),
+      (data) => attestCreatorPayment({ data, headers: { 'X-CSRF-Token': csrfToken } }),
       current,
     );
     await pending;
     if (!current()) return;
-    if (attempt.result?.kind === "saved") await refreshEvidence();
+    if (attempt.result?.kind === 'saved') await refreshEvidence();
   }
 
   return (
     <div className="space-y-4">
       <StatementPayment statement={statement} locale={locale} />
-      {(statement.state === "open" || attempt.request) && (
+      {(statement.state === 'open' || attempt.request) && (
         <form
           className="space-y-4 rounded-xl border bg-card p-5 text-card-foreground"
           aria-labelledby={`${fieldId}-heading`}
@@ -109,16 +87,11 @@ export function CreatorPaymentAttestation({
           <h3 id={`${fieldId}-heading`} className="font-semibold">
             {m.payment_attestation_heading()}
           </h3>
-          <p
-            className="max-w-prose text-sm text-muted-foreground"
-            id={`${fieldId}-help`}
-          >
+          <p className="max-w-prose text-sm text-muted-foreground" id={`${fieldId}-help`}>
             {m.payment_attestation_help()}
           </p>
           <Field>
-            <FieldLabel htmlFor={fieldId}>
-              {m.statements_paid_reference()}
-            </FieldLabel>
+            <FieldLabel htmlFor={fieldId}>{m.statements_paid_reference()}</FieldLabel>
             <Input
               id={fieldId}
               name="paidReference"
@@ -132,10 +105,7 @@ export function CreatorPaymentAttestation({
               className="min-h-11"
               onChange={(event) => setReference(event.target.value)}
             />
-            <p
-              id={`${fieldId}-validation`}
-              className="text-sm text-muted-foreground"
-            >
+            <p id={`${fieldId}-validation`} className="text-sm text-muted-foreground">
               {m.payment_attestation_validation()}
             </p>
           </Field>
@@ -151,40 +121,31 @@ export function CreatorPaymentAttestation({
               </div>
             </dl>
           )}
-          <p
-            role="status"
-            className="text-sm whitespace-pre-wrap"
-            aria-live="polite"
-          >
+          <p role="status" className="text-sm whitespace-pre-wrap" aria-live="polite">
             {attempt.busy
               ? m.payment_attestation_submitting()
-              : result?.kind === "uncertain"
+              : result?.kind === 'uncertain'
                 ? m.payment_attestation_uncertain()
-                : result?.kind === "saved"
+                : result?.kind === 'saved'
                   ? m.payment_attestation_saved()
-                  : result?.kind === "conflict"
+                  : result?.kind === 'conflict'
                     ? m.payment_attestation_conflict()
-                    : result?.kind === "denied"
+                    : result?.kind === 'denied'
                       ? m.creator_denied()
-                      : result?.kind === "rejected"
+                      : result?.kind === 'rejected'
                         ? m.creator_rejected()
-                        : ""}
+                        : ''}
           </p>
-          {result?.kind === "saved" && (
+          {result?.kind === 'saved' && (
             <dl className="space-y-2 text-sm">
               <div>
                 <dt>{m.statements_paid_reference()}</dt>
-                <dd className="break-words whitespace-pre-wrap">
-                  {result.statement.paidReference}
-                </dd>
+                <dd className="break-words whitespace-pre-wrap">{result.statement.paidReference}</dd>
               </div>
               <div>
                 <dt>{m.statements_paid_at()}</dt>
                 <dd>
-                  <StatementTime
-                    value={result.statement.paidAt}
-                    locale={locale}
-                  />
+                  <StatementTime value={result.statement.paidAt} locale={locale} />
                 </dd>
               </div>
             </dl>
@@ -193,15 +154,9 @@ export function CreatorPaymentAttestation({
             <Button
               type="submit"
               className="min-h-11"
-              disabled={
-                !admitted ||
-                attempt.busy ||
-                (!locked && !validPaymentReference(reference))
-              }
+              disabled={!admitted || attempt.busy || (!locked && !validPaymentReference(reference))}
             >
-              {locked
-                ? m.payment_attestation_retry()
-                : m.payment_attestation_submit()}
+              {locked ? m.payment_attestation_retry() : m.payment_attestation_submit()}
             </Button>
           )}
           {result && !attempt.busy && (
@@ -215,9 +170,7 @@ export function CreatorPaymentAttestation({
               {m.statements_refresh()}
             </Button>
           )}
-          {refreshFailed && (
-            <p role="alert">{m.payment_attestation_refresh_failed()}</p>
-          )}
+          {refreshFailed && <p role="alert">{m.payment_attestation_refresh_failed()}</p>}
         </form>
       )}
     </div>
