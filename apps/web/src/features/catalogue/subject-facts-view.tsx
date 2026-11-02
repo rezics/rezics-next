@@ -165,52 +165,76 @@ function FactDiscard({
   const locked = factLocked(draft);
   const discardTrigger = useRef<HTMLButtonElement>(null);
   const cancel = useRef<HTMLButtonElement>(null);
-  const [pending, setPending] = useState<{ draft: FactDraft; read: FactsCurrent; active: () => boolean } | null>(null);
+  type Decision = { draft: FactDraft; read: FactsCurrent; active: () => boolean };
+  const [pending, setPending] = useState<Decision | null>(null);
   const active = useCurrentReadingActive();
   const visible = useCurrentReadingVisible();
-  const latest = useRef({ draft, read, busy, visible, onDiscard });
-  latest.current = { draft, read, busy, visible, onDiscard };
-  const confirming = !!pending && pending.draft === draft && pending.read === read && pending.active();
-  if (pending && !confirming) setPending(null);
+  const latest = useRef({ draft, read, busy, visible, onDiscard, decision: null as Decision | null });
+  latest.current = { ...latest.current, draft, read, busy, visible, onDiscard };
+  const confirming =
+    !!pending &&
+    latest.current.decision === pending &&
+    pending.draft === draft &&
+    pending.read === read &&
+    pending.active() &&
+    active() &&
+    visible;
+  if (pending && latest.current.decision === pending && !confirming) {
+    latest.current.decision = null;
+    setPending(null);
+  }
   useLayoutEffect(() => {
     if (confirming && !busy) cancel.current?.focus();
   }, [confirming, busy]);
+  useLayoutEffect(
+    () => () => {
+      latest.current.decision = null;
+    },
+    [],
+  );
+  function retire(decision: Decision, apply?: () => void) {
+    if (latest.current.decision !== decision) return false;
+    latest.current.decision = null;
+    flushSync(() => {
+      apply?.();
+      setPending(null);
+    });
+    return true;
+  }
   function cancelDiscard() {
     const now = latest.current;
+    if (!pending || now.decision !== pending) return;
     if (
-      !pending ||
       !pending.active() ||
       !active() ||
       !now.visible ||
-      now.busy ||
       now.read !== pending.read ||
       now.draft !== pending.draft ||
       !row.current?.isConnected
-    )
+    ) {
+      retire(pending);
       return;
-    flushSync(() => setPending(null));
+    }
+    if (now.busy || !retire(pending)) return;
     discardTrigger.current?.focus();
   }
   function discard() {
     const now = latest.current;
+    if (!pending || now.decision !== pending) return;
     if (
-      !pending ||
       !pending.active() ||
       !active() ||
       !now.visible ||
-      now.busy ||
       now.read !== pending.read ||
       now.draft !== pending.draft ||
-      now.draft.command ||
-      factLocked(now.draft) ||
       !row.current?.isConnected
-    )
+    ) {
+      retire(pending);
       return;
+    }
+    if (now.busy || now.draft.command || factLocked(now.draft)) return;
     const form = row.current.closest('form');
-    flushSync(() => {
-      now.onDiscard?.(pending.draft);
-      setPending(null);
-    });
+    if (!retire(pending, () => now.onDiscard?.(pending.draft))) return;
     const selector =
       'select:not(:disabled), button:not(:disabled):not([hidden]), input:not(:disabled):not([type="hidden"])';
     (row.current?.querySelector<HTMLElement>(selector) ?? form?.querySelector<HTMLElement>(selector))?.focus();
@@ -227,6 +251,7 @@ function FactDiscard({
         onClick={() => {
           const now = latest.current;
           if (
+            !now.decision &&
             active() &&
             now.visible &&
             !now.busy &&
@@ -235,8 +260,11 @@ function FactDiscard({
             !!row.current?.isConnected &&
             !draft.command &&
             !factLocked(draft)
-          )
-            setPending({ draft, read, active });
+          ) {
+            const decision = { draft, read, active };
+            now.decision = decision;
+            setPending(decision);
+          }
         }}
       >
         {m.album_remove_draft({ field: label }, o)}
