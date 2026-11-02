@@ -285,22 +285,28 @@ test('bounded retirement and erasure drain retained candidates without runtime p
       (route,owner_account_id,collection_id,episode_id,canonical_basis,basis_digest,state,last_read_at,
        workflow_id,reserved_incarnation,reserved_generation)
       VALUES ($1,$2,$3,$4,'[]',decode(repeat('00',32),'hex'),'retired',now(),'retained','retained','0')`,
-    [key.route,key.ownerAccountId,key.collectionId,key.episodeId],
+    [key.route, key.ownerAccountId, key.collectionId, key.episodeId],
   );
   const subjects = Array.from({ length: 101 }, () => native.locator(f.owner, f.collectionId).episodeId);
-  const insert = () => native.db.admin.query(
-    `INSERT INTO library.members_preparation_result
+  const insert = () =>
+    native.db.admin.query(
+      `INSERT INTO library.members_preparation_result
       (route,owner_account_id,collection_id,episode_id,subject_id,sort_key)
       SELECT $1,$2,$3,$4,id,id::text FROM unnest($5::uuid[]) id`,
-    [key.route,key.ownerAccountId,key.collectionId,key.episodeId,subjects],
-  );
+      [key.route, key.ownerAccountId, key.collectionId, key.episodeId, subjects],
+    );
   await insert();
-  const args = { route:key.route, owner_account_id:key.ownerAccountId, collection_id:key.collectionId, episode_id:key.episodeId };
+  const args = {
+    route: key.route,
+    owner_account_id: key.ownerAccountId,
+    collection_id: key.collectionId,
+    episode_id: key.episodeId,
+  };
   const first = await drainResults.run(native.db.admin, args);
   const last = await drainResults.run(native.db.admin, args);
   expect(first).toHaveLength(100);
   expect(last).toHaveLength(1);
-  expect(new Set([...first,...last].map(row => row.subjectId))).toEqual(new Set(subjects));
+  expect(new Set([...first, ...last].map((row) => row.subjectId))).toEqual(new Set(subjects));
   await insert();
   const owner = { route: key.route, account_id: key.ownerAccountId };
   expect(await eraseResults.run(native.db.admin, owner)).toHaveLength(100);
