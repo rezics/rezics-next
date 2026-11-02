@@ -11,6 +11,7 @@ import type { RelationTransport } from '../../subject/relation-candidates';
 import { pageText } from '../pages/data';
 import { ViewHeadingActions } from '../pages/view-heading';
 import { CreateSubjectForm } from './create-subject-form';
+import type { CreateResult } from './create-subject';
 import { EditorFailure } from './statement-editor-view';
 import { SubjectFacts } from './subject-facts-view';
 import { CharacterClassification } from './character-profile-classification';
@@ -63,23 +64,34 @@ function StoryArcProfileLive({
   const o = { locale: locale as never };
   const [id, setId] = useState(initialId);
   const [work, setWork] = useState(initialWork);
-  const [createdHref, setCreatedHref] = useState<string>();
+  const [created, setCreated] = useState<Extract<CreateResult, { ok: true }>>();
+  const selection = JSON.stringify([id, work]);
   const query = useQuery({
     queryKey: [...['story-arc-profile', id, work, locale, session], lifetime.generation],
     queryFn: () => transport.load({ id, work }),
     retry: false,
     staleTime: Infinity,
+    gcTime: 0,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
-  const retained = useRef<Extract<StoryArcRead, { ok: true }> | undefined>(undefined);
-  if (query.data?.ok) retained.current = query.data;
-  const current = retained.current;
+  const retained = useRef<
+    | {
+        selection: string;
+        read: Extract<StoryArcRead, { ok: true }>;
+      }
+    | undefined
+  >(undefined);
+  // A refresh retains mounted drafts; a different address never inherits its targets.
+  if (retained.current?.selection !== selection) retained.current = undefined;
+  if (query.data?.ok) retained.current = { selection, read: query.data };
+  const current = retained.current?.read;
+  const readable = !query.isError && query.data?.ok === true;
   const arc = current?.arc;
   const label = pageText(arc?.subject.labels, locale);
   const href = arc ? subjectHref({ id: arc.subject.id, label: label.text }, locale).href : undefined;
   const address = storyArcEntry({ id, work, label: label.text, locale }).href;
-  const editable = session === 'signed-in' && query.data?.ok;
+  const editable = session === 'signed-in' && readable;
   return (
     <article className="mx-auto w-full max-w-4xl space-y-8 px-4 py-8 sm:px-6">
       <ViewHeadingActions
@@ -87,7 +99,7 @@ function StoryArcProfileLive({
         headingClassName="font-sans"
         actions={
           href &&
-          query.data?.ok && (
+          readable && (
             <a href={href} className={buttonVariants({ variant: 'outline', className: callerActionClass })}>
               {m.candidate_view_public({}, o)}
             </a>
@@ -107,6 +119,27 @@ function StoryArcProfileLive({
       >
         {m.correction_reload({}, o)}
       </Button>
+      {session === 'signed-in' && !readable && (id || work) && (
+        <div className="flex flex-wrap gap-3">
+          {id && (
+            <Button
+              variant="outline"
+              className={callerActionClass}
+              onClick={() => {
+                setCreated(undefined);
+                setId(undefined);
+              }}
+            >
+              {m.story_arc_choose_existing({}, o)}
+            </Button>
+          )}
+          {!readable && work && (
+            <Button variant="outline" className={callerActionClass} onClick={() => setWork(undefined)}>
+              {m.story_arc_choose_work({}, o)}
+            </Button>
+          )}
+        </div>
+      )}
       {session !== 'signed-in' && (
         <p role="status">
           {session === 'signed-out'
@@ -124,164 +157,175 @@ function StoryArcProfileLive({
           )}
         </p>
       )}
-      {current && (
-        <div hidden={!query.data?.ok} className="space-y-8">
-          <section className="space-y-3 rounded-xl border border-border bg-card p-4 sm:p-6">
-            {arc ? (
-              <>
-                <h2 className="text-xl font-semibold">{m.story_arc_identity({}, o)}</h2>
-                <p lang={label.lang} className="text-lg font-medium">
-                  {label.text || m.subject_value_unlabelled({}, o)}
-                </p>
-                <p lang={pageText(current.release.types[storyArcType]!.labels, locale).lang}>
-                  {pageText(current.release.types[storyArcType]!.labels, locale).text}
-                </p>
-                {href && (
-                  <nav className="flex flex-wrap gap-3" aria-label={m.facts_other_editors({}, o)}>
-                    <a href={`${href}/terms`} className={`${callerTextActionClass} underline`}>
-                      {m.catalogue_terms_title({}, o)}
-                    </a>
-                    <a
-                      href={`${href}/context-review?${new URLSearchParams({ context: arc.subject.context })}`}
-                      className={`${callerTextActionClass} underline`}
-                    >
-                      {m.context_title({}, o)}
-                    </a>
-                  </nav>
-                )}
-                {query.data?.ok && (
-                  <FictionalReferenceDetails id={arc.subject.id} type={storyArcType} locale={locale} />
-                )}
-              </>
-            ) : (
-              <div hidden={!editable} className="space-y-6">
-                <EntityPicker
-                  label={m.story_arc_choose_existing({}, o)}
-                  className={callerPickerClass}
-                  value={[]}
-                  src={coverSrc}
-                  search={async (text, signal) =>
-                    (await search(text, signal)).filter((entry) => entry.types.includes(storyArcType))
-                  }
-                  onValueChange={(items) => {
-                    if (items[0]) setId(items[0].id);
-                  }}
-                />
-                <CreateSubjectForm
-                  locale={locale}
-                  session={session}
-                  transport={transport.creation}
-                  onNavigate={setCreatedHref}
-                  profile={{
-                    scope: 'story-arc',
-                    hideHeading: true,
-                    readOnlyType: true,
-                    fields: () => null,
-                    prepare: (item) => ({ item, errors: [] }),
-                    type: storyArcType,
-                    title: m.story_arc_create({}, o),
-                    intro: m.story_arc_creation_help({}, o),
-                    href: address,
-                  }}
-                />
-                {createdHref && (
-                  <a
-                    href={`${createdHref}/story-arc${work ? `?work=${encodeURIComponent(work)}` : ''}`}
-                    className={buttonVariants({ className: callerActionClass })}
-                  >
-                    {m.story_arc_continue({}, o)}
+      <div hidden={!readable} className="space-y-8">
+        <section className="space-y-3 rounded-xl border border-border bg-card p-4 sm:p-6">
+          {current && arc ? (
+            <>
+              <h2 className="text-xl font-semibold">{m.story_arc_identity({}, o)}</h2>
+              <p lang={label.lang} className="text-lg font-medium">
+                {label.text || m.subject_value_unlabelled({}, o)}
+              </p>
+              <p lang={pageText(current.release.types[storyArcType]!.labels, locale).lang}>
+                {pageText(current.release.types[storyArcType]!.labels, locale).text}
+              </p>
+              {href && (
+                <nav className="flex flex-wrap gap-3" aria-label={m.facts_other_editors({}, o)}>
+                  <a href={`${href}/terms`} className={`${callerTextActionClass} underline`}>
+                    {m.catalogue_terms_title({}, o)}
                   </a>
-                )}
-              </div>
-            )}
-          </section>
-          {arc && (
-            <div hidden={!editable}>
-              <SubjectFacts
-                key={arc.subject.id}
-                initial={storyArcFacts(current)}
-                locale={locale}
-                transport={facts(arc.subject.id)}
-                review={(property, token) => review(arc.subject.id, property, token)}
-              />
-              {current.release.types[storyArcType]!.properties.filter(
-                (property) => current.release.properties[property]?.relation?.group === 'classification',
-              ).map((property) => (
-                <CharacterClassification
-                  key={`${arc.subject.id}:${property}`}
-                  property={property}
-                  read={{ ok: true, release: current.release, public: arc, source: null }}
-                  locale={locale}
-                  search={search}
-                  transport={facts(arc.subject.id)}
-                  review={(field, token) => review(arc.subject.id, field, token)}
-                />
-              ))}
-              <section className="space-y-4">
-                <h2 className="text-xl font-semibold">{m.story_arc_relations({}, o)}</h2>
-                <p className="text-sm text-muted-foreground">{m.story_arc_relations_help({}, o)}</p>
-                <a
-                  href={`${href}/relation-edit`}
-                  className={buttonVariants({ variant: 'outline', className: callerActionClass })}
+                  <a
+                    href={`${href}/context-review?${new URLSearchParams({ context: arc.subject.context })}`}
+                    className={`${callerTextActionClass} underline`}
+                  >
+                    {m.context_title({}, o)}
+                  </a>
+                </nav>
+              )}
+              {readable && <FictionalReferenceDetails id={arc.subject.id} type={storyArcType} locale={locale} />}
+              {editable && (
+                <Button
+                  variant="outline"
+                  className={callerActionClass}
+                  onClick={() => {
+                    setCreated(undefined);
+                    setId(undefined);
+                  }}
                 >
-                  {m.relation_title({}, o)}
-                </a>
-              </section>
-            </div>
-          )}
-          <section
-            aria-label={m.story_arc_work({}, o)}
-            className="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6"
-          >
-            <h2 className="text-xl font-semibold">{m.story_arc_work({}, o)}</h2>
-            <p>{m.story_arc_work_help({}, o)}</p>
-            {current.work ? (
-              <>
-                {query.data?.ok && (
-                  <FictionalWorkReference
-                    subject={current.work.subject}
-                    locale={locale}
-                    onChooseAnother={editable ? () => setWork(undefined) : undefined}
-                  />
-                )}
-                <div hidden={!editable}>
-                  <RelationEditor
-                    key={`work:${current.work.subject.id}`}
-                    id={current.work.subject.id}
-                    locale={locale}
-                    search={search}
-                    transport={{
-                      ...relations(current.work.subject.id),
-                      read: async (...args) =>
-                        storyArcRelations(
-                          await relations(current.work!.subject.id).read(...args),
-                          current.release,
-                          true,
-                        ),
-                    }}
-                  />
-                </div>
-              </>
-            ) : (
+                  {m.story_arc_choose_existing({}, o)}
+                </Button>
+              )}
+            </>
+          ) : !id ? (
+            <div hidden={!editable} className="space-y-6">
               <EntityPicker
-                label={m.story_arc_choose_work({}, o)}
+                label={m.story_arc_choose_existing({}, o)}
                 className={callerPickerClass}
                 value={[]}
                 src={coverSrc}
-                disabled={!editable}
                 search={async (text, signal) =>
-                  (await search(text, signal)).filter((entry) =>
-                    entry.types.some((type) => storyArcWork(current.release, type)),
-                  )
+                  (await search(text, signal)).filter((entry) => entry.types.includes(storyArcType))
                 }
                 onValueChange={(items) => {
-                  if (items[0]) setWork(items[0].id);
+                  if (items[0]) setId(items[0].id);
                 }}
               />
-            )}
-          </section>
-        </div>
-      )}
+              <CreateSubjectForm
+                locale={locale}
+                session={session}
+                transport={transport.creation}
+                onNavigate={() => {}}
+                onCreated={setCreated}
+                profile={{
+                  scope: 'story-arc',
+                  hideHeading: true,
+                  readOnlyType: true,
+                  fields: () => null,
+                  prepare: (item) => ({ item, errors: [] }),
+                  type: storyArcType,
+                  title: m.story_arc_create({}, o),
+                  intro: m.story_arc_creation_help({}, o),
+                  href: address,
+                }}
+              />
+              {created?.reader.state === 'ready' && (
+                <a
+                  href={`${created.reader.href}/story-arc${work ? `?work=${encodeURIComponent(work)}` : ''}`}
+                  onClick={(event) => {
+                    // Keep ordinary authored href navigation for new tabs and modified clicks.
+                    if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                    event.preventDefault();
+                    setId(created.id);
+                  }}
+                  className={buttonVariants({ className: callerActionClass })}
+                >
+                  {m.story_arc_continue({}, o)}
+                </a>
+              )}
+            </div>
+          ) : null}
+        </section>
+        {current && arc && (
+          <div hidden={!editable}>
+            <SubjectFacts
+              key={arc.subject.id}
+              initial={storyArcFacts(current)}
+              locale={locale}
+              transport={facts(arc.subject.id)}
+              review={(property, token) => review(arc.subject.id, property, token)}
+            />
+            {current.release.types[storyArcType]!.properties.filter(
+              (property) => current.release.properties[property]?.relation?.group === 'classification',
+            ).map((property) => (
+              <CharacterClassification
+                key={`${arc.subject.id}:${property}`}
+                property={property}
+                read={{ ok: true, release: current.release, public: arc, source: null }}
+                locale={locale}
+                search={search}
+                transport={facts(arc.subject.id)}
+                review={(field, token) => review(arc.subject.id, field, token)}
+              />
+            ))}
+            <section className="space-y-4">
+              <h2 className="text-xl font-semibold">{m.story_arc_relations({}, o)}</h2>
+              <p className="text-sm text-muted-foreground">{m.story_arc_relations_help({}, o)}</p>
+              <a
+                href={`${href}/relation-edit`}
+                className={buttonVariants({ variant: 'outline', className: callerActionClass })}
+              >
+                {m.relation_title({}, o)}
+              </a>
+            </section>
+          </div>
+        )}
+        <section
+          aria-label={m.story_arc_work({}, o)}
+          className="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6"
+        >
+          <h2 className="text-xl font-semibold">{m.story_arc_work({}, o)}</h2>
+          <p>{m.story_arc_work_help({}, o)}</p>
+          {current?.work ? (
+            <>
+              {readable && (
+                <FictionalWorkReference
+                  subject={current.work.subject}
+                  locale={locale}
+                  onChooseAnother={editable ? () => setWork(undefined) : undefined}
+                />
+              )}
+              <div hidden={!editable}>
+                <RelationEditor
+                  key={`work:${current.work.subject.id}`}
+                  id={current.work.subject.id}
+                  locale={locale}
+                  search={search}
+                  transport={{
+                    ...relations(current.work.subject.id),
+                    read: async (...args) =>
+                      storyArcRelations(await relations(current.work!.subject.id).read(...args), current.release, true),
+                  }}
+                />
+              </div>
+            </>
+          ) : (
+            <EntityPicker
+              label={m.story_arc_choose_work({}, o)}
+              className={callerPickerClass}
+              value={[]}
+              src={coverSrc}
+              disabled={!editable}
+              search={async (text, signal) =>
+                (await search(text, signal)).filter((entry) =>
+                  entry.types.some((type) => !!current && storyArcWork(current.release, type)),
+                )
+              }
+              onValueChange={(items) => {
+                if (items[0]) setWork(items[0].id);
+              }}
+            />
+          )}
+        </section>
+      </div>
     </article>
   );
 }
