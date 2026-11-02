@@ -57,29 +57,28 @@ test('Album qualifier cancellation, stable correction targets, selective removal
       return invalid;
     },
   };
+  const props = {
+    release,
+    metadataCurrent: () => metadata,
+    onReload: async () => {},
+    locale: 'en',
+    transport,
+    search: async (text: string) =>
+      [artistId, roleId]
+        .filter((id) => publicRead.related[id]!.labels.en!.includes(text))
+        .map((id) => ({
+          id,
+          title: publicRead.related[id]!.labels.en!,
+          types: [publicRead.related[id]!.type!],
+          typeLabel: '',
+          cover: null,
+        })),
+  };
   const paint = () =>
     act(async () =>
       root.render(
         <QueryClientProvider client={client}>
-          <AlbumProfileCreate
-            release={release}
-            metadataCurrent={() => metadata}
-            onReload={async () => {}}
-            locale="en"
-            enabled={enabled}
-            transport={transport}
-            search={async (text) =>
-              [artistId, roleId]
-                .filter((id) => publicRead.related[id]!.labels.en!.includes(text))
-                .map((id) => ({
-                  id,
-                  title: publicRead.related[id]!.labels.en!,
-                  types: [publicRead.related[id]!.type!],
-                  typeLabel: '',
-                  cover: null,
-                }))
-            }
-          />
+          <AlbumProfileCreate {...props} enabled={enabled} />
         </QueryClientProvider>,
       ),
     );
@@ -93,7 +92,8 @@ test('Album qualifier cancellation, stable correction targets, selective removal
     await act(async () =>
       user.type(within(scope).getByRole('combobox', { name: name(property) }), publicRead.related[id]!.labels.en!),
     );
-    await act(async () => user.click(await within(host).findByRole('option')));
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 350)));
+    await act(async () => user.click(within(host).getByRole('option')));
   };
   const remove = (id: string) => `${m.relation_remove()}: ${name(id)}`;
   try {
