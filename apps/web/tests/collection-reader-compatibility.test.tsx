@@ -505,9 +505,15 @@ test('Board and MyRealms preserve same-prepared reader provenance across indepen
     sessionValue({ subject: 'reader-b', accessToken: 'access-b', csrfToken: 'csrf-b' }),
   );
   const mismatchedRealmsCaller = myRealmsCallerForVisit(mismatchedRealmsClient, realmsWire.result.visit);
-  mismatchedRealmsCaller.verifyHydration();
-  expect(mismatchedRealmsCaller.isCurrent()).toBe(false);
-  expect(mismatchedRealmsClient.getQueryData(['my-realms', ''])).toBeUndefined();
+  const disconnectMismatchedRealmsCaller = mismatchedRealmsCaller.connect();
+  try {
+    mismatchedRealmsCaller.verifyHydration();
+    await settle();
+    expect(mismatchedRealmsCaller.isCurrent()).toBe(false);
+    expect(mismatchedRealmsClient.getQueryData(['my-realms', ''])).toBeUndefined();
+  } finally {
+    disconnectMismatchedRealmsCaller();
+  }
 
   // A hidden expected/actual mismatch and an explicit credential without a prepared subject cannot admit private
   // reader data for either route.
