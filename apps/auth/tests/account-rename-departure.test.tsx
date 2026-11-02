@@ -164,7 +164,7 @@ test('keyboard navigation stays in the departure dialog and Escape stays on the 
 test('Leave clears an unsent invalid draft before navigation', async () => {
   const ui = await mount(source({ readCurrent: async () => ({ kind: 'ready', target: target('account', null) }) }));
   await setHandle(ui.host, '!');
-  await startNavigation(ui.router, '/next');
+  const { navigation } = await startNavigation(ui.router, '/next');
   await flush(() => document.body.querySelector<HTMLButtonElement>('[data-leave]')!.click());
   await flush(() => navigation);
   expect(readRenameContinuation()).toBeNull();
