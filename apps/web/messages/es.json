@@ -3145,6 +3145,8 @@
   "creator_delist": "Retirar de la venta",
   "creator_refresh": "Actualizar ofertas",
   "creator_next": "Siguientes ofertas",
+  "lifecycle_leave_title": "¿Salir del acceso a la cuenta?",
+  "lifecycle_leave_unsaved": "La acción seleccionada, el motivo privado y la confirmación revisada solo se conservan en esta página. Si sales, se descartarán.",
   "lifecycle_title": "Acceso a la cuenta",
   "lifecycle_intro": "Revisa esta cuenta, elige una acción disponible y comprueba sus consecuencias antes de confirmar.",
   "lifecycle_target": "Cuenta de destino",

@@ -3292,6 +3292,8 @@
   "author_erasure_check_again": "Check again",
   "author_erasure_checking": "Checking…",
   "author_erasure_back_thread": "Back to thread",
+  "lifecycle_leave_title": "Leave account access?",
+  "lifecycle_leave_unsaved": "Your selected action, private reason and reviewed confirmation are kept only on this page. Leaving discards them.",
   "lifecycle_title": "Account access",
   "lifecycle_intro": "Review this account, choose an available action and check its consequences before confirming.",
   "lifecycle_target": "Target account",

@@ -3145,6 +3145,8 @@
   "creator_delist": "판매 중단",
   "creator_refresh": "목록 새로 고침",
   "creator_next": "다음 판매 제안",
+  "lifecycle_leave_title": "계정 접근 관리에서 나갈까요?",
+  "lifecycle_leave_unsaved": "선택한 작업, 비공개 사유, 검토한 확인 내용은 이 페이지에만 보관됩니다. 나가면 삭제됩니다.",
   "lifecycle_title": "계정 접근",
   "lifecycle_intro": "이 계정을 검토하고 사용 가능한 작업을 선택한 뒤, 확정하기 전에 영향을 확인하세요.",
   "lifecycle_target": "대상 계정",

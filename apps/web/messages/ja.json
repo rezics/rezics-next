@@ -3145,6 +3145,8 @@
   "creator_delist": "販売を停止",
   "creator_refresh": "一覧を更新",
   "creator_next": "次のオファー",
+  "lifecycle_leave_title": "アカウントのアクセス管理を離れますか？",
+  "lifecycle_leave_unsaved": "選択した操作、非公開の理由、確認内容はこのページ内にのみ保持されます。ページを離れると失われます。",
   "lifecycle_title": "アカウントへのアクセス",
   "lifecycle_intro": "このアカウントを確認し、利用できる操作を選んで、実行前にその影響を確認してください。",
   "lifecycle_target": "対象アカウント",

@@ -3145,6 +3145,8 @@
   "creator_delist": "下架",
   "creator_refresh": "刷新报价",
   "creator_next": "后续报价",
+  "lifecycle_leave_title": "离开账户访问管理？",
+  "lifecycle_leave_unsaved": "所选操作、私密原因和已审阅的确认内容仅保留在此页面中。离开后将丢弃这些内容。",
   "lifecycle_title": "账户访问",
   "lifecycle_intro": "请核对这个账户，选择可用操作，并在确认前了解操作的影响。",
   "lifecycle_target": "目标账号",

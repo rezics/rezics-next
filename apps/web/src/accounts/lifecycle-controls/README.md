@@ -20,6 +20,16 @@ supply authority. Confirmation shows the actual action, exact private reason and
 help and request details retain protocol, floor/fence, original-key and receipt information without leading the
 decision or recovery text. Closing or reloading the page loses its in-memory copy; no persistence is added.
 
+## Departure
+
+The shared Web departure owner protects a changed action, any nonempty exact reason, reviewed confirmation and
+unresolved command; containing page owners present one Stay/Leave decision. Stay preserves input, focus and the
+immutable command. Leave retires local continuations and ignores late responses without cancelling or undoing a
+native effect. Reload/close warns only while this work exists. Untouched input and explicitly complete recorded
+effects need no prompt; a receipt or selection read alone cannot establish completion.
+Decision: explicit denial, sign-out, missing access, session/token replacement or target replacement revokes the old
+review immediately; transient unavailability preserves its local recovery without granting authority.
+
 A confirmed immutable intent stays in memory while sending and after response loss. Recovery attempts one current
 native read before offering an identical replay, and checks current advertisement again before sending. A receipt
 is reported only as recorded; it never proves current state, Auth cleanup or operator fanout completion. New effects

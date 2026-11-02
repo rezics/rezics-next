@@ -3145,6 +3145,8 @@
   "creator_delist": "下架",
   "creator_refresh": "重新整理報價",
   "creator_next": "後續報價",
+  "lifecycle_leave_title": "離開帳戶存取管理？",
+  "lifecycle_leave_unsaved": "所選操作、私人原因與已檢閱的確認內容只保留在此頁面中。離開後將捨棄這些內容。",
   "lifecycle_title": "帳戶存取",
   "lifecycle_intro": "請核對這個帳戶，選擇可用操作，並在確認前了解操作的影響。",
   "lifecycle_target": "目標帳號",

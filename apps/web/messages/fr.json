@@ -3145,6 +3145,8 @@
   "creator_delist": "Retirer de la vente",
   "creator_refresh": "Actualiser les offres",
   "creator_next": "Offres suivantes",
+  "lifecycle_leave_title": "Quitter l’accès au compte ?",
+  "lifecycle_leave_unsaved": "L’action sélectionnée, le motif privé et la confirmation vérifiée sont conservés uniquement sur cette page. Ils seront perdus si vous la quittez.",
   "lifecycle_title": "Accès au compte",
   "lifecycle_intro": "Vérifiez ce compte, choisissez une action disponible et examinez ses conséquences avant de confirmer.",
   "lifecycle_target": "Compte cible",

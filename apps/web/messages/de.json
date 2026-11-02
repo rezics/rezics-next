@@ -3145,6 +3145,8 @@
   "creator_delist": "Aus dem Verkauf nehmen",
   "creator_refresh": "Angebote aktualisieren",
   "creator_next": "Weitere Angebote",
+  "lifecycle_leave_title": "Kontozugriff verlassen?",
+  "lifecycle_leave_unsaved": "Die ausgewählte Aktion, die private Begründung und die geprüfte Bestätigung bleiben nur auf dieser Seite erhalten. Beim Verlassen werden sie verworfen.",
   "lifecycle_title": "Kontozugriff",
   "lifecycle_intro": "Prüfe dieses Konto, wähle eine verfügbare Aktion und beachte vor dem Bestätigen die Folgen.",
   "lifecycle_target": "Zielkonto",

@@ -1,4 +1,5 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { QueryClientContext } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@rezics/ui/shadcn/field';
@@ -6,6 +7,8 @@ import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-selec
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { m } from '../../paraglide/messages.js';
 import { PageHeading } from '../../shell/page-heading';
+import { sessionQuery } from '../../session/query';
+import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../../threads/authoring-departure';
 import { parseIntent, type Action, type Intent, type Outcome, type Page } from './data';
 import { commandRequest, reviewRequest } from './request';
 
@@ -59,8 +62,36 @@ export function AccountLifecyclePage({ initial, io }: { initial: Page; io: IO })
   if (initial.status === 'ready') resource.current = initial.account.id;
   // A replacement resource starts a fresh review and retires the previous resource's callbacks.
   // A failed selection refresh does not discard a command whose result is still uncertain.
-  return <LifecycleReview key={resource.current} initial={initial} io={io} />;
+  return (
+    <AuthoringDepartureBoundary sessionBound={false}>
+      <LifecycleReview key={resource.current} initial={initial} io={io} />
+    </AuthoringDepartureBoundary>
+  );
 }
+
+/** Bind even when a containing departure owner does not bind its own children to a session. */
+function useReviewCaller() {
+  const client = useContext(QueryClientContext);
+  const read = useCallback(() => {
+    const session = client?.getQueryData(sessionQuery.queryKey);
+    return JSON.stringify([session?.state, session?.subject, session?.csrfToken]);
+  }, [client]);
+  const [owner] = useState(() => ({ client, session: read() }));
+  const retired = useRef(false);
+  const current = useCallback(() => {
+    if (owner.client !== client || owner.session !== read()) retired.current = true;
+    return !retired.current;
+  }, [client, owner, read]);
+  const subscribe = useCallback(
+    (listener: () => void) => client?.getQueryCache().subscribe(() => { current(); listener(); }) ?? (() => {}),
+    [client, current],
+  );
+  const snapshot = useCallback(() => JSON.stringify([current(), read()]), [current, read]);
+  const session = useSyncExternalStore(subscribe, snapshot, snapshot);
+  return { current, session };
+}
+
+const authorityLost = (page: Page) => ['denied', 'signed-out', 'missing'].includes(page.status);
 
 function LifecycleReview({ initial, io }: { initial: Page; io: IO }) {
   const id = useId();
@@ -70,7 +101,11 @@ function LifecycleReview({ initial, io }: { initial: Page; io: IO }) {
   const titleId = `${id}-confirm-title`;
   const [page, setPage] = useState(initial);
   const currentPage = useRef(initial);
-  const [action, setAction] = useState<Action>('suspend');
+  const accountId = useRef(initial.status === 'ready' ? initial.account.id : null);
+  const [defaultAction] = useState(() =>
+    initial.status === 'ready' && !initial.offered.includes('suspend') ? initial.offered[0] ?? 'suspend' : 'suspend',
+  );
+  const [action, setAction] = useState<Action>(defaultAction);
   const [reason, setReason] = useState('');
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
@@ -85,14 +120,51 @@ function LifecycleReview({ initial, io }: { initial: Page; io: IO }) {
   const active = useRef(true);
   const request = useRef<AbortController | null>(null);
   const currentConfirmation = useRef<Confirmation | null>(null);
+  const caller = useReviewCaller();
+  const incoming = useRef(initial);
+  incoming.current = initial;
+  const [retired, setRetired] = useState(false);
+  const current = () =>
+    active.current && caller.current() && !authorityLost(incoming.current) && !authorityLost(currentPage.current);
+  function retire() {
+    active.current = false;
+    request.current?.abort();
+    currentConfirmation.current = null;
+    unresolved.current = null;
+  }
   useEffect(() => {
     active.current = true;
     return () => {
-      active.current = false;
-      request.current?.abort();
-      currentConfirmation.current = null;
+      retire();
     };
   }, []);
+
+  const reconciled = outcome?.status === 'recorded' && outcome.effects?.state === 'complete';
+  const needsDecision = () =>
+    current() && !reconciled && (unresolved.current !== null || confirmation !== null || reason !== '' || action !== defaultAction);
+  const departure = useAuthoringDeparture(
+    needsDecision,
+    () => current() && !reconciled && unresolved.current !== null,
+    JSON.stringify([action, reason, confirmation?.intent.key, outcome?.status, busy, reconciled, caller.session]),
+    undefined,
+    () => {
+      retire();
+      setRetired(true);
+    },
+    undefined,
+    {
+      title: m.lifecycle_leave_title(),
+      unsaved: m.lifecycle_leave_unsaved(),
+      pending: m.container_lifecycle_leave_pending(),
+    },
+  );
+  const authorized = current();
+  useLayoutEffect(() => {
+    if (!authorized) {
+      retire();
+      departure.release();
+    }
+  }, [authorized, departure.release]);
 
   function replaceConfirmation(value: Confirmation | null) {
     currentConfirmation.current = value;
@@ -100,6 +172,11 @@ function LifecycleReview({ initial, io }: { initial: Page; io: IO }) {
   }
   function updatePage(value: Page) {
     currentPage.current = value;
+    if (value.status === 'ready' && accountId.current !== null && value.account.id !== accountId.current) {
+      retire();
+      setRetired(true);
+    }
+    if (authorityLost(value)) retire();
     setPage(value);
   }
   const offered = page.status === 'ready' ? page.offered : [];
@@ -107,32 +184,34 @@ function LifecycleReview({ initial, io }: { initial: Page; io: IO }) {
   const canChoose = !busy && !locked && selected !== undefined;
 
   async function read() {
-    if (!active.current || inFlight.current) return;
+    if (!current() || inFlight.current) return;
     inFlight.current = true;
     setBusy(true);
     try {
       request.current = new AbortController();
       const next = await reviewRequest((signal) => io.read(signal), request.current.signal);
-      if (active.current) updatePage(next);
+      if (current()) updatePage(next);
     } catch {
-      if (active.current) updatePage({ status: 'unavailable' });
+      if (current()) updatePage({ status: 'unavailable' });
     } finally {
       // Replaying an uncertain command requires a bounded read attempt first, even if unavailable.
-      lastRead.current = true;
-      inFlight.current = false;
-      if (active.current) setBusy(false);
+      if (current()) {
+        lastRead.current = true;
+        inFlight.current = false;
+        setBusy(false);
+      }
     }
   }
   async function send(review: Confirmation) {
     const intent = review.intent;
-    const current = currentPage.current;
+    const available = currentPage.current;
     if (
-      !active.current ||
+      !current() ||
       currentConfirmation.current !== review ||
       inFlight.current ||
-      current.status !== 'ready' ||
-      current.account.id !== intent.accountId ||
-      !current.offered.includes(intent.action) ||
+      available.status !== 'ready' ||
+      available.account.id !== intent.accountId ||
+      !available.offered.includes(intent.action) ||
       (unresolved.current !== null && (unresolved.current !== intent || !retryable.current || !lastRead.current))
     )
       return;
@@ -149,7 +228,7 @@ function LifecycleReview({ initial, io }: { initial: Page; io: IO }) {
       // A BFF response can be lost after the native commit. Preserve exactly this intent.
       result = { status: 'uncertain', current: { status: 'unavailable' } };
     }
-    if (!active.current) return;
+    if (!current()) return;
     if (['recorded', 'uncertain', 'pending'].includes(result.status)) ambiguous.current = true;
     // A later denial before receipt access cannot settle an earlier lost response.
     if (ambiguous.current && !['recorded', 'uncertain', 'pending'].includes(result.status))
@@ -165,6 +244,17 @@ function LifecycleReview({ initial, io }: { initial: Page; io: IO }) {
     }
     inFlight.current = false;
     setBusy(false);
+  }
+
+  if (retired || !authorized) {
+    const revoked = authorityLost(initial) ? initial : page;
+    return (
+      <article className="mx-auto flex w-full max-w-2xl flex-col gap-6 pb-8">
+        <PageHeading>{m.lifecycle_title()}</PageHeading>
+        <p role="status">{authorityLost(revoked) ? statusText(revoked.status) : m.thread_authoring_session_changed()}</p>
+        <Button variant="outline" onClick={() => window.location.reload()}>{m.settings_reload()}</Button>
+      </article>
+    );
   }
 
   return (
@@ -207,7 +297,7 @@ function LifecycleReview({ initial, io }: { initial: Page; io: IO }) {
           onSubmit={(event) => {
             event.preventDefault();
             if (
-              !active.current ||
+              !current() ||
               page !== currentPage.current ||
               inFlight.current ||
               unresolved.current ||
