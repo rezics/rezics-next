@@ -8,8 +8,8 @@ import {
   Outlet,
   RouterProvider,
 } from '@tanstack/react-router';
-import { expect, userEvent, waitFor, within } from 'storybook/test';
-import { PROFILE_FORMAT, type CompositionDocument, type PresentationProfile } from '@rezics/composition';
+import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
+import { PROFILE_FORMAT, profileDigest, type CompositionDocument, type PresentationProfile } from '@rezics/composition';
 import { PresentationViewEditor, type CurationEditorTransport } from '../features/pages/curate-view-editor';
 import { m } from '../paraglide/messages.js';
 import { deLocalizeUrl, getLocale, localizeUrl } from '../paraglide/runtime';
@@ -299,5 +299,120 @@ export const UnsavedNavigation: Story = {
     await userEvent.click(within(leaving).getByRole('button', { name: m.curation_leave() }));
     await expect(await canvas.findByRole('heading', { level: 1, name: m.search_heading() })).toBeVisible();
     await expect(canvas.queryByRole('region', { name: m.curation_editor() })).not.toBeInTheDocument();
+  },
+};
+
+// UNRUN constructed control examples; these do not establish native publication or visual acceptance.
+const longType = `schema:${'LongTemplate'.repeat(16)}`;
+const longRoute = `/${'long-route-key-'.repeat(14)}end`;
+const longProfile: PresentationProfile = {
+  ...profile,
+  types: [
+    ...profile.types,
+    { type: longType, views: { overview: pageDocument('long-type'), details: pageDocument('long-details') } },
+  ],
+  routes: [...profile.routes, { route: longRoute, document: pageDocument('long-route') }],
+};
+const longInitial = { ...initial, profile: longProfile, digest: profileDigest(longProfile) };
+const controlsTransport = () => ({ read: fn(transport.read), publish: fn(transport.publish) });
+
+export const IndependentEditors: Story = {
+  args: { initial: longInitial, locale: 'en', transport: controlsTransport() },
+  render: (args) => (
+    <PatternStory visitor="Signed In" path="/curate/presentation">
+      <AppShell>
+        <div className="grid min-w-0 gap-8 xl:grid-cols-2">
+          <div data-editor-example="first" className="min-w-0">
+            <PresentationViewEditor {...args} locale={getLocale()} />
+          </div>
+          <div data-editor-example="second" className="min-w-0">
+            <PresentationViewEditor {...args} locale={getLocale()} />
+          </div>
+        </div>
+      </AppShell>
+    </PatternStory>
+  ),
+  play: async ({ canvasElement, args }) => {
+    const first = canvasElement.querySelector<HTMLElement>('[data-editor-example="first"]')!;
+    const second = canvasElement.querySelector<HTMLElement>('[data-editor-example="second"]')!;
+    for (const panel of [first, second]) {
+      for (const label of panel.querySelectorAll<HTMLLabelElement>('label')) {
+        await expect(label.control).not.toBeNull();
+        await expect(panel.contains(label.control)).toBe(true);
+      }
+    }
+    const ids = [...canvasElement.querySelectorAll('[id]')].map((node) => node.id);
+    await expect(new Set(ids).size).toBe(ids.length);
+    await userEvent.selectOptions(templateControls(first).template, JSON.stringify({ scope: 'type', key: longType }));
+    await userEvent.selectOptions(templateControls(first).view, 'details');
+    await expect(templateControls(second).template).toHaveValue(JSON.stringify({ scope: 'generic', key: null }));
+    await expect(templateControls(second).view).toHaveValue('overview');
+    await userEvent.click(within(second).getByRole('button', { name: `generic: ${m.curation_generic()}` }));
+    await expect(within(first).getByRole('region', { name: m.curation_editor() })).toBeVisible();
+    await expect(within(second).getByRole('region', { name: m.curation_editor() })).toBeVisible();
+    await userEvent.selectOptions(within(second).getByRole('combobox', { name: m.curation_scope() }), 'route');
+    await userEvent.type(within(second).getByRole('textbox', { name: m.curation_key() }), '/second-editor');
+    await expect(within(first).getByRole('combobox', { name: m.curation_scope() })).toHaveValue('type');
+    await expect(within(first).getByRole('textbox', { name: m.curation_key() })).toHaveValue('');
+    await expect(templateControls(first).template).toHaveValue(JSON.stringify({ scope: 'type', key: longType }));
+    await expect(templateControls(first).view).toHaveValue('details');
+    const mountedIds = [...canvasElement.querySelectorAll('[id]')].map((node) => node.id);
+    await expect(new Set(mountedIds).size).toBe(mountedIds.length);
+    await expect(args.transport.read).not.toHaveBeenCalled();
+    await expect(args.transport.publish).not.toHaveBeenCalled();
+  },
+};
+
+export const LongKeysPhoneFocus: Story = {
+  args: { initial: longInitial, locale: 'en', transport: controlsTransport() },
+  render,
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    await userEvent.selectOptions(
+      templateControls(canvasElement).template,
+      JSON.stringify({ scope: 'route', key: longRoute }),
+    );
+    await expect(templateControls(canvasElement).view).toHaveValue('overview');
+    const selected = canvasElement.ownerDocument.getElementById(
+      templateControls(canvasElement).template.getAttribute('aria-describedby')!,
+    )!;
+    await expect(selected).toHaveTextContent(`${m.curation_route()}: ${longRoute}`);
+    await expect(selected).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: m.curation_close() }));
+    const open = canvas.getByRole('button', { name: `route: ${longRoute}` });
+    open.focus();
+    await userEvent.keyboard('{Enter}');
+    await expect(canvas.getByRole('region', { name: m.curation_editor() })).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: m.curation_close() }));
+    const summaries = [
+      ...templateControls(canvasElement).template.closest('article')!.querySelectorAll<HTMLElement>('summary'),
+    ];
+    for (const summary of summaries) {
+      summary.focus();
+      await expect(summary).toHaveFocus();
+      await userEvent.keyboard('{Enter}');
+      await expect(summary.closest('details')).toHaveAttribute('open');
+      await expect(summary).toHaveFocus();
+      await userEvent.keyboard(' ');
+      await expect(summary.closest('details')).not.toHaveAttribute('open');
+    }
+    await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.curation_scope() }), 'route');
+    const key = canvas.getByRole('textbox', { name: m.curation_key() });
+    await userEvent.type(key, longRoute);
+    await expect(key).toHaveValue(longRoute);
+    const exactKey = canvasElement.ownerDocument.getElementById(
+      key.getAttribute('aria-describedby')!.split(' ').at(-1)!,
+    )!;
+    await expect(exactKey).toHaveTextContent(longRoute);
+    const editor = key.closest('article')!;
+    await expect(editor.scrollWidth).toBeLessThanOrEqual(editor.clientWidth);
+    for (const control of editor.querySelectorAll<HTMLElement>('select, input, button, summary')) {
+      if (!control.getClientRects().length) continue;
+      await expect(control.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
+      await expect(control.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    }
+    await expect(args.transport.read).not.toHaveBeenCalled();
+    await expect(args.transport.publish).not.toHaveBeenCalled();
   },
 };

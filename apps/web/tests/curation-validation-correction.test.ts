@@ -86,9 +86,16 @@ test('default presentation editor takes a native invalid publication to its actu
       button(label).click();
     });
   };
-  const select = async (id: string, value: string) => {
+  const templateControl = (name: string) => {
+    const region = [...host.querySelectorAll('section')].find(
+      (section) => section.getAttribute('aria-label') === m.curation_templates(),
+    );
+    return ([...(region?.querySelectorAll('label') ?? [])].find((label) => label.textContent === name)?.control ??
+      null) as InstanceType<typeof window.HTMLSelectElement> | null;
+  };
+  const select = async (name: string, value: string) => {
     await act(async () => {
-      const control = host.querySelector(`#${id}`)! as InstanceType<typeof window.HTMLSelectElement>;
+      const control = templateControl(name)! as InstanceType<typeof window.HTMLSelectElement>;
       control.value = value;
       control.dispatchEvent(new window.Event('change', { bubbles: true }));
     });
@@ -140,10 +147,10 @@ test('default presentation editor takes a native invalid publication to its actu
     await act(async () => {
       root.render(createElement(RouterProvider, { router }));
     });
-    expect((host.querySelector('#curation-view') as InstanceType<typeof window.HTMLSelectElement>).value).toBe(
+    expect((templateControl(m.curation_view()) as InstanceType<typeof window.HTMLSelectElement>).value).toBe(
       'overview',
     );
-    expect((host.querySelector('#curation-template') as InstanceType<typeof window.HTMLSelectElement>).value).toBe(
+    expect((templateControl(m.curation_template()) as InstanceType<typeof window.HTMLSelectElement>).value).toBe(
       JSON.stringify({ scope: 'generic', key: null }),
     );
     await click(m.curation_publish());
@@ -154,28 +161,26 @@ test('default presentation editor takes a native invalid publication to its actu
     );
 
     // Later edits belong to the current editor, even though the error describes the retained intent.
-    await select('curation-view', 'overview');
+    await select(m.curation_view(), 'overview');
     await heading('overview');
     await edit('text.en', 'Later overview edit');
     await edit('text.fr', 'Brouillon');
     await edit('text.fr', '');
-    await select('curation-template', JSON.stringify({ scope: 'type', key: 'schema:Book' }));
-    await select('curation-view', 'details');
+    await select(m.curation_template(), JSON.stringify({ scope: 'type', key: 'schema:Book' }));
+    await select(m.curation_view(), 'details');
     await heading('details');
     await edit('text.ja', '後からの編集');
     await edit('text.fr', 'Détails');
     await edit('text.fr', '');
-    await select('curation-view', 'overview');
-    await select('curation-template', JSON.stringify({ scope: 'generic', key: null }));
+    await select(m.curation_view(), 'overview');
+    await select(m.curation_template(), JSON.stringify({ scope: 'generic', key: null }));
 
     await click(m.curation_correct());
     await settle(() => window.document.activeElement === textField('text.en') && !!textField('text.en'));
-    expect((host.querySelector('#curation-template') as InstanceType<typeof window.HTMLSelectElement>).value).toBe(
+    expect((templateControl(m.curation_template()) as InstanceType<typeof window.HTMLSelectElement>).value).toBe(
       JSON.stringify({ scope: 'type', key: 'schema:Book' }),
     );
-    expect((host.querySelector('#curation-view') as InstanceType<typeof window.HTMLSelectElement>).value).toBe(
-      'details',
-    );
+    expect((templateControl(m.curation_view()) as InstanceType<typeof window.HTMLSelectElement>).value).toBe('details');
     expect(textField('text.ja')!.value).toBe('後からの編集');
     expect(textField('text.fr')!.value).toBe('');
     expect(host.textContent).toContain(m.curation_correction_later());
@@ -198,11 +203,11 @@ test('default presentation editor takes a native invalid publication to its actu
       text: { en: 'Corrected heading', ja: '後からの編集' },
     });
     expect(host.textContent).toContain(m.curation_saved());
-    await select('curation-view', 'details');
+    await select(m.curation_view(), 'details');
     await heading('details');
     expect(textField('text.fr')!.value).toBe('');
-    await select('curation-template', JSON.stringify({ scope: 'generic', key: null }));
-    await select('curation-view', 'overview');
+    await select(m.curation_template(), JSON.stringify({ scope: 'generic', key: null }));
+    await select(m.curation_view(), 'overview');
     await heading('overview');
     expect(textField('text.en')!.value).toBe('Later overview edit');
     expect(textField('text.fr')!.value).toBe('');

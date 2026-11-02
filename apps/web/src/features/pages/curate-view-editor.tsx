@@ -4,6 +4,7 @@ import {
   lazy,
   Suspense,
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -69,6 +70,13 @@ import { CurationFailureNotice, CurationPublicationRecovery } from './curation-p
 import { CurationNavigationGuard } from './curation-navigation-guard';
 
 const PageEditor = lazy(() => import('./editor').then((module) => ({ default: module.PageEditor })));
+
+const editorControlClass = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere]';
+const editorDisclosureClass =
+  'min-h-11 min-w-11 cursor-pointer rounded-md py-2 text-muted-foreground [overflow-wrap:anywhere] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2';
+// Scope consumer styling to editor-owned recovery, leaving the supplied preview and Puck untouched.
+const editorRecoveryClass =
+  'contents [&_button]:h-auto [&_button]:min-h-11 [&_button]:min-w-11 [&_button]:max-w-full [&_button]:whitespace-normal [&_button]:[overflow-wrap:anywhere] [&_summary]:min-h-11 [&_summary]:min-w-11 [&_summary]:cursor-pointer [&_summary]:rounded-md [&_summary]:py-2 [&_summary]:[overflow-wrap:anywhere] [&_summary]:focus-visible:outline-none [&_summary]:focus-visible:ring-2 [&_summary]:focus-visible:ring-ring [&_summary]:focus-visible:ring-offset-2 [&_pre]:focus-visible:ring-2 [&_pre]:focus-visible:ring-ring';
 
 /** The existing whole-profile publication helper owns transport; no retry protocol lives in the editor. */
 export type CurationEditorTransport = PublicationTransport;
@@ -273,7 +281,9 @@ function ActualPresentationViewEditor({
       return failedRead.reason === 'unavailable' ? (
         <div className="space-y-4">
           {failureView(failedRead)}
-          <Button onClick={retryAdmission}>{m.curation_reload()}</Button>
+          <Button className={editorControlClass} onClick={retryAdmission}>
+            {m.curation_reload()}
+          </Button>
         </div>
       ) : (
         failureView(failedRead)
@@ -285,7 +295,9 @@ function ActualPresentationViewEditor({
     return currentAdmission.reason === 'unavailable' && needsRead ? (
       <div className="space-y-4">
         {failureView(currentAdmission)}
-        <Button onClick={retryAdmission}>{m.curation_reload()}</Button>
+        <Button className={editorControlClass} onClick={retryAdmission}>
+          {m.curation_reload()}
+        </Button>
       </div>
     ) : (
       failureView(currentAdmission)
@@ -444,7 +456,9 @@ function StandalonePresentationViewEditor({
     return currentAdmission.reason === 'unavailable' && needsRead ? (
       <div className="space-y-4">
         {failureView(currentAdmission)}
-        <Button onClick={retryAdmission}>{m.curation_reload()}</Button>
+        <Button className={editorControlClass} onClick={retryAdmission}>
+          {m.curation_reload()}
+        </Button>
       </div>
     ) : (
       failureView(currentAdmission)
@@ -491,6 +505,7 @@ function AdmittedPresentationViewEditor({
   retained: RetainedPublication;
   preview?: ReactNode;
 }) {
+  const formId = useId();
   const [current, setCurrent] = useState<CurationRead>(initial);
   const [draft, setDraft] = useState(() => (initial.ok ? presentationDraft(initial) : null));
   const [failure, setFailure] = useState<CurationFailure | null>(null);
@@ -760,7 +775,7 @@ function AdmittedPresentationViewEditor({
       <div className="space-y-4">
         {navigationGuard}
         <CurationFailureNotice failure={failure ?? (current.ok ? { ok: false, reason: 'unavailable' } : current)} />
-        <Button disabled={busy} onClick={() => void reload()}>
+        <Button className={editorControlClass} disabled={busy} onClick={() => void reload()}>
           {m.curation_reload()}
         </Button>
       </div>
@@ -778,7 +793,12 @@ function AdmittedPresentationViewEditor({
   );
 
   return (
-    <article ref={pageRegion} tabIndex={-1} className="min-w-0 space-y-6 font-sans text-foreground" aria-busy={busy}>
+    <article
+      ref={pageRegion}
+      tabIndex={-1}
+      className="min-w-0 space-y-6 rounded-md font-sans text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      aria-busy={busy}
+    >
       {navigationGuard}
       <header className="space-y-2">
         <h1 className="text-3xl font-semibold tracking-tight">{m.curation_heading()}</h1>
@@ -794,9 +814,7 @@ function AdmittedPresentationViewEditor({
               : m.curation_saved()}
         </p>
         <details className="text-sm">
-          <summary className="cursor-pointer text-muted-foreground">
-            {m.presentation_editor_saved_version_details()}
-          </summary>
+          <summary className={editorDisclosureClass}>{m.presentation_editor_saved_version_details()}</summary>
           <p className="mt-2 break-all font-mono">
             {m.presentation_editor_version_reference({ head: saved.head, digest: saved.digest })}
           </p>
@@ -807,41 +825,54 @@ function AdmittedPresentationViewEditor({
           {message}
         </p>
       )}
-      {failure && <CurationFailureNotice failure={failure} correction={validationCorrection(failureProfile)} />}
+      {failure && (
+        <div className={editorRecoveryClass}>
+          <CurationFailureNotice failure={failure} correction={validationCorrection(failureProfile)} />
+        </div>
+      )}
       {preview}
-      <CurationPublicationRecovery
-        publication={publication}
-        {...(visit ? { visit } : {})}
-        profile={profile}
-        head={saved.head}
-        onPublished={published}
-        correction={validationCorrection(publicationState.intent?.profile ?? profile)}
-        onReviewed={(_reviewed, choice) => {
-          if (!isCurrent()) return;
-          // reconcile('keep') returns the draft on the reviewed head. The dirty baseline is the actual read.
-          const active = publicationState.active;
-          if (!active) return;
-          setOwned(setCurrent, active);
-          setOwned(setDraft, (value) => value && reviewPresentationDraft(value, active, choice));
-          if (choice === 'discard') setOwned(setGeneration, (value) => value + 1);
-          setOwned(setFailure, null);
-          setOwned(setMessage, choice === 'keep' ? m.curation_reconciled() : m.curation_discarded());
-        }}
-      />
+      <div className={editorRecoveryClass}>
+        <CurationPublicationRecovery
+          publication={publication}
+          {...(visit ? { visit } : {})}
+          profile={profile}
+          head={saved.head}
+          onPublished={published}
+          correction={validationCorrection(publicationState.intent?.profile ?? profile)}
+          onReviewed={(_reviewed, choice) => {
+            if (!isCurrent()) return;
+            // reconcile('keep') returns the draft on the reviewed head. The dirty baseline is the actual read.
+            const active = publicationState.active;
+            if (!active) return;
+            setOwned(setCurrent, active);
+            setOwned(setDraft, (value) => value && reviewPresentationDraft(value, active, choice));
+            if (choice === 'discard') setOwned(setGeneration, (value) => value + 1);
+            setOwned(setFailure, null);
+            setOwned(setMessage, choice === 'keep' ? m.curation_reconciled() : m.curation_discarded());
+          }}
+        />
+      </div>
       <fieldset disabled={busy} className="min-w-0 space-y-6">
         <div className="flex flex-wrap gap-3">
           {!editorOpen && (
             <Button
+              className={editorControlClass}
               disabled={unresolvedPublication || (invalidPublication && !laterChanges)}
               onClick={() => void publish()}
             >
               {m.curation_publish()}
             </Button>
           )}
-          <Button variant="outline" disabled={!dirty} onClick={() => isCurrent() && setOwned(setConfirm, 'discard')}>
+          <Button
+            className={editorControlClass}
+            variant="outline"
+            disabled={!dirty}
+            onClick={() => isCurrent() && setOwned(setConfirm, 'discard')}
+          >
             {m.curation_view_discard()}
           </Button>
           <Button
+            className={editorControlClass}
             variant="outline"
             onClick={() =>
               isCurrent() && (!pendingPublication && dirty ? setOwned(setConfirm, 'reload') : void reload())
@@ -856,9 +887,11 @@ function AdmittedPresentationViewEditor({
         >
           <div className="grid min-w-0 gap-4 sm:grid-cols-2">
             <Field className="min-w-0">
-              <FieldLabel htmlFor="curation-template">{m.curation_template()}</FieldLabel>
+              <FieldLabel htmlFor={`${formId}-template`}>{m.curation_template()}</FieldLabel>
               <NativeSelect
-                id="curation-template"
+                id={`${formId}-template`}
+                className="w-full min-w-0 max-w-full"
+                aria-describedby={selection.template.key !== null ? `${formId}-template-value` : undefined}
                 value={JSON.stringify(selection.template)}
                 onChange={(event) => {
                   if (!isCurrent()) return;
@@ -876,11 +909,20 @@ function AdmittedPresentationViewEditor({
                   </NativeSelectOption>
                 ))}
               </NativeSelect>
+              {selection.template.key !== null && (
+                <p
+                  id={`${formId}-template-value`}
+                  className="text-sm text-muted-foreground select-text [overflow-wrap:anywhere]"
+                >
+                  {templateLabel(selection.template)}
+                </p>
+              )}
             </Field>
             <Field className="min-w-0">
-              <FieldLabel htmlFor="curation-view">{m.curation_view()}</FieldLabel>
+              <FieldLabel htmlFor={`${formId}-view`}>{m.curation_view()}</FieldLabel>
               <NativeSelect
-                id="curation-view"
+                id={`${formId}-view`}
+                className="w-full min-w-0 max-w-full"
                 value={selection.view}
                 onChange={(event) => {
                   if (!isCurrent()) return;
@@ -901,19 +943,26 @@ function AdmittedPresentationViewEditor({
             </Field>
           </div>
           <details className="text-sm">
-            <summary className="cursor-pointer text-muted-foreground">
-              {m.presentation_editor_resolver_details()}
-            </summary>
+            <summary className={editorDisclosureClass}>{m.presentation_editor_resolver_details()}</summary>
             <p className="mt-2 text-muted-foreground">{m.curation_fallback()}</p>
           </details>
         </section>
         {editorOpen ? (
-          <section ref={editorRegion} tabIndex={-1} className="min-w-0 space-y-3" aria-label={m.curation_editor()}>
+          <section
+            ref={editorRegion}
+            tabIndex={-1}
+            className="min-w-0 space-y-3 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label={m.curation_editor()}
+          >
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="break-words font-semibold">
+              <h2 className="min-w-0 flex-1 font-semibold [overflow-wrap:anywhere]">
                 {templateLabel(selection.template)} · {viewNames[selection.view]}
               </h2>
-              <Button variant="outline" onClick={() => isCurrent() && setOwned(setEditorOpen, false)}>
+              <Button
+                className={editorControlClass}
+                variant="outline"
+                onClick={() => isCurrent() && setOwned(setEditorOpen, false)}
+              >
                 {m.curation_close()}
               </Button>
             </div>
@@ -953,18 +1002,25 @@ function AdmittedPresentationViewEditor({
             </div>
           </section>
         ) : (
-          <Button variant="outline" onClick={() => isCurrent() && setOwned(setEditorOpen, true)}>
+          <Button
+            className={editorControlClass}
+            variant="outline"
+            onClick={() => isCurrent() && setOwned(setEditorOpen, true)}
+          >
             {selection.template.scope}: {selection.template.key ?? m.curation_generic()}
           </Button>
         )}
-        <form className="space-y-3 rounded-xl border border-border bg-card p-4" onSubmit={addTemplate}>
+        <form className="min-w-0 space-y-3 rounded-xl border border-border bg-card p-4" onSubmit={addTemplate}>
           <h2 className="font-semibold">{m.curation_add()}</h2>
-          <p className="text-sm text-muted-foreground">{m.curation_add_hint()}</p>
-          <div className="flex flex-wrap items-end gap-3">
-            <Field>
-              <FieldLabel htmlFor="curation-scope">{m.curation_scope()}</FieldLabel>
+          <p id={`${formId}-add-hint`} className="text-sm text-muted-foreground">
+            {m.curation_add_hint()}
+          </p>
+          <div className="grid min-w-0 items-start gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto]">
+            <Field className="min-w-0">
+              <FieldLabel htmlFor={`${formId}-scope`}>{m.curation_scope()}</FieldLabel>
               <NativeSelect
-                id="curation-scope"
+                id={`${formId}-scope`}
+                className="w-full min-w-0 max-w-full"
                 value={scope}
                 onChange={(event) => isCurrent() && setOwned(setScope, event.target.value as 'type' | 'route')}
               >
@@ -972,17 +1028,23 @@ function AdmittedPresentationViewEditor({
                 <NativeSelectOption value="route">{scopeNames.route}</NativeSelectOption>
               </NativeSelect>
             </Field>
-            <Field className="min-w-0 flex-1">
-              <FieldLabel htmlFor="curation-key">{m.curation_key()}</FieldLabel>
+            <Field className="min-w-0">
+              <FieldLabel htmlFor={`${formId}-key`}>{m.curation_key()}</FieldLabel>
               <Input
-                id="curation-key"
+                id={`${formId}-key`}
+                aria-describedby={key ? `${formId}-add-hint ${formId}-key-value` : `${formId}-add-hint`}
                 value={key}
                 onChange={(event) => isCurrent() && setOwned(setKey, event.target.value)}
                 required
                 autoComplete="off"
               />
+              {key && (
+                <p id={`${formId}-key-value`} className="text-sm select-text [overflow-wrap:anywhere]">
+                  {key}
+                </p>
+              )}
             </Field>
-            <Button type="submit" variant="outline">
+            <Button className={`${editorControlClass} w-full sm:mt-7 sm:w-auto`} type="submit" variant="outline">
               {m.curation_add()}
             </Button>
           </div>
@@ -1002,8 +1064,9 @@ function AdmittedPresentationViewEditor({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>{m.curation_keep()}</AlertDialogCancel>
+            <AlertDialogCancel className={editorControlClass}>{m.curation_keep()}</AlertDialogCancel>
             <AlertDialogAction
+              className={editorControlClass}
               onClick={() => {
                 if (!isCurrent()) return;
                 if (confirm === 'reload') void reload();

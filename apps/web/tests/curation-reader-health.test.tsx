@@ -180,9 +180,16 @@ test('mounted curation retires every stale cache owner and recovers only an expl
     act(async () => {
       button(label).click();
     });
-  const select = async (id: string, value: string) =>
+  const templateControl = (name: string) => {
+    const region = [...host.querySelectorAll('section')].find(
+      (section) => section.getAttribute('aria-label') === m.curation_templates(),
+    );
+    return ([...(region?.querySelectorAll('label') ?? [])].find((label) => label.textContent === name)?.control ??
+      null) as InstanceType<typeof window.HTMLSelectElement> | null;
+  };
+  const select = async (name: string, value: string) =>
     act(async () => {
-      const control = host.querySelector(`#${id}`) as InstanceType<typeof window.HTMLSelectElement>;
+      const control = templateControl(name) as InstanceType<typeof window.HTMLSelectElement>;
       control.value = value;
       control.dispatchEvent(new window.Event('change', { bubbles: true }));
     });
@@ -195,8 +202,8 @@ test('mounted curation retires every stale cache owner and recovers only an expl
       control.blur();
     });
   const openDetailsHeading = async () => {
-    await select('curation-template', JSON.stringify({ scope: 'type', key: 'schema:Book' }));
-    await select('curation-view', 'details');
+    await select(m.curation_template(), JSON.stringify({ scope: 'type', key: 'schema:Book' }));
+    await select(m.curation_view(), 'details');
     await settle(() => !!host.querySelector('[data-puck-layer-tree-id="details"]'), 'Puck details heading');
     await act(async () => {
       const row = host.querySelector('[data-puck-layer-tree-id="details"]')!;
@@ -219,7 +226,7 @@ test('mounted curation retires every stale cache owner and recovers only an expl
     await settle(() => reads.length > index, `fresh BFF admission for ${reader}`);
     expect(reads[index]!.reader).toBe(reader);
     await act(async () => reads[index]!.work.resolve(readFor(reader, profile, reader === readerA ? 7 : 31)));
-    await settle(() => host.querySelector('#curation-template') !== null, `mounted admission for ${reader}`);
+    await settle(() => templateControl(m.curation_template()) !== null, `mounted admission for ${reader}`);
   };
   const flush = () =>
     act(async () => {
@@ -231,7 +238,7 @@ test('mounted curation retires every stale cache owner and recovers only an expl
     // Initial browser hydration has no session query yet. The same-read SSR curation remains usable.
     await router.load();
     await show();
-    await settle(() => host.querySelector('#curation-template') !== null, 'same-read SSR editor');
+    await settle(() => templateControl(m.curation_template()) !== null, 'same-read SSR editor');
     expect(host.textContent).toContain('/private-a');
     expect(reads).toHaveLength(0);
 
@@ -298,7 +305,7 @@ test('mounted curation retires every stale cache owner and recovers only an expl
     await act(async () => reads[0]!.work.resolve(readFor(readerA, profileA, 7)));
     await settle(() => host.textContent?.includes(m.curation_unknown()) ?? false, 'retained original after A recovery');
     expect(host.textContent).not.toContain('A later raw-language draft');
-    const recoveredASelect = host.querySelector('#curation-template') as InstanceType<typeof window.HTMLSelectElement>;
+    const recoveredASelect = templateControl(m.curation_template()) as InstanceType<typeof window.HTMLSelectElement>;
     recoveredASelect.focus();
     const recoveredAStatuses = [...host.querySelectorAll('[role="status"]')].map((node) => node.textContent);
     oldRetry?.();
@@ -340,7 +347,7 @@ test('mounted curation retires every stale cache owner and recovers only an expl
     expect(reads).toHaveLength(1);
     await admit(activeClient, readerA, 1, profileA);
     expect(host.textContent).toContain(m.curation_unknown());
-    const recoveredErrorSelect = host.querySelector('#curation-template') as InstanceType<
+    const recoveredErrorSelect = templateControl(m.curation_template()) as InstanceType<
       typeof window.HTMLSelectElement
     >;
     recoveredErrorSelect.focus();
@@ -368,7 +375,7 @@ test('mounted curation retires every stale cache owner and recovers only an expl
     await settle(() => reads.length === 3, 'fresh A admission after removal and recreation');
     await act(async () => reads[2]!.work.resolve(readFor(readerA, profileA, 7)));
     await settle(() => host.textContent?.includes(m.curation_unknown()) ?? false, 'original remains uncertain');
-    const recoveredRemovalSelect = host.querySelector('#curation-template') as InstanceType<
+    const recoveredRemovalSelect = templateControl(m.curation_template()) as InstanceType<
       typeof window.HTMLSelectElement
     >;
     recoveredRemovalSelect.focus();
@@ -430,7 +437,7 @@ test('mounted curation retires every stale cache owner and recovers only an expl
     await act(async () => replacementClient.setQueryData(session.sessionQuery.queryKey, signedIn(readerB, 'csrf-b')));
     await settle(() => reads.length === 7, 'fresh B admission');
     await act(async () => reads[6]!.work.resolve(readFor(readerB, profileB, 31)));
-    await settle(() => host.querySelector('#curation-template') !== null, 'B editor');
+    await settle(() => templateControl(m.curation_template()) !== null, 'B editor');
     expect(host.textContent).toContain('/private-b');
     expect(host.textContent).not.toContain('A later raw-language draft');
     expect(host.textContent).not.toContain(m.curation_unknown());
@@ -462,7 +469,7 @@ test('mounted curation retires every stale cache owner and recovers only an expl
     await settle(() => reads.length === 9, 'fresh admission after unmount');
     await act(async () => reads[8]!.work.resolve(readFor(readerA, profileA, 7)));
     await settle(() => host.textContent?.includes(m.curation_unknown()) ?? false, 'unmounted intent recovered');
-    const recoveredUnmountSelect = host.querySelector('#curation-template') as InstanceType<
+    const recoveredUnmountSelect = templateControl(m.curation_template()) as InstanceType<
       typeof window.HTMLSelectElement
     >;
     recoveredUnmountSelect.focus();

@@ -100,9 +100,16 @@ test('default presentation editor protects unsaved drafts and unresolved publica
       button(label).click();
     });
   };
-  const select = async (id: string, value: string) => {
+  const templateControl = (name: string) => {
+    const region = [...host.querySelectorAll('section')].find(
+      (section) => section.getAttribute('aria-label') === m.curation_templates(),
+    );
+    return ([...(region?.querySelectorAll('label') ?? [])].find((label) => label.textContent === name)?.control ??
+      null) as InstanceType<typeof window.HTMLSelectElement> | null;
+  };
+  const select = async (name: string, value: string) => {
     await act(async () => {
-      const control = host.querySelector(`#${id}`)! as InstanceType<typeof window.HTMLSelectElement>;
+      const control = templateControl(name)! as InstanceType<typeof window.HTMLSelectElement>;
       control.value = value;
       control.dispatchEvent(new window.Event('change', { bubbles: true }));
     });
@@ -193,19 +200,17 @@ test('default presentation editor protects unsaved drafts and unresolved publica
     return event.defaultPrevented;
   };
   const assertSelection = () => {
-    expect((host.querySelector('#curation-template') as InstanceType<typeof window.HTMLSelectElement>).value).toBe(
+    expect((templateControl(m.curation_template()) as InstanceType<typeof window.HTMLSelectElement>).value).toBe(
       JSON.stringify({ scope: 'type', key: 'schema:Book' }),
     );
-    expect((host.querySelector('#curation-view') as InstanceType<typeof window.HTMLSelectElement>).value).toBe(
-      'details',
-    );
+    expect((templateControl(m.curation_view()) as InstanceType<typeof window.HTMLSelectElement>).value).toBe('details');
   };
   try {
     await router.load();
     await act(async () => root.render(createElement(RouterProvider, { router })));
     expect(unloadIsProtected()).toBe(false);
-    await select('curation-template', JSON.stringify({ scope: 'type', key: 'schema:Book' }));
-    await select('curation-view', 'details');
+    await select(m.curation_template(), JSON.stringify({ scope: 'type', key: 'schema:Book' }));
+    await select(m.curation_view(), 'details');
     await heading('details');
     expect(unloadIsProtected()).toBe(false); // Opening a view is not an edit.
     await edit('text.en', 'Original publication');
@@ -225,10 +230,10 @@ test('default presentation editor protects unsaved drafts and unresolved publica
     expect(attempts).toHaveLength(1);
     const original = structuredClone(attempts[0]!);
     await edit('text.en', 'Later unpublished draft');
-    await select('curation-view', 'overview');
+    await select(m.curation_view(), 'overview');
     await heading('book');
     await edit('text.en', 'Other view draft');
-    await select('curation-view', 'details');
+    await select(m.curation_view(), 'details');
     await heading('details');
 
     const dialog = await attemptDeparture();
@@ -240,10 +245,10 @@ test('default presentation editor protects unsaved drafts and unresolved publica
     expect(textField('text.en')!.value).toBe('Later unpublished draft');
     expect(textField('text.fr')!.value).toBe('');
     expect(attempts).toEqual([original]);
-    await select('curation-view', 'overview');
+    await select(m.curation_view(), 'overview');
     await heading('book');
     expect(textField('text.en')!.value).toBe('Other view draft');
-    await select('curation-view', 'details');
+    await select(m.curation_view(), 'details');
     await heading('details');
     expect(textField('text.en')!.value).toBe('Later unpublished draft');
     expect(textField('text.fr')!.value).toBe('');
@@ -293,8 +298,8 @@ test('default presentation editor protects unsaved drafts and unresolved publica
     await act(async () => {
       await router.navigate({ to: initialLocation });
     });
-    await select('curation-template', JSON.stringify({ scope: 'type', key: 'schema:Book' }));
-    await select('curation-view', 'details');
+    await select(m.curation_template(), JSON.stringify({ scope: 'type', key: 'schema:Book' }));
+    await select(m.curation_view(), 'details');
     await heading('details');
     await edit('text.en', 'Confirmed publication');
     await click(m.curation_publish());
@@ -448,16 +453,25 @@ test('reader replacement and ABA retire delayed reload, publication and preview 
     });
     await click(m.presentation_preview_inspect());
   };
+  const templateControl = (name: string) => {
+    const region = [...host.querySelectorAll('section')].find(
+      (section) => section.getAttribute('aria-label') === m.curation_templates(),
+    );
+    return ([...(region?.querySelectorAll('label') ?? [])].find((label) => label.textContent === name)?.control ??
+      null) as InstanceType<typeof window.HTMLSelectElement> | null;
+  };
   const switchReader = async (reader: string, readIndex: number, route: string, head: number) => {
     subject = reader;
     await render();
     await settle(() => reads.length > readIndex);
     expect(reads[readIndex]!.reader).toBe(reader);
     reads[readIndex]!.pending.resolve(readFor(reader, route, head));
-    await settle(() => host.querySelector('#curation-template') !== null);
+    await settle(() => templateControl(m.curation_template()) !== null);
   };
   const routeOptions = () =>
-    [...host.querySelectorAll('#curation-template option')].map((option) => option.textContent?.trim() ?? '');
+    [...templateControl(m.curation_template())!.querySelectorAll('option')].map(
+      (option) => option.textContent?.trim() ?? '',
+    );
   const expectedRoute = (route: string) => `${m.curation_route()}: ${route}`;
   const previewPage: PresentationPreview = {
     ok: true,
@@ -474,7 +488,7 @@ test('reader replacement and ABA retire delayed reload, publication and preview 
   };
   try {
     await render();
-    expect(host.querySelector('#curation-template')).not.toBeNull();
+    expect(templateControl(m.curation_template())).not.toBeNull();
     await click(m.curation_publish());
     await settle(() => publishes.length === 1);
     expect(publishes[0]!.reader).toBe(readerA);
@@ -491,7 +505,7 @@ test('reader replacement and ABA retire delayed reload, publication and preview 
     await settle(() => previewReads.length === 2);
 
     await switchReader(readerA, 2, '/a-current', 40);
-    const curationSelect = host.querySelector('#curation-template') as InstanceType<typeof window.HTMLSelectElement>;
+    const curationSelect = templateControl(m.curation_template()) as InstanceType<typeof window.HTMLSelectElement>;
     curationSelect.focus();
     const focusedA = window.document.activeElement;
     const statusesA = [...host.querySelectorAll('[role="status"]')].map((node) => node.textContent);
@@ -531,7 +545,7 @@ test('reader replacement and ABA retire delayed reload, publication and preview 
     expect(publishes[1]!.input).toEqual(publishes[0]!.input);
 
     await switchReader(readerB, 6, '/b-ready', 32);
-    const focusedB = host.querySelector('#curation-template') as InstanceType<typeof window.HTMLSelectElement>;
+    const focusedB = templateControl(m.curation_template()) as InstanceType<typeof window.HTMLSelectElement>;
     focusedB.focus();
     const statusesB = [...host.querySelectorAll('[role="status"]')].map((node) => node.textContent);
     publishes[1]!.pending!.resolve({ ok: false, reason: 'unavailable', outcome: 'unknown' });
