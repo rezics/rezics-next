@@ -89,8 +89,17 @@ export const Pending: Story = {
     const article = view.getByRole('article', {
       name: new RegExp(`${m.moderation_appeals_tab()}.*${m.moderation_queue_post()}`),
     });
+    const expectTargetIdentityWithheld = async () => {
+      const targetId = pendingAppeal.decision.target.id;
+      await expect(canvasElement.textContent).not.toContain(targetId);
+      const renderedAttributes = [canvasElement, ...canvasElement.querySelectorAll('*')]
+        .flatMap((element) => [...element.attributes].map(({ name, value }) => `${name}=${value}`))
+        .join('\n');
+      await expect(renderedAttributes).not.toContain(targetId);
+    };
+
     await expect(article.querySelector('h2')).toHaveTextContent(m.moderation_queue_post());
-    await expect(article).toHaveTextContent(pendingAppeal.decision.target.id);
+    await expectTargetIdentityWithheld();
     await expect(article.querySelector('a')).toBeNull();
     await expect(view.getByRole('heading', { level: 3, name: m.moderation_current_target_label() })).toBeVisible();
     await expect(article.querySelector('time')).toHaveAttribute('dateTime', pendingAppeal.createdAt);
@@ -110,10 +119,30 @@ export const Pending: Story = {
     await expect(uphold).toHaveFocus();
 
     await expect(view.getByText(pendingAppeal.decision.statement)).toBeInTheDocument();
-    await expect(view.getByText(pendingAppeal.decision.target.id)).toBeInTheDocument();
     await expect(view.getByText(pendingAppeal.statement)).toBeInTheDocument();
     await expect(view.getByRole('blockquote').textContent).toBe(m.moderation_target_unavailable());
     await expect(view.queryByText(m.moderation_appeals_empty())).not.toBeInTheDocument();
+
+    await userEvent.click(view.getByText(m.reporter_status_reference(), { exact: true }));
+    const referenceDetails = view.getByText(m.reporter_status_reference(), { exact: true }).closest('details');
+    if (!referenceDetails) throw new Error('Appeal Reference details were not rendered.');
+    await expect(referenceDetails).toHaveAttribute('open');
+    await expectTargetIdentityWithheld();
+
+    const references = within(referenceDetails);
+    const appealReferenceLabel = references.getByText(m.moderation_case_details_appeal_id(), { exact: true });
+    const appealReferenceValue = references.getByText(pendingAppeal.id, { exact: true });
+    await expect(appealReferenceLabel).toBeVisible();
+    await expect(appealReferenceValue).toBeVisible();
+    if (!appealReferenceLabel.parentElement?.contains(appealReferenceValue))
+      throw new Error('The appeal ID must remain under its Appeal ID reference label.');
+
+    const decisionReferenceLabel = references.getByText(m.moderation_case_details_decision_id(), { exact: true });
+    const decisionReferenceValue = references.getByText(pendingAppeal.decisionId, { exact: true });
+    await expect(decisionReferenceLabel).toBeVisible();
+    await expect(decisionReferenceValue).toBeVisible();
+    if (!decisionReferenceLabel.parentElement?.contains(decisionReferenceValue))
+      throw new Error('The decision ID must remain under its Decision ID reference label.');
   },
 };
 
