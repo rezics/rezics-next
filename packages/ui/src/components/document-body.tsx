@@ -41,6 +41,7 @@ export function DocumentBody({ document, className, labels, mentions, locale = '
   if (visit.semanticSnapshot !== semanticSnapshot) {
     // Restart this render before its children commit so replacement text cannot paint revealed.
     setVisit({ semanticSnapshot, id: visit.id + 1 });
+    return null;
   }
 
   const resolved = { ...documentBodyLabels, ...labels };

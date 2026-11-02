@@ -495,6 +495,11 @@ export const DisclosureReplacement: Story = {
       if (!handler) throw new Error(`the ${testId} control has no click handler`);
       await act(async () => handler(retainedEvent(control)));
     };
+    const runControlWithOneImageRender = async (testId: string) => {
+      const before = Number(imageCall());
+      await runControl(testId);
+      await expect(imageCall()).toBe(String(before + 1));
+    };
 
     const initialButtons = firstButtons();
     const initialImageCall = imageCall();
@@ -516,17 +521,17 @@ export const DisclosureReplacement: Story = {
     await expectRevealed(canvas, secondSecret, canvasElement);
     expect(imageCall()).toBe(callsBeforePointerReveal);
 
-    await runControl('disclosure-fresh-callback');
+    await runControlWithOneImageRender('disclosure-fresh-callback');
     await expectRevealed(canvas, secondSecret, canvasElement);
-    await runControl('disclosure-options');
+    await runControlWithOneImageRender('disclosure-options');
     await expectRevealed(canvas, secondSecret, canvasElement);
     await expect(canvas.getByRole('link', { name: '@reader' })).toHaveAttribute('href', '/fr/@reader');
     await expect(canvas.getByRole('link', { name: 'ordinary link' })).toHaveAttribute('href', 'https://example.com/read');
-    await runControl('disclosure-equal-snapshot');
+    await runControlWithOneImageRender('disclosure-equal-snapshot');
     await expectRevealed(canvas, secondSecret, canvasElement);
     await expect(canvas.getByText('Revision A context')).toBeVisible();
 
-    await runControl('disclosure-show-b');
+    await runControlWithOneImageRender('disclosure-show-b');
     const replacementButtons = canvas.getAllByRole('button', { name: 'Afficher le spoiler' });
     if (!replacementButtons[0] || !replacementButtons[1]) throw new Error('revision B did not mount two fresh spoilers');
     await expectConcealed(replacementButtons[0], firstSecret, canvasElement, 'Afficher le spoiler');
@@ -539,6 +544,7 @@ export const DisclosureReplacement: Story = {
 
     const boundary = canvas.getByTestId('disclosure-focus-boundary');
     boundary.focus();
+    const callsBeforeRetiredHandlers = imageCall();
     await act(async () => {
       retiredFirst.onClick?.(retainedEvent(initialButtons[0]!));
       retiredFirst.onKeyDown?.(retainedEvent(initialButtons[0]!, 'Enter'));
@@ -554,6 +560,7 @@ export const DisclosureReplacement: Story = {
       'false',
     );
     expect(canvasElement.ownerDocument.activeElement).toBe(boundary);
+    expect(imageCall()).toBe(callsBeforeRetiredHandlers);
 
     const imageCallBeforeReplacementReveal = imageCall();
     await userEvent.click(replacementButtons[0]!);
@@ -561,27 +568,28 @@ export const DisclosureReplacement: Story = {
     await expect(canvas.getByRole('button', { name: 'Afficher le spoiler' })).toHaveAttribute('aria-expanded', 'false');
     expect(imageCall()).toBe(imageCallBeforeReplacementReveal);
 
-    await runControl('disclosure-show-a');
+    await runControlWithOneImageRender('disclosure-show-a');
     const revisitA = canvas.getAllByRole('button', { name: 'Afficher le spoiler' });
     await expectConcealed(revisitA[0]!, firstSecret, canvasElement, 'Afficher le spoiler');
     await expectConcealed(revisitA[1]!, secondSecret, canvasElement, 'Afficher le spoiler');
-    await runControl('disclosure-show-b');
+    await runControlWithOneImageRender('disclosure-show-b');
     const revisitB = canvas.getAllByRole('button', { name: 'Afficher le spoiler' });
     await expectConcealed(revisitB[0]!, firstSecret, canvasElement, 'Afficher le spoiler');
     await expectConcealed(revisitB[1]!, secondSecret, canvasElement, 'Afficher le spoiler');
-    await runControl('disclosure-show-a');
+    await runControlWithOneImageRender('disclosure-show-a');
     const secondAVisit = canvas.getAllByRole('button', { name: 'Afficher le spoiler' });
     await expectConcealed(secondAVisit[0]!, firstSecret, canvasElement, 'Afficher le spoiler');
     await expectConcealed(secondAVisit[1]!, secondSecret, canvasElement, 'Afficher le spoiler');
 
     const unmountedHandlers = retainedReactHandlers(secondAVisit[0]!);
-    await runControl('disclosure-remove-spoilers');
+    await runControlWithOneImageRender('disclosure-remove-spoilers');
     await expect(canvas.queryAllByRole('button', { name: 'Afficher le spoiler' })).toHaveLength(0);
-    await runControl('disclosure-show-a');
+    await runControlWithOneImageRender('disclosure-show-a');
     const reappeared = canvas.getAllByRole('button', { name: 'Afficher le spoiler' });
     await expectConcealed(reappeared[0]!, firstSecret, canvasElement, 'Afficher le spoiler');
 
     const unmountCallback = retainedReactHandlers(reappeared[0]!);
+    const callsBeforeUnmount = imageCall();
     await runControl('disclosure-unmount');
     await expect(canvasElement.querySelector('[data-slot="document-body"]')).toBeNull();
     boundary.focus();
@@ -594,6 +602,7 @@ export const DisclosureReplacement: Story = {
     expect(canvasElement.ownerDocument.activeElement).toBe(boundary);
 
     await runControl('disclosure-remount');
+    await expect(imageCall()).toBe(String(Number(callsBeforeUnmount) + 1));
     const remounted = canvas.getAllByRole('button', { name: 'Afficher le spoiler' });
     await expectConcealed(remounted[0]!, firstSecret, canvasElement, 'Afficher le spoiler');
     const callsBeforeFreshReveal = imageCall();
