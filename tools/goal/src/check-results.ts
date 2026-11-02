@@ -56,7 +56,7 @@ function workspaceClosure(root: string, cwd: string, commit: string): string[] {
   const here = relative(root, cwd).split(sep).join('/');
   const dirs = git(root, 'ls-tree', '-r', '--name-only', commit)
     .split('\n')
-    .filter((path) => /^(?:apps|services|packages)\/[^/]+\/package\.json$/.test(path))
+    .filter((path) => /^(?:(?:apps|services|packages)\/[^/]+|tools\/goal)\/package\.json$/.test(path))
     .map((path) => path.replace(/\/package\.json$/, ''))
     .sort();
   const byName = new Map<string, string>();
@@ -66,7 +66,7 @@ function workspaceClosure(root: string, cwd: string, commit: string): string[] {
     } catch {}
   }
   const start = dirs.find((dir) => here === dir || here.startsWith(`${dir}/`));
-  if (!start) return dirs.length ? [] : [];
+  if (!start) return [];
   const seen = new Set<string>();
   const visit = (dir: string) => {
     if (seen.has(dir)) return;
@@ -100,8 +100,12 @@ export function checkResultKey(input: {
 }): { key: string; unit: string } {
   const { root, cwd, command } = input;
   const commit = input.commit ?? git(cwd, 'rev-parse', 'HEAD');
-  const unitDirs = relative(root, cwd) === '' ? ['.'] : workspaceClosure(root, cwd, commit);
-  const unit = unitDirs.join(',') || '.';
+  const here = relative(root, cwd).split(sep).join('/');
+  const atRoot = here === '' || here === '.';
+  let unitDirs = atRoot ? ['.'] : workspaceClosure(root, cwd, commit);
+  const workdir = atRoot || unitDirs.length ? undefined : here;
+  if (workdir) unitDirs = ['.'];
+  const unit = workdir ?? (unitDirs.join(',') || '.');
   const trees = unitDirs.map((dir) => [
     dir,
     git(root, 'rev-parse', dir === '.' ? `${commit}^{tree}` : `${commit}:${dir}`),
@@ -125,6 +129,7 @@ export function checkResultKey(input: {
     trees,
     global: globalInputs(root, commit),
     toolchain,
+    workdir: here || '.',
   };
   return { key: createHash('sha256').update(JSON.stringify(value)).digest('hex'), unit };
 }

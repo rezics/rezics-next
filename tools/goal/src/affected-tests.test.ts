@@ -1,11 +1,70 @@
 import { expect, test } from 'bun:test';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { siblingTestFiles, workerTestCommands } from './affected-tests.ts';
 import { checkSettings, loadSettings } from './config.ts';
 import defaults from '../defaults.json';
 import { failingTestFiles } from './merge-train.ts';
 import { settle } from './settle.ts';
-import { integrationHarness } from './test-support.ts';
+import { integrationHarness, temporaryDirectory } from './test-support.ts';
+
+test('existing supported sibling tests are discovered once and routed through the appropriate existing runner', () => {
+  const directory = temporaryDirectory();
+  try {
+    const root = directory.path;
+    const write = (path: string) => {
+      mkdirSync(join(root, dirname(path)), { recursive: true });
+      writeFileSync(join(root, path), '');
+    };
+    [
+      'apps/web/scripts/focused.ts',
+      'apps/web/src/shelf.ts',
+      'apps/web/tests/shelf.spec.tsx',
+      'packages/ui/src/button.ts',
+      'packages/ui/src/button.tsx',
+      'packages/ui/tests/button.test.ts',
+      'packages/filter/src/filter.ts',
+      'packages/filter/test/filter.test.ts',
+      'scripts/check.ts',
+      'scripts/check.spec.ts',
+      'scripts/check.test.mjs',
+      'services/kernel/src/library.ts',
+      'services/kernel/test/library.test.ts',
+      'services/kernel/test/library/shelf.test.ts',
+    ].forEach(write);
+    expect(
+      siblingTestFiles(
+        [
+          'apps/web/src/shelf.ts',
+          'packages/ui/src/button.ts',
+          'packages/ui/src/button.tsx',
+          'packages/filter/src/filter.ts',
+          'scripts/check.ts',
+          'services/kernel/src/library.ts',
+        ],
+        root,
+      ),
+    ).toEqual([
+      'apps/web/tests/shelf.spec.tsx',
+      'packages/filter/test/filter.test.ts',
+      'packages/ui/tests/button.test.ts',
+      'scripts/check.spec.ts',
+      'scripts/check.test.mjs',
+    ]);
+    expect(
+      workerTestCommands(
+        ['apps/web/src/shelf.ts', 'packages/filter/src/filter.ts', 'services/kernel/test/library/shelf.test.ts'],
+        root,
+      ),
+    ).toEqual([
+      ['bun', 'run', '--cwd', 'services/kernel', 'check', 'test/library/shelf.test.ts'],
+      ['bun', 'apps/web/scripts/focused.ts', '--private-network', '--', 'bun', 'test', 'tests/shelf.spec.tsx'],
+      ['bun', 'test', 'packages/filter/test/filter.test.ts'],
+    ]);
+  } finally {
+    directory.close();
+  }
+});
 
 type Harness = ReturnType<typeof integrationHarness>;
 const command = (script: string) => ['bun', '-e', script];

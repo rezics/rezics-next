@@ -602,7 +602,8 @@ the missing teardown-intent/receipt API; Goal does not claim the check was cance
 replacement. Delivering that lifecycle seam remains separate work.
 
 Declared paths support literals, `*`, `?` and whole-segment `**`. Absolute paths, traversal and unsupported glob syntax
-are refused. Risk ownership is checked by intersecting the path patterns, including broad claims such as `src/**`.
+are refused. Matching walks an explicit stack and refuses after one million visited states; each pattern shares the
+64 KiB brief size bound. Risk ownership is checked by intersecting the path patterns, including broad claims such as `src/**`.
 Every intersected risk area must be declared. Extend the ownership data when adding product modules. A `control-plane`
 brief may declare only `tools/goal/` paths; dispatch refuses outside paths and asks that they be split into a dev task.
 
@@ -734,7 +735,9 @@ integration. The defaults cover kernel affected mode, workspace imports, the Per
 regressions and the client page-story/component check. Local `affectedTests` and `integrationChecks` remain compatible
 inputs to this verifier when `verifierChecks` is not explicitly set; `bun install` and old typecheck entries are
 excluded. An explicit `verifierChecks` array replaces those legacy selections. `siblingTests.command` selects sibling
-tests after integration, excluding spec-tree files. These settings cannot disable or add work to the mandatory
+tests after integration, excluding spec-tree files. Discovery uses the shared `siblingTestFiles` selection of existing
+`.test`/`.spec` JS/TS module and JSX files beside the source and in workspace test directories, and still places a
+`bun test` command in the workspace that owns those files. These settings cannot disable or add work to the mandatory
 prelanding typecheck.
 
 Main and stabilize train checks retain their existing baseline behavior. They compare recorded failing files with the
