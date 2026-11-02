@@ -4,7 +4,11 @@ import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { ManagedAccounts } from '../../settings/managed-accounts';
-import { managedAccountsFailure, type ManagedAccountsIO } from '../../settings/managed-accounts-read';
+import {
+  managedAccountsFailure,
+  type ManagedAccountsIO,
+  type ManagedAccountsResult,
+} from '../../settings/managed-accounts-read';
 import { managedAccountsExample, managedAccountsIO, managedViewer } from './managed-accounts.fixtures';
 
 type Scenario =
@@ -372,5 +376,178 @@ export const DeniedFirstPageClearsInventory: Story = {
     await expect(canvas.queryByRole('link', { name: 'Atlas Indexer' })).toBeNull();
     await expect(canvas.queryByRole('button', { name: m.settings_managed_restart_list() })).toBeNull();
     await expect(canvas.getByRole('button', { name: m.settings_retry() })).toBeEnabled();
+  },
+};
+
+const longIdentity = 'InternationaleLesegemeinschaftFürUnabhängigeVeröffentlichungen'.repeat(3);
+
+/** Supplied bounded data only; these examples add no identity lookup or native evidence. UNRUN. */
+function LongInventoryExample({ preparing = false, empty = false, waiting = false, rtl = false, busy = false }) {
+  const [io] = useState<ManagedAccountsIO>(() => {
+    let initial = true;
+    const failed = new Set<string>();
+    return async (cursors) => {
+      if (waiting && initial) {
+        initial = false;
+        return managedAccountsFailure(429, { code: 'rate_limited' }, { 'Retry-After': '1' });
+      }
+      const page = managedAccountsExample();
+      page.account.displayName = longIdentity;
+      page.account.handle = longIdentity.toLowerCase();
+      page.organizations.items[0]!.account.displayName = `Organisation ${longIdentity}`;
+      page.organizations.items[0]!.account.handle = longIdentity.toLowerCase();
+      page.responsibilities.items[0]!.account!.displayName = `Betreiber ${longIdentity}`;
+      if (preparing) page.organizations = { state: 'preparing', items: [], next: null };
+      if (empty) {
+        page.organizations = { state: 'ready', items: [], next: null };
+        page.responsibilities = { items: [], next: null };
+      }
+      const feed = cursors.organizationsCursor ? 'organizations' : cursors.operatorsCursor ? 'responsibilities' : null;
+      if (busy && feed) return new Promise<ManagedAccountsResult>(() => {});
+      if (feed && !failed.has(feed)) {
+        failed.add(feed);
+        return managedAccountsFailure(
+          feed === 'organizations' ? 400 : 409,
+          {
+            code: feed === 'organizations' ? 'invalid_cursor' : 'stale_cursor',
+          },
+          { 'Retry-After': '1' },
+        );
+      }
+      if (!initial || feed) {
+        // A deliberate first-page recovery replaces only the selected feed in the real reader.
+        page.organizations = { state: 'ready', items: [], next: 'sparse organization +/=' };
+        page.responsibilities = { items: [], next: 'sparse responsibility +/=' };
+        if (feed) page[feed].next = null;
+      }
+      initial = false;
+      return { ok: true, page };
+    };
+  });
+  return (
+    <div dir={rtl ? 'rtl' : 'ltr'} className="mx-auto min-w-0 max-w-2xl p-4">
+      <ManagedAccounts
+        viewerId={managedViewer}
+        settingsHref={`/${getLocale()}/settings?panel=compact#account`}
+        io={io}
+      />
+    </div>
+  );
+}
+
+async function assertInventoryGeometry(canvasElement: HTMLElement) {
+  const inventory = canvasElement.querySelector<HTMLElement>('[data-slot="managed-accounts"]')!;
+  await expect(inventory.scrollWidth).toBeLessThanOrEqual(inventory.clientWidth + 1);
+  for (const button of inventory.querySelectorAll<HTMLButtonElement>('button')) {
+    const bounds = button.getBoundingClientRect();
+    const style = getComputedStyle(button);
+    await expect(bounds.height).toBeGreaterThanOrEqual(44);
+    await expect(bounds.width).toBeGreaterThanOrEqual(44);
+    await expect(style.whiteSpace).toBe('normal');
+    await expect(button.scrollWidth).toBeLessThanOrEqual(button.clientWidth + 1);
+  }
+}
+
+const longRecoveryPlay: NonNullable<Story['play']> = async ({ canvasElement }) => {
+  const canvas = within(canvasElement);
+  await canvas.findByRole('link', { name: longIdentity });
+  const organizations = within(canvas.getByRole('list', { name: m.managed_organizations_title() }).parentElement!);
+  const responsibilities = within(canvas.getByRole('list', { name: m.managed_operated_title() }).parentElement!);
+  const missing = canvas
+    .getByRole('heading', { name: m.settings_managed_identity_unavailable(), level: 4 })
+    .closest('li')!;
+  await expect(within(missing).queryByRole('link')).toBeNull();
+  await expect(canvas.getByText(m.managed_current())).toBeVisible();
+  await expect(canvas.getByText(m.managed_reconciling())).toBeVisible();
+  await assertInventoryGeometry(canvasElement);
+  const more = organizations.getByRole('button', { name: m.settings_managed_load_more() });
+  more.focus();
+  await expect(more).toHaveFocus();
+  await userEvent.keyboard('{Enter}');
+  await organizations.findByRole('alert');
+  const restart = organizations.getByRole('button', { name: m.settings_managed_restart_list() });
+  await expect(restart).toBeDisabled();
+  await userEvent.click(responsibilities.getByRole('button', { name: m.settings_managed_load_more() }));
+  await responsibilities.findByRole('alert');
+  await assertInventoryGeometry(canvasElement);
+  await waitFor(() => expect(restart).toBeEnabled(), { timeout: 3000 });
+  restart.focus();
+  await expect(restart).toHaveFocus();
+  await userEvent.keyboard(' ');
+  await organizations.findByText(m.managed_no_current_page());
+  await expect(responsibilities.getByRole('alert')).toBeVisible();
+  await waitFor(() => expect(responsibilities.getByRole('button', { name: m.settings_retry() })).toBeEnabled(), {
+    timeout: 3000,
+  });
+  await userEvent.click(responsibilities.getByRole('button', { name: m.settings_retry() }));
+  await waitFor(() => expect(responsibilities.queryByRole('alert')).toBeNull());
+  await expect(responsibilities.getByText(m.managed_reconciling())).toBeVisible();
+  await userEvent.click(organizations.getByRole('button', { name: m.settings_managed_load_more() }));
+  await organizations.findByText(m.managed_no_organizations());
+  await expect(organizations.queryByRole('button')).toBeNull();
+  await assertInventoryGeometry(canvasElement);
+};
+
+export const LongLocaleBoundedRecoveryPhone: Story = {
+  globals: { locale: 'de', viewport: { value: 'phone390' } },
+  render: () => <LongInventoryExample />,
+  play: longRecoveryPlay,
+};
+export const LongLocaleBoundedRecoveryDesktop: Story = {
+  ...LongLocaleBoundedRecoveryPhone,
+  globals: { locale: 'fr', viewport: { value: 'desktop1280' } },
+};
+export const LongLocaleBoundedRecoveryRTL: Story = {
+  ...LongLocaleBoundedRecoveryPhone,
+  render: () => <LongInventoryExample rtl />,
+};
+export const LongLocalePreparing: Story = {
+  globals: { locale: 'de', viewport: { value: 'phone390' } },
+  render: () => <LongInventoryExample preparing />,
+  play: async ({ canvasElement }) => {
+    await within(canvasElement).findByText(m.managed_preparing_text());
+    await assertInventoryGeometry(canvasElement);
+  },
+};
+export const LongLocaleEmpty: Story = {
+  globals: { locale: 'fr', viewport: { value: 'desktop1280' } },
+  render: () => <LongInventoryExample empty />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByText(m.managed_no_organizations());
+    await expect(canvas.getByText(m.managed_no_responsibilities())).toBeVisible();
+    await expect(canvas.queryByRole('button')).toBeNull();
+    await assertInventoryGeometry(canvasElement);
+  },
+};
+export const LongLocaleInventoryWait: Story = {
+  globals: { locale: 'de', viewport: { value: 'phone390' } },
+  render: () => <LongInventoryExample waiting rtl />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByRole('alert');
+    const retry = canvas.getByRole('button', { name: m.settings_retry() });
+    await expect(retry).toBeDisabled();
+    await expect(canvas.getByRole('status')).toHaveTextContent(m.settings_managed_inventory_retry_wait());
+    await assertInventoryGeometry(canvasElement);
+    await waitFor(() => expect(retry).toBeEnabled(), { timeout: 3000 });
+    await expect(canvas.queryByRole('list')).toBeNull();
+    await userEvent.click(retry);
+    await canvas.findByRole('link', { name: longIdentity });
+  },
+};
+
+export const LongLocaleBusy: Story = {
+  globals: { locale: 'de', viewport: { value: 'phone390' } },
+  render: () => <LongInventoryExample busy rtl />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByRole('list', { name: m.managed_your_account() });
+    const organizations = within(canvas.getByRole('list', { name: m.managed_organizations_title() }).parentElement!);
+    const responsibilities = within(canvas.getByRole('list', { name: m.managed_operated_title() }).parentElement!);
+    await userEvent.click(organizations.getByRole('button', { name: m.settings_managed_load_more() }));
+    await expect(organizations.getByRole('button', { name: m.settings_managed_loading() })).toBeDisabled();
+    await expect(responsibilities.getByRole('button', { name: m.settings_managed_load_more() })).toBeEnabled();
+    await assertInventoryGeometry(canvasElement);
   },
 };

@@ -5,7 +5,7 @@ import { Badge } from '@rezics/ui/shadcn/badge';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
-import { ContentItem } from '@rezics/ui/content-item';
+import { ContentItem, ContentItemHeading } from '@rezics/ui/content-item';
 import { m } from '../paraglide/messages.js';
 import { useSession } from '../session/query';
 import { initials } from '../threads/initials';
@@ -27,6 +27,12 @@ import {
   type ManagedIdentity,
 } from './managed-accounts-read';
 
+// Grow with translated labels while retaining native button and focus behavior.
+const recoveryButtonClassName =
+  'h-auto min-h-11 min-w-11 max-w-full shrink whitespace-normal wrap-anywhere py-2 text-center';
+const identityClassName = 'max-w-full wrap-anywhere';
+const stateClassName = 'h-auto min-h-5 max-w-full shrink whitespace-normal wrap-anywhere';
+
 const nativeIO: ManagedAccountsIO = (data) => readManagedAccountsInventory({ data });
 
 function IdentityRow({
@@ -41,6 +47,7 @@ function IdentityRow({
   const name = account.displayName || (account.handle ? `@${account.handle}` : m.managed_unnamed());
   return (
     <ContentItem
+      className={identityClassName}
       title={name}
       headingLevel={4}
       href={managedAccountHref(settingsHref, account.id)}
@@ -51,7 +58,7 @@ function IdentityRow({
       }
       metadata={
         account.handle && account.displayName ? (
-          <p className="break-words text-sm text-muted-foreground">@{account.handle}</p>
+          <p className="min-w-0 max-w-full wrap-anywhere text-sm text-muted-foreground">@{account.handle}</p>
         ) : null
       }
       state={children}
@@ -80,12 +87,15 @@ function Failure({
   return (
     <Alert
       variant="destructive"
+      className="min-w-0 max-w-full wrap-anywhere"
       data-response-status={failure.status ?? ''}
       data-response-code={failure.code ?? ''}
       data-retry-after={failure.retryAfter}
     >
-      <AlertTitle>{failure.kind === 'denied' ? m.managed_denied_title() : m.managed_unavailable_title()}</AlertTitle>
-      <AlertDescription className="space-y-3">
+      <AlertTitle className="min-w-0">
+        {failure.kind === 'denied' ? m.managed_denied_title() : m.managed_unavailable_title()}
+      </AlertTitle>
+      <AlertDescription className="min-w-0 space-y-3">
         <p>{failure.kind === 'denied' ? m.managed_denied_text() : m.managed_unavailable_text()}</p>
         {waiting ? (
           <p role="status">
@@ -96,12 +106,24 @@ function Failure({
                 : m.settings_managed_responsibilities_retry_wait()}
           </p>
         ) : null}
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" className="min-h-11" disabled={busy || waiting} onClick={retry}>
+        <div className="flex min-w-0 max-w-full flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className={recoveryButtonClassName}
+            disabled={busy || waiting}
+            onClick={retry}
+          >
             {m.settings_retry()}
           </Button>
           {firstPage ? (
-            <Button type="button" variant="outline" className="min-h-11" disabled={busy || waiting} onClick={firstPage}>
+            <Button
+              type="button"
+              variant="outline"
+              className={recoveryButtonClassName}
+              disabled={busy || waiting}
+              onClick={firstPage}
+            >
               {m.settings_managed_restart_list()}
             </Button>
           ) : null}
@@ -136,7 +158,13 @@ function FeedActions({
         />
       ) : null}
       {!feed.failure && (feed.next !== null || preparing) ? (
-        <Button type="button" variant="outline" className="min-h-11" disabled={feed.busy} onClick={retry}>
+        <Button
+          type="button"
+          variant="outline"
+          className={recoveryButtonClassName}
+          disabled={feed.busy}
+          onClick={retry}
+        >
           {feed.busy ? m.settings_managed_loading() : preparing ? m.settings_retry() : m.settings_managed_load_more()}
         </Button>
       ) : null}
@@ -162,7 +190,7 @@ export function ManagedAccountsView({
   const { account, organizations, responsibilities } = snapshot;
   return (
     <div
-      className="space-y-6"
+      className="min-w-0 max-w-full space-y-6 wrap-anywhere"
       data-slot="managed-accounts"
       onClickCapture={managedNavigationGuard(current)}
       onAuxClickCapture={managedNavigationGuard(current)}
@@ -173,33 +201,35 @@ export function ManagedAccountsView({
       ) : null}
       {account ? (
         <>
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                <h3>{m.managed_your_account()}</h3>
+          <Card className="min-w-0 max-w-full">
+            <CardHeader className="min-w-0">
+              <CardTitle className="min-w-0 wrap-anywhere">
+                <ContentItemHeading level={3}>{m.managed_your_account()}</ContentItemHeading>
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <ul aria-label={m.managed_your_account()}>
+            <CardContent className="min-w-0">
+              <ul className="min-w-0 max-w-full" aria-label={m.managed_your_account()}>
                 <IdentityRow account={account} settingsHref={settingsHref} />
               </ul>
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                <h3>{m.managed_organizations_title()}</h3>
+          <Card className="min-w-0 max-w-full">
+            <CardHeader className="min-w-0">
+              <CardTitle className="min-w-0 wrap-anywhere">
+                <ContentItemHeading level={3}>{m.managed_organizations_title()}</ContentItemHeading>
               </CardTitle>
-              <CardDescription>{m.managed_membership_text()}</CardDescription>
+              <CardDescription className="min-w-0 wrap-anywhere">{m.managed_membership_text()}</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4" aria-busy={organizations.busy}>
+            <CardContent className="min-w-0 space-y-4" aria-busy={organizations.busy}>
               {organizations.state === 'preparing' ? (
                 <p role="status">{m.managed_preparing_text()}</p>
               ) : organizations.items.length ? (
-                <ul aria-label={m.managed_organizations_title()}>
+                <ul className="min-w-0 max-w-full" aria-label={m.managed_organizations_title()}>
                   {organizations.items.map(({ account, role }) => (
                     <IdentityRow key={account.id} account={account} settingsHref={settingsHref}>
-                      <Badge variant="secondary">{role === 'owner' ? m.managed_owner() : m.managed_member()}</Badge>
+                      <Badge variant="secondary" className={stateClassName}>
+                        {role === 'owner' ? m.managed_owner() : m.managed_member()}
+                      </Badge>
                     </IdentityRow>
                   ))}
                 </ul>
@@ -217,32 +247,33 @@ export function ManagedAccountsView({
               />
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                <h3>{m.managed_operated_title()}</h3>
+          <Card className="min-w-0 max-w-full">
+            <CardHeader className="min-w-0">
+              <CardTitle className="min-w-0 wrap-anywhere">
+                <ContentItemHeading level={3}>{m.managed_operated_title()}</ContentItemHeading>
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="min-w-0 wrap-anywhere">
                 {m.managed_responsibility_text()} {m.settings_managed_authority_text()}
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4" aria-busy={responsibilities.busy}>
+            <CardContent className="min-w-0 space-y-4" aria-busy={responsibilities.busy}>
               {responsibilities.items.length ? (
-                <ul aria-label={m.managed_operated_title()}>
+                <ul className="min-w-0 max-w-full" aria-label={m.managed_operated_title()}>
                   {responsibilities.items.map((item) =>
                     item.account ? (
                       <IdentityRow key={item.reservationId} account={item.account} settingsHref={settingsHref}>
-                        <Badge variant="secondary">
+                        <Badge variant="secondary" className={stateClassName}>
                           {item.state === 'current' ? m.managed_current() : m.managed_reconciling()}
                         </Badge>
                       </IdentityRow>
                     ) : (
                       <ContentItem
                         key={item.reservationId}
+                        className={identityClassName}
                         title={m.settings_managed_identity_unavailable()}
                         headingLevel={4}
                         state={
-                          <Badge variant="secondary">
+                          <Badge variant="secondary" className={stateClassName}>
                             {item.state === 'current' ? m.managed_current() : m.managed_reconciling()}
                           </Badge>
                         }
