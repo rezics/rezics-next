@@ -1541,6 +1541,7 @@ directories. The run's one-line JSON results are appended to `<state>/backlog-ru
   latest-event lookup each, the running manager rows, and the backlog directories' entries.
 - **Bound:** at most four dispatches and 20 cancellations per Goal per run, outside the host process; the stopped scan
   is proportional to stopped tasks, not task history.
+- **Growth check:** `tools/goal/src/backlog-growth.test.ts`: `backlog growth tracks indexed history, input-proportional directory entries, and dispatch/cancellation caps`. It scales settled task/event history with fixed selected work, stopped tasks, and ready entries independently; it records SQLite executions and returned rows, JSON-decoded bytes, and actual backlog-directory enumerations and returned entries. Query plans and returned rows are not physical scan counts. The scenario includes empty backlog and cap continuation; `backlog.test.ts` covers interrupted uncommitted claims and replay after committed dispatch.
 
 ### Check result reuse
 
