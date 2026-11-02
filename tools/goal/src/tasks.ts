@@ -1413,11 +1413,7 @@ export class WorkerTasks {
       let task = this.store.task(taskId);
       if (options.expectedAttempt !== undefined && task.currentAttempt !== options.expectedAttempt)
         throw new StaleAttemptError({ taskId, attempt: options.expectedAttempt }, task.currentAttempt);
-      if (
-        task.currentAttempt > 0 &&
-        this.store.retryIntent({ taskId, attempt: task.currentAttempt })?.status === 'abandoned'
-      )
-        throw new StaleAttemptError({ taskId, attempt: task.currentAttempt }, task.currentAttempt);
+      this.store.assertRetryAllowed({ taskId, attempt: task.currentAttempt });
       if (!task.branch || !task.base) throw new Error('Imported attempts need a dispatchable contract before retry');
       if (!['ready', 'running', 'landing', 'stopped', 'held'].includes(task.state))
         throw new Error(`cannot retry ${task.state} task`);
@@ -1960,7 +1956,7 @@ export class WorkerTasks {
     const ref = { taskId, attempt: task.currentAttempt };
     const intent = this.store.attempt(ref).terminationIntent;
     if (!intent || intent.processIdentity === 'unknown') return;
-    if (intent.state === 'complete' && task.state === (intent.operation === 'cancel' ? 'cancelled' : 'stopped')) return;
+    if (intent.settledAt) return;
     if (intent.operation === 'cancel') await this.cancel(taskId);
     else await this.stop(taskId);
   }

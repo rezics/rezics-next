@@ -368,6 +368,8 @@ export type TerminationIntent = {
   process: ProcessIdentity | null;
   auxiliaryProcesses: ProcessIdentity[];
   error?: string;
+  /** The requested disposition was committed after physical termination was confirmed. */
+  settledAt?: string;
 };
 export type Attempt = AttemptRef & {
   state: 'pending' | 'running' | 'waiting' | 'exited' | 'superseded' | 'stopped' | 'cancelled';

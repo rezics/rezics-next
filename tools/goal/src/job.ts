@@ -1160,7 +1160,7 @@ export class WorkerJob implements GateOutcomeSink {
       const ref = { taskId: task.id, attempt: task.currentAttempt };
       const intent = store.attempt(ref).terminationIntent;
       if (!intent || intent.processIdentity === 'unknown') continue;
-      if (intent.state === 'complete' && ['stopped', 'cancelled'].includes(task.state)) continue;
+      if (intent.settledAt) continue;
       try {
         await this.tasks.resumeTermination(task.id);
       } catch (error) {

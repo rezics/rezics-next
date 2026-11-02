@@ -1464,6 +1464,8 @@ and integration-commit policy used to release held work.
 `retry <task> [--brief <file>]` retries a task, optionally replacing its brief after checking that its Goal and manager stay the same. Brief comparison canonicalizes line endings to LF and ignores trailing end-of-file whitespace. If the supplied brief matches the current contract after that normalization, the command reports that the contract is unchanged and exits without starting another attempt. A changed brief records SHA-256 hashes of the previous and new contract on the new attempt; a stopped task can still be restarted with plain `retry <task>`.
 
 For an attempt that has started, `stop` and `cancel` persist the requested disposition before signaling its recorded process groups. `status <task>` shows `terminationRequest` as requested, unknown or complete; missing process identity stays unknown and is never reported as physical termination. Host recovery resumes that same request and records its terminal result once. A stop abandons any retry already queued for that attempt; a later explicit retry queues a new one.
+The request fences worker settlement and replacement until its disposition is committed (`settledAt`). Physical
+confirmation alone does not authorize a retry. Recovery leaves a later explicit retry of a settled stop queued.
 
 A retry resumes the previous attempt's provider session while the pool, CLI and model stay the same. `--fresh-session`
 starts the next attempt in a new session instead, keeping the branch, worktree, commits and uncommitted work; the

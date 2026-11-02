@@ -730,6 +730,11 @@ export class WorkerStore implements AttemptFence {
   assertCurrent(ref: AttemptRef): void {
     const task = this.task(ref.taskId);
     if (task.currentAttempt !== ref.attempt) throw new StaleAttemptError(ref, task.currentAttempt);
+    // An accepted stop owns settlement even if its controller died before closing the attempt.
+    if (ref.attempt > 0) {
+      const intent = this.attempt(ref).terminationIntent;
+      if (intent && !intent.settledAt) throw new StaleAttemptError(ref, task.currentAttempt);
+    }
     // A hold advances the task's delivery generation without manufacturing another worker attempt. A request or
     // outcome already in the train must be acknowledged as stale instead of integrating over that held generation.
     if (task.state === 'held' && ('branch' in ref || 'stage' in ref))
@@ -1131,6 +1136,7 @@ export class WorkerStore implements AttemptFence {
           (ref.attempt > 0 && ['superseded', 'cancelled'].includes(this.attempt(ref).state))
         )
           throw new StaleAttemptError(ref, task.currentAttempt);
+        this.assertRetryAllowed(ref, true);
         const before = structuredClone(task);
         update(task);
         this.retainProofPredecessor(before, task);
@@ -1335,6 +1341,7 @@ export class WorkerStore implements AttemptFence {
       .transaction(() => {
         const task = this.task(ref.taskId);
         const attempt = ref.attempt > 0 ? this.attempt(ref) : undefined;
+        this.assertRetryAllowed(ref, options.reshapeHeld === true);
         const reshapingHeld = options.reshapeHeld === true && task.state === 'held';
         if (task.currentAttempt !== ref.attempt)
           throw new Error(
@@ -1393,6 +1400,7 @@ export class WorkerStore implements AttemptFence {
       .transaction(() => {
         const current = this.task(ref.taskId);
         const attempt = ref.attempt > 0 ? this.attempt(ref) : undefined;
+        this.assertRetryAllowed(ref);
         const abandonPending = attempt?.state === 'pending' || attempt?.state === 'waiting';
         if (
           current.currentAttempt !== ref.attempt ||
@@ -1455,14 +1463,14 @@ export class WorkerStore implements AttemptFence {
     });
   }
   /** Do not publish a replacement while an accepted operator stop still owns this generation. */
-  assertRetryAllowed(ref: AttemptRef): void {
+  assertRetryAllowed(ref: AttemptRef, explicit = false): void {
     const task = this.task(ref.taskId);
     if (task.currentAttempt !== ref.attempt) throw new StaleAttemptError(ref, task.currentAttempt);
     if (!ref.attempt) return;
     const intent = this.attempt(ref).terminationIntent;
     if (
-      this.retryIntent(ref)?.status === 'abandoned' ||
-      (intent && (intent.operation === 'cancel' || intent.state !== 'complete' || task.state !== 'stopped'))
+      (!explicit && this.retryIntent(ref)?.status === 'abandoned') ||
+      (intent && (intent.operation === 'cancel' || intent.state !== 'complete' || !intent.settledAt))
     )
       throw new StaleAttemptError(ref, task.currentAttempt);
   }
@@ -1649,6 +1657,7 @@ export class WorkerStore implements AttemptFence {
             .run(ref.taskId, ref.attempt, 'termination-requested', at, JSON.stringify({ operation, processIdentity }));
         } else if (operation === 'cancel' && intent.operation !== 'cancel') {
           intent.operation = 'cancel';
+          delete intent.settledAt;
         }
         this.abandonRetry(ref, intent.operation);
         this.saveAttempt(attempt);
@@ -1697,6 +1706,7 @@ export class WorkerStore implements AttemptFence {
             .run(ref.taskId, ref.attempt, state, new Date().toISOString(), '{}');
         task.state = state;
         attempt.state = state;
+        intent.settledAt ??= new Date().toISOString();
         this.saveTask(task);
         this.saveAttempt(attempt);
       })
