@@ -108,7 +108,15 @@ test('write-target discovery fails malformed documents and bounded native trees 
   );
   expect(() => collectModifyTargets(document(chain(MAX_PLAN_DEPTH + 1)), output)).toThrow(/maximum depth 256/);
   expect(() =>
-    collectModifyTargets(document(node({}, Array.from({ length: MAX_PLAN_NODES }, () => node()))), output),
+    collectModifyTargets(
+      document(
+        node(
+          {},
+          Array.from({ length: MAX_PLAN_NODES }, () => node()),
+        ),
+      ),
+      output,
+    ),
   ).toThrow(/maximum node count 10000/);
   expect(output.size).toBe(0);
 });
