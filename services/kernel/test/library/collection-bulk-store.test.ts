@@ -27,9 +27,11 @@ test('confirmation and recovery use the persisted preview, skip a changed entry 
   const tx = await db.admin.connect();
   try {
     await tx.query('BEGIN');
-    await tx.query('CREATE TEMP TABLE bulk_test_effect (ordinal text PRIMARY KEY) ON COMMIT DROP');
+    await tx.query('CREATE TEMP TABLE bulk_test_effect (subject_id uuid PRIMARY KEY, revision integer, effects integer) ON COMMIT DROP');
     const input = preview([target(), target(), target()]);
     await previewCollectionBulk(tx, input);
+    for (let ordinal = 0; ordinal < 3; ordinal++) await tx.query(
+      'INSERT INTO bulk_test_effect VALUES ($1,$2,0)', [input.targets[ordinal]!.subjectId, ordinal === 1 ? 2 : 1]);
     expect(await confirmCollectionBulk(tx, input)).toBe(true);
     expect(await confirmCollectionBulk(tx, input)).toBe(false);
     // A new source match does not enter the captured manifest; an existing changed target stays inspectable.
@@ -38,8 +40,10 @@ test('confirmation and recovery use the persisted preview, skip a changed entry 
     for (let ordinal = 0; ordinal < 3; ordinal++) {
       await applyCollectionBulkTarget(tx, { ...input, ordinal }, async (native, operation, row) => {
         expect(operation.request.action).toBe('set_status');
-        if (row.ordinal === '1') return { state: 'conflict', reason: 'revision_mismatch' };
-        await native.query('INSERT INTO bulk_test_effect VALUES ($1)', [row.ordinal]);
+        if (row.target.kind !== 'subject' || row.target.expected.kind !== 'present') throw new Error('Expected an entry');
+        const changed = await native.query('UPDATE bulk_test_effect SET effects=effects+1 WHERE subject_id=$1 AND revision=$2 RETURNING true',
+          [row.target.subjectId,row.target.expected.revision]);
+        if (!changed.rowCount) return { state: 'conflict', reason: 'revision_mismatch' };
         return { state: 'applied', reason: null, resultingMemberId: newId(route) };
       });
     }
@@ -54,7 +58,7 @@ test('confirmation and recovery use the persisted preview, skip a changed entry 
       })).toEqual({ state: recovered[ordinal]!.state, reason: recovered[ordinal]!.reason,
         resultingMemberId: recovered[ordinal]!.resultingMemberId });
     }
-    expect((await tx.query('SELECT count(*)::integer AS n FROM bulk_test_effect')).rows[0].n).toBe(2);
+    expect((await tx.query('SELECT sum(effects)::integer AS n FROM bulk_test_effect')).rows[0].n).toBe(2);
     expect(await readCollectionBulk(tx, { ...input, accountId: newId(route) })).toBeNull();
     expect(await pageCollectionBulkManifest(tx, { ...input, accountId: newId(route) })).toEqual([]);
     expect((await previewCollectionBulk(tx, input)).phase).toBe('completed');

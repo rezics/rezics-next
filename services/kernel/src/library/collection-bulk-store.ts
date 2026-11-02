@@ -143,11 +143,11 @@ export async function previewCollectionBulk(
     await tx.query(`INSERT INTO library.bulk_target
       (route,operation_id,ordinal,account_id,subject_id,target_kind,collection_id,member_id,target,
         source_digest,receipt,created_transaction_id,state,chunk_index)
-      SELECT $1,$2,(n-1),$3,(target->>'subjectId')::uuid,target->>'kind',
+      SELECT $1,$2::uuid,(n-1),$3::uuid,(target->>'subjectId')::uuid,target->>'kind',
         (target->>'collectionId')::uuid,(target->>'memberId')::uuid,target,$5,
-        jsonb_build_object('partition',$7::integer,'principalKind','account','principalId',$3::text,
-          'commandKind','library.collectionBulk.target','key',$2::text||':'||(n-1)::text,
-          'digest',encode(sha256(convert_to(target::text,'UTF8')),'hex')),$6,'pending',(n-1)/100
+        jsonb_build_object('partition',$7::integer,'principalKind','account','principalId',($3::uuid)::text,
+          'commandKind','library.collectionBulk.target','key',($2::uuid)::text||':'||(n-1)::text,
+          'digest',encode(sha256(convert_to($5::text||':'||target::text,'UTF8')),'hex')),$6,'pending',(n-1)/100
       FROM jsonb_array_elements($4::jsonb) WITH ORDINALITY AS manifest(target,n) WHERE n <= 1000`,
       [input.route,input.operationId,input.accountId,JSON.stringify(targets),sourceDigest,input.transactionId,partitionOf(input.route)]);
   }
