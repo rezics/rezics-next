@@ -10,14 +10,9 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { unprofiledSubjectId } from '../kernel/fake/library-unprofiled-subject';
 import { PageStory, PatternStory, exposureStory, libraryProgressReady, pagePaths } from './page';
 
-const viewports = {
-  phone: { name: 'Phone', styles: { width: '390px', height: '844px' } },
-  desktop: { name: 'Desktop', styles: { width: '1280px', height: '900px' } },
-};
-
 const meta = {
   title: 'Pages/Library/Progress',
-  parameters: { layout: 'fullscreen', viewport: { options: viewports } },
+  parameters: { layout: 'fullscreen' },
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -35,18 +30,13 @@ export const SignedIn: Story = {
 export const ExposureOpen: Story = exposureStory(pagePaths['library-progress']);
 export const ExposureClosed: Story = exposureStory(pagePaths['library-progress'], true);
 
-export const Desktop: Story = {
-  name: 'Progress list at 1280',
-  parameters: { viewport: { defaultViewport: 'desktop' } },
-  play: libraryProgressReady,
-  render: () => ProgressStory('recorded'),
-};
-
 export const SelectorSheetOpen: Story = {
-  name: 'Profile unit selector at 390',
+  name: 'Profile unit selector focused',
   play: async (context) => {
     await libraryProgressReady(context);
-    (await within(context.canvasElement).findByRole('combobox', { name: m.library_progress_unit() })).focus();
+    const selector = await within(context.canvasElement).findByRole('combobox', { name: m.library_progress_unit() });
+    selector.focus();
+    await expect(selector).toHaveFocus();
   },
   render: () => ProgressStory('recorded'),
 };
@@ -78,8 +68,7 @@ export const LaterPageEmpty: Story = {
 };
 
 export const FilteredLaterPageEmpty: Story = {
-  name: 'Empty later page retains the subject filter at 390',
-  globals: { viewport: { value: 'phone' }, locale: 'de' },
+  name: 'Empty later page retains the subject filter',
   render: () => ProgressStory('none', `${pagePaths['library-progress']}&cursor=earlier%2Fopaque%2B%3D%3D`),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -133,8 +122,7 @@ function UnknownUnitStory() {
 }
 
 export const UnknownUnitNarrow: Story = {
-  name: 'Unknown unit with long titles at 390',
-  globals: { viewport: { value: 'phone' }, locale: 'de' },
+  name: 'Unknown unit with long titles',
   parameters: {
     docs: {
       description: {

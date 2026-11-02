@@ -1,251 +1,250 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { useState } from 'react';
-import { expect, userEvent, within } from 'storybook/test';
-import { Badge } from '@rezics/ui/shadcn/badge';
-import { Button } from '@rezics/ui/shadcn/button';
-import { CoverCard, CoverGrid } from '@rezics/ui/cover-card';
-import { ShelfListRow } from '@rezics/ui/shelf-list';
-import { ShelfTable, type ShelfColumn, type ShelfTableRow } from '@rezics/ui/shelf-table';
-import { coverSrc } from '../media/cover-src';
+import { useQueryClient, useSuspenseQuery, type QueryClient } from '@tanstack/react-query';
+import { useLocation } from '@tanstack/react-router';
+import { Suspense } from 'react';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { Toaster } from '@rezics/ui/shadcn/toast';
+import { createStoryFetch } from '../../.storybook/cloudflare-workers';
+import { createRecordedKernelFetch } from '../kernel/fake';
+import { setContinueStorySize } from '../kernel/fake/library-continue';
+import { setLibraryEntriesStoryMode } from '../kernel/fake/library-entries-story';
+import { setLibraryNavigationStoryState } from '../kernel/fake/library-pins';
+import entries from '../kernel/recorded/library-entries.json';
+import entriesZhHans from '../kernel/recorded/library-entries-zh-Hans.json';
+import definitions from '../kernel/recorded/definitions-release.json';
+import { PersonalLibraryCurrent } from '../library/personal-library-current';
+import { readPersonalLibraryCurrent } from '../library/personal-library-server';
+import { libraryStateLabel } from '../library/profiles';
+import { shelfDisplay, shelfHref, validateShelfSearch } from '../library/shelf-params';
+import { displayLibraryTitle } from '../library/title';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
-import definitions from '../kernel/recorded/definitions-release.json';
-import { libraryStateOptions } from '../library/profiles';
+import { sessionQuery } from '../session/query';
 import type { Release } from '../subject/definitions';
+import { subjectHref } from '../subject/subject-href';
 import { PatternStory } from './page';
 
-const meta = { title: 'Patterns/Library/Tracked entries', parameters: { layout: 'fullscreen' } } satisfies Meta;
+type FixtureState = 'recorded' | 'long-titles' | 'subject-unavailable';
+const release = definitions.release as unknown as Release;
+const filteredEntry = entries.libraryEntries.find((entry) => entry.state === 'planned')!;
+const clients = new WeakMap<Element, QueryClient>();
+
+/** Illustrative HTTP bodies retain source order, IDs, revisions and dates; only the named presentation varies. */
+function illustrativeEntries(source: typeof entries, state: FixtureState) {
+  return {
+    ...source,
+    libraryEntries: source.libraryEntries.map((entry, index) => ({
+      ...entry,
+      subject:
+        state === 'subject-unavailable' && index === 0
+          ? null
+          : {
+              ...entry.subject,
+              label: {
+                ...entry.subject.label,
+                value:
+                  state === 'long-titles'
+                    ? Array.from({ length: 4 }, () => entry.subject.label.value).join(' — ')
+                    : entry.subject.label.value,
+              },
+            },
+    })),
+  };
+}
+
+const meta = {
+  title: 'Patterns/Library/Tracked entries',
+  parameters: {
+    layout: 'fullscreen',
+    docs: {
+      description: {
+        component:
+          'The real current personal Library composition in PatternStory, through the installed recorded HTTP transport. Selection and state destinations use production components. Layout specimens live under Entry layouts. Filter navigation is exercised on Pages/Library/Entries. All authored outcomes are UNRUN; these illustrative inputs establish no native or visual proof.',
+      },
+    },
+  },
+  decorators: [
+    (Story) => (
+      <Toaster>
+        <Story />
+      </Toaster>
+    ),
+  ],
+  beforeEach: ({ parameters }) => {
+    setLibraryEntriesStoryMode('recorded');
+    setContinueStorySize(0);
+    setLibraryNavigationStoryState({ pinCount: 0, builtins: 'none', collectionCount: 0 });
+    const state: FixtureState = parameters.trackedEntriesFixture ?? 'recorded';
+    const previous = globalThis.fetch;
+    const transport = createStoryFetch(
+      previous,
+      createRecordedKernelFetch({
+        'library-entries': illustrativeEntries(entries, state),
+        'library-entries-zh-Hans': illustrativeEntries(entriesZhHans, state),
+      }),
+    );
+    globalThis.fetch = transport;
+    return () => {
+      if (globalThis.fetch === transport) globalThis.fetch = previous;
+    };
+  },
+} satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-const recordedRelease = definitions.release as unknown as Release;
-
-function stateExamples() {
-  return libraryStateOptions(recordedRelease, 'schema:Book', getLocale()).map(({ id, label }) => ({
-    id,
-    label: label.text,
-  }));
-}
-
-const samples = Array.from({ length: 3 }, (_, index) => {
-  const title = ['Kokoro', 'The Little Prince', 'Norwegian Wood'][index]!;
-  const id = `0192f3a0-6c1e-7b2a-9d4e-${String(index + 1).padStart(12, '0')}`;
-  const subject = { id, title, types: ['schema:Book'] };
-  const cover = { subject, cover: null, src: coverSrc };
-  return { title, id, cover, subject };
-});
-
-function Grid({ size }: { size: 'small' | 'medium' | 'large' }) {
+function TrackedEntriesPattern() {
+  const client = useQueryClient();
+  const location = useLocation();
+  const search = validateShelfSearch(location.search);
+  const locale = getLocale();
+  const { data } = useSuspenseQuery({
+    queryKey: ['story', 'tracked-entries', locale, search],
+    queryFn: () => readPersonalLibraryCurrent({ data: search }),
+  });
   return (
-    <CoverGrid ratio="5:7" density={size} fixedDensity>
-      {samples.map((sample) => (
-        <CoverCard key={sample.id} title={sample.title} cover={sample.cover} />
-      ))}
-    </CoverGrid>
-  );
-}
-
-function TrackedLayoutsPattern() {
-  const row = samples[0]!;
-  const states = stateExamples();
-  const columns: ShelfColumn[] = [
-    { id: 'cover', label: '', visible: true },
-    { id: 'title', label: 'Title', visible: true },
-    { id: 'status', label: 'Status', visible: true },
-  ];
-  const tableRows: ShelfTableRow[] = samples.map((sample, index) => ({
-    id: sample.id,
-    title: sample.title,
-    href: `/en/subjects/${sample.id}`,
-    cover: sample.cover,
-    status: <a href={`/en/library?state=${states[index]!.id}`}>{states[index]!.label}</a>,
-  }));
-  return (
-    <div className="space-y-8">
-      <section aria-labelledby="grid-layout">
-        <h2 id="grid-layout" className="mb-3 text-lg font-semibold">
-          {m.library_layout_grid()}
-        </h2>
-        <Grid size="medium" />
-      </section>
-      <section aria-labelledby="list-layout">
-        <h2 id="list-layout" className="mb-3 text-lg font-semibold">
-          {m.library_layout_list()}
-        </h2>
-        <ul>
-          {samples.map((sample, index) => (
-            <ShelfListRow
-              key={sample.id}
-              href={`/en/subjects/${sample.id}`}
-              title={sample.title}
-              cover={sample.cover}
-              status={<a href={`/en/library?state=${states[index]!.id}`}>{states[index]!.label}</a>}
-              labels={{ select: `Select ${sample.title}`, menu: `Actions for ${sample.title}` }}
-            />
-          ))}
-        </ul>
-      </section>
-      <section aria-labelledby="table-layout">
-        <h2 id="table-layout" className="mb-3 text-lg font-semibold">
-          {m.library_layout_table()}
-        </h2>
-        <ShelfTable rows={tableRows} columns={columns} onSort={() => {}} />
-      </section>
-      <p className="sr-only">{row.title}</p>
+    <div
+      className="w-full min-w-0 max-w-6xl p-4"
+      data-tracked-entries
+      ref={(node) => {
+        if (node) clients.set(node, client);
+      }}
+    >
+      <PersonalLibraryCurrent initial={data} search={search} locale={locale} display={shelfDisplay(search)} />
     </div>
   );
 }
 
-function SelectionPattern() {
-  const [active, setActive] = useState(false);
-  const [selected, setSelected] = useState(false);
-  const first = samples[0]!;
-  const state = stateExamples()[1] ?? stateExamples()[0];
+function renderPattern(state?: string) {
+  const path = shelfHref(getLocale(), { layout: 'list', size: 'm', ...(state ? { state } : {}) });
   return (
-    <section className="space-y-4">
-      <Button onClick={() => setActive((value) => !value)}>{active ? 'Done selecting' : 'Select entries'}</Button>
-      <ul>
-        <ShelfListRow
-          href={`/en/subjects/${first.id}`}
-          title={first.title}
-          cover={first.cover}
-          status={state ? <a href={`/en/library?state=${state.id}`}>{state.label}</a> : undefined}
-          selectable={active}
-          selected={selected}
-          onSelectedChange={setSelected}
-          labels={{ select: `Select ${first.title}`, menu: `Actions for ${first.title}` }}
-        />
-      </ul>
-      {active ? <p role="status">{selected ? '1 entry selected' : 'No entries selected'}</p> : null}
-    </section>
-  );
-}
-
-function StateFilterPattern() {
-  const states = stateExamples();
-  const [selected, setSelected] = useState<(typeof states)[number] | null>(() => states[1] ?? states[0] ?? null);
-  return (
-    <p className="flex flex-wrap items-center gap-2 text-sm" aria-label={m.library_states()}>
-      <span>{m.library_states()}</span>
-      {selected ? (
-        <>
-          <Badge variant="secondary" data-state-id={selected.id}>
-            {selected.label}
-          </Badge>
-          <a
-            href="/en/library"
-            onClick={(event) => {
-              event.preventDefault();
-              setSelected(null);
-            }}
-            className="text-primary underline-offset-4 hover:underline"
-          >
-            {m.library_state_all()}
-          </a>
-        </>
-      ) : (
-        <span>{m.library_state_all()}</span>
-      )}
-    </p>
-  );
-}
-
-export const TrackedLayouts: Story = {
-  render: () => (
-    <PatternStory>
-      <TrackedLayoutsPattern />
+    <PatternStory visitor="Signed In" path={path}>
+      <Suspense fallback={null}>
+        <TrackedEntriesPattern />
+      </Suspense>
     </PatternStory>
-  ),
+  );
+}
+
+function sourceEntries() {
+  return getLocale() === 'zh-Hans' ? entriesZhHans.libraryEntries : entries.libraryEntries;
+}
+
+async function ready(canvasElement: HTMLElement) {
+  const canvas = within(canvasElement);
+  await canvas.findByRole('heading', { name: m.library_tracked_entries() });
+  const select = await canvas.findByRole('button', { name: m.library_selection_page() });
+  await waitFor(() => expect(select).toBeEnabled());
+  return { canvas, select };
+}
+
+export const TrackedEntries: Story = {
+  name: 'Owner, tracked entries',
+  render: () => renderPattern(),
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    const states = stateExamples();
-    const selected = states[1] ?? states[0];
-    if (!selected) throw new Error('The recorded Book profile has no entry states.');
-    for (const [index, sample] of samples.entries()) {
-      const subjectLinks = canvas.getAllByRole('link', { name: sample.title });
-      expect(subjectLinks.length).toBeGreaterThanOrEqual(2);
-      for (const link of subjectLinks) await expect(link).toHaveAttribute('href', `/en/subjects/${sample.id}`);
-      const stateLinks = canvas.getAllByRole('link', { name: states[index]!.label });
-      expect(stateLinks.length).toBeGreaterThanOrEqual(2);
-      for (const link of stateLinks)
-        await expect(link).toHaveAttribute('href', `/en/library?state=${states[index]!.id}`);
+    const { canvas } = await ready(canvasElement);
+    for (const entry of sourceEntries()) {
+      const title = displayLibraryTitle(entry.subject.label, getLocale()).text;
+      await expect(canvas.getByRole('link', { name: title })).toHaveAttribute(
+        'href',
+        subjectHref({ id: entry.subject.id, label: title }, getLocale()).href,
+      );
+      const status = libraryStateLabel(release, entry.subject.type, entry.state, getLocale())!.text;
+      await expect(canvas.getByRole('link', { name: status })).toHaveAttribute(
+        'href',
+        shelfHref(getLocale(), { state: entry.state, layout: 'list', size: 'm' }),
+      );
     }
   },
 };
-export const GridSmall: Story = {
-  render: () => (
-    <PatternStory>
-      <Grid size="small" />
-    </PatternStory>
-  ),
-};
-export const GridMedium: Story = {
-  render: () => (
-    <PatternStory>
-      <Grid size="medium" />
-    </PatternStory>
-  ),
-};
-export const GridLarge: Story = {
-  render: () => (
-    <PatternStory>
-      <Grid size="large" />
-    </PatternStory>
-  ),
-};
+
 export const StateFilterActive: Story = {
-  render: () => (
-    <PatternStory>
-      <StateFilterPattern />
-    </PatternStory>
-  ),
+  name: 'Owner, state filter active',
+  render: () => renderPattern(filteredEntry.state),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const selected = stateExamples()[1] ?? stateExamples()[0];
-    if (!selected) throw new Error('The recorded Book profile has no entry states.');
-    const clear = canvas.getByRole('link', { name: m.library_state_all() });
-    await expect(canvas.getByText(selected.label)).toHaveAttribute('data-state-id', selected.id);
-    await userEvent.click(clear);
-    await expect(canvas.getByText(m.library_state_all())).toBeVisible();
-    await expect(canvas.queryByText(selected.label)).toBeNull();
+    const status = libraryStateLabel(release, filteredEntry.subject.type, filteredEntry.state, getLocale())!.text;
+    await canvas.findByRole('heading', { name: m.library_tracked_entries_state({ status }) });
+    await expect(canvas.getByRole('link', { name: m.library_clear_state() })).toHaveAttribute(
+      'href',
+      shelfHref(getLocale(), { layout: 'list', size: 'm' }),
+    );
+    for (const entry of sourceEntries()) {
+      const title = displayLibraryTitle(entry.subject.label, getLocale()).text;
+      if (entry.state === filteredEntry.state) await expect(canvas.getByRole('link', { name: title })).toBeVisible();
+      else expect(canvas.queryByRole('link', { name: title })).toBeNull();
+    }
   },
 };
+
 export const SelectionMode: Story = {
-  render: () => (
-    <PatternStory>
-      <SelectionPattern />
-    </PatternStory>
-  ),
+  name: 'Owner, one tracked entry selected',
+  render: () => renderPattern(),
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: 'Select entries' }));
-    const selection = await canvas.findByRole('checkbox', { name: 'Select Kokoro' });
-    await userEvent.click(selection);
-    await expect(selection).toBeChecked();
-    await expect(canvas.getByRole('status')).toHaveTextContent('1 entry selected');
+    const { canvas, select } = await ready(canvasElement);
+    await userEvent.click(select);
+    for (const entry of sourceEntries().slice(1)) {
+      const title = displayLibraryTitle(entry.subject.label, getLocale()).text;
+      await userEvent.click(canvas.getByRole('checkbox', { name: title }));
+    }
+    const first = displayLibraryTitle(sourceEntries()[0]!.subject.label, getLocale()).text;
+    await expect(canvas.getByRole('checkbox', { name: first })).toBeChecked();
+    const selection = within(canvas.getByRole('region', { name: m.library_selection_heading() }));
+    await expect(selection.getByRole('status')).toHaveTextContent(m.library_selection_count({ count: 1 }));
+    await userEvent.click(selection.getByRole('button', { name: m.library_selection_clear() }));
+    expect(canvas.queryByRole('region', { name: m.library_selection_heading() })).toBeNull();
   },
 };
-export const StatusChips: Story = {
-  render: () => (
-    <PatternStory>
-      <ul className="space-y-3">
-        {stateExamples().map((state) => (
-          <li key={state.id} className="flex items-center gap-3">
-            <span>{state.label}</span>
-            <a href={`/en/library?state=${state.id}`}>
-              <Badge variant="secondary">{state.label}</Badge>
-            </a>
-          </li>
-        ))}
-      </ul>
-    </PatternStory>
-  ),
+
+export const LongTitles: Story = {
+  name: 'Owner, long tracked titles',
+  parameters: { trackedEntriesFixture: 'long-titles' },
+  render: () => renderPattern(),
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    for (const state of stateExamples())
-      await expect(canvas.getByRole('link', { name: state.label })).toHaveAttribute(
-        'href',
-        `/en/library?state=${state.id}`,
-      );
+    const { canvas } = await ready(canvasElement);
+    for (const entry of sourceEntries()) {
+      const title = Array.from({ length: 4 }, () => entry.subject.label.value).join(' — ');
+      await expect(canvas.getByRole('link', { name: title })).toBeVisible();
+      await expect(canvas.getByRole('button', { name: m.library_entry_actions({ title }) })).toBeEnabled();
+    }
+  },
+};
+
+export const SubjectUnavailable: Story = {
+  name: 'Owner, tracked subject unavailable',
+  parameters: { trackedEntriesFixture: 'subject-unavailable' },
+  render: () => renderPattern(),
+  play: async ({ canvasElement }) => {
+    const { canvas, select } = await ready(canvasElement);
+    await canvas.findByText(m.library_subject_unavailable());
+    const title = displayLibraryTitle(sourceEntries()[0]!.subject.label, getLocale()).text;
+    expect(canvas.queryByRole('link', { name: title })).toBeNull();
+    await userEvent.click(select);
+    expect(canvas.queryByRole('checkbox', { name: m.library_subject_unavailable() })).toBeNull();
+    const selection = within(canvas.getByRole('region', { name: m.library_selection_heading() }));
+    await expect(selection.getByRole('status')).toHaveTextContent(
+      m.library_selection_count({ count: sourceEntries().length - 1 }),
+    );
+  },
+};
+
+export const ViewerRetired: Story = {
+  name: 'Owner selection retired after sign out',
+  render: () => renderPattern(),
+  play: async ({ canvasElement }) => {
+    const { canvas, select } = await ready(canvasElement);
+    await userEvent.click(select);
+    await expect(canvas.getByRole('region', { name: m.library_selection_heading() })).toBeVisible();
+    const region = canvasElement.querySelector('[data-tracked-entries]')!;
+    const client = clients.get(region)!;
+    // Retire the actual session observation; no story-owned selection or authorization controls intervene.
+    client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null });
+    await waitFor(() => {
+      expect(canvas.queryByRole('region', { name: m.library_selection_heading() })).toBeNull();
+      expect(canvas.queryByRole('checkbox')).toBeNull();
+      for (const entry of sourceEntries()) {
+        const title = displayLibraryTitle(entry.subject.label, getLocale()).text;
+        expect(canvas.queryByRole('link', { name: title })).toBeNull();
+      }
+    });
   },
 };

@@ -8,8 +8,9 @@ import { PageStory, exposureStory, libraryEntriesReady, pageReady, pagePaths } f
 import entries from '../kernel/recorded/library-entries.json';
 import { setLibraryEntriesStoryMode, setLibraryTypesStoryState } from '../kernel/fake/library-entries-story';
 import { pickText } from '@rezics/composition';
-import { displayTypeLabel } from '../subject/definitions';
+import { displayTypeLabel, type Release } from '../subject/definitions';
 import definitions from '../kernel/recorded/definitions-release.json';
+import { libraryStateLabel } from '../library/profiles';
 import { setContinueStorySize } from '../kernel/fake/library-continue';
 import { setLibraryNavigationStoryState } from '../kernel/fake/library-pins';
 
@@ -20,6 +21,7 @@ const meta = {
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
+const stateFilterEntry = entries.libraryEntries.find((entry) => entry.state === 'planned')!;
 
 function filteredEntriesPath(title: string): string {
   const row = entries.libraryEntries.find(
@@ -35,6 +37,36 @@ export const SignedIn: Story = {
 };
 export const ExposureOpen: Story = exposureStory(pagePaths['library-entries']);
 export const ExposureClosed: Story = exposureStory(pagePaths['library-entries'], true);
+
+// UNRUN: the route harness owns real filter navigation, while the connected pattern owns row interactions.
+export const StateFilterCleared: Story = {
+  name: 'Owner, state filter cleared',
+  render: () => (
+    <PageStory
+      visitor="Signed In"
+      path={`${pagePaths['library-entries']}?state=${encodeURIComponent(stateFilterEntry.state)}&layout=list&size=l`}
+    />
+  ),
+  play: async (context) => {
+    await pageReady(context);
+    const canvas = within(context.canvasElement);
+    const status = libraryStateLabel(
+      definitions.release as unknown as Release,
+      stateFilterEntry.subject.type,
+      stateFilterEntry.state,
+      getLocale(),
+    )!.text;
+    await canvas.findByRole('heading', { name: m.library_tracked_entries_state({ status }) });
+    const clear = await canvas.findByRole('link', { name: m.library_clear_state() });
+    await expect(clear).toHaveAttribute('href', `/${getLocale()}/library?layout=list&size=l`);
+    await expect(canvas.getByText(m.library_filtered_by({ status }))).toBeVisible();
+    await userEvent.click(clear);
+    await expect(await canvas.findByRole('heading', { name: m.library_tracked_entries() })).toBeVisible();
+    expect(canvas.queryByRole('link', { name: m.library_clear_state() })).toBeNull();
+    const layout = within(canvas.getByRole('group', { name: m.library_layout() }));
+    await expect(layout.getByRole('button', { name: m.library_layout_list() })).toHaveAttribute('aria-pressed', 'true');
+  },
+};
 
 export const FilteredEmpty: Story = {
   render: () => {
