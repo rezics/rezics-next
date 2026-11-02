@@ -175,8 +175,8 @@ test('a raw-input locator and constructor-funded work cannot replace private liv
     },
     Date.now() + 5000,
   );
-  // @ts-expect-error A structural SQL client cannot supply the native operational admission.
   await expect(
+    // @ts-expect-error A structural SQL client cannot supply the native operational admission.
     resolveCollectionKindRawInput(copied, locator, 'sha256:' + '0'.repeat(64), native),
   ).rejects.toMatchObject({ code: 'semantic_not_ready' });
   expect(queries).toBe(0);

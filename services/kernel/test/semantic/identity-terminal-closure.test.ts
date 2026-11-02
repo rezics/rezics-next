@@ -447,7 +447,7 @@ for (const failRelease of [false, true]) {
   test(`partial group acquisition releases earlier claims${failRelease ? ' despite a failed release home' : ''}`, async () => {
     const db = await isolatedDeployment();
     try {
-      const pairs = [];
+      const pairs: { original: string; terminal: string }[] = [];
       for (let index = 0; index < 3; index++) {
         const original = await seedLegacyRoot(db, 0x7410);
         const terminal = await seedLegacyRoot(db, 0x7420 + index * 16);

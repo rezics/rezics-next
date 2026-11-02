@@ -212,6 +212,7 @@ const typed = [
   'GET /v1/threads/:id',
   'POST /v1/threads/:id/posts',
   'GET /v1/threads/:id/posts',
+  'GET /v1/threads/:id/posts/:postId/location',
   'GET /v1/posts/:id',
   'POST /v1/posts/:id/$restore',
   'POST /v1/posts/:id/revisions',
