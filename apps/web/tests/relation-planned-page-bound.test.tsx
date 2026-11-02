@@ -105,9 +105,7 @@ test('an over-limit continuation keeps the last admitted window without advancin
   const { useState } = await import('react');
   const route = routing.createRootRoute({
     component: () => {
-      const [section, setSection] = useState(() =>
-        page('links', [row('links', targets[0], 'alice', 'Alice')], 'next'),
-      );
+      const [section, setSection] = useState(() => page('links', [row('links', targets[0], 'alice', 'Alice')], 'next'));
       replace = setSection;
       return <RelationStream value={value} section={section} node="credits" view="relations" title="Credits" />;
     },
