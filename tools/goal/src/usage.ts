@@ -140,9 +140,7 @@ export function withObservedExhaustion(
         continue;
       }
       const observedTime = Date.parse(marker.observedAt);
-      const expires = marker.expiresAt
-        ? Date.parse(String(marker.expiresAt))
-        : observedTime + pool.policy.maxAgeMs;
+      const expires = marker.expiresAt ? Date.parse(String(marker.expiresAt)) : observedTime + pool.policy.maxAgeMs;
       // An expired new marker cannot invalidate a still-live, exactly identified legacy observation.
       if (!Number.isFinite(observedTime) || !Number.isFinite(expires) || now >= expires) continue;
       markers.push({ observedAt: marker.observedAt, observedTime });

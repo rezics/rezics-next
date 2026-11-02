@@ -112,7 +112,10 @@ test('exhaustion markers follow exact allowance keys and conservatively read leg
   legacy('ambiguous_key');
   expect(observe('safe-key', now + 100).exhausted).toBe(true);
   expect(observe('safe-key', now + 1000)).toMatchObject({
-    exhausted: false, observedAt: null, windows: [], error: 'unavailable',
+    exhausted: false,
+    observedAt: null,
+    windows: [],
+    error: 'unavailable',
   });
   expect(observe('ambiguous_key', now + 100).exhausted).toBe(false);
   expect(observe('ambiguous/key', now + 100).exhausted).toBe(false);
