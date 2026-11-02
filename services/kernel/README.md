@@ -556,7 +556,10 @@ history; that history's growth is a production retention question, not a growth 
 applicable background statement is skipped for that bound.
 
 Plans are collected only inside a capture: an instrumented connection runs auto_explain just for the statements of a
-measured run, and seeding is never explained. Each report sample carries `seeding`, the statements and rows written by
+measured run, and seeding is never explained. Capture setting transitions use the same SQL classifier as the attempt
+ledger, so a leading-comment commit, full rollback or rollback-to-savepoint still invalidates the cached explaining
+state and the next statement reasserts auto_explain; unknown prepared text waits until its existing resolution
+boundary. Each report sample carries `seeding`, the statements and rows written by
 `grow` (every pool, `admin` included), the time of `grow`, the ANALYZE settle after it (`vacuumMs`), and total settling
 time for that scale (`settleMs`); when `GROWTH_PROFILE` names a file, `checkGrowth` appends one JSON line per check
 with the test file, check name, scales and each scale's `seeding`.

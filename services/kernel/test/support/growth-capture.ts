@@ -8,6 +8,7 @@ import { walkPlanTree } from './growth-plan-walk.ts';
 import type { Capture } from './growth-cost.ts';
 import { drainCaptureWork } from './growth-capture-drain.ts';
 import { collectModifyTargets } from './growth-plan-walk.ts';
+import { classifyGrowthSql } from './growth-sql-kind.ts';
 
 export type GrowthDatabase = {
   readonly url: string;
@@ -394,8 +395,17 @@ function connectedDatabase(client: PoolClient): string | undefined {
 }
 
 const WRITE_COMMANDS = new Set(['INSERT', 'UPDATE', 'DELETE', 'MERGE', 'COPY']);
-const MAY_RESET_SETTING = /^\s*(?:ROLLBACK|ABORT|COMMIT|END)\b/i;
 const IN_FAILED_TRANSACTION = '25P02';
+
+function mayResetCaptureSetting(text: string | undefined): boolean {
+  if (text === undefined) return false;
+  try {
+    const kind = classifyGrowthSql(text);
+    return kind === 'commit' || kind === 'rollback' || kind === 'rollback-to';
+  } catch {
+    return false;
+  }
+}
 
 function countWrites(counter: SeedingCount | undefined, result: unknown): void {
   if (!counter) return;
@@ -597,9 +607,10 @@ function instrumentBytes(client: PoolClient, state: CaptureState): void {
  * An unrelated workflow running during a capture is therefore counted as the operation's; that can only make a bound
  * stricter, never hide cost. If a spurious failure traces to one, switch to lineage tracking. Other work is background.
  * The switch is an ordinary SET sent ahead of the statement on the
- * client's own queue and never counted. A rollback, including one to a savepoint, or a failed statement can undo it,
- * so queued statements reassert it; a statement that ends a transaction sends none, since a failed transaction can
- * refuse it.
+ * client's own queue and never counted. A rollback, including one to a savepoint, a commit of a failed transaction,
+ * or a failed statement can undo it, so queued statements reassert it; a statement that ends a transaction sends none,
+ * since a failed transaction can refuse it. Ending kinds follow classifyGrowthSql, including leading comments.
+ * Unknown prepared text waits until that existing resolution boundary.
  */
 function intercept(client: PoolClient, state: CaptureState, explain: boolean): (statement: string) => unknown {
   const query = client.query.bind(client) as PoolClient['query'];
@@ -675,7 +686,8 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
     }
     if (state.seeding && !suppressAttribution) state.seeding.statements++;
     if (explain && !suppressAttribution) {
-      if (text === undefined || !MAY_RESET_SETTING.test(text)) {
+      const resetsSetting = mayResetCaptureSetting(text);
+      if (!resetsSetting) {
         const wanted = state.active !== undefined;
         // A pg client queues concurrent queries. A preceding queued query may fail or roll back the transaction after
         // this call observes `explaining`, so reassert the setting between queued statements as well as on transitions.
@@ -683,7 +695,7 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
       }
       // COMMIT can roll back an already-failed transaction, which also rolls back SET changes. Treat every end as
       // unknown and reassert on the next query; a successful commit simply repeats the harmless session setting.
-      if (text !== undefined && MAY_RESET_SETTING.test(text)) explaining = undefined;
+      if (resetsSetting) explaining = undefined;
     }
     const wireStatement: WireStatement = {
       record,

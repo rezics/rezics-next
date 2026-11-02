@@ -808,6 +808,71 @@ test("a rolled-back switch is restored before the connection's next statement", 
   });
 });
 
+test('commented commit, full rollback and savepoint rollback keep native plans and original failures', async () => {
+  const database = db!;
+  const work = 'SELECT id FROM growth_capture_test.lookup WHERE id = 1';
+
+  await withConnection(database.pool, async (client) => {
+    await client.query('BEGIN');
+    const result = await capture(database, async () => {
+      await client.query(work);
+      await client.query('/* restore capture */ ROLLBACK');
+      return (await client.query<{ id: number }>(work)).rows[0]?.id;
+    });
+    expect(result.value).toBe(1);
+    expect(result.capture.statements).toEqual([work, '/* restore capture */ ROLLBACK', work]);
+    expect(result.capture.statementErrors).toEqual([null, null, null]);
+    expect(
+      nativePlanEntries(result.capture).map(({ owner, queryText, plan }) => [owner, queryText, plan['Actual Rows']]),
+    ).toEqual([
+      [0, work, 1],
+      [2, work, 1],
+    ]);
+  });
+
+  await withConnection(database.pool, async (client) => {
+    await client.query('BEGIN');
+    await client.query('SAVEPOINT restore_capture');
+    const result = await capture(database, async () => {
+      await client.query(work);
+      await client.query('/* restore capture */ ROLLBACK TO SAVEPOINT restore_capture');
+      const after = await client.query<{ id: number }>(work);
+      await client.query('COMMIT');
+      return after.rows[0]?.id;
+    });
+    expect(result.value).toBe(1);
+    expect(
+      nativePlanEntries(result.capture)
+        .filter(({ queryText }) => queryText === work)
+        .map(({ owner, plan }) => [owner, plan['Actual Rows']]),
+    ).toEqual([
+      [0, 1],
+      [2, 1],
+    ]);
+  });
+
+  await withConnection(database.pool, async (client) => {
+    await client.query('BEGIN');
+    const result = await capture(database, async () => {
+      await expect(client.query('SELECT * FROM growth_capture_test.missing_commented')).rejects.toMatchObject({
+        code: '42P01',
+      });
+      await client.query('-- restore capture\nCOMMIT');
+      return (await client.query<{ id: number }>(work)).rows[0]?.id;
+    });
+    expect(result.value).toBe(1);
+    expect(result.capture.statements).toEqual([
+      'SELECT * FROM growth_capture_test.missing_commented',
+      '-- restore capture\nCOMMIT',
+      work,
+    ]);
+    expect(result.capture.statementErrors).toEqual(['42P01', null, null]);
+    expect(
+      nativePlanEntries(result.capture).map(({ owner, queryText, plan }) => [owner, queryText, plan['Actual Rows']]),
+    ).toEqual([[2, work, 1]]);
+  });
+});
+
 test('fails at open when the database cannot report plans', async () => {
   const database = db!;
   const role = `growth_capture_${Bun.randomUUIDv7().replaceAll('-', '')}`;
