@@ -81,7 +81,42 @@ test('A contributor retries only the failed reading after a confirmed save', asy
   try {
     const terms = catalogueTermsFixture('reader-denied');
     let loseRead = false;
+    let originalReads = 0;
+    let replacementReads = 0;
+    let startFirstRetry!: () => void;
+    let releaseFirstRetry!: () => void;
+    let startSecondRetry!: () => void;
+    let releaseSecondRetry!: () => void;
+    let startRetiredRetry!: () => void;
+    let releaseRetiredRetry!: () => void;
+    const firstRetryStarted = new Promise<void>((resolve) => (startFirstRetry = resolve));
+    const firstRetryGate = new Promise<void>((resolve) => (releaseFirstRetry = resolve));
+    const secondRetryStarted = new Promise<void>((resolve) => (startSecondRetry = resolve));
+    const secondRetryGate = new Promise<void>((resolve) => (releaseSecondRetry = resolve));
+    const retiredRetryStarted = new Promise<void>((resolve) => (startRetiredRetry = resolve));
+    const retiredRetryGate = new Promise<void>((resolve) => (releaseRetiredRetry = resolve));
     const readTerms = mock(async (...args: Parameters<typeof terms.transport.read>) => {
+      if (args[0] !== termsSubjectId) {
+        if (replacementReads++ === 0) return { state: 'unavailable' } as const;
+        return terms.transport.read(...args);
+      }
+      const attempt = originalReads++;
+      if (attempt === 0) throw new TypeError('Initial terms reading temporarily unavailable');
+      if (attempt === 1) {
+        startFirstRetry();
+        await firstRetryGate;
+        throw new TypeError('Initial terms reading temporarily unavailable');
+      }
+      if (attempt === 2) {
+        startSecondRetry();
+        await secondRetryGate;
+        throw new TypeError('Initial terms reading temporarily unavailable');
+      }
+      if (attempt === 3) {
+        startRetiredRetry();
+        await retiredRetryGate;
+        return terms.transport.read(...args);
+      }
       if (loseRead) {
         loseRead = false;
         throw new TypeError('Result reading temporarily unavailable');
@@ -104,6 +139,90 @@ test('A contributor retries only the failed reading after a confirmed save', asy
       );
     });
     await act(async () => {
+      await Bun.sleep(10);
+    });
+    expect(host.textContent).toContain(m.catalogue_result_read_unavailable());
+    const firstRetry = button(m.catalogue_retry_loading_result());
+    await act(async () => {
+      firstRetry.focus();
+      firstRetry.click();
+      firstRetry.click();
+      await firstRetryStarted;
+    });
+    expect(readTerms).toHaveBeenCalledTimes(2);
+    expect(host.querySelector('[role="status"]')?.textContent).toContain(m.candidate_loading());
+    releaseFirstRetry();
+    await act(async () => {
+      await Bun.sleep(10);
+    });
+    expect(host.textContent).toContain(m.catalogue_result_read_unavailable());
+    expect(window.document.activeElement).toBe(host.querySelector('[role="alert"]'));
+
+    const outside = window.document.createElement('button');
+    outside.textContent = 'Outside focus';
+    window.document.body.append(outside);
+    const secondRetry = button(m.catalogue_retry_loading_result());
+    await act(async () => {
+      secondRetry.focus();
+      secondRetry.click();
+      await secondRetryStarted;
+    });
+    await act(async () => outside.focus());
+    releaseSecondRetry();
+    await act(async () => {
+      await Bun.sleep(10);
+    });
+    expect(window.document.activeElement).toBe(outside);
+
+    const retiredRetry = button(m.catalogue_retry_loading_result());
+    await act(async () => {
+      retiredRetry.focus();
+      retiredRetry.click();
+      await retiredRetryStarted;
+      root.render(
+        createElement(
+          QueryClientProvider,
+          { client: queryClient },
+          createElement(SubjectTermsPage, {
+            id: 'replacement-subject',
+            locale: 'en',
+            session: 'signed-in',
+            transport: { read: readTerms, submit: submitTerms },
+          }),
+        ),
+      );
+      await Bun.sleep(10);
+    });
+    await act(async () => outside.focus());
+    releaseRetiredRetry();
+    await act(async () => {
+      await Bun.sleep(10);
+    });
+    expect(host.textContent).toContain(m.catalogue_result_read_unavailable());
+    expect(window.document.activeElement).toBe(outside);
+
+    const currentRetry = button(m.catalogue_retry_loading_result());
+    await act(async () => {
+      currentRetry.focus();
+      currentRetry.click();
+      await Bun.sleep(10);
+    });
+    expect(host.querySelector('h1')).not.toBeNull();
+    expect(window.document.activeElement).toBe(host.querySelector('h1'));
+
+    await act(async () => {
+      root.render(
+        createElement(
+          QueryClientProvider,
+          { client: queryClient },
+          createElement(SubjectTermsPage, {
+            id: termsSubjectId,
+            locale: 'en',
+            session: 'signed-in',
+            transport: { read: readTerms, submit: submitTerms },
+          }),
+        ),
+      );
       await Bun.sleep(10);
     });
     await act(async () => {

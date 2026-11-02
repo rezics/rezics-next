@@ -1,7 +1,16 @@
 import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { SubjectTermsNavigationGuard } from './subject-terms-navigation';
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type MouseEvent,
+} from 'react';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import {
@@ -72,6 +81,21 @@ type LocalTermsDecision = {
   opener: HTMLButtonElement;
 };
 
+type TermsReadVisit = {
+  id: string;
+  locale: string;
+  session: 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
+  transport: TermsTransport;
+  generation: number;
+};
+
+type InitialTermsRetryFocus = {
+  action: object;
+  visit: TermsReadVisit;
+  opener: HTMLButtonElement;
+  cancelled: boolean;
+};
+
 function needsLocalTermsConfirmation(snapshot: TermsSnapshot, language: string, draft?: LanguageDraft) {
   if (!draft) return false;
   const original = languageDraft(snapshot.subject, language);
@@ -100,6 +124,33 @@ function SubjectTermsPageLive({
   const domId = (part: string) => `${formId}-${part}`;
   const lifetime = useEditorLifetime();
   const options = { locale: locale as never };
+  const retryAction = useRef<object | null>(null);
+  const retryFocus = useRef<InitialTermsRetryFocus | null>(null);
+  const retryBoundary = useRef<HTMLElement | null>(null);
+  const currentOrigin = useRef<object | null>(null);
+  const [initialRetry, setInitialRetry] = useState<'pending' | 'settled'>();
+  const [settledRetry, setSettledRetry] = useState<InitialTermsRetryFocus | null>(null);
+  const currentVisit = useRef<TermsReadVisit | null>(null);
+  const previousVisit = currentVisit.current;
+  if (
+    !previousVisit ||
+    previousVisit.id !== id ||
+    previousVisit.locale !== locale ||
+    previousVisit.session !== session ||
+    previousVisit.transport !== transport ||
+    previousVisit.generation !== lifetime.generation
+  ) {
+    if (retryFocus.current) retryFocus.current.cancelled = true;
+    retryAction.current = null;
+    currentVisit.current = {
+      id,
+      locale,
+      session,
+      transport,
+      generation: lifetime.generation,
+    };
+  }
+  const visit = currentVisit.current!;
   const query = useQuery({
     queryKey: [...['catalogue-terms', id, locale], lifetime.generation],
     queryFn: () => transport.read(id),
@@ -141,6 +192,86 @@ function SubjectTermsPageLive({
       : query.data?.state === 'ready'
         ? query.data.snapshot
         : undefined;
+  const origin = useMemo(
+    () => ({}),
+    [query.data, query.error, query.dataUpdatedAt, query.errorUpdatedAt, initialRetry, visit],
+  );
+  currentOrigin.current =
+    !base && !query.isPending && !query.isFetching && !retryAction.current ? origin : null;
+  useEffect(() => {
+    const cancelOnPointer = () => {
+      if (retryFocus.current) retryFocus.current.cancelled = true;
+    };
+    const cancelOnFocus = (event: FocusEvent) => {
+      const intent = retryFocus.current;
+      if (intent && event.target !== intent.opener && event.target !== document.body)
+        intent.cancelled = true;
+    };
+    document.addEventListener('pointerdown', cancelOnPointer, true);
+    document.addEventListener('focusin', cancelOnFocus, true);
+    return () => {
+      document.removeEventListener('pointerdown', cancelOnPointer, true);
+      document.removeEventListener('focusin', cancelOnFocus, true);
+    };
+  }, []);
+  useLayoutEffect(() => {
+    retryAction.current = null;
+    if (retryFocus.current) retryFocus.current.cancelled = true;
+    retryFocus.current = null;
+    setSettledRetry(null);
+    setInitialRetry(undefined);
+    return () => {
+      retryAction.current = null;
+      if (retryFocus.current) retryFocus.current.cancelled = true;
+      retryFocus.current = null;
+    };
+  }, [visit]);
+  async function retryInitial(event: MouseEvent<HTMLButtonElement>) {
+    if (
+      !lifetime.active() ||
+      currentOrigin.current !== origin ||
+      retryAction.current ||
+      query.isFetching ||
+      currentVisit.current !== visit
+    )
+      return;
+    const action = {};
+    retryAction.current = action;
+    currentOrigin.current = null;
+    const intent =
+      event.detail === 0
+        ? { action, visit, opener: event.currentTarget, cancelled: false }
+        : null;
+    retryFocus.current = intent;
+    setSettledRetry(null);
+    setInitialRetry('pending');
+    try {
+      await query.refetch({ cancelRefetch: false });
+    } finally {
+      if (retryAction.current !== action) return;
+      retryAction.current = null;
+      if (!lifetime.active() || currentVisit.current !== visit) return;
+      setInitialRetry('settled');
+      if (intent && retryFocus.current === intent) setSettledRetry(intent);
+    }
+  }
+  // Deliberate keyboard recovery returns to the current editor or truthful failure boundary.
+  useLayoutEffect(() => {
+    if (!settledRetry || query.isPending || query.isFetching) return;
+    setSettledRetry(null);
+    setInitialRetry(undefined);
+    if (retryFocus.current === settledRetry) retryFocus.current = null;
+    if (
+      settledRetry.cancelled ||
+      !lifetime.active() ||
+      currentVisit.current !== settledRetry.visit
+    )
+      return;
+    const active = document.activeElement;
+    if (settledRetry.opener.isConnected && active === settledRetry.opener) return;
+    if (active !== document.body && active !== settledRetry.opener) return;
+    (base ? document.getElementById(domId('title')) : retryBoundary.current)?.focus();
+  }, [base, lifetime, query.isFetching, query.isPending, settledRetry, visit]);
   const current = useRef({
     language,
     locale,
@@ -555,7 +686,9 @@ function SubjectTermsPageLive({
         </AlertDialogContent>
       </AlertDialog>
       <header className="flex min-w-0 flex-col gap-3">
-        <PageHeading id={domId('title')}>{m.catalogue_terms_title({}, options)}</PageHeading>
+        <PageHeading id={domId('title')} tabIndex={-1}>
+          {m.catalogue_terms_title({}, options)}
+        </PageHeading>
         {base && (
           <ContentItemHeading className="min-w-0 text-lg font-semibold [overflow-wrap:anywhere]">
             {pickText(base.subject.labels, locale).text || m.subject_value_unlabelled({}, options)}
@@ -569,9 +702,13 @@ function SubjectTermsPageLive({
           </a>
         )}
       </header>
-      {query.isPending && <p role="status">{m.candidate_loading({}, options)}</p>}
+      {(query.isPending || initialRetry === 'pending') && (
+        <p role="status" tabIndex={-1}>
+          {m.candidate_loading({}, options)}
+        </p>
+      )}
       {!base && !query.isPending && (
-        <section role="alert" className="flex min-w-0 flex-col gap-3">
+        <section ref={retryBoundary} role="alert" tabIndex={-1} className="flex min-w-0 flex-col gap-3">
           <p>
             {query.data?.state === 'concealed'
               ? m.catalogue_create_concealed({}, options)
@@ -579,7 +716,12 @@ function SubjectTermsPageLive({
                 ? m.catalogue_result_read_denied({}, options)
                 : m.catalogue_result_read_unavailable({}, options)}
           </p>
-          <Button className={actionClassName} variant="outline" onClick={() => void query.refetch()}>
+          <Button
+            className={actionClassName}
+            variant="outline"
+            aria-disabled={query.isFetching || retryAction.current !== null}
+            onClick={retryInitial}
+          >
             {m.catalogue_retry_loading_result({}, options)}
           </Button>
         </section>
