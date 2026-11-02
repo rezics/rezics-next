@@ -615,9 +615,7 @@ test('healthy authenticated history without CSRF clears private history on nativ
     const links = await page
       .locator('section > ol h4 a')
       .evaluateAll((entries) => entries.map((entry) => entry.getAttribute('href')));
-    expect(links).toEqual([
-      `/en/posts/${second.id}/revisions/${second.revisionId}`,
-    ]);
+    expect(links).toEqual([`/en/posts/${second.id}/revisions/${second.revisionId}`]);
     expect(await page.getByRole('button', { name: m.thread_history_more() }).count()).toBe(0);
     expect((await calls(page)).slice(-3).map(({ cursor: value, limit }) => ({ cursor: value, limit }))).toEqual([
       { cursor: null, limit: '20' },
@@ -636,7 +634,9 @@ test('a transport failure with a changed actual reader clears private history in
   const page = await mounted();
   try {
     await authorHistory(page);
-    await page.evaluate(() => { (window as unknown as { historyViewer?: string }).historyViewer = undefined; });
+    await page.evaluate(() => {
+      (window as unknown as { historyViewer?: string }).historyViewer = undefined;
+    });
     await page.getByRole('button', { name: m.thread_history_more() }).click();
     await pending(page);
     expect((await calls(page)).at(-1)?.authorization).toBeNull();
