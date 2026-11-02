@@ -45,11 +45,7 @@ test('Native Recent Retry-After prevents early reads and writes through sync, re
     const writes: Parameters<RecentSearchTransport['write']>[0][] = [];
     let reads = 0,
       writeCalls = 0,
-      write: Awaited<ReturnType<RecentSearchTransport['write']>> = {
-        ok: false,
-        code: 'unavailable',
-        retryAt: now + 5_000,
-      };
+      failWrite = true;
     const adapter = createRecentSearchSyncAdapter({
       accountId,
       bucket,
@@ -63,7 +59,15 @@ test('Native Recent Retry-After prevents early reads and writes through sync, re
         write: async (input) => {
           writeCalls++;
           writes.push(structuredClone(input));
-          return write;
+          if (failWrite) return { ok: false, code: 'unavailable', retryAt: now + 5_000 };
+          return {
+            ok: true,
+            value: {
+              id: '019f0000-0000-7000-8000-734100000003',
+              revision: input.expectedRevision + 1,
+              lastUsed: new Date(now).toISOString(),
+            },
+          };
         },
       },
     });
@@ -92,7 +96,7 @@ test('Native Recent Retry-After prevents early reads and writes through sync, re
     });
     Date.now = () => now + 5_000;
     expect(reads).toBe(blocked.reads);
-    write = { ok: true, value: { id: '019f0000-0000-7000-8000-734100000003', revision: 5, lastUsed: new Date(now).toISOString() } };
+    failWrite = false;
     await adapter.retry(entries, signal());
     expect(writes[1]!.pending.key).toBe(attempted.pending.key);
     expect(writes[1]!.expectedRevision).toBe(4);
