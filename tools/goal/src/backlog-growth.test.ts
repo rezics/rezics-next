@@ -1,6 +1,6 @@
-import { afterAll, expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { Buffer } from 'node:buffer';
-import { createRequire, syncBuiltinESMExports } from 'node:module';
+import { createRequire } from 'node:module';
 import { mkdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
 import type { Database } from 'bun:sqlite';
 import { join, sep } from 'node:path';
@@ -14,8 +14,22 @@ const NOW = Date.UTC(2026, 10, 2, 12, 0);
 const GROWTH_SCENARIO =
   'backlog growth tracks indexed history, input-proportional directory entries, and dispatch/cancellation caps';
 let activeDirectoryProbe: { root: string; metrics: Metrics } | undefined;
-let restoreDirectoryObserver: (() => void) | undefined;
-afterAll(() => restoreDirectoryObserver?.());
+const nativeFs = createRequire(import.meta.url)('node:fs') as {
+  readdirSync: (...args: unknown[]) => unknown[];
+};
+const nativeReaddir = nativeFs.readdirSync.bind(nativeFs);
+mock.module('node:fs', () => ({
+  ...nativeFs,
+  readdirSync: (...args: unknown[]) => {
+    const probe = activeDirectoryProbe;
+    const path = String(args[0]);
+    const inBacklog = probe && (path === probe.root || path.startsWith(`${probe.root}${sep}`));
+    if (inBacklog) probe.metrics.directoryEnumerations += 1;
+    const entries = nativeReaddir(...args);
+    if (inBacklog) probe.metrics.directoryEntriesReturned += entries.length;
+    return entries;
+  },
+}));
 
 test('the approved backlog Cost derivation names the exact native growth scenario', () => {
   const citation = `\`tools/goal/src/backlog-growth.test.ts\`: \`${GROWTH_SCENARIO}\``;
@@ -126,26 +140,6 @@ function observeJson(metrics: Metrics): () => void {
 }
 
 function observeDirectories(root: string, metrics: Metrics): () => void {
-  if (!restoreDirectoryObserver) {
-    const builtinFs = createRequire(import.meta.url)('node:fs') as {
-      readdirSync: (...args: unknown[]) => unknown[];
-    };
-    const original = builtinFs.readdirSync.bind(builtinFs);
-    builtinFs.readdirSync = (...args) => {
-      const probe = activeDirectoryProbe;
-      const path = String(args[0]);
-      const inBacklog = probe && (path === probe.root || path.startsWith(`${probe.root}${sep}`));
-      if (inBacklog) probe.metrics.directoryEnumerations += 1;
-      const entries = original(...args);
-      if (inBacklog) probe.metrics.directoryEntriesReturned += entries.length;
-      return entries;
-    };
-    syncBuiltinESMExports();
-    restoreDirectoryObserver = () => {
-      builtinFs.readdirSync = original;
-      syncBuiltinESMExports();
-    };
-  }
   activeDirectoryProbe = { root, metrics };
   return () => {
     activeDirectoryProbe = undefined;
