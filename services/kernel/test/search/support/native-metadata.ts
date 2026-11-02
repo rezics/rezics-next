@@ -9,6 +9,43 @@ type ResolveBody = {
   data_streams: unknown;
 };
 
+/** Native `_resolve/index` envelope: writer aliases appear on the physical index and as top-level receipts. */
+export type NativeSubjectResolveEnvelope = {
+  indices: { name: string; attributes: string[]; aliases?: string[] }[];
+  aliases: { name: string; indices: string[] }[];
+  data_streams: unknown[];
+};
+
+export function nativeSubjectResolveEnvelope(
+  prefix: string,
+  generations: readonly { generation: number; writer?: string; hidden?: boolean }[],
+  active: number | null = null,
+): NativeSubjectResolveEnvelope {
+  const alias = subjectAlias(prefix);
+  const indices = generations.map((entry) => {
+    const name = subjectIndexName(prefix, entry.generation);
+    const aliases = [
+      ...(entry.writer ? [entry.writer] : []),
+      ...(active === entry.generation ? [alias] : []),
+    ];
+    return {
+      name,
+      attributes: entry.hidden ? ['open', 'hidden'] : ['open'],
+      ...(aliases.length ? { aliases } : {}),
+    };
+  });
+  return {
+    indices,
+    aliases: [
+      ...generations.flatMap((entry) =>
+        entry.writer ? [{ name: entry.writer, indices: [subjectIndexName(prefix, entry.generation)] }] : [],
+      ),
+      ...(active === null ? [] : [{ name: alias, indices: [subjectIndexName(prefix, active)] }]),
+    ],
+    data_streams: [],
+  };
+}
+
 export function captureMetadata(
   native: OpenSearch,
   surface: 'resolve' | 'mapping',
