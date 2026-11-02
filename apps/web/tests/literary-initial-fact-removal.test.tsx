@@ -72,7 +72,10 @@ test('Literary removal preserves full rows and stable siblings through Cancel, r
   try {
     for (const citationOnly of [false, true]) {
       const selected = structuredClone(complete);
-      if (citationOnly) selected.statement.value = { type: 'value', content: '' };
+      if (citationOnly) {
+        selected.statement.value = { type: 'value', content: '' };
+        selected.statement.qualifiers = [];
+      }
       rows = [selected, sibling];
       await render();
       const survivor = region(sibling),
