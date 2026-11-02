@@ -16,6 +16,8 @@ const globals = {
   Element: dom.Element,
   Node: dom.Node,
   scrollTo: (_options?: unknown) => {},
+  requestAnimationFrame: dom.requestAnimationFrame.bind(dom),
+  cancelAnimationFrame: dom.cancelAnimationFrame.bind(dom),
   getComputedStyle: dom.getComputedStyle.bind(dom),
 };
 const previous = new Map(
