@@ -165,9 +165,7 @@ test('long retained sessions keep bounded read buffers and isolate the current a
     const scan = scanSessionJsonl(rollout, () => {});
     expect(scan.complete).toBe(true);
     expect(scan.bytesRead).toBeGreaterThan(SESSION_JSONL_READ_BUFFER_BYTES * 10);
-    expect(scan.maxBufferedBytes).toBeLessThanOrEqual(
-      SESSION_JSONL_READ_BUFFER_BYTES + SESSION_JSONL_MAX_RECORD_BYTES,
-    );
+    expect(scan.maxBufferedBytes).toBeLessThanOrEqual(SESSION_JSONL_READ_BUFFER_BYTES + SESSION_JSONL_MAX_RECORD_BYTES);
     expect(scan.maxBufferedBytes).toBeLessThan(scan.bytesRead / 2);
 
     const previous = lines([
@@ -210,10 +208,7 @@ test('long retained sessions keep bounded read buffers and isolate the current a
     writeFileSync(partial, '{"type":"token_usage_record",');
     expect(measureSessionFile(partial, { startedAt: start, endedAt: end })).toBeNull();
     const unsupported = join(root, 'unsupported-session.jsonl');
-    writeFileSync(
-      unsupported,
-      JSON.stringify({ type: 'token_usage_record', payload: { usage: 'future-format' } }),
-    );
+    writeFileSync(unsupported, JSON.stringify({ type: 'token_usage_record', payload: { usage: 'future-format' } }));
     expect(measureSessionFile(unsupported, { startedAt: start, endedAt: end })?.hasUsage).toBe(false);
   } finally {
     rmSync(root, { recursive: true, force: true });

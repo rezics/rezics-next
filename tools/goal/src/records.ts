@@ -149,7 +149,8 @@ export function measureLog(
   const state = measurementState(options, adapters, hasRollout);
   for (const event of events) state.add(event);
   const ledger =
-    adapters.map((adapter) => adapter.parseUsage(events, state.start, state.end)).find((usage) => usage !== null) ?? null;
+    adapters.map((adapter) => adapter.parseUsage(events, state.start, state.end)).find((usage) => usage !== null) ??
+    null;
   return state.finish(ledger);
 }
 
