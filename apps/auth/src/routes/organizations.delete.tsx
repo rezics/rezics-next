@@ -118,7 +118,11 @@ export function OrganizationDeleteContent({
       selected,
       active: true,
       humanAccountId:
-        uncertain.kind === 'pending' ? uncertain.value.humanAccountId : saved?.organizationId === selected ? saved?.humanAccountId : undefined,
+        uncertain.kind === 'pending'
+          ? uncertain.value.humanAccountId
+          : saved?.organizationId === selected
+            ? saved?.humanAccountId
+            : undefined,
       isCurrent: (): boolean => review.current === current && current.active,
     };
     review.current = current;
@@ -129,7 +133,7 @@ export function OrganizationDeleteContent({
     if (uncertain.kind !== 'absent') setOutcome('unknown');
     void loadReview(current);
     const retire = () => {
-      current.active = false;
+      if (review.current) review.current.active = false;
       resetReview();
       setLoaded({ kind: 'unavailable' });
     };
@@ -139,7 +143,7 @@ export function OrganizationDeleteContent({
     window.addEventListener('pagehide', retire);
     window.addEventListener('pageshow', restore);
     return () => {
-      current.active = false;
+      if (review.current) review.current.active = false;
       window.removeEventListener('pagehide', retire);
       window.removeEventListener('pageshow', restore);
     };
@@ -149,7 +153,11 @@ export function OrganizationDeleteContent({
     const previous = review.current;
     if (!previous || submitting.current) return;
     previous.active = false;
-    const current = { ...previous, active: true, isCurrent: (): boolean => review.current === current && current.active };
+    const current = {
+      ...previous,
+      active: true,
+      isCurrent: (): boolean => review.current === current && current.active,
+    };
     review.current = current;
     resetReview();
     if (current.selected && readOrganizationDeleteUnknown(current.selected).kind !== 'absent') setOutcome('unknown');

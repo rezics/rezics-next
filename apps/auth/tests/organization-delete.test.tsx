@@ -9,11 +9,17 @@ const first = '20000000-0000-0000-0000-000000000000';
 const second = '30000000-0000-0000-0000-000000000000';
 const body = { account_id: human, client_id: session('delete').clientId, scope: session('delete').scopes };
 const ready = (id: string): OrganizationDeletionRead => ({
-  kind: 'ready', account: { id, kind: 'organization', handle: id === first ? 'first' : 'second', displayName: null },
+  kind: 'ready',
+  account: { id, kind: 'organization', handle: id === first ? 'first' : 'second', displayName: null },
 });
-const content = (id: string, read: OrganizationDeletionReader) =>
-  <OrganizationDeleteContent organizationId={id} privacyContact="mailto:privacy@example.test" read={read} />;
-const confirm = (host: HTMLElement, phrase: string) => flush(() => { fill(host.querySelector('input')!, phrase); send(host); });
+const content = (id: string, read: OrganizationDeletionReader) => (
+  <OrganizationDeleteContent organizationId={id} privacyContact="mailto:privacy@example.test" read={read} />
+);
+const confirm = (host: HTMLElement, phrase: string) =>
+  flush(() => {
+    fill(host.querySelector('input')!, phrase);
+    send(host);
+  });
 
 test('unavailable review recovers the selected organization and freshly confirms accepted deletion', async () => {
   let unavailable = true;
@@ -53,9 +59,16 @@ test('uncertainty retains the original identity through unavailable, missing, de
     expect(page.calls).toHaveLength(2);
     expect(page.host.textContent).not.toContain('command was accepted');
   }
-  await page.render(content(second, read));
-  result = ready(second);
-  await flush(() => button(page.host, 'Retry')?.click());
+  await page.render(
+    <OrganizationDeleteContent
+      key="restored"
+      organizationId={first}
+      privacyContact="mailto:privacy@example.test"
+      read={read}
+    />,
+  );
+  expect(readOrganizationDeleteUnknown(first)).toEqual(saved);
+  expect(page.host.querySelector('form')).toBeNull();
 });
 
 for (const phase of ['read', 'approval', 'execution', 'step-up'] as const)
@@ -69,15 +82,25 @@ for (const phase of ['read', 'approval', 'execution', 'step-up'] as const)
     await confirm(page.host, '@first');
     if (phase !== 'read') await flush(() => oldRead.resolve(ready(first)));
     if (phase === 'execution' || phase === 'step-up') await flush(() => page.calls[0]!.resolve(approval()));
+    if (phase === 'execution') await flush(leave);
     await page.render(content(second, read));
     expect(page.host.querySelector<HTMLInputElement>('input')!.value).toBe('');
     await confirm(page.host, '@second');
     const assign = spyOn(window.location, 'assign').mockImplementation(() => {});
     try {
-      await flush(() => phase === 'read' ? oldRead.resolve(ready(first)) : page.calls.at(-1)!.resolve(
-        phase === 'approval' ? approval() : phase === 'execution' ? Response.json({ accountId: first }) :
-        Response.json({ error: 'step_up_required' }, { status: 401 }),
-      ));
+      await flush(() =>
+        phase === 'read'
+          ? oldRead.resolve(ready(first))
+          : page.calls
+              .at(-1)!
+              .resolve(
+                phase === 'approval'
+                  ? approval()
+                  : phase === 'execution'
+                    ? Response.json({ accountId: first })
+                    : Response.json({ error: 'step_up_required' }, { status: 401 }),
+              ),
+      );
       expect(page.host.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(true);
       expect(page.host.textContent).not.toContain('command was accepted');
       expect(assign).not.toHaveBeenCalled();
@@ -85,12 +108,17 @@ for (const phase of ['read', 'approval', 'execution', 'step-up'] as const)
       await flush(() => newRead.resolve(ready(second)));
       expect(page.calls).toHaveLength(previousCalls + 1);
       expect(page.calls.at(-1)!.body.operation).toEqual({ kind: 'delete', accountId: second });
-    } finally { assign.mockRestore(); }
+    } finally {
+      assign.mockRestore();
+    }
   });
 
 test('late initial reads and browser departure cannot restore private review; recovery pins the initiating human', async () => {
   const delayed = Promise.withResolvers<OrganizationDeletionRead>();
-  const read: OrganizationDeletionReader = async ({ organizationId }) => organizationId === first ? delayed.promise : ready(second);
+  const recovery = Promise.withResolvers<OrganizationDeletionRead>();
+  let reads = 0;
+  const read: OrganizationDeletionReader = async ({ organizationId }) =>
+    ++reads === 3 ? recovery.promise : organizationId === first ? delayed.promise : ready(second);
   const page = await open(content(first, read), body);
   await page.render(content(second, read));
   await flush(() => delayed.resolve(ready(first)));
@@ -99,6 +127,10 @@ test('late initial reads and browser departure cannot restore private review; re
   await flush(leave);
   expect(page.host.querySelector('form')).toBeNull();
   expect(page.host.textContent).not.toContain(second);
+  await flush(() => button(page.host, 'Retry')!.click());
+  await flush(leave);
+  await flush(() => recovery.resolve(ready(second)));
+  expect(page.host.querySelector('form')).toBeNull();
   globalThis.fetch = (async () => Response.json({ ...body, account_id: first })) as typeof fetch;
   await flush(() => button(page.host, 'Retry')!.click());
   expect(page.host.querySelector('form')).toBeNull();
