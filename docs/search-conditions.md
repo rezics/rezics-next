@@ -40,6 +40,7 @@ saved and authorized private predicates together, then exact-deduplicate and adm
 When released saved-filter metadata has no localized label, identify the authored `{saved: id}` reference by its exact ID.
 An empty editor group is a repair state: keep it visible and prevent applying until a child is restored or the group is explicitly removed.
 Condition error actions use one localized navigation label and focus the matching field, nearest condition group, or error summary in that order without changing the draft.
+Unfinished numeric text belongs to an editor-local condition occurrence across Boolean edits; replacement documents and incompatible property changes retire it, while compatible property changes retain it.
 An unsupported condition is an admission error. A recognized condition outside a kind's declared domain is
 not-applicable/unknown, including under NOT; only proven true selects a hit. Withheld or incomplete evidence
 cannot become false under NOT. True OR cannot bypass authorization of any referenced resource.

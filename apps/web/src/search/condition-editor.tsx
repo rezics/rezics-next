@@ -32,7 +32,10 @@ import {
 } from './condition-property-edit';
 import {
   conditionTreeCanSubmit,
+  createConditionDraftNode,
+  editConditionDraftNode,
   editConditionTree,
+  type ConditionDraftNode,
   type ConditionTreeEdit,
   type ConditionTreePath,
 } from './condition-tree-edit';
@@ -49,6 +52,7 @@ type EditorContext = {
   announce(message: string, pointer: string): void;
   canEditTree(path: ConditionTreePath, edit: ConditionTreeEdit): boolean;
   editTree(path: ConditionTreePath, edit: ConditionTreeEdit): boolean;
+  changeCondition(path: ConditionTreePath, value: FilterDocument | undefined, retain: boolean): void;
   savedFilters: readonly string[];
   canSelectSavedFilter(path: ConditionTreePath, id: string, mode: SavedFilterEditMode): boolean;
   selectSavedFilter(path: ConditionTreePath, id: string, mode: SavedFilterEditMode): boolean;
@@ -102,6 +106,22 @@ export function ConditionEditor({
   embedded?: boolean;
 }) {
   const root = useRef<HTMLDivElement>(null);
+  const serial = useRef(0);
+  const nextKey = () => ++serial.current;
+  let [session, setSession] = useState(() => ({
+    value,
+    node: value ? createConditionDraftNode(value, nextKey) : undefined,
+  }));
+  // Only documents emitted by this session inherit its drafts. Revert and external
+  // replacements start fresh, even when they reuse an earlier document object.
+  if (session.value !== value) {
+    session = { value, node: value ? createConditionDraftNode(value, nextKey) : undefined };
+    setSession(session);
+  }
+  const publish = (next: FilterDocument | undefined, node: ConditionDraftNode | undefined) => {
+    setSession({ value: next, node });
+    onChange(next);
+  };
   const [announcement, setAnnouncement] = useState({ text: '', version: 0 });
   const announce = (message: string, pointer: string) => {
     setAnnouncement((previous) => ({ text: message, version: previous.version + 1 }));
@@ -119,11 +139,11 @@ export function ConditionEditor({
   };
   const canEditTree = (path: ConditionTreePath, edit: ConditionTreeEdit) =>
     value !== undefined && editConditionTree(value, path, edit).accepted;
-  const editTree = (path: ConditionTreePath, edit: ConditionTreeEdit) => {
+  const editTree = (path: ConditionTreePath, edit: ConditionTreeEdit, retainReplacement = false) => {
     if (value === undefined) return false;
     const result = editConditionTree(value, path, edit);
     if (!result.accepted) return false;
-    onChange(result.value);
+    publish(result.value, editConditionDraftNode(session.node!, path, edit, nextKey, retainReplacement));
     return true;
   };
   const admitsCondition = useMemo(
@@ -140,7 +160,9 @@ export function ConditionEditor({
   const selectSavedFilter = (path: ConditionTreePath, id: string, mode: SavedFilterEditMode) => {
     const next = getSavedFilterEdit(path, id, mode);
     if (!next) return false;
-    onChange(next);
+    const edit: ConditionTreeEdit =
+      mode === 'append' ? { type: 'append', value: { saved: id } } : { type: 'replace', value: { saved: id } };
+    publish(next, editConditionDraftNode(session.node!, path, edit, nextKey));
     return true;
   };
   const context: EditorContext | undefined = metadata
@@ -152,6 +174,8 @@ export function ConditionEditor({
         announce,
         canEditTree,
         editTree,
+        changeCondition: (path, next, retain) =>
+          editTree(path, next ? { type: 'replace', value: next } : { type: 'remove' }, retain),
         savedFilters,
         canSelectSavedFilter,
         selectSavedFilter,
@@ -202,14 +226,22 @@ export function ConditionEditor({
         {context ? (
           <>
             {value ? (
-              <NodeEditor value={value} onChange={onChange} pointer={CONDITION_POINTER} path={[]} context={context} />
+              <NodeEditor
+                key={session.node!.key}
+                draft={session.node!}
+                value={value}
+                pointer={CONDITION_POINTER}
+                path={[]}
+                context={context}
+              />
             ) : (
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  onChange({ and: [{ type: { in: [''] } }] });
+                  const next: FilterDocument = { and: [{ type: { in: [''] } }] };
+                  publish(next, createConditionDraftNode(next, nextKey));
                   announce(m.condition_added(), `${CONDITION_POINTER}/and/0`);
                 }}
               >
@@ -271,17 +303,27 @@ function EditorField({
 
 function NodeEditor({
   value,
-  onChange,
+  draft,
   pointer,
   path,
   context,
 }: {
   value: FilterDocument;
-  onChange(value: FilterDocument | undefined): void;
+  draft: ConditionDraftNode;
   pointer: string;
   path: ConditionTreePath;
   context: EditorContext;
 }) {
+  const onChange = (next: FilterDocument | undefined) => {
+    const replacesRange =
+      next &&
+      'statement' in value &&
+      'statement' in next &&
+      value.statement.property !== next.statement.property &&
+      ('range' in value.statement ? value.statement.range : undefined) !==
+        ('range' in next.statement ? next.statement.range : undefined);
+    context.changeCondition(path, next, !replacesRange);
+  };
   const groupOperator = 'and' in value ? 'and' : 'or' in value ? 'or' : undefined;
   const operator = groupOperator ?? ('not' in value ? 'not' : '');
   const group = 'and' in value ? value.and : 'or' in value ? value.or : undefined;
@@ -423,17 +465,12 @@ function NodeEditor({
           )}
           {group.map((child, index) => (
             <NodeEditor
-              key={index}
+              key={draft.children[index]!.key}
+              draft={draft.children[index]!}
               value={child}
               pointer={`${pointer}/${operator}/${index}`}
               path={[...path, groupOperator!, index]}
               context={context}
-              onChange={(next) => {
-                const children = next
-                  ? group.map((entry, at) => (at === index ? next : entry))
-                  : group.filter((_, at) => at !== index);
-                onChange(groupOperator === 'and' ? { and: children } : { or: children });
-              }}
             />
           ))}
           <div className="flex flex-wrap gap-2">
@@ -486,11 +523,12 @@ function NodeEditor({
       )}
       {'not' in value && (
         <NodeEditor
+          key={draft.children[0]!.key}
+          draft={draft.children[0]!}
           value={value.not}
           pointer={`${pointer}/not`}
           path={[...path, 'not']}
           context={context}
-          onChange={(next) => onChange(next ? { not: next } : undefined)}
         />
       )}
       {extensionLeaf}
@@ -542,6 +580,7 @@ function NodeEditor({
                     {(props) => (
                       <ConditionRangeInput
                         {...props}
+                        draft={draft.ranges[bound]}
                         datatype={definition?.datatype === 'time' ? 'time' : 'quantity'}
                         label={label}
                         value={range[bound]}

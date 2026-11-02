@@ -4,6 +4,7 @@ import { m } from '../paraglide/messages.js';
 
 export type ConditionRangeDatatype = 'quantity' | 'time';
 type RangeDraft = { valid: true; value: number | undefined } | { valid: false };
+export type ConditionRangeDraft = { current?: { raw: string; value: number | undefined } };
 
 const numericGrammar = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
 
@@ -31,6 +32,7 @@ export function applyConditionRangeDraft(
 
 export function ConditionRangeInput({
   value,
+  draft,
   datatype,
   label,
   onValue,
@@ -39,6 +41,7 @@ export function ConditionRangeInput({
   'aria-describedby': ariaDescribedBy,
 }: {
   value: number | undefined;
+  draft: ConditionRangeDraft;
   datatype: ConditionRangeDatatype;
   label: string;
   onValue(value: number | undefined): void;
@@ -46,12 +49,15 @@ export function ConditionRangeInput({
   'aria-invalid': boolean;
   'aria-describedby'?: string;
 }) {
-  const [raw, setRaw] = useState(value?.toString() ?? '');
-  const [previous, setPrevious] = useState(value);
+  const [state, setState] = useState(draft.current ?? { raw: value?.toString() ?? '', value });
+  const { raw, value: previous } = state;
+  const setDraft = (next: typeof state) => {
+    draft.current = next;
+    setState(next);
+  };
   const input = useRef<HTMLInputElement>(null);
   if (!Object.is(previous, value)) {
-    setPrevious(value);
-    setRaw(value?.toString() ?? '');
+    setDraft({ raw: value?.toString() ?? '', value });
   }
 
   const error = parseConditionRangeDraft(raw, datatype).valid
@@ -79,8 +85,7 @@ export function ConditionRangeInput({
             (message) => event.currentTarget.setCustomValidity(message),
             m.search_reader_condition_format({ field: label }),
           );
-          setRaw(text);
-          if (next.valid) setPrevious(next.value);
+          setDraft({ raw: text, value: next.valid ? next.value : value });
         }}
       />
       {error && (
