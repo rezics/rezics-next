@@ -7,7 +7,7 @@ export type NativeReadResponse = {
   status: number;
   data?: unknown;
   error?: { value?: unknown } | null;
-  headers?: HeadersInit;
+  headers?: HeadersInit | undefined;
 };
 
 export type CurationBaseline =
