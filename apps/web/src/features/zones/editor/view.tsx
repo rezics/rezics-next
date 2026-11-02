@@ -5,6 +5,7 @@ import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldLabel, FieldDescription } from '@rezics/ui/shadcn/field';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useBlocker, useRouter } from '@tanstack/react-router';
 import { Alert, AlertTitle, AlertDescription } from '@rezics/ui/shadcn/alert';
 import { m } from '../../../paraglide/messages.js';
 import { PageHeading } from '../../../shell/page-heading';
@@ -30,6 +31,86 @@ export function EditorLoading() {
       {m.zone_editor_loading()}
     </p>
   );
+}
+
+function ZoneNavigationGuard({
+  session,
+  generation,
+  dirty,
+  busy,
+}: {
+  session: ZoneEditorSession;
+  generation: number;
+  dirty: boolean;
+  busy: boolean;
+}) {
+  const router = useRouter({ warn: false });
+  return router ? (
+    <RouterDepartureGuard session={session} generation={generation} dirty={dirty} busy={busy} />
+  ) : null;
+}
+
+function RouterDepartureGuard({
+  session,
+  generation,
+  dirty,
+  busy,
+}: {
+  session: ZoneEditorSession;
+  generation: number;
+  dirty: boolean;
+  busy: boolean;
+}) {
+  const resolved = useRef(false);
+  const current = () => session.isCurrent() && session.snapshot().generation === generation;
+  const blocker = useBlocker({
+    shouldBlockFn: () => {
+      if (!current() || !session.dirty()) return false;
+      resolved.current = false;
+      return true;
+    },
+    disabled: !dirty || !current(),
+    enableBeforeUnload: false,
+    withResolver: true,
+  });
+  const blockerRef = useRef(blocker);
+  blockerRef.current = blocker;
+  useEffect(() => {
+    if ((!dirty || !current()) && blocker.status === 'blocked' && !resolved.current) {
+      resolved.current = true;
+      blocker.reset();
+    }
+  }, [blocker, dirty, generation, session]);
+  useEffect(
+    () => () => {
+      const pending = blockerRef.current;
+      if (pending.status === 'blocked' && !resolved.current) {
+        resolved.current = true;
+        pending.reset();
+      }
+    },
+    [],
+  );
+
+  function resolve(leave: boolean) {
+    if (blocker.status !== 'blocked' || resolved.current) return;
+    resolved.current = true;
+    const latest = session.snapshot();
+    if (leave && current() && !latest.busy && session.dirty()) blocker.proceed();
+    else blocker.reset();
+  }
+
+  return blocker.status === 'blocked' ? (
+    <section role="alert" className="mb-6 space-y-3 rounded-xl border border-border p-4">
+      <p>{m.zone_editor_leave()}</p>
+      <div className="flex flex-wrap gap-2">
+        <Button onClick={() => resolve(false)}>{m.zone_editor_stay()}</Button>
+        <Button variant="outline" disabled={busy} onClick={() => resolve(true)}>
+          {m.zone_editor_discard()}
+        </Button>
+      </div>
+    </section>
+  ) : null;
 }
 
 export function ZoneConfigurationEditor({
@@ -215,6 +296,7 @@ export function ZoneConfigurationEditor({
       className="flex min-w-0 flex-col gap-6 text-foreground"
       aria-busy={state.busy}
     >
+      <ZoneNavigationGuard session={session} generation={state.generation} dirty={dirty} busy={state.busy} />
       <header className="space-y-3">
         <PageHeading>{m.zone_editor_heading()}</PageHeading>
         <p className="max-w-3xl text-muted-foreground">{m.zone_editor_live_note()}</p>

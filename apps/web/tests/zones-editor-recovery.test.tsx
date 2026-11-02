@@ -2,6 +2,14 @@
 import { afterAll, expect, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  Outlet,
+  RouterProvider,
+} from '@tanstack/react-router';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { UI_LOCALES } from '@rezics/composition';
 import { zoneEditorFixture } from '../src/features/zones/editor/fixture';
@@ -68,6 +76,79 @@ function withoutDiagnostics(host: HTMLElement) {
   copy.querySelectorAll('details').forEach((details) => details.remove());
   return copy.textContent;
 }
+
+test('Zone draft navigation stays with the exact edits, allows a deliberate leave once, and is clear after save', async () => {
+  const fixture = zoneEditorFixture();
+  const session = new ZoneEditorSession(fixture.transport, fixture.initial);
+  let arrivals = 0;
+  const rootRoute = createRootRoute({ component: Outlet });
+  const editorRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/edit',
+    component: () => <ZoneConfigurationEditor session={session} locale="en" />,
+  });
+  const awayRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/away',
+    onEnter: () => arrivals++,
+    component: () => <p>Destination</p>,
+  });
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([editorRoute, awayRoute]),
+    history: createMemoryHistory({ initialEntries: ['/edit'] }),
+  });
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await router.load();
+    await act(async () => root.render(<RouterProvider router={router} />));
+    const edited = structuredClone(session.snapshot().draft!);
+    edited.configuration.pages.push({ route: 'guide', document: { root: { props: {} }, content: [] } });
+    edited.configuration.scope = ['books/fiction'];
+    edited.mounts = [
+      fixture.initial.options.collections.kind === 'ready' ? fixture.initial.options.collections.value.items[0]!.id : '',
+    ];
+    session.edit(edited);
+    const retained = session.snapshot().draft;
+    await act(async () => {
+      const page = host.querySelector<HTMLSelectElement>('#zone-page')!;
+      page.value = '1';
+      page.dispatchEvent(new window.Event('change', { bubbles: true }));
+    });
+    expect(host.textContent).not.toContain(m.zone_editor_leave());
+    let pending: Promise<void> | undefined;
+    await act(async () => {
+      pending = router.navigate({ to: '/away' });
+    });
+    expect(host.textContent).toContain(m.zone_editor_leave());
+    expect(router.state.location.pathname).toBe('/edit');
+    await act(async () => button(host, m.zone_editor_stay()).click());
+    await pending;
+    expect(session.snapshot().draft).toBe(retained);
+    expect(arrivals).toBe(0);
+    await act(async () => session.save());
+    await act(async () => router.navigate({ to: '/away' }));
+    expect(host.textContent).toContain('Destination');
+    expect(host.textContent).not.toContain(m.zone_editor_leave());
+    expect(arrivals).toBe(1);
+    await act(async () => router.navigate({ to: '/edit' }));
+    const discarded = structuredClone(session.snapshot().draft!);
+    discarded.configuration.labels.en = 'Discard this edit';
+    session.edit(discarded);
+    await act(async () => {
+      pending = router.navigate({ to: '/away' });
+    });
+    expect(host.textContent).toContain(m.zone_editor_leave());
+    await act(async () => button(host, m.zone_editor_discard()).click());
+    await pending;
+    expect(router.state.location.pathname).toBe('/away');
+    expect(arrivals).toBe(2);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
+});
 
 test('Zone configuration validation identifies a readable field and reachable correction while preserving the dirty draft and current owner lifetime', async () => {
   const fixture = zoneEditorFixture();

@@ -1,5 +1,5 @@
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { useBlocker, useLocation, useRouter } from '@tanstack/react-router';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useLocation, useRouter } from '@tanstack/react-router';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../../paraglide/messages.js';
 import { useSession } from '../../../session/query';
@@ -143,40 +143,14 @@ function AdmittedZoneEditor({
       canWrite: () => lifetime.isCurrent(capture) && hasValidOwnerCsrfToken(capture.csrfToken),
     });
   });
-  useSyncExternalStore(session.subscribe, session.snapshot, session.snapshot);
-  const blocker = useBlocker({ shouldBlockFn: () => session.dirty(), withResolver: true });
   if (!session.isCurrent()) return <EditorLoading />;
   return (
-    <>
-      {blocker.status === 'blocked' ? (
-        <section role="alert" className="mb-6 space-y-3 rounded-xl border border-border p-4">
-          <p>{m.zone_editor_leave()}</p>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              onClick={() => {
-                if (session.isCurrent()) blocker.reset();
-              }}
-            >
-              {m.zone_editor_stay()}
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => {
-                if (session.isCurrent()) blocker.proceed();
-              }}
-            >
-              {m.zone_editor_discard()}
-            </Button>
-          </div>
-        </section>
-      ) : null}
-      <ZoneConfigurationEditor
-        session={session}
-        locale={locale}
-        enabled
-        writeEnabled={hasValidOwnerCsrfToken(capture.csrfToken)}
-      />
-    </>
+    <ZoneConfigurationEditor
+      session={session}
+      locale={locale}
+      enabled
+      writeEnabled={hasValidOwnerCsrfToken(capture.csrfToken)}
+    />
   );
 }
 
