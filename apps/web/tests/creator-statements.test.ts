@@ -225,8 +225,22 @@ describe('Creators can inspect private royalty statements, source lines and exte
       statement,
       lines: { kind: 'unavailable' },
     });
-    expect(() => statementSearch({ cursor: 'x'.repeat(4097) })).toThrow();
-    expect(() => statementDetailSearch({ from: ['untrusted'] })).toThrow();
+    expect(statementSearch({ cursor: 'x'.repeat(4097) })).toEqual({ cursorMalformed: true });
+    expect(statementDetailSearch({ from: ['untrusted'], cursor: 'signed/line+/=' })).toEqual({
+      cursor: 'signed/line+/=',
+      fromMalformed: true,
+    });
+  });
+
+  test('malformed statement positions do not prepare or issue a native read', async () => {
+    const api = fixture(() => Response.json({}));
+    expect(await loadCreatorStatements(api.client, request(), {}, { cursor: 'x'.repeat(4097) })).toEqual({
+      kind: 'unavailable',
+    });
+    expect(await loadCreatorStatement(api.client, request(), {}, { id: statement.id, cursor: 'x'.repeat(4097) })).toEqual({
+      kind: 'unavailable',
+    });
+    expect(api.calls).toHaveLength(0);
   });
 
   test('pages preserve currencies, negative adjustments, exact provenance and external payment meaning', async () => {

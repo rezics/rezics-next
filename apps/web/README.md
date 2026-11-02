@@ -3342,6 +3342,10 @@ uncertain commands retain their original payload and key.
 
 An unsent reference warns only while it satisfies the existing non-blank, 256-character validator; clearing it removes the warning, and a captured `markPaid` attempt remains command custody.
 
+## Creator statement addresses
+
+Decision: restart malformed list/evidence positions before reading; discard a malformed return hint while preserving the statement ID and exact valid evidence position.
+
 ## Private creator Sales
 
 `/creator/sales` uses the existing signed-in route and list/card family. Its current read prepares one server

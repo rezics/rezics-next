@@ -1,7 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router';
+import { CreatorStatementAddressRecovery } from '../../../checkout/creator-statement-address';
 import { CreatorStatementsCurrent } from '../../../checkout/creator-statements-current';
 import { CreatorStatementsPage } from '../../../checkout/creator-statements-page';
-import { readCreatorStatementsCurrent, statementSearch } from '../../../checkout/creator-statements';
+import {
+  hasStatementAddressIssue,
+  readCreatorStatementsCurrent,
+  statementSearch,
+} from '../../../checkout/creator-statements';
 import { requireSignedIn } from '../../../session/guard';
 import { pageHead } from '../../../shell/head';
 import { pageHeadContext } from '../../../shell/head-context';
@@ -12,7 +17,8 @@ export const Route = createFileRoute('/creator/statements/')({
   beforeLoad: requireSignedIn,
   validateSearch: statementSearch,
   loaderDeps: ({ search }) => statementSearch(search),
-  loader: ({ deps }) => readCreatorStatementsCurrent({ data: { ...deps, locale: getLocale() } }),
+  loader: ({ deps }) =>
+    hasStatementAddressIssue(deps) ? undefined : readCreatorStatementsCurrent({ data: { ...deps, locale: getLocale() } }),
   staleTime: 0,
   gcTime: 0,
   head: ({ match }) =>
@@ -23,6 +29,8 @@ export const Route = createFileRoute('/creator/statements/')({
   },
   component: function CreatorStatementsRoute() {
     const search = Route.useSearch();
-    return <CreatorStatementsCurrent initial={Route.useLoaderData()} locale={getLocale()} {...search} />;
+    const initial = Route.useLoaderData();
+    if (hasStatementAddressIssue(search)) return <CreatorStatementAddressRecovery kind="list" locale={getLocale()} />;
+    return <CreatorStatementsCurrent initial={initial!} locale={getLocale()} {...search} />;
   },
 });

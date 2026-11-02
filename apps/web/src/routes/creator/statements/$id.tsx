@@ -1,7 +1,13 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, notFound } from '@tanstack/react-router';
+import { CreatorStatementAddressRecovery } from '../../../checkout/creator-statement-address';
 import { CreatorStatementCurrent } from '../../../checkout/creator-statements-current';
 import { CreatorStatementPage } from '../../../checkout/creator-statement-page';
-import { readCreatorStatementCurrent, statementDetailSearch } from '../../../checkout/creator-statements';
+import {
+  hasStatementAddressIssue,
+  isCreatorStatementId,
+  readCreatorStatementCurrent,
+  statementDetailSearch,
+} from '../../../checkout/creator-statements';
 import { requireSignedIn } from '../../../session/guard';
 import { pageHead } from '../../../shell/head';
 import { pageHeadContext } from '../../../shell/head-context';
@@ -12,15 +18,18 @@ export const Route = createFileRoute('/creator/statements/$id')({
   beforeLoad: requireSignedIn,
   validateSearch: statementDetailSearch,
   loaderDeps: ({ search }) => statementDetailSearch(search),
-  loader: ({ params, deps }) =>
-    readCreatorStatementCurrent({
+  loader: ({ params, deps }) => {
+    if (!isCreatorStatementId(params.id)) throw notFound();
+    if (hasStatementAddressIssue(deps)) return undefined;
+    return readCreatorStatementCurrent({
       data: {
         id: params.id,
         locale: getLocale(),
         ...(deps.from ? { from: deps.from } : {}),
         ...(deps.cursor ? { cursor: deps.cursor } : {}),
       },
-    }),
+    });
+  },
   staleTime: 0,
   gcTime: 0,
   head: ({ match }) =>
@@ -32,14 +41,16 @@ export const Route = createFileRoute('/creator/statements/$id')({
     );
   },
   component: function CreatorStatementRoute() {
-    const { cursor, from } = Route.useSearch();
+    const search = Route.useSearch();
+    const id = Route.useParams().id;
+    if (hasStatementAddressIssue(search))
+      return <CreatorStatementAddressRecovery kind="detail" id={id} locale={getLocale()} {...search} />;
     return (
       <CreatorStatementCurrent
-        initial={Route.useLoaderData()}
-        id={Route.useParams().id}
+        initial={Route.useLoaderData()!}
+        id={id}
         locale={getLocale()}
-        {...(cursor ? { cursor } : {})}
-        {...(from ? { from } : {})}
+        {...search}
       />
     );
   },

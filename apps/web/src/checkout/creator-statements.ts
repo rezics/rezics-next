@@ -22,8 +22,8 @@ export type CreatorLinesData = ({ kind: 'ready' } & NativeLines) | StatementFail
 export type CreatorStatementData =
   | { kind: 'ready'; statement: CreatorStatement; lines: CreatorLinesData }
   | StatementFailure;
-export type StatementSearch = { cursor?: string };
-export type StatementDetailSearch = StatementSearch & { from?: string };
+export type StatementSearch = { cursor?: string; cursorMalformed?: boolean };
+export type StatementDetailSearch = StatementSearch & { from?: string; fromMalformed?: boolean };
 
 export type CreatorStatementsAddress =
   | { kind: 'list'; locale: string; cursor: string | null }
@@ -74,20 +74,38 @@ export function acceptsStatementsCurrent(
   );
 }
 
-function cursor(value: unknown): string | undefined {
-  if (value === undefined || value === '') return undefined;
-  if (typeof value !== 'string' || value.length > 4096) throw notFound();
-  return value;
+function cursor(value: unknown): { value?: string; malformed: boolean } {
+  if (value === undefined || value === '') return { malformed: false };
+  if (typeof value !== 'string' || value.length > 4096) return { malformed: true };
+  return { value, malformed: false };
 }
 
 export function statementSearch(search: Record<string, unknown>): StatementSearch {
-  const value = cursor(search.cursor);
-  return value ? { cursor: value } : {};
+  const position = cursor(search.cursor);
+  if (position.malformed || (!position.value && search.cursorMalformed === true)) return { cursorMalformed: true };
+  return position.value ? { cursor: position.value } : {};
 }
 
 export function statementDetailSearch(search: Record<string, unknown>): StatementDetailSearch {
-  const from = cursor(search.from);
-  return { ...statementSearch(search), ...(from ? { from } : {}) };
+  const result = statementSearch(search);
+  const position = cursor(search.from);
+  if (position.malformed || (!position.value && search.fromMalformed === true))
+    return { ...result, fromMalformed: true };
+  return { ...result, ...(position.value ? { from: position.value } : {}) };
+}
+
+export function hasStatementAddressIssue(search: StatementDetailSearch | StatementSearch): boolean {
+  return search.cursorMalformed === true || ('fromMalformed' in search && search.fromMalformed === true);
+}
+
+export function isCreatorStatementId(value: unknown): value is string {
+  return typeof value === 'string' && UUID.test(value);
+}
+
+function nativeStatementSearch(value: unknown): StatementSearch {
+  const search = statementSearch(object(value));
+  if (search.cursorMalformed) throw notFound();
+  return search;
 }
 
 function object(value: unknown): Record<string, unknown> {
@@ -97,8 +115,8 @@ function object(value: unknown): Record<string, unknown> {
 
 function detailInput(value: unknown): { id: string; cursor?: string } {
   const input = object(value);
-  if (typeof input.id !== 'string' || !UUID.test(input.id)) throw notFound();
-  return { id: input.id, ...statementSearch(input) };
+  if (!isCreatorStatementId(input.id)) throw notFound();
+  return { id: input.id, ...nativeStatementSearch(input) };
 }
 
 function failure(status: number, problem: unknown, paginated = false): StatementFailure {
@@ -185,7 +203,7 @@ async function loadStatementsBody(
   let subject: string | null = null;
   const finish = (page: CreatorStatementsData) => ({ sessionSubject: subject, page });
   try {
-    const query = statementSearch(input);
+    const query = nativeStatementSearch(input);
     const prepared = await prepareStatementRead(request, sessionEnv, current);
     if (!prepared) return finish({ kind: 'denied' });
     const { authorization } = prepared;
@@ -285,7 +303,7 @@ async function loadStatementBody(
 }
 
 export const readCreatorStatements = createServerFn({ method: 'GET' })
-  .validator((value: unknown) => statementSearch(object(value)))
+  .validator(nativeStatementSearch)
   .handler(async ({ data }): Promise<CreatorStatementsData> => {
     setResponseHeader('cache-control', 'private, no-store');
     setResponseHeader('x-robots-tag', 'noindex, nofollow');
@@ -311,12 +329,16 @@ export const readCreatorStatement = createServerFn({ method: 'GET' })
 function currentListInput(value: unknown) {
   const input = object(value);
   if (!locales.some((locale) => locale === input.locale)) throw notFound();
-  return { locale: String(input.locale), ...statementSearch(input) };
+  return { locale: String(input.locale), ...nativeStatementSearch(input) };
 }
 
 function currentDetailInput(value: unknown) {
   const input = object(value);
-  return { ...currentListInput(input), ...detailInput(input), ...statementDetailSearch(input) };
+  const list = currentListInput(input);
+  const detail = detailInput(input);
+  const search = statementDetailSearch(input);
+  if (search.fromMalformed) throw notFound();
+  return { ...list, ...detail, ...(search.from ? { from: search.from } : {}) };
 }
 
 function freshStatementRequest() {
