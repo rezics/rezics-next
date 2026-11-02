@@ -69,8 +69,8 @@ export function CollectionMetadataEditor({
               })}
               value={title}
             />
-            <CollectionTextInputHelp id="collection-edit-title" field="title" value={title} submitted={textSubmitted} />
           </label>
+          <CollectionTextInputHelp id="collection-edit-title" field="title" value={title} submitted={textSubmitted} />
           <label className="block max-w-3xl">
             {m.library_collection_description()}
             <textarea
@@ -86,13 +86,13 @@ export function CollectionMetadataEditor({
               rows={4}
               value={description}
             />
-            <CollectionTextInputHelp
-              id="collection-edit-description"
-              field="description"
-              value={description}
-              submitted={textSubmitted}
-            />
           </label>
+          <CollectionTextInputHelp
+            id="collection-edit-description"
+            field="description"
+            value={description}
+            submitted={textSubmitted}
+          />
           {children}
         </div>
       </details>

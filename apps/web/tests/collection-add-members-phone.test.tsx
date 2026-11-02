@@ -70,7 +70,7 @@ afterAll(async () => {
 });
 
 const title = `Selected subject 0 — ${'Long multilingual title 閱讀 読書 '.repeat(8)}${'界'.repeat(180)}`;
-const exactNote = ` \n${'😀'.repeat(996)}\n `;
+const exactNote = `  Original occurrence 0\n\t${'😀'.repeat(973)}\n `;
 const csrfOne = 'A'.repeat(22);
 const csrfTwo = 'B'.repeat(22);
 const subject = members.members[0]!.subject;

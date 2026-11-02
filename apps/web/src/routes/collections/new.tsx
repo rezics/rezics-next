@@ -148,8 +148,8 @@ function NewCollectionForm({ csrfToken, types }: { csrfToken: string; types: Col
               submitted: textSubmitted,
             })}
           />
-          <CollectionTextInputHelp id="collection-new-title" field="title" value={title} submitted={textSubmitted} />
         </label>
+        <CollectionTextInputHelp id="collection-new-title" field="title" value={title} submitted={textSubmitted} />
         <label className="block">
           {m.library_collection_description()}
           <textarea
@@ -165,13 +165,13 @@ function NewCollectionForm({ csrfToken, types }: { csrfToken: string; types: Col
               submitted: textSubmitted,
             })}
           />
-          <CollectionTextInputHelp
-            id="collection-new-description"
-            field="description"
-            value={description}
-            submitted={textSubmitted}
-          />
         </label>
+        <CollectionTextInputHelp
+          id="collection-new-description"
+          field="description"
+          value={description}
+          submitted={textSubmitted}
+        />
         <CollectionPresentationFields
           types={types}
           kind={kind}
