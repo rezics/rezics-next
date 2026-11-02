@@ -126,10 +126,10 @@ createRoot(document.getElementById('app')).render(<Harness />);
 }
 
 async function update(page: Page, panel: PanelName, patch: Record<string, unknown>) {
-  await page.evaluate(
-    ({ panelName, values }) => window.reactionTest?.update(panelName, values),
-    { panelName: panel, values: patch },
-  );
+  await page.evaluate(({ panelName, values }) => window.reactionTest?.update(panelName, values), {
+    panelName: panel,
+    values: patch,
+  });
 }
 
 async function waitForCalls(page: Page, count: number) {
@@ -141,10 +141,13 @@ async function calls(page: Page): Promise<Call[]> {
 }
 
 async function settle(page: Page, id: number, outcome: CallOutcome) {
-  await page.evaluate(async ({ callId, result }) => {
-    window.reactionTest?.settle(callId, result);
-    await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-  }, { callId: id, result: outcome });
+  await page.evaluate(
+    async ({ callId, result }) => {
+      window.reactionTest?.settle(callId, result);
+      await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    },
+    { callId: id, result: outcome },
+  );
 }
 
 async function retain(page: Page, panel: PanelName, surface: 'chip' | 'picker', kind: string): Promise<number> {
@@ -178,7 +181,9 @@ async function waitBusy(page: Page, panel: PanelName, busy: boolean) {
   const name = panel === 'primary' ? 'Primary' : 'Secondary';
   await page.waitForFunction(
     ({ region, expected }) =>
-      document.querySelector('[role="region"][aria-label="' + region + '"] [data-slot="reactions"]')?.getAttribute('aria-busy') === String(expected),
+      document
+        .querySelector('[role="region"][aria-label="' + region + '"] [data-slot="reactions"]')
+        ?.getAttribute('aria-busy') === String(expected),
     { region: name, expected: busy },
   );
 }
@@ -246,7 +251,7 @@ test('shared Reactions serialize original choices and retire every obsolete visi
     await openPicker(page);
     await chooseFromPicker(page, 'Love');
     await chooseFromPicker(page, 'Upvote');
-    expect((await calls(page))).toHaveLength(1);
+    expect(await calls(page)).toHaveLength(1);
     await update(page, 'primary', {
       callback: 'B',
       labels: { choose: 'Choose a reaction now', failed: 'This reaction could not be saved.' },
@@ -322,7 +327,12 @@ test('shared Reactions serialize original choices and retire every obsolete visi
     const retiredDisableChipHandler = await retain(page, 'primary', 'chip', 'Like');
     await update(page, 'primary', { disabled: true });
     await waitBusy(page, 'primary', false);
-    expect(await page.getByRole('dialog').getByRole('button', { name: /^Upvote/ }).isDisabled()).toBe(true);
+    expect(
+      await page
+        .getByRole('dialog')
+        .getByRole('button', { name: /^Upvote/ })
+        .isDisabled(),
+    ).toBe(true);
     expect(await primary.getByRole('button', { name: 'Like 3' }).isDisabled()).toBe(true);
     expect(await primary.getByRole('button', { name: 'Laugh 2' }).getAttribute('aria-pressed')).toBe('true');
     await invokeRetained(page, retiredDisableHandler);
@@ -392,10 +402,18 @@ test('shared Reactions serialize original choices and retire every obsolete visi
     const retiredKindsHandler = await retain(page, 'primary', 'picker', 'Sad');
     await update(page, 'primary', { kinds: ['like', 'love', 'sad'] });
     await page.getByRole('dialog').getByRole('button', { name: /^Sad/ }).waitFor({ state: 'visible' });
-    expect(await page.getByRole('dialog').getByRole('button', { name: /^Laugh/ }).count()).toBe(0);
+    expect(
+      await page
+        .getByRole('dialog')
+        .getByRole('button', { name: /^Laugh/ })
+        .count(),
+    ).toBe(0);
     expect(await primary.getByRole('button', { name: /^Upvote/ }).count()).toBe(0);
     await update(page, 'primary', { kinds: [...reactionKinds].reverse() });
-    await page.getByRole('dialog').getByRole('button', { name: /^Laugh/ }).waitFor({ state: 'visible' });
+    await page
+      .getByRole('dialog')
+      .getByRole('button', { name: /^Laugh/ })
+      .waitFor({ state: 'visible' });
     await invokeRetained(page, retiredKindsHandler);
     expect(await calls(page)).toHaveLength(12);
     await update(page, 'primary', { callback: 'E' });

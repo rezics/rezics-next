@@ -229,14 +229,7 @@ export const Reactions = (props: ReactionsProps) => {
       kinds: props.kinds,
     };
     failedLabelRef.current = labels.failed;
-  }, [
-    props.counts,
-    props.value,
-    props.disabled,
-    props.signInHref,
-    props.kinds,
-    labels.failed,
-  ]);
+  }, [props.counts, props.value, props.disabled, props.signInHref, props.kinds, labels.failed]);
 
   const isCurrent = (candidate: ReactionQueue, kind?: ReactionKind) => {
     const current = currentPropsRef.current;
