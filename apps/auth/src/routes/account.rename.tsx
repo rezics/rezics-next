@@ -427,6 +427,12 @@ function RenameReview({
       >
         <AlertDialogContent
           ref={departureDialog}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              stay();
+            }
+          }}
           finalFocus={() => {
             if (focusAfterStay.current) {
               focusAfterStay.current = false;

@@ -153,7 +153,7 @@ test('keyboard navigation stays in the departure dialog and Escape stays on the 
     expect(dialog.contains(document.activeElement)).toBe(true);
   }
   await flush(() =>
-    document.activeElement!.dispatchEvent(new dom.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })),
+    stay.dispatchEvent(new dom.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })),
   );
   await flush(() => navigation);
   expect(ui.router.state.location.pathname).toBe('/account/rename');
