@@ -242,6 +242,7 @@ function isStatistic(value: unknown): value is Statistic {
     Number.isFinite(value.mean) &&
     value.mean >= min &&
     value.mean <= max &&
+    isInteger(value.count) &&
     Number.isSafeInteger(value.count) &&
     value.count >= 1 &&
     value.count <= 2_147_483_647 &&
