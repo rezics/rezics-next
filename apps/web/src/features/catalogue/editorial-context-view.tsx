@@ -70,9 +70,7 @@ function EditorialContextWorkspaceLive({
   const observation = useRef<typeof observed | undefined>(undefined);
   observation.current = observed;
   function admitted() {
-    return (
-      lifetime.active() && mounted.current && !running.current && !busy && observation.current === observed
-    );
+    return lifetime.active() && mounted.current && !running.current && !busy && observation.current === observed;
   }
   function retireControls() {
     observation.current = undefined;
