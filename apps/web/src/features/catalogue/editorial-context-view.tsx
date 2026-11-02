@@ -70,7 +70,9 @@ function EditorialContextWorkspaceLive({
   const observation = useRef<typeof observed | undefined>(undefined);
   observation.current = observed;
   function admitted() {
-    return lifetime.active() && mounted.current && !running.current && !busy && observation.current === observed;
+    return (
+      lifetime.active() && mounted.current && !running.current && !busy && observation.current === observed
+    );
   }
   function retireControls() {
     observation.current = undefined;
@@ -245,7 +247,7 @@ function EditorialContextWorkspaceLive({
                 value={language}
                 disabled={busy || !!pending}
                 onChange={(event) => {
-                  if (!admitted() || pending) return;
+                  if (!admitted() || pending || event.target.value === language) return;
                   retireControls();
                   setLanguage(event.target.value);
                 }}
@@ -268,7 +270,7 @@ function EditorialContextWorkspaceLive({
                 required
                 disabled={busy || !!pending}
                 onChange={(event) => {
-                  if (!admitted() || pending) return;
+                  if (!admitted() || pending || (event.target.value === name && !failure)) return;
                   retireControls();
                   setName(event.target.value);
                   setFailure(undefined);

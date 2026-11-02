@@ -299,7 +299,10 @@ test('Editorial Context family retains supplied comparison, independent controls
     expect(sent[1]).toBe(sent[0]);
     expect(sent[1]).toEqual(sealed);
     expect(sent[1]).toMatchObject({ operation: 'delete', id: queued.id, session: 'editorial-session' });
-    await act(async () => { oldConfirm(); oldRetry(); });
+    await act(async () => {
+      oldConfirm();
+      oldRetry();
+    });
     expect(sent).toHaveLength(2);
     await click(m.editorial_restore({}, o));
     await click(m.contribution_confirm({}, o));
