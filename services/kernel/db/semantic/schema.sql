@@ -4157,6 +4157,25 @@ CREATE TABLE semantic.definition_catalogue_build (
 
 
 --
+-- Name: definition_catalogue_checkpoint; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.definition_catalogue_checkpoint (
+    route integer NOT NULL,
+    root_digest text NOT NULL,
+    phase text NOT NULL,
+    job_id uuid NOT NULL,
+    "position" bigint NOT NULL,
+    result bytea NOT NULL,
+    recorded_transaction_id uuid NOT NULL,
+    CONSTRAINT definition_catalogue_checkpoint_phase_check CHECK ((phase = ANY (ARRAY['step'::text, 'activation-step'::text]))),
+    CONSTRAINT definition_catalogue_checkpoint_position_check CHECK (("position" >= 0)),
+    CONSTRAINT definition_catalogue_checkpoint_result_check CHECK (((octet_length(result) >= 1) AND (octet_length(result) <= 65536))),
+    CONSTRAINT definition_catalogue_checkpoint_route_check CHECK ((route = 0))
+);
+
+
+--
 -- Name: definition_catalogue_consumer; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -8331,6 +8350,14 @@ ALTER TABLE ONLY semantic.definition_catalogue_artifact
 
 ALTER TABLE ONLY semantic.definition_catalogue_build
     ADD CONSTRAINT definition_catalogue_build_pkey PRIMARY KEY (route, root_digest);
+
+
+--
+-- Name: definition_catalogue_checkpoint definition_catalogue_checkpoint_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.definition_catalogue_checkpoint
+    ADD CONSTRAINT definition_catalogue_checkpoint_pkey PRIMARY KEY (route, root_digest, phase, job_id, "position");
 
 
 --
@@ -13767,6 +13794,14 @@ ALTER TABLE ONLY semantic.definition_activation
 
 ALTER TABLE ONLY semantic.definition_catalogue_activation
     ADD CONSTRAINT definition_catalogue_activation_route_root_digest_fkey FOREIGN KEY (route, root_digest) REFERENCES semantic.definition_catalogue_enrollment(route, root_digest);
+
+
+--
+-- Name: definition_catalogue_checkpoint definition_catalogue_checkpoint_route_root_digest_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.definition_catalogue_checkpoint
+    ADD CONSTRAINT definition_catalogue_checkpoint_route_root_digest_fkey FOREIGN KEY (route, root_digest) REFERENCES semantic.definition_catalogue_enrollment(route, root_digest);
 
 
 --
