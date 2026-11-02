@@ -6,7 +6,7 @@ import { sealHistoryAccount } from '../history/gates.ts';
 import { minimizeHistoryReceipt } from '../history/receipt.ts';
 import { minimizeHistoryOutbox } from '../history/outbox.ts';
 import { minimizeHistoryWork } from '../history/durable.ts';
-import { recordHistoryReceivingProof } from '../history/receiving.ts';
+import { recordHistoryReceivingProof, type HistoryReceivingContext } from '../history/receiving.ts';
 import { decodeLocator } from '../history/locator.ts';
 import { historyArtifact, type HistoryArtifactType } from '../history/contracts.ts';
 import type { HistoryBarrier, HistoryRegistry } from '../history/registry.ts';
@@ -265,15 +265,16 @@ export async function advanceSharedHistory(
     // this durable original until its owner supplies the authenticated transfer integration
     // and all reached child declarations. Never enter it under a fresh allocation here.
     const parent = original ? identityOriginalRemainder(deps, original, jobId) : null;
-    if (!parent || parent.source === null || parent.library === null) return result('more', IDENTITY_ORIGINAL_SOURCE_TRANSFER_MISSING);
+    if (original && (!parent || parent.source === null || parent.library === null))
+      return result('more', IDENTITY_ORIGINAL_SOURCE_TRANSFER_MISSING);
     if (!deps.env) return result('more', IDENTITY_SOURCE_MAINTENANCE_UNAVAILABLE);
     const clock = deps.clock ?? systemClock;
     try {
       const unitDeps = { pool: deps.pool, client: deps.client, env: deps.env, clock, registry: deps.registry };
       const enter = original
-        ? <T>(body: (funded: import('../history/agent-identity-retirement.ts').IdentitySourceConsumerMaintenanceContext) => Promise<T>) =>
+        ? <T>(body: (funded: HistoryReceivingContext) => Promise<T>) =>
           withSelectedHistoryOriginalChild(unitDeps, original, jobId, body)
-        : <T>(body: (funded: import('../history/agent-identity-retirement.ts').IdentitySourceConsumerMaintenanceContext) => Promise<T>) =>
+        : <T>(body: (funded: HistoryReceivingContext) => Promise<T>) =>
           withAgentIdentityHistoryUnit(unitDeps, { deadline: deadlineFor(DEFAULT_REQUEST_DEADLINE_MS) }, body);
       return await enter(async (funded) => {
           const gap = await minimizeHistoryWork(
