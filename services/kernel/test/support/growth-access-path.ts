@@ -76,9 +76,7 @@ function addEvidence<T>(
   bucket.candidates.push(candidate);
 }
 
-function finishEvidence<T>(
-  builders: Map<string, EvidenceBucketBuilder<T>>,
-): ReadonlyMap<string, EvidenceBucket<T>> {
+function finishEvidence<T>(builders: Map<string, EvidenceBucketBuilder<T>>): ReadonlyMap<string, EvidenceBucket<T>> {
   const entries: [string, EvidenceBucket<T>][] = [];
   for (const [key, bucket] of builders)
     entries.push([key, { count: bucket.count, first: bucket.first, candidates: bucket.candidates.join(', ') }]);
@@ -169,9 +167,7 @@ function relationMatch(
   requested: RelationRequest,
 ): RelationCostEvidence | undefined {
   const matches =
-    typeof requested === 'string'
-      ? index.byLegacySelector.get(requested)
-      : identityMatches(index, requested);
+    typeof requested === 'string' ? index.byLegacySelector.get(requested) : identityMatches(index, requested);
   if (matches !== undefined && matches.count > 1) {
     invalidEvidence(
       name,
