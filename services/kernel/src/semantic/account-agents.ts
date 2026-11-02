@@ -1,3 +1,4 @@
+import { admitIdentityTerminalCapture, runIdentityTerminalCommand } from './identity-terminal-closure-command.ts';
 import { recordSemanticProducerRole } from './erasure-producer.ts';
 import { initializeSubjectPagePublication } from './subject-page-publication-store.ts';
 import { subjectPageFacts, recordSubjectPageDiff } from './subject-page-publication-native.ts';
@@ -226,6 +227,7 @@ async function ensureInTransaction(
   const account = accountIdOf(options.account);
   if (!['person', 'organization', 'software'].includes(options.kind)) throw new TypeError('Invalid account agent kind');
   const agentId = accountAgentId(account);
+  await admitIdentityTerminalCapture(tx, [agentId]);
   const agentRoute = routeOf(agentId)!;
   const language = options.language ?? 'und';
   const row = await readAgentSubject(tx, agentId);
@@ -294,7 +296,7 @@ export async function ensureAccountAgent(
   const agentId = accountAgentId(account);
   const agentRoute = routeOf(agentId)!;
   try {
-    const outcome = await runCommand(pool, { partition: partitionOf(agentRoute) }, async (tx, { transactionId }) => {
+    const outcome = await runIdentityTerminalCommand(pool, { partition: partitionOf(agentRoute) }, async (tx, { transactionId }) => {
       await recordSemanticProducerRole(tx, transactionId, accountIdOf(options.account), 'subject');
       const state = await tx.query(
         'SELECT state,authn_fenced AS fenced FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE',

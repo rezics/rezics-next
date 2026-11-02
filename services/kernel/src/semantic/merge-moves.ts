@@ -1,3 +1,4 @@
+import { admitIdentityTerminalCapture, runIdentityTerminalCommand } from './identity-terminal-closure-command.ts';
 import {
   applySubjectPageOwnerChange,
   enqueueSubjectPageRepair,
@@ -119,10 +120,11 @@ async function register(
     )) ?? { changeId: `legacy:merge:${id}`, time: { effectiveAt: null, evidence: 'missing' as const } };
   for (;;) {
     const route = routeOf(survivor)!;
-    const result = await runCommand<{ redirect: string | null; state: Move | null }>(
+    const result = await runIdentityTerminalCommand<{ redirect: string | null; state: Move | null }>(
       pool,
       { partition: partitionOf(route) },
       async (tx) => {
+        await admitIdentityTerminalCapture(tx, [survivor]);
         const redirect = await redirectOf(tx, survivor);
         if (redirect) {
           const previous = (await readMember.run(tx, { route, subject_id: survivor, member_id: id })) as Move | null;
@@ -149,10 +151,11 @@ async function register(
       initial = result.value.state!;
       continue;
     }
-    const repointed = await runCommand(
+    const repointed = await runIdentityTerminalCommand(
       pool,
       { partition: partitionOf(routeOf(id)!) },
       async (tx, { transactionId }) => {
+        await admitIdentityTerminalCapture(tx, [id]);
         const last = await readLastRedirect.run(tx, { route: routeOf(id)!, subject_id: id });
         if (last && last.target < survivor) return { value: last.target, events: [projected(survivor)] };
         if (last && last.target !== survivor) {
@@ -194,7 +197,7 @@ export async function moveMergePage(
   if (expected && survivor === target && JSON.stringify(expected) !== JSON.stringify([state.phase, ...state.cursor]))
     return false;
   const sourceRoute = routeOf(id)!;
-  const page = await runCommand(pool, { partition: partitionOf(sourceRoute) }, async (tx) => {
+  const page = await runIdentityTerminalCommand(pool, { partition: partitionOf(sourceRoute) }, async (tx) => {
     let links: Link[] = [];
     let outbound: Outbound[] = [];
     let members: ({ member_id: string } & Move)[] = [];
@@ -283,7 +286,7 @@ export async function moveMergePage(
     const sourceRoute = routeOf(id)!;
     const revision = page.value.outbound[0]!.source_revision;
     const securityRevision = page.value.outbound[0]!.source_security_revision;
-    await runCommand(pool, { partition: partitionOf(sourceRoute) }, async (tx, { transactionId }) => {
+    await runIdentityTerminalCommand(pool, { partition: partitionOf(sourceRoute) }, async (tx, { transactionId }) => {
       await upsertByContext(
         tx,
         {
@@ -333,7 +336,7 @@ export async function moveMergePage(
         group.push(link);
         byRoute.set(targetRoute, group);
       }
-      await runCommand(pool, { partition }, async (tx, { transactionId }) => {
+      await runIdentityTerminalCommand(pool, { partition }, async (tx, { transactionId }) => {
         for (const [targetRoute, routeLinks] of byRoute)
           await upsertByContext(
             tx,
@@ -362,12 +365,12 @@ export async function moveMergePage(
     }
   }
   if (state.phase === 'outbound' && page.value.next.phase !== 'outbound') {
-    await runCommand(pool, { partition: partitionOf(sourceRoute) }, async (tx) => {
+    await runIdentityTerminalCommand(pool, { partition: partitionOf(sourceRoute) }, async (tx) => {
       await clearProjectionPending.run(tx, { route: sourceRoute, subject_id: id });
       return { value: null, events: [projected(id)] };
     });
   }
-  const applied = await runCommand(pool, { partition: partitionOf(route) }, async (tx, { transactionId }) => {
+  const applied = await runIdentityTerminalCommand(pool, { partition: partitionOf(route) }, async (tx, { transactionId }) => {
     const redirect = await redirectOf(tx, survivor);
     if (redirect) return { value: redirect, events: [projected(survivor)] };
     const current = (await readMember.run(tx, { route, subject_id: survivor, member_id: id })) as Move;
@@ -448,7 +451,7 @@ export async function reverseAccountAgentLinks(
     context: NIL,
   };
   for (;;) {
-    const page = await runCommand<ReversalLink[]>(pool, { partition: partitionOf(route) }, async (tx) => {
+    const page = await runIdentityTerminalCommand<ReversalLink[]>(pool, { partition: partitionOf(route) }, async (tx) => {
       await tx.query('SET LOCAL enable_seqscan = off');
       const links = (await pageMovedAgentLinks.run(tx, {
         route,
@@ -478,7 +481,7 @@ export async function reverseAccountAgentLinks(
       } => link.source_revision !== null && link.source_security_revision !== null && link.present !== null,
     );
     if (restored.length) {
-      await runCommand(pool, { partition: partitionOf(nodeRoute) }, async (tx, { transactionId }) => {
+      await runIdentityTerminalCommand(pool, { partition: partitionOf(nodeRoute) }, async (tx, { transactionId }) => {
         await tx.query('SET LOCAL enable_seqscan = off');
         await upsertByContext(
           tx,
@@ -514,7 +517,7 @@ export async function reverseAccountAgentLinks(
         return { value: null, events: [projected(options.movedFrom)] };
       });
     }
-    await runCommand(pool, { partition: partitionOf(route) }, async (tx) => {
+    await runIdentityTerminalCommand(pool, { partition: partitionOf(route) }, async (tx) => {
       await tx.query('SET LOCAL enable_seqscan = off');
       const contexts = [...new Set(page.value.map((link) => link.context_id))];
       contexts.sort((a, b) => (a === GLOBAL_CONTEXT ? -1 : b === GLOBAL_CONTEXT ? 1 : a.localeCompare(b)));

@@ -1,3 +1,4 @@
+import { admitIdentityTerminalCapture, runIdentityTerminalCommand } from './identity-terminal-closure-command.ts';
 import { beginSemanticRecordSourceSet, sealSemanticRecordSourceSet } from './record-source-set.ts';
 import { collectSemanticCandidateSource, recordSemanticDocumentSource } from './record-source-set.ts';
 import locatePublicationCandidate from './moderation-read-live-candidate.sql';
@@ -156,7 +157,7 @@ export async function batchCommand(
   const partition = partitionOf(route);
   const kind = `subject.batch_${command.op}`;
   const digest = requestDigest(kind, actor, command);
-  const outcome = await runCommand<Value>(
+  const outcome = await runIdentityTerminalCommand<Value>(
     pool,
     {
       partition,

@@ -1,3 +1,4 @@
+import { runIdentityTerminalCommand } from '../semantic/identity-terminal-closure-command.ts';
 import {
   acceptTechnicalSource,
   verifyTechnicalSource,
@@ -421,7 +422,7 @@ export async function loadAccountIdentitySource(pool: Pool, receipt: AccountRece
   return withRequestDeadline(deadline, async () => {
     const load = async () =>
       (
-        await runCommand(pool, { partition: partitionOf(accountRoute(receipt)), deadline }, async (tx) =>
+        await runIdentityTerminalCommand(pool, { partition: partitionOf(accountRoute(receipt)), deadline }, async (tx) =>
           noEffect(await readAccountIdentitySource(tx, receipt)),
         )
       ).value;
@@ -474,7 +475,7 @@ async function deliverAccountIdentityBounded(pool: Pool, receipt: AccountReceipt
   // Completion is independently read from actual native custody, never inferred from adapter return.
   const binding = await identityEpochStore.bindReceipt(pool, {}, source.input);
   const published = (
-    await runCommand(pool, { partition: identityJobPartition(job) }, async (tx) =>
+    await runIdentityTerminalCommand(pool, { partition: identityJobPartition(job) }, async (tx) =>
       noEffect(await identityEpochStore.findJob(tx, receipt, binding)),
     )
   ).value;
@@ -505,7 +506,7 @@ export async function publishedAccountIdentityUndo(
   const existing = await readAccountIdentityUndo(pool, receipt);
   const { identityEpochStore, identityJobPartition } = await import('../semantic/identity-epoch-store.ts');
   const saved = (
-    await runCommand(pool, { partition: identityJobPartition(existing.job) }, async (tx) =>
+    await runIdentityTerminalCommand(pool, { partition: identityJobPartition(existing.job) }, async (tx) =>
       noEffect(await identityEpochStore.readJob(tx, existing.job)),
     )
   ).value;
@@ -588,7 +589,7 @@ async function probeAccountIdentityPublicationBounded(pool: Pool, receipt: Accou
   const binding = await lookupIdentityBinding(pool, {}, source.input);
   if (!binding) throw accountIdentityUnavailable(`missing published binding ${keyOf(receipt)}`);
   const saved = (
-    await runCommand(pool, { partition: identityJobPartition(binding.job) }, async (tx) =>
+    await runIdentityTerminalCommand(pool, { partition: identityJobPartition(binding.job) }, async (tx) =>
       noEffect(await identityEpochStore.findJob(tx, receipt, binding)),
     )
   ).value;

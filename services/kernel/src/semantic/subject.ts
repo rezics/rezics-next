@@ -1,3 +1,4 @@
+import { admitIdentityTerminalCapture, runIdentityTerminalCommand } from './identity-terminal-closure-command.ts';
 import {
   beginSemanticRecordSourceSet,
   collectSemanticRecordFacts,
@@ -129,7 +130,7 @@ export async function createSubject(
   const { route, id: subjectId } = options.target;
   if (routeOf(subjectId) !== route) throw new RangeError('Subject target id must carry its route');
   const partition = partitionOf(route);
-  const command = await runCommand(
+  const command = await runIdentityTerminalCommand(
     pool,
     {
       partition,
@@ -180,6 +181,7 @@ export async function writeSubject(
     routeKey?: Uint8Array;
   },
 ) {
+  await admitIdentityTerminalCapture(tx, [options.target.id]);
   const sourceSet = await beginSemanticRecordSourceSet(tx);
   const { route, id: subjectId } = options.target;
   const input = options.item as Record<string, unknown>;
@@ -1043,7 +1045,7 @@ export async function updateSubjectIdentity(
 ) {
   const route = routeOf(options.subject);
   if (route === null) throw new SubjectInputError([{ pointer: '/subject', code: 'invalid_format' }]);
-  return runCommand(
+  return runIdentityTerminalCommand(
     pool,
     {
       partition: partitionOf(route),

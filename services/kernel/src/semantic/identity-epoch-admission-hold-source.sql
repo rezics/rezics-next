@@ -5,4 +5,7 @@ JOIN semantic.identity_epoch_mapping m ON (m.route,m.original,m.control_partitio
 JOIN core.partition o ON o.partition_no=(SELECT p2 FROM parameters) AND o.epoch=s.source_owner_epoch AND o.write_state='active'
 LEFT JOIN semantic.identity_epoch_dirty d ON (d.route,d.original)=(s.route,s.original)
 LEFT JOIN LATERAL(SELECT target FROM semantic.redirect WHERE (route,subject_id)=(s.route,s.original) ORDER BY sequence DESC LIMIT 1) r ON true
-WHERE s.route/16=(SELECT p2 FROM parameters) AND coalesce(d.revision,0)=coalesce(d.captured_revision,0) AND coalesce(r.target,s.original)=s.terminal;
+WHERE s.route/16=(SELECT p2 FROM parameters) AND coalesce(d.revision,0)=coalesce(d.captured_revision,0) AND ((m.closure_state='legacy' AND coalesce(r.target,s.original)=s.terminal)
+ OR (m.closure_state='active' AND m.closure_immediate=coalesce(r.target,s.original)
+     AND m.closure_generation IS NOT NULL AND m.closure_incarnation IS NOT NULL
+     AND m.closure_registration_transaction IS NOT NULL AND m.closure_install_transaction IS NOT NULL));

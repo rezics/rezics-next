@@ -710,8 +710,9 @@ async function reserveGeneration(
   terminal: string,
   generation: string,
   measured: Work,
+  closure = false,
 ) {
-  if (
+  if (!closure && (
     (
       await query(
         tx,
@@ -720,9 +721,9 @@ async function reserveGeneration(
         [home],
       )
     ).rowCount
-  )
+  ))
     throw unavailable('Bootstrap export custody must be settled before allocating an output generation');
-  if (
+  if (!closure && (
     (
       await query(
         tx,
@@ -731,7 +732,7 @@ async function reserveGeneration(
         [home, job.jobId],
       )
     ).rowCount
-  )
+  ))
     throw unavailable('Prior native generation awaits minimizer and empty-range custody');
   const existing = (
     await query(
@@ -1661,4 +1662,36 @@ async function cleanCustodiedPayload(
     );
     return removed.rowCount ? { value: null, events: [wake(job, saved.home)] } : noEffect(null);
   });
+}
+
+/** Native closure allocations share the mapping inventory; no fifth slot or inverse ledger. */
+export async function reserveIdentityTerminalClosure(
+  tx: CommandTransaction,
+  reservation: string,
+  terminal: string,
+  copies: number,
+  coalesce = true,
+): Promise<string> {
+  const command = currentCommand(tx);
+  if (!Number.isInteger(copies) || copies < 0 || copies > 4096) throw new RangeError('Closure copy bound');
+  const measured: Work = { rows: 0, points: 0, statements: 0, bytes: 0, engineRequests: 0 };
+  // Provisional copies share physical inventory, never execution funds. This
+  // applies at receiving homes too: a long cohome prefix must not consume one
+  // slot per export before its later terminal seed can be scanned.
+  let allocation = reservation;
+  if (coalesce) {
+    const shared = (await tx.query(`SELECT generation FROM semantic.identity_epoch_mapping_generation
+      WHERE partition_no=$1 AND closure_source_pool AND closure_copies+$2<=4096 ORDER BY slot LIMIT 1 FOR UPDATE`,
+    [command.partition, copies])).rows[0];
+    allocation = shared?.generation ?? command.transactionId;
+  }
+  await reserveGeneration(tx, { jobId: allocation, epoch: 1n }, command.partition, terminal, allocation, measured, true);
+  const allocated = await tx.query(
+    `UPDATE semantic.identity_epoch_mapping_generation SET closure_copies=closure_copies+$3,
+       closure_source_pool=closure_source_pool OR $4
+     WHERE partition_no=$1 AND generation=$2 AND job_id=$2 AND closure_copies+$3<=4096 RETURNING slot`,
+    [command.partition, allocation, copies, coalesce],
+  );
+  if (allocated.rowCount !== 1) throw unavailable('Closure physical copies exhaust their reserved generation');
+  return allocation;
 }

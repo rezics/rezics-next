@@ -1,3 +1,4 @@
+import { assertIdentityTerminalGroupsOpen } from './identity-terminal-closure.ts';
 import { recordPreparedIdentityPrearm, sealColocatedEmptyIdentityPrearm } from './identity-epoch-prearm.ts';
 import admissionInsertJob from './identity-epoch-admission-insert-job.sql';
 import admissionInsertBases from './identity-epoch-admission-insert-bases.sql';
@@ -424,6 +425,7 @@ export const identityEpochStore: IdentityEpochStore = {
       )
     )
       throw unavailable();
+    await assertIdentityTerminalGroupsOpen(tx, locked.map((g) => g.terminal));
     if (locked.some((g) => g.pending_job))
       throw new IdentityEpochStoreError('identity_epoch_busy', 'An input group is already claimed');
     if (!state || state.pending_job || state.prepare_job || state.retained_preparation)
@@ -775,6 +777,9 @@ export const identityEpochStore: IdentityEpochStore = {
     const outstanding = (await tx.query(storeSelectEffectReceipt2.sql, [partition, job.jobId])).rowCount;
     if (outstanding)
       throw new IdentityEpochStoreError('identity_participants_incomplete', 'Prior effects lack receiving custody');
+    const publishingGroups = (await tx.query(`SELECT terminal FROM semantic.identity_epoch_group
+      WHERE partition_no=$1 AND pending_job=$2 ORDER BY terminal LIMIT 100 FOR UPDATE`, [partition, job.jobId])).rows;
+    await assertIdentityTerminalGroupsOpen(tx, publishingGroups.map((g) => g.terminal));
     await tx.query(storeUpdateJob.sql, [partition, job.jobId]);
     await tx.query(storeUpdateControl2.sql, [partition, job.epoch.toString()]);
     await tx.query(storeUpdateGroup2.sql, [partition, job.epoch.toString(), job.jobId]);

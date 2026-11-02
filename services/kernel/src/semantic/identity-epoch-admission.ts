@@ -22,6 +22,7 @@ import {
   type IdentityReceiptBinding,
   type IdentityAdmissionSource,
 } from './identity-epoch-binding.ts';
+import { assertIdentityTerminalGroupsOpen } from './identity-terminal-closure.ts';
 import sourcePoints from './identity-epoch-read-sources.sql';
 import handoff from './identity-epoch-admission-handoff.sql';
 import inputs from './identity-epoch-admission-inputs.sql';
@@ -140,7 +141,7 @@ async function capture(pool: Pool, input: IdentityAdmissionInput): Promise<Ident
           !row.original ||
           row.owner_epoch !== owner.epoch ||
           BigInt(row.dirty_revision) !== BigInt(row.captured_revision) ||
-          (row.current_target ?? row.original) !== row.control_group
+          (row.closure_state === 'active' ? row.closure_immediate !== (row.current_target ?? row.original) : row.closure_state !== 'legacy' || (row.current_target ?? row.original) !== row.control_group)
         )
           throw unavailable();
         return { ...row, source_owner_epoch: owner.epoch };
@@ -166,7 +167,7 @@ async function capture(pool: Pool, input: IdentityAdmissionInput): Promise<Ident
     });
     for (const point of local) {
       const group = rows.find((g) => g.terminal === point.control_group);
-      if (!group) throw unavailable();
+      if (!group || group.closure_state !== 'open') throw unavailable();
       if (group.pending_job)
         throw new IdentityEpochStoreError('identity_epoch_busy', 'An input group is already claimed');
       if (!group.ready) {
@@ -417,6 +418,7 @@ export async function admitBoundIdentityEpoch(
   const locked = (
     await tx.query(selectGroups.sql, [home, groups.filter((g) => g.partition_no === home).map((g) => g.terminal)])
   ).rows;
+  await assertIdentityTerminalGroupsOpen(tx, locked.map((g) => g.terminal));
   if (locked.some((g) => g.pending_job))
     throw new IdentityEpochStoreError('identity_epoch_busy', 'An input group is already claimed');
   if (!state || state.pending_job || state.prepare_job || state.retained_preparation) throw unavailable();

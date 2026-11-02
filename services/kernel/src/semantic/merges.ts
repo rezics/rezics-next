@@ -1,3 +1,4 @@
+import { admitIdentityTerminalCapture, runIdentityTerminalCommand } from './identity-terminal-closure-command.ts';
 import { retainSubjectPageContinuation } from './subject-page-publication-store.ts';
 import { invalidateSubjectPage } from './subject-page-publication-native.ts';
 import type { Pool } from 'pg';
@@ -67,7 +68,7 @@ export async function mergeSubjects(
   });
   const route = routeOf(redirected);
   if (route === null) throw new SubjectNotFoundError();
-  const command = await runCommand(
+  const command = await runIdentityTerminalCommand(
     pool,
     {
       partition: partitionOf(route),
@@ -113,6 +114,7 @@ export async function mergeSubjectsInCommand(
     allowAccountAgent?: boolean;
   },
 ) {
+  await admitIdentityTerminalCapture(tx, [options.redirected]);
   if (options.survivor === options.redirected) throw new EditorialConflictError();
   const kept = await mergeSubject(tx, options.survivor);
   const gone = await mergeSubject(tx, options.redirected);

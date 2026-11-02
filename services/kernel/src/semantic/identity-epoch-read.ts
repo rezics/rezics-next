@@ -5,7 +5,7 @@ import type { IdentityMapping } from './identity-epoch-contract.ts';
 import owners from './identity-epoch-read-owners.sql';
 import sources from './identity-epoch-read-sources.sql';
 import pending from './identity-epoch-read-pending.sql';
-import current from './identity-epoch-read-current.sql';
+import current from './identity-terminal-closure-current.sql';
 import { identitySourceSupportJob } from './identity-source-support-scope.ts';
 
 /** Bounded exact mapping proof, with source and control homes released independently. */
@@ -49,7 +49,7 @@ export async function readIdentityMappings(pool: Pool, originals: readonly strin
           ...(await tx.query(pending.sql, [group.map(() => home), group.map((row) => row.control_group)])).rows,
         );
         currentRows.push(
-          ...(await tx.query(current.sql, [group.map(() => home), group.map((row) => row.control_group)])).rows,
+          ...(await tx.query(current.sql, [group.map(() => home), group.map((row) => row.control_group), group.map((row) => row.original)])).rows,
         );
       });
     }
@@ -84,7 +84,9 @@ export async function readIdentityMappings(pool: Pool, originals: readonly strin
       source.owner_epoch !== sourceOwner.epoch ||
       BigInt(source.dirty_revision) > BigInt(source.captured_revision) ||
       source.control_group !== source.terminal ||
-      (source.terminal === original ? source.current_target !== null : source.current_target !== source.terminal)
+      (source.closure_state === 'active'
+        ? source.closure_immediate !== (source.current_target ?? original) || BigInt(source.source_revision) !== BigInt(source.dirty_revision)
+        : source.closure_state !== 'legacy' || (source.terminal === original ? source.current_target !== null : source.current_target !== source.terminal))
     )
       return { state: 'unavailable', reason: 'bootstrap' };
     const controlOwner = controlOwners.find((owner) => owner.partition_no === source.control_partition);
@@ -92,9 +94,16 @@ export async function readIdentityMappings(pool: Pool, originals: readonly strin
     if (controlOwner.write_state !== 'active')
       return { state: 'unavailable', reason: controlOwner.write_state === 'moved' ? 'moved-owner' : 'bootstrap' };
     const basis = currentRows.find(
-      (group) => group.partition_no === source.control_partition && group.terminal === source.control_group,
+      (group) => group.partition_no === source.control_partition && group.terminal === source.control_group && group.requested_original === original,
     );
-    if (!basis || basis.redirected || basis.owner_epoch !== controlOwner.epoch)
+    if (!basis || basis.redirected || basis.owner_epoch !== controlOwner.epoch || basis.closure_state !== 'open' ||
+      (source.closure_state === 'active' &&
+        (basis.directory_state !== 'installed' || basis.directory_enrollment !== source.closure_enrollment ||
+         basis.generation !== source.closure_generation || basis.closure_incarnation !== source.closure_incarnation ||
+         basis.directory_incarnation !== source.closure_incarnation || basis.directory_install !== source.closure_install_transaction ||
+         basis.registration_transaction !== source.closure_registration_transaction ||
+         basis.directory_export !== source.closure_export_transaction || basis.directory_owner !== source.owner_epoch ||
+         BigInt(basis.directory_revision ?? -1) !== BigInt(source.source_revision))))
       return { state: 'unavailable', reason: 'bootstrap' };
     const claim = pendingRows.find(
       (group) => group.partition_no === source.control_partition && group.terminal === source.control_group,
