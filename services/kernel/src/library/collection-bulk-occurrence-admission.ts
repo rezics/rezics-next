@@ -16,10 +16,9 @@ import { LibraryNotFoundError } from './command-support.ts';
 import { readCollection } from './collection-store.ts';
 import { readableSubjects } from './subject-anchor.ts';
 
-export type ExplicitCollectionOccurrenceRemoval = Extract<
-  BulkAdmission,
-  { action: 'remove_from_collection' }
-> & { selection: { kind: 'occurrences'; memberIds: readonly string[] } };
+export type ExplicitCollectionOccurrenceRemoval = Extract<BulkAdmission, { action: 'remove_from_collection' }> & {
+  selection: { kind: 'occurrences'; memberIds: readonly string[] };
+};
 type CapturedOccurrenceTarget = Omit<Extract<OccurrenceTarget, { expected: unknown }>, 'operationId' | 'ordinal'>;
 
 type OccurrenceAdmissionDependencies = { pool: Pool; access: Access };

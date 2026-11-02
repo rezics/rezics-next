@@ -7,7 +7,11 @@ import { pageCollectionBulkManifest, readCollectionBulk } from '../../src/librar
 import { bulkPreviewSchema } from '../../src/library/bulk-schemas.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { testTokens } from '../support/test-kernel.ts';
-import { createCollectionBatchFixture, entryKey, type CollectionBatchFixture } from './support/collection-batch-fixture.ts';
+import {
+  createCollectionBatchFixture,
+  entryKey,
+  type CollectionBatchFixture,
+} from './support/collection-batch-fixture.ts';
 
 let f: CollectionBatchFixture;
 let owner: Awaited<ReturnType<CollectionBatchFixture['identity']>>;
@@ -155,11 +159,12 @@ test('preview captures only exact curated occurrences and confirmed replay prese
   await runCollectionBulkPage(work, { route: key.route, operationId });
   expect(await runCollectionBulkPage(work, { route: key.route, operationId })).toBe(false);
   const outcomes = await f.send(owner.bearer, 'GET', `/v1/libraryOperations/${operationId}/outcomes`);
-  expect((await outcomes.json()).outcomes.map((row: { state: string; reason: string | null }) => [row.state, row.reason]))
-    .toEqual([
-      ['conflict', 'revision_mismatch'],
-      ['applied', null],
-    ]);
+  expect(
+    (await outcomes.json()).outcomes.map((row: { state: string; reason: string | null }) => [row.state, row.reason]),
+  ).toEqual([
+    ['conflict', 'revision_mismatch'],
+    ['applied', null],
+  ]);
   const active = await f.pool.query<{ memberId: string }>(
     `SELECT member_id AS "memberId" FROM library.collection_member WHERE route=$1 AND collection_id=$2
      AND deletion_id IS NULL ORDER BY member_id`,
