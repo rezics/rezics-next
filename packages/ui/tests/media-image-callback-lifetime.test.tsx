@@ -8,6 +8,7 @@ import { MediaImage } from '../src/components/media-image.tsx';
 const webTests = join(import.meta.dir, '../../../apps/web/tests');
 const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', webTests))));
 const window = new Window();
+Object.defineProperty(Object.getPrototypeOf(window.document.createElement('img')), 'complete', { configurable: true, get: () => false });
 for (const [key, value] of Object.entries({ window, document: window.document, navigator: window.navigator, IS_REACT_ACT_ENVIRONMENT: true }))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 
@@ -37,7 +38,6 @@ test('bounds cached, changed, retired and remounted image completion callbacks',
 
   await act(async () => root.render(view('pending', () => calls.push('old'))));
   const pending = host.querySelector('img')!;
-  Object.defineProperty(pending, 'complete', { configurable: true, value: false });
   const oldLoad = handlers(pending)!.onLoad;
   await act(async () => root.render(view('pending', () => calls.push('current'))));
   Object.defineProperty(pending, 'naturalWidth', { configurable: true, value: 320 });
