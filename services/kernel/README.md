@@ -670,6 +670,9 @@ Calibration then admits at most 256 checks, 32 runs per check, 4,096 check√órun√
 folds, covering the documented five-run sample with headroom. It indexes per-run medians and spreads and refits each
 omitted run from those statistics instead of rescanning repetitions. Excess work is refused with the check or series
 size and the supported capacity; it does not return a partial fit.
+Calibration CLI loading applies that same total-byte budget to observed file sizes before retaining contents, counts a
+file that grows after its size is observed against the budget, and closes every opened profile on failure; file-level
+budget and change errors use line 1 of the run basename because loading does not parse JSONL.
 Calibration combines a file/check/occurrence only when every run declares the same growth bounds and scales; omitted
 checks with differing bounds report each run and its declaration.
 

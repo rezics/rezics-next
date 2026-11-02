@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
-import { readFile } from 'node:fs/promises';
-import { basename, extname, posix } from 'node:path';
+import { posix } from 'node:path';
+import { readGrowthProfileFiles } from './growth-profile-files.ts';
 import {
   GROWTH_CALIBRATION_LIMITS,
   calibrateUncertainty,
@@ -475,12 +475,7 @@ async function main(paths: readonly string[]): Promise<void> {
     throw new Error(
       'Usage: bun scripts/growth-calibrate.ts <calibration-run.jsonl> <calibration-run.jsonl>... <coverage-run.jsonl>',
     );
-  const sources: GrowthProfileRunSource[] = await Promise.all(
-    paths.map(async (path) => ({
-      name: basename(path, extname(path)),
-      text: await readFile(path, 'utf8'),
-    })),
-  );
+  const sources = await readGrowthProfileFiles(paths);
   const names = new Set<string>();
   for (const source of sources) {
     if (names.has(source.name)) throw new Error(`Profile input basenames must be unique: ${source.name}`);
