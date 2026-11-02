@@ -8,7 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import { pickText } from '@rezics/composition';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import type { EntityPickerSearch } from '@rezics/ui/entity-picker';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { PageHeading } from '../../shell/page-heading';
 import type { CandidateTransport } from '../../subject/candidate-review';
@@ -160,33 +160,40 @@ function AlbumCorrections({
   const [loading, setLoading] = useState(false);
   const reading = useRef(false);
   const [revision, setRevision] = useState(0);
-  const reload = async () => {
+  const reload = () => {
     if (!lifetime.active() || reading.current) return;
     reading.current = true;
     setLoading(true);
     setRevision((previous) => previous + 1);
-    try {
-      const next = await editors.facts.read();
-      if (!lifetime.active()) return;
-      if (
-        next.ok &&
-        next.public.subject.id === initial.public.subject.id &&
-        next.public.subject.type === albumType &&
-        next.release.types[albumType]
-      ) {
-        setRead(next);
-        setLoadFailure(undefined);
-      } else setLoadFailure(next.ok ? 'invalid' : next.reason);
-    } catch {
-      if (!lifetime.active()) return;
-      setLoadFailure('unavailable');
-    } finally {
-      if (lifetime.active()) {
-        reading.current = false;
-        setLoading(false);
-      }
-    }
   };
+  // Commit the retired observation before I/O, even when a transport resolves immediately.
+  // Nested holders must observe the pause to reread their original addresses on recovery.
+  useEffect(() => {
+    if (!loading) return;
+    void (async () => {
+      try {
+        const next = await editors.facts.read();
+        if (!lifetime.active()) return;
+        if (
+          next.ok &&
+          next.public.subject.id === initial.public.subject.id &&
+          next.public.subject.type === albumType &&
+          next.release.types[albumType]
+        ) {
+          setRead(next);
+          setLoadFailure(undefined);
+        } else setLoadFailure(next.ok ? 'invalid' : next.reason);
+      } catch {
+        if (!lifetime.active()) return;
+        setLoadFailure('unavailable');
+      } finally {
+        if (lifetime.active()) {
+          reading.current = false;
+          setLoading(false);
+        }
+      }
+    })();
+  }, [loading]);
   const visible = !loading && !loadFailure;
   return (
     <div className="space-y-8" aria-busy={loading}>
@@ -224,7 +231,7 @@ function AlbumCorrectionWorkspaceLive({
   enabled: boolean;
   search: EntityPickerSearch;
   editors: AlbumEditors;
-  onReload: () => Promise<void>;
+  onReload: () => void;
 }) {
   const lifetime = useEditorLifetime();
   const visible = useCurrentReadingVisible();
