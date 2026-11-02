@@ -67,7 +67,11 @@ test('side-effect imports stay, and a type-only specifier of the same export yie
 test('namespace plus named stay valid, and effect order is kept or left unresolved', () => {
   expect(
     resolveImportConflicts(
-      conflict("import * as harness from './harness.ts';\n", "import { load } from './harness.ts';\n", 'harness; load();\n'),
+      conflict(
+        "import * as harness from './harness.ts';\n",
+        "import { load } from './harness.ts';\n",
+        'harness; load();\n',
+      ),
     ),
   ).toBe(
     "import { expect, test } from 'bun:test';\nimport * as harness from './harness.ts';\n" +
@@ -75,7 +79,11 @@ test('namespace plus named stay valid, and effect order is kept or left unresolv
   );
   expect(
     resolveImportConflicts(
-      conflict("import { clock } from './clock.ts';\nimport './polyfill.ts';\n", "import { clock } from './clock.ts';\n", 'clock;\n'),
+      conflict(
+        "import { clock } from './clock.ts';\nimport './polyfill.ts';\n",
+        "import { clock } from './clock.ts';\n",
+        'clock;\n',
+      ),
     ),
   ).toBe(
     "import { expect, test } from 'bun:test';\nimport { clock } from './clock.ts';\nimport './polyfill.ts';\n\nclock;\n",
@@ -93,6 +101,8 @@ test('namespace plus named stay valid, and effect order is kept or left unresolv
       "import './polyfill.ts';\n\na; b;\n",
   );
   expect(
-    resolveImportConflicts(conflict("import './a.ts';\nimport './b.ts';\n", "import './b.ts';\nimport './a.ts';\n", 'export {};\n')),
+    resolveImportConflicts(
+      conflict("import './a.ts';\nimport './b.ts';\n", "import './b.ts';\nimport './a.ts';\n", 'export {};\n'),
+    ),
   ).toBeUndefined();
 });

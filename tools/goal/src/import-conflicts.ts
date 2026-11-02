@@ -197,8 +197,7 @@ function mergeOrder(ours: string[], theirs: string[]): string[] | undefined {
   const ready = nodes.filter((node) => indegree.get(node) === 0);
   while (ready.length) {
     let pick = 0;
-    for (let i = 1; i < ready.length; i++)
-      if (priority.indexOf(ready[i]!) < priority.indexOf(ready[pick]!)) pick = i;
+    for (let i = 1; i < ready.length; i++) if (priority.indexOf(ready[i]!) < priority.indexOf(ready[pick]!)) pick = i;
     const node = ready.splice(pick, 1)[0]!;
     result.push(node);
     for (const other of next.get(node)!) {
