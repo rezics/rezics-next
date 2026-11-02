@@ -201,6 +201,7 @@ async function preview(targets: SubjectTarget[]): Promise<TargetCommand[]> {
     sourceDigest: operation.source_digest,
     target: { ...row.target, operationId, ordinal: row.ordinal } as SubjectTarget,
     receipt: row.receipt,
+    identity: { clientId: actor.clientId, requestedBy: actor.requestedBy },
     chunkIndex: 0,
     deadline: Date.now() + 5000,
   }));

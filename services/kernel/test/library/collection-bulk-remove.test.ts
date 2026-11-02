@@ -87,6 +87,7 @@ async function capture(collectionId: string, memberIds: string[]) {
       sourceDigest: operation.sourceDigest,
       target: { ...row.target, operationId, ordinal: row.ordinal },
       receipt: row.receipt,
+      identity: { clientId: f.owner.actor.clientId, requestedBy: f.owner.actor.requestedBy },
       chunkIndex: 0,
       deadline: Date.now() + 30000,
     }));
