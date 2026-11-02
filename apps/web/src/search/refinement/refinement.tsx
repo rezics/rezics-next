@@ -10,10 +10,7 @@ import { XIcon } from 'lucide-react';
 import { m } from '../../paraglide/messages.js';
 import { localizedLabel } from '../results';
 import { useSearchRetryWait } from '../search-recovery-retry';
-import {
-  FacetContinuationLedger,
-  MAX_CACHED_FACET_PROPERTIES,
-} from './facet-continuation';
+import { FacetContinuationLedger, MAX_CACHED_FACET_PROPERTIES } from './facet-continuation';
 import { refinementHref, type RefinementConditions, type RefinementProperty } from './model';
 import { PropertyPicker } from './property-picker';
 import { type FacetPage, type FacetState, type RequestedFacet } from './request';

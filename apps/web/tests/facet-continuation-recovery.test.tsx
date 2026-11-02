@@ -196,7 +196,9 @@ test('More keeps the accepted window through pending and failure, retries the ex
   await replace(next);
 
   await act(async () => button(m.refinement_more_values()).click());
-  const checkboxes = () => [...host.querySelectorAll<HTMLInputElement>('input[type="checkbox"][name="f.schema:genre"]')];
+  const checkboxes = () => [
+    ...host.querySelectorAll<HTMLInputElement>('input[type="checkbox"][name="f.schema:genre"]'),
+  ];
   expect(checkboxes().map((input) => input.value)).toEqual(firstValues);
   await act(async () => finishFailure({ status: 'unavailable', code: 'temporary' }));
   expect(checkboxes().map((input) => input.value)).toEqual(firstValues);
@@ -236,11 +238,18 @@ test('the finite continuation allowance keeps the last window and offers an expl
   const cursors: (string | undefined)[] = [];
   let page = 1;
   await replace(
-    makeProps('finite', ready(Array.from({ length: 10 }, (_, index) => `window-0-${index}`), 'cursor-0'), async (facets) => {
-      cursors.push(facets[0]?.cursor);
-      const values = Array.from({ length: 10 }, (_, index) => `window-${page}-${index}`);
-      return ready(values, `cursor-${page++}`);
-    }),
+    makeProps(
+      'finite',
+      ready(
+        Array.from({ length: 10 }, (_, index) => `window-0-${index}`),
+        'cursor-0',
+      ),
+      async (facets) => {
+        cursors.push(facets[0]?.cursor);
+        const values = Array.from({ length: 10 }, (_, index) => `window-${page}-${index}`);
+        return ready(values, `cursor-${page++}`);
+      },
+    ),
   );
 
   for (let index = 0; index < 64; index++) await act(async () => button(m.refinement_more_values()).click());
@@ -248,7 +257,7 @@ test('the finite continuation allowance keeps the last window and offers an expl
   expect(host.textContent).toContain('window-64-0');
   expect(host.textContent).not.toContain('window-63-0');
   expect(host.textContent).toContain(m.refinement_restart());
-  expect([...host.querySelectorAll('button')].some((node) => node.textContent?.trim() === m.refinement_more_values())).toBe(
-    false,
-  );
+  expect(
+    [...host.querySelectorAll('button')].some((node) => node.textContent?.trim() === m.refinement_more_values()),
+  ).toBe(false);
 });
