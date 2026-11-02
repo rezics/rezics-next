@@ -1,7 +1,6 @@
 import { afterAll, afterEach, expect, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, useState } from 'react';
-import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router';
 import {
   readRenameContinuation,
   saveRenameContinuation,
@@ -31,6 +30,9 @@ const previous = new Map(
 );
 for (const [name, value] of Object.entries(globals))
   Object.defineProperty(globalThis, name, { value, configurable: true, writable: true });
+const { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } = await import(
+  '@tanstack/react-router'
+);
 const { createRoot } = await import('react-dom/client');
 const { RenameAccountPage } = await import('../src/routes/account.rename');
 const { overwriteGetLocale } = await import('../src/paraglide/runtime.js');
