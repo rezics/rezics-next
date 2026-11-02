@@ -105,3 +105,24 @@ test('Leave retains an unresolved command and retires its late approval before r
   expect(page.calls).toHaveLength(2);
   expect(page.host.querySelector<HTMLInputElement>('#automated-confirm')!.checked).toBe(false);
 });
+test('completed creation leaves normally, and caller replacement revokes a changed draft without a prompt', async () => {
+  const page = await start();
+  await page.review();
+  await flush(() => page.host.querySelector<HTMLInputElement>('#automated-confirm')!.click());
+  await flush(() => send(page.host));
+  await flush(() => page.calls[1]!.resolve(approval()));
+  await flush(() => page.calls[2]!.resolve(Response.json({ accountId: operator.id })));
+  expect(unloadWarns()).toBe(false);
+  await page.navigate();
+  expect(page.host.textContent).toContain('Destination');
+  // Clear only test storage to start a fresh draft after the completed command.
+  window.sessionStorage.clear();
+  await flush(() => {
+    void page.router.navigate({ to: '/automated/new' });
+  });
+  await page.draft();
+  globalThis.fetch = (() => Promise.resolve(Response.json({ ...session, account_id: operator.id }))) as typeof fetch;
+  await page.navigate();
+  expect(page.host.querySelector('dialog')).toBeNull();
+  expect(page.host.textContent).toContain('Destination');
+});
