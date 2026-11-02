@@ -31,7 +31,7 @@ export const Route = createFileRoute('/entitlements/')({
     const initial = Route.useLoaderData();
     const search = Route.useSearch();
     const locale = getLocale();
-    if ('kind' in initial && initial.kind === 'malformed-address') {
+    if (!('requested' in initial)) {
       return <EntitlementsAddressRecovery locale={locale} history={search} />;
     }
     return (
