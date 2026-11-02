@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
+import { createBoardEffect } from '../../src/content/board-projection.ts';
 import { SESSION_HEADER } from '../../src/http/request.ts';
 import { snapshotReactionOperation, targetProjectionRows } from './reaction-relay-convergence-fixture.ts';
 import {
@@ -102,6 +103,9 @@ test.serial(
           expect(new Set(walk.ids).size).toBe(8);
           expect(walk.pages.at(-1)!.next).toBeNull();
         }
+      const control = await world.thread(otherBoardId, initialAt);
+      await runtime.consume(control.envelopes);
+      const controlBefore = await materialized(world, otherBoardId);
       const initialHot = expectedOrder(threads, 'hot', initialAt);
       const initialActive = expectedOrder(threads, 'active', initialAt);
       // Pick a non-leading tied item independently of returned pages so the changed vote must change rank order.
@@ -121,7 +125,20 @@ test.serial(
       const replyAt = plus(at, 240);
       const reply = await world.reply(replied, world.base.other, replyAt);
       expect(new Date(replied.activityAt).toISOString()).toBe(replyAt);
+      // Revision and post creation share a position. Deliver the revision first,
+      // then let the real relay finish and replay the interrupted envelope.
+      const boardEffect = createBoardEffect(world.pool);
+      const replyEvents = reply.envelopes.flatMap(({ events }) => events);
+      await boardEffect.run(replyEvents.find(({ type }) => type === 'com.rezics.content.revision.created.v1')!);
       await runtime.consume(reply.envelopes);
+      for (const event of [...replyEvents].reverse().filter(({ type }) => boardEffect.types.includes(type)))
+        await boardEffect.run(event);
+      expect(
+        (await materialized(world, boardId))
+          .find(({ thread_id }) => thread_id === replied.id)!
+          .last_activity_at.toISOString(),
+      ).toBe(replyAt);
+      expect(await materialized(world, otherBoardId)).toEqual(controlBefore);
 
       // Both a receipt replay and a new-key same-slot no-op preserve the physical source position and projection.
       const before = await snapshotReactionOperation(world.pool, world.base.other.accountId, voted.id, change.key);

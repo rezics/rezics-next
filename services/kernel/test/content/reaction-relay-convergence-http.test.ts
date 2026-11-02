@@ -1,5 +1,6 @@
 import { afterAll, expect, test } from 'bun:test';
 import { partitionOf, routeOf, newId } from '../../src/route/route.ts';
+import { createReactionCountEffect } from '../../src/content/reaction-projection.ts';
 import { seedGovernanceAuthority } from './support/disclosure-fixtures.ts';
 import {
   comparePosition,
@@ -307,6 +308,34 @@ test.serial(
     );
     await expectThreadRead(base, publicTarget, base.author, 'like', base.other, 'like', { like: 2 }, threadFreshness);
 
+    // Missing intermediate delivery must not count an already projected kind twice.
+    const roundTrip = [];
+    const untouched = await targetProjectionRows(base.system.database.pool, draftTarget.threadId);
+    for (const kind of ['love', 'like'] as const)
+      roundTrip.push(
+        await commitWhilePaused(
+          base,
+          runtime,
+          base.author,
+          publicTarget.threadId,
+          `/v1/threads/${publicTarget.threadId}/reaction`,
+          kind,
+        ),
+      );
+    for (const change of [...roundTrip].reverse()) await runtime.replay(change.event);
+    await waitForChanges(runtime, roundTrip);
+    await expectThreadRead(
+      base,
+      publicTarget,
+      base.author,
+      'like',
+      base.other,
+      'like',
+      { like: 2 },
+      await freshness(base, publicTarget.threadId),
+    );
+    expect(await targetProjectionRows(base.system.database.pool, draftTarget.threadId)).toEqual(untouched);
+
     const threadLoveA = await setReaction(
       base,
       runtime,
@@ -326,6 +355,23 @@ test.serial(
       { like: 2 },
       staleThreadFreshness,
     );
+    // Fail after the slot/count write, before its total: retry must redo the entire target transaction.
+    const pool = base.system.database.pool;
+    const beforeInterrupted = await targetProjectionRows(pool, publicTarget.threadId);
+    await pool.query(`CREATE FUNCTION content.reject_interrupted_reaction_test() RETURNS trigger LANGUAGE plpgsql
+      AS $$ BEGIN IF NEW.target_id = '${publicTarget.threadId}'::uuid THEN
+        RAISE EXCEPTION 'Interrupted reaction total'; END IF; RETURN NEW; END $$;
+      CREATE TRIGGER reject_interrupted_reaction_test BEFORE INSERT OR UPDATE ON content.reaction_total
+      FOR EACH ROW EXECUTE FUNCTION content.reject_interrupted_reaction_test()`);
+    try {
+      await expect(createReactionCountEffect(pool).run(threadLoveA.event)).rejects.toThrow(
+        'Interrupted reaction total',
+      );
+      expect(await targetProjectionRows(pool, publicTarget.threadId)).toEqual(beforeInterrupted);
+    } finally {
+      await pool.query(`DROP TRIGGER reject_interrupted_reaction_test ON content.reaction_total;
+        DROP FUNCTION content.reject_interrupted_reaction_test()`);
+    }
     await waitForChanges(runtime, [threadLoveA]);
     const lovedThreadFreshness = await freshness(base, publicTarget.threadId);
     await expectThreadRead(
@@ -359,6 +405,18 @@ test.serial(
     );
     await waitForChanges(runtime, [threadClearA]);
     const clearedThreadFreshness = await freshness(base, publicTarget.threadId);
+    await expectThreadRead(
+      base,
+      publicTarget,
+      base.author,
+      null,
+      base.other,
+      'like',
+      { like: 1 },
+      clearedThreadFreshness,
+    );
+
+    for (const change of [threadLikeA, threadLoveA]) await runtime.replay(change.event);
     await expectThreadRead(
       base,
       publicTarget,

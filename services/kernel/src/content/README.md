@@ -461,6 +461,18 @@ the existing per-kind counts and total in the subject's partition. It also maint
 per reacting account in that same partition and transaction. Clearing a reaction or erasing an account removes the
 reactor row through the relay.
 
+Each target stores the latest projected kind and source watermark independently for each actor, retaining a null
+kind after clearing. Deltas come from that projected slot, never the event's previous kind; a late event for another
+actor in the same source partition still contributes. Slot, per-partition counts, totals and subject reactor changes
+commit atomically, with aggregate kinds locked in a fixed order. Replays and stale actor events change nothing.
+Installation freezes native slot writers and rebuilds this derived state once, recording each source partition's
+cutover; older events are already represented, including cleared slots. Runtime reads that one source cutover before
+releasing its checkout and updating one target, with no source history scan or producer changes.
+
+Board activity is a separate monotone value from its source watermark: a delayed post creation can advance activity
+even after a revision from the same or a later envelope. Such an update retains the newer source revision and
+watermark and touches only that exact board/thread candidate.
+
 A `com.rezics.subject.merged.v1` event starts one idempotent DBOS job for the merged subject. The job reads its
 `content.subject_reactor` rows in actor ID keyset order from that subject's partition, up to 100 IDs per page. For
 each actor it runs one command in the actor's partition and resolves the current final survivor with `resolveSubject`
@@ -537,7 +549,7 @@ this change adds no deletion path.
 
 #### Subject reaction relay
 
-- Touches: one contribution upsert, at most two total upserts, and one reactor upsert or delete, all in the subject's partition in one transaction.
+- Touches: one source cutover point read, then one actor contribution CAS, at most two per-partition count/total upserts and one reactor upsert or delete in the subject's partition in one transaction.
 - Bound: constant statements. Blocks O(log R).
 - Growth check: `test/content/growth-reactions.test.ts`, `Subject reaction relay`, at 64, 512 and 4096 reactors.
 

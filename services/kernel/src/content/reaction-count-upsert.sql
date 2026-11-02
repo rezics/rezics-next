@@ -10,10 +10,11 @@ VALUES (
   :source_position::bigint
 )
 ON CONFLICT (route, target_id, source_partition, kind) DO UPDATE
-SET count = GREATEST(stored.count + :update_delta::integer, 0),
-    source_epoch = EXCLUDED.source_epoch,
-    source_position = EXCLUDED.source_position
-WHERE (stored.source_epoch, stored.source_position) < (EXCLUDED.source_epoch, EXCLUDED.source_position)
+SET count = stored.count + :update_delta::integer,
+    source_epoch = GREATEST(stored.source_epoch, EXCLUDED.source_epoch),
+    source_position = CASE WHEN stored.source_epoch > EXCLUDED.source_epoch THEN stored.source_position
+      WHEN stored.source_epoch < EXCLUDED.source_epoch THEN EXCLUDED.source_position
+      ELSE GREATEST(stored.source_position, EXCLUDED.source_position) END
 RETURNING WITH (OLD AS previous, NEW AS current)
   COALESCE(previous.count, 0) AS previous_count,
   current.count AS current_count;
