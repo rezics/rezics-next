@@ -41,6 +41,19 @@ export function isRealmDiscoverySearch(state: SearchLoaderDeps): boolean {
   return !hasResultSearchIntent(state);
 }
 
+const injectedCacheScopes = new WeakMap<RealmDiscoveryReader, string>();
+let nextInjectedCacheScope = 0;
+
+/** Default anonymous locale/sort/page identity stays public; injected readers get a private cache token. */
+function realmDiscoveryCacheScope(read: RealmDiscoveryReader): string {
+  if (read === readRealmDiscovery) return 'anonymous';
+  const existing = injectedCacheScopes.get(read);
+  if (existing) return existing;
+  const scope = `injected:${++nextInjectedCacheScope}`;
+  injectedCacheScopes.set(read, scope);
+  return scope;
+}
+
 /** One cache entry per anonymous locale/sort/page, with no background refills or automatic retries. */
 export function realmDiscoveryQueryOptions(
   locale: string,
@@ -49,7 +62,16 @@ export function realmDiscoveryQueryOptions(
   read: RealmDiscoveryReader = readRealmDiscovery,
 ) {
   return queryOptions({
-    queryKey: ['search', 'realm-discovery-v1', 'anonymous', 'public-global', locale, sort, 20, cursor ?? null],
+    queryKey: [
+      'search',
+      'realm-discovery-v1',
+      realmDiscoveryCacheScope(read),
+      'public-global',
+      locale,
+      sort,
+      20,
+      cursor ?? null,
+    ],
     staleTime: 0,
     gcTime: 60_000,
     retry: false,

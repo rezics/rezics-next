@@ -91,6 +91,10 @@ query identity starts a fresh admitted state.
 Native GET sort submission uses an empty `sort` value for Relevance, parsed as the default; `rating` is the only
 explicit sort value.
 
+Search Realm discovery owns the rendered window, continuation callbacks and request lifetime by the actual reader,
+locale, sort and QueryClient; a replacement hides old rows during render, injected readers keep a private cache
+identity, and disposing one anonymous consumer does not cancel another.
+
 Local Recent keeps exact query text within global Search's 512 UTF-8 bytes or native Recent's 256 UTF-16-unit bound,
 never truncates, and leaves longer valid global queries local-only so they cannot block native synchronization.
 Recent history reads at most two 20-row pages for its 32-row view; each nonterminal page must contain 20 rows, and
