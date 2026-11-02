@@ -42,15 +42,16 @@ export function RecentPanel({
   const announce = useCallback((message: string) => setAnnouncement(message), []);
   const focusCandidates = entries.slice(0, (all ? 32 : 5) + 1);
   const focus = useHistoryRemovalFocus(entries, focusCandidates, announce, history?.owner);
+  const options = { locale: language as never };
   const status =
     history?.failure === 'conflict'
-      ? m.search_history_conflict()
+      ? m.search_history_conflict({}, options)
       : history?.failure === 'unavailable'
-        ? m.search_history_offline()
+        ? m.search_history_offline({}, options)
         : history?.persistence === 'unavailable'
-          ? m.shell_account_unavailable()
+          ? m.shell_account_unavailable({}, options)
           : history?.sync === 'pending'
-            ? m.header_search_history_pending()
+            ? m.header_search_history_pending({}, options)
             : undefined;
   return (
     <div data-search-discovery className="px-2 py-4">
@@ -58,20 +59,22 @@ export function RecentPanel({
         <section
           ref={focus.regionRef}
           tabIndex={-1}
-          aria-label={all ? m.header_search_history() : m.header_search_recent()}
+          aria-label={all ? m.header_search_history({}, options) : m.header_search_recent({}, options)}
           className="space-y-2"
         >
           <div className="flex items-center justify-between gap-2 px-2">
-            <h2 className="font-semibold">{all ? m.header_search_history() : m.header_search_recent()}</h2>
+            <h2 className="font-semibold">
+              {all ? m.header_search_history({}, options) : m.header_search_recent({}, options)}
+            </h2>
             <button type="button" className={control} aria-expanded={all} onClick={() => setAll(!all)}>
-              {all ? m.header_search_recent() : m.header_search_history()}
+              {all ? m.header_search_recent({}, options) : m.header_search_history({}, options)}
               <ChevronRight aria-hidden="true" className="size-4" />
             </button>
           </div>
           {status && <p className="px-2 text-xs text-muted-foreground">{status}</p>}
           {history?.failure && history.retry && (
             <button type="button" className={control} onClick={history.retry}>
-              {m.search_history_reload()}
+              {m.search_history_reload({}, options)}
             </button>
           )}
           {entries.length ? (
@@ -99,11 +102,11 @@ export function RecentPanel({
                       )}
                       <span className="min-w-0">
                         <span className="block truncate">
-                          {entry.query || entry.scope?.name || m.search_history_unavailable()}
+                          {entry.query || entry.scope?.name || m.search_history_unavailable({}, options)}
                         </span>
                         {entry.query && entry.scope ? (
                           <span className="block truncate text-xs text-muted-foreground">
-                            {entry.scope.name || m.search_history_unavailable()}
+                            {entry.scope.name || m.search_history_unavailable({}, options)}
                           </span>
                         ) : null}
                       </span>
@@ -111,7 +114,7 @@ export function RecentPanel({
                     <button
                       type="button"
                       className={`${control} shrink-0`}
-                      aria-label={m.header_search_remove_recent({ name })}
+                      aria-label={m.header_search_remove_recent({ name }, options)}
                       data-history-action=""
                       data-history-id={entry.id}
                       onClick={(event) => {
@@ -119,7 +122,7 @@ export function RecentPanel({
                           entry.id,
                           index,
                           event.currentTarget,
-                          m.search_history_management_removed({ name }),
+                          m.search_history_management_removed({ name }, options),
                         );
                         history?.remove(entry.id);
                       }}
@@ -131,7 +134,7 @@ export function RecentPanel({
               })}
             </ul>
           ) : (
-            <p className="px-2 py-4 text-sm text-muted-foreground">{m.header_search_recent_empty()}</p>
+            <p className="px-2 py-4 text-sm text-muted-foreground">{m.header_search_recent_empty({}, options)}</p>
           )}
           <p className="sr-only" role="status" aria-live="polite">
             {announcement}

@@ -90,26 +90,29 @@ export function TrendingSearchesSection({
   onSelect,
   onRetry,
   isCurrent,
+  language,
 }: {
   state: TrendingState;
   onSelect?: ((query: string) => void) | undefined;
   onRetry?: (() => void) | undefined;
   isCurrent?: (() => boolean) | undefined;
+  language?: string;
 }) {
   const values = state.status === 'ready' ? state.page.trendingSearches : [];
   const waiting = useSearchRetryWait(state.status === 'ready' ? undefined : state.retryAt);
   const rows = trendingTermRowKeys(values).map((key, index) => ({ key, ...values[index]! }));
   const focus = useTrendingRetryFocus(state, isCurrent);
+  const options = language === undefined ? undefined : { locale: language as never };
   return (
     <section
       ref={focus.regionRef}
       tabIndex={-1}
       className="space-y-2 pt-5"
-      aria-label={m.header_search_trending_searches()}
+      aria-label={m.header_search_trending_searches({}, options)}
       aria-busy={state.status === 'loading'}
       data-trending-searches
     >
-      <h3 className="px-2 text-sm font-semibold">{m.header_search_trending_searches()}</h3>
+      <h3 className="px-2 text-sm font-semibold">{m.header_search_trending_searches({}, options)}</h3>
       {values.length ? (
         <ul>
           {rows.map(({ key, query, display }, index) => (
@@ -129,17 +132,17 @@ export function TrendingSearchesSection({
       ) : (
         <p role="status" className="px-2 py-3 text-sm text-muted-foreground">
           {state.status === 'loading'
-            ? m.trending_loading()
+            ? m.trending_loading({}, options)
             : state.status === 'preparing'
-              ? m.discovery_not_ready()
+              ? m.discovery_not_ready({}, options)
               : state.status === 'unavailable'
-                ? m.trending_unavailable()
-                : m.trending_empty()}
+                ? m.trending_unavailable({}, options)
+                : m.trending_empty({}, options)}
         </p>
       )}
       {onRetry && state.status !== 'ready' && (
         <>
-          {waiting && <p className="px-2 text-sm text-muted-foreground">{m.search_recovery_wait()}</p>}
+          {waiting && <p className="px-2 text-sm text-muted-foreground">{m.search_recovery_wait({}, options)}</p>}
           <button
             ref={focus.retryRef}
             type="button"
@@ -150,7 +153,7 @@ export function TrendingSearchesSection({
               onRetry();
             }}
           >
-            {m.search_facet_retry()}
+            {m.search_facet_retry({}, options)}
           </button>
         </>
       )}
@@ -175,6 +178,7 @@ export function CurrentTrendingSearches({
   const { state, retry, isCurrent } = useTrendingSearches(language, identity, observe);
   return (
     <TrendingSearchesSection
+      language={language}
       state={state}
       onRetry={identity === null ? undefined : retry}
       isCurrent={isCurrent}
