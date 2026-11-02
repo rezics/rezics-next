@@ -122,7 +122,10 @@ function ParentAuthor({ author }: { author: PageAuthor | undefined }) {
     );
   const name = author?.displayName || (author?.handle ? `@${author.handle}` : m.thread_author_unknown());
   return author?.handle ? (
-    <a href={`/${getLocale()}/@${encodeURIComponent(author.handle)}`} className="underline-offset-4 hover:underline">
+    <a
+      href={`/${getLocale()}/@${encodeURIComponent(author.handle)}`}
+      className="min-w-0 rounded-sm underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+    >
       {name}
     </a>
   ) : (
@@ -153,11 +156,17 @@ export function ReplyContext({
   const disclosed = parent?.availability === 'available' && parent.body && authors !== undefined;
   const excerpt = disclosed ? replyParentExcerpt(parent.body!) : '';
   return (
-    <div data-slot="reply-context" className="mb-3 min-w-0 space-y-2 text-sm text-muted-foreground">
+    <div
+      data-slot="reply-context"
+      className="mb-3 min-w-0 space-y-2 text-sm text-muted-foreground [overflow-wrap:anywhere]"
+    >
       <p className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
         <ReplyIcon aria-hidden="true" className="size-4 shrink-0 self-center" />
         {parent ? (
-          <a href={`#post-${parent.id}`} className="underline-offset-4 hover:underline">
+          <a
+            href={`#post-${parent.id}`}
+            className="min-w-0 rounded-sm underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
             {label}
           </a>
         ) : (
@@ -186,6 +195,7 @@ function OffPageParent({ parentId, reader }: { parentId: string; reader: ReplyPa
         type="button"
         variant="ghost"
         size="sm"
+        className="h-auto min-h-11 min-w-11 max-w-full shrink px-3 py-2 text-left leading-snug whitespace-normal [overflow-wrap:anywhere]"
         aria-expanded={open}
         aria-controls={regionId}
         onClick={() => reader.toggle(parentId)}
@@ -193,12 +203,18 @@ function OffPageParent({ parentId, reader }: { parentId: string; reader: ReplyPa
         {open ? m.thread_reply_parent_close() : m.thread_reply_parent_view()}
       </Button>
       {open ? (
-        <section id={regionId} aria-label={m.thread_reply_parent()} className="space-y-2 rounded-lg border p-3">
+        <section id={regionId} aria-label={m.thread_reply_parent()} className="min-w-0 space-y-2 rounded-lg border p-3">
           {result.state === 'loading' ? <p role="status">{m.thread_reply_parent_loading()}</p> : null}
           {result.state === 'unavailable' ? (
             <>
               <p role="status">{m.thread_reply_parent_unavailable()}</p>
-              <Button type="button" variant="outline" size="sm" onClick={() => void reader.load(parentId)}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-auto min-h-11 min-w-11 max-w-full shrink px-3 py-2 text-left leading-snug whitespace-normal [overflow-wrap:anywhere]"
+                onClick={() => void reader.load(parentId)}
+              >
                 {m.exact_revision_retry()}
               </Button>
             </>
@@ -215,7 +231,7 @@ function OffPageParent({ parentId, reader }: { parentId: string; reader: ReplyPa
               {result.revisionId ? (
                 <a
                   href={exactRevisionHref({ postId: result.id, revisionId: result.revisionId }, getLocale())}
-                  className="inline-flex min-h-11 items-center underline underline-offset-4"
+                  className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm py-2 underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 >
                   {m.exact_revision_heading()}
                 </a>
@@ -230,9 +246,16 @@ function OffPageParent({ parentId, reader }: { parentId: string; reader: ReplyPa
 
 export function ReplyButton({ disabled, onReply }: { disabled: boolean; onReply: () => void }) {
   return (
-    <Button type="button" variant="ghost" size="sm" disabled={disabled} onClick={onReply}>
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      className="h-auto min-h-11 min-w-11 max-w-full shrink px-3 py-2 text-left leading-snug whitespace-normal [overflow-wrap:anywhere]"
+      disabled={disabled}
+      onClick={onReply}
+    >
       <ReplyIcon aria-hidden="true" />
-      {m.thread_reply_to_post()}
+      <span className="min-w-0">{m.thread_reply_to_post()}</span>
     </Button>
   );
 }
