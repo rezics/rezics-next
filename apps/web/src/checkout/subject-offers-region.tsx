@@ -1,5 +1,5 @@
 import { queryOptions, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useState, useSyncExternalStore } from 'react';
 import { ContentItem } from '@rezics/ui/content-item';
 import { Alert, AlertDescription } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -16,7 +16,43 @@ export function purchaseHref(path: string, locale: string): string | null {
   const language = locales.find((candidate) => candidate === locale);
   return language ? localizeHref(path, { locale: language }) : null;
 }
-export type SubjectOffersViewer = { subject: string | null; sessionKey: string | null };
+export type SubjectOffersViewer = {
+  subject: string | null;
+  sessionKey: string | null;
+  readScope?: string;
+  readEpoch?: number;
+  current?: () => boolean;
+};
+
+/** Cache events retire a read even when React batches an account change away and back. */
+function useSubjectOffersReadBoundary() {
+  const client = useQueryClient();
+  const scope = useId();
+  const boundary = useMemo(() => {
+    let epoch = 0;
+    return {
+      snapshot: () => epoch,
+      subscribe: (changed: () => void) =>
+        client.getQueryCache().subscribe((event) => {
+          const key = event.query.queryKey;
+          if (
+            (event.type !== 'updated' && event.type !== 'removed') ||
+            !((key.length === 1 && key[0] === 'session') || (key[0] === 'exposure' && key[1] === 'viewer'))
+          )
+            return;
+          epoch += 1;
+          // Cancel before notifying React: late reads cannot enter this mount's cache again.
+          const queryKey = ['subject-offers', scope];
+          void client.cancelQueries({ queryKey });
+          client.removeQueries({ queryKey });
+          changed();
+        }),
+    };
+  }, [client, scope]);
+  const epoch = useSyncExternalStore(boundary.subscribe, boundary.snapshot, () => 0);
+  const current = useCallback(() => boundary.snapshot() === epoch, [boundary, epoch]);
+  return { scope, epoch, current };
+}
 /** Browser-only and bound to the prepared actor/session, including cancellation of late personal responses. */
 export function subjectOffersQuery(
   input: SubjectOffersInput,
@@ -26,6 +62,8 @@ export function subjectOffersQuery(
   return queryOptions({
     queryKey: [
       'subject-offers',
+      viewer.readScope ?? null,
+      viewer.readEpoch ?? 0,
       input.subjectId,
       input.locale,
       input.credentialMode,
@@ -34,8 +72,11 @@ export function subjectOffersQuery(
       input.cursor ?? '',
     ],
     queryFn: async ({ signal }) => {
+      signal.throwIfAborted();
+      if (viewer.current && !viewer.current()) throw new Error('Subject offers read retired');
       const page = await read({ data: input });
       signal.throwIfAborted();
+      if (viewer.current && !viewer.current()) throw new Error('Subject offers read retired');
       return page;
     },
     enabled: typeof window !== 'undefined',
@@ -202,7 +243,7 @@ function PreparedSubjectOffersRegion({
         },
         viewer,
       ),
-    [context.subjectId, context.locale, credentialMode, viewer.subject, viewer.sessionKey, cursor],
+    [context.subjectId, context.locale, credentialMode, viewer, cursor],
   );
   const query = useQuery(options);
   useEffect(
@@ -215,18 +256,29 @@ function PreparedSubjectOffersRegion({
   return (
     <SubjectOffersView
       page={
-        query.isFetching
+        !viewer.current?.() || query.isFetching
           ? { kind: 'pending' }
           : query.isError
             ? { kind: 'unavailable' }
             : (query.data ?? { kind: 'pending' })
       }
       locale={context.locale}
-      onNext={setCursor}
+      onNext={(next) => {
+        if (viewer.current?.()) setCursor(next);
+      }}
       {...(cursor || query.data?.kind === 'cursor-error'
-        ? { onRestart: () => (cursor ? setCursor(undefined) : void query.refetch()) }
+        ? {
+            onRestart: () => {
+              if (viewer.current?.()) {
+                if (cursor) setCursor(undefined);
+                else void query.refetch();
+              }
+            },
+          }
         : {})}
-      onRetry={() => void query.refetch()}
+      onRetry={() => {
+        if (viewer.current?.()) void query.refetch();
+      }}
     />
   );
 }
@@ -234,13 +286,23 @@ function PreparedSubjectOffersRegion({
 /** Public presentation waits for session preparation so a denied actor never gets an anonymous fallback. */
 export function SubjectOffersRegion(context: SubjectPurchaseContext) {
   const session = useSession();
+  const { scope, epoch, current } = useSubjectOffersReadBoundary();
+  const viewer = useMemo(
+    () => ({
+      subject: session.subject ?? null,
+      sessionKey: session.csrfToken,
+      readScope: scope,
+      readEpoch: epoch,
+      current,
+    }),
+    [session.subject, session.csrfToken, scope, epoch, current],
+  );
   if (session.state === 'unknown') return <SubjectOffersView page={{ kind: 'pending' }} locale={context.locale} />;
-  if (session.state === 'unavailable' || (session.state === 'signed-in' && (!session.subject || !session.csrfToken)))
+  if (session.state === 'unavailable' || (session.state === 'signed-in' && !session.subject))
     return <SubjectOffersView page={{ kind: 'unavailable' }} locale={context.locale} />;
-  const viewer = { subject: session.subject ?? null, sessionKey: session.csrfToken };
   return (
     <PreparedSubjectOffersRegion
-      key={JSON.stringify([context.subjectId, context.locale, session.state, viewer.subject, viewer.sessionKey])}
+      key={JSON.stringify([context.subjectId, context.locale, session.state, viewer.subject, viewer.sessionKey, epoch])}
       context={context}
       viewer={viewer}
       credentialMode={session.state === 'signed-in' ? 'session' : 'anonymous'}

@@ -56,3 +56,13 @@ establish native, privacy, physical, whole-journey or main acceptance.
 Internal checkout updates use their genuine buyer-owned native commit receipt when actor write-basis attribution
 is intentionally absent. Current native order/revision-event proof remains mandatory; receipt ownership creates
 neither a worker principal nor financial truth from its response.
+
+## Subject purchase entry
+
+A healthy signed-in session reads the embedded Subject offer directory without a CSRF token; commands retain their
+separate mutation credential and explicit terms acceptance. Anonymous visitors use public discovery. Each page,
+retry and restart performs one bounded directory read, preserving native offer order and exact target identities.
+Missing or denied read authority remains distinct from an empty directory; there is no anonymous fallback or
+per-offer entitlement read. Session, Subject, locale and viewer-exposure changes retire previous rows and late replies.
+Decision: a viewer-exposure cache update restarts discovery at the first page with a fresh read, including when an
+account changes away and back before rendering.
