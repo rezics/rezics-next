@@ -200,6 +200,29 @@ function RecipeEditorLive({
   const pending = useRef<RecipeCommand | null>(null);
   const pendingUncertain = useRef(false);
   const running = useRef(false);
+  const readFocus = useRef<{ epoch: number; active: () => boolean } | undefined>(undefined);
+  const readingHeading = useRef<HTMLHeadingElement>(null);
+  const emptyReading = useRef<HTMLParagraphElement>(null);
+  const unavailableReading = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const origin = readFocus.current;
+    if (!origin) return;
+    if (!origin.active() || origin.epoch !== readEpochRef.current) {
+      readFocus.current = undefined;
+      return;
+    }
+    if (busy || query.isFetching) return;
+    const target = readUnavailable
+      ? unavailableReading.current
+      : read
+        ? read.fields.length === 0
+          ? emptyReading.current
+          : readingHeading.current
+        : null;
+    if (!target?.isConnected) return;
+    readFocus.current = undefined;
+    target.focus();
+  }, [busy, query.isFetching, read, readUnavailable, readEpoch, lifetime]);
   const locked = busy || !!pending.current || failure?.refreshDefinitions === true;
   const draftDirty =
     !created &&
@@ -252,6 +275,8 @@ function RecipeEditorLive({
   }
   async function retryRead() {
     if (!lifetime.active() || !isReadEpochCurrent(readEpoch) || running.current) return;
+    // Only this deliberate recovery owns focus; internal reviews and readbacks do not.
+    readFocus.current = { epoch: readEpochRef.current + 1, active: lifetime.active };
     running.current = true;
     setBusy(true);
     try {
@@ -385,7 +410,9 @@ function RecipeEditorLive({
   const Workspace = id ? 'div' : 'form';
   return (
     <article className="mx-auto min-w-0 w-full max-w-3xl space-y-6 px-4 py-8 [overflow-wrap:anywhere] sm:px-6 [&_label]:min-w-0 [&_label]:max-w-full [&_label]:flex-wrap">
-      <PageHeading>{id ? m.recipe_edit({}, o) : m.recipe_title({}, o)}</PageHeading>
+      <PageHeading ref={readingHeading} tabIndex={-1}>
+        {id ? m.recipe_edit({}, o) : m.recipe_title({}, o)}
+      </PageHeading>
       {!id && (
         <a
           className={buttonVariants({ variant: 'outline', className: recipeActionClassName })}
@@ -401,7 +428,7 @@ function RecipeEditorLive({
       )}
       {(query.isPending || query.isFetching) && <p role="status">{m.candidate_loading({}, o)}</p>}
       {readUnavailable && (
-        <div className="space-y-3">
+        <div ref={unavailableReading} tabIndex={-1} className="space-y-3">
           {query.data && !query.data.ok && query.data.reason === 'concealed' ? (
             <p role="alert">{m.catalogue_create_concealed({}, o)}</p>
           ) : (
@@ -412,7 +439,11 @@ function RecipeEditorLive({
           </Button>
         </div>
       )}
-      {read && read.fields.length === 0 && <p role="status">{m.recipe_empty({}, o)}</p>}
+      {read && read.fields.length === 0 && (
+        <p ref={emptyReading} tabIndex={-1} role="status">
+          {m.recipe_empty({}, o)}
+        </p>
+      )}
       {created ? (
         <section className="space-y-4">
           <p role="status">{m.recipe_created({}, o)}</p>

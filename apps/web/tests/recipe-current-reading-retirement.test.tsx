@@ -55,7 +55,9 @@ test('Recipe recovery retires current authority and keeps the private draft and 
   const { default: userEvent } = await import(require.resolve('@testing-library/user-event'));
   const user = userEvent.setup({ document: window.document });
   const host = window.document.createElement('div') as unknown as HTMLElement;
-  window.document.body.append(host);
+  const outside = window.document.createElement('button');
+  outside.textContent = 'Outside the Recipe';
+  window.document.body.append(host, outside);
   const root = createRoot(host);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   const fixture = recipeFixture();
@@ -132,6 +134,7 @@ test('Recipe recovery retires current authority and keeps the private draft and 
       (button) => button.textContent?.trim() === m.correction_retry() && !button.closest('section'),
     )!;
   try {
+    outside.focus();
     await show(
       <RecipeEditor
         id={recipeId}
@@ -142,8 +145,10 @@ test('Recipe recovery retires current authority and keeps the private draft and 
       />,
     );
     await until(() => loadCount === 1 && !!within(host).queryByRole('link', { name: m.candidate_view_public() }));
+    expect(window.document.activeElement).toBe(outside);
     const ingredient = 'schema:recipeIngredient';
     const cookTime = 'schema:cookTime';
+    const instructions = 'schema:recipeInstructions';
     const ingredientLabel = initial.release.properties[ingredient]!.labels.en!;
     const cookTimeLabel = initial.release.properties[cookTime]!.labels.en!;
     const currentIngredient = section(ingredientLabel);
@@ -151,11 +156,26 @@ test('Recipe recovery retires current authority and keeps the private draft and 
       (field) =>
         field !== ingredient &&
         field !== cookTime &&
+        field !== instructions &&
         initial.release.properties[field]?.labels.en &&
         (initial.public!.subject.statements[field] ?? []).length > 0,
     )!;
     const untouchedLabel = initial.release.properties[untouched]!.labels.en!;
     const oldCorrect = queued(within(section(untouchedLabel)).getByRole('button', { name: m.recipe_correct() }));
+    const methodLabel = initial.release.properties[instructions]!.labels.en!;
+    await click(section(methodLabel), m.recipe_correct());
+    const methodDraft = section(methodLabel, true);
+    await click(methodDraft, m.recipe_replace_method());
+    await replace(input(methodDraft, m.catalogue_create_language()), 'en');
+    await replace(input(methodDraft, m.subject_source_licence()), 'CC-BY-4.0');
+    const methodEditor = methodDraft.querySelector<HTMLElement>('[contenteditable="true"][role="textbox"]')!;
+    const privateMethod = 'My private method survives read recovery.';
+    await act(async () => {
+      methodEditor.innerHTML = `<p>${privateMethod}</p>`;
+      methodEditor.dispatchEvent(new window.InputEvent('input', { bubbles: true, inputType: 'insertText' }));
+      await new Promise((resolve) => setTimeout(resolve, 180));
+      methodEditor.dispatchEvent(new window.FocusEvent('blur'));
+    });
     await click(currentIngredient, m.recipe_correct());
     const ingredientDraft = section(ingredientLabel, true);
     const privateValue = 'Retained correction, private until reviewed';
@@ -174,6 +194,7 @@ test('Recipe recovery retires current authority and keeps the private draft and 
     const exactCommand = structuredClone(sent[1]!.command);
     await click(ingredientDraft, m.catalogue_create_review_new());
     await until(() => loadCount === 2);
+    outside.focus();
     await until(() => !currentIngredient.isConnected);
     expect(within(host).queryByRole('link', { name: m.candidate_view_public() })).toBeNull();
     expect(host.textContent).not.toContain(untouchedLabel);
@@ -195,6 +216,7 @@ test('Recipe recovery retires current authority and keeps the private draft and 
     expect(cookTimeDraft.textContent).not.toContain(m.correction_proposed());
     reads[0]!.resolve({ ok: false, reason: 'concealed' });
     await until(() => host.textContent!.includes(m.catalogue_create_concealed()));
+    expect(window.document.activeElement).toBe(outside);
     expect(within(host).queryByRole('link', { name: m.candidate_view_public() })).toBeNull();
     expect(sent).toHaveLength(2);
     await act(async () => user.click(readRetry()));
@@ -202,18 +224,35 @@ test('Recipe recovery retires current authority and keeps the private draft and 
     await until(() => !currentIngredient.isConnected);
     reads[1]!.reject(new Error('reader unavailable'));
     await until(() => loadCount === 3 && host.textContent!.includes(m.correction_unavailable()));
+    expect(window.document.activeElement).toBe(readRetry().parentElement);
     expect(within(host).queryByRole('link', { name: m.candidate_view_public() })).toBeNull();
     expect(input(ingredientDraft, m.correction_value()).value).toBe(privateValue);
 
-    await act(async () => user.click(readRetry()));
+    const retiredRetry = queued(readRetry());
+    await act(async () => {
+      readRetry().focus();
+      await user.keyboard('{Enter}');
+    });
     await until(() => loadCount === 4);
+    expect(readRetry().disabled).toBe(true);
     reads[2]!.resolve(initial);
     await until(() => !!within(host).queryByRole('link', { name: m.candidate_view_public() }));
+    expect(window.document.activeElement).toBe(within(host).getByRole('heading', { level: 1 }));
+    expect(methodDraft.isConnected).toBe(true);
+    expect(methodEditor.textContent).toBe(privateMethod);
+    expect(input(methodDraft, m.catalogue_create_language()).value).toBe('en');
+    expect(input(methodDraft, m.subject_source_licence()).value).toBe('CC-BY-4.0');
     expect(within(host).getByRole('link', { name: m.candidate_view_public() }).getAttribute('href')).toContain(
       recipeId,
     );
     const untouchedHeadingCount = within(host).getAllByRole('heading', { name: untouchedLabel, level: 2 }).length;
-    await act(async () => oldCorrect());
+    outside.focus();
+    await act(async () => {
+      oldCorrect();
+      retiredRetry();
+    });
+    expect(loadCount).toBe(4);
+    expect(window.document.activeElement).toBe(outside);
     expect(within(host).getAllByRole('heading', { name: untouchedLabel, level: 2 })).toHaveLength(
       untouchedHeadingCount,
     );
@@ -223,6 +262,46 @@ test('Recipe recovery retires current authority and keeps the private draft and 
     await click(cookTimeDraft, m.correction_retry());
     await until(() => sent.length === 3 && cookTimeDraft.textContent!.includes(m.correction_proposed()));
     expect(sent[2]).toEqual({ command: exactCommand, replay: true });
+    expect(window.document.activeElement).not.toBe(within(host).getByRole('heading', { level: 1 }));
+
+    // Deliberate recovery lands on truthful non-field results; retired completions stay silent.
+    for (const outcome of ['empty', 'concealed', 'unavailable', 'retired'] as const) {
+      await show(null);
+      client.clear();
+      const result = deferred<typeof initial | { ok: false; reason: 'concealed' | 'unavailable' }>();
+      let calls = 0;
+      const transport = {
+        ...fixture.corrections,
+        load: async () => (++calls === 1 ? { ok: false as const, reason: 'unavailable' as const } : result.promise),
+      };
+      await show(
+        <RecipeEditor id={recipeId} locale="en" session="signed-in" transport={transport} search={async () => []} />,
+      );
+      await until(() => !!readRetry());
+      const oldRetry = queued(readRetry());
+      await act(async () => {
+        readRetry().focus();
+        await user.keyboard('{Enter}');
+      });
+      await until(() => calls === 2);
+      if (outcome === 'retired') await show(null);
+      outside.focus();
+      await act(async () =>
+        result.resolve(
+          outcome === 'empty' || outcome === 'retired' ? { ...initial, fields: [] } : { ok: false, reason: outcome },
+        ),
+      );
+      await until(() => outcome === 'retired' || !readRetry()?.disabled);
+      if (outcome === 'retired') {
+        await act(async () => oldRetry());
+        expect(calls).toBe(2);
+        expect(window.document.activeElement).toBe(outside);
+      } else {
+        const destination = outcome === 'empty' ? within(host).getByRole('status') : readRetry().parentElement;
+        expect(window.document.activeElement).toBe(destination);
+        expect(host.querySelector('input, select, [contenteditable]')).toBeNull();
+      }
+    }
   } finally {
     await act(async () => root.unmount());
     client.clear();
