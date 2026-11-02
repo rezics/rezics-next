@@ -3,7 +3,6 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { git } from './tasks.ts';
 import { integrationHarness } from './test-support.ts';
-import { frozenFile } from './frozen.ts';
 
 async function unchangedClaim(h: ReturnType<typeof integrationHarness>, command: string[]) {
   h.ensureDev();
@@ -80,18 +79,17 @@ test('dirty or changed source and contract refuse an unchanged claim before acce
   }
 });
 
-test('historical empty commits and frozen acceptance alone complete without advancing dev', async () => {
-  for (const frozen of [false, true]) {
+test.each([false, true])('historical empty commits complete without advancing dev (frozen acceptance: %s)', async (frozen) => {
     const h = integrationHarness();
     try {
       h.ensureDev();
       const ancestor = h.advanceDev('retained.txt');
       const task = h.dispatch('retained.txt', [], ['sh', '-c', 'cat retained.txt; git rev-parse HEAD']);
       if (frozen) {
-        writeFileSync(join(task.worktree, 'retained.txt'), 'frozen acceptance\n');
-        git(task.worktree, ['add', 'retained.txt']);
+        const markdown = `${task.brief.markdown}\n\`\`\`text path=retained.txt\nfrozen acceptance\n\`\`\`\n`;
+        writeFileSync(task.briefPath, markdown);
         h.store.updateTask({ taskId: task.id, attempt: 0 }, (current) => {
-          Object.assign(current, { frozenFiles: [frozenFile('retained.txt', 'frozen acceptance\n')] });
+          current.brief.markdown = markdown;
         });
         writeFileSync(
           join(task.worktree, '.temp/worker-plan.json'),
@@ -99,10 +97,11 @@ test('historical empty commits and frozen acceptance alone complete without adva
         );
       }
       git(task.worktree, ['commit', '--allow-empty', '-m', 'Retained historical controller commit']);
-      const source = h.head(task.branch);
       await h.start(task);
+      const source = h.head(task.branch);
       await h.train();
 
+      expect(h.outcomes[0]?.firstFailure).toBeUndefined();
       expect(h.outcomes[0]?.retainedSourceAcceptance).toEqual({
         sourceCommit: source,
         command: task.brief.acceptance.command,
@@ -115,11 +114,10 @@ test('historical empty commits and frozen acceptance alone complete without adva
     } finally {
       h.dispose();
     }
-  }
 });
 
-test('unavailable acceptance and invalidation during acceptance never complete an unchanged claim', async () => {
-  for (const change of ['unavailable', 'dirty', 'source', 'contract', 'stale'] as const) {
+test.each(['unavailable', 'dirty', 'source', 'contract', 'stale'] as const)(
+  '%s during acceptance never completes an unchanged claim', async (change) => {
     const h = integrationHarness();
     try {
       const { source, task } = await unchangedClaim(h, ['true']);
@@ -145,5 +143,5 @@ test('unavailable acceptance and invalidation during acceptance never complete a
     } finally {
       h.dispose();
     }
-  }
-});
+  },
+);
