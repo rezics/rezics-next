@@ -4362,5 +4362,11 @@
   "space_setup_details_name_unavailable": "Nom indisponible",
   "moderation_controls_details_summary": "Filtres sélectionnés : {status} ; {kind} ; {order}.",
   "library_progress_index_reader_history_unavailable": "La signification historique de cette unité est indisponible. Les valeurs enregistrées restent inchangées.",
-  "library_progress_index_reader_pagination": "Pages de progression"
+  "library_progress_index_reader_pagination": "Pages de progression",
+  "search_constraint_identity_kind_unavailable": "Nom du type indisponible",
+  "search_constraint_identity_property_unavailable": "Nom de la propriété indisponible",
+  "search_constraint_identity_value_unavailable": "Nom de la valeur indisponible",
+  "search_constraint_identity_unit_unavailable": "Nom de l’unité indisponible",
+  "search_constraint_identity_filter": "Filtre {number} : {label}",
+  "search_constraint_identity_details": "Détails techniques des filtres"
 }

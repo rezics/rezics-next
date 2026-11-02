@@ -459,15 +459,20 @@ export function SearchPage({
     JSON.stringify([committedState.condition, committedState.languages]);
   const number = new Intl.NumberFormat(locale);
   const label = (labels: Record<string, string> | undefined, fallback: string) =>
-    localizedLabel(labels ?? {}, locale).text || fallback;
-  const constraints: { key: string; text: string; state: SearchLoaderDeps }[] = [];
-  const add = (key: string, text: string, state: SearchLoaderDeps) =>
-    constraints.push({ key, text, state: { ...state, cursor: undefined } });
+    localizedLabel(labels ?? {}, locale).text.trim() || fallback;
+  const constraints: { key: string; text: string; state: SearchLoaderDeps; details?: unknown }[] = [];
+  const add = (key: string, text: string, state: SearchLoaderDeps, details?: unknown) =>
+    constraints.push({ key, text, state: { ...state, cursor: undefined }, details });
   if (type)
-    add('type', `${m.search_subject_type()}: ${label(data?.typeLabels, type)}`, {
-      ...navigationState,
-      type: undefined,
-    });
+    add(
+      'type',
+      `${m.search_subject_type()}: ${label(data?.typeLabels, m.search_constraint_identity_kind_unavailable())}`,
+      {
+        ...navigationState,
+        type: undefined,
+      },
+      { type },
+    );
   for (const kind of navigationState.kinds ?? [])
     add(
       `kind:${kind}`,
@@ -475,9 +480,10 @@ export function SearchPage({
         discovery?.status === 'ready'
           ? discovery.page.kinds.values.find((entry) => entry.id === kind)?.labels
           : undefined,
-        kind,
+        m.search_constraint_identity_kind_unavailable(),
       )}`,
       { ...navigationState, kinds: navigationState.kinds?.filter((value) => value !== kind) },
+      { kind },
     );
   for (const [property, values] of Object.entries(selectedFacets))
     for (const value of values) {
@@ -489,21 +495,23 @@ export function SearchPage({
           : undefined;
       add(
         `facet:${property}:${value}`,
-        `${property === 'type' ? m.search_subject_types() : label(data?.selectedFacetLabels[property], property)}: ${label(valueLabels, value)}`,
+        `${property === 'type' ? m.search_subject_types() : label(data?.selectedFacetLabels[property], m.search_constraint_identity_property_unavailable())}: ${label(valueLabels, m.search_constraint_identity_value_unavailable())}`,
         {
           ...navigationState,
           facets: { ...selectedFacets, [property]: values.filter((entry) => entry !== value) },
         },
+        { property, value },
       );
     }
   for (const [property, range] of Object.entries(data?.ranges ?? {}))
     add(
       `range:${property}`,
-      `${label(data?.conditionMetadata?.properties[property]?.labels, property)}: ${range.gte ?? '…'} – ${range.lte ?? '…'}${range.unit ? ` ${range.unit}` : ''}`,
+      `${label(data?.conditionMetadata?.properties[property]?.labels, m.search_constraint_identity_property_unavailable())}: ${range.gte ?? '…'} – ${range.lte ?? '…'}${range.unit ? ` (${m.search_constraint_identity_unit_unavailable()})` : ''}`,
       {
         ...navigationState,
         ranges: Object.fromEntries(Object.entries(data?.ranges ?? {}).filter(([key]) => key !== property)),
       },
+      { property, range },
     );
   for (const tag of draft.languages ?? [])
     add(
@@ -614,21 +622,54 @@ export function SearchPage({
         {m.search_filters()} ({number.format(activeFilterCount)})
       </Button>
       {constraints.length > 0 && (
-        <ul aria-label={m.refinement_selected()} className="flex flex-wrap gap-2">
-          {constraints.map(({ key, text, state }) => (
-            <li key={key}>
+        <ul aria-label={m.refinement_selected()} data-search-constraints className="flex flex-wrap gap-2">
+          {constraints.map(({ key, text, state }, index) => (
+            <li key={key} className="min-w-0 max-w-full">
               <a
-                className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                className={cn(
+                  buttonVariants({ variant: 'outline', size: 'sm' }),
+                  'h-auto min-h-11 max-w-full whitespace-normal py-2',
+                )}
                 data-remove-condition={key === 'condition' ? 'true' : undefined}
-                aria-label={m.refinement_remove({ value: text })}
+                aria-label={m.refinement_remove({
+                  value: m.search_constraint_identity_filter({ number: number.format(index + 1), label: text }),
+                })}
                 href={discoverySearchHref(locale, state)}
               >
-                <span className="max-w-64 truncate">{text}</span>
+                <span className="min-w-0 text-start wrap-anywhere">
+                  {m.search_constraint_identity_filter({ number: number.format(index + 1), label: text })}
+                </span>
                 <XIcon aria-hidden="true" className="size-3" />
               </a>
             </li>
           ))}
         </ul>
+      )}
+      {constraints.some(({ details }) => details !== undefined) && (
+        <details className="min-w-0 text-sm" data-search-constraint-details>
+          <summary className="min-h-11 w-fit max-w-full cursor-pointer rounded-sm py-2 wrap-anywhere focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+            {m.search_constraint_identity_details()}
+          </summary>
+          <dl className="space-y-3 pt-2">
+            {constraints.map(({ key, text, details }, index) =>
+              details !== undefined ? (
+                <div key={key} className="min-w-0 space-y-1">
+                  <dt className="font-medium wrap-anywhere">
+                    {m.search_constraint_identity_filter({ number: number.format(index + 1), label: text })}
+                  </dt>
+                  <dd className="min-w-0">
+                    <code
+                      tabIndex={0}
+                      className="block max-w-full rounded-sm select-text whitespace-pre-wrap wrap-anywhere focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                    >
+                      {JSON.stringify(details, null, 2)}
+                    </code>
+                  </dd>
+                </div>
+              ) : null,
+            )}
+          </dl>
+        </details>
       )}
     </div>
   );
@@ -687,11 +728,13 @@ export function SearchPage({
         >
           <NativeSelectOption value="">{m.search_all_subject_types()}</NativeSelectOption>
           {type && !data?.conditionMetadata?.types[type] && (
-            <NativeSelectOption value={type}>{label(data?.typeLabels, type)}</NativeSelectOption>
+            <NativeSelectOption value={type}>
+              {label(data?.typeLabels, m.search_constraint_identity_kind_unavailable())}
+            </NativeSelectOption>
           )}
           {Object.entries(data?.conditionMetadata?.types ?? {}).map(([id, definition]) => (
             <NativeSelectOption key={id} value={id}>
-              {label(definition.labels, id)}
+              {label(definition.labels, m.search_constraint_identity_kind_unavailable())}
             </NativeSelectOption>
           ))}
         </NativeSelect>

@@ -14,6 +14,7 @@ import { discoverySearchHref, searchLoaderDeps } from '../search/search-params';
 import {
   readSearchOutcome,
   searchRecoveryFromResponse,
+  searchUnavailablePage,
   type SearchOutcome,
   type SearchWireResponse,
 } from '../search/search-recovery';
@@ -26,6 +27,17 @@ const state = searchLoaderDeps({
   language: ['ja', 'en'],
   kinds: ['schema:Book'],
   cursor: 'native+/= opaque',
+});
+const metadataUnavailableState = searchLoaderDeps({
+  q: state.query,
+  type: 'schema:Book',
+  kinds: state.kinds,
+  language: state.languages,
+  condition: JSON.stringify(tree),
+  cursor: state.cursor,
+  'f.schema:genre': ['fixture:genre-a', 'fixture:genre-b'],
+  'r.schema:datePublished': JSON.stringify({ gte: 1900, lte: 2026 }),
+  'r.fixture:amount': JSON.stringify({ lte: 12.5, unit: 'fixture:opaque-unit' }),
 });
 const base: SearchPageData = {
   queryState: state,
@@ -70,27 +82,33 @@ function Journey({
   response,
   metadata = true,
   initiallyOpen = false,
+  identity = false,
 }: {
   response: SearchWireResponse;
   metadata?: boolean;
   initiallyOpen?: boolean;
+  identity?: boolean;
 }) {
   const [outcome, setOutcome] = useState<SearchOutcome>(() => ({ recovery: searchRecoveryFromResponse(response) }));
   const { conditionMetadata: _metadata, ...withoutMetadata } = base;
+  const selectedState = identity ? metadataUnavailableState : state;
+  const selectedData = identity ? searchUnavailablePage(selectedState) : metadata ? base : withoutMetadata;
   async function retry() {
     setOutcome({ recovery: { status: 'loading' } });
     const client = createKernelClient('http://search-story.local', {
       fetch: (async (_input, _init) => Response.json(ready)) as typeof fetch,
     });
-    setOutcome(await readSearchOutcome(discoveryRequest(state, ['en']), (body) => client.subjects.$search.post(body)));
+    setOutcome(
+      await readSearchOutcome(discoveryRequest(selectedState, ['en']), (body) => client.subjects.$search.post(body)),
+    );
   }
   return (
-    <PatternStory path={discoverySearchHref(getLocale(), state)}>
+    <PatternStory path={discoverySearchHref(getLocale(), selectedState)}>
       <AppShell>
         <SearchPage
-          query={state.query}
+          query={selectedState.query}
           initiallyOpen={initiallyOpen}
-          data={{ ...(metadata ? base : withoutMetadata), ...outcome }}
+          data={{ ...selectedData, ...outcome }}
           onRetry={() => void retry()}
         />
       </AppShell>
@@ -184,6 +202,26 @@ export const Closed: Story = {
 export const Denied: Story = { render: () => <Journey response={{ status: 403, error: { code: 'forbidden' } }} /> };
 export const MetadataUnavailable: Story = {
   render: () => (
-    <Journey metadata={false} initiallyOpen response={{ status: 503, error: { code: 'semantic_not_ready' } }} />
+    <Journey
+      identity
+      metadata={false}
+      initiallyOpen
+      response={{ status: 503, error: { code: 'semantic_not_ready' } }}
+    />
   ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const selected = await canvas.findByRole('list', { name: m.refinement_selected() });
+    await expect(selected.textContent).toContain(m.search_constraint_identity_kind_unavailable());
+    await expect(selected.textContent).toContain(m.search_constraint_identity_property_unavailable());
+    await expect(selected.textContent).toContain(m.search_constraint_identity_value_unavailable());
+    await expect(selected.textContent).not.toContain('schema:genre');
+    const details = canvas.getByText(m.search_constraint_identity_details(), { exact: true });
+    details.focus();
+    await userEvent.keyboard('{Enter}');
+    await expect(details.closest('details')).toHaveAttribute('open');
+    await expect(canvasElement.querySelector('[data-search-constraint-details]')?.textContent).toContain(
+      JSON.stringify({ property: 'fixture:amount', range: { lte: 12.5, unit: 'fixture:opaque-unit' } }, null, 2),
+    );
+  },
 };

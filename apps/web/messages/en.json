@@ -4363,5 +4363,11 @@
   "space_setup_details_name_unavailable": "Name unavailable",
   "moderation_controls_details_summary": "Selected filters: {status}; {kind}; {order}.",
   "library_progress_index_reader_history_unavailable": "The historical meaning of this unit is unavailable. Stored values are unchanged.",
-  "library_progress_index_reader_pagination": "Progress pages"
+  "library_progress_index_reader_pagination": "Progress pages",
+  "search_constraint_identity_kind_unavailable": "Kind name unavailable",
+  "search_constraint_identity_property_unavailable": "Property name unavailable",
+  "search_constraint_identity_value_unavailable": "Value name unavailable",
+  "search_constraint_identity_unit_unavailable": "Unit name unavailable",
+  "search_constraint_identity_filter": "Filter {number}: {label}",
+  "search_constraint_identity_details": "Technical filter details"
 }

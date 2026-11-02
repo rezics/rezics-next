@@ -4362,5 +4362,11 @@
   "space_setup_details_name_unavailable": "名稱暫不可用",
   "moderation_controls_details_summary": "目前篩選：{status}；{kind}；{order}。",
   "library_progress_index_reader_history_unavailable": "無法取得此單位的歷史含義。儲存的數值未作更改。",
-  "library_progress_index_reader_pagination": "進度分頁"
+  "library_progress_index_reader_pagination": "進度分頁",
+  "search_constraint_identity_kind_unavailable": "類型名稱暫時無法取得",
+  "search_constraint_identity_property_unavailable": "屬性名稱暫時無法取得",
+  "search_constraint_identity_value_unavailable": "值名稱暫時無法取得",
+  "search_constraint_identity_unit_unavailable": "單位名稱暫時無法取得",
+  "search_constraint_identity_filter": "篩選條件 {number}：{label}",
+  "search_constraint_identity_details": "篩選條件技術詳情"
 }

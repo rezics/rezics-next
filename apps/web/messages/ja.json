@@ -4362,5 +4362,11 @@
   "space_setup_details_name_unavailable": "名前を取得できません",
   "moderation_controls_details_summary": "選択中の絞り込み：{status}、{kind}、{order}。",
   "library_progress_index_reader_history_unavailable": "この単位の過去の意味を取得できません。保存された値は変更されていません。",
-  "library_progress_index_reader_pagination": "進捗のページ"
+  "library_progress_index_reader_pagination": "進捗のページ",
+  "search_constraint_identity_kind_unavailable": "種類名を取得できません",
+  "search_constraint_identity_property_unavailable": "プロパティ名を取得できません",
+  "search_constraint_identity_value_unavailable": "値の名前を取得できません",
+  "search_constraint_identity_unit_unavailable": "単位名を取得できません",
+  "search_constraint_identity_filter": "フィルター {number}：{label}",
+  "search_constraint_identity_details": "フィルターの技術的な詳細"
 }

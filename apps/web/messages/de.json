@@ -4362,5 +4362,11 @@
   "space_setup_details_name_unavailable": "Name nicht verfügbar",
   "moderation_controls_details_summary": "Ausgewählte Filter: {status}; {kind}; {order}.",
   "library_progress_index_reader_history_unavailable": "Die historische Bedeutung dieser Einheit ist nicht verfügbar. Gespeicherte Werte bleiben unverändert.",
-  "library_progress_index_reader_pagination": "Fortschrittsseiten"
+  "library_progress_index_reader_pagination": "Fortschrittsseiten",
+  "search_constraint_identity_kind_unavailable": "Name der Ergebnisart nicht verfügbar",
+  "search_constraint_identity_property_unavailable": "Eigenschaftsname nicht verfügbar",
+  "search_constraint_identity_value_unavailable": "Wertname nicht verfügbar",
+  "search_constraint_identity_unit_unavailable": "Einheitenname nicht verfügbar",
+  "search_constraint_identity_filter": "Filter {number}: {label}",
+  "search_constraint_identity_details": "Technische Filterdetails"
 }
