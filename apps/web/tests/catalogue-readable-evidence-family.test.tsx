@@ -425,7 +425,12 @@ test('Sources uses the item family while retaining rich values, all qualifiers, 
       m.sources_authored(),
       m.sources_media(),
     ]);
-    expect(host.querySelector('#source-field-2')?.getAttribute('lang')).toBe('ar');
+    const propertySection = headings[2]!.closest('section')!;
+    const propertyHeading = [...propertySection.querySelectorAll('h3')].find(
+      (node) => node.textContent === 'المؤلف ومعلومات الطبعة الأصلية',
+    )!;
+    expect(propertySection.getAttribute('aria-labelledby')).toBe(propertyHeading.id);
+    expect(propertyHeading.getAttribute('lang')).toBe('ar');
     const rich = headings[2]!.closest('[data-slot="source-statement"]')!;
     expect(rich.parentElement?.tagName).toBe('LI');
     expect(rich.parentElement?.parentElement?.tagName).toBe('UL');

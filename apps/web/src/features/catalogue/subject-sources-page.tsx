@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { ContextNavigation, contextHref } from '../pages/context-navigation';
 import { Button } from '@rezics/ui/shadcn/button';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
@@ -39,6 +40,7 @@ function CitationPart({
 
 /** The detailed public reader shares the subject frame, value renderer and original Sources presentation. */
 export function SubjectSourcesPage({ result, locale, onRetry, busy = false }: Props) {
+  const headingId = useId();
   const o = { locale: locale as never };
   if (result.kind !== 'ready')
     return (
@@ -128,76 +130,79 @@ export function SubjectSourcesPage({ result, locale, onRetry, busy = false }: Pr
         <ViewHeading label={m.subject_sources({}, o)} headingClassName="font-sans" />
         <p className="text-sm text-muted-foreground">{m.sources_intro({}, o)}</p>
       </div>
-      <section aria-labelledby="selected-facts-title" className="min-w-0 space-y-5">
-        <h2 id="selected-facts-title" className="text-xl font-semibold">
+      <section aria-labelledby={`${headingId}-selected-facts-title`} className="min-w-0 space-y-5">
+        <h2 id={`${headingId}-selected-facts-title`} className="text-xl font-semibold">
           {m.sources_selected({}, o)}
         </h2>
         {!page.fields.length && <p className="text-muted-foreground">{m.sources_empty({}, o)}</p>}
         {page.fields.map((field, index) => (
-          <section
-            key={field.property}
-            aria-labelledby={`source-field-${index}`}
-            className="min-w-0 space-y-3 border-t border-border/60 pt-4"
-          >
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <h3 id={`source-field-${index}`} lang={field.label.lang} className="font-semibold">
-                {field.label.text || unlabelled}
-              </h3>
-              {field.compareHref && (
-                <a className={`${linkClassName} text-sm text-primary`} href={field.compareHref}>
-                  {m.sources_compare({}, o)}
-                </a>
-              )}
-            </div>
-            <ul className="space-y-1">
-              {field.facts.map((fact, factIndex) => (
-                <li key={factIndex} className="min-w-0">
-                  <ContentItemFrame
-                    as="div"
-                    data-slot="source-statement"
-                    className="min-w-0 space-y-2 py-3 [overflow-wrap:anywhere] sm:py-4 [&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:items-center [&_a]:rounded-sm [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring"
-                  >
-                    <ContentItemHeading
-                      level={4}
-                      className="text-[17px] font-semibold leading-snug sm:text-lg md:text-xl"
+          <section key={field.property} aria-labelledby={`${headingId}-source-field-${index}`} className="min-w-0">
+            <ContentItemFrame as="div" data-slot="source-property" className="min-w-0 space-y-3 py-3 sm:py-4">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <ContentItemHeading
+                  level={3}
+                  id={`${headingId}-source-field-${index}`}
+                  lang={field.label.lang}
+                  className="min-w-0 font-semibold [overflow-wrap:anywhere]"
+                >
+                  {field.label.text || unlabelled}
+                </ContentItemHeading>
+                {field.compareHref && (
+                  <a className={`${linkClassName} text-sm text-primary`} href={field.compareHref}>
+                    {m.sources_compare({}, o)}
+                  </a>
+                )}
+              </div>
+              <ul className="space-y-1">
+                {field.facts.map((fact, factIndex) => (
+                  <li key={factIndex} className="min-w-0">
+                    <ContentItemFrame
+                      as="div"
+                      data-slot="source-statement"
+                      className="min-w-0 space-y-2 py-3 [overflow-wrap:anywhere] sm:py-4 [&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:items-center [&_a]:rounded-sm [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring"
                     >
-                      {fact.display === 'document' ? (
-                        m.sources_authored({}, o)
-                      ) : fact.display === 'media' ? (
-                        m.sources_media({}, o)
-                      ) : (
-                        <CandidateValue snak={fact.snak} related={page.related} locale={locale} link={ContextLink} />
-                      )}
-                    </ContentItemHeading>
-                    {!!fact.qualifiers.length && (
-                      <div data-content-item-slot="metadata" className="min-w-0 space-y-1 text-sm">
-                        {fact.qualifiers.map((part, i) => (
-                          <CitationPart key={i} part={part} page={page} locale={locale} link={ContextLink} />
-                        ))}
-                      </div>
-                    )}
-                    <div data-content-item-slot="preview" className="min-w-0 space-y-2 text-sm leading-relaxed">
-                      {fact.citations.length ? (
-                        <div className="space-y-2">
-                          <p className="text-sm text-muted-foreground">{m.sources_citations({}, o)}</p>
-                          <ol className="list-decimal space-y-2 ps-5">
-                            {fact.citations.map((citation, i) => (
-                              <li key={i}>
-                                {citation.map((part, j) => (
-                                  <CitationPart key={j} part={part} page={page} locale={locale} link={ContextLink} />
-                                ))}
-                              </li>
-                            ))}
-                          </ol>
+                      <ContentItemHeading
+                        level={4}
+                        className="text-[17px] font-semibold leading-snug sm:text-lg md:text-xl"
+                      >
+                        {fact.display === 'document' ? (
+                          m.sources_authored({}, o)
+                        ) : fact.display === 'media' ? (
+                          m.sources_media({}, o)
+                        ) : (
+                          <CandidateValue snak={fact.snak} related={page.related} locale={locale} link={ContextLink} />
+                        )}
+                      </ContentItemHeading>
+                      {!!fact.qualifiers.length && (
+                        <div data-content-item-slot="metadata" className="min-w-0 space-y-1 text-sm">
+                          {fact.qualifiers.map((part, i) => (
+                            <CitationPart key={i} part={part} page={page} locale={locale} link={ContextLink} />
+                          ))}
                         </div>
-                      ) : (
-                        <p className="text-sm text-muted-foreground">{m.sources_no_citations({}, o)}</p>
                       )}
-                    </div>
-                  </ContentItemFrame>
-                </li>
-              ))}
-            </ul>
+                      <div data-content-item-slot="preview" className="min-w-0 space-y-2 text-sm leading-relaxed">
+                        {fact.citations.length ? (
+                          <div className="space-y-2">
+                            <p className="text-sm text-muted-foreground">{m.sources_citations({}, o)}</p>
+                            <ol className="list-decimal space-y-2 ps-5">
+                              {fact.citations.map((citation, i) => (
+                                <li key={i}>
+                                  {citation.map((part, j) => (
+                                    <CitationPart key={j} part={part} page={page} locale={locale} link={ContextLink} />
+                                  ))}
+                                </li>
+                              ))}
+                            </ol>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">{m.sources_no_citations({}, o)}</p>
+                        )}
+                      </div>
+                    </ContentItemFrame>
+                  </li>
+                ))}
+              </ul>
+            </ContentItemFrame>
           </section>
         ))}
       </section>
