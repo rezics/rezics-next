@@ -276,8 +276,14 @@ export function startDiscoveryIndexing(options: {
     paused = false,
     timer: ReturnType<typeof setTimeout> | undefined;
   let running = Promise.resolve(),
+    pauseDrain = Promise.resolve(),
+    resumeAfter: Promise<void> | undefined,
     closing: Promise<void> | undefined,
     delay = options.intervalMs ?? 100;
+  const clearSchedule = () => {
+    if (timer !== undefined) clearTimeout(timer);
+    timer = undefined;
+  };
   const step = async () => {
     if (stopped || paused) return;
     const registry = await nativeDiscoveryRegistry(options.pool, options.routeKey, options.source);
@@ -328,7 +334,7 @@ export function startDiscoveryIndexing(options: {
     return next;
   };
   const schedule = (waitMs: number) => {
-    if (stopped || paused) return;
+    if (stopped || paused || timer !== undefined) return;
     timer = setTimeout(() => {
       timer = undefined;
       void refresh().then(
@@ -340,23 +346,43 @@ export function startDiscoveryIndexing(options: {
   schedule(0);
   return {
     refresh,
-    async pause() {
+    pause() {
       paused = true;
-      if (timer !== undefined) clearTimeout(timer);
-      await running;
-      await Promise.all([...relays.values()].map((relay) => relay.pause()));
+      resumeAfter = undefined;
+      clearSchedule();
+      const projection = Promise.all([...relays.values()].map((relay) => relay.pause()));
+      // Finish in-flight maintenance and relay drains, then apply the current
+      // pause intent to every retained or newly created relay.
+      pauseDrain = Promise.all([running, projection]).then(async () => {
+        if (stopped) return;
+        await Promise.all([...relays.values()].map((relay) => relay.pause()));
+      });
+      return pauseDrain;
     },
     resume() {
-      if (stopped || !paused) return;
-      paused = false;
-      for (const relay of relays.values()) relay.resume();
-      schedule(0);
+      if (!paused || stopped || resumeAfter) return;
+      const after = pauseDrain;
+      resumeAfter = after;
+      void after.then(
+        () => {
+          if (stopped || resumeAfter !== after) return;
+          resumeAfter = undefined;
+          paused = false;
+          for (const relay of relays.values()) relay.resume();
+          schedule(0);
+        },
+        (error) => {
+          if (resumeAfter === after) resumeAfter = undefined;
+          console.error('Discovery runner resume failed', error);
+        },
+      );
     },
     stop() {
       if (closing) return closing;
       stopped = true;
       paused = true;
-      if (timer !== undefined) clearTimeout(timer);
+      resumeAfter = undefined;
+      clearSchedule();
       return (closing = running.then(async () => {
         await Promise.all([...relays.values()].map((relay) => relay.stop()));
         relays.clear();

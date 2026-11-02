@@ -1283,6 +1283,10 @@ their first partition scan. Resume waits for the pause drain and resumes the act
 cancels a queued resume. Stop seals admission immediately and shares one drain promise across repeated calls,
 including when a native response fails. It waits for admitted discovery, replacement and projection; later refresh
 or resume cannot create work. These controls do not close the supplied pool, Source or engine.
+Discovery indexing uses that same latest-intent drain: in-flight maintenance and relay pauses finish, then the
+current pause, resume or terminal stop is applied to every retained or newly created relay. One serialized
+maintenance chain and one schedule stay owned; stop drains owned work once and a delayed pause or resume cannot
+schedule or revive it.
 
 The [native lifecycle controls](../../test/search/runner-discovery-lifecycle.test.ts) hold actually executed discovery,
 bulk and conflict-refresh responses before delivery, and hold controlled Source reads. Real PostgreSQL outbox and
