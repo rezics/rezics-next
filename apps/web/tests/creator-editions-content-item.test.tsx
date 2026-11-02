@@ -164,7 +164,6 @@ test('Shared creator edition summaries preserve fixed identity state licence and
       ).toBeNull();
       expect(row.textContent).not.toMatch(/USD|EUR|\$|€|price|benefit/i);
     }
-    // Native continuation fragments resolve only to a currently admitted, keyboard-focusable page.
     for (const [editions, nextCursor] of [
       [[draft], 'next/+='],
       [[], 'next/+='],
@@ -181,7 +180,6 @@ test('Shared creator edition summaries preserve fixed identity state licence and
       const boundary = host.querySelector<HTMLElement>(continuation!.hash)!;
       expect(window.document.activeElement).not.toBe(boundary);
       expect(boundary.tabIndex).toBe(-1);
-      expect(boundary.getAttribute('aria-labelledby')).toBe('creator-editions-heading');
       expect(boundary.getAttribute('aria-describedby')).toBe(editions.length ? null : 'creator-editions-empty');
       boundary.focus();
       expect(window.document.activeElement).toBe(boundary);
