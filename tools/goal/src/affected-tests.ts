@@ -1,20 +1,48 @@
 import { existsSync } from 'node:fs';
-import { basename, dirname, join, parse } from 'node:path';
+import { dirname, join, parse } from 'node:path';
 
 const SOURCE_EXTENSION = /\.(?:[cm]?[jt]sx?)$/i;
 const TEST_EXTENSION = /\.(?:test|spec)\.[cm]?[jt]sx?$/i;
+const WORKSPACE = /^(apps|services|packages)\/[^/]+\//;
+
+function siblingNames(stem: string): string[] {
+  return ['test', 'spec'].flatMap((kind) =>
+    ['', 'm', 'c'].flatMap((mod) =>
+      ['j', 't'].flatMap((lang) => [`${stem}.${kind}.${mod}${lang}s`, `${stem}.${kind}.${mod}${lang}sx`]),
+    ),
+  );
+}
+
+function siblingDirs(source: string): string[] {
+  const dirs = new Set([dirname(source), 'tests']);
+  const workspace = source.match(WORKSPACE)?.[0]?.slice(0, -1);
+  if (workspace) {
+    dirs.add(join(workspace, 'tests'));
+    dirs.add(join(workspace, 'test'));
+  }
+  return [...dirs];
+}
 
 /** Return the tracked sibling tests present in the landing candidate for changed source files. */
-export function siblingTestFiles(changedPaths: readonly string[], candidate: string): string[] {
+export function siblingTestFiles(
+  changedPaths: readonly string[],
+  candidate: string | ReadonlySet<string>,
+): string[] {
+  const present =
+    typeof candidate === 'string'
+      ? (path: string) => existsSync(join(candidate, path))
+      : (path: string) => candidate.has(path);
   const tests = new Set<string>();
   for (const source of changedPaths) {
     if (source.startsWith('services/kernel/') || !SOURCE_EXTENSION.test(source) || TEST_EXTENSION.test(source))
       continue;
-    const name = parse(source).name;
-    const sameDirectory = join(dirname(source), `${name}.test.ts`);
-    const workspaceTest = join('tests', `${basename(source, parse(source).ext)}.test.ts`);
-    if (existsSync(join(candidate, sameDirectory))) tests.add(sameDirectory);
-    else if (existsSync(join(candidate, workspaceTest))) tests.add(workspaceTest);
+    const names = siblingNames(parse(source).name);
+    for (const dir of siblingDirs(source)) {
+      for (const name of names) {
+        const path = dir === '.' ? name : join(dir, name);
+        if (present(path)) tests.add(path);
+      }
+    }
   }
   return [...tests].sort();
 }

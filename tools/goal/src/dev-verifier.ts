@@ -1,9 +1,9 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
-import { basename, dirname, join, parse } from 'node:path';
+import { basename, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import type { Settings, Task } from './types.ts';
-import { siblingTestCommand } from './affected-tests.ts';
+import { siblingTestCommand, siblingTestFiles } from './affected-tests.ts';
 import { runBoundedInstallProcess } from './install-process.ts';
 import type { WorkerStore } from './store.ts';
 import type { SqliteManagerInbox } from './inbox.ts';
@@ -92,21 +92,7 @@ export function placeInWorkspace(check: DevVerifierCheck, tracked: ReadonlySet<s
   };
 }
 function siblingTestFilesAtCommit(changedPaths: readonly string[], tracked: ReadonlySet<string>): string[] {
-  const tests = new Set<string>();
-  for (const source of changedPaths) {
-    if (
-      source.startsWith('services/kernel/') ||
-      !/\.(?:[cm]?[jt]sx?)$/i.test(source) ||
-      /\.(?:test|spec)\.[cm]?[jt]sx?$/i.test(source)
-    )
-      continue;
-    const extension = parse(source).ext;
-    const sameDirectory = join(dirname(source), `${parse(source).name}.test.ts`);
-    const workspaceTest = join('tests', `${basename(source, extension)}.test.ts`);
-    if (tracked.has(sameDirectory)) tests.add(sameDirectory);
-    else if (tracked.has(workspaceTest)) tests.add(workspaceTest);
-  }
-  return [...tests].sort();
+  return siblingTestFiles(changedPaths, tracked);
 }
 function commits(cwd: string, base: string, target: string): string[] {
   return git(cwd, 'rev-list', '--reverse', `${base}..${target}`).split('\n').filter(Boolean);
