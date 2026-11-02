@@ -673,7 +673,10 @@ function RecipeFieldLive({
                       ? [
                           {
                             parts: [
-                              { property: { id: 'schema:url' }, value: { type: 'value' as const, content: url.trim() } },
+                              {
+                                property: { id: 'schema:url' },
+                                value: { type: 'value' as const, content: url.trim() },
+                              },
                             ],
                           },
                         ]

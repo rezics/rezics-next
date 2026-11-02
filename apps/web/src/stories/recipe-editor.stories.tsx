@@ -466,10 +466,12 @@ function RecipeFamilyStory({ onFixture, rtl = false }: { onFixture?: ObserveReci
       load: async () => {
         const item = recipeExample();
         item.statements['schema:recipeIngredient']![0]!.value = {
-          type: 'value', content: { language: 'en', text: familyValue },
+          type: 'value',
+          content: { language: 'en', text: familyValue },
         };
         item.statements['schema:recipeIngredient']![0]!.references[0]!.parts[0]!.value = {
-          type: 'value', content: familyCitation,
+          type: 'value',
+          content: familyCitation,
         };
         await correction.transport.create({ item, key: crypto.randomUUID() });
         return correction.corrections.load();
@@ -486,8 +488,14 @@ function RecipeFamilyStory({ onFixture, rtl = false }: { onFixture?: ObserveReci
             <RecipeEditor locale={locale} session="signed-in" transport={creation.transport} search={async () => []} />
           </div>
           <div data-recipe-family="correct">
-            <RecipeEditor id={recipeId} locale={locale} session="signed-in" transport={transport}
-              review={(property) => correction.review(property)} search={async () => []} />
+            <RecipeEditor
+              id={recipeId}
+              locale={locale}
+              session="signed-in"
+              transport={transport}
+              review={(property) => correction.review(property)}
+              search={async () => []}
+            />
           </div>
         </div>
       </AppShell>
@@ -496,7 +504,12 @@ function RecipeFamilyStory({ onFixture, rtl = false }: { onFixture?: ObserveReci
 }
 type ObserveRecipeFamily = (fixture: ReturnType<typeof recipeFixture>) => void;
 const familyDescription = {
-  docs: { description: { story: 'Authored UNRUN. Two independent actual editors with long supplied localized fields, exact values and citations. Browser, native and visual acceptance remains deferred.' } },
+  docs: {
+    description: {
+      story:
+        'Authored UNRUN. Two independent actual editors with long supplied localized fields, exact values and citations. Browser, native and visual acceptance remains deferred.',
+    },
+  },
 };
 const exerciseRecipeFamily: NonNullable<Story['play']> = async ({ canvasElement, args }) => {
   const createRegion = canvasElement.querySelector<HTMLElement>('[data-recipe-family="create"]')!;
@@ -536,7 +549,10 @@ const exerciseRecipeFamily: NonNullable<Story['play']> = async ({ canvasElement,
     if (!node.matches('input, select, textarea'))
       await expect(node.scrollWidth).toBeLessThanOrEqual(node.clientWidth + 1);
   };
-  for (const [region, select] of [[createRegion, ownAdd], [correctRegion, otherAdd]] as const) {
+  for (const [region, select] of [
+    [createRegion, ownAdd],
+    [correctRegion, otherAdd],
+  ] as const) {
     const label = region.querySelector<HTMLLabelElement>(`label[for="${select.id}"]`)!;
     await userEvent.click(label);
     await expect(select).toHaveFocus();
@@ -591,7 +607,10 @@ const exerciseRecipeFamily: NonNullable<Story['play']> = async ({ canvasElement,
     }
   }
   // Both method panels retain their own explicit native label associations and rich-text role.
-  for (const [region, select] of [[createRegion, ownAdd], [correctRegion, otherAdd]] as const) {
+  for (const [region, select] of [
+    [createRegion, ownAdd],
+    [correctRegion, otherAdd],
+  ] as const) {
     await userEvent.selectOptions(select, 'schema:recipeInstructions');
     await userEvent.click(within(region).getByRole('button', { name: m.correction_add() }));
     const method = [...region.querySelectorAll('section')].at(-1)!;

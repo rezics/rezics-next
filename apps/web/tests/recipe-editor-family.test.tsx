@@ -11,16 +11,32 @@ test('Recipe creation and current correction share complete frames with independ
   );
   const window = new Window({ url: 'https://site.test/en/catalogue/recipe', width: 390, height: 844 });
   const globals = {
-    window, document: window.document, navigator: window.navigator,
-    HTMLElement: window.HTMLElement, HTMLInputElement: window.HTMLInputElement,
-    HTMLSelectElement: window.HTMLSelectElement, HTMLTextAreaElement: window.HTMLTextAreaElement,
-    Element: window.Element, Node: window.Node, Text: window.Text, NodeFilter: window.NodeFilter,
-    Document: window.Document, ShadowRoot: window.ShadowRoot, HTMLButtonElement: window.HTMLButtonElement,
-    Event: window.Event, KeyboardEvent: window.KeyboardEvent, FocusEvent: window.FocusEvent,
-    MouseEvent: window.MouseEvent, PointerEvent: window.PointerEvent, CSS: window.CSS,
-    DocumentFragment: window.DocumentFragment, DOMParser: window.DOMParser,
-    MutationObserver: window.MutationObserver, ResizeObserver: window.ResizeObserver,
-    Range: window.Range, DOMRect: window.DOMRect,
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    HTMLInputElement: window.HTMLInputElement,
+    HTMLSelectElement: window.HTMLSelectElement,
+    HTMLTextAreaElement: window.HTMLTextAreaElement,
+    Element: window.Element,
+    Node: window.Node,
+    Text: window.Text,
+    NodeFilter: window.NodeFilter,
+    Document: window.Document,
+    ShadowRoot: window.ShadowRoot,
+    HTMLButtonElement: window.HTMLButtonElement,
+    Event: window.Event,
+    KeyboardEvent: window.KeyboardEvent,
+    FocusEvent: window.FocusEvent,
+    MouseEvent: window.MouseEvent,
+    PointerEvent: window.PointerEvent,
+    CSS: window.CSS,
+    DocumentFragment: window.DocumentFragment,
+    DOMParser: window.DOMParser,
+    MutationObserver: window.MutationObserver,
+    ResizeObserver: window.ResizeObserver,
+    Range: window.Range,
+    DOMRect: window.DOMRect,
     getComputedStyle: window.getComputedStyle.bind(window),
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
     cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
@@ -49,20 +65,25 @@ test('Recipe creation and current correction share complete frames with independ
   window.document.body.append(outside);
   const root = createRoot(host);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
-  const show = (node: ReactNode) => act(async () => root.render(<QueryClientProvider client={client}>{node}</QueryClientProvider>));
+  const show = (node: ReactNode) =>
+    act(async () => root.render(<QueryClientProvider client={client}>{node}</QueryClientProvider>));
   const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
   const until = async (predicate: () => boolean) => {
     for (let attempt = 0; attempt < 100 && !predicate(); attempt++) await settle();
     expect(predicate()).toBe(true);
   };
-  const click = (scope: HTMLElement, name: string) => act(async () => user.click(within(scope).getByRole('button', { name })));
+  const click = (scope: HTMLElement, name: string) =>
+    act(async () => user.click(within(scope).getByRole('button', { name })));
   const input = (scope: HTMLElement, name: string) => within(scope).getByRole('textbox', { name }) as HTMLInputElement;
-  const replace = (control: HTMLElement, value: string) => act(async () => {
-    await user.clear(control);
-    if (value) await user.type(control, value);
-  });
+  const replace = (control: HTMLElement, value: string) =>
+    act(async () => {
+      await user.clear(control);
+      if (value) await user.type(control, value);
+    });
   const add = async (scope: HTMLElement, property: string) => {
-    await act(async () => user.selectOptions(within(scope).getByRole('combobox', { name: m.character_add_fact() }), property));
+    await act(async () =>
+      user.selectOptions(within(scope).getByRole('combobox', { name: m.character_add_fact() }), property),
+    );
     await click(scope, m.correction_add());
     return [...scope.querySelectorAll<HTMLElement>('section')].at(-1)!;
   };
@@ -115,7 +136,9 @@ test('Recipe creation and current correction share complete frames with independ
   };
   const deferred = <T,>() => {
     let resolve!: (value: T) => void;
-    const promise = new Promise<T>((done) => { resolve = done; });
+    const promise = new Promise<T>((done) => {
+      resolve = done;
+    });
     return { promise, resolve };
   };
   const search = async () => [];
@@ -125,18 +148,32 @@ test('Recipe creation and current correction share complete frames with independ
     const creation = recipeFixture('uncertain');
     const correction = recipeFixture();
     const item = recipeExample();
-    item.statements['schema:recipeIngredient']![0]!.value = { type: 'value', content: { language: 'en', text: longValue } };
-    item.statements['schema:recipeIngredient']![0]!.references[0]!.parts[0]!.value = { type: 'value', content: longCitation };
+    item.statements['schema:recipeIngredient']![0]!.value = {
+      type: 'value',
+      content: { language: 'en', text: longValue },
+    };
+    item.statements['schema:recipeIngredient']![0]!.references[0]!.parts[0]!.value = {
+      type: 'value',
+      content: longCitation,
+    };
     expect((await correction.transport.create({ item, key: crypto.randomUUID() })).ok).toBe(true);
     const ingredient = 'schema:recipeIngredient';
     const longLabel = `ingredient — ${'Full supplied localized field 材料 '.repeat(5)}`;
     correction.release.properties[ingredient]!.labels.en = longLabel;
     creation.release.properties[ingredient]!.labels.en = longLabel;
-    const pair = () => <>
-      <RecipeEditor locale="en" session="signed-in" transport={creation.transport} search={search} />
-      <RecipeEditor id={recipeId} locale="en" session="signed-in" transport={correction.corrections}
-        review={(property) => correction.review(property)} search={search} />
-    </>;
+    const pair = () => (
+      <>
+        <RecipeEditor locale="en" session="signed-in" transport={creation.transport} search={search} />
+        <RecipeEditor
+          id={recipeId}
+          locale="en"
+          session="signed-in"
+          transport={correction.corrections}
+          review={(property) => correction.review(property)}
+          search={search}
+        />
+      </>
+    );
     await show(pair());
     await until(() => host.querySelectorAll('select').length === 2);
     const [a, b] = articles() as [HTMLElement, HTMLElement];
@@ -170,7 +207,9 @@ test('Recipe creation and current correction share complete frames with independ
     const current = section(b, longLabel);
     frame(current);
     expect(current.textContent).toContain(longValue);
-    expect(within(b).getByRole('link', { name: m.candidate_view_public() }).getAttribute('href')).toBe(`/en/subjects/${recipeId}/lentil-soup`);
+    expect(within(b).getByRole('link', { name: m.candidate_view_public() }).getAttribute('href')).toBe(
+      `/en/subjects/${recipeId}/lentil-soup`,
+    );
     expect(within(a).getByRole('link', { name: m.catalogue_create_search() }).getAttribute('href')).toBe('/en/search');
     const original = structuredClone(correction.publicRead.subject.statements[ingredient]![0]!);
     await click(current, m.recipe_correct());
@@ -187,7 +226,10 @@ test('Recipe creation and current correction share complete frames with independ
     await replace(input(ownIngredient, m.relation_citation()), longCitation);
     await replace(input(draft, m.relation_citation()), longCitation);
     const citation = input(draft, m.relation_citation());
-    await act(async () => { citation.focus(); await user.tab(); });
+    await act(async () => {
+      citation.focus();
+      await user.tab();
+    });
     expect(window.document.activeElement).toBe(within(draft).getByRole('button', { name: m.recipe_remove_field() }));
     await act(async () => user.tab());
     expect(window.document.activeElement).toBe(within(draft).getByRole('button', { name: m.correction_submit() }));
@@ -196,7 +238,9 @@ test('Recipe creation and current correction share complete frames with independ
     await act(async () => user.keyboard('{Enter}'));
     await until(() => draft.textContent!.includes(m.correction_stale()));
     const stale = posts(correction, '/candidates')[0]!;
-    expect((within(draft).getByRole('button', { name: m.correction_retry() }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(draft).getByRole('button', { name: m.correction_retry() }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
     expect(input(draft, m.correction_value()).closest('fieldset')!.disabled).toBe(true);
     await click(draft, m.catalogue_create_review_new());
     expect(input(draft, m.correction_value()).value).toBe(longValue);
@@ -205,7 +249,10 @@ test('Recipe creation and current correction share complete frames with independ
     await click(draft, m.correction_submit());
     await until(() => draft.textContent!.includes(m.correction_unavailable()));
     const retry = within(draft).getByRole('button', { name: m.correction_retry() });
-    await act(async () => { retry.focus(); await user.keyboard('{Enter}'); });
+    await act(async () => {
+      retry.focus();
+      await user.keyboard('{Enter}');
+    });
     await until(() => draft.textContent!.includes(m.correction_proposed()));
     const writes = posts(correction, '/candidates');
     expect(writes).toHaveLength(3);
@@ -213,7 +260,9 @@ test('Recipe creation and current correction share complete frames with independ
     expect(writes[2]).toEqual(writes[1]);
     expect(writes[1]!.authorization).toBe('Bearer fixture');
     const expected = statementInput(original);
-    expected.references.push({ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: longCitation } }] });
+    expected.references.push({
+      parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: longCitation } }],
+    });
     expect(writes[1]!.body).toEqual({ statement: expected });
     expect(correction.publicRead.subject.statements[ingredient]![0]).toEqual(original);
     expect(draft.querySelector('[data-content-item-slot="state"]')!.textContent).toBe(m.correction_proposed());
@@ -221,7 +270,9 @@ test('Recipe creation and current correction share complete frames with independ
     await until(() => !!within(draft).queryByRole('button', { name: m.candidate_accept() }));
     const exact = [...correction.candidates.keys()][0]!;
     await click(draft, m.candidate_accept());
-    const confirmation = within(draft).getByRole('region', { name: m.candidate_confirm_title({ action: m.candidate_accept() }) });
+    const confirmation = within(draft).getByRole('region', {
+      name: m.candidate_confirm_title({ action: m.candidate_accept() }),
+    });
     await click(confirmation, m.candidate_accept());
     await until(() => draft.textContent!.includes(m.candidate_accepted()));
     expect(posts(correction, ':accept')).toHaveLength(1);
@@ -238,7 +289,9 @@ test('Recipe creation and current correction share complete frames with independ
     expect(input(methodA, m.catalogue_create_language()).id).not.toBe(input(methodB, m.catalogue_create_language()).id);
     expect(input(methodA, m.subject_source_licence()).id).not.toBe(input(methodB, m.subject_source_licence()).id);
     expect(methodA.querySelector('[contenteditable]')!.textContent).not.toContain('A separate original replacement.');
-    expect((within(methodB).getByRole('button', { name: m.correction_submit() }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(methodB).getByRole('button', { name: m.correction_submit() }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
     await replace(input(a, m.catalogue_create_label()), 'My lentil soup');
     await click(a, m.recipe_title());
     await until(() => a.textContent!.includes(m.catalogue_create_invalid()));
@@ -249,10 +302,13 @@ test('Recipe creation and current correction share complete frames with independ
     await until(() => !!within(a).queryByRole('button', { name: m.correction_retry() }));
     const createWrite = structuredClone(posts(creation, '/subjects')[0]!);
     expect(createWrite.authorization).toBe('Bearer fixture');
-    expect(createWrite.body).toMatchObject({ labels: { en: 'My lentil soup' }, statements: {
-      [ingredient]: [{ value: { type: 'value', content: { language: 'en', text: '400 ml water' } } }],
-      'schema:recipeInstructions': [{ value: { type: 'value', content: { language: 'en', licence: 'CC-BY-4.0' } } }],
-    } });
+    expect(createWrite.body).toMatchObject({
+      labels: { en: 'My lentil soup' },
+      statements: {
+        [ingredient]: [{ value: { type: 'value', content: { language: 'en', text: '400 ml water' } } }],
+        'schema:recipeInstructions': [{ value: { type: 'value', content: { language: 'en', licence: 'CC-BY-4.0' } } }],
+      },
+    });
     creation.setScenario('reader-unavailable');
     await click(a, m.correction_retry());
     await until(() => a.textContent!.includes(m.catalogue_create_reader_unavailable()));
@@ -262,12 +318,18 @@ test('Recipe creation and current correction share complete frames with independ
     creation.setScenario('ready');
     await click(a, m.correction_retry());
     await until(() => !!within(a).queryByRole('link', { name: m.candidate_view_public() }));
-    expect(creation.calls.slice(createdCount)).toEqual([expect.objectContaining({ method: 'GET', path: `/v1/subjects/${recipeId}`, authorization: null })]);
+    expect(creation.calls.slice(createdCount)).toEqual([
+      expect.objectContaining({ method: 'GET', path: `/v1/subjects/${recipeId}`, authorization: null }),
+    ]);
     expect(within(a).getByRole('link', { name: m.candidate_view_public() }).getAttribute('href')).toBe(
       subjectHref({ id: recipeId, label: 'My lentil soup' }, 'en').href,
     );
     expect(creation.documents.size).toBe(1);
-    expect([...creation.documents.values()][0]).toMatchObject({ origin: 'account', language: 'en', licence: 'CC-BY-4.0' });
+    expect([...creation.documents.values()][0]).toMatchObject({
+      origin: 'account',
+      language: 'en',
+      licence: 'CC-BY-4.0',
+    });
     await click(methodB, m.recipe_remove_field());
     expect(host.contains(methodB)).toBe(false);
     expect(draft.textContent).toContain(m.correction_proposed());
@@ -279,7 +341,8 @@ test('Recipe creation and current correction share complete frames with independ
       const supplied = recipeExample();
       const entry = supplied.statements[ingredient]![0]!;
       supplied.statements[ingredient] = Array.from({ length: count }, (_, index) => ({
-        ...structuredClone(entry), value: { type: 'value', content: { language: 'en', text: `${index}: ${longValue}` } },
+        ...structuredClone(entry),
+        value: { type: 'value', content: { language: 'en', text: `${index}: ${longValue}` } },
       }));
       expect((await fixture.transport.create({ item: supplied, key: crypto.randomUUID() })).ok).toBe(true);
       const before = fixture.calls.length;
@@ -287,14 +350,26 @@ test('Recipe creation and current correction share complete frames with independ
       if (!read.ok || !read.public) throw new Error('Expected supplied correction reading');
       expect(fixture.calls.length - before).toBe(3); // Exact subject + active + release.
       let traversals = 0;
-      const noPopulationScan = <T extends object,>(value: T) => new Proxy(value, {
-        ownKeys(target) { traversals++; return Reflect.ownKeys(target); },
-      });
+      const noPopulationScan = <T extends object>(value: T) =>
+        new Proxy(value, {
+          ownKeys(target) {
+            traversals++;
+            return Reflect.ownKeys(target);
+          },
+        });
       read.release.properties = noPopulationScan(read.release.properties);
       read.public.related = noPopulationScan(read.public.related);
       const suppliedCalls = structuredClone(fixture.calls);
-      const node = <RecipeEditor key={`growth-${count}`} id={recipeId} locale="en" session="signed-in"
-        transport={{ ...fixture.corrections, load: async () => read }} search={search} />;
+      const node = (
+        <RecipeEditor
+          key={`growth-${count}`}
+          id={recipeId}
+          locale="en"
+          session="signed-in"
+          transport={{ ...fixture.corrections, load: async () => read }}
+          search={search}
+        />
+      );
       await show(node);
       await until(() => host.querySelectorAll('h2').length === read.fields.length);
       const region = section(host, fixture.release.properties[ingredient]!.labels.en!);
@@ -309,8 +384,22 @@ test('Recipe creation and current correction share complete frames with independ
     // Truthful read states retain only their real recovery, with no automatic retry.
     for (const scenario of ['empty', 'concealed', 'unavailable'] as const) {
       const fixture = recipeFixture(scenario);
-      await show(<RecipeEditor key={scenario} id={recipeId} locale="en" session="signed-in" transport={fixture.corrections} search={search} />);
-      const message = scenario === 'empty' ? m.recipe_empty() : scenario === 'concealed' ? m.catalogue_create_concealed() : m.correction_unavailable();
+      await show(
+        <RecipeEditor
+          key={scenario}
+          id={recipeId}
+          locale="en"
+          session="signed-in"
+          transport={fixture.corrections}
+          search={search}
+        />,
+      );
+      const message =
+        scenario === 'empty'
+          ? m.recipe_empty()
+          : scenario === 'concealed'
+            ? m.catalogue_create_concealed()
+            : m.correction_unavailable();
       await until(() => host.textContent!.includes(message));
       expect(host.querySelector('select')).toBeNull();
       const calls = structuredClone(fixture.calls);
@@ -322,7 +411,16 @@ test('Recipe creation and current correction share complete frames with independ
     await denied.transport.create({ item: recipeExample(), key: crypto.randomUUID() });
     denied.setScenario('denied');
     const deniedOriginal = structuredClone(denied.publicRead.subject.statements);
-    await show(<RecipeEditor key="denied" id={recipeId} locale="en" session="signed-in" transport={denied.corrections} search={search} />);
+    await show(
+      <RecipeEditor
+        key="denied"
+        id={recipeId}
+        locale="en"
+        session="signed-in"
+        transport={denied.corrections}
+        search={search}
+      />,
+    );
     await until(() => !!host.querySelector('select'));
     const deniedLabel = denied.release.properties['schema:cookTime']!.labels.en!;
     await click(section(host, deniedLabel), m.recipe_correct());
@@ -336,7 +434,15 @@ test('Recipe creation and current correction share complete frames with independ
     await settle();
     expect(denied.calls).toEqual(deniedCalls);
     const signedOut = recipeFixture();
-    await show(<RecipeEditor key="signed-out" locale="en" session="signed-out" transport={signedOut.transport} search={search} />);
+    await show(
+      <RecipeEditor
+        key="signed-out"
+        locale="en"
+        session="signed-out"
+        transport={signedOut.transport}
+        search={search}
+      />,
+    );
     await until(() => !!host.querySelector('select'));
     expect(host.textContent).toContain(m.catalogue_create_signed_out());
     expect((within(host).getByRole('button', { name: m.recipe_title() }) as HTMLButtonElement).disabled).toBe(true);
@@ -350,19 +456,27 @@ test('Recipe creation and current correction share complete frames with independ
       const gate = deferred<'success' | 'failure' | 'throw'>();
       const entered = deferred<void>();
       let hold = true;
-      const transport = { ...fixture.corrections, propose: async (command: Parameters<typeof fixture.transport.propose>[0]) => {
-        const result = await fixture.transport.propose(command);
-        if (!hold) return result;
-        hold = false;
-        entered.resolve();
-        const kind = await gate.promise;
-        if (kind === 'throw') throw new Error('Retired delivery');
-        return kind === 'failure' ? { ok: false as const, reason: 'unavailable' as const } : result;
-      } };
-      const boundary = (reader: string) => <CandidateReaderBoundary key={delivery} address="recipe-family"
-        observed={{ state: 'signed-in', subject: reader, csrfToken: 'AAAAAAAAAAAAAAAAAAAAAA' }}>
-        <RecipeEditor id={recipeId} locale="en" session="signed-in" transport={transport} search={search} />
-      </CandidateReaderBoundary>;
+      const transport = {
+        ...fixture.corrections,
+        propose: async (command: Parameters<typeof fixture.transport.propose>[0]) => {
+          const result = await fixture.transport.propose(command);
+          if (!hold) return result;
+          hold = false;
+          entered.resolve();
+          const kind = await gate.promise;
+          if (kind === 'throw') throw new Error('Retired delivery');
+          return kind === 'failure' ? { ok: false as const, reason: 'unavailable' as const } : result;
+        },
+      };
+      const boundary = (reader: string) => (
+        <CandidateReaderBoundary
+          key={delivery}
+          address="recipe-family"
+          observed={{ state: 'signed-in', subject: reader, csrfToken: 'AAAAAAAAAAAAAAAAAAAAAA' }}
+        >
+          <RecipeEditor id={recipeId} locale="en" session="signed-in" transport={transport} search={search} />
+        </CandidateReaderBoundary>
+      );
       await show(boundary('0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10'));
       await until(() => !!host.querySelector('select'));
       const reading = section(host, fixture.release.properties['schema:cookTime']!.labels.en!);
@@ -376,7 +490,10 @@ test('Recipe creation and current correction share complete frames with independ
       await until(() => !!host.querySelector('select'));
       const count = fixture.calls.length;
       outside.focus();
-      await act(async () => { oldSubmit(); gate.resolve(delivery); });
+      await act(async () => {
+        oldSubmit();
+        gate.resolve(delivery);
+      });
       await settle();
       expect(fixture.calls).toHaveLength(count);
       expect(window.document.activeElement).toBe(outside);
@@ -397,28 +514,38 @@ test('Recipe creation and current correction share complete frames with independ
       const entered = deferred<void>();
       const gate = deferred<'success' | 'failure' | 'throw'>();
       let hold = true;
-      const transport = { ...fixture.corrections, load: async () => {
-        const result = await fixture.corrections.load();
-        if (!hold) return result;
-        hold = false;
-        entered.resolve();
-        const kind = await gate.promise;
-        if (kind === 'throw') throw new Error('Retired recipe read');
-        return kind === 'failure' ? { ok: false as const, reason: 'unavailable' as const } : result;
-      } };
-      const boundary = (reader: string) => <CandidateReaderBoundary key={`read-${delivery}`} address="recipe-read"
-        observed={{ state: 'signed-in', subject: reader, csrfToken: 'AAAAAAAAAAAAAAAAAAAAAA' }}>
-        <RecipeEditor id={recipeId} locale="en" session="signed-in" transport={transport} search={search} />
-      </CandidateReaderBoundary>;
+      const transport = {
+        ...fixture.corrections,
+        load: async () => {
+          const result = await fixture.corrections.load();
+          if (!hold) return result;
+          hold = false;
+          entered.resolve();
+          const kind = await gate.promise;
+          if (kind === 'throw') throw new Error('Retired recipe read');
+          return kind === 'failure' ? { ok: false as const, reason: 'unavailable' as const } : result;
+        },
+      };
+      const boundary = (reader: string) => (
+        <CandidateReaderBoundary
+          key={`read-${delivery}`}
+          address="recipe-read"
+          observed={{ state: 'signed-in', subject: reader, csrfToken: 'AAAAAAAAAAAAAAAAAAAAAA' }}
+        >
+          <RecipeEditor id={recipeId} locale="en" session="signed-in" transport={transport} search={search} />
+        </CandidateReaderBoundary>
+      );
       await show(boundary('0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10'));
       await entered.promise;
-      const retired = client.getQueryCache().getAll().find((query) =>
-        query.queryKey[0] === 'recipe-editor' && query.state.fetchStatus === 'fetching',
-      )!;
+      const retired = client
+        .getQueryCache()
+        .getAll()
+        .find((query) => query.queryKey[0] === 'recipe-editor' && query.state.fetchStatus === 'fetching')!;
       expect(retired).toBeDefined();
       const freshValue = `Fresh reader's supplied ingredient ${delivery}`;
       fixture.publicRead.subject.statements[ingredient]![0]!.value = {
-        type: 'value', content: { language: 'en', text: freshValue },
+        type: 'value',
+        content: { language: 'en', text: freshValue },
       };
       await show(boundary('0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e11'));
       await until(() => host.textContent!.includes(freshValue));
