@@ -1,6 +1,7 @@
 import { useContext, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { ArrowLeft, ArrowUpRight, Check, FileText, ShieldCheck } from 'lucide-react';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
+import { Badge } from '@rezics/ui/shadcn/badge';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { Withheld } from '@rezics/ui/withheld';
@@ -261,6 +262,7 @@ function DecisionVisit({
   const displayed = current ?? page;
   const { decision } = displayed;
   const target = displayed.target?.id === decision.targetId ? displayed.target : null;
+  const targetKind = decision.targetKind === 'post' ? m.reporter_status_post() : m.reporter_status_thread();
   const locale = getLocale();
   // This hint controls presentation only; an unavailable target cannot establish authorship.
   const allowed = target
@@ -444,6 +446,7 @@ function DecisionVisit({
             {m.decision_current_target()}
           </ContentItemHeading>
           <ContentItemFrame as="div" className="p-5 sm:p-6">
+            <Badge variant="outline">{targetKind}</Badge>
             {target ? (
               <>
                 <p className="text-sm font-medium">{m.decision_target_available()}</p>
@@ -452,7 +455,7 @@ function DecisionVisit({
                   className="mt-3 inline-flex min-h-11 max-w-full items-center gap-2 text-sm font-medium underline underline-offset-4"
                 >
                   <span className="line-clamp-3 wrap-anywhere">
-                    {target.text || m.decision_target_fallback({ kind: decision.targetKind })}
+                    {target.text || m.decision_target_fallback({ kind: targetKind })}
                   </span>
                   <ArrowUpRight className="size-4 shrink-0" aria-hidden="true" />
                 </a>
@@ -564,9 +567,29 @@ function DecisionVisit({
           ) : null}
         </ContentItemFrame>
       </section>
-      <p className="wrap-anywhere border-t border-border pt-4 text-xs leading-6 text-muted-foreground">
-        {m.decision_reference()} <span className="font-mono">{decision.id}</span>
-      </p>
+      <details className="border-t border-border pt-3">
+        <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">
+          {m.reporter_status_reference()}
+        </summary>
+        <ContentItemFrame as="div" className="space-y-4 p-4">
+          <dl className="space-y-4 text-sm">
+            <div className="space-y-1">
+              <dt className="text-muted-foreground">{m.moderation_case_details_decision_id()}</dt>
+              <dd className="select-text break-all font-mono leading-6">{decision.id}</dd>
+            </div>
+            <div className="space-y-1">
+              <dt className="text-muted-foreground">{m.moderation_case_details_target_id()}</dt>
+              <dd className="select-text break-all font-mono leading-6">{decision.targetId}</dd>
+            </div>
+            {appeal ? (
+              <div className="space-y-1">
+                <dt className="text-muted-foreground">{m.moderation_case_details_appeal_id()}</dt>
+                <dd className="select-text break-all font-mono leading-6">{appeal.id}</dd>
+              </div>
+            ) : null}
+          </dl>
+        </ContentItemFrame>
+      </details>
     </article>
   );
 }

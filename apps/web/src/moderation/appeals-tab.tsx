@@ -1,6 +1,7 @@
 import { useContext, useId, useRef, useState, useSyncExternalStore } from 'react';
 import { QueryClientContext } from '@tanstack/react-query';
 import { createPrivateReaderLifetime, type PrivateReaderNavigation } from './private-reader-lifetime';
+import { Badge } from '@rezics/ui/shadcn/badge';
 import { Button } from '@rezics/ui/shadcn/button';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { useSession } from '../session/query';
@@ -265,11 +266,17 @@ function AppealCard({
 }) {
   const id = useId();
   const identity = appealTarget(appeal);
-  const targetKind =
+  const appealKind =
     identity?.kind === 'post'
       ? m.moderation_queue_post()
       : identity?.kind === 'thread'
         ? m.moderation_queue_thread()
+        : m.moderation_target_unavailable();
+  const targetKind =
+    identity?.kind === 'post'
+      ? m.reporter_status_post()
+      : identity?.kind === 'thread'
+        ? m.reporter_status_thread()
         : m.moderation_target_unavailable();
 
   return (
@@ -277,7 +284,7 @@ function AppealCard({
       <ContentItemFrame as="article" className="space-y-5 p-4 sm:p-6" aria-labelledby={`${id}-title`}>
         <header className="space-y-2">
           <ContentItemHeading id={`${id}-title`} level={2} className="text-lg font-semibold">
-            {m.moderation_appeals_tab()} · {targetKind}
+            {m.moderation_appeals_tab()} · {appealKind}
           </ContentItemHeading>
           <p className="text-sm text-muted-foreground">
             {m.moderation_queue_submitted()} <time dateTime={appeal.createdAt}>{date(appeal.createdAt)}</time>
@@ -293,13 +300,10 @@ function AppealCard({
           <ContentItemHeading id={`${id}-target`} level={3} className="text-sm font-semibold">
             {m.moderation_current_target_label()}
           </ContentItemHeading>
-          {identity ? (
-            <p className="text-xs text-muted-foreground">
-              <span>{m.moderation_appeal_target_label()}:</span> {targetKind}{' '}
-              <code className="break-all">{identity.id}</code>
-            </p>
-          ) : null}
-          <blockquote className="min-w-0 border-l-2 pl-3">{moderationTargetContent(target)}</blockquote>
+          <Badge variant="outline">{targetKind}</Badge>
+          <blockquote className="min-w-0 border-l-2 pl-3 wrap-anywhere">
+            {moderationTargetContent(target)}
+          </blockquote>
         </section>
         <section aria-labelledby={`${id}-statement`} className="space-y-2">
           <ContentItemHeading id={`${id}-statement`} level={3} className="text-sm font-semibold">
@@ -320,6 +324,29 @@ function AppealCard({
             resolution={appeal.decision.appeal ?? null}
             {...(isCurrent ? { isCurrent } : {})}
           />
+          <details className="border-t border-border pt-3">
+            <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">
+              {m.reporter_status_reference()}
+            </summary>
+            <ContentItemFrame as="div" className="space-y-4 p-4">
+              <dl className="space-y-4 text-sm">
+                <div className="space-y-1">
+                  <dt className="text-muted-foreground">{m.moderation_case_details_appeal_id()}</dt>
+                  <dd className="select-text break-all font-mono leading-6">{appeal.id}</dd>
+                </div>
+                <div className="space-y-1">
+                  <dt className="text-muted-foreground">{m.moderation_case_details_decision_id()}</dt>
+                  <dd className="select-text break-all font-mono leading-6">{appeal.decisionId}</dd>
+                </div>
+                {identity ? (
+                  <div className="space-y-1">
+                    <dt className="text-muted-foreground">{m.moderation_case_details_target_id()}</dt>
+                    <dd className="select-text break-all font-mono leading-6">{identity.id}</dd>
+                  </div>
+                ) : null}
+              </dl>
+            </ContentItemFrame>
+          </details>
         </div>
       </ContentItemFrame>
     </li>

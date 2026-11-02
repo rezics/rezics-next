@@ -4,11 +4,27 @@ import { useState } from 'react';
 import { AppShell } from '../shell/shell';
 import { ReporterStatusPage } from '../moderation/reporter-status-view';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, within } from 'storybook/test';
+import { expect, userEvent, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
 import { localizeHref } from '../paraglide/runtime.js';
 import { PageStory } from './page';
-import { reporterStatusViewports } from './reporter-status/fixture';
+import { reporterStatusViewports, submittedReport } from './reporter-status/fixture';
+
+// Fixture-derived long references exercise the page presenter without claiming a native report receipt.
+const longId = (value: string) => `${value}-${value}-${value}`;
+const longEvidence = Array.from(
+  { length: 8 },
+  (_, index) =>
+    `Evidence paragraph ${index + 1}: ${submittedReport.evidence} The full explanation remains available to the reporter.`,
+).join('\n\n');
+const longReferenceReport = {
+  ...submittedReport,
+  id: longId(submittedReport.id),
+  target: { ...submittedReport.target, id: longId(submittedReport.target.id) },
+  revisionId: longId(submittedReport.revisionId!),
+  evidence: longEvidence,
+  targetAvailability: 'unavailable' as const,
+};
 
 const meta = {
   title: 'Pages/Reporter status',
@@ -52,6 +68,35 @@ export const SubmittedReport: Story = {
       localizeHref('/inbox'),
     );
     await expect(page.getAllByRole('link')).toHaveLength(1);
+  },
+};
+
+export const CurrentTarget: Story = {
+  render: () => <PageStory visitor="Signed In" path="/moderation/reports/01a17a3b-0884-721b-91ef-d7ffd7bb58f3" />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const page = within(await canvas.findByRole('main'));
+    await expect(page.getByText(m.reporter_status_available())).toBeVisible();
+    await expect(page.getByText(m.reporter_status_post(), { exact: true })).toBeVisible();
+    await expect(page.queryByRole('link', { name: m.reporter_status_post() })).toBeNull();
+    await userEvent.click(page.getByText(m.reporter_status_reference(), { exact: true }));
+    await expect(page.getByText('01a17a3b-0884-721b-91ef-d7ffd7bb58f3', { exact: true })).toBeVisible();
+  },
+};
+
+export const IllustrativeLongReferences: Story = {
+  name: 'Illustrative long references (fixture-derived)',
+  render: () => <ReporterStatusPage report={longReferenceReport} />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('heading', { level: 1, name: m.reporter_status_heading() })).toBeVisible();
+    await expect(canvas.getByText(longEvidence)).toBeVisible();
+    await expect(canvas.getByText(m.moderation_target_unavailable())).toBeVisible();
+    await expect(canvas.queryByRole('link', { name: m.reporter_status_post() })).toBeNull();
+    await userEvent.click(canvas.getByText(m.reporter_status_reference(), { exact: true }));
+    await expect(canvas.getByText(longReferenceReport.id, { exact: true })).toBeVisible();
+    await expect(canvas.getByText(longReferenceReport.target.id, { exact: true })).toBeVisible();
+    await expect(canvas.getByText(longReferenceReport.revisionId!, { exact: true })).toBeVisible();
   },
 };
 

@@ -6,6 +6,7 @@ import type { ModerationTarget } from '../moderation/reports-page';
 import { m } from '../paraglide/messages.js';
 import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
+import { currentText, moderationQueueFixture, queueViewports } from './patterns/board-report-queue/fixture';
 
 // This fixed response is copied from the native fixture's successful GET /v1/boards/:id/appeals receipt.
 const pendingAppeal = {
@@ -28,10 +29,30 @@ const withheldTarget: ModerationTarget = {
   value: null,
 };
 
+// Illustrative composition of the existing appeal and current-target fixtures; long IDs/reason are UI stress data,
+// not a native receipt or proof.
+const longId = (value: string) => `${value}-${value}-${value}`;
+const longTargetId = longId(pendingAppeal.decision.target.id);
+const longAppeal = {
+  ...pendingAppeal,
+  id: longId(pendingAppeal.id),
+  decisionId: longId(pendingAppeal.decisionId),
+  statement: Array.from(
+    { length: 8 },
+    (_, index) =>
+      `Appeal reason paragraph ${index + 1}: ${pendingAppeal.statement} The complete statement remains readable for independent review.`,
+  ).join('\n\n'),
+  decision: { ...pendingAppeal.decision, target: { kind: 'post' as const, id: longTargetId } },
+} satisfies Appeal;
+const longCurrentTarget: ModerationTarget = {
+  ...moderationQueueFixture.targets[0]!,
+  key: `post:${longTargetId}`,
+};
+
 const meta = {
   title: 'Pages/Moderation appeals',
   component: ModerationAppealsView,
-  parameters: { layout: 'fullscreen' },
+  parameters: { layout: 'fullscreen', viewport: { options: queueViewports } },
   decorators: [
     (Story) => (
       <PatternStory visitor="Signed In" path="/boards/community/moderation?tab=appeals">
@@ -105,5 +126,21 @@ export const Empty: Story = {
     await expect(view.getByText(m.moderation_appeals_empty())).toBeVisible();
     await expect(view.queryByRole('list')).not.toBeInTheDocument();
     await expect(view.queryByRole('textbox')).not.toBeInTheDocument();
+  },
+};
+
+export const IllustrativeCurrentTargetWithLongReferences: Story = {
+  name: 'Illustrative current target with long references',
+  args: { appeals: [longAppeal], targets: [longCurrentTarget] },
+  play: async ({ canvasElement }) => {
+    const view = within(await within(canvasElement).findByRole('main'));
+    await expect(view.getByRole('heading', { level: 3, name: m.moderation_current_target_label() })).toBeVisible();
+    await expect(view.getByText(m.reporter_status_post(), { exact: true })).toBeVisible();
+    await expect(view.getByText(currentText)).toBeVisible();
+    await expect(view.getByText(longAppeal.statement)).toBeVisible();
+    await userEvent.click(view.getByText(m.reporter_status_reference(), { exact: true }));
+    await expect(view.getByText(longAppeal.id, { exact: true })).toBeVisible();
+    await expect(view.getByText(longAppeal.decisionId, { exact: true })).toBeVisible();
+    await expect(view.getByText(longTargetId, { exact: true })).toBeVisible();
   },
 };
