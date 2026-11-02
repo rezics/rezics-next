@@ -67,7 +67,9 @@ export class NativeCollectionWork {
    * held until the entire group finishes; siblings cannot borrow it, retry with it or add a payer.
    * This transfers accounting only. It establishes no Source, Access or physical-work authority.
    */
-  transferChildren<K extends string>(declarations: Readonly<Record<K, WorkDimensions>>): Readonly<{
+  transferChildren<K extends string>(
+    declarations: Readonly<Record<K, WorkDimensions>>,
+  ): Readonly<{
     children: Readonly<Record<K, NativeCollectionWork>>;
     finish(): WorkReceipt;
   }> {
@@ -102,8 +104,7 @@ export class NativeCollectionWork {
         const used = zero();
         const values = Object.values(children) as NativeCollectionWork[];
         for (const child of values) {
-          if (child.pending !== 0)
-            throw new TypeError('Native child work is still in flight');
+          if (child.pending !== 0) throw new TypeError('Native child work is still in flight');
           for (const axis of axes) used[axis] += child.used[axis];
         }
         finished = true;

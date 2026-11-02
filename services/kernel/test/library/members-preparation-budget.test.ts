@@ -9,8 +9,14 @@ import {
 } from '../../src/library/members-preparation-budget.ts';
 
 const axes = [
-  'candidateKeys', 'nativeRows', 'identityMetadataRows', 'emptySeeks',
-  'nativePoints', 'witnessKeys', 'statements', 'bytes',
+  'candidateKeys',
+  'nativeRows',
+  'identityMetadataRows',
+  'emptySeeks',
+  'nativePoints',
+  'witnessKeys',
+  'statements',
+  'bytes',
 ] as const;
 const cost = (amount: number) => Object.fromEntries(axes.map((axis) => [axis, amount])) as WorkDimensions;
 const declarations = (): MembersPreparationDeclarations =>
@@ -26,20 +32,25 @@ function dispatch(work: NativeCollectionWork, amount: number) {
 test('every required child must be declared and funded before any checkout can begin', () => {
   for (const missing of MEMBERS_PREPARATION_CHILDREN) {
     const original = parent();
-    expect(() => transferMembersPreparationBudget(original, 'key', { ...declarations(), [missing]: null }))
-      .toThrow(ProblemError);
+    expect(() => transferMembersPreparationBudget(original, 'key', { ...declarations(), [missing]: null })).toThrow(
+      ProblemError,
+    );
     expect(original.receipt().used).toEqual(cost(0));
     expect(original.available('statements')).toBe(MEMBERS_PREPARATION_CHILDREN.length * 2);
     // Refusal allocated nothing; a later complete declaration can still be transferred.
-    expect(transferMembersPreparationBudget(original, 'key', declarations()).children[missing])
-      .toBeInstanceOf(NativeCollectionWork);
+    expect(transferMembersPreparationBudget(original, 'key', declarations()).children[missing]).toBeInstanceOf(
+      NativeCollectionWork,
+    );
   }
   for (const axis of axes) {
     const original = parent();
     const declared = declarations();
-    expect(() => transferMembersPreparationBudget(original, 'key', {
-      ...declared, sourceVerify: { ...declared.sourceVerify!, [axis]: 3 },
-    })).toThrow(ProblemError);
+    expect(() =>
+      transferMembersPreparationBudget(original, 'key', {
+        ...declared,
+        sourceVerify: { ...declared.sourceVerify!, [axis]: 3 },
+      }),
+    ).toThrow(ProblemError);
     expect(original.available(axis)).toBe(MEMBERS_PREPARATION_CHILDREN.length * 2);
   }
 });
@@ -48,7 +59,9 @@ test('one key transfers all children once and siblings cannot borrow a spent or 
   const original = parent();
   const funded = transferMembersPreparationBudget(original, 'exact-preparation-key', declarations());
   for (const axis of axes) expect(original.available(axis)).toBe(0);
-  expect(() => transferMembersPreparationBudget(original, 'exact-preparation-key', declarations())).toThrow(ProblemError);
+  expect(() => transferMembersPreparationBudget(original, 'exact-preparation-key', declarations())).toThrow(
+    ProblemError,
+  );
   dispatch(funded.children.sourceResolve, 2);
   expect(() => dispatch(funded.children.sourceResolve, 1)).toThrow(ProblemError);
   expect(funded.children.sourceVerify.available('nativeRows')).toBe(2);
@@ -60,7 +73,9 @@ test('one key transfers all children once and siblings cannot borrow a spent or 
   expect(() => funded.finish()).toThrow('already finished');
   expect(() => dispatch(funded.children.cleanup, 1)).toThrow('allocation is closed');
   expect(() => funded.children.cleanup.reserve(cost(1), true)).toThrow('allocation is closed');
-  expect(() => transferMembersPreparationBudget(original, 'exact-preparation-key', declarations())).toThrow(ProblemError);
+  expect(() => transferMembersPreparationBudget(original, 'exact-preparation-key', declarations())).toThrow(
+    ProblemError,
+  );
 });
 
 test('completion waits for in-flight child work and records charged work without reporting unused capacity', () => {
@@ -90,16 +105,20 @@ test('invalid or overflowing declarations cannot partially transfer a finite par
     expect(original.available('bytes')).toBe(MEMBERS_PREPARATION_CHILDREN.length * 2);
   }
   const original = parent(Number.MAX_SAFE_INTEGER);
-  expect(() => original.transferChildren({ members: cost(Number.MAX_SAFE_INTEGER), cleanup: cost(1) }))
-    .toThrow('overflow');
+  expect(() => original.transferChildren({ members: cost(Number.MAX_SAFE_INTEGER), cleanup: cost(1) })).toThrow(
+    'overflow',
+  );
   expect(original.available('bytes')).toBe(Number.MAX_SAFE_INTEGER);
 });
 
 test('failed child receipts stay charged and poison the parent after settlement', async () => {
   const original = parent();
   const funded = transferMembersPreparationBudget(original, 'key', declarations());
-  await expect(funded.children.sourceResolve.compose(async () => { throw new Error('Source failed'); }))
-    .rejects.toThrow('Source failed');
+  await expect(
+    funded.children.sourceResolve.compose(async () => {
+      throw new Error('Source failed');
+    }),
+  ).rejects.toThrow('Source failed');
   expect(funded.finish().used).toEqual(cost(2));
   expect(() => original.assertReady()).toThrow('Source failed');
   expect(() => dispatch(funded.children.sourceVerify, 1)).toThrow('allocation is closed');

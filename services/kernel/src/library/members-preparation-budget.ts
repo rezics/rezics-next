@@ -19,9 +19,7 @@ export const MEMBERS_PREPARATION_CHILDREN = [
   'cleanup',
 ] as const;
 export type MembersPreparationChild = (typeof MEMBERS_PREPARATION_CHILDREN)[number];
-export type MembersPreparationDeclarations = Readonly<
-  Record<MembersPreparationChild, WorkDimensions | null>
->;
+export type MembersPreparationDeclarations = Readonly<Record<MembersPreparationChild, WorkDimensions | null>>;
 
 const registered = new WeakMap<NativeCollectionWork, Set<string>>();
 
@@ -35,8 +33,7 @@ export function transferMembersPreparationBudget(
   preparationKey: string,
   declarations: MembersPreparationDeclarations,
 ) {
-  if (!preparationKey || registered.get(parent)?.has(preparationKey))
-    throw new ProblemError('dependency_unavailable');
+  if (!preparationKey || registered.get(parent)?.has(preparationKey)) throw new ProblemError('dependency_unavailable');
   const complete = Object.create(null) as Record<MembersPreparationChild, WorkDimensions>;
   for (const name of MEMBERS_PREPARATION_CHILDREN) {
     const declaration = declarations[name];
