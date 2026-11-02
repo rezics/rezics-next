@@ -394,3 +394,17 @@ Source read for this surface: pinned installed 5.5.3-preview `dbos`, `dbos-execu
 `.reference/search-worker-outcome-harness/dbos-transact-ts/src/{client,dbos,dbos-executor,system_database}.ts`.
 The reference is context only; the pinned installed package determines this port. Retained Members work/native
 SQL/migration were read with git show only as receiving operands, never composed into this worker.
+
+The native first-issuance `admission_generation=1` is immutable. Consume additionally requires that generation to
+equal the actual current attempt. Thus interruption before the first consume also poisons foreign dispatch on
+recovery, even if `admission_spent` is still false. Recovered attempts can only reconcile an already committed result.
+A selected transaction handle is frozen, and a returning body must have reached a durable apply/failure result or
+replayed result. Escaped or unawaited phases cannot turn an incomplete invocation into a completed SDK checkpoint.
+
+Delivery typing receipt: exactly one `bun run --cwd services/kernel typecheck` ran through supported ordinary
+placement on host `b`, terminal exit 2, command duration 231.153 seconds. It reported TypeScript control-flow
+narrowing and exact-optional-property errors in the two new producer modules. Those errors were corrected with
+explicit never-returning function declarations and explicit optional value types; the same post-check fix also
+hardens first-issuance poisoning, transaction immutability and the table-specific native immutable guard.
+These later fixes are UNVERIFIED. The compiler was not repeated. No authored/native/unit/growth/full acceptance
+was run, and no passing compiler or native completion is claimed.

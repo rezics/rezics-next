@@ -312,10 +312,10 @@ index 7f21387b27..86e49bd724 100644
 \ No newline at end of file
 diff --git a/dist/src/sysdb_migrations/internal/selected_step_execution.js b/dist/src/sysdb_migrations/internal/selected_step_execution.js
 new file mode 100644
-index 0000000000..c90205a1e1
+index 0000000000..de60ff3090
 --- /dev/null
 +++ b/dist/src/sysdb_migrations/internal/selected_step_execution.js
-@@ -0,0 +1,100 @@
+@@ -0,0 +1,101 @@
 +"use strict";
 +Object.defineProperty(exports, "__esModule", { value: true });
 +function selectedStepExecutionMigration(schemaName) {
@@ -331,6 +331,7 @@ index 0000000000..c90205a1e1
 +            step_arguments TEXT NOT NULL CHECK(octet_length(step_arguments)<=4096),
 +            deadline BIGINT NOT NULL CHECK(deadline>0),
 +            live BOOLEAN NOT NULL,
++            admission_generation BIGINT NOT NULL CHECK(admission_generation=1),
 +            admission_spent BOOLEAN NOT NULL DEFAULT false,
 +            PRIMARY KEY(workflow_uuid,function_id)
 +        )`,
@@ -355,7 +356,7 @@ index 0000000000..c90205a1e1
 +               cutoff<=(EXTRACT(EPOCH FROM clock_timestamp())*1000)::BIGINT THEN
 +                RAISE EXCEPTION 'DBOS selected registration unavailable'; END IF;
 +            INSERT INTO ${s}.selected_step_executions AS old
-+                VALUES(id,fid,step,owner_token,1,domain,arguments,cutoff,true,false)
++                VALUES(id,fid,step,owner_token,1,domain,arguments,cutoff,true,1,false)
 +                ON CONFLICT(workflow_uuid,function_id) DO UPDATE SET owner_xid=EXCLUDED.owner_xid,
 +                    attempt_generation=old.attempt_generation+1,restore_generation=EXCLUDED.restore_generation,
 +                    deadline=EXCLUDED.deadline,live=true
@@ -388,7 +389,7 @@ index 0000000000..c90205a1e1
 +          BEGIN
 +            PERFORM ${s}.hold_selected_execution(id,fid,owner_token,attempt,restore,step);
 +            UPDATE ${s}.selected_step_executions SET admission_spent=true
-+              WHERE workflow_uuid=id AND function_id=fid AND NOT admission_spent;
++              WHERE workflow_uuid=id AND function_id=fid AND NOT admission_spent AND admission_generation=attempt;
 +            RETURN FOUND;
 +          END $$`,
 +        `CREATE FUNCTION ${s}.release_selected_execution(id TEXT,fid INTEGER,attempt BIGINT,owner_token TEXT)
@@ -401,8 +402,8 @@ index 0000000000..c90205a1e1
 +          LANGUAGE plpgsql SET search_path=pg_catalog,pg_temp SET lock_timeout='200ms' AS $$
 +          BEGIN
 +            IF TG_OP IN ('DELETE','TRUNCATE') THEN RAISE EXCEPTION 'DBOS selected admission is permanent'; END IF;
-+            IF (OLD.workflow_uuid,OLD.function_id,OLD.step_name,OLD.step_arguments) IS DISTINCT FROM
-+               (NEW.workflow_uuid,NEW.function_id,NEW.step_name,NEW.step_arguments) OR
++            IF (OLD.workflow_uuid,OLD.function_id,OLD.step_name,OLD.step_arguments,OLD.admission_generation) IS DISTINCT FROM
++               (NEW.workflow_uuid,NEW.function_id,NEW.step_name,NEW.step_arguments,NEW.admission_generation) OR
 +               (OLD.admission_spent AND NOT NEW.admission_spent) OR NEW.attempt_generation<OLD.attempt_generation THEN
 +                RAISE EXCEPTION 'DBOS selected admission cannot reopen'; END IF;
 +            RETURN NEW;

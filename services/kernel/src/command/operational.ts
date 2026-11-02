@@ -188,7 +188,7 @@ export async function runOperationalTransaction<T>(
             },
           });
           // Access deadline clients inherit this object and shadow its query method.
-          const tx = { query } as OperationalTransaction;
+          const tx = (selected ? Object.freeze({ query }) : { query }) as OperationalTransaction;
           await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
           try {
             return await withOperationalAttempt(tx, attempt, async () => {

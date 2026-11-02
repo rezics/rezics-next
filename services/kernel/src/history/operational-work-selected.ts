@@ -21,7 +21,7 @@ type Tuple = {basis: string; digest: string; version: string; checkpoint: string
 type Episode = {txIdentity: SelectedIdentity; locator: SelectedLocator; custody: string; tuple: Tuple;
   originalDigest: string; result: SelectedOutcome|null};
 const episodes = new WeakMap<SelectedEpisode, Episode>();
-const unavailable = (gap: string): never => {throw new OperationalWorkUnavailable(gap);};
+function unavailable(gap: string): never { throw new OperationalWorkUnavailable(gap); }
 const same = (a: unknown,b: unknown) => canonicalize(a) === canonicalize(b);
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 // Only owned literal SQL is exempt from the foreign dispatch declaration. No caller SQL shape matching.

@@ -3703,8 +3703,10 @@ BEGIN
   IF TG_OP IN ('DELETE','TRUNCATE') THEN
     RAISE EXCEPTION 'selected operational association is permanent' USING ERRCODE='23514';
   END IF;
-  IF TG_TABLE_NAME='operational_work_selection' AND OLD.result IS NULL AND NEW.result IS NOT NULL AND
-     (to_jsonb(OLD)-'result')=(to_jsonb(NEW)-'result') THEN RETURN NEW; END IF;
+  IF TG_TABLE_NAME='operational_work_selection' THEN
+    IF OLD.result IS NULL AND NEW.result IS NOT NULL AND
+       (to_jsonb(OLD)-'result')=(to_jsonb(NEW)-'result') THEN RETURN NEW; END IF;
+  END IF;
   IF OLD IS DISTINCT FROM NEW THEN
     RAISE EXCEPTION 'selected operational association is immutable' USING ERRCODE='23514';
   END IF;

@@ -31,7 +31,7 @@ type RuntimeSdk = typeof DBOS & {
 export class SelectedRuntimeUnavailable extends Error {
   constructor(readonly gap: string) { super(gap); }
 }
-const refuse = (gap: string): never => { throw new SelectedRuntimeUnavailable(gap); };
+function refuse(gap: string): never { throw new SelectedRuntimeUnavailable(gap); }
 /** Reviewed literal native statements, each with its complete child declaration and multiplicity.
  * This is a dispatch description, never a Source or user authorization capability. */
 export type SelectedNativeDeclaration = Readonly<{ sql: string; limit: number; cost: SelectedCost }>;
@@ -54,9 +54,9 @@ export type SelectedRuntime = Readonly<{
 }>;
 type Balance = Record<(typeof SELECTED_AXES)[number], number>;
 type Original = { pool: Pool; work: NativeSdk; deadline: number; remaining: Balance; cleanup: Balance;
-  children?: SelectedChildren; counts: Map<string, number>; claim?: Claim; identity?: SelectedIdentity;
+  children: SelectedChildren | undefined; counts: Map<string, number>; claim?: Claim; identity?: SelectedIdentity;
   revoked: boolean; phase: 'new'|'selecting'|'selected'|'source'|'read'|'applied'|'failed'; busy: boolean;
-  operations: Set<Promise<unknown>>; localQuery?: string; continuation?: string; locator?: SelectedLocator; attempted: Set<string> };
+  operations: Set<Promise<unknown>>; localQuery?: string | undefined; continuation?: string; locator?: SelectedLocator; attempted: Set<string> };
 const active = new AsyncLocalStorage<Original>();
 const balance = (cost: SelectedCost): Balance => ({...cost});
 function debit(state: Original, cost: SelectedCost, cleanup = false): void {
@@ -257,7 +257,9 @@ export function composeSelectedRuntime(pool: Pool, work: WorkClient): SelectedRu
             state.phase = 'failed'; return result;
           },
         });
-        return body(invocation, locator);
+        const result=await body(invocation, locator);
+        if (!['applied','failed'].includes(state.phase)) refuse('selected-runtime-incomplete-invocation');
+        return result;
       }, {name: 'library.membersPreparation.step'}, lifecycle);
     },
   });
