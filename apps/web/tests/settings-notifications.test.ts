@@ -414,7 +414,7 @@ test(
         expect(await control.isDisabled()).toBe(true);
         expect(await control.getAttribute('aria-describedby')).toBeTruthy();
       }
-      expect(await replies.isChecked()).toBe(true);
+      expect(await replies.isChecked()).toBe(false);
       expect(patches()).toHaveLength(1);
       // Dispatching submit exercises the handler even when the visible submit button is disabled.
       await restore

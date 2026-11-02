@@ -1645,6 +1645,7 @@ are deferred to integration; local workspace typing does not establish visual or
   remain separate until the original outcome is known; conflict reload and newer readback require review before
   deliberate resubmission. Preferences affect future optional sends, never notices already in the Inbox.
   Moderation decisions, report outcomes and appeal outcomes remain mandatory.
+- **Recovery choice:** Native failures retain their immutable operation in a private response body; reviewed retries write only deliberately changed kinds, and Restore remains a null patch.
 - **Bound:** The map holds a few kinds; rendering is linear in it. Missing or malformed notification preferences show an unavailable state; the client never supplies enabled values for absent native fields.
 - **Growth check:** The acceptance test counts kernel requests for one settings render: equal to base.
 

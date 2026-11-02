@@ -14,6 +14,8 @@ export type NotificationEditorState = {
   known: Snapshot;
   draft: NotificationPreferences;
   pending: Attempt | null;
+  /** Only deliberate choices belong to a recovery write; null retains Restore defaults. */
+  intent: NotificationPatch | undefined;
   phase: 'idle' | 'saving' | 'saved' | 'uncertain' | 'conflict' | 'review' | 'reloading' | 'failed';
   /** A current read can fail independently of an earlier write or a retained review draft. */
   readOrigin: 'refresh' | 'review' | 'replay' | null;
@@ -32,7 +34,9 @@ export function sameNotifications(a: NotificationPreferences, b: NotificationPre
 }
 
 export function notificationsNeedNavigationDecision(state: NotificationEditorState): boolean {
-  return state.pending !== null || !sameNotifications(state.known.notifications, state.draft);
+  return (
+    state.pending !== null || state.intent !== undefined || !sameNotifications(state.known.notifications, state.draft)
+  );
 }
 
 /** Keeps an unresolved command separate from edits made after it was sent. Nothing is persisted in browser storage. */
@@ -57,6 +61,7 @@ export class NotificationEditor {
       known: { ...initial, notifications: { ...initial.notifications } },
       draft: { ...initial.notifications },
       pending: null,
+      intent: undefined,
       phase: initialFailed ? 'failed' : 'idle',
       readOrigin: null,
       retryAt: 0,
@@ -92,15 +97,22 @@ export class NotificationEditor {
   }
   async edit(kind: string, enabled: boolean, version: number) {
     if (!this.live() || !this.canWrite()) return;
+    if (!(kind in this.state.draft)) return;
+    if (this.state.intent === undefined && this.state.draft[kind] === enabled) return;
     this.minimumVersion(version);
     const local =
       this.state.pending ||
       ['conflict', 'review', 'reloading'].includes(this.state.phase) ||
       (this.state.readOrigin !== null && this.state.phase === 'failed');
     if (!local && this.waiting()) return;
-    this.update({ draft: { ...this.state.draft, [kind]: enabled } });
+    this.update({
+      draft: { ...this.state.draft, [kind]: enabled },
+      intent: { ...this.state.intent, [kind]: enabled },
+    });
+    // A refused operation still needs a current read and deliberate review.
+    if (this.state.phase === 'failed') return;
     if (local) return;
-    await this.start({ [kind]: enabled }, version);
+    await this.start(this.state.intent!, version);
   }
   async restore(version: number) {
     if (!this.live() || !this.canWrite()) return;
@@ -112,13 +124,19 @@ export class NotificationEditor {
       (this.state.readOrigin !== null && this.state.phase === 'failed')
     )
       return;
+    if (this.waiting()) return;
+    this.update({ intent: null });
     await this.start(null, version);
   }
   async submit(version: number) {
     if (!this.live() || !this.canWrite()) return;
     this.minimumVersion(version);
     if (this.state.pending || this.state.phase !== 'review') return;
-    await this.start({ ...this.state.draft }, version);
+    if (this.state.intent === undefined) {
+      this.useCurrent();
+      return;
+    }
+    await this.start(this.state.intent, version);
   }
   private async start(notifications: NotificationPatch, version: number) {
     if (!this.live() || !this.canWrite()) return;
@@ -167,7 +185,6 @@ export class NotificationEditor {
           pending: null,
           phase: result.reason === 'conflict' ? 'conflict' : 'failed',
           reason: result.reason,
-          draft: result.reason === 'conflict' ? this.state.draft : { ...this.state.known.notifications },
           failure: result.failure,
         });
       }
@@ -189,6 +206,7 @@ export class NotificationEditor {
       this.update({
         pending: null,
         draft: edited ? this.state.draft : { ...receipt.notifications },
+        intent: stale || edited ? this.state.intent : undefined,
         phase: stale ? 'conflict' : edited ? 'review' : 'saved',
       });
       return;
@@ -215,6 +233,7 @@ export class NotificationEditor {
     this.update({
       pending: null,
       draft: edited ? this.state.draft : { ...receipt.notifications },
+      intent: matches && !edited ? undefined : this.state.intent,
       phase: matches && !edited ? 'saved' : 'review',
       reason: undefined,
       failure: undefined,
@@ -257,6 +276,7 @@ export class NotificationEditor {
     if (!this.live()) return;
     if (this.waiting() || this.state.pending || this.state.phase === 'reloading') return;
     const preserve =
+      this.state.intent !== undefined ||
       !sameNotifications(this.state.draft, this.state.known.notifications) ||
       this.state.phase === 'conflict' ||
       this.state.phase === 'review' ||
@@ -290,6 +310,12 @@ export class NotificationEditor {
       this.update({ phase: 'conflict', reason: undefined, failure: undefined });
       return;
     }
-    this.update({ draft: { ...this.state.known.notifications }, phase: 'idle', reason: undefined, failure: undefined });
+    this.update({
+      draft: { ...this.state.known.notifications },
+      intent: undefined,
+      phase: 'idle',
+      reason: undefined,
+      failure: undefined,
+    });
   }
 }

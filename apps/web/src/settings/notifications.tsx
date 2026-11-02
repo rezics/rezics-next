@@ -47,6 +47,7 @@ export function NotificationsCard({
   io?: NotificationEditorIO;
 }) {
   const ids = useId();
+  const nativeInputs = useRef(new Map<string, HTMLInputElement>());
   const [hydrated, setHydrated] = useState(false);
   const sharedVersion = useRef(version);
   sharedVersion.current = Math.max(sharedVersion.current, version);
@@ -76,7 +77,14 @@ export function NotificationsCard({
     editor,
   );
   const waiting = usePreferenceRetry(state.failure, state.retryAt);
-  useLayoutEffect(() => setHydrated(true), []);
+  useLayoutEffect(() => {
+    // A reader may have changed the native checkbox while the bundle was loading.
+    // Capture those choices before replacing it with the controlled shared switch.
+    for (const [kind, input] of nativeInputs.current) {
+      if (input.checked !== editor.snapshot().draft[kind]) void editor.edit(kind, input.checked, version);
+    }
+    setHydrated(true);
+  }, [editor]);
   const busy = state.phase === 'saving' || state.phase === 'reloading';
   const disabled = busy || !csrfToken || !writeCurrent();
   const uncertain = state.phase === 'uncertain' || (state.pending !== null && state.phase === 'reloading');
@@ -94,7 +102,9 @@ export function NotificationsCard({
         </CardTitle>
         <CardDescription>{m.settings_notifications_text()}</CardDescription>
         <CardDescription>
-          {localEdit ? m.settings_notifications_draft_help() : m.settings_automatic_save_help()}
+          {localEdit || state.intent !== undefined
+            ? m.settings_notifications_draft_help()
+            : m.settings_automatic_save_help()}
         </CardDescription>
       </CardHeader>
       <CardContent className="min-w-0 space-y-4">
@@ -103,21 +113,26 @@ export function NotificationsCard({
             <div className="flex flex-col gap-3">
               {Object.entries(state.draft).map(([kind, checked]) => {
                 const id = `${ids}-${encodeURIComponent(kind)}`;
+                const formId = `${id}-form`;
                 const name = notificationName(kind);
                 return (
                   <form
                     key={kind}
+                    id={formId}
                     method="post"
                     action={action}
                     className="m-0"
                     onSubmit={(event) => {
                       if (!hydrated) return;
                       event.preventDefault();
+                      if (rowDisabled) return;
+                      const fields = new FormData(event.currentTarget);
+                      void editor.edit(kind, fields.has('enabled'), version);
                     }}
                   >
-                    <input type="hidden" name="csrf_token" value={csrfToken ?? ''} />
-                    <input type="hidden" name="expectedVersion" value={state.known.version} />
-                    <input type="hidden" name="notificationKind" value={kind} />
+                    <input form={formId} type="hidden" name="csrf_token" value={csrfToken ?? ''} />
+                    <input form={formId} type="hidden" name="expectedVersion" value={state.known.version} />
+                    <input form={formId} type="hidden" name="notificationKind" value={kind} />
                     <FieldLabel htmlFor={id} className="min-h-11 cursor-pointer has-data-disabled:cursor-not-allowed">
                       <Field orientation="horizontal" className="min-h-11">
                         <FieldContent className="min-w-0">
@@ -127,6 +142,7 @@ export function NotificationsCard({
                         {hydrated ? (
                           <Switch
                             id={id}
+                            form={formId}
                             name="enabled"
                             value="true"
                             checked={checked}
@@ -138,6 +154,11 @@ export function NotificationsCard({
                         ) : (
                           <input
                             id={id}
+                            form={formId}
+                            ref={(input) => {
+                              if (input) nativeInputs.current.set(kind, input);
+                              else nativeInputs.current.delete(kind);
+                            }}
                             type="checkbox"
                             role="switch"
                             name="enabled"
@@ -154,18 +175,21 @@ export function NotificationsCard({
                     <Button
                       className={preferenceActionClassName}
                       type="submit"
+                      form={formId}
                       size="sm"
                       variant="outline"
                       hidden={hydrated}
-                      disabled={!csrfToken}
+                      disabled={rowDisabled}
                     >
                       {m.settings_notification_save()}
                     </Button>
-                    <input type="hidden" name="action" value="save" />
+                    <input form={formId} type="hidden" name="action" value="save" />
                   </form>
                 );
               })}
               <form
+                id={`${ids}-restore-form`}
+                hidden={state.phase === 'review' && state.intent === null}
                 method="post"
                 action={action}
                 className="m-0"
@@ -175,12 +199,13 @@ export function NotificationsCard({
                   void editor.restore(version);
                 }}
               >
-                <input type="hidden" name="csrf_token" value={csrfToken ?? ''} />
-                <input type="hidden" name="expectedVersion" value={state.known.version} />
-                <input type="hidden" name="action" value="restore" />
+                <input form={`${ids}-restore-form`} type="hidden" name="csrf_token" value={csrfToken ?? ''} />
+                <input form={`${ids}-restore-form`} type="hidden" name="expectedVersion" value={state.known.version} />
+                <input form={`${ids}-restore-form`} type="hidden" name="action" value="restore" />
                 <Button
                   className={preferenceActionClassName}
                   type="submit"
+                  form={`${ids}-restore-form`}
                   variant="outline"
                   disabled={waiting || disabled || !!state.pending || state.phase === 'conflict' || readFailed}
                   aria-describedby={waitDescription}
@@ -326,7 +351,7 @@ export function NotificationsCard({
                     aria-describedby={waitDescription}
                     onClick={() => void editor.submit(version)}
                   >
-                    {m.settings_notifications_save_draft()}
+                    {state.intent === null ? m.settings_notifications_restore() : m.settings_notifications_save_draft()}
                   </Button>
                   <Button
                     className={preferenceActionClassName}

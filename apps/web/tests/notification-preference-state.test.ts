@@ -241,7 +241,7 @@ test('a definite notification refusal guards row autosave, Restore and Reload un
       expect(failed).toMatchObject({
         phase: 'failed',
         pending: null,
-        draft: notifications,
+        draft: { ...notifications, reply: false },
         retryAt: now + 30_000,
         failure: { status: 422, code: 'invalid_request', retryAfter, requestId: 'native-refusal' },
       });
@@ -261,13 +261,14 @@ test('a definite notification refusal guards row autosave, Restore and Reload un
       await Promise.resolve();
       expect(transport.calls).toHaveLength(1);
       refused = false;
-      await editor.edit('reply', false, 7);
-      expect(transport.calls).toHaveLength(2);
-      expect(transport.sessionReads()).toBe(2);
-      expect(transport.calls[1]!.headers.get('idempotency-key')).not.toBe(
+      await editor.reload();
+      await editor.submit(8);
+      expect(transport.calls.map((call) => call.method)).toEqual(['PATCH', 'GET', 'PATCH']);
+      expect(transport.sessionReads()).toBe(3);
+      expect(transport.calls[2]!.headers.get('idempotency-key')).not.toBe(
         transport.calls[0]!.headers.get('idempotency-key'),
       );
-      expect(await transport.calls[1]!.json()).toEqual({ expectedVersion: 7, notifications: { reply: false } });
+      expect(await transport.calls[2]!.json()).toEqual({ expectedVersion: 8, notifications: { reply: false } });
       expect(editor.snapshot()).toMatchObject({ phase: 'saved', draft: { ...notifications, reply: false } });
     } finally {
       clock.mockRestore();
