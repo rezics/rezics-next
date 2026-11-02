@@ -225,7 +225,12 @@ test('counted configuration admits a finite unit-name budget before sorting and 
 test('returned counted evidence keeps undeclared diagnostic units and refuses oversized runs before medians', () => {
   const check = { read: () => ({}), limits: { slots: 3 } };
   expect(validateCountedRun(check, { slots: 1, extra: 2 }, 1)).toEqual({ slots: 1, extra: 2 });
-  expect(countedSample([{ slots: 1, extra: 2 }, { slots: 3, extra: 4 }])).toEqual({
+  expect(
+    countedSample([
+      { slots: 1, extra: 2 },
+      { slots: 3, extra: 4 },
+    ]),
+  ).toEqual({
     extra: { value: 3, repetitions: [2, 4] },
     slots: { value: 2, repetitions: [1, 3] },
   });
