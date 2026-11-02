@@ -2934,6 +2934,7 @@
   "condition_unsupported": "Diese Bedingung wird für diese Suche nicht unterstützt.",
   "condition_text_error": "Suchtext und die Grenze von 512 Byte prüfen. Die Anfrage bleibt erhalten.",
   "condition_cursor_error": "Diese Fortsetzung ist ungültig. Mit den aktuellen Bedingungen neu starten.",
+  "condition_error_jump_target": "Fehlerstelle finden",
   "condition_language": "Ergebnissprache",
   "condition_language_default": "Seitensprache verwenden",
   "condition_languages_label": "Sprachpräferenzen für Ergebnisse",

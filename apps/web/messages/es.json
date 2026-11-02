@@ -2934,6 +2934,7 @@
   "condition_unsupported": "Esta condición no es compatible con esta búsqueda.",
   "condition_text_error": "Revisa el texto y su límite de 512 bytes. Se conserva la consulta.",
   "condition_cursor_error": "Esta continuación no es válida. Reinicia con las condiciones actuales.",
+  "condition_error_jump_target": "Ir a esta incidencia",
   "condition_language": "Idioma de los resultados",
   "condition_language_default": "Usar el idioma de la página",
   "condition_languages_label": "Preferencias de idioma de los resultados",

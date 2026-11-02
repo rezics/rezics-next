@@ -2934,6 +2934,7 @@
   "condition_unsupported": "此搜索不支持该条件。",
   "condition_text_error": "请检查搜索文字及512字节上限。已保留查询。",
   "condition_cursor_error": "此续页标记无效。请使用当前条件重新开始。",
+  "condition_error_jump_target": "定位此错误",
   "condition_language": "结果语言",
   "condition_language_default": "使用页面语言",
   "condition_languages_label": "结果语言偏好",

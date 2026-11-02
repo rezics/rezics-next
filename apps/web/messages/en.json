@@ -2988,6 +2988,7 @@
   "condition_unsupported": "This condition is not supported for this search.",
   "condition_text_error": "Check the search text and its 512-byte limit. Your query is retained.",
   "condition_cursor_error": "This continuation is invalid. Restart with the current conditions.",
+  "condition_error_jump_target": "Locate this issue",
   "condition_language": "Result language",
   "condition_language_default": "Use page language",
   "condition_languages_label": "Result language preferences",

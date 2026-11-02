@@ -2934,6 +2934,7 @@
   "condition_unsupported": "此搜尋不支援該條件。",
   "condition_text_error": "請檢查搜尋文字與512位元組上限。已保留查詢。",
   "condition_cursor_error": "此續頁標記無效。請使用目前條件重新開始。",
+  "condition_error_jump_target": "定位此錯誤",
   "condition_language": "結果語言",
   "condition_language_default": "使用頁面語言",
   "condition_languages_label": "結果語言偏好",

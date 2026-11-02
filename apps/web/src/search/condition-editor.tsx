@@ -23,6 +23,7 @@ import {
   type ConditionIssue,
   type ConditionMetadata,
 } from './condition-editor-model';
+import { findConditionErrorTarget, isConditionEditorPointer } from './condition-error-target';
 import { conditionFieldChoices as buildConditionFieldChoices } from './condition-field-choices';
 import {
   changeQualifierProperty,
@@ -184,6 +185,15 @@ export function ConditionEditor({
               data-error-code={issue.code}
             >
               {summaryErrorText(issue)}
+              {isConditionEditorPointer(issue.pointer) && (
+                <button
+                  type="button"
+                  className="ml-2 font-medium underline underline-offset-2"
+                  onClick={() => findConditionErrorTarget(root.current, issue.pointer)?.element.focus()}
+                >
+                  {m.condition_error_jump_target()}
+                </button>
+              )}
             </p>
           ))}
         </div>
@@ -243,7 +253,7 @@ function EditorField({
   const firstError = errors[0];
   const fieldSpecific = firstError && !exact && firstError.pointer === pointer && firstError.code !== 'out_of_range';
   return (
-    <Field data-invalid={errors.length > 0 || undefined}>
+    <Field data-invalid={errors.length > 0 || undefined} data-condition-field-pointer={pointer}>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
       {children({
         id,
@@ -353,7 +363,11 @@ function NodeEditor({
       context.announce(m.condition_removed(), pointer.replace(/\/(and|or)\/\d+$|\/not$/, ''));
   };
   return (
-    <FieldSet className="min-w-0 gap-3 rounded-lg border border-border/60 p-3" data-condition-pointer={pointer}>
+    <FieldSet
+      className="min-w-0 gap-3 rounded-lg border border-border/60 p-3"
+      data-condition-pointer={pointer}
+      tabIndex={-1}
+    >
       <FieldLegend variant="label">{label}</FieldLegend>
       <div className="flex flex-wrap items-end gap-2">
         <EditorField context={context} pointer={pointer} label={m.condition_group()} exact>
@@ -584,7 +598,12 @@ function NodeEditor({
             )
           )}
           {value.statement.qualifiers?.map((qualifier, index) => (
-            <FieldSet key={index} className="min-w-0 gap-3 border-t border-border/60 pt-3">
+            <FieldSet
+              key={index}
+              className="min-w-0 gap-3 border-t border-border/60 pt-3"
+              data-condition-pointer={`${pointer}/statement/qualifiers/${index}`}
+              tabIndex={-1}
+            >
               <FieldLegend variant="label">{m.condition_qualifier()}</FieldLegend>
               <EditorField
                 context={context}

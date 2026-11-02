@@ -2934,6 +2934,7 @@
   "condition_unsupported": "이 검색에서는 이 조건을 지원하지 않습니다.",
   "condition_text_error": "검색어와 512바이트 한도를 확인하세요. 쿼리는 유지됩니다.",
   "condition_cursor_error": "이어보기 정보가 올바르지 않습니다. 현재 조건으로 다시 시작하세요.",
+  "condition_error_jump_target": "이 오류 위치로 이동",
   "condition_language": "결과 언어",
   "condition_language_default": "페이지 언어 사용",
   "condition_languages_label": "검색 결과 언어 설정",

@@ -2934,6 +2934,7 @@
   "condition_unsupported": "Cette condition n’est pas prise en charge pour cette recherche.",
   "condition_text_error": "Vérifiez le texte et sa limite de 512 octets. Votre requête est conservée.",
   "condition_cursor_error": "Cette continuation est invalide. Recommencez avec les conditions actuelles.",
+  "condition_error_jump_target": "Accéder à l’emplacement de cette erreur",
   "condition_language": "Langue des résultats",
   "condition_language_default": "Utiliser la langue de la page",
   "condition_languages_label": "Préférences linguistiques des résultats",

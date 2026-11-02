@@ -2934,6 +2934,7 @@
   "condition_unsupported": "この検索ではこの条件を利用できません。",
   "condition_text_error": "検索語と512バイトの上限を確認してください。クエリは保持されています。",
   "condition_cursor_error": "継続トークンが無効です。現在の条件で再開してください。",
+  "condition_error_jump_target": "このエラー箇所へ移動",
   "condition_language": "結果の言語",
   "condition_language_default": "ページの言語を使用",
   "condition_languages_label": "検索結果の言語設定",

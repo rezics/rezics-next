@@ -39,6 +39,7 @@ saved and authorized private predicates together, then exact-deduplicate and adm
 32 leaves, depth 4, OR 16, `in` 64 and qualifiers 4. Never truncate expansion or drop an OR branch to fit.
 When released saved-filter metadata has no localized label, identify the authored `{saved: id}` reference by its exact ID.
 An empty editor group is a repair state: keep it visible and prevent applying until a child is restored or the group is explicitly removed.
+Condition error actions use one localized navigation label and focus the matching field, nearest condition group, or error summary in that order without changing the draft.
 An unsupported condition is an admission error. A recognized condition outside a kind's declared domain is
 not-applicable/unknown, including under NOT; only proven true selects a hit. Withheld or incomplete evidence
 cannot become false under NOT. True OR cannot bypass authorization of any referenced resource.
