@@ -2,10 +2,7 @@ import { purchaseHistorySearch } from '../../checkout/purchase-return';
 import { createFileRoute } from '@tanstack/react-router';
 import { EntitlementsCurrent } from '../../checkout/entitlements-current';
 import { readBuyerEntitlementsCurrent } from '../../checkout/entitlements';
-import {
-  entitlementHistoryAddress,
-  loadEntitlementHistoryAddress,
-} from '../../checkout/entitlement-history-address';
+import { entitlementHistoryAddress, loadEntitlementHistoryAddress } from '../../checkout/entitlement-history-address';
 import { EntitlementsAddressRecovery } from '../../checkout/entitlements-page';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
