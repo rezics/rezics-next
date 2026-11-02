@@ -1,5 +1,6 @@
 import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
-import { useRef, useState } from 'react';
+import { useRef, useState, type MouseEvent } from 'react';
+import { useContributionResultFocus } from './contribution-result-focus';
 import { Button } from '@rezics/ui/shadcn/button';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import {
@@ -54,6 +55,7 @@ function ContributionLifecycleLive({
   onClear: () => void | Promise<void>;
 }) {
   const lifetime = useEditorLifetime();
+  const resultFocus = useContributionResultFocus();
   const o = { locale: locale as never };
   const [state, setState] = useState<'active' | 'deleted' | 'restored' | 'expired'>('active');
   const [confirmation, setConfirmation] = useState<{ operation: ContributionCommand['operation'] } | null>(null);
@@ -107,18 +109,17 @@ function ContributionLifecycleLive({
       // A fresh read replaces old action assumptions. Only a confirmed command
       // can report restoration; availability alone says nothing about selection.
       setState(
-        nextOperation === 'restore'
-          ? 'deleted'
-          : effect === 'restore'
-            ? 'restored'
-            : effect === 'delete' && nextOperation === null
-              ? 'deleted'
-              : 'active',
+        effect === 'restore'
+          ? 'restored'
+          : effect === 'delete' || nextOperation === 'restore'
+            ? 'deleted'
+            : 'active',
       );
     }
   }
 
   async function change(
+    event: MouseEvent<HTMLButtonElement>,
     admission:
       | { kind: 'confirm'; confirmation: { operation: ContributionCommand['operation'] } }
       | { kind: 'retry'; command: ContributionCommand },
@@ -147,6 +148,8 @@ function ContributionLifecycleLive({
       pending.current = command;
       clearConfirmation(admission.confirmation);
     }
+    const focusIntent = resultFocus.start(event, lifetime.active);
+    if (admission.kind === 'confirm') resultFocus.suppressCloseFocus.current = focusIntent !== null;
     running.current = true;
     setBusy(true);
     setFailure(undefined);
@@ -182,6 +185,7 @@ function ContributionLifecycleLive({
       // Callback failures after a confirmed effect/refusal cannot turn it into an uncertain command.
       if (pending.current) setFailure('unavailable');
     } finally {
+      resultFocus.complete(focusIntent);
       if (!lifetime.active()) return;
       running.current = false;
       setBusy(false);
@@ -191,6 +195,7 @@ function ContributionLifecycleLive({
   async function refresh() {
     if (!lifetime.active()) return;
     if (running.current || pending.current) return;
+    resultFocus.cancel();
     running.current = true;
     setBusy(true);
     controls.current.confirmation = null;
@@ -227,7 +232,12 @@ function ContributionLifecycleLive({
           </p>
         )}
         {state !== 'active' && (
-          <p role="status" className="font-medium leading-relaxed">
+          <p
+            ref={failure ? undefined : resultFocus.boundaryRef}
+            tabIndex={-1}
+            role="status"
+            className="font-medium leading-relaxed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
             {state === 'deleted'
               ? m.contribution_deleted({}, o)
               : state === 'expired'
@@ -261,7 +271,12 @@ function ContributionLifecycleLive({
             <p className="text-sm leading-relaxed text-muted-foreground">{m.contribution_window({}, o)}</p>
           )}
           {failure && (
-            <p role="alert" className="text-sm font-medium leading-relaxed">
+            <p
+              ref={resultFocus.boundaryRef}
+              tabIndex={-1}
+              role="alert"
+              className="text-sm font-medium leading-relaxed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
               {failure === 'denied'
                 ? m.contribution_denied({}, o)
                 : failure === 'expired'
@@ -279,14 +294,17 @@ function ContributionLifecycleLive({
                 type="button"
                 className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2.5 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 variant={operation === 'delete' ? 'destructive' : 'default'}
+                data-contribution-action={pending.current ? 'retry' : operation}
                 disabled={busy}
-                onClick={() => {
+                onClick={(event) => {
                   const expectedOperation = operation;
                   const retryCommand = pending.current;
                   if (!lifetime.active() || running.current || !expectedOperation || terminal.current) return;
                   if (retryCommand) {
-                    if (pending.current === retryCommand) void change({ kind: 'retry', command: retryCommand });
+                    if (pending.current === retryCommand) void change(event, { kind: 'retry', command: retryCommand });
                   } else if (controls.current.operation === expectedOperation) {
+                    resultFocus.cancel();
+                    resultFocus.suppressCloseFocus.current = false;
                     const admitted = { operation: expectedOperation };
                     controls.current.confirmation = admitted;
                     setConfirmation(admitted);
@@ -313,7 +331,10 @@ function ContributionLifecycleLive({
           open={confirmation !== null}
           onOpenChange={(open) => lifetime.active() && !open && clearConfirmation(confirmation ?? undefined)}
         >
-          <AlertDialogContent initialFocus={() => lifetime.active()} finalFocus={() => lifetime.active()}>
+          <AlertDialogContent
+            initialFocus={() => lifetime.active()}
+            finalFocus={() => lifetime.active() && !resultFocus.suppressCloseFocus.current}
+          >
             <AlertDialogHeader className="min-w-0 justify-items-stretch text-start sm:text-start">
               <AlertDialogTitle className="min-w-0 [overflow-wrap:anywhere]">{action}</AlertDialogTitle>
               <AlertDialogDescription className="min-w-0 [overflow-wrap:anywhere]">
@@ -330,7 +351,7 @@ function ContributionLifecycleLive({
                 className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2.5 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 variant={confirmation?.operation === 'delete' ? 'destructive' : 'default'}
                 disabled={busy}
-                onClick={() => confirmation && void change({ kind: 'confirm', confirmation })}
+                onClick={(event) => confirmation && void change(event, { kind: 'confirm', confirmation })}
               >
                 {m.contribution_confirm({}, o)}
               </AlertDialogAction>

@@ -378,6 +378,92 @@ test('own-contribution family preserves independent panels, exact recovery and r
       expect(new Set(sent.map((command) => command.key)).size).toBe(3);
     }
 
+    // Command completion belongs only to the explicit current keyboard action and surviving holder.
+    const keyboard = (node: HTMLButtonElement) => {
+      node.focus();
+      return act(async () => { node.dispatchEvent(new window.MouseEvent('click', { bubbles: true, detail: 0 })); });
+    };
+    for (const mode of ['success', 'restore', 'pointer', 'moved', 'retired', 'throws', 'denied', 'retry'] as const) {
+      let release!: (value: ContributionResult) => void;
+      const sent: ContributionCommand[] = [];
+      const transport: ContributionTransport = {
+        change: (command) => {
+          sent.push(command);
+          return new Promise((resolve) => { release = resolve; });
+        },
+        read: async () => { throw new Error('No completion read'); },
+      };
+      function Holder() {
+        const [retired, retire] = useState(false);
+        return retired ? <input aria-label="Replacement draft" /> : (
+          <ContributionLifecycle address={first.address} locale="en" transport={transport} onClear={() => {
+            if (mode === 'retired') retire(true);
+            if (mode === 'throws') throw new Error('Clear failed after confirmation');
+          }} />
+        );
+      }
+      await render(<Holder key={`handoff-${mode}`} />);
+      const opener = button(host, m.contribution_withdraw());
+      await keyboard(opener);
+      await until(() => !!dialog());
+      await until(() => document.activeElement === button(dialog(), m.candidate_cancel()));
+      await click(button(dialog(), m.candidate_cancel()));
+      await until(() => !dialog() && document.activeElement === opener);
+      await keyboard(opener);
+      await until(() => !!dialog());
+      const confirmation = button(dialog(), m.contribution_confirm());
+      if (mode === 'pointer') {
+        confirmation.focus();
+        await act(async () => { confirmation.dispatchEvent(new window.MouseEvent('click', { bubbles: true, detail: 1 })); });
+      } else await keyboard(confirmation);
+      await until(() => !dialog());
+      if (mode === 'moved') {
+        outside.focus();
+        // Returning to a command control does not revive the old confirmation intent.
+        button(host, m.contribution_retry()).focus();
+      }
+      const success: ContributionResult = {
+        ok: true, operation: 'delete',
+        current: { subject: 'available', candidate: 'deleted', selected: false },
+      };
+      await act(async () => release(mode === 'denied' ? { ok: false, reason: 'denied' }
+        : mode === 'retry' ? { ok: false, reason: 'unavailable' } : success));
+      await settle();
+      const boundary = host.querySelector<HTMLElement>('[role="alert"]') ??
+        host.querySelector<HTMLElement>('[role="status"][tabindex="-1"]');
+      if (['pointer', 'moved', 'retired'].includes(mode)) {
+        expect(boundary === null || document.activeElement !== boundary).toBe(true);
+        if (mode === 'moved') expect(document.activeElement).toBe(outside);
+        if (mode === 'retired') expect(document.activeElement).not.toBe(host.querySelector('input'));
+      } else {
+        expect(document.activeElement).toBe(boundary);
+        expect(boundary?.textContent).toBe(mode === 'denied' ? m.contribution_denied()
+          : mode === 'retry' ? m.contribution_unavailable() : m.contribution_deleted());
+      }
+      if (mode === 'throws') expect(host.textContent).not.toContain(m.contribution_unavailable());
+      if (mode === 'restore') {
+        await keyboard(button(host, m.contribution_restore()));
+        await until(() => !!dialog());
+        await keyboard(button(dialog(), m.contribution_confirm()));
+        await until(() => !dialog());
+        await act(async () => release({ ...success, operation: 'restore',
+          current: { subject: 'available', candidate: 'available', selected: false } }));
+        expect(document.activeElement?.textContent).toBe(m.contribution_restored());
+      }
+      if (mode === 'retry') {
+        const retry = button(host, m.contribution_retry());
+        await keyboard(retry);
+        await act(async () => release({ ok: false, reason: 'unavailable' }));
+        expect(document.activeElement).toBe(retry);
+        await keyboard(retry);
+        await act(async () => release(success));
+        expect(document.activeElement?.textContent).toBe(m.contribution_deleted());
+        expect(sent[1]).toBe(sent[0]);
+        expect(sent[2]).toBe(sent[0]);
+      }
+      expect(sent).toHaveLength(mode === 'retry' ? 3 : mode === 'restore' ? 2 : 1);
+    }
+
     // Terminal refusal and invalid input remain distinct from uncertain replay.
     for (const scenario of ['denied', 'expired', 'invalid'] as const) {
       const fixture = contributionFixture(scenario);
@@ -518,7 +604,9 @@ test('own-contribution family preserves independent panels, exact recovery and r
         },
       };
       await render(<Panel key={`pending-${result}`} name="pending" address={first.address} transport={held} />);
-      await confirm(panel('pending'));
+      await click(button(panel('pending'), m.contribution_withdraw()));
+      await until(() => !!dialog());
+      await keyboard(button(dialog(), m.contribution_confirm()));
       await until(() => sends === 1);
       expect(panel('pending').querySelector('section')?.getAttribute('aria-busy')).toBe('true');
       const oldAction = queued(button(panel('pending'), m.contribution_retry()));

@@ -601,6 +601,10 @@ Explicit refresh replaces prior action assumptions: confirmed availability offer
 offers restoration, and an unconfirmed reading offers refresh alone; only a confirmed restore command reports
 restoration.
 
+Decision: keyboard contribution confirmation or exact retry hands lost focus to its current confirmed effect or
+refusal after clearing settles; an unchanged surviving retry keeps focus, and moved focus or retired holders stay
+quiet. Confirmed effects remain confirmed if clearing throws; availability reads never announce restoration.
+
 Contribution withdrawal and restoration share their enclosing editor's departure decision: only a sent unresolved
 command protects route/search departure and browser unload; Stay keeps exact retry recovery without sending, and
 Leave retires local recovery and late callbacks without cancelling native work. Confirmed effects or refusals release
