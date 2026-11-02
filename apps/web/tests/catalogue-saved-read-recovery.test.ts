@@ -252,7 +252,9 @@ test('A contributor retries only the failed reading after a confirmed save', asy
 
     // Authored-only associations; the Terms helper and its scenarios stay independent.
     const authoredControl = (name: string) => {
-      const label = Array.from(host.querySelectorAll('label')).find((element: any) => element.textContent === name) as any;
+      const label = Array.from(host.querySelectorAll('label')).find(
+        (element: any) => element.textContent === name,
+      ) as any;
       expect(label, `Expected the actual ${name} label`).toBeDefined();
       const control = window.document.getElementById(label.htmlFor);
       expect(control, `Expected the locally associated ${name} control`).not.toBeNull();

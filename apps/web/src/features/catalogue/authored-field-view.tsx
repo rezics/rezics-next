@@ -88,7 +88,14 @@ function Body({
   );
 }
 
-/** Always composes a new original work; existing rich documents and candidates remain intact. */
+/**
+ * Always composes a new original work; existing rich documents and candidates remain intact.
+ *
+ * Cost: render the supplied authored form and readback.
+ * - Touches: supplied bodies, citations and the active type's field choices; no presentation I/O.
+ * - Bound: O(supplied text/citations/fields), with one unconditional form identity and fixed DOM associations.
+ * - Growth check: authored-field-family.test.tsx supplies three citation/unrelated-definition scales (UNRUN).
+ */
 export function AuthoredField(props: Omit<ComponentProps<typeof AuthoredFieldLive>, 'work'>) {
   const subject = useRef<string | undefined>(undefined);
   if (props.initial.ok) subject.current = props.initial.public.subject.id;

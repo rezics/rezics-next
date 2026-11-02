@@ -25,7 +25,9 @@ async function associatedControl(html: string, name: string) {
   );
   const window = new Window();
   window.document.body.innerHTML = html;
-  const label = Array.from(window.document.querySelectorAll('label')).find((label: any) => label.textContent === name) as any;
+  const label = Array.from(window.document.querySelectorAll('label')).find(
+    (label: any) => label.textContent === name,
+  ) as any;
   const control = label ? window.document.getElementById(label.htmlFor) : null;
   await window.happyDOM.close();
   return control;

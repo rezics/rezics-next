@@ -246,14 +246,21 @@ export const Unavailable: Story = {
           canvas.getByRole('button', { name: m.correction_submit() }),
         ])
           await target(control);
-        for (const label of article.querySelectorAll<HTMLLabelElement>('label[for]')) {
-          const control = article.ownerDocument.getElementById(label.htmlFor);
-          if (control && article.contains(control)) await contained(label);
-        }
         const original = canvas.getByRole('checkbox', { name: m.authored_original() });
-        const originalLabel = Array.from(article.querySelectorAll<HTMLLabelElement>('label[for]')).find(
-          (label) => label.htmlFor === original.id,
-        )!;
+        const labels = Array.from(article.querySelectorAll<HTMLLabelElement>('label[for]'));
+        for (const control of [
+          property,
+          canvas.getByRole('textbox', { name: m.authored_language() }),
+          canvas.getByRole('textbox', { name: m.authored_licence() }),
+          canvas.getByRole('textbox', { name: m.authored_citation() }),
+          original,
+        ]) {
+          const label = labels.find((label) => label.htmlFor === control.id);
+          await expect(label).toBeDefined();
+          await expect(article.ownerDocument.getElementById(label!.htmlFor)).toBe(control);
+          await contained(label!);
+        }
+        const originalLabel = labels.find((label) => label.htmlFor === original.id)!;
         await target(originalLabel);
         if (getLocale() === 'en') {
           const text = canvasElement.ownerDocument.createRange();
