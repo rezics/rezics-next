@@ -319,9 +319,6 @@ test('whole Person and Organization creation families retain exact facts, indepe
     organizationInput.focus();
     expect(window.document.activeElement).toBe(organizationInput);
     await choose('schema:Organization', a);
-    await act(async () =>
-      user.click(within(group('schema:url', a)).getByRole('button', { name: m.people_profile_remove_fact() })),
-    );
     expect(group('schema:url', a)).toBeNull();
     await add(left, 'schema:url', a);
     await value(left, 'schema:url', 'https://example.org/other-draft', a);
