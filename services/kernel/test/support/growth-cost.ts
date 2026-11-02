@@ -504,8 +504,7 @@ function costNode(
         )
       : 0;
     const examined = rowScans.has(nodeType) && loops > 0 ? checkedMultiply(rowsPerLoop, loops, 'Rows examined') : 0;
-    const modified =
-      nodeType === 'ModifyTable' && loops > 0 ? checkedMultiply(actualRows, loops, 'Rows modified') : 0;
+    const modified = nodeType === 'ModifyTable' && loops > 0 ? checkedMultiply(actualRows, loops, 'Rows modified') : 0;
     const exclusiveBlocks = checkedAdd(exclusiveHit, exclusiveRead, 'Exclusive node blocks');
     const relationName = node['Relation Name'];
     const indexName = node['Index Name'];
@@ -535,8 +534,7 @@ function costNode(
         nodeType === 'Seq Scan' && loops > 0 ? 1 : 0,
       );
     } else if (nodeType === 'Bitmap Index Scan' && typeof indexName === 'string') {
-      const schema =
-        (typeof node.Schema === 'string' ? node.Schema : undefined) ?? relationContexts.get(node)?.schema;
+      const schema = (typeof node.Schema === 'string' ? node.Schema : undefined) ?? relationContexts.get(node)?.schema;
       addRelation(
         relations,
         {
