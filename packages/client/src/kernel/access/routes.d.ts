@@ -1,4 +1,3 @@
-import type { LifecycleReview, LifecycleReviewInput } from './lifecycle-review-contract.ts';
 import type { Pool } from 'pg';
 import type { TSchema } from 'typebox';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
@@ -7007,15 +7006,40 @@ export declare function accessRoutes(app: ReturnType<typeof definitionRoutes>, d
         };
     };
 } & {
-    v1: { accounts: { ":accountId": { lifecycleReview: { post: {
-        body: LifecycleReviewInput;
-        params: { accountId: string };
-        query: unknown;
-        headers: unknown;
-        response: { 200: LifecycleReview; 404: Response | {
-            type: unknown; title: unknown; status: number; code: unknown; retryable: unknown;
-            effect_status: "not_applicable" | "not_applied"; request_id: string; detail: unknown; errors: unknown;
-        };
+    v1: {
+        accounts: {
+            ":accountId": {
+                lifecycleReview: {
+                    post: {
+                        body: {
+                            operatorPageKey?: string;
+                            original?: {
+                                operationId: "account.reinstate" | "account.suspend";
+                                key: string;
+                                reason?: string;
+                            };
+                        };
+                        params: {
+                            accountId: string;
+                        };
+                        query: unknown;
+                        headers: unknown;
+                        response: {
+                            200: Readonly<{
+                                account: {
+                                    id: string;
+                                    kind: 'actor' | 'organization';
+                                    displayName: string | null;
+                                    handle: string | null;
+                                };
+                                current: {
+                                    state: 'pending' | 'active' | 'suspended' | 'deleted';
+                                    minimumAuthnEpoch: string;
+                                    fenced: boolean;
+                                };
+                                actions: import("./lifecycle-review-contract.ts").LifecycleAdvertisement[];
+                                original?: import("./lifecycle-review-contract.ts").LifecycleOriginalResult;
+                            }>;
                             400: Response | {
                                 type: unknown;
                                 title: unknown;
@@ -7039,6 +7063,17 @@ export declare function accessRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 errors: unknown;
                             };
                             403: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -7082,9 +7117,13 @@ export declare function accessRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 detail: unknown;
                                 errors: unknown;
                             };
-                                };
-        error: never;
-    } } } } };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
 } & {
     v1: {
         accounts: {

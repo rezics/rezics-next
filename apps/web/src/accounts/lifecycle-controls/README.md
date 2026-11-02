@@ -6,7 +6,7 @@ private, no-store. No bearer, reason or command intent is put in a URL or browse
 lookup, scope change, Auth writer or grant page is added.
 
 The production-configured generated client calls the real private
-`POST /v1/accounts/{accountId}/lifecycleReview` (`account.lifecycleReview`) with an empty body for selection.
+`POST /v1/accounts/{accountId}/lifecycleReview` (`account.lifecycle_review`) with an empty body for selection.
 Only its exact `account:suspend` / `account.suspend` or `account:reinstate` / `account.reinstate` pair enables
 confirmation. The adapter exposes native current state/floor/fence separately from original outcome. Management
 and generic viewerActions never authorize lifecycle controls. Healthy authenticated BFF reads retain their existing

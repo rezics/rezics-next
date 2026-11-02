@@ -1297,7 +1297,7 @@ export function accessRoutes(
         response: { 200: lifecycleReviewSchema, ...failures, 404: problemSchema('not_found'),
           503: problemSchema('dependency_unavailable', 'deadline_exceeded', 'partition_unavailable', 'overloaded') },
         detail: {
-          operationId: 'account.lifecycleReview', 'x-exposure': 'public', 'x-action': 'account:read',
+          operationId: 'account.lifecycle_review', 'x-exposure': 'public', 'x-action': 'account:read',
           security: [{ bearerAuth: [] }],
         },
       },

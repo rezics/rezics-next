@@ -569,7 +569,7 @@ Page and subject receipts make crash recovery and replay idempotent.
 
 ### Private exact-target lifecycle review
 
-`POST /v1/accounts/{accountId}/lifecycleReview` (`account.lifecycleReview`) is a bearer-authenticated,
+`POST /v1/accounts/{accountId}/lifecycleReview` (`account.lifecycle_review`) is a bearer-authenticated,
 private/no-store read on the real account route composition. Its empty body reviews exactly one selected account,
 including a suspended account. It does not use management relationships, public account eligibility or generic
 `viewerActions`. The mounted `account:read` label describes HTTP read accounting/error semantics; it supplies no
