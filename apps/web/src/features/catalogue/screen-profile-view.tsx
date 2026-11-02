@@ -4,7 +4,7 @@ import {
   useEditorLifetime,
   useCurrentReadingActive,
 } from './editor-lifetime';
-import { useMemo, useRef, useState, type ComponentProps } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type MouseEvent } from 'react';
 import { flushSync } from 'react-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { pickText } from '@rezics/composition';
@@ -14,7 +14,7 @@ import { m } from '../../paraglide/messages.js';
 import { subjectHref } from '../../subject/subject-href';
 import type { CandidateTransport } from '../../subject/candidate-review';
 import type { RelationTransport } from '../../subject/relation-candidates';
-import { ViewHeadingActions } from '../pages/view-heading';
+import { ViewHeading, ViewHeadingActions } from '../pages/view-heading';
 import { CandidateValue } from '../pages/data';
 import { CreateSubjectForm } from './create-subject-form';
 import type { CreateResult, CreatedReader } from './create-subject';
@@ -166,6 +166,66 @@ function ScreenProfileLive({
   // Creation metadata is private draft scaffolding, never an existing subject's authority.
   if (!id && query.data?.ok) retained.current = query.data;
   const read = query.data?.ok ? query.data : retained.current;
+  const [creationRetry, setCreationRetry] = useState<'pending' | 'settled'>();
+  const creationRetryRunning = useRef(false);
+  const creationHeading = useRef<HTMLHeadingElement>(null);
+  const creationAction = useRef<HTMLButtonElement>(null);
+  const creationIntent = useRef<{ trigger: HTMLButtonElement; dispose: () => void } | null>(null);
+  const origin = useMemo(
+    () => ({}),
+    [query.data, query.error, query.dataUpdatedAt, query.errorUpdatedAt, creationRetry],
+  );
+  const currentOrigin = useRef<object | undefined>(undefined);
+  currentOrigin.current = !id && !read && !query.isFetching && !query.isPending ? origin : undefined;
+  const creationPending = query.isPending || query.isFetching || creationRetry === 'pending';
+  const retryCreation = async (event: MouseEvent<HTMLButtonElement>) => {
+    if (!lifetime.active() || currentOrigin.current !== origin || creationRetryRunning.current) return;
+    creationRetryRunning.current = true;
+    currentOrigin.current = undefined;
+    creationIntent.current?.dispose();
+    const trigger = event.currentTarget;
+    const document = trigger.ownerDocument;
+    if (event.detail === 0 && document.activeElement === trigger) {
+      const intent = { trigger, dispose };
+      function dispose() {
+        if (creationIntent.current === intent) creationIntent.current = null;
+        document.removeEventListener('focusin', moved, true);
+        document.removeEventListener('pointerdown', dispose, true);
+        document.defaultView?.removeEventListener('blur', dispose);
+      }
+      function moved(event: FocusEvent) {
+        if (event.target !== trigger) dispose();
+      }
+      creationIntent.current = intent;
+      document.addEventListener('focusin', moved, true);
+      document.addEventListener('pointerdown', dispose, true);
+      document.defaultView?.addEventListener('blur', dispose);
+    }
+    setCreationRetry('pending');
+    try {
+      await query.refetch({ cancelRefetch: false });
+    } finally {
+      if (lifetime.active()) {
+        creationRetryRunning.current = false;
+        setCreationRetry('settled');
+      }
+    }
+  };
+  useLayoutEffect(() => () => creationIntent.current?.dispose(), [lifetime]);
+  useLayoutEffect(() => {
+    if (creationRetry !== 'settled' || query.isFetching || !lifetime.active()) return;
+    const intent = creationIntent.current;
+    intent?.dispose();
+    if (intent) {
+      const document = intent.trigger.ownerDocument;
+      const active = document.activeElement;
+      if (active === intent.trigger || active === document.body) {
+        const target = creationAction.current ?? creationHeading.current;
+        if (target?.isConnected && active !== target) target.focus();
+      }
+    }
+    setCreationRetry(undefined);
+  }, [creationRetry, query.isFetching, lifetime]);
   const admitted =
     !retired && !query.isFetching && !query.isError && query.data?.ok && query.data.public?.subject.id === id
       ? query.data
@@ -224,9 +284,9 @@ function ScreenProfileLive({
     );
   if (!read)
     return (
-      <article className="mx-auto w-full max-w-4xl min-w-0 space-y-5 p-4 sm:p-6">
+      <article aria-busy={creationPending} className="mx-auto w-full max-w-4xl min-w-0 space-y-5 p-4 sm:p-6">
         <ViewHeadingActions label={id ? m.screen_edit({}, o) : m.screen_title({}, o)} headingClassName="font-sans" />
-        {query.isPending ? (
+        {creationPending ? (
           <p role="status">{m.candidate_loading({}, o)}</p>
         ) : (
           <>
@@ -238,14 +298,17 @@ function ScreenProfileLive({
                 reason={query.data && !query.data.ok ? query.data.reason : 'unavailable'}
               />
             )}
-            <Button
-              className={screenActionClassName}
-              disabled={query.isFetching}
-              onClick={() => void query.refetch({ cancelRefetch: false })}
-            >
-              {m.correction_retry({}, o)}
-            </Button>
           </>
+        )}
+        {(!query.isPending || creationRetry) && (
+          <Button
+            ref={creationAction}
+            className={screenActionClassName}
+            disabled={creationPending}
+            onClick={(event) => void retryCreation(event)}
+          >
+            {m.correction_retry({}, o)}
+          </Button>
         )}
       </article>
     );
@@ -253,7 +316,7 @@ function ScreenProfileLive({
     return (
       <div className="mx-auto w-full max-w-4xl min-w-0 space-y-6 px-4 py-8 sm:px-6">
         <header className="min-w-0 space-y-3">
-          <ViewHeadingActions label={m.screen_title({}, o)} headingClassName="font-sans" />
+          <ViewHeading label={m.screen_title({}, o)} headingRef={creationHeading} headingTabIndex={-1} headingClassName="font-sans" />
           {intro}
         </header>
         <CreateSubjectForm

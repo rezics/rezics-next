@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import type { Release } from '@rezics/definitions';
 import type { ScreenRow } from '../src/features/catalogue/screen-profile-fields';
-import type { ScreenCommand } from '../src/features/catalogue/screen-profile';
+import type { ScreenCommand, ScreenRead } from '../src/features/catalogue/screen-profile';
 import type { CreateResult } from '../src/features/catalogue/create-subject';
 import recorded from '../src/kernel/recorded/definitions-release.json';
 import * as start from '../.storybook/react-start';
@@ -457,6 +457,89 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
       expect(reads).toBeLessThanOrEqual(300 + 32 * count);
       expect(searches).toBe(before);
       expect(fetch.mock.calls).toHaveLength(0);
+    }
+
+    // Initial metadata recovery owns one pending read and only surviving keyboard focus intent.
+    for (const mode of ['keyboard', 'pointer', 'moved-back', 'pointer-during', 'locale', 'reader', 'csrf', 'session-aba', 'unmount', 'initial']) {
+      await render(null);
+      await act(async () => client.setQueryData(sessionQuery.queryKey, originalReader));
+      const current = screenProfileFixture();
+      const ready = await current.transport.load();
+      let reads = 0;
+      let deliver!: (read: ScreenRead) => void;
+      const hold = () => new Promise<ScreenRead>((resolve) => { deliver = resolve; });
+      let response: Promise<ScreenRead> = mode === 'initial' ? hold() : Promise.resolve({ ok: false, reason: 'unavailable' });
+      const transport = { ...current.transport, load: () => { reads++; return response; } };
+      const editor = (locale = 'en', reader = originalReader) => (
+        <CandidateReaderBoundary observed={reader} address="screen-metadata-recovery">
+          <SessionProfile locale={locale} session="signed-in" transport={transport} search={search} onNavigate={() => {}} />
+        </CandidateReaderBoundary>
+      );
+      outside.focus();
+      await render(editor());
+      if (mode === 'initial') {
+        await until(() => host.querySelector('[role="status"]') !== null);
+        await act(async () => deliver(ready));
+        await until(() => host.querySelector('#create-type') !== null);
+        expect(window.document.activeElement).toBe(outside);
+        expect(reads).toBe(1);
+        continue;
+      }
+      await until(() => host.textContent!.includes(m.correction_unavailable()));
+      expect(window.document.activeElement).toBe(outside);
+      const retry = within(host).getByRole('button', { name: m.correction_retry() }) as HTMLButtonElement;
+      const props = Object.keys(retry).find((key) => key.startsWith('__reactProps$'))!;
+      const queued = Reflect.get(retry, props).onClick as (event: { currentTarget: HTMLButtonElement; detail: number }) => void;
+      response = hold();
+      retry.focus();
+      if (mode === 'pointer') await act(async () => user.click(retry));
+      else await key('{Enter}');
+      await act(async () => { queued({ currentTarget: retry, detail: 0 }); queued({ currentTarget: retry, detail: 0 }); });
+      expect(reads).toBe(2);
+      expect(retry.disabled).toBe(true);
+      expect(host.querySelector('article')?.getAttribute('aria-busy')).toBe('true');
+      expect(host.textContent).toContain(m.candidate_loading());
+      expect(host.textContent).not.toContain(m.correction_unavailable());
+      if (mode === 'keyboard') {
+        await act(async () => deliver({ ok: false, reason: 'concealed' }));
+        await until(() => !retry.disabled);
+        expect(host.textContent).toContain(m.catalogue_create_concealed());
+        expect(within(host).getByRole('button', { name: m.correction_retry() })).toBe(retry);
+        expect(window.document.activeElement).toBe(retry);
+        response = hold();
+        await key(' ');
+        expect(reads).toBe(3);
+      }
+      if (mode === 'moved-back') { outside.focus(); retry.focus(); }
+      if (mode === 'pointer-during') retry.dispatchEvent(new window.PointerEvent('pointerdown', { bubbles: true }));
+      const finish = deliver;
+      response = Promise.resolve({ ok: false, reason: 'unavailable' });
+      if (mode === 'locale') await render(editor('fr'));
+      if (mode === 'reader') await render(editor('en', { ...originalReader, subject: 'replacement-reader' }));
+      if (mode === 'csrf') await render(editor('en', { ...originalReader, csrfToken: 'replacement-csrf' }));
+      if (mode === 'session-aba') await act(async () => {
+        client.setQueryData(sessionQuery.queryKey, { ...originalReader, subject: 'replacement-reader' });
+        client.setQueryData(sessionQuery.queryKey, originalReader);
+      });
+      if (mode === 'unmount') await render(null);
+      await settle();
+      const retired = ['locale', 'reader', 'csrf', 'session-aba', 'unmount'].includes(mode);
+      const before = host.innerHTML;
+      const beforeFocus = window.document.activeElement;
+      const beforeReads = reads;
+      await act(async () => finish(ready));
+      await settle(15);
+      if (retired) {
+        expect(host.innerHTML).toBe(before);
+        expect(window.document.activeElement).toBe(beforeFocus);
+      } else {
+        await until(() => host.querySelector('#create-type') !== null);
+        if (mode === 'keyboard') expect(window.document.activeElement).toBe(host.querySelector('h1'));
+        else expect(window.document.activeElement).not.toBe(host.querySelector('h1'));
+      }
+      await act(async () => queued({ currentTarget: retry, detail: 0 }));
+      expect(reads).toBe(beforeReads);
+      expect(nativeWrites(current)).toHaveLength(0);
     }
 
     // Actual whole creation: local invalid summary retains the native pointer and named fact anchor.

@@ -612,6 +612,8 @@ refreshes without discarding it, and key conflicts require explicit review befor
 The native API validates the submitted command. An uncertain retry reaches that same native idempotency path
 without replacing its payload or key after a metadata change.
 
+Initial Screen metadata retry replaces the failure with a pending status, keeps one read in flight, and preserves the Retry action on another failure; successful keyboard recovery orients to the creation heading only while focus intent survives movement, pointer use and caller retirement.
+
 Corrections compose the common multi-field editor and qualified relation editor. Unchanged fields and unedited
 languages, qualifiers and references survive; each changed scalar field has its own result and retry key. A
 submitted proposal is still awaiting review and selection, and review follows the exact returned candidate ID.
