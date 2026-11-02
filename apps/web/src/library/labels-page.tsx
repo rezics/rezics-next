@@ -292,7 +292,7 @@ export function LabelsPageView({
       if (result.ok && input.operation === 'create') setCreateName((value) => (value === input.name ? '' : value));
       if (result.ok && input.operation === 'rename')
         setAction((selected) =>
-          selected?.label.id !== input.id
+          !selected || selected.label.id !== input.id
             ? selected
             : selected.name === input.name
               ? null
