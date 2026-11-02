@@ -142,6 +142,7 @@ function witness(thread: ThreadView | null | undefined, candidate: ReviewContext
     !thread ||
     thread.kind !== 'review' ||
     thread.availability !== 'available' ||
+    thread.visibility === 'taken_down' ||
     thread.subjectIds.length !== 1 ||
     thread.subjectIds[0] !== candidate.subjectId ||
     thread.firstPost.availability !== 'available' ||
@@ -168,7 +169,7 @@ async function postWitness(
 ): Promise<string | null> {
   try {
     const post = (await readPost(deps, pair.threadId, pair.postId, context)).value;
-    return post?.availability === 'available'
+    return post?.availability === 'available' && post.visibility !== 'taken_down'
       ? JSON.stringify([post.threadId, post.id, post.revisionId, post.securityRevision])
       : null;
   } catch (error) {
