@@ -81,8 +81,7 @@ function assertFrame(
   root: string,
   operation: Parameters<typeof assertCataloguePublisherFrame>[3],
 ) {
-  // Kind work still requires Accounts' authentic original admission. Only the
-  // separate private Semantic publisher receiving boundary is used here.
+  // Publication runs in an ordinary command, separate from historical operational work.
   if (hasLiveOperationalTransaction(tx)) return unavailable();
   assertCataloguePublisherFrame(tx, work, root, operation);
 }
@@ -189,7 +188,7 @@ export async function requestCatalogueActivation(
   return (await readActivation(tx, pin.rootDigest, work)) ?? unavailable();
 }
 
-/** One Global continuation; no Source checkout, callback or synthetic ACK. */
+/** One bounded Global continuation; Source adapters read committed domain withdrawals. */
 export async function advanceCatalogueActivation(
   tx: CommandTransaction,
   root: string,
