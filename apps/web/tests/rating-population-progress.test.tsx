@@ -151,6 +151,23 @@ test('a pending or failed next keeps one accepted window, retries the exact curs
   expect(directories().at(-1)?.cursor).toBeUndefined();
 });
 
+test('an overlong continuation keeps its accepted page and restarts without issuing that cursor', async () => {
+  directory = () => ready(['first'], 'x'.repeat(4097));
+  await paint();
+  await settle(() => boxes().length === 1 && host.textContent!.includes(m.rating_population_unavailable()));
+  expect(next().disabled).toBe(true);
+  expect(restart().disabled).toBe(false);
+  expect(directories().map((input) => input.cursor)).toEqual([undefined]);
+
+  const held = deferred<PopulationEnvelope['result']>();
+  directory = () => held.promise;
+  await click(restart());
+  expect(directories().map((input) => input.cursor)).toEqual([undefined, undefined]);
+  expect(host.textContent).toContain('Realm first');
+  held.resolve(ready(['second'], null));
+  await settle(() => host.textContent!.includes('Realm second'));
+});
+
 test('empty pages require explicit Next; self and longer cycles stop visibly and restart without automatic reads', async () => {
   for (const loop of [
     ['a', 'a'],

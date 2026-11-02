@@ -1,5 +1,7 @@
 /** The first page counts; failed attempts keep their exact request and consume no reads. */
 export const POPULATION_TRAVERSAL_LIMIT = 64;
+/** Matches the native ratings population request cursor bound. */
+export const NATIVE_POPULATION_CURSOR_MAX_LENGTH = 4096;
 
 export type PopulationPageRequest = { cursor: string | undefined; revision: number };
 export type PopulationProgress = {
@@ -7,11 +9,18 @@ export type PopulationProgress = {
   accepted?: PopulationPageRequest | undefined;
   successfulReads: number;
   cursors: readonly string[];
+  unusableContinuation: boolean;
   stopped?: 'cycle' | 'limit' | undefined;
 };
 
 export function startPopulationProgress(revision = 0, accepted?: PopulationPageRequest): PopulationProgress {
-  return { request: { cursor: undefined, revision }, accepted, successfulReads: 0, cursors: [] };
+  return {
+    request: { cursor: undefined, revision },
+    accepted,
+    successfulReads: 0,
+    cursors: [],
+    unusableContinuation: false,
+  };
 }
 
 export function populationRequestKey(request: PopulationPageRequest): string {
@@ -44,13 +53,17 @@ export function acceptPopulationPage(
     accepted: active ? request : progress.accepted,
     successfulReads,
     cursors,
+    unusableContinuation: next !== null && next.length > NATIVE_POPULATION_CURSOR_MAX_LENGTH,
     stopped,
   };
 }
 
 export function nextPopulationPage(progress: PopulationProgress, next: string | null): PopulationProgress {
+  if (next !== null && next.length > NATIVE_POPULATION_CURSOR_MAX_LENGTH)
+    return { ...progress, unusableContinuation: true };
   if (
     progress.stopped ||
+    progress.unusableContinuation ||
     next === null ||
     progress.request.revision !== progress.accepted?.revision ||
     progress.cursors.includes(next)
@@ -60,5 +73,8 @@ export function nextPopulationPage(progress: PopulationProgress, next: string | 
 }
 
 export function restartPopulationProgress(progress: PopulationProgress): PopulationProgress {
-  return startPopulationProgress(progress.request.revision + 1, progress.accepted);
+  return {
+    ...startPopulationProgress(progress.request.revision + 1, progress.accepted),
+    unusableContinuation: progress.unusableContinuation,
+  };
 }

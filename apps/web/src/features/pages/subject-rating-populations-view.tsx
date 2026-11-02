@@ -500,6 +500,7 @@ function PopulationVisit({
         )}
         {page && (
           <>
+            {pageState.unusableContinuation && <p role="status">{m.rating_population_unavailable({}, options)}</p>}
             {choices.length === 0 && <p role="status">{m.rating_population_empty_page({}, options)}</p>}
             {page.incomplete && <p role="status">{m.rating_population_concealed({}, options)}</p>}
             <div className="grid gap-2 sm:grid-cols-2">
@@ -534,7 +535,7 @@ function PopulationVisit({
                 className={actionClass}
                 type="button"
                 variant="outline"
-                disabled={!pageState.stopped && request.cursor === undefined && !pending}
+                disabled={!pageState.stopped && !pageState.unusableContinuation && request.cursor === undefined && !pending}
                 onClick={() => move(true)}
               >
                 {m.rating_population_restart({}, options)}
@@ -543,7 +544,7 @@ function PopulationVisit({
                 className={actionClass}
                 type="button"
                 variant="outline"
-                disabled={busy || pending || !!pageState.stopped || page.next === null}
+                disabled={busy || pending || !!pageState.stopped || pageState.unusableContinuation || page.next === null}
                 onClick={() => move()}
               >
                 {m.rating_population_next({}, options)}
