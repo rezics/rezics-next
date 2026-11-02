@@ -47,6 +47,7 @@ import type { CurationRead } from './curate-actions';
 import {
   discardPresentationDraft,
   confirmPresentationDraft,
+  draftPublicationProfile,
   editView,
   hasDraftChanges,
   presentationDraft,
@@ -596,10 +597,7 @@ function AdmittedPresentationViewEditor({
     (publicationState.readFailure?.reason === 'forbidden' &&
       publicationState.readFailure.admissionChanged &&
       publicationState.readFailure);
-  const laterChanges =
-    !!draft &&
-    !!publicationState.intent &&
-    JSON.stringify(draft.profile) !== JSON.stringify(publicationState.intent.profile);
+  const laterChanges = !!draft && !!publicationState.intent && hasDraftChanges(draft, publicationState.intent.profile);
   const unresolvedPublication = pendingPublication && !invalidPublication;
 
   if (admissionFailure)
@@ -749,10 +747,8 @@ function AdmittedPresentationViewEditor({
 
   async function publish(edited?: CompositionDocument) {
     if (!isCurrent() || !draft || inFlight.current || publication.getSnapshot().busy || unresolvedPublication) return;
-    // onChange normally already captured this data; onPublish can deliver a final synchronous edit.
-    const profile = edited
-      ? withView(draft.profile, draft.selection.template, draft.selection.view, edited)
-      : draft.profile;
+    const profile = draftPublicationProfile(draft, edited);
+    if (!profile) return;
     const errors = validateProfile(platformRegistry, profile);
     if (errors.length) {
       setOwned(setFailure, { ok: false, reason: 'invalid', errors });
@@ -857,7 +853,7 @@ function AdmittedPresentationViewEditor({
           {!editorOpen && (
             <Button
               className={editorControlClass}
-              disabled={unresolvedPublication || (invalidPublication && !laterChanges)}
+              disabled={!dirty || unresolvedPublication || (invalidPublication && !laterChanges)}
               onClick={() => void publish()}
             >
               {m.curation_publish()}
@@ -979,7 +975,7 @@ function AdmittedPresentationViewEditor({
                     draft={editors[editorKey]}
                     locale={locale}
                     pointerPrefix={viewPointer(profile, selection.template, selection.view)}
-                    publishDisabled={unresolvedPublication || busy || (invalidPublication && !laterChanges)}
+                    publishDisabled={!dirty || unresolvedPublication || busy || (invalidPublication && !laterChanges)}
                     correction={correction}
                     onInvalid={(errors, document) => {
                       if (!isCurrent()) return;

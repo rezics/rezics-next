@@ -1,5 +1,6 @@
 import {
   platformRegistry,
+  profileDigest,
   type CompositionDocument,
   type CompositionNode,
   type PresentationProfile,
@@ -191,8 +192,29 @@ export function editView(draft: PresentationDraft, selection: ViewSelection, dat
   };
 }
 
-export function hasDraftChanges(draft: PresentationDraft): boolean {
-  return JSON.stringify(draft.profile) !== JSON.stringify(draft.saved.profile);
+/** Compare composition identity, including when reviewing edits after a retained publication. */
+export function hasDraftChanges(
+  draft: PresentationDraft,
+  baseline: PresentationProfile = draft.saved.profile,
+): boolean {
+  if (draft.profile === baseline) return false;
+  try {
+    return profileDigest(draft.profile) !== profileDigest(baseline);
+  } catch {
+    // An uncanonicalizable edit must not lose its leave warning or be mistaken for a saved draft.
+    return true;
+  }
+}
+
+/** Include Puck's final synchronous edit before deciding whether a publication is necessary. */
+export function draftPublicationProfile(
+  draft: PresentationDraft,
+  edited?: CompositionDocument,
+): PresentationProfile | null {
+  const profile = edited
+    ? withView(draft.profile, draft.selection.template, draft.selection.view, edited)
+    : draft.profile;
+  return hasDraftChanges({ ...draft, profile }) ? profile : null;
 }
 
 export function discardPresentationDraft(draft: PresentationDraft): PresentationDraft {

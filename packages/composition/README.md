@@ -471,6 +471,7 @@ capped at 64.
 `profileDigest` is `sha256:` and the lowercase hex SHA-256 of the RFC 8785 canonical UTF-8
 JSON, the same way a definition release is digested. Key order in the object does not change
 the digest.
+The presentation editor compares this identity for saved and retained snapshots; distinct drafts that cannot be canonicalized remain unsaved, while an untouched snapshot stays clean.
 
 ## Template resolution
 
