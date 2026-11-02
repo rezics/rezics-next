@@ -469,8 +469,8 @@ test('Multilingual terms show actionable field-specific corrections without chan
         await replace('terms-labels', 'Corrected title');
       }
       serverFailure = undefined;
-      const beforeSeal = queuedChange(control('terms-labels'), 'After sealing');
       await replace('terms-new-language', 'fr');
+      const beforeSeal = queuedChange(control('terms-labels'), 'After sealing');
       const refusedAdd = queued(button(m.catalogue_create_add_language({}, options)));
       retiredLanguage = queued(button(`ja: ${m.catalogue_create_description({}, options)}`));
       let release!: () => void;
