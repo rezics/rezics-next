@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { CandidateValue } from '../pages/data';
@@ -9,6 +9,13 @@ import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import { m } from '../../paraglide/messages.js';
 import type { ValuePage, ValueRead, ValueTransport } from './value-explanation';
 import { ChangeExplanation } from './subject-changes-page';
+
+type ValueActionKind = 'more' | 'retry' | 'reload';
+type ValueAction = { kind: ValueActionKind; source: HTMLButtonElement; keyboard: boolean };
+type ValueActionResult = { token: number; reading: unknown; result: ValueRead };
+type PendingValueAction = ValueAction & { token: number; document: Document; retired: boolean; cancel: () => void };
+
+const useFocusLayoutEffect = typeof document === 'undefined' ? useEffect : useLayoutEffect;
 
 function Part({ snak, page, locale }: { snak: Snak; page: ValuePage; locale: string }) {
   const label = page.labels[snak.property.id];
@@ -31,30 +38,129 @@ export function ValueExplanationPage({
   onReload,
   onRetry,
   reloadFromFirstPage = false,
-  focusResultVersion = 0,
+  actionResult,
+  reading,
+  isCurrent = () => true,
 }: {
   result?: ValueRead | undefined;
   locale: string;
   busy?: boolean;
-  onMore?: (cursor: string) => void;
-  onReload?: () => void;
-  onRetry?: (() => void) | undefined;
+  onMore?: (cursor: string, action: ValueAction) => number | undefined;
+  onReload?: (action: ValueAction) => number | undefined;
+  onRetry?: ((action: ValueAction) => number | undefined) | undefined;
   reloadFromFirstPage?: boolean;
-  focusResultVersion?: number | undefined;
+  actionResult?: ValueActionResult | undefined;
+  reading?: unknown;
+  isCurrent?: () => boolean;
 }) {
   const headingId = useId();
   const explanationHeading = useRef<HTMLHeadingElement>(null);
-  const lastFocusedResult = useRef(0);
+  const pendingAction = useRef<PendingValueAction | null>(null);
+  function clearPendingAction() {
+    pendingAction.current?.cancel();
+  }
+  function actionIsMeaningful(action: PendingValueAction) {
+    const source = action.source;
+    return (
+      !action.retired &&
+      source.isConnected &&
+      source.dataset.valueAction === action.kind &&
+      !source.matches(':disabled') &&
+      !source.closest('[hidden], [inert], [aria-hidden="true"]')
+    );
+  }
+  function beginAction(action: ValueAction, token: number | undefined) {
+    clearPendingAction();
+    if (!action.keyboard || token === undefined) return;
+    const document = action.source.ownerDocument;
+    const request: PendingValueAction = {
+      ...action,
+      token,
+      document,
+      retired: false,
+      cancel() {
+        document.removeEventListener('focusin', moved, true);
+        document.removeEventListener('pointerdown', cancel, true);
+        document.removeEventListener('keydown', tabbed, true);
+        document.defaultView?.removeEventListener('blur', cancel);
+        if (pendingAction.current === request) pendingAction.current = null;
+      },
+    };
+    function moved(event: FocusEvent) {
+      const target = event.target;
+      if (target === action.source) return;
+      if (
+        (target === document.body || target === document.documentElement) &&
+        (!action.source.isConnected || action.source.matches(':disabled'))
+      )
+        return;
+      request.cancel();
+    }
+    function cancel() {
+      request.cancel();
+    }
+    function tabbed(event: KeyboardEvent) {
+      if (event.key === 'Tab') request.cancel();
+    }
+    document.addEventListener('focusin', moved, true);
+    document.addEventListener('pointerdown', cancel, true);
+    document.addEventListener('keydown', tabbed, true);
+    document.defaultView?.addEventListener('blur', cancel);
+    pendingAction.current = request;
+  }
+  useEffect(() => () => clearPendingAction(), []);
+  useFocusLayoutEffect(() => {
+    const action = pendingAction.current;
+    if (action && (!action.source.isConnected || action.source.dataset.valueAction !== action.kind)) {
+      action.retired = true;
+    }
+  }, [busy, result, onMore, onReload, onRetry]);
   const o = { locale: locale as never };
   const page = result?.kind === 'ready' ? result.page : undefined;
   const statement = page?.statement;
   const competition = page?.competition;
   const change = page?.change;
-  useEffect(() => {
-    if (!focusResultVersion || focusResultVersion <= lastFocusedResult.current || busy || !result) return;
-    lastFocusedResult.current = focusResultVersion;
-    explanationHeading.current?.focus();
-  }, [busy, focusResultVersion, result]);
+  useFocusLayoutEffect(() => {
+    const action = pendingAction.current;
+    if (
+      !action ||
+      busy ||
+      !actionResult ||
+      actionResult?.token !== action.token ||
+      actionResult.result !== result ||
+      actionResult.reading !== reading
+    )
+      return;
+    if (!isCurrent()) {
+      action.cancel();
+      return;
+    }
+    const active = action.document.activeElement;
+    if (active !== action.source && active !== action.document.body && active !== action.document.documentElement) {
+      action.cancel();
+      return;
+    }
+    if (actionIsMeaningful(action)) {
+      if (active !== action.source) action.source.focus();
+    } else {
+      explanationHeading.current?.focus();
+    }
+    action.cancel();
+  }, [actionResult, busy, isCurrent, reading, result]);
+
+  function activate(
+    event: MouseEvent<HTMLButtonElement>,
+    kind: ValueActionKind,
+    run: (action: ValueAction) => number | undefined,
+  ) {
+    const source = event.currentTarget;
+    const action = {
+      kind,
+      source,
+      keyboard: event.detail === 0 && source.ownerDocument.activeElement === source,
+    } satisfies ValueAction;
+    beginAction(action, run(action));
+  }
   return (
     <article
       className="mx-auto flex w-full min-w-0 max-w-3xl flex-col gap-6 whitespace-normal [overflow-wrap:anywhere] [&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:items-center [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring [&_pre]:max-w-full [&_pre]:whitespace-pre-wrap"
@@ -80,7 +186,7 @@ export function ValueExplanationPage({
       <ViewHeading
         label={m.value_why({}, o)}
         headingRef={explanationHeading}
-        headingTabIndex={focusResultVersion ? -1 : undefined}
+        headingTabIndex={actionResult ? -1 : undefined}
         headingClassName="font-sans focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       />
       {!result ? (
@@ -213,7 +319,8 @@ export function ValueExplanationPage({
                       variant="outline"
                       className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere]"
                       disabled={busy}
-                      onClick={() => onMore(competition.next!)}
+                      data-value-action="more"
+                      onClick={(event) => activate(event, 'more', (action) => onMore(competition.next!, action))}
                     >
                       {m.value_more({}, o)}
                     </Button>
@@ -307,7 +414,8 @@ export function ValueExplanationPage({
               variant="outline"
               className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere]"
               disabled={busy}
-              onClick={onRetry}
+              data-value-action="retry"
+              onClick={(event) => activate(event, 'retry', onRetry)}
             >
               {m.value_retry({}, o)}
             </Button>
@@ -317,7 +425,8 @@ export function ValueExplanationPage({
               variant="outline"
               className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere]"
               disabled={busy}
-              onClick={onReload}
+              data-value-action="reload"
+              onClick={(event) => activate(event, 'reload', onReload)}
             >
               {reloadFromFirstPage ? m.value_restart({}, o) : m.candidate_reload({}, o)}
             </Button>
@@ -382,13 +491,16 @@ function ValueEpisode({
   const [busy, setBusy] = useState(false);
   const session = useRef<string | undefined>(initial?.kind === 'ready' ? initial.session : undefined);
   const [cursor, setCursor] = useState<string | undefined>();
-  const [focusResultVersion, setFocusResultVersion] = useState(0);
+  const [actionResult, setActionResult] = useState<ValueActionResult | undefined>();
   const [retry, setRetry] = useState<PageRequest | undefined>(() =>
     unavailable(initial) ? { cursor: undefined, session: session.current } : undefined,
   );
   const running = useRef(false);
   const generation = useRef(0);
-  async function load(request: PageRequest = { cursor: undefined, session: session.current }, focusResult = false) {
+  function load(
+    request: PageRequest = { cursor: undefined, session: session.current },
+    action?: ValueAction,
+  ): number | undefined {
     if (!work.active() || running.current) return;
     running.current = true;
     const version = ++generation.current;
@@ -396,21 +508,25 @@ function ValueEpisode({
     setResult(undefined);
     setRetry(undefined);
     setCursor(request.cursor);
-    const next = await transport(request.cursor, request.session).catch((): ValueRead => ({ kind: 'unavailable' }));
-    if (!work.active() || version !== generation.current) return;
-    session.current = next.kind === 'ready' ? next.session : undefined;
-    setRetry(
-      unavailable(next)
-        ? {
-            cursor: request.cursor,
-            session: next.kind === 'ready' ? next.session : request.session,
-          }
-        : undefined,
-    );
-    setResult(next);
-    setBusy(false);
-    running.current = false;
-    if (focusResult) setFocusResultVersion((version) => version + 1);
+    setActionResult(undefined);
+    void (async () => {
+      const next = await transport(request.cursor, request.session).catch((): ValueRead => ({ kind: 'unavailable' }));
+      if (!work.active() || version !== generation.current) return;
+      session.current = next.kind === 'ready' ? next.session : undefined;
+      setRetry(
+        unavailable(next)
+          ? {
+              cursor: request.cursor,
+              session: next.kind === 'ready' ? next.session : request.session,
+            }
+          : undefined,
+      );
+      setResult(next);
+      setBusy(false);
+      running.current = false;
+      if (action?.keyboard) setActionResult({ token: version, reading: work.generation, result: next });
+    })();
+    return version;
   }
   useEffect(() => {
     if (!initial) void load();
@@ -427,17 +543,19 @@ function ValueEpisode({
       result={work.active() ? result : undefined}
       locale={locale}
       busy={busy}
-      focusResultVersion={focusResultVersion}
-      onMore={(cursor) => {
-        if (offered === generation.current) void load({ cursor, session: session.current }, true);
+      actionResult={actionResult}
+      reading={work.generation}
+      isCurrent={work.active}
+      onMore={(cursor, action) => {
+        if (offered === generation.current) return load({ cursor, session: session.current }, action);
       }}
-      onReload={() => {
-        if (offered === generation.current) void load();
+      onReload={(action) => {
+        if (offered === generation.current) return load(undefined, action);
       }}
       onRetry={
         retry
-          ? () => {
-              if (offered === generation.current) void load(retry, true);
+          ? (action) => {
+              if (offered === generation.current) return load(retry, action);
             }
           : undefined
       }

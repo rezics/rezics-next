@@ -393,8 +393,11 @@ returned session, or the attempted session when no page returned; Back to first 
 continuation. Denied, missing, invalid or changed readings retire recovery, and every reread hides the prior explanation.
 A changed transport or locale rereads from the first page unless it also supplies a new initial reading.
 Recovery stays inside the existing viewer/session and visit lifetime; saved controls belong to the read that offered them.
-Explicit More and exact-retry results focus the mounted “Why this value?” heading with a visible focus ring, including
-empty and terminal pages; initial, hydration, reload and retired reads do not move focus or add a completion announcement.
+Explicit More, exact-retry and reload results focus the mounted “Why this value?” heading with a visible focus ring
+when the same focused keyboard action still owns the read and current result and its opener has disappeared; a surviving
+meaningful opener keeps focus. Pointer activation, background/resume work, intervening pointer, Tab or focus movement,
+movement away and back, window blur, and retired reads remain quiet; initial and hydration reads do not move focus or add
+a completion announcement.
 
 ### Recorded changes
 

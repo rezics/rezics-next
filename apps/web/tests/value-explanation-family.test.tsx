@@ -414,17 +414,23 @@ test('selected-value evidence has independent family sections, complete supplied
       expect(button(container, m.value_restart()).disabled).toBe(true);
       await act(async () => button(container, m.value_restart()).click());
       expect(calls).toHaveLength(cursor === valueCursor ? 1 : 2);
+      if (cursor === valueLastCursor) focusSentinel.focus();
       await complete();
-      expect(window.document.activeElement).toBe(container.querySelector('h1'));
+      expect(window.document.activeElement).toBe(
+        cursor === valueCursor ? container.querySelector('h1') : focusSentinel,
+      );
       expect((container.querySelector('h1') as HTMLHeadingElement).tabIndex).toBe(-1);
       privateAbsent();
     }
     expect(text(container)).toContain(m.value_accepted());
     expect(container.querySelectorAll('button')).toHaveLength(1);
-    await act(async () => button(container, m.value_restart()).click());
+    const restart = button(container, m.value_restart());
+    restart.focus();
+    await act(async () => restart.click());
     expect(calls.at(-1)).toEqual({ session: 'value-session' });
     await complete();
     expect(text(container)).toContain(m.value_page_bound());
+    expect(window.document.activeElement).toBe(restart);
     expect(native.calls.filter((call) => call.path.endsWith('/candidates'))).toHaveLength(4);
     expect(native.calls.every((call) => call.method === 'GET')).toBe(true);
     expect(native.calls.filter((call) => call.path.endsWith('/candidates')).map((call) => call.cursor)).toEqual([
@@ -491,9 +497,12 @@ test('selected-value evidence has independent family sections, complete supplied
     expect(requests.at(-1)).toEqual({ cursor: undefined, session: 'value-session' });
     await resolve({ kind: 'denied' });
     expect(container.querySelector('details,section,nav')).toBeNull();
-    await act(async () => button(container, m.candidate_reload()).click());
+    const reload = button(container, m.candidate_reload());
+    reload.focus();
+    await act(async () => reload.click());
     expect(requests.at(-1)).toEqual({ cursor: undefined, session: undefined });
     await resolve({ kind: 'unavailable' });
+    expect(window.document.activeElement).toBe(container.querySelector('h1'));
     await act(async () => button(container, m.value_retry()).click());
     expect(requests.at(-1)).toEqual({ cursor: undefined, session: undefined });
     await resolve(first);
