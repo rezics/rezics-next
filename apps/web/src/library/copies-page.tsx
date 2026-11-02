@@ -31,6 +31,7 @@ import { CopiesFallback } from './copies-fallback';
 import { UndoNotice } from './copies-undo';
 import type { CopyRemoved } from './copies-read';
 import { undoCopy } from './copies-actions';
+import { copyFieldInputIsTooLong } from './copy-field-input';
 export { CopiesFallback } from './copies-fallback';
 const inputClass =
   'min-h-11 min-w-0 max-w-full w-full rounded-lg border border-border bg-background px-3 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring';
@@ -62,8 +63,29 @@ function DateField({ label, value, onChange }: { label: string; value: string; o
   );
 }
 
-function TextField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+function TextField({
+  field,
+  label,
+  value,
+  onChange,
+  showError,
+}: {
+  field: 'location' | 'source';
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  showError: boolean;
+}) {
   const id = useId();
+  const descriptionId = useId();
+  const tooLong = showError && copyFieldInputIsTooLong(field, value);
+  const description = tooLong
+    ? field === 'location'
+      ? m.library_copy_field_input_location_too_long()
+      : m.library_copy_field_input_source_too_long()
+    : field === 'location'
+      ? m.library_copy_field_input_location_limit()
+      : m.library_copy_field_input_source_limit();
   return (
     <Field>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
@@ -71,15 +93,26 @@ function TextField({ label, value, onChange }: { label: string; value: string; o
         id={id}
         className={inputClass}
         value={value}
+        aria-invalid={tooLong || undefined}
+        aria-describedby={descriptionId}
         autoComplete="off"
         onChange={(event) => onChange(event.currentTarget.value)}
       />
+      <p id={descriptionId} role={tooLong ? 'alert' : undefined} className="text-sm text-muted-foreground">
+        {description}
+      </p>
     </Field>
   );
 }
 
-function NoteField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+function NoteField({ value, onChange, showError }: {
+  value: string;
+  onChange: (value: string) => void;
+  showError: boolean;
+}) {
   const id = useId();
+  const descriptionId = useId();
+  const tooLong = showError && copyFieldInputIsTooLong('note', value);
   return (
     <Field>
       <FieldLabel htmlFor={id}>{m.library_copy_note()}</FieldLabel>
@@ -88,9 +121,14 @@ function NoteField({ value, onChange }: { value: string; onChange: (value: strin
         className="min-h-28 min-w-0 max-w-full"
         rows={4}
         value={value}
+        aria-invalid={tooLong || undefined}
+        aria-describedby={descriptionId}
         autoComplete="off"
         onChange={(event) => onChange(event.currentTarget.value)}
       />
+      <p id={descriptionId} role={tooLong ? 'alert' : undefined} className="text-sm text-muted-foreground">
+        {tooLong ? m.library_copy_field_input_note_too_long() : m.library_copy_field_input_note_limit()}
+      </p>
     </Field>
   );
 }
@@ -224,6 +262,7 @@ export function CopyForm({
   const [more, setMore] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [showFieldErrors, setShowFieldErrors] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const moreId = useId();
   const confirmationId = useId();
@@ -370,6 +409,15 @@ export function CopyForm({
       intent.current?.operation === 'delete'
     )
       return;
+    if (!intent.current) {
+      const invalid = (['location', 'source', 'note'] as const).some((field) =>
+        copyFieldInputIsTooLong(field, draft[field]),
+      );
+      if (invalid) {
+        setShowFieldErrors(true);
+        return;
+      }
+    }
     const editionBinding = binding.current;
     const credentialHeaders = headers(operation);
     if (!credentialHeaders) return;
@@ -700,14 +748,18 @@ export function CopyForm({
           </button>
           <div id={moreId} hidden={!more} className="min-w-0 space-y-4">
             <TextField
+              field="location"
               label={m.library_copy_location()}
               value={draft.location}
               onChange={(value) => change('location', value)}
+              showError={showFieldErrors}
             />
             <TextField
+              field="source"
               label={m.library_copy_source()}
               value={draft.source}
               onChange={(value) => change('source', value)}
+              showError={showFieldErrors}
             />
             <DateField
               label={m.library_copy_acquired()}
@@ -719,7 +771,7 @@ export function CopyForm({
               value={draft.disposedOn}
               onChange={(value) => change('disposedOn', value)}
             />
-            <NoteField value={draft.note} onChange={(value) => change('note', value)} />
+            <NoteField value={draft.note} onChange={(value) => change('note', value)} showError={showFieldErrors} />
           </div>
         </>
       ) : null}

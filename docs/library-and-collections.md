@@ -26,6 +26,7 @@ Progress setup treats the loaded subject and default mode/unit as its baseline; 
 Stored accepted pins retain their immutable meaning after release activation or retirement. Missing profiles block
 new profiled values, not historic reads, clearing or exact undo. Generic labels and curated occurrence edits need no
 profile binding or lookup, and never invent a default state.
+Copy location/source allow 200 Unicode scalar values each and notes 1,000; the editor shows localized limits and accessible field errors after an invalid submit, preserves exact draft text, and validates before capturing a new command.
 
 A Collection has one identity, curator, visibility, title/description, follow target, Zone mount and schema.org
 `ItemList` surface. Curated membership stores ordered occurrences, each with its own ID and note; duplicates remain

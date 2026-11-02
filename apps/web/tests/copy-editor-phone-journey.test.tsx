@@ -157,6 +157,8 @@ for (const editing of [false, true]) {
     await change(m.library_copy_note(), '📚'.repeat(1001));
     await submit();
     expect(editing ? update : create).not.toHaveBeenCalled();
+    expect(keyed).not.toHaveBeenCalled();
+    const messages: string[] = [];
     for (const [label, limit] of [
       [m.library_copy_location(), 200],
       [m.library_copy_source(), 200],
@@ -166,8 +168,13 @@ for (const editing of [false, true]) {
       expect(input.getAttribute('aria-invalid')).toBe('true');
       const description = input.getAttribute('aria-describedby');
       expect(description).toBeTruthy();
-      expect(window.document.getElementById(description!)?.textContent).toContain(String(limit));
+      const message = window.document.getElementById(description!)!;
+      expect(message.getAttribute('role')).toBe('alert');
+      const digits = [...(message.textContent ?? '')].filter((char) => char >= '0' && char <= '9').join('');
+      expect(digits).toContain(String(limit));
+      messages.push(message.textContent ?? '');
     }
+    expect(new Set(messages).size).toBe(3);
     await change(m.library_copy_location(), '  Shelf  ');
     expect(field(m.library_copy_source()).value).toBe('📚'.repeat(201));
     expect(field(m.library_copy_note()).value).toBe('📚'.repeat(1001));
@@ -220,7 +227,7 @@ for (const editing of [false, true]) {
   });
 }
 for (const [reason, expected] of [
-  ['unavailable', m.library_copy_failure()],
+  ['forbidden', m.library_copy_lookup_forbidden()],
   ['conflict', m.library_copy_conflict()],
 ] as const) {
   test(`copy save keeps ${reason} distinct from other outcomes`, async () => {
