@@ -242,7 +242,7 @@ export type EditableCollectionPage = Omit<CollectionPageData, 'memberCount'> &
     filter?: FilterDocument;
     filterIgnored?: string[];
     filterType?: string;
-    filterStatus?: 'unsupported' | 'preparing' | 'failed';
+    filterStatus?: 'unsupported' | 'preparing' | 'failed' | undefined;
     filterProperties?: CollectionFilterProperty[];
     filterParams?: CollectionFilterParams;
     /** Whether the visible first member page can be exported as a complete public ItemList. */
