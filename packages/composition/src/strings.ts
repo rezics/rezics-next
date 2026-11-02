@@ -135,10 +135,7 @@ export function pickLanguage(languages: Iterable<string>, locale: string, origin
   const english = primary === 'en' ? [] : ['en'];
   const lead = primary === 'en' ? chain : chain.slice(0, -1);
   const related = [...available]
-    .filter(
-      (tag) =>
-        primarySubtag(tag) === primary && !chain.some((preferred) => sameLanguageTag(preferred, tag)),
-    )
+    .filter((tag) => primarySubtag(tag) === primary && !chain.some((preferred) => sameLanguageTag(preferred, tag)))
     .sort();
   const origins =
     original === undefined
