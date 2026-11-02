@@ -14,11 +14,12 @@ const id = '019a0000-0000-8000-8000-000000000001';
 const document = '019a0000-0000-8000-8000-000000000002';
 const candidate = '019a0000-0000-8000-8000-000000000003';
 const reference = { document, digest: 'a'.repeat(64), language: 'en' };
-const row = (content: unknown, rank = 'normal') => ({
-  id: candidate,
+const row = (content: unknown, rank = 'normal', id = candidate, qualifiers?: unknown[]) => ({
+  id,
   rank,
   property: { id: 'schema:abstract', data_type: 'document' },
   value: { type: 'value', content },
+  ...(qualifiers === undefined ? {} : { qualifiers }),
 });
 const page = (...content: CompositionDocument['content']): CompositionDocument => ({ root: { props: {} }, content });
 
@@ -68,6 +69,35 @@ test('document selection follows current best rank, unknown snaks and the reader
       'en',
     ),
   ).toEqual([]);
+  const earlier = '019a0000-0000-8000-8000-000000000000';
+  const later = '019a0000-0000-8000-8000-000000000004';
+  expect(
+    pageDocumentReferences(
+      {
+        statements: {
+          'schema:abstract': [
+            row({ ...reference, document: '019a0000-0000-8000-8000-000000000005' }, 'normal', later),
+            row({ ...reference, document: '019a0000-0000-8000-8000-000000000006' }, 'normal', earlier),
+            row(reference, 'preferred', '019a0000-0000-8000-8000-000000000007', [
+              {
+                property: { id: 'rezics:spoilerLevel' },
+                value: { type: 'value', content: { amount: '+1', unit: '1' } },
+              },
+            ]),
+          ],
+        },
+      },
+      ['schema:abstract'],
+      'en',
+    ),
+  ).toEqual([
+    {
+      candidate: earlier,
+      document: '019a0000-0000-8000-8000-000000000006',
+      digest: reference.digest,
+      language: 'en',
+    },
+  ]);
 });
 
 test('the shipped Recipe configuration selects instructions and its shared summary without another renderer', () => {

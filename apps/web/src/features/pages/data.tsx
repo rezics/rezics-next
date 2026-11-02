@@ -3,6 +3,7 @@ import type { MemberPageTarget } from './member-list-query';
 import {
   pickLanguage,
   pickText,
+  pageDocumentReferences,
   planReads,
   platformRegistry,
   shownProperties,
@@ -481,7 +482,8 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
     if (value.type === 'value' && property.data_type === 'document') {
       const content = value.content;
       const document = statementDocument(read.subject.id, statement, read.documents);
-      if (!isRecord(content) || document === undefined || typeof content.language !== 'string') return null;
+      if (!isRecord(content) || document === undefined || typeof content.language !== 'string')
+        return <span>{m.candidate_value_unavailable({}, { locale: options.locale as never })}</span>;
       const lang = content.language === options.locale ? undefined : content.language;
       return (
         <div className="space-y-1">
@@ -494,9 +496,15 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
   };
 
   for (const [property, all] of Object.entries(read.subject.statements)) {
-    let chosen = bestRank(all as unknown as Stmt[]);
+    let chosen: Stmt[];
+    if (all.some((statement) => statement.property.data_type === 'document')) {
+      const candidate = pageDocumentReferences(read.subject, [property], options.locale)[0]?.candidate;
+      chosen = candidate ? (all as unknown as Stmt[]).filter((statement) => statement.id === candidate) : [];
+    } else {
+      chosen = bestRank(all as unknown as Stmt[]);
+    }
     if (!chosen.length) continue;
-    // A summary is one document per language; the page shows the one the reader's chain reaches first.
+    // A document-valued property contributes only its selected public candidate to the page.
     const documents = chosen.flatMap((statement) =>
       statement.value.type === 'value' &&
       statement.property.data_type === 'document' &&

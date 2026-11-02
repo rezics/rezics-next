@@ -423,19 +423,37 @@ export function pageRoutes<App>(
         probeSession,
         encodeSession(tokens, scope, requestSession.components),
       );
+      const initialSubjectDescriptor = subject
+        ? { kind: 'subject' as const, id: subject.id, ...(selected ? { context: selected.context.id } : {}) }
+        : undefined;
+      const initialSubject = initialSubjectDescriptor
+        ? probes.get(canonicalize(initialSubjectDescriptor)!)?.body
+        : undefined;
+      const properties =
+        isRecord(initialSubject) &&
+        isRecord(initialSubject.subject) &&
+        isRecord(initialSubject.subject.statements)
+          ? Object.keys(initialSubject.subject.statements)
+          : [];
+      const plannedDocuments = documentRead(resolved.document, subject?.id ?? null, properties, selected?.context.id);
       return pageAnswer({
         release: (await activeRelease(pool))?.release,
         continuationOnlyLists: !('subject' in target) || !target.view || target.view === 'overview',
-        ...(selected
+        ...(selected ? { context: selected.context } : {}),
+        ...(selected || plannedDocuments
           ? {
-              context: selected.context,
               finalGuard: async (readSession: string | null) => {
                 const incoming = new Request(request, { headers: request.headers });
                 if (readSession !== null) incoming.headers.set(SESSION_HEADER, readSession);
+                const descriptor = {
+                  kind: 'subject' as const,
+                  id: subject!.id,
+                  ...(selected ? { context: selected.context.id } : {}),
+                };
                 const current = await readPage({
                   dispatch,
                   incoming,
-                  reads: { guard: { kind: 'subject', id: subject!.id, context: selected.context.id } },
+                  reads: { guard: descriptor },
                   session,
                   budget,
                   ...(languages ? { languages } : {}),
@@ -446,16 +464,13 @@ export function pageRoutes<App>(
                   throw new ProblemError(result.status === 404 ? 'not_found' : 'dependency_unavailable', {
                     headers: { 'retry-after': '1' },
                   });
+                const initial = probes.get(canonicalize(descriptor)!);
                 if (
                   survivor(result.body).id !== subject!.id ||
-                  canonicalize(result.body) !==
-                    canonicalize(
-                      probes.get(canonicalize({ kind: 'subject', id: subject!.id, context: selected.context.id })!)
-                        ?.body,
-                    )
+                  canonicalize(result.body) !== canonicalize(initial?.body)
                 )
                   throw new ProblemError('dependency_unavailable', { headers: { 'retry-after': '1' } });
-                await guardSelectedPage(authority, selected);
+                if (selected) await guardSelectedPage(authority, selected);
                 return mergedSession(
                   tokens,
                   scope,

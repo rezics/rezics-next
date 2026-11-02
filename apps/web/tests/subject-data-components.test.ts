@@ -42,6 +42,13 @@ function hash(text: string) {
   for (const char of text) h = (h * 31 + char.charCodeAt(0)) % 1e12;
   return h;
 }
+const abstractDocumentId = '01a1740d-7480-71e4-841f-000000000002';
+const abstractDigest = 'a'.repeat(64);
+const abstractStatement = statement('schema:abstract', 'document', {
+  language: 'en',
+  document: abstractDocumentId,
+  digest: abstractDigest,
+});
 const subjectBody = {
   subject: {
     id: subjectId,
@@ -55,10 +62,7 @@ const subjectBody = {
     aliases: {},
     statements: {
       'schema:abstract': [
-        statement('schema:abstract', 'document', {
-          language: 'en',
-          document: fromMarkdown('A pilot meets a prince.', 'text'),
-        }),
+        abstractStatement,
       ],
       'schema:character': [
         statement('schema:character', 'wikibase-item', characterId, [
@@ -79,6 +83,17 @@ const subjectBody = {
     label: { value: 'The Little Prince', language: 'en' },
     creativeWork: true,
     cover,
+  },
+  documents: {
+    [abstractStatement.id]: {
+      id: abstractDocumentId,
+      subjectId,
+      candidateId: abstractStatement.id,
+      digest: abstractDigest,
+      language: 'en',
+      availability: 'available',
+      body: fromMarkdown('A pilot meets a prince.', 'text'),
+    },
   },
 };
 

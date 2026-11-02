@@ -202,7 +202,8 @@ const subjectBody = {
             type: 'value',
             content: {
               language: 'en',
-              document: fromMarkdown('A pilot meets a prince.', 'text'),
+              document: '01a1740d-7480-71e4-841f-000000000003',
+              digest: 'a'.repeat(64),
             },
           },
           qualifiers: [],
@@ -228,6 +229,17 @@ const subjectBody = {
   },
   related: {
     '01a1740d-7480-71e4-841f-66c04022d7c0': { labels: { en: 'The Fox' } },
+  },
+  documents: {
+    '01a1740d-7480-71e4-841f-000000000002': {
+      id: '01a1740d-7480-71e4-841f-000000000003',
+      subjectId: kokoro,
+      candidateId: '01a1740d-7480-71e4-841f-000000000002',
+      digest: 'a'.repeat(64),
+      language: 'en',
+      availability: 'available',
+      body: fromMarkdown('A pilot meets a prince.', 'text'),
+    },
   },
 };
 const holder = (n: number) => ({

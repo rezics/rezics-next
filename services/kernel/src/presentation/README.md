@@ -226,6 +226,27 @@ node's native links/relations/subject-threads read and retains ordinary subject/
 Search and subject-thread descriptors return 204 with an empty body; they are unrequested, not empty lists. Clients retain independent group state or
 offer a fresh-start link when opening a continued document directly. Full-document planning bounds still apply.
 
+### Document bodies in aggregate pages
+
+`documentRead` describes the configured document-valued properties for the selected subject and Context. The
+executor reuses that page's disclosed subject observation and `pageDocumentReferences` selects at most one released
+statement per property by rank and reader/original language; equal-rank, equal-language candidates use the smallest
+statement UUID in code-unit order. It dispatches the selected unique body IDs through the existing in-process
+`GET /v1/documents/{id}` operation. This is the only body disclosure path: locators, history and competing
+candidates are not readers.
+
+The subject and optional Context stay bound for the whole operation. After body reads, the HTTP page reader reserves
+and performs a final selected-subject read; concealment remains 404, and a changed subject observation discards the
+page result as retryable `dependency_unavailable`. The body route retains its own current disclosure checks. A body
+404 remains absent for Web to render as unavailable; other body failures retain their failure status. Web receives
+only exact id/subject/candidate/language/digest matches with an available validated body.
+
+Each selected body costs one native read and one requested-value slot. The plan admits at most fifteen distinct
+bodies (one subject read plus fifteen bodies reaches the existing sixteen-read ceiling) and shares the page's
+128-slot budget. The final subject guard and other probes or reads reduce the available body allowance. Admission
+rejects an oversized effective plan instead of truncating selected values. Bodies remain request-local and the
+aggregate page response stays `private, no-store`.
+
 ## Configured catalogue lists
 
 `TypeList` accepts an optional public `FilterDocument` in `props.filter`. The shared Filter parser owns its grammar

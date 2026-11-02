@@ -9,7 +9,6 @@ export function statementDocument(
   if (statement.value.type !== 'value') return;
   const content = statement.value.content;
   if (!content || typeof content !== 'object' || !('document' in content) || !('language' in content)) return;
-  if (checkDocument(content.document)) return content.document;
   if (
     typeof content.document !== 'string' ||
     !('digest' in content) ||

@@ -29,7 +29,12 @@ const statement = (property: string, dataType: string, statementValue: unknown, 
   ...extra,
 });
 const spoiler = (level: number) => snak('rezics:spoilerLevel', 'quantity', value({ amount: `+${level}`, unit: '1' }));
-const document = (text: string) => ({ language: 'en', document: fromMarkdown(text, 'text') });
+const documentBodies = new Map<string, ReturnType<typeof fromMarkdown>>();
+const document = (text: string, language = 'en') => {
+  const id = crypto.randomUUID();
+  documentBodies.set(id, fromMarkdown(text, 'text'));
+  return { language, document: id, digest: 'a'.repeat(64) };
+};
 const cover = {
   media: mediaId,
   width: 800,
@@ -82,6 +87,31 @@ function subject(statements: ReturnType<typeof statement>[], extra: Record<strin
     ...extra,
   };
 }
+const availableDocuments = (read: ReturnType<typeof subject>) =>
+  Object.fromEntries(
+    Object.values(read.statements).flatMap((rows) =>
+      rows.flatMap((entry) => {
+        const content = (entry.value as { type: string; content?: { document?: string; digest?: string; language?: string } })
+          .content;
+        const body = content?.document ? documentBodies.get(content.document) : undefined;
+        if (!body || !content?.digest || !content.language) return [];
+        return [
+          [
+            entry.id,
+            {
+              id: content.document,
+              subjectId: read.id,
+              candidateId: entry.id,
+              digest: content.digest,
+              language: content.language,
+              availability: 'available',
+              body,
+            },
+          ] as const,
+        ];
+      }),
+    ),
+  );
 
 // The work overview with the facts of its Details view before Sources, so one render shows every property.
 const work = (
@@ -99,7 +129,7 @@ const workWithFacts: CompositionDocument = {
 };
 
 function pageOf(
-  read: { subject: ReturnType<typeof subject>; summary?: unknown },
+  read: { subject: ReturnType<typeof subject>; summary?: unknown; documents?: unknown },
   template: CompositionDocument = workWithFacts,
 ): SubjectPageData {
   const reads: SubjectPageData['reads'] = {};
@@ -111,6 +141,7 @@ function pageOf(
             body: {
               related: Object.fromEntries(Object.entries(names).map(([id, label]) => [id, { labels: label }])),
               summary: null,
+              documents: read.documents ?? availableDocuments(read.subject),
               ...read,
             },
           }
@@ -251,11 +282,12 @@ test("the cover's credit is absent from captions and remains in Sources at the e
 });
 
 test('a media value renders through Cover and a document value through the document renderer, never as an id or an empty row', () => {
+  const abstract = statement('schema:abstract', 'document', value(document('A pilot meets a prince.')));
   const read = {
     subject: subject([
       statement('schema:image', 'media', value(mediaId)),
       statement('schema:image', 'media', value(otherMediaId)),
-      statement('schema:abstract', 'document', value(document('A pilot meets a prince.'))),
+      abstract,
       statement('schema:keywords', 'string', value('')),
     ]),
     summary: summary(['schema:Book', 'schema:CreativeWork']),
@@ -289,11 +321,10 @@ test('a media value renders through Cover and a document value through the docum
   expect(unreadable).not.toMatch(/<dt[^>]*>Abstract<\/dt>/);
 
   // The summary shown is the reader's language, with the language named when it is not theirs.
+  const traditional = statement('schema:abstract', 'document', value(document('王子', 'zh-Hant')));
+  const englishText = statement('schema:abstract', 'document', value(document('A prince')));
   const abstracts = pageOf({
-    subject: subject([
-      statement('schema:abstract', 'document', value({ language: 'zh-Hant', document: fromMarkdown('王子', 'text') })),
-      statement('schema:abstract', 'document', value({ language: 'en', document: fromMarkdown('A prince', 'text') })),
-    ]),
+    subject: subject([traditional, englishText]),
   });
   const simplified = render(abstracts, 'zh-Hans');
   expect(simplified).toMatch(/lang="zh-Hant"/);

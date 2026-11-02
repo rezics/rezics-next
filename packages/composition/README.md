@@ -601,7 +601,8 @@ at most 12 rows; continuation binds the native cursor to one current node and it
 `Summary` selects `schema:abstract`; `MoreStatements` adds the other properties in the already disclosed subject observation.
 The optional Context stays bound to the same selected subject observation; it never falls back to Global.
 After that one bounded subject observation, `pageDocumentReferences` selects the same best rank
-and reader/original language as the generic renderer. The executor admits the entire effective
+and reader/original language as the generic renderer, with at most one reference per property and
+the smallest statement UUID breaking a tie within the selected rank and language. The executor admits the entire effective
 plan before reading bodies or other planned lists. Its published maximum is fifteen distinct
 bodies (`MAX_PAGE_DOCUMENTS`): one subject operation plus fifteen `document.get` operations exhausts
 sixteen native reads. Account probes, redirect hops, final selected-Context guards and other reads reduce that allowance.

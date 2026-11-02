@@ -30,8 +30,22 @@ const statement = (
   qualifiers,
   references: [],
 });
-const instruction = (language: string, document: unknown, rank = 'normal', qualifiers: unknown[] = []) =>
-  statement('schema:recipeInstructions', 'document', { language, document }, rank, qualifiers);
+const documentBodies: Record<string, unknown> = {};
+const instruction = (language: string, body: unknown, rank = 'normal', qualifiers: unknown[] = []) => {
+  const document = crypto.randomUUID();
+  const digest = 'a'.repeat(64);
+  const row = statement('schema:recipeInstructions', 'document', { language, document, digest }, rank, qualifiers);
+  documentBodies[row.id] = {
+    id: document,
+    subjectId: id,
+    candidateId: row.id,
+    digest,
+    language,
+    availability: 'available',
+    body,
+  };
+  return row;
+};
 const instructions = fromMarkdown(
   '## Prepare\n\n1. Rinse the rice.\n2. Add water.\n\n## Cook\n\nSimmer for 25 minutes.',
   'blocks',
@@ -66,6 +80,13 @@ const build = (entries: unknown[], locale = 'en') =>
   subjectJsonLd({
     ...body,
     subject: { ...body.subject, statements: { 'schema:recipeInstructions': entries } },
+    documents: Object.fromEntries(
+      entries.flatMap((entry) => {
+        if (!entry || typeof entry !== 'object' || !('id' in entry) || typeof entry.id !== 'string') return [];
+        const document = documentBodies[entry.id];
+        return document === undefined ? [] : [[entry.id, document] as const];
+      }),
+    ),
     locale,
     url: 'https://rezics.com/en/subjects/rice',
   } as never);

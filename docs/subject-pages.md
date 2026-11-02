@@ -250,8 +250,18 @@ view. Preserve the actual subject response `{subject, account, summary, related}
 resolution, selected statements, qualifiers and support references. Use current bounded related summaries rather
 than extra per-card reads. Neither a presentation profile nor a cached label grants current access.
 
-Titles, short descriptions and admitted facts render without JavaScript. Genuine embedded, validated Content
-documents use the existing document renderer; a document locator alone is not prose. Select the reader's summary
+For each document-valued property a page binds, show at most one released public statement: preferred rank before
+normal rank, then the reader's language and the subject's original-language fallback. If eligible statements tie at
+that rank and language, the smallest statement UUID in code-unit order wins. `pages.read` obtains that exact body
+through the existing `document.get` aggregate; a locator alone is never prose. The page renders an available body
+with its language through the shared document renderer. A missing eligible reference contributes no body. A body
+withheld by Content renders the ordinary unavailable value and contributes no `recipeInstructions`; a failed body
+read remains a page read failure and is never converted to an empty or successful value. Public `recipeInstructions`
+keeps the existing Schema.org `HowToStep` projection and uses the same selected body as the rendered statement, so
+HTML and JSON-LD cannot select different candidates.
+
+Titles, short descriptions and admitted facts render without JavaScript. Validated document bodies in the page's
+aggregate response use the existing document renderer; a document locator alone is not prose. Select the reader's summary
 language before deciding whether its body is available. If the selected body is unavailable, About retains a real
 short description when present and explicitly offers a document retry. No summary is different from an unreadable
 summary, and a failed dependency is different from an empty successful section. Retry keeps the current query and

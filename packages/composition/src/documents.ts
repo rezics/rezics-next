@@ -11,6 +11,18 @@ function record(value: unknown): value is Record<string, unknown> {
 }
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
+function publicQualifierSet(value: Record<string, unknown>): boolean {
+  if (!Object.hasOwn(value, 'qualifiers')) return true;
+  if (!Array.isArray(value.qualifiers)) return false;
+  return value.qualifiers.every((entry) => {
+    if (!record(entry) || !record(entry.property) || typeof entry.property.id !== 'string') return false;
+    if (entry.property.id !== 'rezics:spoilerLevel') return true;
+    const content = record(entry.value) && entry.value.type === 'value' ? entry.value.content : undefined;
+    const amount = record(content) ? Number(content.amount) : Number.NaN;
+    return Number.isInteger(amount) && amount === 0;
+  });
+}
+
 export function pageDocumentReferences(
   subject: unknown,
   properties: readonly string[],
@@ -21,7 +33,7 @@ export function pageDocumentReferences(
   const ranked = (property: string) => {
     const all = statements[property];
     if (!Array.isArray(all)) return [];
-    const rows = all.filter(record);
+    const rows = all.filter((row): row is Record<string, unknown> => record(row) && publicQualifierSet(row));
     const rank = rows.some((row) => row.rank === 'preferred') ? 'preferred' : 'normal';
     return rows.filter((row) => row.rank === rank);
   };
@@ -41,6 +53,7 @@ export function pageDocumentReferences(
     const rows = ranked(property).flatMap((row) => {
       if (
         !record(row.property) ||
+        row.property.id !== property ||
         row.property.data_type !== 'document' ||
         !record(row.value) ||
         row.value.type !== 'value'
@@ -65,6 +78,9 @@ export function pageDocumentReferences(
       locale,
       original,
     );
-    return rows.filter((row) => row.language === language);
+    const selected = rows
+      .filter((row) => row.language === language)
+      .sort((left, right) => (left.candidate < right.candidate ? -1 : left.candidate > right.candidate ? 1 : 0))[0];
+    return selected ? [selected] : [];
   });
 }

@@ -1,6 +1,6 @@
 import { hasPublicMean, PUBLIC_RATING_SCALE } from './subject-ratings';
 import type { PublicFigure } from './subject-ratings';
-import { pickLanguage } from '@rezics/composition';
+import { pageDocumentReferences, pickLanguage } from '@rezics/composition';
 import { isExists } from 'date-fns/isExists';
 import {
   checkDocument,
@@ -330,7 +330,12 @@ export function subjectJsonLd({
     const externalId = /^wdt:P\d+$/.test(property);
     if ((key === undefined && !externalId) || (key !== undefined && reserved.has(key))) continue;
     const values: JsonValue[] = [];
-    for (const statement of publicStatements(statements, locale, original)) {
+    const hasDocuments = statements.some((statement) => statement.property.data_type === 'document');
+    const selectedCandidate = hasDocuments ? pageDocumentReferences(subject, [property], locale)[0]?.candidate : undefined;
+    const visible = hasDocuments
+      ? statements.filter((statement) => selectedCandidate !== undefined && statement.id === selectedCandidate)
+      : statements;
+    for (const statement of publicStatements(visible, locale, original)) {
       if (externalId && statement.property.data_type !== 'external-id') continue;
       if (statement.value.type !== 'value') continue;
       const value = statementValue(statement, references, property, subject.id, documents);

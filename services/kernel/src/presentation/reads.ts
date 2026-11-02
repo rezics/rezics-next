@@ -719,6 +719,19 @@ export async function readPage(options: {
   }
 
   const documents: Record<string, unknown> = {};
+  const subjectCanonical = descriptor
+    ? canonicalize({ kind: 'subject' as const, id: descriptor.id, ...(descriptor.context ? { context: descriptor.context } : {}) })
+    : undefined;
+  const setSubjectResult = (result: PageResult) => {
+    if (subjectCanonical) byCanonical.set(subjectCanonical, result);
+  };
+  const failDocument = async () => {
+    setSubjectResult(
+      await responseResult(
+        problemResponse(new ProblemError('dependency_unavailable'), { method: 'GET', id: 'page' }),
+      ),
+    );
+  };
   for (const id of documentIds) {
     budget.charge(1);
     const headers = new Headers();
@@ -738,20 +751,36 @@ export async function readPage(options: {
     }
     const result = await responseResult(response);
     if (result.status !== 200) {
-      for (const read of reads) {
-        if (read.descriptor.kind === 'subject' && read.descriptor.id === descriptor?.id)
-          byCanonical.set(read.canonical, result);
-      }
+      setSubjectResult(result);
       break;
     }
     const document = isObject(result.body) ? result.body.document : undefined;
-    if (!isObject(document) || document.availability !== 'available' || !checkDocument(document.body)) continue;
+    const selectedReference = references.find((value) => value.document === id);
+    if (
+      !selectedReference ||
+      !isObject(document) ||
+      document.id !== id ||
+      document.subjectId !== descriptor?.id ||
+      document.candidateId !== selectedReference.candidate ||
+      document.language !== selectedReference.language ||
+      document.digest !== selectedReference.digest
+    ) {
+      await failDocument();
+      break;
+    }
+    if (document.availability !== 'available') continue;
+    if (!checkDocument(document.body)) {
+      await failDocument();
+      break;
+    }
     const canonical = serializeDocument(document.body);
     if (
       Buffer.byteLength(canonical) > MAX_DOCUMENT_BYTES ||
       createHash('sha256').update(canonical).digest('hex') !== document.digest
-    )
-      continue;
+    ) {
+      await failDocument();
+      break;
+    }
     for (const reference of references) {
       if (
         document.id === reference.document &&

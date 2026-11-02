@@ -3,21 +3,41 @@ import { fromPlainText } from '@rezics/document';
 import { subjectJsonLd } from '../src/features/pages/jsonld.ts';
 
 test('public rank, document language and source order are independent of concealed statements', () => {
+  const subject = '019a0000-0000-8000-8000-000000000001';
+  const documentBodies: Record<string, unknown> = {};
   const statement = (content: unknown, rank = 'normal', amount?: string, data_type = 'string') => ({
+    id: crypto.randomUUID(),
     rank,
-    property: { data_type },
+    property: { id: data_type === 'document' ? 'schema:recipeInstructions' : 'schema:recipeYield', data_type },
     value: { type: 'value', content },
     qualifiers:
       amount === undefined
         ? []
         : [{ property: { id: 'rezics:spoilerLevel' }, value: { type: 'value', content: { amount } } }],
   });
-  const document = (language: string, rank = 'normal', amount?: string) =>
-    statement({ language, document: fromPlainText(language) }, rank, amount, 'document');
+  const document = (language: string, rank = 'normal', amount?: string) => {
+    const body = fromPlainText(language);
+    const row = statement(
+      { language, document: crypto.randomUUID(), digest: 'a'.repeat(64) },
+      rank,
+      amount,
+      'document',
+    );
+    documentBodies[row.id] = {
+      id: (row.value.content as { document: string }).document,
+      subjectId: subject,
+      candidateId: row.id,
+      digest: 'a'.repeat(64),
+      language,
+      availability: 'available',
+      body,
+    };
+    return row;
+  };
   const build = (values: unknown[], documents: unknown[]) =>
     subjectJsonLd({
       subject: {
-        id: 'recipe',
+        id: subject,
         type: 'schema:Recipe',
         labels: { en: 'Public' },
         descriptions: {},
@@ -28,6 +48,13 @@ test('public rank, document language and source order are independent of conceal
           'schema:inLanguage': [statement('ja')],
         },
       },
+      documents: Object.fromEntries(
+        documents.flatMap((row) => {
+          if (!row || typeof row !== 'object' || !('id' in row) || typeof row.id !== 'string') return [];
+          const body = documentBodies[row.id];
+          return body === undefined ? [] : [[row.id, body] as const];
+        }),
+      ),
       related: {},
       locale: 'fr',
       url: 'https://rezics.com/fr/subjects/recipe',
