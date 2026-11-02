@@ -10,6 +10,7 @@ import { XIcon } from 'lucide-react';
 import { m } from '../../paraglide/messages.js';
 import { localizedLabel } from '../results';
 import { useSearchRetryWait } from '../search-recovery-retry';
+import { FacetContinuationLedger } from './facet-continuation';
 import { refinementHref, type RefinementConditions, type RefinementProperty } from './model';
 import { type FacetPage, type FacetState, type RequestedFacet } from './request';
 
@@ -19,18 +20,7 @@ export type RefinementData = {
   initial?: FacetState;
 };
 type Load = (facets: RequestedFacet[], signal: AbortSignal) => Promise<FacetState>;
-
-/** Compose existing native fields and checkboxes inside the page's shared desktop/phone Filters surface. */
-export function Refinement({
-  data,
-  conditions,
-  query,
-  locale,
-  sort,
-  load,
-  showSummary = true,
-  onNavigate,
-}: {
+type RefinementProps = {
   data: RefinementData;
   conditions: RefinementConditions;
   query: string;
@@ -39,7 +29,38 @@ export function Refinement({
   load: Load;
   showSummary?: boolean;
   onNavigate?: (href: string) => void;
-}) {
+};
+
+/** Compose existing native fields and checkboxes inside the page's shared desktop/phone Filters surface. */
+export function Refinement(props: RefinementProps) {
+  const queryIdentity = JSON.stringify([
+    props.data.key,
+    refinementHref(props.locale, props.query, props.conditions, props.sort),
+  ]);
+  const currentIdentity = useRef(queryIdentity);
+  currentIdentity.current = queryIdentity;
+  return (
+    <RefinementInstance
+      key={queryIdentity}
+      {...props}
+      queryIdentity={queryIdentity}
+      isCurrent={() => currentIdentity.current === queryIdentity}
+    />
+  );
+}
+
+function RefinementInstance({
+  data,
+  conditions,
+  query,
+  locale,
+  sort,
+  load,
+  showSummary = true,
+  onNavigate,
+  queryIdentity,
+  isCurrent,
+}: RefinementProps & { queryIdentity: string; isCurrent: () => boolean }) {
   const id = useId();
   const router = useRouter({ warn: false });
   const navigate =
@@ -54,6 +75,7 @@ export function Refinement({
   const [state, setState] = useState(data.initial);
   const [busy, setBusy] = useState(false);
   const active = useRef<AbortController | null>(null);
+  const continuations = useRef(new FacetContinuationLedger(queryIdentity));
   const lastRead = useRef<{ facets: RequestedFacet[]; more?: string | undefined } | undefined>(undefined);
   const waiting = useSearchRetryWait(state && state.status !== 'ready' ? state.retryAt : undefined);
   useEffect(() => () => active.current?.abort(), []);
@@ -79,13 +101,27 @@ export function Refinement({
       )
       .map((property): RequestedFacet => {
         const cursor = more === property ? pages.find((entry) => entry.property === property)?.next : undefined;
-        return { property, size: 10, ...(cursor ? { cursor } : {}) };
+        return { property, size: 10, ...(cursor === undefined || cursor === null ? {} : { cursor }) };
       });
     if (!facets.length) return;
     return readRequested(facets, more);
   }
 
+  function stopRepeatedContinuation(property: string) {
+    setPages((current) => current.map((page) => (page.property === property ? { ...page, next: null } : page)));
+    lastRead.current = undefined;
+    setState({ status: 'restart', code: 'repeated_facet_continuation' });
+  }
+
   async function readRequested(facets: RequestedFacet[], more?: string) {
+    if (!isCurrent()) return;
+    const repeatedRequest = facets.find(
+      (facet) => facet.cursor !== undefined && continuations.current.has(facet.property, facet.cursor),
+    );
+    if (repeatedRequest) {
+      stopRepeatedContinuation(repeatedRequest.property);
+      return;
+    }
     lastRead.current = { facets, more };
     active.current?.abort();
     const controller = new AbortController();
@@ -93,8 +129,16 @@ export function Refinement({
     setBusy(true);
     try {
       const result = await load(facets, controller.signal);
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted || !isCurrent()) return;
       if (result.status === 'ready') {
+        const repeated = result.page.facets.find((facet) => {
+          const request = facets.find((entry) => entry.property === facet.property);
+          return continuations.current.repeats(facet.property, request?.cursor, facet.next);
+        });
+        if (repeated) {
+          stopRepeatedContinuation(repeated.property);
+          return;
+        }
         const next = [...pages];
         for (const facet of result.page.facets) {
           const index = next.findIndex((entry) => entry.property === facet.property);
@@ -114,15 +158,19 @@ export function Refinement({
           if (index >= 0) next[index] = combined;
           else next.push(combined);
         }
+        for (const facet of result.page.facets) {
+          const request = facets.find((entry) => entry.property === facet.property);
+          if (request?.cursor !== undefined) continuations.current.consume(facet.property, request.cursor);
+        }
         setPages(next);
         lastRead.current = undefined;
       }
       setState(result);
     } catch (error) {
-      if (!controller.signal.aborted)
+      if (!controller.signal.aborted && isCurrent())
         setState({ status: 'unavailable', code: error instanceof Error ? error.name : 'transport_error' });
     } finally {
-      if (!controller.signal.aborted) setBusy(false);
+      if (!controller.signal.aborted && isCurrent()) setBusy(false);
     }
   }
 

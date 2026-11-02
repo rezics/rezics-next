@@ -207,7 +207,7 @@ Metadata is a fixed bounded PAGE in configured order, never count order: data ki
 One More types control uses metadata continuation without excluding unshown kinds from hit search. Counts are
 attempted once on the initial query and retained across hit continuation; changed conditions start a new query.
 Later metadata can have unavailable counts. K_page=8 is a research proposal pending first native measurement,
-not a frozen output/engine allowance. Existing property/value facets and public totals remain count-free.
+not a frozen output/engine allowance. Existing property/value facets and public totals remain count-free. Facet traversal belongs to the current refinement query; a repeated opaque cursor preserves accepted values, stops further paging and offers the existing restart action. Failed reads remain retryable.
 
 Every hit has a generic base sufficient to render/link without an additional read: canonical ID, registry kind
 and localized kind label, title label with actual BCP47 language, optional currently public image plus aspect
