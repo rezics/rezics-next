@@ -74,22 +74,38 @@ async function mountForm(hydrate = false) {
   const { renderToString } = await import('react-dom/server');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const edits = await import('../src/library/collection-edit');
-  const { Route } = await import('../src/routes/collections/new');
+  const { NewCollectionForm, Route } = await import('../src/routes/collections/new');
   const { m } = await import('../src/paraglide/messages.js');
   const { getLocale } = await import('../src/paraglide/runtime.js');
   let loaded = loader();
   const read = spyOn(Route, 'useLoaderData').mockImplementation(() => loaded);
   const Page = Route.options.component!;
   const calls: {
+    sender: unknown;
     data: Parameters<typeof edits.createCollection>[0]['data'];
+    headers: [string, string][];
     csrf: string | null;
     work: ReturnType<typeof deferred<CollectionWriteResult>>;
   }[] = [];
-  const transport = spyOn(edits, 'createCollection').mockImplementation((input) => {
+  const record = (sender: unknown, input: Parameters<typeof edits.createCollection>[0]) => {
     const work = deferred<CollectionWriteResult>();
-    calls.push({ data: structuredClone(input.data), csrf: new Headers(input.headers).get('X-CSRF-Token'), work });
+    const headers = new Headers(input.headers);
+    calls.push({
+      sender,
+      data: structuredClone(input.data),
+      headers: [...headers.entries()],
+      csrf: headers.get('X-CSRF-Token'),
+      work,
+    });
     return work.promise;
-  });
+  };
+  const transport = spyOn(edits, 'createCollection');
+  transport.mockImplementation((input) => record(transport, input));
+  const createSender = (): typeof edits.createCollection => {
+    let sender!: typeof edits.createCollection;
+    sender = (input) => record(sender, input);
+    return sender;
+  };
   const navigation: string[] = [];
   const navigate = spyOn(window.location, 'assign').mockImplementation((url) => navigation.push(String(url)));
   const host = document.createElement('div');
@@ -103,11 +119,13 @@ async function mountForm(hydrate = false) {
     admitted = true,
     page = loaded,
     visible = true,
+    sender,
   }: {
     session?: Viewer;
     admitted?: boolean;
     page?: Loaded;
     visible?: boolean;
+    sender?: typeof edits.createCollection;
   } = {}) => {
     loaded = page;
     await act(async () => {
@@ -117,7 +135,13 @@ async function mountForm(hydrate = false) {
       client.setQueryData(['exposure', 'anonymous'], ['collections']);
       const tree = (
         <StrictMode>
-          <QueryClientProvider client={client}>{visible ? <Page /> : null}</QueryClientProvider>
+          <QueryClientProvider client={client}>
+            {visible
+              ? sender
+                ? <NewCollectionForm csrfToken={session.csrfToken ?? ''} types={loaded.types} sender={sender} />
+                : <Page />
+              : null}
+          </QueryClientProvider>
         </StrictMode>
       );
       if (!root && hydrate) {
@@ -140,7 +164,9 @@ async function mountForm(hydrate = false) {
   const fill = async (value = 'Private title', visibility = 'private', presentationKind = 'book') => {
     await act(async () => {
       title().value = value;
+      title().dispatchEvent(new window.Event('input', { bubbles: true }));
       description().value = `${value} description`;
+      description().dispatchEvent(new window.Event('input', { bubbles: true }));
       kind().value = presentationKind;
       kind().dispatchEvent(new window.Event('change', { bubbles: true }));
       host.querySelector<HTMLElement>(`#collection-visibility-${visibility}`)!.click();
@@ -163,6 +189,7 @@ async function mountForm(hydrate = false) {
     host,
     m,
     calls,
+    createSender,
     navigation,
     hydrationErrors,
     render,
@@ -299,6 +326,7 @@ describe('Curated Collection creation preserves exact uncertain intent and isola
         await page.render();
         await page.fill('  Exact title  ', 'unlisted', 'game');
         page.description().value = '  Exact description\nsecond line  ';
+        page.description().dispatchEvent(new page.host.ownerDocument.defaultView!.Event('input', { bubbles: true }));
         await page.submit(true);
         const captured = page.calls[0]!.data;
         expect(captured).toEqual({
@@ -309,6 +337,7 @@ describe('Curated Collection creation preserves exact uncertain intent and isola
           idempotencyKey: page.key(),
         });
         expect(page.calls[0]!.csrf).toBe('csrf-one');
+        expect(page.calls[0]!.headers).toEqual([['x-csrf-token', 'csrf-one']]);
         await page.render({ session: viewer('viewer-one', 'csrf-two'), page: { ...loader(), types: [] } });
         expect(page.key()).toBe(captured.idempotencyKey);
         expect(page.title().value).toBe(captured.title);
@@ -325,8 +354,10 @@ describe('Curated Collection creation preserves exact uncertain intent and isola
         page.description().value = 'Unsent replacement description';
         await page.submit(true);
         expect(page.calls).toHaveLength(2);
+        expect(page.calls[1]!.sender).toBe(page.calls[0]!.sender);
         expect(page.calls[1]!.data).toEqual(captured);
-        expect(page.calls[1]!.csrf).toBe('csrf-three');
+        expect(page.calls[1]!.headers).toEqual(page.calls[0]!.headers);
+        expect(page.calls[1]!.csrf).toBe('csrf-one');
         await page.settle(1, { ok: false, reason: 'unavailable' });
         expect(page.key()).toBe(captured.idempotencyKey);
         await page.submit();
@@ -348,6 +379,27 @@ describe('Curated Collection creation preserves exact uncertain intent and isola
         await page.settle(3, success);
         expect(page.navigation).toEqual([page.href(success.id)]);
       });
+  });
+
+  test('a renewed sender cannot replace the original sender or credentials for an uncertain create', async () => {
+    await withForm(async (page) => {
+      const originalSender = page.createSender();
+      const renewedSender = page.createSender();
+      await page.render({ sender: originalSender });
+      await page.fill('Retained create', 'unlisted', 'game');
+      await page.submit();
+      const original = page.calls[0]!;
+      await page.settle(0, { ok: false, reason: 'unavailable' });
+
+      await page.render({ session: viewer('viewer-one', 'csrf-two'), sender: renewedSender });
+      await page.submit();
+      expect(page.calls).toHaveLength(2);
+      expect(page.calls[1]!.sender).toBe(originalSender);
+      expect(page.calls[1]!.headers).toEqual(original.headers);
+      expect(page.calls[1]!.data).toEqual(original.data);
+      await page.settle(1, success);
+      expect(page.navigation).toEqual([page.href(success.id)]);
+    });
   });
 
   test('uncertain feedback and intent are private to their viewer, and healthy guarded hydration remains usable', async () => {

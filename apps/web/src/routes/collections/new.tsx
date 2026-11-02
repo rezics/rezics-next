@@ -35,21 +35,33 @@ function NewCollectionPage() {
         <PageHeading>{m.library_collection_new()}</PageHeading>
       </header>
       {state === 'signed-in' && subject && csrfToken && admitted ? (
-        <NewCollectionForm key={subject} csrfToken={csrfToken} types={loaded.types} />
+        <NewCollectionForm key={subject} csrfToken={csrfToken} types={loaded.types} sender={createCollection} />
       ) : null}
     </article>
   );
 }
 
 type CreateIntent = {
-  title: string;
-  description: string;
-  visibility: CollectionVisibility;
-  presentationKind: string | null;
-  idempotencyKey: string;
+  sender: typeof createCollection;
+  headers: { 'X-CSRF-Token': string };
+  data: {
+    title: string;
+    description: string;
+    visibility: CollectionVisibility;
+    presentationKind: string | null;
+    idempotencyKey: string;
+  };
 };
 
-function NewCollectionForm({ csrfToken, types }: { csrfToken: string; types: CollectionTypeOption[] | null }) {
+export function NewCollectionForm({
+  csrfToken,
+  types,
+  sender,
+}: {
+  csrfToken: string;
+  types: CollectionTypeOption[] | null;
+  sender: typeof createCollection;
+}) {
   // The loader UUID is public, not a viewer lifetime. Every admitted mount gets a fresh command key.
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
   const [visibility, setVisibility] = useState<CollectionVisibility | ''>('');
@@ -89,17 +101,19 @@ function NewCollectionForm({ csrfToken, types }: { csrfToken: string; types: Col
         setTextSubmitted(true);
         if (collectionTextIssue('title', title) || collectionTextIssue('description', description)) return;
         current.intent = {
-          title,
-          description,
-          visibility,
-          presentationKind: kind,
-          idempotencyKey,
+          sender,
+          headers: { 'X-CSRF-Token': csrfToken },
+          data: {
+            title,
+            description,
+            visibility,
+            presentationKind: kind,
+            idempotencyKey,
+          },
         };
       }
-      const result = await createCollection({
-        data: current.intent,
-        headers: { 'X-CSRF-Token': csrfToken },
-      });
+      const intent = current.intent;
+      const result = await intent.sender({ data: intent.data, headers: intent.headers });
       if (!current.active) return;
       if (result.ok) {
         navigating = true;
