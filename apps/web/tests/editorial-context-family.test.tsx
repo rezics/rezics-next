@@ -267,8 +267,17 @@ test('Editorial Context family retains supplied comparison, independent controls
 
     // A queued confirmation stays retired after a mounted current reread.
     await render(null);
-    const queued = editorialContextFixture();
-    await render(<EditorialContextWorkspace id={queued.id} locale="en" transport={queued.transport} />);
+    const queued = editorialContextFixture('uncertain');
+    const sent: Parameters<EditorialTransport['submit']>[0][] = [];
+    const queuedTransport: EditorialTransport = {
+      read: queued.transport.read,
+      submit: async (command) => {
+        sent.push(command);
+        const result = await queued.transport.submit(command);
+        return result.ok ? result : { ...result, session: 'rotated-session' };
+      },
+    };
+    await render(<EditorialContextWorkspace id={queued.id} locale="en" transport={queuedTransport} />);
     await until(() => buttons(host, m.editorial_delete({}, o)).length === 1);
     await click(m.editorial_delete({}, o));
     const retained = (node: Element, event: string) => {
@@ -280,6 +289,39 @@ test('Editorial Context family retains supplied comparison, independent controls
     await until(() => buttons(host, m.editorial_delete({}, o)).length === 1);
     await act(async () => oldConfirm());
     expect(queued.calls.map((call) => call.method)).toEqual(['GET', 'GET']);
+    await click(m.editorial_delete({}, o));
+    await click(m.contribution_confirm({}, o));
+    const oldRetry = retained(button(m.editorial_retry({}, o)), 'onClick');
+    const sealed = structuredClone(sent[0]);
+    expect(buttons(host, m.editorial_revise({}, o))).toHaveLength(0);
+    await act(async () => oldRetry());
+    await until(() => buttons(host, m.editorial_restore({}, o)).length === 1);
+    expect(sent[1]).toBe(sent[0]);
+    expect(sent[1]).toEqual(sealed);
+    expect(sent[1]).toMatchObject({ operation: 'delete', id: queued.id, session: 'editorial-session' });
+    await act(async () => { oldConfirm(); oldRetry(); });
+    expect(sent).toHaveLength(2);
+    await click(m.editorial_restore({}, o));
+    await click(m.contribution_confirm({}, o));
+    await until(() => buttons(host, m.editorial_delete({}, o)).length === 1);
+    await act(async () => oldRetry());
+    expect(sent).toHaveLength(3);
+
+    await render(null);
+    const draft = editorialContextFixture('create');
+    await render(<EditorialContextWorkspace locale="en" transport={draft.transport} />);
+    await act(async () => retained(host.querySelector('input')!, 'onChange')({ target: { value: 'Old' } }));
+    const oldDraft = retained(host.querySelector('form')!, 'onSubmit');
+    await act(async () => retained(host.querySelector('select')!, 'onChange')({ target: { value: 'ja' } }));
+    await act(async () => retained(host.querySelector('input')!, 'onChange')({ target: { value: 'Current' } }));
+    await act(async () => oldDraft({ preventDefault() {} }));
+    expect(draft.calls).toHaveLength(0);
+    const createCurrent = retained(host.querySelector('form')!, 'onSubmit');
+    await act(async () => createCurrent({ preventDefault() {} }));
+    await until(() => buttons(host, m.editorial_delete({}, o)).length === 1);
+    await act(async () => createCurrent({ preventDefault() {} }));
+    expect(draft.calls.map((call) => call.method)).toEqual(['POST', 'GET']);
+    expect(draft.calls[0]!.body).toEqual({ labels: { ja: 'Current' } });
 
     // A deliberate delete confirmation keeps confirm/cancel adjacency, then removes review content.
     await render(null);

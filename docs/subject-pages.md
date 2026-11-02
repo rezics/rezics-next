@@ -655,6 +655,7 @@ actual native state. A concealed or unavailable reread displays no old private p
 separate from successful current reading. Ordinary subjects, contributions and Global selections remain independent;
 no page claims cascade deletion or completed cleanup. A failed request keeps its draft, exact action and key.
 An uncertain request remains sealed for exact retry; a definite refusal allows explicit review of a new request.
+Lifecycle controls admit only their current observed draft, target, action and confirmation; a retained retry may replay only its still-unresolved command with its original payload, key and session.
 All actions preserve current session identity, CSRF, native response/session headers and current authority through
 the existing BFF. Lifecycle command responses carry identity and state; the lifecycle metadata read supplies the native deadline.
 

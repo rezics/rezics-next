@@ -61,10 +61,25 @@ function EditorialContextWorkspaceLive({
   const session = useRef<string | undefined>(undefined);
   const mounted = useRef(true);
   const languageNames = new Intl.DisplayNames([locale], { type: 'language' });
+  const active = reading?.ok ? reading.context : undefined;
+  const action = knownDeleted ? 'restore' : 'delete';
+  const eligibleAttempt = (knownDeleted && !restoreBlocked) || active?.kind === 'community';
+  // A control admits only the observation that rendered it. Replay belongs to the
+  // unresolved command instead, so later session/read observations cannot re-key it.
+  const observed = { pending, restoreBlocked };
+  const observation = useRef<typeof observed | undefined>(undefined);
+  observation.current = observed;
+  function admitted() {
+    return lifetime.active() && mounted.current && !running.current && !busy && observation.current === observed;
+  }
+  function retireControls() {
+    observation.current = undefined;
+  }
 
   async function refresh(target = currentId) {
     if (!lifetime.active()) return;
     if (!target || running.current) return;
+    retireControls();
     running.current = true;
     setBusy(true);
     // Do not retain private labels or review payloads across a failed current read.
@@ -98,25 +113,33 @@ function EditorialContextWorkspaceLive({
     // Route/session identity remounts this private workspace. Mutations own subsequent reads.
   }, [id, transport]);
 
-  async function submit(operation: EditorialCommand['operation']) {
-    if (!lifetime.active()) return;
-    if (running.current) return;
-    let command = pending;
-    if (!command) {
-      try {
-        command = editorialCommand({
-          operation,
-          key: crypto.randomUUID(),
-          ...(session.current ? { session: session.current } : {}),
-          ...(operation === 'create' ? { labels: { [language]: name.trim() } } : { id: currentId }),
-        });
-      } catch {
-        if (!lifetime.active()) return;
-        setFailure({ ok: false, reason: 'invalid' });
-        return;
-      }
-      setPending(command);
+  function submit(operation: EditorialCommand['operation']) {
+    if (!admitted() || pending) return;
+    if (operation === 'create') {
+      if (currentId || !name.trim()) return;
+    } else if (!currentId || !eligibleAttempt || operation !== action || confirmation !== action) return;
+    let command: EditorialCommand;
+    try {
+      command = editorialCommand({
+        operation,
+        key: crypto.randomUUID(),
+        ...(session.current ? { session: session.current } : {}),
+        ...(operation === 'create' ? { labels: { [language]: name.trim() } } : { id: currentId }),
+      });
+    } catch {
+      setFailure({ ok: false, reason: 'invalid' });
+      return;
     }
+    setPending(command);
+    void execute(command);
+  }
+  function retry(command: EditorialCommand) {
+    if (!lifetime.active() || !mounted.current || running.current) return;
+    if (observation.current?.pending !== command || observation.current.restoreBlocked) return;
+    void execute(command);
+  }
+  async function execute(command: EditorialCommand) {
+    retireControls();
     running.current = true;
     setBusy(true);
     setFailure(undefined);
@@ -152,7 +175,6 @@ function EditorialContextWorkspaceLive({
       if (mounted.current) setBusy(false);
     }
   }
-  const active = reading?.ok ? reading.context : undefined;
   const errorText = (reason: EditorialFailure['reason']) =>
     reason === 'denied'
       ? m.editorial_denied({}, o)
@@ -167,8 +189,6 @@ function EditorialContextWorkspaceLive({
   const draftDirty = name !== '' || language !== locale;
   // Protect the sent command, not an ordinary read (including the read after confirmed success).
   const commandUnsettled = !!pending && (busy || !!uncertain);
-  const action = knownDeleted ? 'restore' : 'delete';
-  const eligibleAttempt = (knownDeleted && !restoreBlocked) || active?.kind === 'community';
   return (
     <section
       aria-label={m.editorial_title({}, o)}
@@ -224,9 +244,11 @@ function EditorialContextWorkspaceLive({
                 data-editorial-control
                 value={language}
                 disabled={busy || !!pending}
-                onChange={(event) =>
-                  lifetime.active() && !running.current && !pending && setLanguage(event.target.value)
-                }
+                onChange={(event) => {
+                  if (!admitted() || pending) return;
+                  retireControls();
+                  setLanguage(event.target.value);
+                }}
               >
                 {locales.map((value) => (
                   <NativeSelectOption key={value} value={value}>
@@ -246,7 +268,8 @@ function EditorialContextWorkspaceLive({
                 required
                 disabled={busy || !!pending}
                 onChange={(event) => {
-                  if (!lifetime.active() || running.current || pending) return;
+                  if (!admitted() || pending) return;
+                  retireControls();
                   setName(event.target.value);
                   setFailure(undefined);
                 }}
@@ -310,7 +333,7 @@ function EditorialContextWorkspaceLive({
                       className={actionControlClass}
                       data-editorial-control
                       disabled={busy}
-                      onClick={() => void submit(pending.operation)}
+                      onClick={() => retry(pending)}
                     >
                       {m.editorial_retry({}, o)}
                     </Button>
@@ -322,7 +345,8 @@ function EditorialContextWorkspaceLive({
                       data-editorial-control
                       disabled={busy}
                       onClick={() => {
-                        if (!lifetime.active() || running.current || uncertain) return;
+                        if (!admitted() || uncertain) return;
+                        retireControls();
                         setPending(undefined);
                         setFailure(undefined);
                         if (currentId) void refresh();
@@ -340,11 +364,14 @@ function EditorialContextWorkspaceLive({
                       className={actionControlClass}
                       data-editorial-control
                       disabled={busy}
-                      onClick={() =>
-                        lifetime.active() &&
-                        !running.current &&
-                        (confirmation ? void submit(action) : setConfirmation(action))
-                      }
+                      onClick={() => {
+                        if (!admitted() || !eligibleAttempt || pending) return;
+                        if (confirmation) submit(action);
+                        else {
+                          retireControls();
+                          setConfirmation(action);
+                        }
+                      }}
                     >
                       {confirmation
                         ? m.contribution_confirm({}, o)
@@ -357,7 +384,11 @@ function EditorialContextWorkspaceLive({
                         variant="outline"
                         className={actionControlClass}
                         data-editorial-control
-                        onClick={() => lifetime.active() && !running.current && setConfirmation(undefined)}
+                        onClick={() => {
+                          if (!admitted()) return;
+                          retireControls();
+                          setConfirmation(undefined);
+                        }}
                       >
                         {m.candidate_cancel({}, o)}
                       </Button>
@@ -371,7 +402,7 @@ function EditorialContextWorkspaceLive({
                   className={actionControlClass}
                   data-editorial-control
                   disabled={busy}
-                  onClick={() => void refresh()}
+                  onClick={() => admitted() && void refresh()}
                 >
                   {m.candidate_reload({}, o)}
                 </Button>
