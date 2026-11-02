@@ -10,6 +10,13 @@ import { indexCteScopes, unscannedCteBlocks, type CteBlocks } from './growth-cte
 import { walkPlanTree, type PlanNode } from './growth-plan-walk.ts';
 import { classifyGrowthSql } from './growth-sql-kind.ts';
 import { validateCaptureEvidence } from './growth-capture-evidence.ts';
+import {
+  keyedRelationEntries,
+  relationIdentityKey,
+  relationIdentityLabel,
+  relationRecordKeys,
+  type RelationIdentity,
+} from './growth-relation-identity.ts';
 
 export type Capture = {
   readonly statements: readonly string[];
@@ -25,6 +32,8 @@ export type Capture = {
   /** Backend process ID parallel to each statement and plan when capture(..., { includeBackends: true }) is used. */
   readonly statementBackends?: readonly (number | undefined)[];
   readonly planBackends?: readonly (number | undefined)[];
+  /** PostgreSQL database name parallel to each plan, retained by the capture harness. */
+  readonly planDatabases?: readonly (string | undefined)[];
   readonly backgroundStatements?: readonly string[];
   readonly backgroundRequestBytes?: readonly number[];
   readonly backgroundResponseBytes?: readonly number[];
@@ -36,6 +45,8 @@ export type Capture = {
   /** Backend process ID parallel to each background statement and plan, when backends are included. */
   readonly backgroundStatementBackends?: readonly (number | undefined)[];
   readonly backgroundPlanBackends?: readonly (number | undefined)[];
+  /** PostgreSQL database name parallel to each background plan. */
+  readonly backgroundPlanDatabases?: readonly (string | undefined)[];
 };
 
 export type RelationCost = {
@@ -43,6 +54,7 @@ export type RelationCost = {
   readonly blocks: number;
   readonly nodes: number;
   readonly sequentialScans: number;
+  readonly identity?: RelationIdentity;
 };
 
 export type Cost = {
@@ -66,12 +78,27 @@ export type Cost = {
   readonly backgroundRows?: number;
   readonly backgroundBlocks?: number;
   readonly backgroundCosts?: Readonly<
-    Record<string, { readonly rows: number; readonly blocks: number; readonly bounded: boolean }>
+    Record<
+      string,
+      {
+        readonly rows: number;
+        readonly blocks: number;
+        readonly bounded: boolean;
+        readonly relationIdentities?: readonly RelationIdentity[];
+      }
+    >
   >;
 };
 
 type NodeTotals = { readonly rows: number; readonly inclusiveHit: number; readonly inclusiveRead: number };
-type MutableRelationCost = { rows: number; blocks: number; nodes: number; sequentialScans: number };
+type MutableRelationCost = {
+  readonly identity: RelationIdentity;
+  rows: number;
+  blocks: number;
+  nodes: number;
+  sequentialScans: number;
+};
+type RelationContext = { readonly schema?: string };
 
 const rowScans = new Set([
   'Seq Scan',
@@ -364,6 +391,9 @@ export function withoutCatalogTexts(
     ...(capture.statementBackends === undefined
       ? {}
       : { statementBackends: statements.map((index) => capture.statementBackends![index]) }),
+    ...(capture.planDatabases === undefined
+      ? {}
+      : { planDatabases: plans.map((index) => capture.planDatabases![index]) }),
     ...(capture.planBackends === undefined ? {} : { planBackends: plans.map((index) => capture.planBackends![index]) }),
     ...(capture.planStatements === undefined
       ? {}
@@ -393,6 +423,9 @@ export function withoutCatalogTexts(
       ? {}
       : { backgroundStatementBackends: capture.backgroundStatementBackends }),
     ...(capture.backgroundPlanBackends === undefined ? {} : { backgroundPlanBackends: capture.backgroundPlanBackends }),
+    ...(capture.backgroundPlanDatabases === undefined
+      ? {}
+      : { backgroundPlanDatabases: capture.backgroundPlanDatabases }),
   };
 }
 
@@ -408,10 +441,20 @@ function costNode(
   root: PlanNode,
   relations: Map<string, MutableRelationCost>,
   location: string,
+  database?: string,
 ): { readonly totals: NodeTotals; readonly cteBlocks: CteBlocks; readonly cteLimitations: readonly string[] } {
   const cteScopes = indexCteScopes(root, location);
   const producerBlocks = new Map<PlanNode, CteBlocks>();
   const scanBlocks = new Map<PlanNode, CteBlocks>();
+  const relationContexts = new Map<PlanNode, RelationContext | undefined>();
+  const parentContexts: (RelationContext | undefined)[] = [];
+  for (const { node, depth } of walkPlanTree(root, location, 'preorder')) {
+    const parent = depth === 0 ? undefined : parentContexts[depth - 1];
+    relationContexts.set(node, parent);
+    const hasRelation = typeof node['Relation Name'] === 'string';
+    const schema = typeof node.Schema === 'string' ? node.Schema : undefined;
+    parentContexts[depth] = hasRelation ? (schema === undefined ? {} : { schema }) : parent;
+  }
   const totalsByNode = new Map<PlanNode, NodeTotals>();
   for (const { node, depth } of walkPlanTree(root, location, 'postorder')) {
     const nodeType = typeof node['Node Type'] === 'string' ? node['Node Type'] : '';
@@ -448,11 +491,15 @@ function costNode(
     if (rowScans.has(nodeType) || nodeType === 'ModifyTable') {
       const relationName = node['Relation Name'];
       if (typeof relationName === 'string') {
-        const schema = node.Schema;
-        const key = typeof schema === 'string' ? `${schema}.${relationName}` : relationName;
+        const schema = typeof node.Schema === 'string' ? node.Schema : undefined;
         addRelation(
           relations,
-          key,
+          {
+            ...(database === undefined ? {} : { database }),
+            ...(schema === undefined ? {} : { schema }),
+            kind: 'relation',
+            name: relationName,
+          },
           nodeType === 'ModifyTable' && loops > 0
             ? checkedMultiply(actualRows, loops, 'Rows modified')
             : nodeType === 'ModifyTable'
@@ -464,13 +511,21 @@ function costNode(
       }
     } else if (nodeType === 'Bitmap Index Scan') {
       const indexName = node['Index Name'];
-      if (typeof indexName === 'string')
+      if (typeof indexName === 'string') {
+        const schema =
+          (typeof node.Schema === 'string' ? node.Schema : undefined) ?? relationContexts.get(node)?.schema;
         addRelation(
           relations,
-          `index:${indexName}`,
+          {
+            ...(database === undefined ? {} : { database }),
+            ...(schema === undefined ? {} : { schema }),
+            kind: 'index',
+            name: indexName,
+          },
           0,
           checkedAdd(exclusiveHit, exclusiveRead, 'Exclusive index blocks'),
         );
+      }
     }
 
     totalsByNode.set(node, {
@@ -486,18 +541,33 @@ function costNode(
   };
 }
 
-type BackgroundStatementCost = { rows: number; blocks: number; bounded: boolean };
+type BackgroundStatementCost = {
+  rows: number;
+  blocks: number;
+  bounded: boolean;
+  relationIdentities: readonly RelationIdentity[];
+};
 
 function backgroundPlanBounded(relations: Cost['relations']): boolean {
   // DBOS history is not seeded by grow(), so its accumulated rows do not represent scale growth.
-  return Object.keys(relations).some((relation) => !/^(?:dbos|auth_dbos)\./.test(relation));
+  return Object.entries(relations).some(([relation, cost]) =>
+    cost.identity?.schema === undefined
+      ? !/^(?:dbos|auth_dbos)\./.test(relation)
+      : !/^(?:dbos|auth_dbos)$/.test(cost.identity.schema),
+  );
 }
 
 function addBackgroundExecutionCost(prior: BackgroundStatementCost, planCost: Cost): BackgroundStatementCost {
+  const relationIdentities = new Map(
+    [...prior.relationIdentities, ...Object.values(planCost.relations).flatMap(({ identity }) => identity ?? [])].map(
+      (identity) => [relationIdentityKey(identity), identity],
+    ),
+  );
   return {
     rows: checkedAdd(prior.rows, planCost.rows, 'Background execution examined rows'),
     blocks: checkedAdd(prior.blocks, planCost.blocks, 'Background execution blocks'),
     bounded: prior.bounded && backgroundPlanBounded(planCost.relations),
+    relationIdentities: [...relationIdentities.values()],
   };
 }
 
@@ -510,6 +580,14 @@ function raiseBackgroundHighWater(
     rows: Math.max(prior.rows, execution.rows),
     blocks: Math.max(prior.blocks, execution.blocks),
     bounded: prior.bounded && execution.bounded,
+    relationIdentities: [
+      ...new Map(
+        [...prior.relationIdentities, ...execution.relationIdentities].map((identity) => [
+          relationIdentityKey(identity),
+          identity,
+        ]),
+      ).values(),
+    ],
   };
 }
 
@@ -527,19 +605,21 @@ function backgroundExecutionKey(
 
 function addRelation(
   relations: Map<string, MutableRelationCost>,
-  key: string,
+  identity: RelationIdentity,
   rows: number,
   blocks: number,
   sequentialScans = 0,
 ): void {
-  const relation = relations.get(key) ?? { rows: 0, blocks: 0, nodes: 0, sequentialScans: 0 };
-  relation.rows = checkedAdd(relation.rows, rows, `Rows for relation ${key}`);
-  relation.blocks = checkedAdd(relation.blocks, blocks, `Blocks for relation ${key}`);
+  const key = relationIdentityKey(identity);
+  const label = relationIdentityLabel(identity);
+  const relation = relations.get(key) ?? { identity, rows: 0, blocks: 0, nodes: 0, sequentialScans: 0 };
+  relation.rows = checkedAdd(relation.rows, rows, `Rows for relation ${label}`);
+  relation.blocks = checkedAdd(relation.blocks, blocks, `Blocks for relation ${label}`);
   relation.nodes++;
   relation.sequentialScans = checkedAdd(
     relation.sequentialScans,
     sequentialScans,
-    `Sequential scans for relation ${key}`,
+    `Sequential scans for relation ${label}`,
   );
   relations.set(key, relation);
 }
@@ -600,7 +680,12 @@ function costOfAt(capture: Capture, planCollection: string): Cost {
         if (backendAware && !hasMatchingStatement(matchingStatements, true, queryText, backend)) included = false;
         if (queryText !== undefined && isCatalogQuery(catalog, queryText, backend)) included = false;
       }
-      const nodeCost = costNode(plan, included ? relations : new Map<string, MutableRelationCost>(), location);
+      const nodeCost = costNode(
+        plan,
+        included ? relations : new Map<string, MutableRelationCost>(),
+        location,
+        capture.planDatabases?.[index],
+      );
       if (!included) continue;
       plans++;
       rows = checkedAdd(rows, nodeCost.totals.rows, 'Total examined rows');
@@ -642,6 +727,9 @@ function costOfAt(capture: Capture, planCollection: string): Cost {
         {
           statements: [],
           plans: [[{ Plan: entry.plan, ...(entry.queryText === undefined ? {} : { 'Query Text': entry.queryText }) }]],
+          ...(capture.backgroundPlanDatabases?.[index] === undefined
+            ? {}
+            : { planDatabases: [capture.backgroundPlanDatabases[index]] }),
         },
         `backgroundPlans[${index}]`,
       );
@@ -654,8 +742,14 @@ function costOfAt(capture: Capture, planCollection: string): Cost {
       limitations.push(...(planCost.limitations ?? []).map((limitation) => `${backgroundProvenance}: ${limitation}`));
       backgroundRows = checkedAdd(backgroundRows, planCost.rows, 'Total background examined rows');
       backgroundBlocks = checkedAdd(backgroundBlocks, planCost.blocks, 'Total background blocks');
+<<<<<<< HEAD
       const executionKey = backgroundExecutionKey(hasBackgroundOccurrenceCustody, owner, key, index, entryIndex);
-      const prior = backgroundExecutions.get(executionKey) ?? { rows: 0, blocks: 0, bounded: true };
+      const prior = backgroundExecutions.get(executionKey) ?? {
+        rows: 0,
+        blocks: 0,
+        bounded: true,
+        relationIdentities: [],
+      };
       backgroundExecutions.set(executionKey, addBackgroundExecutionCost(prior, planCost));
       backgroundExecutionTexts.set(executionKey, key);
     }
@@ -682,7 +776,9 @@ function costOfAt(capture: Capture, planCollection: string): Cost {
     sharedHit,
     sharedRead,
     ...(limitations.length === 0 ? {} : { limitations: [...new Set(limitations)] }),
-    relations: Object.fromEntries(relations),
+    relations: keyedRelationEntries(
+      [...relations.values()].map((relation) => ({ identity: relation.identity, value: relation })),
+    ),
   };
   const requestBytes =
     capture.requestBytes === undefined ? undefined : sumFinite(capture.requestBytes, 'Request bytes');
@@ -738,6 +834,7 @@ function ownedRelationCosts(relations: Cost['relations']): Cost['relations'] {
         blocks: relation.blocks,
         nodes: relation.nodes,
         sequentialScans: relation.sequentialScans,
+        ...(relation.identity === undefined ? {} : { identity: relation.identity }),
       },
     ]),
   );
@@ -884,6 +981,18 @@ export function medianCost(costs: readonly Cost[]): Cost {
   const blocks = lowerMedian(costs.map((cost) => cost.blocks));
   const representative = costs.find((cost) => cost.blocks === blocks)!;
   const limitations = [...new Set(costs.flatMap((cost) => cost.limitations ?? []))];
+  const relationEvidence = costs.flatMap((cost) => Object.values(cost.relations));
+  const normalizedRelations = relationEvidence.every(({ identity }) => identity !== undefined)
+    ? (() => {
+        const keys = relationRecordKeys(relationEvidence.map((relation) => relation.identity!));
+        return Object.fromEntries(
+          Object.values(representative.relations).map((relation) => [
+            keys.get(relationIdentityKey(relation.identity!))!,
+            relation,
+          ]),
+        );
+      })()
+    : representative.relations;
 
   const median = {
     statements: lowerMedian(costs.map((cost) => cost.statements)),
@@ -897,7 +1006,7 @@ export function medianCost(costs: readonly Cost[]): Cost {
     sharedHit: lowerMedian(costs.map((cost) => cost.sharedHit)),
     sharedRead: lowerMedian(costs.map((cost) => cost.sharedRead)),
     ...(limitations.length === 0 ? {} : { limitations }),
-    relations: ownedRelationCosts(representative.relations),
+    relations: ownedRelationCosts(normalizedRelations),
   };
   const failedStatements = new Map<string, number>();
   for (const code of new Set(costs.flatMap((cost) => Object.keys(cost.failedStatements ?? {}))))
@@ -923,14 +1032,22 @@ export function medianCost(costs: readonly Cost[]): Cost {
           ...(backgroundCostsAvailable
             ? {
                 backgroundCosts: Object.fromEntries(
-                  [...new Set(costs.flatMap((cost) => Object.keys(cost.backgroundCosts ?? {})))].map((statement) => [
-                    statement,
-                    {
-                      rows: lowerMedian(costs.map((cost) => cost.backgroundCosts?.[statement]?.rows ?? 0)),
-                      blocks: lowerMedian(costs.map((cost) => cost.backgroundCosts?.[statement]?.blocks ?? 0)),
-                      bounded: costs.some((cost) => cost.backgroundCosts?.[statement]?.bounded ?? false),
-                    },
-                  ]),
+                  [...new Set(costs.flatMap((cost) => Object.keys(cost.backgroundCosts ?? {})))].map((statement) => {
+                    const relationIdentities = new Map(
+                      costs
+                        .flatMap((cost) => cost.backgroundCosts?.[statement]?.relationIdentities ?? [])
+                        .map((identity) => [relationIdentityKey(identity), identity]),
+                    );
+                    return [
+                      statement,
+                      {
+                        rows: lowerMedian(costs.map((cost) => cost.backgroundCosts?.[statement]?.rows ?? 0)),
+                        blocks: lowerMedian(costs.map((cost) => cost.backgroundCosts?.[statement]?.blocks ?? 0)),
+                        bounded: costs.some((cost) => cost.backgroundCosts?.[statement]?.bounded ?? false),
+                        ...(relationIdentities.size === 0 ? {} : { relationIdentities: [...relationIdentities.values()] }),
+                      },
+                    ];
+                  }),
                 ),
               }
             : {}),

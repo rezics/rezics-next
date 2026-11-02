@@ -617,6 +617,8 @@ with production row shapes, key distributions and fan-out so they exercise each 
 report their measured relation footprints. Do not inflate cardinality merely to force a plan. A relation whose
 production size does not grow with N, such as definitions, roles or configuration, may stay at fixture size. Use
 measured relation pages for the access-path rule; do not infer a footprint from rows, buffers or fixture width.
+Relation evidence carries database, schema and relation identity; familiar keys remain when unique, and ambiguous
+access-path requests require an explicit identity.
 Injected planner statistics do not replace seeding: they change only a plan's estimates, while a growth check
 measures executed work (`docs/research/growth-check-plan-stability.md`).
 

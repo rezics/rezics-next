@@ -1087,6 +1087,7 @@ async function captureInternal<T>(
         planStatements: active.planStatements,
         statementErrors: foreground.map(({ errorCode }) => errorCode),
         statementErrorMessages: foreground.map(({ errorMessage }) => errorMessage),
+        planDatabases: active.planDatabases,
         ...(active.includeBackends
           ? { statementBackends: foreground.map(({ backend }) => backend), planBackends: active.planBackends }
           : {}),
@@ -1094,6 +1095,7 @@ async function captureInternal<T>(
         backgroundRequestBytes: background.map(({ requestBytes }) => requestBytes),
         backgroundResponseBytes: background.map(({ responseBytes }) => responseBytes),
         backgroundPlans: active.backgroundPlans,
+        backgroundPlanDatabases: active.backgroundPlanDatabases,
         backgroundPlanStatements: active.backgroundPlanStatements,
         backgroundStatementErrors: background.map(({ errorCode }) => errorCode),
         backgroundStatementErrorMessages: background.map(({ errorMessage }) => errorMessage),

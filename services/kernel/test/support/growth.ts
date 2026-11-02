@@ -32,8 +32,18 @@ import {
   type Capture,
   type CatalogClassification,
   type Cost,
+  type RelationCost,
 } from './growth-cost.ts';
 import { classifyGrowthSql } from './growth-sql-kind.ts';
+import {
+  keyedRelationEntries,
+  legacyRelationKey,
+  relationIdentityKey,
+  relationIdentityLabel,
+  relationRecordKeys,
+  resolveRelationIdentity,
+  type RelationIdentity,
+} from './growth-relation-identity.ts';
 import { classifySeries, type SeriesClassification, type SeriesInterval, type SeriesPoint } from './growth-model.ts';
 import { GROWTH_BASELINE } from './growth-baseline.ts';
 import { GROWTH_UNCERTAINTY } from './growth-uncertainty.ts';
@@ -62,6 +72,7 @@ export { admitGrowthCheck, type AdmittedGrowthCheck, type GrowthCheckConfigurati
 
 export * from './growth-cost.ts';
 export * from './growth-access-path.ts';
+export * from './growth-relation-identity.ts';
 export * from './growth-bound.ts';
 export {
   openGrowthDatabase,
@@ -134,7 +145,7 @@ export type ReportSample = {
   readonly scale: number;
   readonly cost: Cost;
   readonly repetitions: readonly Cost[];
-  readonly relationSizes: Readonly<Record<string, RelationSize>>;
+  readonly relationSizes: Readonly<Record<string, RelationSizeEvidence>>;
   readonly seeding: SeedingCost;
   readonly statementRepetitions: readonly (readonly StatementAttribution[])[];
   readonly occurrenceRepetitions: readonly StatementOccurrences[];
@@ -369,7 +380,10 @@ export type StatementAttribution = {
   readonly blocks: number;
   readonly count: number;
   readonly node?: string;
+  readonly relationIdentities?: readonly RelationIdentity[];
 };
+
+export type RelationSizeEvidence = RelationSize & { readonly identity?: RelationIdentity };
 
 export type GrowthReport = {
   readonly name: string;
@@ -750,31 +764,100 @@ export function assertBackgroundBound(name: string, samples: readonly ReportSamp
   throw error;
 }
 
-async function readRelationSizes(db: GrowthDatabase): Promise<Readonly<Record<string, RelationSize>>> {
-  const result = await db.admin.query<{ name: string; reltuples: number; relpages: number }>(
-    `SELECT CASE WHEN c.relkind IN ('i', 'I') THEN 'index:' || c.relname
-                 ELSE n.nspname || '.' || c.relname
-            END AS name,
+async function readRelationSizes(db: GrowthDatabase): Promise<readonly RelationSizeEvidence[]> {
+  const result = await db.admin.query<{
+    database: string;
+    schema: string;
+    name: string;
+    kind: RelationIdentity['kind'];
+    reltuples: number;
+    relpages: number;
+  }>(
+    `SELECT current_database() AS database,
+            n.nspname AS schema,
+            c.relname AS name,
+            CASE WHEN c.relkind IN ('i', 'I') THEN 'index' ELSE 'relation' END AS kind,
             c.reltuples,
             c.relpages
      FROM pg_class AS c
      JOIN pg_namespace AS n ON n.oid = c.relnamespace`,
   );
-  return Object.fromEntries(result.rows.map(({ name, reltuples, relpages }) => [name, { reltuples, relpages }]));
+  return result.rows.map(({ database, schema, name, kind, reltuples, relpages }) => ({
+    identity: { database, schema, name, kind },
+    reltuples,
+    relpages,
+  }));
 }
 
 function sizesForMeasuredRelations(
   costs: readonly Cost[],
-  available: Readonly<Record<string, RelationSize>>,
-): Readonly<Record<string, RelationSize>> {
-  const names = new Set(costs.flatMap(({ relations }) => Object.keys(relations)));
-  return Object.fromEntries(
-    Array.from(names, (name) => {
-      const size = available[name];
-      if (!size) throw new Error(`Measured relation ${name} was missing from pg_class statistics`);
-      return [name, size];
+  available: readonly RelationSizeEvidence[],
+): { readonly costs: readonly Cost[]; readonly relationSizes: Readonly<Record<string, RelationSizeEvidence>> } {
+  const catalogByIdentity = new Map<string, RelationIdentity>();
+  const sizesByIdentity = new Map<string, RelationSizeEvidence>();
+  for (const size of available) {
+    if (size.identity === undefined) continue;
+    const identityKey = relationIdentityKey(size.identity);
+    catalogByIdentity.set(identityKey, size.identity);
+    sizesByIdentity.set(identityKey, size);
+  }
+  const catalog = [...catalogByIdentity.values()];
+  const identities = new Map<string, RelationIdentity>();
+  const relationsByCost = costs.map((cost) => {
+    const relations = new Map<string, RelationCost>();
+    for (const [name, relation] of Object.entries(cost.relations)) {
+      let identity: RelationIdentity;
+      if (relation.identity !== undefined) identity = resolveRelationIdentity(relation.identity, catalog);
+      else {
+        const candidates = catalog.filter((candidate) => legacyRelationKey(candidate) === name);
+        if (candidates.length === 0)
+          throw new Error(
+            `Measured relation ${name} is missing database/schema provenance and has no unique pg_class footprint; capture the plan database and schema before checking its footprint`,
+          );
+        if (candidates.length > 1)
+          throw new Error(
+            `Measured relation ${name} is ambiguous across ${candidates.map(relationIdentityLabel).join(', ')}; capture an explicit database and schema identity before checking its footprint`,
+          );
+        identity = candidates[0]!;
+      }
+      const identityKey = relationIdentityKey(identity);
+      identities.set(identityKey, identity);
+      const prior = relations.get(identityKey);
+      relations.set(
+        identityKey,
+        prior === undefined
+          ? { ...relation, identity }
+          : {
+              identity,
+              rows: prior.rows + relation.rows,
+              blocks: prior.blocks + relation.blocks,
+              nodes: prior.nodes + relation.nodes,
+              sequentialScans: prior.sequentialScans + relation.sequentialScans,
+            },
+      );
+    }
+    return relations;
+  });
+  const relationKeys = relationRecordKeys([...identities.values()]);
+  const normalizedCosts = costs.map((cost, index) => ({
+    ...cost,
+    relations: Object.fromEntries(
+      [...relationsByCost[index]!.entries()].map(([identityKey, relation]) => {
+        const key = relationKeys.get(identityKey);
+        if (key === undefined) throw new Error(`Missing report key for measured relation ${relationIdentityLabel(relation.identity!)}`);
+        return [key, relation];
+      }),
+    ),
+  }));
+  const relationSizes = keyedRelationEntries(
+    [...identities.entries()].map(([identityKey, identity]) => {
+      const size = sizesByIdentity.get(identityKey);
+      if (size === undefined)
+        throw new Error(`Measured relation ${relationIdentityLabel(identity)} was missing from pg_class statistics`);
+      return { identity, value: size };
     }),
   );
+  return { costs: normalizedCosts, relationSizes };
 }
 
 /**
@@ -1002,14 +1085,15 @@ async function runGrowthCheck(
         accepted = true;
       }
     }
-    const availableRelationSizes: Record<string, RelationSize> = {};
-    for (const target of measuredDatabases) Object.assign(availableRelationSizes, await readRelationSizes(target));
+    const availableRelationSizes: RelationSizeEvidence[] = [];
+    for (const target of measuredDatabases) availableRelationSizes.push(...(await readRelationSizes(target)));
+    const relationEvidence = sizesForMeasuredRelations(costs, availableRelationSizes);
     samples.push({
       scale,
-      cost: medianCost(costs),
-      repetitions: costs,
+      cost: medianCost(relationEvidence.costs),
+      repetitions: relationEvidence.costs,
       ...(check.counted === undefined ? {} : { counted: countedSample(countedRuns) }),
-      relationSizes: sizesForMeasuredRelations(costs, availableRelationSizes),
+      relationSizes: relationEvidence.relationSizes,
       seeding,
       statementRepetitions,
       occurrenceRepetitions,

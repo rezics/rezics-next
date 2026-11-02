@@ -4,6 +4,7 @@ import type { ReportSample, StatementAttribution } from './growth.ts';
 import { indexStatementRepetitions } from './growth-report-index.ts';
 import { walkPlanTree, type PlanNode } from './growth-plan-walk.ts';
 import { validateCaptureEvidence } from './growth-capture-evidence.ts';
+import { relationIdentityKey, type RelationIdentity } from './growth-relation-identity.ts';
 
 function normalizeStatement(statement: string): string {
   const identifierPart = (character: string | undefined) =>
@@ -198,20 +199,50 @@ function planEntries(document: unknown, location = 'plan'): { queryText?: string
   });
 }
 
-function planCost(root: PlanNode, location: string): { rows: number; blocks: number; node?: string } {
+function planCost(
+  root: PlanNode,
+  location: string,
+  database?: string,
+): { rows: number; blocks: number; node?: string; relationIdentities: readonly RelationIdentity[] } {
   let rows = 0;
   let costliest = { blocks: -1, rows: -1, name: undefined as string | undefined };
   let costliestNamed = { blocks: -1, rows: -1, name: undefined as string | undefined };
+  const relationIdentities = new Map<string, RelationIdentity>();
+  const parentSchemas: (string | undefined)[] = [];
   const blocks =
     (typeof root['Shared Hit Blocks'] === 'number' ? root['Shared Hit Blocks'] : 0) +
     (typeof root['Shared Read Blocks'] === 'number' ? root['Shared Read Blocks'] : 0);
-  for (const { node } of walkPlanTree(root, location)) {
+  for (const { node, depth } of walkPlanTree(root, location)) {
     const type = typeof node['Node Type'] === 'string' ? node['Node Type'] : 'Unknown';
+    const relationName = typeof node['Relation Name'] === 'string' ? node['Relation Name'] : undefined;
+    const indexName = typeof node['Index Name'] === 'string' ? node['Index Name'] : undefined;
+    const ownSchema = typeof node.Schema === 'string' ? node.Schema : undefined;
+    const parentSchema = depth === 0 ? undefined : parentSchemas[depth - 1];
+    if (relationName !== undefined) {
+      const identity: RelationIdentity = {
+        ...(database === undefined ? {} : { database }),
+        ...(ownSchema === undefined ? {} : { schema: ownSchema }),
+        kind: 'relation',
+        name: relationName,
+      };
+      relationIdentities.set(relationIdentityKey(identity), identity);
+    }
+    if (indexName !== undefined) {
+      const schema = ownSchema ?? parentSchema;
+      const identity: RelationIdentity = {
+        ...(database === undefined ? {} : { database }),
+        ...(schema === undefined ? {} : { schema }),
+        kind: 'index',
+        name: indexName,
+      };
+      relationIdentities.set(relationIdentityKey(identity), identity);
+    }
+    parentSchemas[depth] = relationName === undefined ? parentSchema : ownSchema;
     const relation =
-      typeof node['Relation Name'] === 'string'
-        ? `${typeof node.Schema === 'string' ? `${node.Schema}.` : ''}${node['Relation Name']}`
-        : typeof node['Index Name'] === 'string'
-          ? `index:${node['Index Name']}`
+      relationName !== undefined
+        ? `${ownSchema === undefined ? '' : `${ownSchema}.`}${relationName}`
+        : indexName !== undefined
+          ? `index:${indexName}`
           : undefined;
     const loops = typeof node['Actual Loops'] === 'number' ? node['Actual Loops'] : 1;
     const scanned = [
@@ -250,30 +281,40 @@ function planCost(root: PlanNode, location: string): { rows: number; blocks: num
     rows,
     blocks,
     ...(node === undefined ? {} : { node }),
+    relationIdentities: [...relationIdentities.values()],
   };
 }
 
 function addPlanCost(
-  statements: Map<string, { rows: number; blocks: number; count: number; node?: string }>,
+  statements: Map<
+    string,
+    { rows: number; blocks: number; count: number; node?: string; relationIdentities: Map<string, RelationIdentity> }
+  >,
   key: string | undefined,
   plan: PlanNode,
   location: string,
+  database?: string,
 ) {
   if (key === undefined) return;
   const current = statements.get(key);
   if (!current) return;
-  const cost = planCost(plan, location);
+  const cost = planCost(plan, location, database);
   current.rows += cost.rows;
   current.blocks += cost.blocks;
   if (cost.node) current.node = cost.node;
+  for (const identity of cost.relationIdentities)
+    current.relationIdentities.set(relationIdentityKey(identity), identity);
 }
 
 export function statementAttributions(capture: Capture): StatementAttribution[] {
   validateCaptureEvidence(capture);
-  const statements = new Map<string, { rows: number; blocks: number; count: number; node?: string }>();
+  const statements = new Map<
+    string,
+    { rows: number; blocks: number; count: number; node?: string; relationIdentities: Map<string, RelationIdentity> }
+  >();
   for (const statement of capture.statements) {
     const key = normalizeStatement(statement);
-    const current = statements.get(key) ?? { rows: 0, blocks: 0, count: 0 };
+    const current = statements.get(key) ?? { rows: 0, blocks: 0, count: 0, relationIdentities: new Map() };
     current.count++;
     statements.set(key, current);
   }
@@ -291,9 +332,17 @@ export function statementAttributions(capture: Capture): StatementAttribution[] 
         ownedKey ?? (queryText === undefined ? undefined : normalizeStatement(queryText)),
         plan,
         location,
+        capture.planDatabases?.[index],
       );
   }
-  return [...statements].map(([statement, cost]) => ({ statement, ...cost }));
+  return [...statements].map(([statement, cost]) => ({
+    statement,
+    rows: cost.rows,
+    blocks: cost.blocks,
+    count: cost.count,
+    ...(cost.node === undefined ? {} : { node: cost.node }),
+    ...(cost.relationIdentities.size === 0 ? {} : { relationIdentities: [...cost.relationIdentities.values()] }),
+  }));
 }
 
 export type StatementOccurrence = {
@@ -306,6 +355,7 @@ export type StatementOccurrence = {
   readonly planDocuments: readonly unknown[];
   readonly rows: number;
   readonly blocks: number;
+  readonly relationIdentities?: readonly RelationIdentity[];
 };
 
 export type StatementOccurrences = {
@@ -323,6 +373,7 @@ export function statementOccurrences(capture: Capture): StatementOccurrences {
     backends: readonly (number | undefined)[] | undefined,
     plans: readonly unknown[],
     planStatements: readonly (number | undefined)[] | undefined,
+    planDatabases: readonly (string | undefined)[] | undefined,
     planCollection: string,
   ): StatementOccurrence[] => {
     const plansByStatement = Array.from({ length: statements.length }, () => [] as number[]);
@@ -340,11 +391,14 @@ export function statementOccurrences(capture: Capture): StatementOccurrences {
       const planIndices = plansByStatement[index]!;
       let rows = 0;
       let blocks = 0;
+      const relationIdentities = new Map<string, RelationIdentity>();
       for (const planIndex of planIndices) {
         for (const entry of planEntries(plans[planIndex], `${planCollection}[${planIndex}]`)) {
-          const cost = planCost(entry.plan, entry.location);
+          const cost = planCost(entry.plan, entry.location, planDatabases?.[planIndex]);
           rows += cost.rows;
           blocks += cost.blocks;
+          for (const identity of cost.relationIdentities)
+            relationIdentities.set(relationIdentityKey(identity), identity);
         }
       }
       const code = errors?.[index] ?? null;
@@ -357,6 +411,7 @@ export function statementOccurrences(capture: Capture): StatementOccurrences {
         planDocuments: planIndices.map((planIndex) => plans[planIndex]),
         rows,
         blocks,
+        ...(relationIdentities.size === 0 ? {} : { relationIdentities: [...relationIdentities.values()] }),
       };
     });
   };
@@ -368,6 +423,7 @@ export function statementOccurrences(capture: Capture): StatementOccurrences {
       capture.statementBackends,
       capture.plans,
       capture.planStatements,
+      capture.planDatabases,
       'plans',
     ),
     backgroundStatements: occurrences(
@@ -377,6 +433,7 @@ export function statementOccurrences(capture: Capture): StatementOccurrences {
       capture.backgroundStatementBackends,
       capture.backgroundPlans ?? [],
       capture.backgroundPlanStatements,
+      capture.backgroundPlanDatabases,
       'backgroundPlans',
     ),
   };
@@ -432,7 +489,18 @@ export function profileStatements(samples: readonly Pick<ReportSample, 'statemen
     const { statements } = profileStatementRuns(statementRepetitions);
     return [...statements.keys()].sort().map((statement) => {
       const profile = statements.get(statement)!;
-      return { statement, rows: profile.rows, blocks: profile.blocks, count: profile.count };
+      const relationIdentities = new Map<string, RelationIdentity>();
+      for (const run of statementRepetitions) {
+        for (const identity of run.find((item) => item.statement === statement)?.relationIdentities ?? [])
+          relationIdentities.set(relationIdentityKey(identity), identity);
+      }
+      return {
+        statement,
+        rows: profile.rows,
+        blocks: profile.blocks,
+        count: profile.count,
+        ...(relationIdentities.size === 0 ? {} : { relationIdentities: [...relationIdentities.values()] }),
+      };
     });
   });
 }
