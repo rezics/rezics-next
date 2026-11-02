@@ -1,5 +1,10 @@
 import type {
-  BulkRead, BulkOperation, BulkOutcomes, OperationAddress, CancelCommand, CancelResult,
+  BulkRead,
+  BulkOperation,
+  BulkOutcomes,
+  OperationAddress,
+  CancelCommand,
+  CancelResult,
 } from './bulk-operation-recovery-native';
 
 export type RecoveryState = {
@@ -33,9 +38,15 @@ export class BulkOperationRecovery {
     private transport: Transport,
     private changed: () => void,
   ) {}
-  retire() { this.live = false; }
-  private current() { return this.live && this.access.current(); }
-  private publish() { if (this.current()) this.changed(); }
+  retire() {
+    this.live = false;
+  }
+  private current() {
+    return this.live && this.access.current();
+  }
+  private publish() {
+    if (this.current()) this.changed();
+  }
   async read(cursor = this.state.cursor) {
     if (!this.current() || this.reading) return;
     const current = this.access.capture();
@@ -43,12 +54,16 @@ export class BulkOperationRecovery {
     this.state = { ...this.state, read: 'loading', cursor, page: undefined };
     this.publish();
     let result: BulkRead;
-    try { result = await this.transport.read({ ...this.address, ...(cursor === undefined ? {} : { cursor }) }); }
-    catch { result = { state: 'unavailable' }; }
+    try {
+      result = await this.transport.read({ ...this.address, ...(cursor === undefined ? {} : { cursor }) });
+    } catch {
+      result = { state: 'unavailable' };
+    }
     this.reading = false;
     if (!this.current() || !current()) return;
     if (result.state === 'ready' && result.operation.id !== this.address.id) result = { state: 'unavailable' };
-    if (result.state === 'ready') this.state = { ...this.state, read: 'ready', operation: result.operation, page: result.page };
+    if (result.state === 'ready')
+      this.state = { ...this.state, read: 'ready', operation: result.operation, page: result.page };
     else this.state = { ...this.state, read: result.state, page: undefined };
     this.publish();
   }
@@ -60,7 +75,12 @@ export class BulkOperationRecovery {
     if (retry ? this.state.cancel !== 'uncertain' : !!this.command || this.state.read !== 'ready') return;
     if (!this.command) {
       const operation = this.state.operation;
-      if (!operation || operation.cancelRequested || ['completed', 'completed_with_errors', 'cancelled', 'stopped', 'expired'].includes(operation.phase)) return;
+      if (
+        !operation ||
+        operation.cancelRequested ||
+        ['completed', 'completed_with_errors', 'cancelled', 'stopped', 'expired'].includes(operation.phase)
+      )
+        return;
       this.command = Object.freeze({ ...this.address, key: crypto.randomUUID(), csrf: this.access.csrf() });
       this.send = this.transport.cancel;
     }
@@ -69,8 +89,11 @@ export class BulkOperationRecovery {
     this.state = { ...this.state, cancel: 'sending' };
     this.publish();
     let result: CancelResult;
-    try { result = await this.send!(this.command); }
-    catch { result = { state: 'uncertain' }; }
+    try {
+      result = await this.send!(this.command);
+    } catch {
+      result = { state: 'uncertain' };
+    }
     this.sending = false;
     if (!this.current() || !current()) {
       // The effect may have committed, but its late response carries no current disclosure authority.
@@ -78,8 +101,13 @@ export class BulkOperationRecovery {
       return;
     }
     if (result.state === 'ready' && result.operation.id !== this.address.id) result = { state: 'uncertain' };
-    this.state = { ...this.state, cancel: result.state,
-      ...(result.state === 'ready' ? { operation: result.operation } : {}) };
+    // A refused retry does not resolve whether the original attempt committed.
+    if (retry && result.state !== 'ready') result = { state: 'uncertain' };
+    this.state = {
+      ...this.state,
+      cancel: result.state,
+      ...(result.state === 'ready' ? { operation: result.operation } : {}),
+    };
     this.publish();
   }
 }

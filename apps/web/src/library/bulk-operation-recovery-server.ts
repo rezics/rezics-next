@@ -6,8 +6,13 @@ import { prepareSession, sessionSubject, viewerCredential, requestCsrfToken } fr
 import type { SessionEnv } from '../session/client';
 import { MediaProblem } from '../media/kernel';
 import {
-  operationAddress, readNativeOperation, cancelNativeOperation,
-  type OperationAddress, type CancelCommand, type BulkRead, type CancelResult,
+  operationAddress,
+  readNativeOperation,
+  cancelNativeOperation,
+  type OperationAddress,
+  type CancelCommand,
+  type BulkRead,
+  type CancelResult,
 } from './bulk-operation-recovery-native';
 
 /** A fresh request binds every call, including retries, to the captured sender. */
@@ -15,7 +20,10 @@ async function credential(viewer: string, csrf?: string) {
   const request = new Request(getRequest());
   const stale = await prepareSession(request, env as Partial<SessionEnv>);
   if (stale || request.headers.has('authorization') || sessionSubject(request) !== viewer) return null;
-  if (csrf !== undefined && (!csrf || requestCsrfToken(request) !== csrf || request.headers.get('x-csrf-token') !== csrf))
+  if (
+    csrf !== undefined &&
+    (!csrf || requestCsrfToken(request) !== csrf || request.headers.get('x-csrf-token') !== csrf)
+  )
     return null;
   return viewerCredential(request);
 }
