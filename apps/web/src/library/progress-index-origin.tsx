@@ -29,7 +29,7 @@ export function progressIndexAdmission(client: QueryClient, operation: Operation
   if (
     session.state !== 'signed-in' ||
     !session.subject ||
-    !session.csrfToken ||
+    (operation !== 'progress_session.list' && !session.csrfToken) ||
     enrolled.state !== 'signed-in' ||
     enrolled.observation.subject !== session.subject
   )

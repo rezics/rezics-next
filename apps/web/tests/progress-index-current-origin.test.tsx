@@ -573,7 +573,7 @@ test('healthy same-viewer rotation and equivalent refresh retain exact uncertain
         const retry = writes[1]!;
         const retainedSubmit = h.callback(kind);
         expect(retry.data).toEqual(exact);
-        expect(retry.headers).toEqual({ 'x-csrf-token': 'current' });
+        expect(retry.headers).toBe(first.headers);
         if (kind === 'start') {
           expect(exact).toEqual({
             subjectId: id(1),

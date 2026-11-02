@@ -61,6 +61,11 @@ const buttonClass =
   'inline-flex min-h-[44px] min-w-0 max-w-full items-center justify-center rounded-lg border border-border px-4 py-2 text-center whitespace-normal wrap-anywhere text-primary underline-offset-4 hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 const subscribe = () => () => {};
+type ProgressCommand<Input, Sender> = {
+  data: Input;
+  headers: NonNullable<ReturnType<typeof csrfHeaders>>;
+  send: Sender;
+};
 const progressOperations = [
   'progress_session.list',
   'progress_session.create',
@@ -81,7 +86,6 @@ export function CurrentViewerProgressIndexPage({
   const client = useQueryClient();
   const instance = useId();
   const { store, value: scoped } = useLibraryWorkspaceAdmission(progressOperations);
-  const session = progressIndexSession(client, renderedSession);
   const admitted = useOperation('progress_session.list');
   const hydrated = useSyncExternalStore(
     subscribe,
@@ -92,9 +96,7 @@ export function CurrentViewerProgressIndexPage({
   const subjectId = requested.subjectId || '';
   const cursor = requested.cursor || null;
   const viewer = hydrated ? scoped.subject : loader.viewer;
-  const allowed = hydrated
-    ? !!session.csrfToken && progressIndexAdmission(client, 'progress_session.list', admitted)
-    : loader.page.signedIn;
+  const allowed = hydrated ? progressIndexAdmission(client, 'progress_session.list', admitted) : loader.page.signedIn;
   const address = useHistoryAddress('/library/progress', requested.cursor, locale);
   const scope = JSON.stringify([viewer, scoped.viewer, subjectId, cursor, locale, address.key]);
   const origin = useProgressEpisode(
@@ -103,13 +105,7 @@ export function CurrentViewerProgressIndexPage({
       if (getLocale() !== locale || !address.isCurrent()) return false;
       if (!hydrated) return !!viewer && allowed;
       const now = progressIndexSession(client, renderedSession);
-      return (
-        !!viewer &&
-        store.read().viewer === scoped.viewer &&
-        now.state === 'signed-in' &&
-        now.subject === viewer &&
-        !!now.csrfToken
-      );
+      return !!viewer && store.read().viewer === scoped.viewer && now.state === 'signed-in' && now.subject === viewer;
     },
     () => store.read().subject !== viewer,
     () => !hydrated || progressIndexAdmission(client, 'progress_session.list', admitted),
@@ -137,13 +133,12 @@ export function CurrentViewerProgressIndexPage({
     origin.generation,
     instance,
   ] as const;
+  const listVersion = store.dispatchVersion('progress_session.list');
   const query = useQuery({
     ...personalRead,
     queryKey,
     queryFn: async () => {
-      const admissionVersion = store.dispatchVersion('progress_session.list');
-      const currentRead = () =>
-        origin.isCurrent() && store.dispatchVersion('progress_session.list') === admissionVersion;
+      const currentRead = () => origin.isCurrent() && store.dispatchVersion('progress_session.list') === listVersion;
       if (!currentRead()) throw new CancelledError({ silent: true, revert: true });
       try {
         const result = await readCurrentViewerProgressIndex({
@@ -197,7 +192,8 @@ export function CurrentViewerProgressIndexPage({
   const rowSource = useRef<{ page?: ProgressIndex; contexts: Set<string> }>({ contexts: new Set() });
   const authority: ProgressAuthority = {
     key: source,
-    isCurrent: () => origin.isCurrent() && source.isCurrent(),
+    isCurrent: () =>
+      origin.isCurrent() && source.isCurrent() && store.dispatchVersion('progress_session.list') === listVersion,
     permits: (operation, rendered) =>
       !source.retired && source.validate() && hydrated && progressIndexAdmission(client, operation, rendered),
     episode: (operation) => store.dispatchVersion(operation),
@@ -264,7 +260,7 @@ export function ProgressIndexPage({
   admission.current = creatable;
   const episode = useProgressAction(authority, 'progress_session.create', creatable, identity);
   const current = () => episode.isCurrent() && admission.current;
-  const intent = useRef<ProgressStartInput | null>(null);
+  const intent = useRef<ProgressCommand<ProgressStartInput, typeof startProgressSession> | null>(null);
   const sessions = progressIndexSubjects(page.sessions);
   const [chosen, setChosen] = useState(() => {
     const subject = page.selectedSubject;
@@ -334,18 +330,22 @@ export function ProgressIndexPage({
     setAlert(null);
     setPending(true);
     const totalValue = pair?.total !== 'forbidden' ? total.trim() : '';
-    const payload = (intent.current ??= {
-      subjectId: subject.trim(),
-      ...(version[0] ? { versionSubjectId: version[0].id } : {}),
-      mode: mode!,
-      unit,
-      idempotencyKey: key,
-      ...(totalValue ? { total: totalValue } : {}),
-    });
     try {
       const headers = authority ? authority.headers() : csrfHeaders();
       if (!headers || !current()) return;
-      const result = await startProgressSession({ data: payload, headers });
+      const command = (intent.current ??= {
+        data: {
+          subjectId: subject.trim(),
+          ...(version[0] ? { versionSubjectId: version[0].id } : {}),
+          mode: mode!,
+          unit,
+          idempotencyKey: key,
+          ...(totalValue ? { total: totalValue } : {}),
+        },
+        headers,
+        send: startProgressSession,
+      });
+      const result = await command.send({ data: command.data, headers: command.headers });
       if (!draftCurrent()) return;
       if (!result.ok) {
         setAlert(progressFailureMessage(result.reason));
@@ -577,7 +577,10 @@ export function ProgressIndexPage({
                     {alert}
                   </p>
                 ) : null}
-                <Button type="submit" disabled={pending}>
+                <Button
+                  type="submit"
+                  disabled={pending || (!!authority && !authority.permits('progress_session.create', creatable))}
+                >
                   {m.library_progress_start()}
                 </Button>
               </form>
@@ -642,7 +645,7 @@ function SessionRow({
       (action === 'complete'
         ? complete.isCurrent() && admission.current.completable
         : abandon.isCurrent() && admission.current.abandonable));
-  const intent = useRef<ProgressFinishInput | null>(null);
+  const intent = useRef<ProgressCommand<ProgressFinishInput, typeof finishProgressSession> | null>(null);
   const [session, setSession] = useState(initial);
   const [seenIdentity, setSeenIdentity] = useState({ identity, complete, abandon, row });
   const [confirming, setConfirming] = useState<'complete' | 'abandon' | null>(null);
@@ -656,7 +659,7 @@ function SessionRow({
     row !== seenIdentity.row
   ) {
     const sameRow = identity === seenIdentity.identity;
-    const action = intent.current?.action ?? confirming;
+    const action = intent.current?.data.action ?? confirming;
     const previousAction = action === 'complete' ? seenIdentity.complete : seenIdentity.abandon;
     const nextAction = action === 'complete' ? complete : abandon;
     setSeenIdentity({ identity, complete, abandon, row });
@@ -667,7 +670,7 @@ function SessionRow({
         if (authority) setKey(crypto.randomUUID());
       }
       if (!sameRow) setSession(initial);
-      setConfirming(intent.current?.action ?? null);
+      setConfirming(intent.current?.data.action ?? null);
       setError(!!intent.current);
       setPending(false);
     }
@@ -692,22 +695,26 @@ function SessionRow({
       confirmation.current !== confirmed ||
       confirmed.value !== action ||
       origin.pending ||
-      (intent.current && intent.current.action !== action)
+      (intent.current && intent.current.data.action !== action)
     )
       return;
     origin.pending = true;
     setPending(true);
     setError(false);
     try {
-      const payload = (intent.current ??= {
-        sessionId: session.id,
-        revision: session.revision,
-        idempotencyKey: key,
-        action,
-      });
       const headers = authority ? authority.headers() : csrfHeaders();
       if (!headers || !rowCurrent(action)) return;
-      const result = await finishProgressSession({ data: payload, headers });
+      const command = (intent.current ??= {
+        data: {
+          sessionId: session.id,
+          revision: session.revision,
+          idempotencyKey: key,
+          action,
+        },
+        headers,
+        send: finishProgressSession,
+      });
+      const result = await command.send({ data: command.data, headers: command.headers });
       if (!rowCurrent(action)) return;
       if (!result.ok) {
         setError(true);
@@ -718,7 +725,7 @@ function SessionRow({
         }
         return;
       }
-      if (result.session.id !== payload.sessionId) {
+      if (result.session.id !== command.data.sessionId) {
         setError(true);
         return;
       }
@@ -854,7 +861,17 @@ function SessionRow({
               }
             >
               <ListRowControl className="flex flex-wrap gap-2">
-                <Button disabled={pending} onClick={() => void finish(confirming)}>
+                <Button
+                  disabled={
+                    pending ||
+                    (!!authority &&
+                      !authority.permits(
+                        confirming === 'complete' ? 'progress_session.complete' : 'progress_session.abandon',
+                        confirming === 'complete' ? completable : abandonable,
+                      ))
+                  }
+                  onClick={() => void finish(confirming)}
+                >
                   {confirming === 'complete'
                     ? m.library_progress_confirm_complete()
                     : m.library_progress_confirm_abandon()}

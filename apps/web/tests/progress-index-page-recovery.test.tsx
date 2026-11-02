@@ -485,7 +485,7 @@ test('Current private authority and original uncertain mutation intent remain ex
       expect(writes).toHaveLength(2);
       expect(writes[1]!.data).toBe(first.data);
       expect(writes[1]!.data).toEqual(original);
-      expect(writes[1]!.headers).toEqual({ 'x-csrf-token': 'A-current' });
+      expect(writes[1]!.headers).toBe(first.headers);
       const retired = h.callback(kind);
       const navigation = [m.library_collections_first_page(), m.library_progress_more()].map((name) =>
         h.view.getByRole('link', { name, exact: true }),
