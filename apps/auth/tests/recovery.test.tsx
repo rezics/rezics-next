@@ -9,7 +9,7 @@ const { Window } = await import(
 const dom = new Window({ url: 'https://auth.test/recovery' });
 const globals = { window: dom, document: dom.document, navigator: dom.navigator,
   HTMLElement: dom.HTMLElement, HTMLInputElement: dom.HTMLInputElement, Element: dom.Element,
-  Node: dom.Node, Document: dom.Document, DocumentFragment: dom.DocumentFragment,
+  Node: dom.Node, Document: dom.Document, DocumentFragment: dom.DocumentFragment, scrollTo: dom.scrollTo.bind(dom),
   MutationObserver: dom.MutationObserver, IS_REACT_ACT_ENVIRONMENT: true };
 const previous = new Map([...Object.keys(globals), 'fetch'].map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
 for (const [key, value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
@@ -73,7 +73,7 @@ test('current recovery keeps non-disclosing email results and invalid-link recov
     await page.submit('new private password'); await page.respond(401);
     expect(page.calls.at(-1)).toEqual({ account_id: 'account', token: 'private-token', new_password: 'new private password' });
     expect(page.host.querySelector('a[href="/recovery"]')!.textContent).toContain('recovery link');
-    await act(async () => { await page.router.navigate({ to: '/recovery' }); });
+    await act(async () => { page.router.history.replace('/recovery'); await page.router.load(); });
     await page.submit('retry@example.test'); await page.respond();
     expect(page.host.querySelector('[role="status"]')).not.toBeNull();
     await act(async () => { await page.router.navigate({ to: '/recovery', hash: link.slice(1) }); });
@@ -90,14 +90,14 @@ for (const fragment of ['', link]) for (const boundary of ['unmount', 'replace',
       await flush(() => page.host.querySelector('form')!.dispatchEvent(new dom.Event('submit', { bubbles: true, cancelable: true }) as unknown as Event));
       expect(page.calls).toHaveLength(1);
       if (boundary === 'unmount') await page.close();
-      else if (boundary === 'replace') await act(async () => { await page.router.navigate({ to: '/recovery' }); });
-      else await flush(() => window.dispatchEvent(new dom.PageTransitionEvent('pagehide', { persisted: true }) as unknown as Event));
+      else if (boundary === 'replace') await act(async () => { page.router.history.replace('/recovery'); await page.router.load(); });
+      else await flush(() => window.dispatchEvent(Object.assign(new dom.Event('pagehide'), { persisted: true }) as unknown as Event));
       await page.respond(status);
       expect(window.location.pathname).toBe('/recovery');
       expect(window.sessionStorage.getItem('auth.recovery.complete')).toBeNull();
-      expect(page.host.querySelector('[role="status"]')).toBeNull();
-      expect(page.host.querySelector('[role="alert"]')).toBeNull();
-      if (boundary === 'pagehide') await flush(() => window.dispatchEvent(new dom.PageTransitionEvent('pageshow', { persisted: true }) as unknown as Event));
+      expect(Boolean(page.host.querySelector('[role="status"]'))).toBe(false);
+      expect(Boolean(page.host.querySelector('[role="alert"]'))).toBe(false);
+      if (boundary === 'pagehide') await flush(() => window.dispatchEvent(Object.assign(new dom.Event('pageshow'), { persisted: true }) as unknown as Event));
       if (boundary !== 'unmount') {
         expect(page.host.querySelector<HTMLInputElement>('input')!.value).toBe('');
         expect(page.host.querySelector('input[name="new_password"]')).toBeNull();
