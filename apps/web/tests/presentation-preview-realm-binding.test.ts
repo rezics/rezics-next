@@ -61,10 +61,7 @@ function setup(context?: SelectedContext) {
 
 test.each([
   ['missing context', undefined],
-  [
-    'Global population',
-    { id: '00000000-0000-8000-8000-000000000000', population: { kind: 'global' } },
-  ],
+  ['Global population', { id: '00000000-0000-8000-8000-000000000000', population: { kind: 'global' } }],
   [
     'another Realm',
     { id: '00000000-0000-8000-8000-000000000005', population: { kind: 'realm', id: otherRealm, title: 'Other Realm' } },
