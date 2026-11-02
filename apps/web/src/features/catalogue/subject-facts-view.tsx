@@ -4,7 +4,8 @@ import {
   useCurrentReadingVisible,
   useCurrentReadingActive,
 } from './editor-lifetime';
-import { useId, useMemo, useRef, useState } from 'react';
+import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import type { ReactNode } from 'react';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
@@ -144,6 +145,7 @@ function FactField({
   canStage,
   onStage,
   onChange,
+  onDiscard,
   href,
   editorHref,
   onReview,
@@ -156,6 +158,7 @@ function FactField({
   canStage: boolean;
   onStage: (source: string | null) => void;
   onChange: (draft: FactDraft) => void;
+  onDiscard?: ((draft: FactDraft) => void) | undefined;
   href: string;
   editorHref?: string | undefined;
   onReview: (address: ReviewAddress) => void;
@@ -189,9 +192,48 @@ function FactField({
   const canEdit = canStage && !busy && (sourceSelected || (!selected.length && !sourceUnavailable));
   const sourceIndex = draft?.source ? selected.findIndex((item) => item.id === draft.source) : -1;
   const locked = !!draft && factLocked(draft);
+  const row = useRef<HTMLElement>(null);
+  const discardTrigger = useRef<HTMLButtonElement>(null);
+  const cancel = useRef<HTMLButtonElement>(null);
+  const [pending, setPending] = useState<{ draft: FactDraft; read: FactsCurrent; active: () => boolean } | null>(null);
+  const latest = useRef({ draft, read, busy, visible, onDiscard });
+  latest.current = { draft, read, busy, visible, onDiscard };
+  const confirming = !!pending && pending.draft === draft && pending.read === read && pending.active();
+  if (pending && !confirming) setPending(null);
+  useLayoutEffect(() => {
+    if (confirming && !busy) cancel.current?.focus();
+  }, [confirming, busy]);
+  function cancelDiscard() {
+    setPending(null);
+    discardTrigger.current?.focus();
+  }
+  function discard() {
+    const now = latest.current;
+    if (
+      !pending ||
+      !pending.active() ||
+      !active() ||
+      !now.visible ||
+      now.busy ||
+      now.read !== pending.read ||
+      now.draft !== pending.draft ||
+      now.draft.command ||
+      factLocked(now.draft) ||
+      !row.current?.isConnected
+    )
+      return;
+    const form = row.current.closest('form');
+    flushSync(() => {
+      now.onDiscard?.(pending.draft);
+      setPending(null);
+    });
+    const selector =
+      'select:not(:disabled), button:not(:disabled):not([hidden]), input:not(:disabled):not([type="hidden"])';
+    (row.current?.querySelector<HTMLElement>(selector) ?? form?.querySelector<HTMLElement>(selector))?.focus();
+  }
   if (!visible) return null;
   return (
-    <section aria-label={label} className="min-w-0 [overflow-wrap:anywhere]">
+    <section ref={row} aria-label={label} className="min-w-0 [overflow-wrap:anywhere]">
       <ContentItemFrame as="div" className="min-w-0 space-y-4 rounded-xl bg-card p-4 sm:p-5">
         <div lang={pageText(definition.labels, locale).lang}>
           <ContentItemHeading level={3} className="text-lg font-semibold">
@@ -311,6 +353,60 @@ function FactField({
               </Field>
             )}
             {!factChanged(draft) && <p className="text-sm text-muted-foreground">{m.facts_unchanged({}, o)}</p>}
+            {onDiscard && (
+              <div className="space-y-2">
+                <Button
+                  ref={discardTrigger}
+                  type="button"
+                  variant="outline"
+                  hidden={confirming}
+                  disabled={busy || locked || !!draft.command}
+                  className="h-auto min-h-11 max-w-full whitespace-normal break-words"
+                  onClick={() => {
+                    const now = latest.current;
+                    if (
+                      active() &&
+                      now.visible &&
+                      !now.busy &&
+                      now.draft === draft &&
+                      !draft.command &&
+                      !factLocked(draft)
+                    )
+                      setPending({ draft, read, active });
+                  }}
+                >
+                  {m.album_remove_draft({ field: label }, o)}
+                </Button>
+                {confirming && (
+                  <div
+                    role="group"
+                    aria-label={m.candidate_confirm_title({ action: m.album_remove_draft({ field: label }, o) }, o)}
+                    className="space-y-2"
+                    onKeyDown={(event) => {
+                      if (event.key === 'Escape') {
+                        event.preventDefault();
+                        cancelDiscard();
+                      }
+                    }}
+                  >
+                    <p>{m.candidate_confirm_title({ action: m.album_remove_draft({ field: label }, o) }, o)}</p>
+                    <div className="flex flex-wrap gap-2">
+                      <Button ref={cancel} type="button" variant="outline" disabled={busy} onClick={cancelDiscard}>
+                        {m.candidate_cancel({}, o)}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        disabled={busy || locked || !!draft.command}
+                        onClick={discard}
+                      >
+                        {m.album_remove_draft({ field: label }, o)}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
             {draft.result && (
               <ContentItemFrame as="div" className="min-w-0 space-y-3 rounded-xl bg-muted/30 p-4" role="status">
                 {draft.result.ok ? (
@@ -432,6 +528,8 @@ function SubjectFactsLive({
   }
   const admitted = new Set(Object.values(groups).flat());
   const staleDraft = !!profile && drafts.some((draft) => !admitted.has(draft.property));
+  const discardState = useRef({ current, busy, staleDraft });
+  discardState.current = { current, busy, staleDraft };
   const changed = drafts.filter((draft) => draft.included && factChanged(draft) && !draft.result?.ok);
   const success = drafts.filter((draft) => draft.result?.ok).length;
   function change(next: FactDraft) {
@@ -587,6 +685,21 @@ function SubjectFactsLive({
                         canStage={drafts.length < factLimit}
                         draft={drafts.find((draft) => draft.property === property)}
                         onChange={change}
+                        onDiscard={(original) => {
+                          const now = discardState.current;
+                          if (
+                            !lifetime.active() ||
+                            !now.current ||
+                            now.current !== current ||
+                            now.busy ||
+                            running.current ||
+                            now.staleDraft
+                          )
+                            return;
+                          setDrafts((previous) =>
+                            previous.filter((item) => item !== original || !!item.command || factLocked(item)),
+                          );
+                        }}
                         onReview={(address) => {
                           if (lifetime.active()) setReviewing(address);
                         }}

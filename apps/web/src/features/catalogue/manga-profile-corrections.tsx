@@ -6,7 +6,7 @@ import { m } from '../../paraglide/messages.js';
 import { subjectHref } from '../../subject/subject-href';
 import { CandidateReview, type CandidateTransport } from '../../subject/candidate-review';
 import type { FactsTransport, FactDraft } from './subject-facts';
-import { factChanged, factLimit, sealFacts, sendFacts, stageFact } from './subject-facts';
+import { factChanged, factLimit, factLocked, sealFacts, sendFacts, stageFact } from './subject-facts';
 import { FactField } from './subject-facts-view';
 import { correctionProperty } from './statement-editor';
 import { PartValue } from './statement-editor-view';
@@ -101,6 +101,8 @@ function MangaCorrectionsLive({ read, locale, disabled, ports, reload }: Correct
     }
   }
   const changed = drafts.filter((draft) => draft.included && factChanged(draft) && !draft.result?.ok);
+  const discardState = useRef({ read, disabled, ports, busy });
+  discardState.current = { read, disabled, ports, busy };
   async function submit() {
     if (!active() || !subject || !read || !ports || disabled || running.current) return;
     const sealed = sealFacts(subject.id, read.release, drafts);
@@ -244,6 +246,22 @@ function MangaCorrectionsLive({ read, locale, disabled, ports, reload }: Correct
                       busy={busy || disabled || !ports}
                       canStage={drafts.length < factLimit}
                       draft={drafts.find((draft) => draft.property === property)}
+                      onDiscard={(original) => {
+                        const now = discardState.current;
+                        if (
+                          !active() ||
+                          !now.read?.public ||
+                          now.read !== read ||
+                          now.disabled ||
+                          !now.ports ||
+                          now.busy ||
+                          running.current
+                        )
+                          return;
+                        setDrafts((previous) =>
+                          previous.filter((item) => item !== original || !!item.command || factLocked(item)),
+                        );
+                      }}
                       onChange={(next) =>
                         active() &&
                         setDrafts((previous) =>
