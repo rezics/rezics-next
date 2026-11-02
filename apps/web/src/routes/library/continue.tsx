@@ -1,9 +1,10 @@
 import { useCallback } from 'react';
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useLocation } from '@tanstack/react-router';
 import { prepareExposure } from '../../kernel/exposure';
 import { requireSignedIn } from '../../session/guard';
 import { ContinueSection, useContinueRefresh } from '../../library/continue';
 import { readContinueEntries } from '../../library/continue-read';
+import { continueNewestHref } from '../../library/continue-address';
 import { LibraryNavigation } from '../../library/library-nav';
 import { useCurrentLibraryNavigation } from '../../library/pins-current';
 import { m } from '../../paraglide/messages.js';
@@ -18,10 +19,10 @@ export const Route = createFileRoute('/library/continue')({
     await prepareExposure(context.context.queryClient);
   },
   validateSearch: (search: Record<string, unknown>) => ({
-    cursor: typeof search.cursor === 'string' && search.cursor.length > 0 ? search.cursor : undefined,
+    cursor: search.cursor,
   }),
   loaderDeps: ({ search }) => ({ cursor: search.cursor }),
-  loader: ({ deps }) => readContinueEntries({ data: { ...(deps.cursor ? { cursor: deps.cursor } : {}) } }),
+  loader: ({ deps }) => readContinueEntries({ data: deps }),
   head: ({ match }) =>
     pageHead({ title: m.library_continue(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   component: ContinuePage,
@@ -31,9 +32,11 @@ function ContinuePage() {
   const locale = getLocale();
   const { cursor } = Route.useSearch();
   const initial = Route.useLoaderData();
-  const read = useCallback(() => readContinueEntries({ data: { ...(cursor ? { cursor } : {}) } }), [cursor]);
-  const resume = useContinueRefresh(initial, read, `${locale}:${cursor ?? ''}`);
-  const navigation = useCurrentLibraryNavigation(locale, 8, `${locale}:${cursor ?? ''}`);
+  const location = useLocation();
+  const read = useCallback(() => readContinueEntries({ data: { cursor } }), [cursor]);
+  const scope = `${locale}:${location.searchStr}`;
+  const resume = useContinueRefresh(initial, read, scope);
+  const navigation = useCurrentLibraryNavigation(locale, 8, scope);
   return (
     <div className="container mx-auto max-w-7xl space-y-8 px-4 py-8">
       <PageHeading>{m.library_continue()}</PageHeading>
@@ -45,6 +48,7 @@ function ContinuePage() {
       />
       <ContinueSection
         destination
+        newestHref={continueNewestHref(locale, location.searchStr, location.hash)}
         state={resume.result}
         locale={locale}
         onRetry={() => void resume.refresh()}

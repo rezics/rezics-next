@@ -177,6 +177,8 @@ their obsolete Continue guidance at that writer's cutover; those files are inten
 
 ## Cost
 
+The Web destination admits absent or nonempty opaque cursors of at most 4096 UTF-16 code units; malformed and native invalid/stale positions require explicit newest-page navigation that preserves other URL fields. Loading and retry retain the requested position; neither denial nor unavailability is an empty resume list.
+
 - Touches: owner-local indexed active-role/session candidates, accepted meaning/current disclosure, canonical
   epoch and bounded BASIC session projection. Indexes remain derived discovery, never personal truth or permission.
 - Bound: [filtered-list](filtered-lists.md#cost) direct/ready/preparation and useful-page budgets, including actual

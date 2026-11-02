@@ -15,7 +15,7 @@ export type ContinueEntry = {
 
 /** Consumer presentation, not a replacement native DTO or a second Library index. */
 export type ContinueFailure =
-  | { state: 'unavailable'; status?: number; reason?: 'missing-binding' }
+  | { state: 'unavailable'; status?: number; reason?: 'missing-binding' | 'invalid-address' | 'stale-address' }
   | { state: 'preparing'; retryAfter?: number }
   | { state: 'denied'; status: 401 | 403 }
   | { state: 'signed-out' };
@@ -65,11 +65,14 @@ export function continueRetryDelay(result: ContinueView, attempts: number): numb
 }
 
 /** Map the native response status without turning an error or readiness response into empty success. */
-export function continueFailure(status: number, retryAfter?: string | null): ContinueFailure {
+export function continueFailure(status: number, retryAfter?: string | null, problem?: unknown): ContinueFailure {
   if (status === 202) {
     const seconds = retryAfter ? Number(retryAfter) : NaN;
     return { state: 'preparing', ...(Number.isFinite(seconds) && seconds > 0 ? { retryAfter: seconds } : {}) };
   }
   if (status === 401 || status === 403) return { state: 'denied', status };
+  const code = typeof problem === 'object' && problem !== null && 'code' in problem ? problem.code : undefined;
+  if ((status === 400 && code === 'invalid_cursor') || (status === 409 && code === 'stale_cursor'))
+    return { state: 'unavailable', status, reason: 'stale-address' };
   return { state: 'unavailable', status };
 }

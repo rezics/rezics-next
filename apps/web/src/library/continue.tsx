@@ -13,6 +13,7 @@ import { progressView } from './progress-label';
 import { pageText } from '../features/pages/shared';
 import { SectionHeading } from './section-heading';
 import { continueRetryDelay, type ContinueEntry, type ContinueResult, type ContinueView } from './continue-source';
+import { continueNewestHref } from './continue-address';
 
 /**
  * What the visitor is in the middle of. Each card is a cover card: one link to carry on, on its title and stretched
@@ -211,6 +212,7 @@ export function ContinueSection({
   onRetry,
   busy = false,
   destination = false,
+  newestHref,
 }: {
   /** Retained for existing component consumers that already have a successful page. */
   entries?: ContinueEntry[];
@@ -220,13 +222,20 @@ export function ContinueSection({
   onRetry?: () => void;
   busy?: boolean;
   destination?: boolean;
+  newestHref?: string;
 }) {
   const result = state ?? (entries ? { state: 'loaded', entries, next: null } : { state: 'unknown' });
   if (result.state === 'signed-out') return null;
   const options = { locale: locale as Locale };
   const title = m.home_continue_heading({}, options);
+  const address = result.state === 'unavailable' &&
+    (result.reason === 'invalid-address' || result.reason === 'stale-address') ? result.reason : null;
   const message =
-    result.state === 'loaded'
+    address === 'invalid-address'
+      ? m.library_continue_address_malformed({}, options)
+      : address === 'stale-address'
+        ? m.library_continue_address_expired({}, options)
+        : result.state === 'loaded'
       ? m.library_continue_empty({}, options)
       : result.state === 'preparing'
         ? m.library_continue_preparing({}, options)
@@ -263,7 +272,15 @@ export function ContinueSection({
           >
             {message}
           </p>
-          {onRetry && (result.state === 'unavailable' || result.state === 'preparing') ? (
+          {address ? (
+            <a
+              href={newestHref ?? continueNewestHref(locale)}
+              className="mt-4 inline-flex min-h-11 max-w-full items-center rounded-sm px-3 py-2 text-sm text-primary underline-offset-4 wrap-anywhere hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              {m.library_continue_address_newest({}, options)}
+            </a>
+          ) : null}
+          {!address && onRetry && (result.state === 'unavailable' || result.state === 'preparing') ? (
             <Button
               type="button"
               variant="outline"

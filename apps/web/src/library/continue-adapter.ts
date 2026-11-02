@@ -1,5 +1,6 @@
 import type { KernelClient } from '@rezics/client';
 import * as v from 'valibot';
+import { continueAddress } from './continue-address';
 import {
   CONTINUE_LIMIT,
   continueFailure,
@@ -95,11 +96,13 @@ export function presentContinuePage(value: unknown): ContinueResult {
 
 /** The generated caller uses the original native owner/disclosure/cursor authority in one HTTP request. */
 export const nativeContinueSource: ContinueSource = async (client, authorization, input, signal) => {
+  const address = continueAddress(input);
+  if (address.malformed) return { state: 'unavailable', reason: 'invalid-address' };
   if (signal?.aborted) return { state: 'unavailable' };
   const query: NativeContinueQuery = {
     limit: CONTINUE_LIMIT,
     view: 'FULL',
-    ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
+    ...(address.cursor === undefined ? {} : { cursor: address.cursor }),
   };
   try {
     const result = await client.libraryContinue.get({
@@ -108,7 +111,7 @@ export const nativeContinueSource: ContinueSource = async (client, authorization
       fetch: { cache: 'no-store', redirect: 'manual', ...(signal ? { signal } : {}) },
     });
     if (result.status !== 200 || result.error)
-      return continueFailure(result.status, new Headers(result.headers).get('retry-after'));
+      return continueFailure(result.status, new Headers(result.headers).get('retry-after'), result.error?.value);
     return presentContinuePage(result.data);
   } catch {
     return { state: 'unavailable' };

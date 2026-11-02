@@ -7,6 +7,7 @@ import { MediaProblem } from '../media/kernel';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
 import { nativeContinueSource } from './continue-adapter';
+import { continueAddress } from './continue-address';
 import {
   CONTINUE_LIMIT,
   ContinueReadError,
@@ -30,16 +31,17 @@ export function homeContinueQuery<T>(locale: string, read: () => Promise<T>) {
 }
 
 const readLibraryContinuePage = createServerFn({ method: 'GET' })
-  .validator((input: { cursor?: string }) => ({ ...(input.cursor ? { cursor: input.cursor } : {}) }))
+  .validator((input: { cursor?: unknown }) => continueAddress(input))
   .handler(async ({ data }) => {
+    setResponseHeader('Cache-Control', 'private, no-store');
+    if (data.malformed) return { state: 'unavailable', reason: 'invalid-address' } as const;
     const { env } = await import('cloudflare:workers');
     const { kernelClient } = await import('../kernel/client');
-    setResponseHeader('Cache-Control', 'private, no-store');
     return loadContinueState(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
   });
 
 /** Shared private result for Library and its reachable Continue destination. */
-export function readContinueEntries(input: { data: { cursor?: string } } = { data: {} }) {
+export function readContinueEntries(input: { data: { cursor?: unknown } } = { data: {} }) {
   return readLibraryContinuePage(input);
 }
 
@@ -47,7 +49,7 @@ export function libraryContinueQuery(locale: string, cursor?: string) {
   return queryOptions({
     ...personalRead,
     queryKey: ['library-continue', locale, cursor ?? ''],
-    queryFn: () => readLibraryContinuePage({ data: { ...(cursor ? { cursor } : {}) } }),
+    queryFn: () => readLibraryContinuePage({ data: { cursor } }),
     retry: false,
     refetchOnWindowFocus: false,
   });
@@ -58,14 +60,16 @@ export async function loadContinueState(
   client: KernelClient,
   request: Request,
   sessionEnv: Partial<SessionEnv>,
-  input: { cursor?: string } = {},
+  input: { cursor?: unknown } = {},
   source: ContinueSource = nativeContinueSource,
 ): Promise<ContinueResult> {
+  const address = continueAddress(input);
+  if (address.malformed) return { state: 'unavailable', reason: 'invalid-address' };
   try {
     if (await prepareSession(request, sessionEnv, { refresh: false })) return { state: 'signed-out' };
     const authorization = viewerCredential(request);
     if (!authorization) return { state: 'signed-out' };
-    const result = await source(client, authorization, { limit: CONTINUE_LIMIT, ...input }, request.signal);
+    const result = await source(client, authorization, { limit: CONTINUE_LIMIT, ...address }, request.signal);
     return result.state === 'loaded' ? { ...result, entries: result.entries.slice(0, CONTINUE_LIMIT) } : result;
   } catch (error) {
     if (error instanceof ContinueReadError) return error.failure;
