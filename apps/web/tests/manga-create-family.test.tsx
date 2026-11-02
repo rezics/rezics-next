@@ -938,6 +938,40 @@ test('complete Manga creation keeps series and volume drafts, independent contro
       await until(() => host.textContent!.includes(m.manga_created()));
       expect(posts(fixture)).toHaveLength(2);
     }
+
+    // Keyboard Add focuses each admitted repeated assertion; an old activation stays quiet.
+    const focusFixture = mangaFixture();
+    await fresh(focusFixture, 'manga-add-focus');
+    const authorName = title(focusFixture, 'schema:author');
+    const authorPicker = within(host).getByRole('combobox', { name: m.manga_creators() }) as HTMLSelectElement;
+    const authorGroup = authorPicker.closest('section')!;
+    await select(host, m.manga_creators(), 'schema:author');
+    await click(authorGroup, m.correction_add());
+    expect(window.document.activeElement).not.toBe(row(host, authorName));
+    let authors = within(host).getAllByRole('region', { name: authorName });
+    expect(authors).toHaveLength(1);
+    const firstAuthorId = authors[0]!.id;
+    for (const expectedCount of [2, 3]) {
+      await select(host, m.manga_creators(), 'schema:author');
+      const addButton = within(authorGroup).getByRole('button', { name: m.correction_add() }) as HTMLButtonElement;
+      addButton.focus();
+      await act(async () => user.keyboard('{Enter}'));
+      authors = within(host).getAllByRole('region', { name: authorName });
+      expect(authors).toHaveLength(expectedCount);
+      expect(window.document.activeElement).toBe(authors[expectedCount - 1]);
+    }
+    expect(authors[0]!.id).toBe(firstAuthorId);
+    const oldAddButton = within(authorGroup).getByRole('button', { name: m.correction_add() });
+    const oldPropsKey = Object.keys(oldAddButton).find((key) => key.startsWith('__reactProps$'))!;
+    const oldAdd = (Reflect.get(oldAddButton, oldPropsKey) as {
+      onClick: (event: { detail: number; currentTarget: HTMLButtonElement }) => void;
+    }).onClick;
+    await select(host, m.manga_grain(), 'schema:PublicationVolume');
+    await select(host, m.manga_grain(), 'schema:ComicSeries');
+    outside.focus();
+    await act(async () => oldAdd({ detail: 0, currentTarget: oldAddButton as HTMLButtonElement }));
+    expect(within(host).getAllByRole('region', { name: authorName })).toHaveLength(3);
+    expect(window.document.activeElement).toBe(outside);
     await show(null);
   } finally {
     await act(async () => root.unmount());

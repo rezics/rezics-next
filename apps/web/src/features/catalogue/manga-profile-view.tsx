@@ -38,6 +38,13 @@ import {
 
 export type MangaReady = Extract<MangaRead, { ok: true }>;
 type MangaTermDraft = TermDraft & { id: number };
+type MangaAddFocusIntent = {
+  row: MangaRow;
+  type: MangaType;
+  activation: number;
+  read: MangaReady;
+  trigger: HTMLButtonElement;
+};
 
 export function mangaGroupLabels(locale: string) {
   const o = { locale: locale as never };
@@ -224,6 +231,7 @@ function MangaCreate({
   const latestDrafts = useRef(drafts);
   const currentType = useRef(type);
   const typeActivation = useRef(0);
+  const addFocusIntent = useRef<MangaAddFocusIntent | null>(null);
   const [independent, setIndependent] = useState(false);
   const [failure, setFailure] = useState<CreateFailure>();
   const [created, setCreated] = useState<Extract<CreateResult, { ok: true }>>();
@@ -278,6 +286,28 @@ function MangaCreate({
     !currentLocked.current &&
     !running.current &&
     !request.current;
+  useLayoutEffect(() => {
+    const intent = addFocusIntent.current;
+    if (!intent) return;
+    addFocusIntent.current = null;
+    const target = document.getElementById(`manga-row-${intent.row.id}`);
+    const focusStayedOnTrigger =
+      document.activeElement === intent.trigger ||
+      (intent.trigger.disabled && document.activeElement === document.body);
+    if (
+      !lifetime.active() ||
+      !removalAllowed() ||
+      intent.type !== currentType.current ||
+      intent.activation !== typeActivation.current ||
+      intent.read !== latestTermWorkspace.current.read ||
+      latestTermWorkspace.current.created ||
+      !latestDrafts.current[intent.type].includes(intent.row) ||
+      !target?.isConnected ||
+      !focusStayedOnTrigger
+    )
+      return;
+    target.focus();
+  });
   const currentTermEdit = (holder: MangaTermDraft[], expectedType: MangaType, activation: number) => {
     const latest = latestTermWorkspace.current;
     return (
@@ -301,16 +331,17 @@ function MangaCreate({
   function editAllowed(expectedType: MangaType, activation: number) {
     return expectedType === currentType.current && activation === typeActivation.current && removalAllowed();
   }
-  function updateRows(expectedType: MangaType, activation: number, update: (rows: MangaRow[]) => MangaRow[]) {
-    if (!editAllowed(expectedType, activation)) return;
+  function updateRows(expectedType: MangaType, activation: number, update: (rows: MangaRow[]) => MangaRow[]): boolean {
+    if (!editAllowed(expectedType, activation)) return false;
     const current = latestDrafts.current;
     const currentRows = current[expectedType];
     const nextRows = update(currentRows);
-    if (nextRows === currentRows) return;
+    if (nextRows === currentRows) return false;
     const next = { ...current, [expectedType]: nextRows };
     latestDrafts.current = next;
     setDrafts(next);
     setFailure(undefined);
+    return true;
   }
   function changeRow(expectedType: MangaType, activation: number, row: MangaRow, next: MangaRow) {
     updateRows(expectedType, activation, (current) => {
@@ -327,10 +358,11 @@ function MangaCreate({
       return index < 0 ? current : current.filter((_, at) => at !== index);
     });
   }
-  function addRow(expectedType: MangaType, activation: number, row: MangaRow) {
-    updateRows(expectedType, activation, (current) =>
+  function addRow(expectedType: MangaType, activation: number, expectedRead: MangaReady, row: MangaRow): boolean {
+    if (latestTermWorkspace.current.read !== expectedRead || latestTermWorkspace.current.created) return false;
+    return updateRows(expectedType, activation, (current) =>
       current.some((item) => item.id === row.id) ||
-      (!read?.release.properties[row.statement.property.id]?.multivalued &&
+      (!expectedRead.release.properties[row.statement.property.id]?.multivalued &&
         current.some((item) => item.statement.property.id === row.statement.property.id))
         ? current
         : [...current, row],
@@ -453,6 +485,13 @@ function MangaCreate({
       </MangaNavigationLink>
       <form
         className="min-w-0 space-y-8 [overflow-wrap:anywhere] [&_label]:whitespace-normal [&_label]:text-start [&_input]:min-w-0 [&_textarea]:min-w-0"
+        onBlurCapture={(event) => {
+          const intent = addFocusIntent.current;
+          if (!intent || event.target !== intent.trigger) return;
+          const automaticDisabledBlur =
+            intent.trigger.disabled && (event.relatedTarget === null || event.relatedTarget === document.body);
+          if (!automaticDisabledBlur) addFocusIntent.current = null;
+        }}
         onSubmit={(event) => {
           event.preventDefault();
           void submit();
@@ -472,6 +511,7 @@ function MangaCreate({
                 value={type}
                 onChange={(event) => {
                   const nextType = event.target.value as MangaType;
+                  addFocusIntent.current = null;
                   if (nextType !== currentType.current) typeActivation.current++;
                   currentType.current = nextType;
                   setType(nextType);
@@ -646,13 +686,22 @@ function MangaCreate({
                             !rows.some((row) => row.statement.property.id === id),
                         )}
                         name={(id) => pickText(read.release.properties[id]!.labels, locale)}
-                        onAdd={(property) =>
-                          addRow(type, activeTypeActivation, {
+                        onAdd={(property, event) => {
+                          addFocusIntent.current = null;
+                          const row: MangaRow = {
                             id: crypto.randomUUID(),
                             statement: blankMangaStatement(property),
                             label: pickText(read.release.properties[property]!.labels, locale),
-                          })
-                        }
+                          };
+                          if (!addRow(type, activeTypeActivation, read, row) || event.detail !== 0) return;
+                          addFocusIntent.current = {
+                            row,
+                            type,
+                            activation: activeTypeActivation,
+                            read,
+                            trigger: event.currentTarget,
+                          };
+                        }}
                         locale={locale}
                       />
                     </div>
@@ -809,7 +858,7 @@ function AddField({
   label: string;
   fields: string[];
   name: (id: string) => ReturnType<typeof pickText>;
-  onAdd: (id: string) => void;
+  onAdd: (id: string, event: React.MouseEvent<HTMLButtonElement>) => void;
   disabled: boolean;
   locale: string;
 }) {
@@ -843,8 +892,8 @@ function AddField({
         type="button"
         variant="outline"
         disabled={disabled || !fields.includes(property)}
-        onClick={() => {
-          onAdd(property);
+        onClick={(event) => {
+          onAdd(property, event);
           setProperty('');
         }}
       >
