@@ -440,7 +440,7 @@ test('selected-value evidence has independent family sections, complete supplied
       return new Promise<ValueRead>((resolve) => pending.push(resolve));
     };
     const resolve = async (result: ValueRead) => act(async () => pending.shift()!(result));
-    await render(h(ValueExplanation, { locale: 'en', transport: recover, initial: first }));
+    await render(h(ValueExplanation, { locale: 'en', transport: recover, initial: { ...first } }));
     await act(async () => button(container, m.value_more()).click());
     await resolve(await native.transport(valueCursor, 'value-session'));
     await act(async () => button(container, m.value_more()).click());
