@@ -77,35 +77,6 @@ Vite pre-bundles browser dependencies by scanning the site routes and their impo
 Run `bun run storybook` to browse the page stories. Run `bun run record` to create committed page recordings; it needs Docker with permission to start a disposable PostgreSQL container and Bun, and does not use a development kernel or database.
 The Worker inspector is off by default; `WORKER_INSPECTOR_PORT=<port> bun run dev` opens it on that port for DevTools.
 
-## Creator read and command admission
-
-The shared creator origin admits offers, Sales and statement reads and read-only refresh from the current signed-in
-subject and its advertised operation, independently of CSRF. Session epochs and exposure changes retire old callbacks
-and delayed responses, including same-subject ABA; missing or closed authority conceals private reads. Healthy
-same-viewer session renewal may retain an accepted read after fresh exposure admission. New commands require a current
-mutation credential. Read recovery never resolves or renews an uncertain command, its captured offer terms or statement
-reference. The statement consumer keeps its existing reader and guard/intent API; no parallel reader is added.
-
-Decision: explicit uncertain retries require current command admission but reuse the original captured sender, CSRF,
-key and operands; a new read or token never replaces that original. Statement evidence refresh requires only read
-admission, including while its command credential is missing.
-
-## Confirming creator offer availability
-
-After a successful reprice or delist response, the creator offer controls request one fresh, bounded owned-offer
-page. Only a matching row with a revision newer than the captured draft replaces the displayed price and
-availability. An uncertain write retains its original payload and key; it does not start this confirmation read.
-Failed, missing-row or old-revision confirmation reads keep the recorded result and draft visible with read-only
-recovery. They never replay the saved command. A confirmed active row permits another edit with a new key; a
-confirmed delisted row removes the public offer link while preserving history and the recorded result.
-Existing sales keep their accepted terms and benefits; these controls change future availability only.
-
-Decision: use a fresh owned-list read after a confirmed write to reconcile availability; the current native seller
-mutation contract has no revision precondition, so atomic revision-bound seller changes require a native follow-up.
-No public offer read or Web preflight substitutes for that precondition. Missing Content sale authority remains
-unavailable. Sources for this increment: the Commerce owner contract, seller routes/commands, current-origin
-controls and their focused recovery tests. No external reference source applies.
-
 ## Creator statement recovery
 
 Creator statement list/detail pages use the private owner-self payout statement APIs, with at most 20 rows per
@@ -2247,6 +2218,19 @@ Full subject views page through their owner list read with the first page's para
 - **Touches:** Root preferences → D `signedIn`; one anonymous K `GET /v1/offers/<id>?languages=<locale>`, which returns the sold subject's summary (title in the visitor's language, types, cover) in the same response; the price is formatted locally from `unitAmountMinor` and the currency's minor-unit digits. The page renders one idempotency key and reuses it for retries. The browser then loads at most one cover variant through the media route (one K `authorizeDownload`, the media download row). An unknown, hidden or unreadable subject (`null`) never fails the page: the cover area shows the typographic placeholder with the offer title
 - **Bound:** 1 K, ≤1 D, 0 R and 0 A for the page; ≤1 download per visit. Constant offer; no list
 - **Growth check:** `tests/checkout-cost.test.ts`: `offer page stays within its bound as s grows`, at s = 1, 8 and 64, asserts the one call and its `languages` query
+
+### Creator read and command admission
+
+The shared creator origin admits offers, Sales and statement reads and read-only refresh from the current signed-in
+subject and its advertised operation, independently of CSRF. Session epochs and exposure changes retire old callbacks
+and delayed responses, including same-subject ABA; missing or closed authority conceals private reads. Healthy
+same-viewer session renewal may retain an accepted read after fresh exposure admission. New commands require a current
+mutation credential. Read recovery never resolves or renews an uncertain command, its captured offer terms or statement
+reference. The statement consumer keeps its existing reader and guard/intent API; no parallel reader is added.
+
+Decision: explicit uncertain retries require current command admission but reuse the original captured sender, CSRF,
+key and operands; a new read or token never replaces that original. Statement evidence refresh requires only read
+admission, including while its command credential is missing.
 
 ### Creator offer address recovery
 
