@@ -75,13 +75,16 @@ test('Progress drafts share one Stay/Discard choice and preserve the exact note 
         value: progress,
         onChange: (event: { target: HTMLInputElement }) => setProgress(event.target.value),
       }),
-      createElement('button', { id: 'toggle-lock', type: 'button', onClick: () => setLocked((value) => !value) }, 'Lock'),
+      createElement(
+        'button',
+        { id: 'toggle-lock', type: 'button', onClick: () => setLocked((value) => !value) },
+        'Lock',
+      ),
     );
   }
 
   const rootRoute = createRootRoute({
-    component: () =>
-      createElement(PublicationNoteDraftNavigation, null, createElement(Outlet)),
+    component: () => createElement(PublicationNoteDraftNavigation, null, createElement(Outlet)),
   });
   const pageRoute = createRoute({ getParentRoute: () => rootRoute, path: '/progress', component: Page });
   const awayRoute = createRoute({ getParentRoute: () => rootRoute, path: '/away', component: () => 'Away' });
