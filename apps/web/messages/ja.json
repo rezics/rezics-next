@@ -4299,5 +4299,8 @@
   "curation_review_empty_object": "空のオブジェクト",
   "curation_review_children": "内容",
   "curation_review_first_column": "最初の列",
-  "curation_review_last_column": "最後の列"
+  "curation_review_last_column": "最後の列",
+  "creator_offer_controls_manage": "価格の管理・出品の取り下げ",
+  "creator_offer_controls_manage_offer": "価格の管理・出品の取り下げ：{title}",
+  "creator_offer_controls_retained": "下書き、リクエスト、結果を確認できるように、これらの操作欄は開いたままになります。"
 }

@@ -1,4 +1,4 @@
-import { createContext, useContext, useLayoutEffect, useRef, useState } from 'react';
+import { createContext, useContext, useId, useLayoutEffect, useRef, useState } from 'react';
 import { QueryClientContext } from '@tanstack/react-query';
 import { creatorPreviewGuard, useCreatorCurrentOrigin, useCreatorIntent } from './creator-current-origin';
 import { ContentItem } from '@rezics/ui/content-item';
@@ -99,6 +99,8 @@ function OfferCommands({
   const [text, setText] = useState(resume?.text ?? '');
   const [result, setResult] = useState<CreatorOfferResult | null>(resume?.result ?? null);
   const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
+  const controlsId = useId();
   const pending = useRef<CreatorOfferMutation | null>(resume?.pending ?? null);
   const locked = useRef(resume?.result?.kind === 'saved');
   const keys = useRef(resume ? resume.keys : data.keys[observed.id]);
@@ -119,6 +121,10 @@ function OfferCommands({
   const uncertain = result?.kind === 'retry';
   const frozen = busy || uncertain || result?.kind === 'saved';
   const editable = observed.state === 'active' && data.selling && !!csrf() && !!keys.current && guard.isCurrent();
+  // Disclosure never hides an edited intent or an operation's recovery/result. Authority
+  // withdrawal still belongs to the current-origin boundary that mounts these controls.
+  const keepOpen = !!draft || busy || !!pending.current || !!result;
+  const expanded = open || keepOpen;
   function keepDraft(next: ChangeIntent) {
     memory.value = next;
     setDraft(next);
@@ -162,68 +168,92 @@ function OfferCommands({
       }
     }
   }
+  if (observed.state !== 'active' && !result) return null;
   return (
-    <div className="space-y-4">
-      {observed.state === 'active' && (
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            void change('reprice');
-          }}
-          className="space-y-4"
-        >
-          <CreatorPriceField
-            rule={rule}
-            text={text}
-            onChange={(next) => {
-              if (isCurrent() && !frozen) {
-                keepDraft({ observed, text: next, pending: pending.current, keys: keys.current, rule, result });
-                setText(next);
-              }
+    <div className="min-w-0 space-y-3 [overflow-wrap:anywhere]">
+      <Button
+        type="button"
+        variant="outline"
+        aria-expanded={expanded}
+        aria-controls={controlsId}
+        aria-label={m.creator_offer_controls_manage_offer({ title: observed.title })}
+        aria-disabled={keepOpen}
+        aria-describedby={keepOpen ? `${controlsId}-retained` : undefined}
+        className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+        onClick={() => {
+          if (!keepOpen) setOpen((value) => !value);
+        }}
+      >
+        {m.creator_offer_controls_manage()}
+      </Button>
+      <div id={controlsId} hidden={!expanded} className="min-w-0 space-y-4">
+        {keepOpen && (
+          <p id={`${controlsId}-retained`} className="text-sm leading-relaxed text-muted-foreground">
+            {m.creator_offer_controls_retained()}
+          </p>
+        )}
+        {busy && <p role="status">{m.creator_saving()}</p>}
+        {observed.state === 'active' && (
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void change('reprice');
             }}
-            locale={locale}
-            disabled={!editable || frozen}
-          />
-          <p className="text-sm leading-relaxed text-muted-foreground">{m.creator_revision_meaning()}</p>
-          {!rule && (
-            <p className="text-sm" role="status">
-              {m.creator_price_unavailable()}
-            </p>
-          )}
-          {uncertain ? (
-            <Button
-              type="button"
-              onClick={() => {
-                if (pending.current?.operation !== 'create') void change(pending.current?.operation ?? 'reprice');
+            className="space-y-4"
+          >
+            <CreatorPriceField
+              rule={rule}
+              text={text}
+              onChange={(next) => {
+                if (isCurrent() && !frozen) {
+                  keepDraft({ observed, text: next, pending: pending.current, keys: keys.current, rule, result });
+                  setText(next);
+                }
               }}
-              disabled={busy || !editable}
-              className="min-h-11"
-            >
-              {m.creator_retry()}
-            </Button>
-          ) : (
-            <div className="flex flex-wrap gap-3">
-              <Button
-                type="submit"
-                disabled={!editable || frozen || parsedPrice(text, rule) === null}
-                className="min-h-11"
-              >
-                {m.creator_reprice()}
-              </Button>
+              locale={locale}
+              disabled={!editable || frozen}
+            />
+            <p className="text-sm leading-relaxed text-muted-foreground">{m.creator_revision_meaning()}</p>
+            {!rule && (
+              <p className="text-sm" role="status">
+                {m.creator_price_unavailable()}
+              </p>
+            )}
+            {uncertain ? (
               <Button
                 type="button"
-                variant="outline"
-                disabled={!editable || frozen}
+                onClick={() => {
+                  if (pending.current?.operation !== 'create') void change(pending.current?.operation ?? 'reprice');
+                }}
+                disabled={busy || !editable}
                 className="min-h-11"
-                onClick={() => void change('delist')}
               >
-                {m.creator_delist()}
+                {m.creator_retry()}
               </Button>
-            </div>
-          )}
-        </form>
-      )}
-      {result && <p role={result.kind === 'saved' ? 'status' : 'alert'}>{creatorNotice(result.kind)}</p>}
+            ) : (
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  type="submit"
+                  disabled={!editable || frozen || parsedPrice(text, rule) === null}
+                  className="min-h-11"
+                >
+                  {m.creator_reprice()}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={!editable || frozen}
+                  className="min-h-11"
+                  onClick={() => void change('delist')}
+                >
+                  {m.creator_delist()}
+                </Button>
+              </div>
+            )}
+          </form>
+        )}
+        {result && <p role={result.kind === 'saved' ? 'status' : 'alert'}>{creatorNotice(result.kind)}</p>}
+      </div>
     </div>
   );
 }
@@ -341,7 +371,7 @@ export function CreatorOffersPage({
                     {...(offer.state === 'active' && offerPageAvailable
                       ? { href: `/${locale}/offers/${offer.id}` }
                       : {})}
-                    className="p-3 [&_h2]:break-words [&_h2]:[overflow-wrap:anywhere]"
+                    className="p-3 sm:[&>div]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] [&_h2]:break-words [&_h2]:[overflow-wrap:anywhere]"
                     metadata={
                       <div className="min-w-0 space-y-2">
                         <p className="font-serif text-lg tabular-nums">

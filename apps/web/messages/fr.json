@@ -4299,5 +4299,8 @@
   "curation_review_empty_object": "Objet vide",
   "curation_review_children": "Contenu",
   "curation_review_first_column": "Première colonne",
-  "curation_review_last_column": "Dernière colonne"
+  "curation_review_last_column": "Dernière colonne",
+  "creator_offer_controls_manage": "Gérer le prix ou retirer l’offre",
+  "creator_offer_controls_manage_offer": "Gérer le prix ou retirer l’offre : {title}",
+  "creator_offer_controls_retained": "Ces commandes restent ouvertes pour garder votre brouillon, votre demande ou son résultat visible."
 }

@@ -4299,5 +4299,8 @@
   "curation_review_empty_object": "Leeres Objekt",
   "curation_review_children": "Inhalt",
   "curation_review_first_column": "Erste Spalte",
-  "curation_review_last_column": "Letzte Spalte"
+  "curation_review_last_column": "Letzte Spalte",
+  "creator_offer_controls_manage": "Preis verwalten oder Angebot entfernen",
+  "creator_offer_controls_manage_offer": "Preis verwalten oder Angebot entfernen: {title}",
+  "creator_offer_controls_retained": "Diese Steuerelemente bleiben geöffnet, damit Ihr Entwurf, Ihre Anfrage oder Ihr Ergebnis sichtbar bleibt."
 }

@@ -4300,5 +4300,8 @@
   "curation_review_empty_object": "空对象",
   "curation_review_children": "内容",
   "curation_review_first_column": "第一栏",
-  "curation_review_last_column": "最后一栏"
+  "curation_review_last_column": "最后一栏",
+  "creator_offer_controls_manage": "管理价格或下架",
+  "creator_offer_controls_manage_offer": "管理价格或下架：{title}",
+  "creator_offer_controls_retained": "此操作区会保持展开，以便查看草稿、请求或结果。"
 }

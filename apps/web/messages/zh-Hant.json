@@ -4299,5 +4299,8 @@
   "curation_review_empty_object": "空物件",
   "curation_review_children": "內容",
   "curation_review_first_column": "第一欄",
-  "curation_review_last_column": "最後一欄"
+  "curation_review_last_column": "最後一欄",
+  "creator_offer_controls_manage": "管理價格或下架",
+  "creator_offer_controls_manage_offer": "管理價格或下架：{title}",
+  "creator_offer_controls_retained": "此操作區會保持展開，以便查看草稿、請求或結果。"
 }

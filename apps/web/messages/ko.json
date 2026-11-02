@@ -4299,5 +4299,8 @@
   "curation_review_empty_object": "빈 객체",
   "curation_review_children": "내용",
   "curation_review_first_column": "첫 번째 열",
-  "curation_review_last_column": "마지막 열"
+  "curation_review_last_column": "마지막 열",
+  "creator_offer_controls_manage": "가격 관리 또는 판매 중단",
+  "creator_offer_controls_manage_offer": "가격 관리 또는 판매 중단: {title}",
+  "creator_offer_controls_retained": "초안, 요청 또는 결과를 확인할 수 있도록 이 관리 영역은 열린 상태로 유지됩니다."
 }

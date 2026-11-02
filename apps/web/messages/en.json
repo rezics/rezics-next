@@ -4300,5 +4300,8 @@
   "curation_review_empty_object": "Empty object",
   "curation_review_children": "Contents",
   "curation_review_first_column": "First column",
-  "curation_review_last_column": "Last column"
+  "curation_review_last_column": "Last column",
+  "creator_offer_controls_manage": "Manage price or delist",
+  "creator_offer_controls_manage_offer": "Manage price or delist: {title}",
+  "creator_offer_controls_retained": "These controls stay open to keep your draft, request or result visible."
 }

@@ -4299,5 +4299,8 @@
   "curation_review_empty_object": "Objeto vacío",
   "curation_review_children": "Contenido",
   "curation_review_first_column": "Primera columna",
-  "curation_review_last_column": "Última columna"
+  "curation_review_last_column": "Última columna",
+  "creator_offer_controls_manage": "Gestionar el precio o retirar la oferta",
+  "creator_offer_controls_manage_offer": "Gestionar el precio o retirar la oferta: {title}",
+  "creator_offer_controls_retained": "Estos controles permanecen abiertos para mantener visibles el borrador, la solicitud o el resultado."
 }
