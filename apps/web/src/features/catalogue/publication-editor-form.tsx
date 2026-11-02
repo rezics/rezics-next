@@ -71,7 +71,7 @@ function PublicationFactRemoval({
   onRemove: () => void;
   locale: string;
 }) {
-  const o = { locale };
+  const o = { locale: locale as never };
   const [confirmingProperty, setConfirmingProperty] = useState<string>();
   const confirming = confirmingProperty === property;
   const holder = useRef<HTMLDivElement>(null);
