@@ -769,6 +769,8 @@ groups or without a list heading, and never repeats a list's continuation.
 
 Relations retain one native page per stream: successful More replaces it, pending or transport failure preserves its exact retry, native refusal removes it, and repeated cursors or 64 successful requests (including the supplied page, excluding retries) require a native first-page restart; empty pages follow their actual continuation and announcements count only the accepted window.
 
+Members continuations reject conflicting native subject IDs, route template keys and available account identity reads before projecting rows; the DTO cannot independently prove a handle-to-ID relationship without an account identity read, a generic fallback's route or the selected view, so those remain with native target resolution and canonical changes return to ordinary route handling.
+
 ## Agents
 
 People, organizations (studios, publishers, bands, groups) and automated agents are agents, whether they arrived

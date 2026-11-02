@@ -4,6 +4,8 @@ import {
   planReads,
   platformRegistry,
   PROFILE_ROUTE_PATTERN,
+  PageContinuationError,
+  PageReadLimitError,
   isView,
   type CompositionDocument,
   type SelectedContext,
@@ -48,6 +50,27 @@ export function memberContinuationPlan(
   });
 }
 
+type NativeMemberPage = {
+  subject?: string;
+  account?: string;
+  template: { scope: string; key: string | null };
+};
+
+/** Template keys identify routes, never subjects, account handles or views. */
+function matchesNativeTarget(page: NativeMemberPage, target: MemberPageTarget): boolean {
+  if ('route' in target)
+    return (
+      page.subject === undefined &&
+      page.account === undefined &&
+      ((page.template.scope === 'route' && page.template.key === target.route) ||
+        (page.template.scope === 'generic' && page.template.key === null))
+    );
+  if (page.template?.scope === 'route') return false;
+  if ('subject' in target) return page.subject === target.subject && page.account === undefined;
+  // The DTO resolves a handle to an ID, without echoing the handle. Its native target resolution is authoritative.
+  return typeof page.account === 'string' && page.account.length > 0;
+}
+
 /** Reload the current native composition, retaining its exact source and predicate on every continuation. */
 export async function readMemberList(
   client: KernelClient,
@@ -60,7 +83,10 @@ export async function readMemberList(
       languages: requestLanguages(input.locale),
       ...(input.cursor ? { continuation: { node: input.node, cursor: input.cursor } } : {}),
     },
-    authorization ? { headers: { authorization } } : undefined,
+    {
+      fetch: { redirect: 'manual' },
+      ...(authorization ? { headers: { authorization } } : {}),
+    },
   );
   if (response.status !== 200 || !response.data) return { ok: false, status: response.status };
   const page = response.data;
@@ -74,20 +100,48 @@ export async function readMemberList(
     input.representation.populationId !== populationId
   )
     return { ok: false, status: 409 };
+  // A merge or agent-address change belongs to ordinary canonical routing, not this list's retained window.
+  if (!matchesNativeTarget(page, input.target)) return { ok: false, status: 409 };
   // The page API returns the resolved account ID; retain the validated account handle only for its planner shape.
   const resolvedAccount =
     typeof page.account === 'string' && 'account' in input.target
       ? { id: page.account, handle: input.target.account }
       : null;
-  const plan = memberContinuationPlan(
-    {
-      subject: page.subject ?? null,
-      account: resolvedAccount,
-      ...(page.context ? { context: page.context } : {}),
-    },
-    page.document as CompositionDocument,
-    input,
-  );
+  let plan: ReturnType<typeof memberContinuationPlan>;
+  try {
+    plan = memberContinuationPlan(
+      {
+        subject: page.subject ?? null,
+        account: resolvedAccount,
+        ...(page.context ? { context: page.context } : {}),
+      },
+      page.document as CompositionDocument,
+      input,
+    );
+  } catch (error) {
+    if (error instanceof PageContinuationError || error instanceof PageReadLimitError)
+      return { ok: false, status: 409 };
+    throw error;
+  }
+  if ('account' in input.target) {
+    // When the document exposes native account identity, it must agree with both the resolved ID and address.
+    // Documents without it cannot independently prove the ID/handle relationship; do not invent another lookup.
+    for (const [key, descriptor] of Object.entries(plan.reads)) {
+      if (descriptor.kind !== 'account') continue;
+      const identity = page.reads[key];
+      if (identity?.status !== 200) continue;
+      const accounts = isRecord(identity.body) ? identity.body.accounts : undefined;
+      const account = Array.isArray(accounts) ? accounts[0] : undefined;
+      if (
+        !isRecord(account) ||
+        account.id !== page.account ||
+        typeof account.handle !== 'string' ||
+        account.handle.toLowerCase() !== input.target.account.toLowerCase() ||
+        account.movedTo !== undefined
+      )
+        return { ok: false, status: 409 };
+    }
+  }
   const key = plan.nodes[input.node];
   const read = key ? plan.reads[key] : undefined;
   const result = key ? page.reads[key] : undefined;
