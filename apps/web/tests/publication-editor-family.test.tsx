@@ -30,7 +30,7 @@ test('independent publication creation, local corrections, immutable recovery an
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const storybook = dirname(Bun.resolveSync('storybook/test', import.meta.dir));
-  const { within, fireEvent } = await import(Bun.resolveSync('@testing-library/dom', storybook));
+  const { within } = await import(Bun.resolveSync('@testing-library/dom', storybook));
   const { default: userEvent } = await import(Bun.resolveSync('@testing-library/user-event', storybook));
   const { PublicationEditor } = await import('../src/features/catalogue/publication-editor-form');
   const { CandidateReaderBoundary } = await import('../src/subject/candidate-lifetime');
@@ -42,7 +42,7 @@ test('independent publication creation, local corrections, immutable recovery an
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement, { identifierPrefix: ':publication:' });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
-  const user = userEvent.setup({ document: window.document });
+  const user = userEvent.setup({ document: window.document, delay: null });
   const canvas = within(host as unknown as HTMLElement);
   const publisherId = '00000000-0000-4000-8000-00000000e003';
   const searchCalls: string[] = [];
@@ -132,7 +132,8 @@ test('independent publication creation, local corrections, immutable recovery an
   const input = (name: string, index = 0) => scope(index).getByRole('textbox', { name }) as HTMLInputElement;
   const replace = (element: HTMLElement, value: string) =>
     act(async () => {
-      fireEvent.input(element, { target: { value } });
+      await user.clear(element);
+      if (value) await user.type(element, value);
     });
   const click = (name: string, index = 0) => act(async () => user.click(scope(index).getByRole('button', { name })));
   const add = (property: string, index = 0) =>
