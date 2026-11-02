@@ -66,7 +66,7 @@ async function controlPlaneOutcome(suiteOutput: string, suiteTimedOut = false, b
     writeFileSync(
       brief,
       markdown
-        .replace('goal: fixture', 'goal: control-plane')
+        .replace('goal: fixture', 'goal: control-plane\ntarget: main')
         .replace('paths: [result.txt]', 'paths: [tools/goal/src/change.ts]')
         .replace('command: [bun, test]', 'command: ["true"]'),
     );

@@ -32,7 +32,7 @@ function dispatchControlPlane(
   writeFileSync(
     brief,
     markdown
-      .replace('goal: fixture', `goal: control-plane\nmanager: ${manager}`)
+      .replace('goal: fixture', `goal: control-plane\ntarget: main\nmanager: ${manager}`)
       .replace('paths: [result.txt]', `paths: [${file}]`)
       .replace('command: [bun, test]', 'command: ["true"]'),
   );

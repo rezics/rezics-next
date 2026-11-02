@@ -169,8 +169,11 @@ export type Brief = {
   citesSources: boolean;
   hostileInput: boolean;
   markdown: string;
-  /** A fix for the frozen promotion candidate bases on and integrates into the stabilize branch. */
-  target?: 'stabilize';
+  /**
+   * A fix for the frozen promotion candidate bases on and integrates into the stabilize branch. Control-plane work
+   * with `main` or `stabilize` is released through the main proof lane; without a target it lands on dev.
+   */
+  target?: 'stabilize' | 'main';
   /** A Codex model (and effort) this task runs on instead of its class route, such as deep research on Sol max. */
   model?: string;
   effort?: string;
@@ -234,6 +237,7 @@ export type PriorityGrant = {
   revokedBy?: string;
 };
 export type IntegrationPlan = { taskId: string; attempt: number; base: string; commit: string; commits: string[] };
+export type DevVerifierResult = 'pass' | 'fail' | 'infrastructure';
 export type DevVerifierEvidence = {
   commit: string;
   command: string[];
@@ -241,6 +245,9 @@ export type DevVerifierEvidence = {
   timedOut: boolean;
   output: string;
   logPath: string;
+  /** Classification of the executed check; older cached evidence may not have this field. */
+  result?: DevVerifierResult;
+  cwd?: string;
 };
 export type DevVerifierRun = {
   key: string;
@@ -254,7 +261,8 @@ export type DevVerifierFinding = {
   baseCommit: string;
   headCommit: string;
   status: 'existing' | 'new' | 'unknown';
-  check: { command: string[]; closure: string[]; taskId?: string };
+  result: DevVerifierResult;
+  check: { command: string[]; closure: string[]; taskId?: string; cwd?: string };
   assertion: string;
   baseline: DevVerifierEvidence | null;
   head: DevVerifierEvidence | null;

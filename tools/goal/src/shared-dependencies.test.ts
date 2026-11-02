@@ -600,7 +600,6 @@ test('owned train cleanup refuses replaced roots and parent links before changin
   }
 });
 
-
 test('owned cleanup preserves mandatory final-candidate typing, bounded retries and paid source', async () => {
   for (const failure of ['none', 'compiler', 'infrastructure'] as const) {
     const h = ownedTrainFixture();
@@ -625,8 +624,12 @@ test('owned cleanup preserves mandatory final-candidate typing, bounded retries 
       };
       const queue = new SqliteLandingQueue(db, fence);
       queue.enqueue({
-        taskId: 'fixture', attempt: 1, branch: 'fixture-worker', worktree: h.tree,
-        declaredPaths: ['feature.ts'], gate: ['fixture-acceptance'],
+        taskId: 'fixture',
+        attempt: 1,
+        branch: 'fixture-worker',
+        worktree: h.tree,
+        declaredPaths: ['feature.ts'],
+        gate: ['fixture-acceptance'],
       });
       const outcomes: GateOutcome[] = [];
       let calls = 0;
@@ -637,9 +640,16 @@ test('owned cleanup preserves mandatory final-candidate typing, bounded retries 
         worktreeRoot: join(h.root, 'trees'),
         integrationBranch: 'dev',
         integration: { devLandingChecks: false },
-        queue, fence,
-        sink: { onGateOutcome(outcome) { outcomes.push(outcome); } },
-        runGate: async () => { throw new Error('Optional acceptance must not replace mandatory typing'); },
+        queue,
+        fence,
+        sink: {
+          onGateOutcome(outcome) {
+            outcomes.push(outcome);
+          },
+        },
+        runGate: async () => {
+          throw new Error('Optional acceptance must not replace mandatory typing');
+        },
         runTypecheck: async (command, cwd) => {
           calls++;
           checkedTree = cwd;
@@ -652,9 +662,14 @@ test('owned cleanup preserves mandatory final-candidate typing, bounded retries 
           chmodSync(sealed, 0o555);
           await Promise.resolve();
           return {
-            passed: failure === 'none', timedOut: false,
-            output: failure === 'compiler' ? 'feature.ts(1,1): error TS2322: fixture mismatch'
-              : failure === 'infrastructure' ? 'ETIMEDOUT: fixture compiler transport' : '',
+            passed: failure === 'none',
+            timedOut: false,
+            output:
+              failure === 'compiler'
+                ? 'feature.ts(1,1): error TS2322: fixture mismatch'
+                : failure === 'infrastructure'
+                  ? 'ETIMEDOUT: fixture compiler transport'
+                  : '',
           };
         },
       }).run();

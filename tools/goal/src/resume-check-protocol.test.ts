@@ -313,7 +313,7 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
     writeFileSync(
       h.briefFile,
       markdown
-        .replace('goal: fixture', 'goal: control-plane')
+        .replace('goal: fixture', 'goal: control-plane\ntarget: main')
         .replace('paths: [result.txt]', 'paths: [tools/goal/src/a.ts]'),
     );
     const { task, worker } = await startAttempt(h);

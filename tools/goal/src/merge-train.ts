@@ -10,7 +10,7 @@ import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSyn
 import { dirname, join, relative, resolve } from 'node:path';
 import { Database } from 'bun:sqlite';
 import defaults from '../defaults.json';
-import { matchesPath, parseBrief, readRiskOwnership } from './briefs.ts';
+import { controlPlaneReleaseBrief, matchesPath, parseBrief, readRiskOwnership } from './briefs.ts';
 import { StaleAttemptError } from './contracts.ts';
 import type {
   AttemptFence,
@@ -1334,7 +1334,10 @@ export class MergeTrain {
     const command = rootTypecheckCommand(changedFiles(tree, base));
     // With devPrelandingTypecheck off, dev lands without a compiler run; the verifier checks dev after the merge.
     if (this.options.integration?.devPrelandingTypecheck === false) {
-      appendFileSync(logPath, 'Prelanding typecheck skipped (devPrelandingTypecheck off); dev is verified after the merge\n');
+      appendFileSync(
+        logPath,
+        'Prelanding typecheck skipped (devPrelandingTypecheck off); dev is verified after the merge\n',
+      );
       return { command, result: { passed: true, output: '', timedOut: false } };
     }
     const run =
@@ -1583,7 +1586,7 @@ export class MergeTrain {
     if (!o.integrationBranch || !o.fence.commitBatchMerge) return false;
     if ((entry.request.affectedTests ?? []).some((test) => test.status === 'failed')) return false;
     const recorded = taskIntegrationTarget(o.stateDirectory, entry.request.taskId);
-    return !recorded.workspace && recorded.target !== 'stabilize' && recorded.goal !== 'control-plane';
+    return !recorded.workspace && recorded.target !== 'stabilize' && !controlPlaneReleaseBrief(recorded);
   }
 
   private async integrateBatch(entries: readonly LandingEntry[]): Promise<BatchLandingResult> {
@@ -2101,7 +2104,7 @@ export class MergeTrain {
     if (
       lane !== 'main' ||
       o.integrationBranch === undefined ||
-      taskIntegrationTarget(o.stateDirectory, entry.request.taskId).goal !== 'control-plane'
+      !controlPlaneReleaseBrief(taskIntegrationTarget(o.stateDirectory, entry.request.taskId))
     )
       return this.integrate(entry);
 
@@ -2347,7 +2350,7 @@ export class MergeTrain {
     let integrationTarget: IntegrationTarget =
       recorded.target === 'stabilize' && recorded.goal !== 'control-plane'
         ? 'stabilize'
-        : recorded.target === 'main' || o.integrationBranch === undefined
+        : (recorded.target === 'main' && recorded.goal !== 'control-plane') || o.integrationBranch === undefined
           ? 'main'
           : 'integration';
     let targetBranch =
@@ -2505,7 +2508,7 @@ export class MergeTrain {
       // lag after retries, and measuring against dev would include unrelated dev-only commits in the control-plane
       // diff. Only the commits after the main fork are considered for the main landing.
       let controlPlaneFork: string | undefined;
-      if (!workspace && recorded.goal === 'control-plane' && o.integrationBranch !== undefined) {
+      if (!workspace && controlPlaneReleaseBrief(recorded) && o.integrationBranch !== undefined) {
         const fork = git(o.mainCheckout, 'merge-base', tip, `refs/heads/${mainBranch}`);
         const taskChanges = changedPathsBetween(o.mainCheckout, fork, tip);
         controlPlane = taskChanges.length > 0 && taskChanges.every((path) => path.startsWith(CONTROL_PLANE_PATH));

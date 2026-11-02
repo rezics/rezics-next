@@ -34,7 +34,9 @@ const failedCheck: GateOutcome = {
 };
 
 function controlPlaneBrief(path = 'tools/goal/src/result.ts'): string {
-  return markdown.replace('goal: fixture', 'goal: control-plane').replace('paths: [result.txt]', `paths: [${path}]`);
+  return markdown
+    .replace('goal: fixture', 'goal: control-plane\ntarget: main')
+    .replace('paths: [result.txt]', `paths: [${path}]`);
 }
 
 test('a control-plane task refused by its control-plane checks is retried with the failure as evidence, not stopped as scope growth', async () => {

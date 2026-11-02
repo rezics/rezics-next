@@ -50,8 +50,15 @@ test('a dev product worker verifies premises, decides and informs its manager, a
   expect(prompt).toContain('Summary at most 120 words');
   expect(prompt).toContain('Blocker detail at most 80 words');
   expect(prompt).not.toContain('goal status');
-  // Control-plane work keeps manager preflight and no continuation, but shares the conduct rules.
-  const controlPlane = workerPrompt(promptTask('control-plane'), undefined, undefined, [], '/repo/main');
+  // A control-plane release keeps manager preflight and no continuation, but shares the conduct rules.
+  const release = promptTask('control-plane');
+  const controlPlane = workerPrompt(
+    { ...release, brief: { ...release.brief, target: 'main' } },
+    undefined,
+    undefined,
+    [],
+    '/repo/main',
+  );
   expect(controlPlane).not.toContain("Check the contract's premises");
   expect(controlPlane).not.toContain('.temp/continuation');
   expect(controlPlane).not.toContain('inbox send');
@@ -254,7 +261,7 @@ test('environment retries of dev product work keep the same model and session, w
         goal === 'fixture'
           ? markdown
           : markdown
-              .replace('goal: fixture', 'goal: control-plane')
+              .replace('goal: fixture', 'goal: control-plane\ntarget: main')
               .replace('paths: [result.txt]', 'paths: [tools/goal/src/a.ts]'),
       );
       const routing = JSON.parse(readFileSync(h.settings.routingFile, 'utf8'));

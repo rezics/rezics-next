@@ -16,7 +16,13 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve, relative, isAbsolute } from 'node:path';
-import { devProductBrief, parseBrief, readRiskOwnership, withStabilizeTarget } from './briefs.ts';
+import {
+  controlPlaneReleaseBrief,
+  devProductBrief,
+  parseBrief,
+  readRiskOwnership,
+  withStabilizeTarget,
+} from './briefs.ts';
 import { StaleAttemptError } from './contracts.ts';
 import { acquireDirectoryLease, acquireDirectoryLeaseWaiting, LeaseHeldError } from './lease.ts';
 import { classifyTask, readRouting, retryFallbacks, routeTask } from './routing.ts';
@@ -320,10 +326,11 @@ export class WorkerTasks {
       return main;
     }
   }
-  private taskBaseBranch(brief: { goal?: string; target?: 'stabilize'; after?: readonly string[] }): string {
+  private taskBaseBranch(brief: { goal?: string; target?: 'main' | 'stabilize'; after?: readonly string[] }): string {
     // Dev tasks start from the integration head, as trunk-based work does. The verifier tracks progress and known
-    // findings; promotion freezes the integration head and applies its independent full candidate gate.
-    return brief.goal === 'control-plane'
+    // findings; promotion freezes the integration head and applies its independent full candidate gate. Control-plane
+    // work for dev starts there too, since dev's tools/goal is ahead of main's until cp-sync publishes it.
+    return controlPlaneReleaseBrief(brief)
       ? this.settings.mainBranch
       : brief.target === 'stabilize'
         ? this.settings.stabilizeBranch
@@ -357,8 +364,8 @@ export class WorkerTasks {
     });
   }
   /** Control-plane briefs integrate into main; stabilize briefs use stabilize and other briefs use dev. */
-  private taskBaseHead(brief: { goal?: string; target?: 'stabilize' }): string {
-    return this.branchHead(this.taskBaseBranch(brief), brief.goal === 'control-plane' || brief.target !== 'stabilize');
+  private taskBaseHead(brief: { goal?: string; target?: 'main' | 'stabilize' }): string {
+    return this.branchHead(this.taskBaseBranch(brief), controlPlaneReleaseBrief(brief) || brief.target !== 'stabilize');
   }
   private commitRetryLeftovers(task: Task, attempt: number): void {
     // An attempt that stopped inside a conflicted rebase or merge leaves HEAD detached or half merged. The retry

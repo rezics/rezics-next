@@ -3,8 +3,15 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { devVerificationState, VERIFY_CONCURRENCY, verifyDev } from './dev-verifier.ts';
-import type { Settings, Task } from './types.ts';
+import {
+  classifyRun,
+  devVerificationState,
+  placeInWorkspace,
+  VERIFY_CONCURRENCY,
+  verifyDev,
+  withTreeBun,
+} from './dev-verifier.ts';
+import type { DevVerifierFinding, DevVerifierRun, Settings, Task } from './types.ts';
 
 const roots: string[] = [];
 afterEach(() => {
@@ -45,6 +52,8 @@ function setup(root: string, tasks: Task[] = []) {
   mkdirSync(stateDirectory, { recursive: true });
   mkdirSync(worktreeRoot, { recursive: true });
   const updates: string[] = [];
+  const runs = new Map<string, DevVerifierRun>();
+  const findings: DevVerifierFinding[] = [];
   const store = {
     tasks: () => tasks,
     task: (id: string) => tasks.find((task) => task.id === id)!,
@@ -54,6 +63,10 @@ function setup(root: string, tasks: Task[] = []) {
       updates.push(taskId);
       return task;
     },
+    devVerifierRun: (key: string) => runs.get(key),
+    saveDevVerifierRun: (run: DevVerifierRun) => runs.set(run.key, run),
+    devVerifierFindings: () => findings,
+    saveDevVerifierFinding: (finding: DevVerifierFinding) => findings.push(finding),
   };
   const inboxEvents: any[] = [];
   const settings = {
@@ -90,6 +103,63 @@ function landedTask(from: string, commitHead: string, id = 'kernel-task'): Task 
     } as any,
   } as Task;
 }
+
+test('classifies check outcomes and runs Web tests from their workspace', () => {
+  expect(classifyRun({ passed: true, timedOut: false, output: '' })).toBe('pass');
+  expect(classifyRun({ passed: false, timedOut: false, output: 'assertion failed' })).toBe('fail');
+  expect(classifyRun({ passed: false, timedOut: true, output: 'ETIMEDOUT' })).toBe('infrastructure');
+
+  expect(
+    placeInWorkspace(
+      { command: ['env', 'NO_COLOR=1', 'bun', 'test', 'apps/web/tests/example.test.ts'], closure: ['apps/web/**'] },
+      new Set(['apps/web/bunfig.toml']),
+    ),
+  ).toEqual({
+    command: ['env', 'NO_COLOR=1', 'bun', 'test', 'tests/example.test.ts'],
+    closure: ['apps/web/**'],
+    cwd: 'apps/web',
+  });
+});
+
+test('selects the repository Bun executable for verifier checks', () => {
+  const root = mkdtempSync(join(tmpdir(), 'goal-pinned-bun-'));
+  roots.push(root);
+  mkdirSync(join(root, 'node_modules/.bin'), { recursive: true });
+  writeFileSync(join(root, 'package.json'), JSON.stringify({ packageManager: 'bun@1.4.4-canary.test' }));
+  writeFileSync(join(root, 'node_modules/.bin/bun'), '');
+
+  const command = withTreeBun(['bun', 'test', 'tests/example.test.ts'], root);
+  expect(command[0]).toBe('env');
+  expect(command[2]).toBe(join(root, 'node_modules/.bin/bun'));
+  expect(command[1]).toContain(`PATH=${join(root, 'node_modules/.bin')}:`);
+});
+
+test('reuses a failed verifier check while its workspace inputs stay unchanged', async () => {
+  const root = repo();
+  const base = git(root, 'rev-parse', 'dev-verified');
+  const landing = commit(root, 'services/kernel/change.ts', 'export const changed = true;\n', 'landing');
+  git(root, 'branch', '-f', 'dev', landing);
+  const ctx = setup(root);
+  let affectedCalls = 0;
+  const runGate = async (command: readonly string[], cwd: string) => {
+    if (command.includes('affected-check')) {
+      affectedCalls++;
+      return git(cwd, 'ls-files').includes('services/kernel/change.ts')
+        ? { passed: false, output: 'assertion failed', timedOut: false }
+        : { passed: true, output: '', timedOut: false };
+    }
+    return { passed: true, output: '', timedOut: false };
+  };
+
+  await verifyDev({ ...ctx, runGate });
+  expect(ctx.store.devVerifierFindings?.().some((finding) => finding.result === 'fail')).toBe(true);
+  expect(git(root, 'rev-parse', 'dev-verified')).toBe(base);
+
+  const docs = commit(root, 'docs/readme.md', 'Updated.\n', 'docs');
+  git(root, 'branch', '-f', 'dev', docs);
+  await verifyDev({ ...ctx, runGate });
+  expect(affectedCalls).toBe(2);
+});
 
 test('passes all work since dev-verified once and advances the ref to the captured dev head', async () => {
   const root = repo();

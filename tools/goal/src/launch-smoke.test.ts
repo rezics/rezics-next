@@ -460,6 +460,7 @@ function landingFixture(path: string) {
   const brief = parseBrief(
     `---
 goal: control-plane
+target: main
 kind: implementation
 paths: [${path}]
 riskAreas: []

@@ -37,7 +37,7 @@ test('the dev lane batches eligible dev entries without worker-side affected res
     const first = h.dispatch('dev-a.ts');
     const affected = h.dispatch('affected.ts');
     const second = h.dispatch('dev-b.ts');
-    const controlPlane = h.dispatch('tools/goal/cp.ts', [], ['true'], 'control-plane');
+    const controlPlane = h.dispatch('tools/goal/cp.ts', [], ['true'], 'control-plane', 'main');
     const stabilize = h.dispatch('stabilize.ts');
     markTask(h, stabilize.id, { target: 'stabilize' });
     await h.start(first);
@@ -77,7 +77,7 @@ test('the dev batch fills in eligible queue order when prioritized entries lead 
     h.settings.integration.batchSize = 3;
     setChecks(h, [{ paths: ['**'], command: ['true'] }]);
 
-    const controlPlane = h.dispatch('tools/goal/cp-leading.ts', [], ['true'], 'control-plane');
+    const controlPlane = h.dispatch('tools/goal/cp-leading.ts', [], ['true'], 'control-plane', 'main');
     const stabilize = h.dispatch('stabilize-leading.ts');
     const first = h.dispatch('dev-first.ts');
     const affected = h.dispatch('affected-middle.ts');
