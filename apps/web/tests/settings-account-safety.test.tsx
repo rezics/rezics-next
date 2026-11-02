@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { AccountRenameRegion, AccountSafetyCard, readCurrentAccountRename } from '../src/settings/account-safety';
+import { AccountRenameRegion, AccountSafetyCard } from '../src/settings/account-safety';
 import { m } from '../src/paraglide/messages.js';
 
 test('rename recovery refreshes only its read and retires expired credentials before dispatch', async () => {
@@ -11,22 +11,11 @@ test('rename recovery refreshes only its read and retires expired credentials be
   let refreshes = 0;
   const refresh = Promise.withResolvers<void>();
   const context = { accountId: 'alice', handle: 'alice', available: true };
-  const read = (credential: string, current: () => boolean) =>
-    readCurrentAccountRename(
-      credential,
-      current,
-      async () =>
-        ({
-          readAccountRename: async (input: { headers: Record<string, string> }) => {
-            sent.push(input.headers['X-CSRF-Token']!);
-            return credential === 'expired'
-              ? { context: null, failures: [{ kind: 'denied', status: 403 }] }
-              : { context };
-          },
-        }) as unknown as typeof import('../src/settings/account-rename-actions'),
-    );
   const old = new AccountRenameRegion(
-    () => read('expired', old.isCurrent),
+    async () => {
+      sent.push('expired');
+      return { context: null, failures: [{ kind: 'denied', status: 403 }] };
+    },
     'alice',
     () => token === 'expired',
     () => {
@@ -45,7 +34,10 @@ test('rename recovery refreshes only its read and retires expired credentials be
   refresh.resolve();
   await retry;
   expect(sent).toEqual(['expired']);
-  const recovered = new AccountRenameRegion(() => read(token, recovered.isCurrent), 'alice');
+  const recovered = new AccountRenameRegion(async () => {
+    sent.push(token);
+    return { context };
+  }, 'alice');
   const done = recovered.mount();
   await recovered.reload();
   expect(sent).toEqual(['expired', 'fresh']);
@@ -83,14 +75,10 @@ test('failed and uncertain native sign-out recover independently without replay 
     submitted++;
     if (fail) throw new Error('Submission failed');
   };
-  const button = (label: string) =>
-    [...host.querySelectorAll('button')].find(
-      (node) => (node.getAttribute('aria-label') ?? node.textContent) === label,
-    )!;
-  const click = async (label: string) => {
-    await act(async () => button(label).click());
+  const click = async (selector: string) => {
+    await act(async () => host.querySelector<HTMLButtonElement>(selector)!.click());
   };
-  const reload = `${m.settings_reload()}: ${m.account_sign_out()}`;
+  const reload = `button[aria-label="${m.settings_reload()}: ${m.account_sign_out()}"]`;
   try {
     await act(async () =>
       root.render(
@@ -112,22 +100,22 @@ test('failed and uncertain native sign-out recover independently without replay 
         />,
       ),
     );
-    await click(m.account_sign_out());
+    await click('button[type="submit"]');
     expect(host.textContent).toContain(m.settings_account_sign_out_failed());
     refreshFails = true;
     await click(reload);
     expect(host.textContent).toContain(m.settings_account_sign_out_failed());
     refreshFails = false;
-    await click(`${m.settings_reload()}: ${m.settings_account_rename_heading()}`);
+    await click(`button[aria-label="${m.settings_reload()}: ${m.settings_account_rename_heading()}"]`);
     expect(renamed).toBe(1);
     expect(submitted).toBe(1);
     await click(reload);
     expect(refreshed).toBe(2);
     expect(submitted).toBe(1);
     fail = false;
-    await click(m.account_sign_out());
+    await click('button[type="submit"]');
     expect(host.textContent).toContain(m.settings_account_sign_out_uncertain());
-    expect(button(m.account_sign_out()).disabled).toBe(true);
+    expect(host.querySelector('button[type="submit"]')?.hasAttribute('disabled')).toBe(true);
     await click(reload);
     expect(submitted).toBe(2);
     expect(renamed).toBe(1);
