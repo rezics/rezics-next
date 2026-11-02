@@ -1,13 +1,10 @@
 import { afterAll, afterEach, expect, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, useState } from 'react';
-import {
-  readRenameContinuation,
-  saveRenameContinuation,
-  RENAME_PROFILE,
-  type RenameRead,
-  type RenameResult,
-  type RenameSource,
+import type {
+  RenameRead,
+  RenameResult,
+  RenameSource,
 } from '../src/account-rename';
 
 const { Window } = await import(
@@ -30,6 +27,7 @@ const previous = new Map(
 );
 for (const [name, value] of Object.entries(globals))
   Object.defineProperty(globalThis, name, { value, configurable: true, writable: true });
+const { readRenameContinuation, saveRenameContinuation, RENAME_PROFILE } = await import('../src/account-rename');
 const { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } = await import(
   '@tanstack/react-router'
 );
