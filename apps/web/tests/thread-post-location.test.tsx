@@ -81,12 +81,21 @@ test('a cross-page link renders the exact admitted post through one native page,
   const { client, paths } = native('available');
   const { moderationTargetContent } = await import('../src/moderation/target-content');
   const evidence = {
-    id: target.id, kind: 'post', state: 'available', post: target, thread: thread.thread,
-    now: '2030-01-01T00:00:00Z', documentMedia: { kind: 'unavailable' },
+    id: target.id,
+    kind: 'post',
+    state: 'available',
+    post: target,
+    thread: thread.thread,
+    now: '2030-01-01T00:00:00Z',
+    documentMedia: { kind: 'unavailable' },
   };
-  const markup = renderToStaticMarkup(moderationTargetContent({
-    key: `post:${target.id}`, kind: 'post', value: { moderationEvidence: evidence },
-  }));
+  const markup = renderToStaticMarkup(
+    moderationTargetContent({
+      key: `post:${target.id}`,
+      kind: 'post',
+      value: { moderationEvidence: evidence },
+    }),
+  );
   const destination = new URL(/href="([^"]+)"/.exec(markup)![1]!, request.url);
   const linkedInput = { id: input.id, ...threadSearch(Object.fromEntries(destination.searchParams)) };
   const page = await loadThreadPage(client, request, {}, linkedInput, verification, 'anonymous');

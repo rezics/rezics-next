@@ -88,22 +88,12 @@ function EvidenceContent({ evidence }: { evidence: ModerationEvidence['moderatio
   // Evidence can belong to a different page of the current thread reader.
   // Keep its anchored identity and let the existing point locator admit that page.
   // Thread and board evidence still link to the thread beginning.
-  const destination = thread
-    ? threadLocation(
-        locale,
-        thread,
-        undefined,
-        postId,
-      )
-    : undefined;
+  const destination = thread ? threadLocation(locale, thread, undefined, postId) : undefined;
   return (
     <div className="w-full min-w-0 max-w-prose space-y-3 [overflow-wrap:anywhere]">
       <div className="space-y-1 text-sm">
         {thread ? (
-          <a
-            className="block underline underline-offset-4"
-            href={destination}
-          >
+          <a className="block underline underline-offset-4" href={destination}>
             {thread.title || m.threads_untitled()}
           </a>
         ) : evidence.kind !== 'board' ? (
