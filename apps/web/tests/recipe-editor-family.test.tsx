@@ -288,8 +288,8 @@ test('Recipe creation and current correction share complete frames with independ
       true,
     );
     expect(input(draft, m.correction_value()).closest('fieldset')!.disabled).toBe(true);
-    const currentIngredientLabel = `${longLabel} after reread`;
-    correction.release.properties[ingredient]!.labels.en = currentIngredientLabel;
+    const currentCorrectionIngredientLabel = `${longLabel} after reread`;
+    correction.release.properties[ingredient]!.labels.en = currentCorrectionIngredientLabel;
     failCorrectionRead = true;
     const postedBeforeRead = posts(correction, '/candidates').length;
     await click(draft, m.catalogue_create_review_new());
@@ -297,7 +297,7 @@ test('Recipe creation and current correction share complete frames with independ
     expect(posts(correction, '/candidates')).toHaveLength(postedBeforeRead);
     correction.setScenario('ready');
     await click(b, m.correction_retry());
-    await until(() => b.textContent!.includes(currentIngredientLabel));
+    await until(() => b.textContent!.includes(currentCorrectionIngredientLabel));
     const independentAfterRead = section(b, cookTimeLabel, true);
     await click(independentAfterRead, m.correction_retry());
     await until(() => independentAfterRead.textContent!.includes(m.correction_proposed()));
@@ -307,7 +307,7 @@ test('Recipe creation and current correction share complete frames with independ
     expect(independentWrites).toHaveLength(2);
     expect(independentWrites[1]).toEqual(independentFirst);
 
-    const rereadDraft = section(b, currentIngredientLabel, true);
+    const rereadDraft = section(b, currentCorrectionIngredientLabel, true);
     expect(input(rereadDraft, m.correction_value()).value).toBe(longValue);
     expect(input(rereadDraft, m.relation_citation()).value).toBe(longCitation);
     await click(rereadDraft, m.correction_submit());
