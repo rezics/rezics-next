@@ -127,8 +127,8 @@ test('clean navigation is quiet; Stay preserves the proposed handle and confirma
   window.dispatchEvent(dirtyUnload);
   expect(dirtyUnload.defaultPrevented).toBe(true);
   await startNavigation(ui.router, '/next');
-  expect(ui.host.querySelector('[role="alertdialog"]')).not.toBeNull();
-  await flush(() => ui.host.querySelector<HTMLButtonElement>('[data-stay]')!.click());
+  expect(document.body.querySelector('[role="alertdialog"]')).not.toBeNull();
+  await flush(() => document.body.querySelector<HTMLButtonElement>('[data-stay]')!.click());
   expect(ui.router.state.location.pathname).toBe('/account/rename');
   const input = ui.host.querySelector<HTMLInputElement>('#rename-handle')!;
   expect(input.value).toBe('after');
@@ -141,8 +141,8 @@ test('keyboard navigation stays in the departure dialog and Escape stays on the 
   await setHandle(ui.host, 'after');
   await confirm(ui.host);
   const { navigation } = await startNavigation(ui.router, '/next');
-  const stay = ui.host.querySelector<HTMLButtonElement>('[data-stay]')!;
-  const leave = ui.host.querySelector<HTMLButtonElement>('[data-leave]')!;
+  const stay = document.body.querySelector<HTMLButtonElement>('[data-stay]')!;
+  const leave = document.body.querySelector<HTMLButtonElement>('[data-leave]')!;
   await flush(() => {
     leave.focus();
     leave.dispatchEvent(new dom.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
@@ -162,7 +162,7 @@ test('Leave clears an unsent invalid draft before navigation', async () => {
   const ui = await mount(source({ readCurrent: async () => ({ kind: 'ready', target: target('account', null) }) }));
   await setHandle(ui.host, '!');
   const { navigation } = await startNavigation(ui.router, '/next');
-  await flush(() => ui.host.querySelector<HTMLButtonElement>('[data-leave]')!.click());
+  await flush(() => document.body.querySelector<HTMLButtonElement>('[data-leave]')!.click());
   await flush(() => navigation);
   expect(readRenameContinuation()).toBeNull();
   await flush(() => ui.router.navigate({ to: '/account/rename' } as never));
@@ -186,8 +186,8 @@ test('Leave preserves the identity of an unresolved dispatched rename', async ()
   await submit(ui.host);
   const saved = readRenameContinuation();
   const { navigation } = await startNavigation(ui.router, '/next');
-  expect(ui.host.textContent).toContain(m.auth_rename_departure_pending());
-  await flush(() => ui.host.querySelector<HTMLButtonElement>('[data-leave]')!.click());
+  expect(document.body.textContent).toContain(m.auth_rename_departure_pending());
+  await flush(() => document.body.querySelector<HTMLButtonElement>('[data-leave]')!.click());
   await flush(() => navigation);
   expect(readRenameContinuation()).toEqual(saved);
   completion.resolve({ kind: 'renamed', target: target('account', 'after') });
@@ -202,7 +202,7 @@ test('step-up return is allowed and a replacement account revokes the old review
   await submit(ui.host);
   const { navigation: stepUp } = await startNavigation(ui.router, '/step-up');
   await flush(() => stepUp);
-  expect(ui.host.querySelector('[role="alertdialog"]')).toBeNull();
+  expect(document.body.querySelector('[role="alertdialog"]')).toBeNull();
   const { navigation: returned } = await startNavigation(ui.router, '/account/rename');
   await flush(() => returned);
   await tick();
