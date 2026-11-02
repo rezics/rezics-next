@@ -559,11 +559,11 @@ describe('Complete Realm appearance caller and selection lifetime', () => {
     expect(control.getSnapshot().read).toEqual({ kind: 'hidden' });
 
     const queued = callerLifetime(adapter);
-    const queuedControl = createRealmAppearance(configured.realmId, ready(), adapter, () => id(60), queued);
+    const retiredControl = createRealmAppearance(configured.realmId, ready(), adapter, () => id(60), queued);
     queued.retire();
-    await queuedControl.refresh();
-    await queuedControl.save();
-    await queuedControl.upload(
+    await retiredControl.refresh();
+    await retiredControl.save();
+    await retiredControl.upload(
       'avatar',
       new window.File(['image'], 'icon.png', { type: 'image/png' }) as unknown as File,
     );
