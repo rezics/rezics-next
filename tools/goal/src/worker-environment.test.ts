@@ -11,6 +11,7 @@ test('a worker environment leaves affected-test selection to the check runner an
     GOAL_ATTEMPT: '2',
     DEBUGINFOD_IMA_CERT_PATH: 'none',
     MOZ_GMP_PATH: 'none',
+    EDITOR: 'nano',
   });
 });
 
@@ -31,6 +32,7 @@ test('worker and promotion gate environments carry KERNEL_CHECK_REMOTE when the 
       GOAL_ATTEMPT: '2',
       DEBUGINFOD_IMA_CERT_PATH: 'none',
       MOZ_GMP_PATH: 'none',
+      EDITOR: 'nano',
       KERNEL_CHECK_REMOTE: hosts,
       GOAL_CHECK_WAIT_FILE: join(present.directory, 'runs', 'task', '2.check-wait'),
     });
