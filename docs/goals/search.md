@@ -31,6 +31,7 @@ owner's PostgreSQL partition; a public index is never an authorization authority
 Realm browsing advances one explicit page at a time: successful More replaces the visible window (up to 20 rows), pending and failed reads preserve it, and broken cursors offer a first-page restart.
 After profile persistence, any activation refusal remains retryable with its original head and idempotency keys; later edits stay in the separate draft.
 A native save or activation Retry-After is captured once as an absolute deadline; expiry enables a manual retry of that original intent and never publishes on its own.
+A curation editor baseline is admitted only when native active metadata and the returned profile share the canonical profile digest; extra native fields never replace the session reader or the success flag.
 Recent queries repeat `language` values in preference order; missing selections use the current locale fallback.
 Ordered language preference reorder keeps focus on the moved occurrence's surviving move control; removal focuses the next remaining Remove control, otherwise the previous row's Remove, otherwise the language selector.
 History management feedback belongs to the mounted bucket and installed session observation; replacing either permanently retires pending feedback, even when the same account returns.

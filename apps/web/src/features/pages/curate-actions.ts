@@ -6,7 +6,8 @@ import { env } from 'cloudflare:workers';
 import { kernelClient } from '../../kernel/client';
 import type { SessionEnv } from '../../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../../session/request';
-import { curationFailure, publishProfile, type CurationFailure, type PublishInput, type PublishResult } from './curate';
+import { publishProfile, type CurationFailure, type PublishInput, type PublishResult } from './curate';
+import { admitCurationReads } from './curation-read-response';
 import { pickText } from '@rezics/composition';
 import { readRelease } from '../../subject/definitions';
 import {
@@ -124,15 +125,9 @@ export const readCuration = createServerFn({ method: 'POST', strict: false })
     try {
       const client = kernelClient();
       const active = await client.presentation.active.get({ headers: { authorization } });
-      if (active.status >= 400) return curationFailure(active.status, active.error?.value, active.headers);
-      if (!active.data) return { ok: false, reason: 'unavailable' };
-      const result = await client.presentation
-        .profiles({ digest: active.data.digest })
-        .get({ headers: { authorization } });
-      if (result.status >= 400) return curationFailure(result.status, result.error?.value, result.headers);
-      if (!result.data || validateProfile(platformRegistry, result.data.profile).length > 0)
-        return { ok: false, reason: 'unavailable' };
-      return { ok: true, reader, ...active.data, profile: result.data.profile as PresentationProfile };
+      return await admitCurationReads(reader, active, (digest) =>
+        client.presentation.profiles({ digest }).get({ headers: { authorization } }),
+      );
     } catch {
       return { ok: false, reason: 'unavailable' };
     }
