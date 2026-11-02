@@ -97,8 +97,8 @@ export function CurationCompanionViews({
               value={admitted.source}
               disabled={disabled}
               onChange={(event) => {
-                if (event.target.value === 'overview' || event.target.value === 'empty')
-                  setChoice((current) => ({ ...current, source: event.target.value }));
+                const source = event.target.value;
+                if (source === 'overview' || source === 'empty') setChoice((current) => ({ ...current, source }));
               }}
             >
               <NativeSelectOption value="" disabled>
