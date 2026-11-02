@@ -284,17 +284,26 @@ function DecisionVisit({
   const pending = useRef(false);
   const reading = useRef(false);
   const lifetime = useRef({ active: true, retired: false, serial: 0, readSerial: 0 });
+  const outcomeFocus = useRef<{ serial: number; decision: DecisionPage['decision']; control: HTMLButtonElement } | null>(null);
+  const keyboardActivation = useRef<HTMLButtonElement | null>(null);
+  const keyboardClick = useRef<HTMLButtonElement | null>(null);
+  const pendingOutcome = useRef<HTMLParagraphElement | null>(null);
+  const clearOutcomeFocus = () => {
+    outcomeFocus.current = null;
+  };
   function leave() {
     lifetime.current.retired = true;
     lifetime.current.active = false;
     lifetime.current.serial++;
     lifetime.current.readSerial++;
+    clearOutcomeFocus();
     composition.discard();
     retire?.();
   }
   function discard() {
     // Forget local recovery without claiming that the native request was cancelled.
     lifetime.current.serial++;
+    clearOutcomeFocus();
     pending.current = false;
     composition.discard();
     setSending(false);
@@ -302,6 +311,38 @@ function DecisionVisit({
     redraw((value) => value + 1);
   }
   const active = () => lifetime.current.active && !lifetime.current.retired && isCurrent();
+  useEffect(() => {
+    const cancel = () => {
+      clearOutcomeFocus();
+      keyboardActivation.current = null;
+      keyboardClick.current = null;
+    };
+    const focusMoved = (event: FocusEvent) => {
+      const pending = outcomeFocus.current;
+      if (
+        pending &&
+        event.target !== pending.control &&
+        !(event.target === pending.control.ownerDocument.body && !pending.control.isConnected)
+      )
+        clearOutcomeFocus();
+    };
+    const focusLeft = (event: FocusEvent) => {
+      const pending = outcomeFocus.current;
+      if (pending && event.target === pending.control)
+        queueMicrotask(() => {
+          if (outcomeFocus.current === pending && pending.control.isConnected) clearOutcomeFocus();
+        });
+    };
+    document.addEventListener('pointerdown', cancel, true);
+    document.addEventListener('focusin', focusMoved, true);
+    document.addEventListener('focusout', focusLeft, true);
+    return () => {
+      document.removeEventListener('pointerdown', cancel, true);
+      document.removeEventListener('focusin', focusMoved, true);
+      document.removeEventListener('focusout', focusLeft, true);
+      clearOutcomeFocus();
+    };
+  }, []);
   const departure = useAuthoringDeparture(
     () => active() && composition.needsDecision,
     () => active() && composition.unresolved,
@@ -352,12 +393,41 @@ function DecisionVisit({
             ? m.decision_appeal_too_long()
             : m.decision_appeal_refused();
 
-  async function submit(retry = false) {
+  useEffect(() => {
+    const pending = outcomeFocus.current;
+    if (!pending) return;
+    if (!active() || pending.serial !== lifetime.current.serial || !sameDecision(pending.decision, decision)) {
+      clearOutcomeFocus();
+      return;
+    }
+    if (!appeal || appeal.outcome !== null) {
+      if (appeal) clearOutcomeFocus();
+      return;
+    }
+    const summary = pendingOutcome.current;
+    if (!summary) return;
+    const activeElement = summary.ownerDocument.activeElement;
+    if (
+      pending.control.isConnected ||
+      (activeElement !== pending.control && activeElement !== summary.ownerDocument.body)
+    ) {
+      clearOutcomeFocus();
+      return;
+    }
+    clearOutcomeFocus();
+    summary.focus();
+  }, [current]);
+
+  async function submit(retry = false, keyboardControl: HTMLButtonElement | null = null) {
     if (!active() || !canCommand() || pending.current || (!retry && (locked || !allowed || count < 1 || count > 2000)))
       return;
     if (retry && (feedback !== 'uncertain' || !composition.unresolved)) return;
     const token = ++lifetime.current.serial;
     const command = retry ? composition.retry()! : composition.freeze(decision.id);
+    outcomeFocus.current =
+      keyboardControl && document.activeElement === keyboardControl && !decision.appeal
+        ? { serial: token, decision, control: keyboardControl }
+        : null;
     pending.current = true;
     setSending(true);
     setFeedback(null);
@@ -447,6 +517,24 @@ function DecisionVisit({
       className="mx-auto w-full min-w-0 max-w-4xl space-y-7 py-1 sm:py-4"
       aria-labelledby="decision-heading"
       aria-busy={busy}
+      onKeyDownCapture={(event) => {
+        const target = event.target;
+        keyboardActivation.current =
+          target instanceof HTMLButtonElement && (event.key === 'Enter' || event.key === ' ')
+            ? target
+            : null;
+      }}
+      onClickCapture={(event) => {
+        const target = event.target;
+        keyboardClick.current =
+          target instanceof HTMLButtonElement && keyboardActivation.current === target ? target : null;
+        keyboardActivation.current = null;
+      }}
+      onPointerDownCapture={() => {
+        keyboardActivation.current = null;
+        keyboardClick.current = null;
+        clearOutcomeFocus();
+      }}
     >
       <header className="space-y-5">
         <a
@@ -543,7 +631,11 @@ function DecisionVisit({
           </dl>
           {appeal ? (
             <div className="mt-5 space-y-3">
-              <p className="flex items-center gap-2 font-medium">
+              <p
+                ref={appeal.outcome ? null : pendingOutcome}
+                tabIndex={appeal.outcome ? undefined : -1}
+                className="flex items-center gap-2 font-medium"
+              >
                 <Check className="size-4 text-primary" aria-hidden="true" />
                 {appeal.outcome ? m.decision_review_heading() : m.decision_appeal_pending()}
               </p>
@@ -566,7 +658,11 @@ function DecisionVisit({
               className="mt-5 space-y-3"
               onSubmit={(event) => {
                 event.preventDefault();
-                void submit();
+                const submitter = (event.nativeEvent as SubmitEvent).submitter;
+                const keyboardControl =
+                  submitter instanceof HTMLButtonElement && keyboardClick.current === submitter ? submitter : null;
+                keyboardClick.current = null;
+                void submit(false, keyboardControl);
               }}
             >
               <label htmlFor="appeal-statement" className="block text-sm font-medium">
@@ -618,7 +714,16 @@ function DecisionVisit({
                 {feedbackText}
               </p>
               {feedback === 'uncertain' ? (
-                <Button variant="outline" className="min-h-11" disabled={busy} onClick={() => void submit(true)}>
+                <Button
+                  variant="outline"
+                  className="min-h-11"
+                  disabled={busy}
+                  onClick={(event) => {
+                    const keyboardControl = keyboardClick.current === event.currentTarget ? event.currentTarget : null;
+                    keyboardClick.current = null;
+                    void submit(true, keyboardControl);
+                  }}
+                >
                   {m.decision_retry_same()}
                 </Button>
               ) : null}
