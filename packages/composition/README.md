@@ -423,6 +423,8 @@ It has one generic page, then templates by structural base, by type and by expli
 A type's default read layout is its type template. A launch vertical needs no page code of
 its own.
 
+Structural-base templates are presentation fallbacks for existing catalogue structure; adding one creates no catalogue Type or permission.
+
 ```json
 {
   "format": "https://rezics.com/presentation/profile/1",

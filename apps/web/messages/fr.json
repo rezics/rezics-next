@@ -3586,7 +3586,7 @@
   "presentation_editor_preview_current": "Page publiée actuelle",
   "presentation_editor_preview_details": "Détails de version et de sélection",
   "curation_loading": "Chargement de l’éditeur…",
-  "curation_add_hint": "Commencez par l’aperçu générique. Les clés de type utilisent un CURIE comme schema:Book ; les routes utilisent un chemin comme /books.",
+  "curation_add_hint": "Commencez par l’aperçu générique. Les bases structurelles sont des replis de présentation ; en ajouter une ne crée pas de type de catalogue et n’accorde aucune autorisation. Les clés de base et de type utilisent des CURIE exacts, comme schema:Book ; les routes utilisent des chemins comme /books.",
   "curation_discard_title": "Abandonner les modifications non publiées ?",
   "curation_discard_warning": "Tous les brouillons de modèles et de vues reviendront au dernier profil chargé ou publié.",
   "curation_reload_warning": "Le chargement du profil actif remplacera tous les brouillons locaux de modèles et de vues. En cas d’échec, ils seront conservés.",

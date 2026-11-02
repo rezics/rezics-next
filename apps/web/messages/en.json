@@ -3737,7 +3737,7 @@
   "presentation_editor_preview_current": "Current published page",
   "presentation_editor_preview_details": "Version and selection details",
   "curation_loading": "Loading editor…",
-  "curation_add_hint": "Start from the generic overview. Type keys use a CURIE such as schema:Book; routes use paths such as /books.",
+  "curation_add_hint": "Start from the generic overview. Structural bases are presentation fallbacks; adding one does not create a catalogue Type or grant permission. Base and type keys use exact CURIEs such as schema:Book; routes use paths such as /books.",
   "curation_discard_title": "Discard unpublished changes?",
   "curation_discard_warning": "All template and view drafts will return to the last loaded or published profile.",
   "curation_reload_warning": "Loading the active profile will replace every local template and view draft. If loading fails, your drafts stay.",

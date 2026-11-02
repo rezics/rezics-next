@@ -3586,7 +3586,7 @@
   "presentation_editor_preview_current": "Página publicada actual",
   "presentation_editor_preview_details": "Detalles de versión y selección",
   "curation_loading": "Cargando editor…",
-  "curation_add_hint": "Empieza con el resumen genérico. Las claves de tipo usan CURIE como schema:Book; las rutas usan direcciones como /books.",
+  "curation_add_hint": "Empieza con el resumen genérico. Las bases estructurales son alternativas de presentación; añadir una no crea un tipo del catálogo ni concede permisos. Las claves de base y tipo usan CURIE exactos, como schema:Book; las rutas usan direcciones como /books.",
   "curation_discard_title": "¿Descartar los cambios sin publicar?",
   "curation_discard_warning": "Todos los borradores de plantillas y vistas volverán al último perfil cargado o publicado.",
   "curation_reload_warning": "Cargar el perfil activo sustituirá todos los borradores locales de plantillas y vistas. Si falla, se conservarán.",

@@ -46,6 +46,7 @@ import {
   type CurationFailure,
   type Template,
 } from './curate';
+import { addStructuralBaseTemplate } from './curation-base-template';
 import type { CurationRead } from './curate-actions';
 import {
   discardPresentationDraft,
@@ -557,7 +558,7 @@ function AdmittedPresentationViewEditor({
   const [confirm, setConfirm] = useState<'discard' | 'reload' | null>(null);
   const [removeConfirm, setRemoveConfirm] = useState<KeyedTemplate | null>(null);
   const [generation, setGeneration] = useState(0);
-  const [scope, setScope] = useState<'type' | 'route'>('type');
+  const [scope, setScope] = useState<'base' | 'type' | 'route'>('type');
   const [key, setKey] = useState('');
   const [correction, setCorrection] = useState<CorrectionTarget | null>(null);
   const editorRegion = useRef<HTMLElement>(null);
@@ -765,25 +766,36 @@ function AdmittedPresentationViewEditor({
   function addTemplate(event: FormEvent) {
     event.preventDefault();
     if (!isCurrent() || !draft || inFlight.current || publication.getSnapshot().busy) return;
-    const template = { scope, key };
-    if (profileTemplates(draft.profile).some((item) => item.scope === scope && item.key === key)) {
-      setOwned(setFailure, {
-        ok: false,
-        reason: 'invalid',
-        errors: [{ pointer: `/${scope === 'type' ? 'types' : 'routes'}`, code: 'duplicate' }],
-      });
-      return;
-    }
-    const profile = withTemplate(
-      draft.profile,
-      template,
-      structuredClone(overviewOf(draft.profile, { scope: 'generic', key: null })!),
-    );
-    const errors = validateProfile(platformRegistry, profile);
-    if (errors.length) {
-      setOwned(setFailure, { ok: false, reason: 'invalid', errors });
-      setOwned(setFailureProfile, profile);
-      return;
+    const template: Template = { scope, key };
+    let profile = draft.profile;
+    if (scope === 'base') {
+      const addition = addStructuralBaseTemplate(profile, key);
+      if (!addition.ok) {
+        setOwned(setFailure, { ok: false, reason: 'invalid', errors: addition.errors });
+        if (addition.profile) setOwned(setFailureProfile, addition.profile);
+        return;
+      }
+      profile = addition.profile;
+    } else {
+      if (profileTemplates(profile).some((item) => item.scope === scope && item.key === key)) {
+        setOwned(setFailure, {
+          ok: false,
+          reason: 'invalid',
+          errors: [{ pointer: `/${scope === 'type' ? 'types' : 'routes'}`, code: 'duplicate' }],
+        });
+        return;
+      }
+      profile = withTemplate(
+        profile,
+        template,
+        structuredClone(overviewOf(profile, { scope: 'generic', key: null })!),
+      );
+      const errors = validateProfile(platformRegistry, profile);
+      if (errors.length) {
+        setOwned(setFailure, { ok: false, reason: 'invalid', errors });
+        setOwned(setFailureProfile, profile);
+        return;
+      }
     }
     setOwned(setDraft, { ...draft, profile, selection: { template, view: 'overview' } });
     setOwned(setEditorOpen, true);
@@ -1093,8 +1105,9 @@ function AdmittedPresentationViewEditor({
                 id={`${formId}-scope`}
                 className="w-full min-w-0 max-w-full"
                 value={scope}
-                onChange={(event) => isCurrent() && setOwned(setScope, event.target.value as 'type' | 'route')}
+                onChange={(event) => isCurrent() && setOwned(setScope, event.target.value as 'base' | 'type' | 'route')}
               >
+                <NativeSelectOption value="base">{scopeNames.base}</NativeSelectOption>
                 <NativeSelectOption value="type">{scopeNames.type}</NativeSelectOption>
                 <NativeSelectOption value="route">{scopeNames.route}</NativeSelectOption>
               </NativeSelect>

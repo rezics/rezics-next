@@ -272,11 +272,24 @@ test('simultaneous presentation editors own their labels, exact choices, keyboar
     await act(async () => h.user.keyboard('{Enter}'));
     expect(h.control(1, m.curation_template()).value).toBe(JSON.stringify({ scope: 'route', key: addedRoute }));
     expect(h.control(1, m.curation_key()).value).toBe('');
+    expect([...h.control(1, m.curation_scope()).querySelectorAll('option')].map((option) => option.value)).toEqual([
+      'base',
+      'type',
+      'route',
+    ]);
+    await h.select(1, m.curation_scope(), 'base');
+    await h.type(1, 'schema:Thing');
+    await h.click(h.button(1, m.curation_add()));
+    expect(h.control(1, m.curation_template()).value).toBe(JSON.stringify({ scope: 'base', key: 'schema:Thing' }));
+    expect([...h.control(1, m.curation_template()).querySelectorAll('option')].map((option) => option.value)).toContain(
+      JSON.stringify({ scope: 'base', key: 'schema:Thing' }),
+    );
     expect([...h.control(0, m.curation_template()).querySelectorAll('option')].map((node) => node.value)).not.toContain(
       JSON.stringify({ scope: 'route', key: addedRoute }),
     );
     expect(h.control(0, m.curation_view()).value).toBe('details');
     await h.closeEditor(1);
+    await h.select(1, m.curation_template(), JSON.stringify({ scope: 'route', key: addedRoute }));
     h.uniqueIds();
     for (const index of [0, 1])
       expect(
@@ -354,6 +367,7 @@ test('simultaneous presentation editors own their labels, exact choices, keyboar
     ]);
     expect(h.publishes[0]!.input.profile).toEqual(profile);
     expect(h.publishes[1]!.input.profile.routes.map((item) => item.route)).toContain(addedRoute);
+    expect(h.publishes[1]!.input.profile.bases.map(({ base }) => base)).toEqual(['schema:Thing']);
     expect(h.reads).toHaveLength(1);
     h.uniqueIds();
   } finally {

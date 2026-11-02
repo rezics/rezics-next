@@ -3586,7 +3586,7 @@
   "presentation_editor_preview_current": "Aktuell veröffentlichte Seite",
   "presentation_editor_preview_details": "Versions- und Auswahldetails",
   "curation_loading": "Editor wird geladen…",
-  "curation_add_hint": "Beginnen Sie mit der allgemeinen Übersicht. Typschlüssel verwenden CURIEs wie schema:Book, Routen Pfade wie /books.",
+  "curation_add_hint": "Beginnen Sie mit der allgemeinen Übersicht. Strukturelle Basen sind Präsentations-Fallbacks; eine hinzuzufügen erstellt keinen Katalogtyp und gewährt keine Berechtigung. Basis- und Typschlüssel verwenden exakte CURIEs wie schema:Book; Routen verwenden Pfade wie /books.",
   "curation_discard_title": "Unveröffentlichte Änderungen verwerfen?",
   "curation_discard_warning": "Alle Vorlagen- und Ansichtsentwürfe werden auf das zuletzt geladene oder veröffentlichte Profil zurückgesetzt.",
   "curation_reload_warning": "Das Laden des aktiven Profils ersetzt alle lokalen Vorlagen- und Ansichtsentwürfe. Schlägt es fehl, bleiben die Entwürfe erhalten.",

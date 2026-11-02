@@ -3586,7 +3586,7 @@
   "presentation_editor_preview_current": "現在公開中のページ",
   "presentation_editor_preview_details": "バージョンと選択内容の詳細",
   "curation_loading": "エディターを読み込み中…",
-  "curation_add_hint": "汎用の概要から始めます。タイプのキーには schema:Book などの CURIE、ルートには /books などのパスを使います。",
+  "curation_add_hint": "汎用の概要から始めます。構造基底は表示上のフォールバックです。追加してもカタログの型や権限は作成されません。基底キーと型キーには schema:Book のような完全一致の CURIE を使い、ルートには /books のようなパスを使います。",
   "curation_discard_title": "未公開の変更を破棄しますか？",
   "curation_discard_warning": "すべてのテンプレートとビューの下書きを、最後に読み込んだか公開した構成に戻します。",
   "curation_reload_warning": "有効な構成を読み込むと、ローカルの下書きをすべて置き換えます。読み込みに失敗した場合は下書きを保持します。",

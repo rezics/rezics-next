@@ -3586,7 +3586,7 @@
   "presentation_editor_preview_current": "현재 게시된 페이지",
   "presentation_editor_preview_details": "버전 및 선택 세부정보",
   "curation_loading": "편집기 불러오는 중…",
-  "curation_add_hint": "기본 개요에서 시작합니다. 유형 키는 schema:Book 같은 CURIE를, 경로는 /books 같은 경로를 사용합니다.",
+  "curation_add_hint": "기본 개요에서 시작합니다. 구조 기본형은 화면 표시용 대체 템플릿이며, 추가해도 카탈로그 유형이나 권한이 생기지 않습니다. 기본형과 유형 키에는 schema:Book 같은 정확한 CURIE를 사용하고, 경로에는 /books 같은 경로를 사용합니다.",
   "curation_discard_title": "게시하지 않은 변경 사항을 버릴까요?",
   "curation_discard_warning": "모든 템플릿과 보기 초안을 마지막으로 불러오거나 게시한 구성으로 되돌립니다.",
   "curation_reload_warning": "현재 구성을 불러오면 모든 로컬 템플릿과 보기 초안이 바뀝니다. 불러오기에 실패하면 초안은 유지됩니다.",

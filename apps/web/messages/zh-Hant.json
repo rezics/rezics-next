@@ -3586,7 +3586,7 @@
   "presentation_editor_preview_current": "目前已發布頁面",
   "presentation_editor_preview_details": "版本與選擇詳情",
   "curation_loading": "正在載入編輯器…",
-  "curation_add_hint": "從通用總覽開始。類型鍵使用 schema:Book 等 CURIE；路由使用 /books 等路徑。",
+  "curation_add_hint": "從通用總覽開始。結構基底是呈現後備頁面；新增它不會建立目錄類型或授予權限。基底與類型鍵使用 schema:Book 等精確 CURIE；路由使用 /books 等路徑。",
   "curation_discard_title": "捨棄尚未發布的修改？",
   "curation_discard_warning": "所有範本和檢視草稿將還原為上次載入或發布的設定。",
   "curation_reload_warning": "載入目前設定將取代所有本機範本和檢視草稿。如果載入失敗，草稿會保留。",

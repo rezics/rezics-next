@@ -3587,7 +3587,7 @@
   "presentation_editor_preview_current": "当前已发布页面",
   "presentation_editor_preview_details": "版本和选择详情",
   "curation_loading": "正在加载编辑器…",
-  "curation_add_hint": "从通用概览开始。类型键使用 schema:Book 等 CURIE；路由使用 /books 等路径。",
+  "curation_add_hint": "从通用概览开始。结构基类是呈现回退页；添加它不会创建目录类型或授予权限。基类与类型键使用 schema:Book 等精确 CURIE；路由使用 /books 等路径。",
   "curation_discard_title": "放弃未发布的修改？",
   "curation_discard_warning": "所有模板和视图草稿将恢复为上次加载或发布的配置。",
   "curation_reload_warning": "加载当前配置将替换所有本地模板和视图草稿。如果加载失败，草稿会保留。",
