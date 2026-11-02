@@ -109,10 +109,9 @@ test('the generated order reconcile call includes bearer authorization, idempote
 
 test('KernelClient accepts order reconciliation headers and types the queued response', () => {
   const reconcile = (client: KernelClient) =>
-    client.orders({ orderId: 'order-id' }).$reconcile.post(
-      {},
-      { headers: { authorization: 'Bearer token', 'idempotency-key': 'request-key' } },
-    );
+    client
+      .orders({ orderId: 'order-id' })
+      .$reconcile.post({}, { headers: { authorization: 'Bearer token', 'idempotency-key': 'request-key' } });
   type QueuedResponse = Extract<
     NonNullable<Awaited<ReturnType<typeof reconcile>>['data']>,
     { reconciliation: 'queued' }
