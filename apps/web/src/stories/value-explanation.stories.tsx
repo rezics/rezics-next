@@ -257,8 +257,10 @@ export const LongEvidence: Story = {
     const canvas = within(canvasElement);
     await expect(await canvas.findByText(longEvidenceValue)).toBeVisible();
     await expect(canvas.getByText(longEvidenceTitle.trim())).toHaveAttribute('lang', 'ja');
-    await expect(canvas.getByText(longEvidenceReference.trim())).toHaveAttribute('lang', 'fr');
-    await expect(canvas.getByText('Édition originale')).toHaveAttribute('lang', 'fr');
+    for (const node of [canvas.getByText(longEvidenceReference.trim()), canvas.getByText('Édition originale')]) {
+      if (getLocale() === 'fr') await expect(node).not.toHaveAttribute('lang');
+      else await expect(node).toHaveAttribute('lang', 'fr');
+    }
     await expect(canvas.getByRole('link', { name: longEvidenceUrl })).toHaveAttribute('href', longEvidenceUrl);
     const article = canvasElement.querySelector<HTMLElement>('article[data-slot="value-explanation"]')!;
     expect(canvas.getByText(longEvidenceTitle.trim()).textContent).toBe(longEvidenceTitle);
