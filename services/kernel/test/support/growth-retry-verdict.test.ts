@@ -67,11 +67,7 @@ test('unrelated retries preserve successful growth and unresolved attribution st
   });
 });
 
-function occurrence(
-  index: number,
-  statement: string,
-  extra: Partial<StatementOccurrence> = {},
-): StatementOccurrence {
+function occurrence(index: number, statement: string, extra: Partial<StatementOccurrence> = {}): StatementOccurrence {
   return {
     index,
     statement,
@@ -248,15 +244,13 @@ function shapeReads(shapeCount: number): number {
     };
     return { scale, ledger, cost, tracked: tracked(statements) };
   });
-  const evidenceSamples = trackedRuns.map(
-    ({ scale, ledger, cost, tracked: run }): RetryEvidenceSample => ({
-      scale,
-      cost,
-      repetitions: [cost],
-      occurrenceRepetitions: [{ statements: run.items, backgroundStatements: [] }],
-      attempts: { repetitions: [{ ledger }] },
-    }),
-  );
+  const evidenceSamples = trackedRuns.map(({ scale, ledger, cost, tracked: run }): RetryEvidenceSample => ({
+    scale,
+    cost,
+    repetitions: [cost],
+    occurrenceRepetitions: [{ statements: run.items, backgroundStatements: [] }],
+    attempts: { repetitions: [{ ledger }] },
+  }));
   for (const metric of ['rows', 'blocks', 'statements'] as const) successfulMetricEvidence(evidenceSamples, metric);
   validateAttemptSamples(
     attemptCheck,

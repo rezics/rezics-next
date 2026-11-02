@@ -1,8 +1,4 @@
-import {
-  indexRetryRun,
-  isSuccessfulIndexed,
-  type AttemptLedgerEntry,
-} from './growth-attempt-index.ts';
+import { indexRetryRun, isSuccessfulIndexed, type AttemptLedgerEntry } from './growth-attempt-index.ts';
 import { isControlStatement, type Cost } from './growth-cost.ts';
 import type { ByteMetric, GrowthMetric } from './growth-bound.ts';
 import type { StatementOccurrence, StatementOccurrences } from './growth-report.ts';

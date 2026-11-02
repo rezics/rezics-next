@@ -262,8 +262,7 @@ export function validateAttemptSamples(check: GrowthCheck, samples: readonly Rep
       for (const [index, attempt] of run.ledger.entries()) {
         if (attempt.outcome !== 'committed') continue;
         const statements = attempt.occurrences.map(
-          (occurrence) =>
-            occurrenceIndex?.get(occurrence)?.statement ?? `occurrence ${occurrence} (SQL unavailable)`,
+          (occurrence) => occurrenceIndex?.get(occurrence)?.statement ?? `occurrence ${occurrence} (SQL unavailable)`,
         );
         if (committedCount === undefined) {
           committedCount = attempt.statements;
