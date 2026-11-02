@@ -114,6 +114,9 @@ underlying content permissions. See [account-data.ts][account-data], [public-vie
 
 Web public Realm pagination keeps the current profile and query context, replacing only the opaque cursor.
 Starting again removes every cursor parameter and loads the first page; only an unavailable read offers retry.
+Web public account reads use ten-second phase deadlines through body decoding (primary/overview together,
+former-handle lookup, continuation, and Realm directory plus bounded hydration); optional operator labels use two
+seconds, caller cancellation composes with each deadline, and failures retain the existing unavailable/retry UI.
 
 Web preserves the server-derived automation marker even when operator hydration is unavailable; only an actual
 operator address may become a link. Profile editing must round-trip the actual Content avatar summary and every

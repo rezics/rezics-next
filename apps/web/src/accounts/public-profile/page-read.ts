@@ -14,6 +14,7 @@ import { subjectTabs } from '../../features/pages/views';
 import { readPageAuthors } from '../../identity/read';
 import { keepSearch } from '../../subject/subject-href';
 import { readPublicRealms } from './read';
+import { OPERATOR_READ_MS, publicAccountRead } from './request';
 
 export type AccountView = View | 'realms';
 
@@ -46,17 +47,27 @@ export async function loadPublicAccountJourney(
     cursor?: string | undefined;
     search?: string | undefined;
   },
+  signal?: AbortSignal,
 ) {
   const { handle, locale, cursor, search } = input;
   const view = input.view && input.view !== 'overview' ? input.view : undefined;
   const compositionView = view === 'realms' ? undefined : view;
   try {
-    const [result, overview] = await Promise.all([
-      loadAgentPage(client, handle, compositionView, locale),
-      compositionView ? loadAgentPage(client, handle, undefined, locale) : undefined,
-    ]);
+    const [result, overview] = await publicAccountRead(
+      client,
+      (client) =>
+        Promise.all([
+          loadAgentPage(client, handle, compositionView, locale),
+          compositionView ? loadAgentPage(client, handle, undefined, locale) : undefined,
+        ]),
+      signal,
+    );
     if (result.kind === 'missing' || overview?.kind === 'missing') {
-      const moved = await formerHandleRedirect(client, handle, locale, view, search);
+      const moved = await publicAccountRead(
+        client,
+        (client) => formerHandleRedirect(client, handle, locale, view, search),
+        signal,
+      );
       if (moved) return { kind: 'redirect' as const, redirectTo: moved.href };
       if (view && overview?.kind === 'page')
         return {
@@ -86,7 +97,15 @@ export async function loadPublicAccountJourney(
         kind: 'redirect' as const,
         redirectTo: overviewFallback(locale, shown.page.account.handle, search),
       };
-    const identities = profile?.operatorId ? await readPageAuthors(client, [profile.operatorId]) : null;
+    const operatorId = profile?.operatorId;
+    const identities = operatorId
+      ? await publicAccountRead(
+          client,
+          (client) => readPageAuthors(client, [operatorId]),
+          signal,
+          OPERATOR_READ_MS,
+        ).catch(() => null)
+      : null;
     const identity = profile?.operatorId ? identities?.[profile.operatorId] : undefined;
     const operator =
       identity && identity.state !== 'deleted'
@@ -96,7 +115,11 @@ export async function loadPublicAccountJourney(
             displayName: typeof identity.displayName === 'string' && identity.displayName ? identity.displayName : null,
           }
         : undefined;
-    const page = compositionView && cursor ? await continueAgentList(client, result.page, cursor) : result.page;
+    const page =
+      compositionView && cursor
+        ? await publicAccountRead(client, (client) => continueAgentList(client, result.page, cursor), signal)
+        : result.page;
+    signal?.throwIfAborted();
     return {
       kind: 'page' as const,
       view: (view ?? 'overview') as AccountView,
@@ -105,7 +128,7 @@ export async function loadPublicAccountJourney(
       overview: shown.page,
       ...(operator ? { operator } : {}),
       ...(cursor ? { cursor } : {}),
-      ...(view === 'realms' && profile ? { realms: await readPublicRealms(client, profile, cursor) } : {}),
+      ...(view === 'realms' && profile ? { realms: await readPublicRealms(client, profile, cursor, signal) } : {}),
       publicRealms: profile?.publicViews.realms === true,
       tabs: subjectTabs(shown.page),
       title: agentTitle(shown.page),

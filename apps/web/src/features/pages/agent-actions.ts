@@ -31,7 +31,7 @@ export const readAgentPage = createServerFn({ method: 'GET', strict: false })
   })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
-    const result = await loadPublicAccountJourney(kernelClient(data.locale), data);
+    const result = await loadPublicAccountJourney(kernelClient(data.locale), data, getRequest().signal);
     if (result.kind === 'missing') throw notFound();
     if (result.kind !== 'page') return result;
     return { ...result, relations: await relationLabels(pageRelationProperties(result.overview), data.locale) };

@@ -1,5 +1,6 @@
 import type { KernelClient } from '@rezics/client';
 import type { AccountProfile } from '../../features/pages/account-read';
+import { publicAccountRead } from './request';
 
 export type PublicReadState = 'denied' | 'preparing' | 'unavailable';
 export type RealmRow = { id: string; title: string; summary: string | null; role: 'owner' | 'member' };
@@ -19,24 +20,31 @@ export async function readPublicRealms(
   client: KernelClient,
   profile: AccountProfile,
   cursor?: string,
+  signal?: AbortSignal,
 ): Promise<PublicRealms> {
   if (!profile.publicViews.realms) return { state: 'denied' };
   try {
-    const result = await client.accounts({ accountId: profile.id }).realms.get({
-      query: { limit: 20, ...(cursor ? { cursor } : {}) },
-    });
-    if (result.status !== 200 || !result.data) return { state: readFailure(result.status) };
-    const rows = await Promise.all(
-      result.data.realms.map(async ({ id, role }) => {
-        const response = await client.realms({ realmId: id }).get();
-        // A hidden or removed Realm contributes no text, link, placeholder or count.
-        if (response.status === 403 || response.status === 404) return null;
-        if (response.status !== 200 || !response.data) throw new Error('Realm unavailable');
-        const realm = response.data.realm;
-        return { id, role, title: realm.title, summary: realm.summary };
-      }),
+    return await publicAccountRead(
+      client,
+      async (client): Promise<PublicRealms> => {
+        const result = await client.accounts({ accountId: profile.id }).realms.get({
+          query: { limit: 20, ...(cursor ? { cursor } : {}) },
+        });
+        if (result.status !== 200 || !result.data) return { state: readFailure(result.status) };
+        const rows = await Promise.all(
+          result.data.realms.map(async ({ id, role }) => {
+            const response = await client.realms({ realmId: id }).get();
+            // A hidden or removed Realm contributes no text, link, placeholder or count.
+            if (response.status === 403 || response.status === 404) return null;
+            if (response.status !== 200 || !response.data) throw new Error('Realm unavailable');
+            const realm = response.data.realm;
+            return { id, role, title: realm.title, summary: realm.summary };
+          }),
+        );
+        return { state: 'ready', realms: rows.filter((row) => row !== null), next: result.data.next };
+      },
+      signal,
     );
-    return { state: 'ready', realms: rows.filter((row) => row !== null), next: result.data.next };
   } catch {
     return { state: 'unavailable' };
   }
