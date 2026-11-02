@@ -7,7 +7,7 @@ import {
 } from './editor-lifetime';
 import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import type { ReactNode } from 'react';
+import type { ReactNode, RefObject } from 'react';
 import {
   AuthoringDepartureBoundary,
   useAuthoringDeparture,
@@ -142,6 +142,131 @@ function SelectedFacts({ property, read, locale }: { property: string; read: Fac
   );
 }
 
+// One captured-instance discard decision serves admitted fields and retained private assertions.
+function FactDiscard({
+  read,
+  draft,
+  busy,
+  label,
+  locale,
+  row,
+  onDiscard,
+}: {
+  read: FactsCurrent;
+  draft: FactDraft;
+  busy: boolean;
+  label: string;
+  locale: string;
+  row: RefObject<HTMLElement | null>;
+  onDiscard: (draft: FactDraft) => void;
+}) {
+  const o = { locale: locale as never };
+  const locked = factLocked(draft);
+  const discardTrigger = useRef<HTMLButtonElement>(null);
+  const cancel = useRef<HTMLButtonElement>(null);
+  const [pending, setPending] = useState<{ draft: FactDraft; read: FactsCurrent; active: () => boolean } | null>(null);
+  const active = useCurrentReadingActive();
+  const visible = useCurrentReadingVisible();
+  const latest = useRef({ draft, read, busy, visible, onDiscard });
+  latest.current = { draft, read, busy, visible, onDiscard };
+  const confirming = !!pending && pending.draft === draft && pending.read === read && pending.active();
+  if (pending && !confirming) setPending(null);
+  useLayoutEffect(() => {
+    if (confirming && !busy) cancel.current?.focus();
+  }, [confirming, busy]);
+  function cancelDiscard() {
+    const now = latest.current;
+    if (
+      !pending ||
+      !pending.active() ||
+      !active() ||
+      !now.visible ||
+      now.busy ||
+      now.read !== pending.read ||
+      now.draft !== pending.draft ||
+      !row.current?.isConnected
+    )
+      return;
+    flushSync(() => setPending(null));
+    discardTrigger.current?.focus();
+  }
+  function discard() {
+    const now = latest.current;
+    if (
+      !pending ||
+      !pending.active() ||
+      !active() ||
+      !now.visible ||
+      now.busy ||
+      now.read !== pending.read ||
+      now.draft !== pending.draft ||
+      now.draft.command ||
+      factLocked(now.draft) ||
+      !row.current?.isConnected
+    )
+      return;
+    const form = row.current.closest('form');
+    flushSync(() => {
+      now.onDiscard?.(pending.draft);
+      setPending(null);
+    });
+    const selector =
+      'select:not(:disabled), button:not(:disabled):not([hidden]), input:not(:disabled):not([type="hidden"])';
+    (row.current?.querySelector<HTMLElement>(selector) ?? form?.querySelector<HTMLElement>(selector))?.focus();
+  }
+  return (
+    <div className="space-y-2">
+      <Button
+        ref={discardTrigger}
+        type="button"
+        variant="outline"
+        hidden={confirming}
+        disabled={busy || locked || !!draft.command}
+        className="h-auto min-h-11 max-w-full whitespace-normal break-words"
+        onClick={() => {
+          const now = latest.current;
+          if (
+            active() &&
+            now.visible &&
+            !now.busy &&
+            now.read === read &&
+            now.draft === draft &&
+            !!row.current?.isConnected &&
+            !draft.command &&
+            !factLocked(draft)
+          )
+            setPending({ draft, read, active });
+        }}
+      >
+        {m.album_remove_draft({ field: label }, o)}
+      </Button>
+      {confirming && (
+        <div
+          role="group"
+          aria-label={m.candidate_confirm_title({ action: m.album_remove_draft({ field: label }, o) }, o)}
+          className="space-y-2"
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              cancelDiscard();
+            }
+          }}
+        >
+          <p>{m.candidate_confirm_title({ action: m.album_remove_draft({ field: label }, o) }, o)}</p>
+          <div className="flex flex-wrap gap-2">
+            <Button ref={cancel} type="button" variant="outline" disabled={busy} onClick={cancelDiscard}>
+              {m.candidate_cancel({}, o)}
+            </Button>
+            <Button type="button" variant="destructive" disabled={busy || locked || !!draft.command} onClick={discard}>
+              {m.album_remove_draft({ field: label }, o)}
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FactField({
   property,
   read,
@@ -199,44 +324,6 @@ function FactField({
   const sourceIndex = draft?.source ? selected.findIndex((item) => item.id === draft.source) : -1;
   const locked = !!draft && factLocked(draft);
   const row = useRef<HTMLElement>(null);
-  const discardTrigger = useRef<HTMLButtonElement>(null);
-  const cancel = useRef<HTMLButtonElement>(null);
-  const [pending, setPending] = useState<{ draft: FactDraft; read: FactsCurrent; active: () => boolean } | null>(null);
-  const latest = useRef({ draft, read, busy, visible, onDiscard });
-  latest.current = { draft, read, busy, visible, onDiscard };
-  const confirming = !!pending && pending.draft === draft && pending.read === read && pending.active();
-  if (pending && !confirming) setPending(null);
-  useLayoutEffect(() => {
-    if (confirming && !busy) cancel.current?.focus();
-  }, [confirming, busy]);
-  function cancelDiscard() {
-    flushSync(() => setPending(null));
-    discardTrigger.current?.focus();
-  }
-  function discard() {
-    const now = latest.current;
-    if (
-      !pending ||
-      !pending.active() ||
-      !active() ||
-      !now.visible ||
-      now.busy ||
-      now.read !== pending.read ||
-      now.draft !== pending.draft ||
-      now.draft.command ||
-      factLocked(now.draft) ||
-      !row.current?.isConnected
-    )
-      return;
-    const form = row.current.closest('form');
-    flushSync(() => {
-      now.onDiscard?.(pending.draft);
-      setPending(null);
-    });
-    const selector =
-      'select:not(:disabled), button:not(:disabled):not([hidden]), input:not(:disabled):not([type="hidden"])';
-    (row.current?.querySelector<HTMLElement>(selector) ?? form?.querySelector<HTMLElement>(selector))?.focus();
-  }
   if (!visible) return null;
   return (
     <section ref={row} aria-label={label} className="min-w-0 [overflow-wrap:anywhere]">
@@ -360,58 +447,15 @@ function FactField({
             )}
             {!factChanged(draft) && <p className="text-sm text-muted-foreground">{m.facts_unchanged({}, o)}</p>}
             {onDiscard && (
-              <div className="space-y-2">
-                <Button
-                  ref={discardTrigger}
-                  type="button"
-                  variant="outline"
-                  hidden={confirming}
-                  disabled={busy || locked || !!draft.command}
-                  className="h-auto min-h-11 max-w-full whitespace-normal break-words"
-                  onClick={() => {
-                    const now = latest.current;
-                    if (
-                      active() &&
-                      now.visible &&
-                      !now.busy &&
-                      now.draft === draft &&
-                      !draft.command &&
-                      !factLocked(draft)
-                    )
-                      setPending({ draft, read, active });
-                  }}
-                >
-                  {m.album_remove_draft({ field: label }, o)}
-                </Button>
-                {confirming && (
-                  <div
-                    role="group"
-                    aria-label={m.candidate_confirm_title({ action: m.album_remove_draft({ field: label }, o) }, o)}
-                    className="space-y-2"
-                    onKeyDown={(event) => {
-                      if (event.key === 'Escape') {
-                        event.preventDefault();
-                        cancelDiscard();
-                      }
-                    }}
-                  >
-                    <p>{m.candidate_confirm_title({ action: m.album_remove_draft({ field: label }, o) }, o)}</p>
-                    <div className="flex flex-wrap gap-2">
-                      <Button ref={cancel} type="button" variant="outline" disabled={busy} onClick={cancelDiscard}>
-                        {m.candidate_cancel({}, o)}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        disabled={busy || locked || !!draft.command}
-                        onClick={discard}
-                      >
-                        {m.album_remove_draft({ field: label }, o)}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
+              <FactDiscard
+                read={read}
+                draft={draft}
+                busy={busy}
+                label={label}
+                locale={locale}
+                row={row}
+                onDiscard={onDiscard}
+              />
             )}
             {draft.result && (
               <ContentItemFrame as="div" className="min-w-0 space-y-3 rounded-xl bg-muted/30 p-4" role="status">
@@ -465,6 +509,53 @@ function FactField({
           </div>
         )}
       </ContentItemFrame>
+    </section>
+  );
+}
+
+/** Withdrawn metadata cannot authorize an editor or public reading; only the contributor's holder survives. */
+function ExcludedFact({
+  draft,
+  read,
+  locale,
+  label,
+  busy,
+  onDiscard,
+}: {
+  draft: FactDraft;
+  read: FactsCurrent;
+  locale: string;
+  label: ReturnType<typeof pageText> | undefined;
+  busy: boolean;
+  onDiscard: (draft: FactDraft) => void;
+}) {
+  const row = useRef<HTMLElement>(null);
+  const o = { locale: locale as never };
+  const title = label?.text || draft.property;
+  return (
+    <section ref={row} aria-label={title} className="min-w-0 space-y-3 rounded-xl bg-card p-4 [overflow-wrap:anywhere]">
+      <ContentItemHeading level={2} lang={label?.lang} className="font-semibold">
+        {title}
+      </ContentItemHeading>
+      <p>{m.facts_private({}, o)}</p>
+      <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words text-sm">
+        {JSON.stringify(draft.statement, null, 2)}
+      </pre>
+      {draft.result &&
+        (draft.result.ok ? (
+          <p role="status">{m.correction_proposed({}, o)}</p>
+        ) : (
+          <EditorFailure reason={draft.result.reason} locale={locale} />
+        ))}
+      <FactDiscard
+        read={read}
+        draft={draft}
+        busy={busy}
+        label={title}
+        locale={locale}
+        row={row}
+        onDiscard={onDiscard}
+      />
     </section>
   );
 }
@@ -546,9 +637,16 @@ function SubjectFactsLive({
       groups[group] = groups[group].filter((property) => scope.has(property));
   }
   const admitted = new Set(Object.values(groups).flat());
-  const staleDraft = !!profile && drafts.some((draft) => !admitted.has(draft.property));
-  const discardState = useRef({ current, busy, staleDraft });
-  discardState.current = { current, busy, staleDraft };
+  const excluded = drafts.filter((draft) => !admitted.has(draft.property));
+  const staleDraft = !!excluded.length;
+  const draftLabels = useRef(new Map<string, ReturnType<typeof pageText>>());
+  const discardState = useRef({ current, busy });
+  discardState.current = { current, busy };
+  function discard(original: FactDraft) {
+    const now = discardState.current;
+    if (!lifetime.active() || !now.current || now.current !== current || now.busy || running.current) return;
+    setDrafts((previous) => previous.filter((item) => item !== original || !!item.command || factLocked(item)));
+  }
   const changed = drafts.filter((draft) => draft.included && factChanged(draft) && !draft.result?.ok);
   const success = drafts.filter((draft) => draft.result?.ok).length;
   // Inclusion controls the next batch, never ownership of an unfinished assertion.
@@ -712,6 +810,17 @@ function SubjectFactsLive({
               void submit();
             }}
           >
+            {excluded.map((draft) => (
+              <ExcludedFact
+                key={draft.property}
+                draft={draft}
+                read={current}
+                locale={locale}
+                label={draftLabels.current.get(draft.property)}
+                busy={busy}
+                onDiscard={discard}
+              />
+            ))}
             <fieldset disabled={staleDraft} className="space-y-6">
               {Object.entries(groups)
                 .filter(([, properties]) => properties.length)
@@ -732,27 +841,18 @@ function SubjectFactsLive({
                         canStage={drafts.length < factLimit}
                         draft={drafts.find((draft) => draft.property === property)}
                         onChange={change}
-                        onDiscard={(original) => {
-                          const now = discardState.current;
-                          if (
-                            !lifetime.active() ||
-                            !now.current ||
-                            now.current !== current ||
-                            now.busy ||
-                            running.current ||
-                            now.staleDraft
-                          )
-                            return;
-                          setDrafts((previous) =>
-                            previous.filter((item) => item !== original || !!item.command || factLocked(item)),
-                          );
-                        }}
+                        onDiscard={discard}
                         onReview={(address) => {
                           if (lifetime.active()) setReviewing(address);
                         }}
                         onStage={(source) => {
                           if (!lifetime.active()) return;
                           const draft = stageFact(current, property, source);
+                          if (draft)
+                            draftLabels.current.set(
+                              property,
+                              pageText(current.release.properties[property]!.labels, locale),
+                            );
                           if (draft)
                             setDrafts((previous) => (previous.length < factLimit ? [...previous, draft] : previous));
                         }}

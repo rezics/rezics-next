@@ -202,6 +202,9 @@ Only changed facts become candidates; unchanged languages and other fields remai
 independent results and exact candidate IDs awaiting review, separate from acceptance, adoption and the ordinary
 current reader. Uncertain attempts retain their commands and keys. Metadata, denial, stale and unavailable states
 remain visible. Missing controls confer no additional native capability.
+Withdrawn scalar drafts in the shared generic and profile editors retain a bounded private assertion and original
+label outside the disabled admitted fields; cancellable local removal preserves siblings, while commands and locked
+results require exact recovery through matching definitions.
 
 Names and descriptions link the existing terms adapter. Its generated native binding is integrated.
 Native authority and deduplication remain Semantic-owned; this profile never substitutes `schema:name` proposals
