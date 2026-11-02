@@ -8,7 +8,8 @@ import { AccountManagementPageView, AccountVerificationPageView, ReviewPageView 
 import type { SubmitOperation } from './operation';
 import { verificationPageTimeout, withVerificationDeadline } from './deadline';
 
-const submit: SubmitOperation = (data, signal) => decideVerification({ data, signal, headers: csrfHeaders() });
+const submit: SubmitOperation = (data, signal) =>
+  decideVerification({ data, ...(signal ? { signal } : {}), headers: csrfHeaders() });
 
 export function ReviewJourney() {
   const { state, csrfToken, subject } = useSession();

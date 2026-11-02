@@ -271,7 +271,7 @@ export async function performOperation(
     const request = client['verification-requests']({ requestId: targetId });
     const body = reason ? { reason } : {};
     const result = await withVerificationDeadline(
-      (signal) => {
+      async (signal) => {
         const options = { headers: { authorization, 'idempotency-key': key }, fetch: { signal } };
         return action === 'approve'
           ? request.$approve.post(body, options)
