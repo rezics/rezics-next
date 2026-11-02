@@ -1523,6 +1523,13 @@ CREATE INDEX trending_term_rank ON search.trending_term USING btree (route, lang
 
 
 --
+-- Name: trending_term_live_rank; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX trending_term_live_rank ON search.trending_term USING btree (route, language, rank DESC, expires_at DESC, term_key);
+
+
+--
 -- Name: trending_term_source; Type: INDEX; Schema: search; Owner: -
 --
 

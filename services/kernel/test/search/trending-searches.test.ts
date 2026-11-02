@@ -85,3 +85,47 @@ test('native projection deduplicates daily contributions and withdrawal blocks l
     ]);
   }
 });
+
+test('bounded candidates repair withdrawn and expired contributor ranks', async () => {
+  if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL must name the migrated test database');
+  const day = 86_400_000;
+  const source = crypto.randomUUID(), withdrawn = crypto.randomUUID(), expired = crypto.randomUUID(), cleanupAccount = crypto.randomUUID();
+  const eligible = Array.from({ length: 10 }, () => crypto.randomUUID());
+  const current = publicTerm(source, 'en', 'Current')!, past = publicTerm(source, 'en', 'Expired')!, cleanup = publicTerm(source, 'en', 'Cleanup')!;
+  const store = trendingSearchStore(pool, () => new Date(now));
+  try {
+    await pool.query(
+      `WITH fixture AS (
+        SELECT repeat(md5($1::uuid::text||'-stale-'||n::text),2) key,'Stale '||n display,16 rank,$2::timestamptz expiry FROM generate_series(1,10) AS sequence(n)
+        UNION ALL SELECT $3,$4,10,$2 UNION ALL SELECT $5,$6,16,$7 UNION ALL SELECT $8,$9,2,$2
+      ) INSERT INTO search.trending_term(route,term_key,language,source_id,display,rank,expires_at)
+      SELECT 0,key,'en',$1::uuid,display,rank,expiry FROM fixture`,
+      [source, new Date(now + 7 * day), current.key, current.display, past.key, past.display, new Date(now - 1), cleanup.key, cleanup.display],
+    );
+    await pool.query(
+      `WITH fixture AS (
+        SELECT repeat(md5($1::uuid::text||'-stale-'||n::text),2) key,$2::uuid account,$5::date day,$6::timestamptz at FROM generate_series(1,10) AS sequence(n)
+        UNION ALL SELECT $3,account_id,$5,$6 FROM unnest($4::uuid[]) AS accounts(account_id)
+        UNION ALL SELECT $7,$8,$5,$6 UNION ALL SELECT $7,$9,$10,$11
+      ) INSERT INTO search.trending_member(route,term_key,account_id,day,contributed_at)
+      SELECT 0,key,account,day,at FROM fixture`,
+      [source, withdrawn, current.key, eligible, new Date(now).toISOString().slice(0, 10), new Date(now), cleanup.key, cleanupAccount, expired, new Date(now - 7 * day).toISOString().slice(0, 10), new Date(now - 7 * day)],
+    );
+    expect((await store.contribute(cleanup, cleanupAccount)).value).toBe(false);
+    await store.withdraw('account', withdrawn);
+    const refreshed = await pool.query<{ display: string; rank: number; expires_at: Date }>(
+      "SELECT display,rank,expires_at FROM search.trending_term WHERE source_id=$1 AND display IN ('Stale 1','Cleanup') ORDER BY display",
+      [source],
+    );
+    expect(refreshed.rows.map(({ display, rank, expires_at }) => [display, Number(rank), expires_at.getTime()])).toEqual([
+      ['Cleanup', 1, now + 7 * day],
+      ['Stale 1', 0, now],
+    ]);
+    const page = await store.candidates('en', now);
+    expect(page.some((term) => term.key === current.key)).toBe(true);
+    expect(page.some((term) => term.key === past.key)).toBe(false);
+  } finally {
+    await pool.query('DELETE FROM search.trending_term WHERE route=0 AND source_id=$1', [source]);
+    await pool.query('DELETE FROM search.trending_blocked WHERE route=0 AND identity=$1', [withdrawn]);
+  }
+});

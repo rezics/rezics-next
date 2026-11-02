@@ -104,8 +104,9 @@ owner state before allowing fresh contributions; old contributions never return.
 
 - Touches: one Search-owned native home, maintained term/member indexes, ordinary command executor/events,
   existing worker effects, one typed API/BFF call per Search opening, and the existing Search frame.
-- Bound: a rank seek examines ten terms (no expiry predicate that could scan expired history), followed by ten
-  exact member probes of at most sixteen rows. Reduction handles at most 160 private keys and ten labels, returns
+- Bound: seven exact indexed rank pages (10–16), each returning at most ten live terms ordered by latest expiry
+  then term key, merge into a ten-term candidate page. Ten exact member probes read at most sixteen rows each.
+  Reduction handles at most 160 private keys and ten labels, returns
   at most ten pairs and emits no counts. Labels are at most 256 UTF-8 bytes and must round-trip the closed grammar.
   One write locks one term and touches at most sixteen members. Each cleanup transaction removes at most ten terms
   and their 160 members, or ten Account members; indexed barriers block replay before subsequent pages.

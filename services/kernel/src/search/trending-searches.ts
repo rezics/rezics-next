@@ -112,15 +112,25 @@ export function trendingSearchStore(pool: Pool, clock: KernelClock = systemClock
   return {
     async candidates(language: string, now: number): Promise<TrendingCandidate[]> {
       return withReadTransaction(pool, async (tx) => {
+        const ranks = Array.from(
+          { length: TRENDING.contributors - TRENDING.threshold + 1 },
+          (_, index) => TRENDING.contributors - index,
+        );
         const terms = (
           await tx.query<TrendingTerm>(
-            `SELECT term_key AS key, language, source_id::text AS source, display
-          FROM search.trending_term WHERE route=0 AND language=$1
-          ORDER BY rank DESC, term_key LIMIT 10`,
-            [language],
+            `SELECT candidate.term_key AS key, candidate.language, candidate.source_id::text AS source, candidate.display
+          FROM unnest($1::integer[]) AS ranks(rank)
+          CROSS JOIN LATERAL (
+            SELECT term_key, language, source_id, display
+            FROM search.trending_term
+            WHERE route=0 AND language=$2 AND rank=ranks.rank AND expires_at > $3
+            ORDER BY expires_at DESC,term_key LIMIT 10
+          ) AS candidate
+          ORDER BY ranks.rank DESC, candidate.term_key LIMIT 10`,
+            [ranks, language, new Date(now)],
           )
         ).rows;
-        // At most 10 exact term probes, each with at most 16 retained members. No query-log scan/group-by.
+        // Seven exact-rank pages return at most 70 live terms; the final page probes at most 10 terms x 16 members.
         const result: TrendingCandidate[] = [];
         for (const term of terms) {
           const members = (
@@ -157,42 +167,66 @@ export function trendingSearchStore(pool: Pool, clock: KernelClock = systemClock
           new Date(now - TRENDING.days * DAY),
         ]);
         const rows = (
-          await tx.query<{ account: string; day: string }>(
-            `SELECT account_id::text AS account, day::text
+          await tx.query<{ account: string; day: string; at: Date }>(
+            `SELECT account_id::text AS account, day::text, contributed_at AS at
           FROM search.trending_member WHERE route=0 AND term_key=$1 ORDER BY account_id LIMIT 16`,
             [term.key],
           )
         ).rows;
         const day = new Date(now).toISOString().slice(0, 10);
         const own = rows.find((row) => row.account === account);
-        if ((!own && rows.length >= TRENDING.contributors) || own?.day === day) return { changed: true, value: false };
-        await tx.query(
-          `INSERT INTO search.trending_member(route,term_key,account_id,day,contributed_at)
+        const accepted = !((!own && rows.length >= TRENDING.contributors) || own?.day === day);
+        if (accepted)
+          await tx.query(
+            `INSERT INTO search.trending_member(route,term_key,account_id,day,contributed_at)
           VALUES(0,$1,$2,$3,$4) ON CONFLICT(route,term_key,account_id) DO UPDATE
           SET day=excluded.day,contributed_at=excluded.contributed_at`,
-          [term.key, account, day, new Date(now)],
-        );
+            [term.key, account, day, new Date(now)],
+          );
+        const latest = Math.max(accepted ? now : Number.NEGATIVE_INFINITY, ...rows.map(({ at }) => at.getTime()));
         await tx.query(`UPDATE search.trending_term SET rank=$2,expires_at=$3 WHERE route=0 AND term_key=$1`, [
           term.key,
-          rows.length + (own ? 0 : 1),
-          new Date(now + TRENDING.days * DAY),
+          rows.length + (accepted && !own ? 1 : 0),
+          new Date(latest + TRENDING.days * DAY),
         ]);
-        return { changed: true, value: true };
+        return { changed: true, value: accepted };
       });
     },
     /** Permanent minimal native barrier precedes paged removal; late deliveries cannot restore members. */
     withdraw(kind: 'account' | 'source', identity: string) {
-      return command(async (tx) => {
+      return command(async (tx, now) => {
         await tx.query(
           `INSERT INTO search.trending_blocked(route,kind,identity) VALUES(0,$1,$2) ON CONFLICT DO NOTHING`,
           [kind, identity],
         );
         if (kind === 'account') {
-          const rows = await tx.query(
+          const rows = await tx.query<{ term_key: string }>(
             `DELETE FROM search.trending_member WHERE route=0 AND (term_key,account_id) IN
-            (SELECT term_key,account_id FROM search.trending_member WHERE route=0 AND account_id=$1 ORDER BY term_key LIMIT 10) RETURNING term_key`,
-            [identity],
+            (SELECT term_key,account_id FROM search.trending_member WHERE route=0 AND account_id=$1 ORDER BY term_key LIMIT $2) RETURNING term_key`,
+            [identity, TRENDING.cleanup],
           );
+          const termKeys = [...new Set(rows.rows.map(({ term_key }) => term_key))];
+          if (termKeys.length) {
+            const cutoff = new Date(now - TRENDING.days * DAY);
+            // A 10-member withdrawal page affects at most 10 terms; 16 retained members each bound prune and recount to 160 rows apiece.
+            await tx.query(
+              `DELETE FROM search.trending_member WHERE route=0 AND term_key=ANY($1::text[]) AND contributed_at <= $2`,
+              [termKeys, cutoff],
+            );
+            await tx.query(
+              `UPDATE search.trending_term AS term SET rank=members.rank,
+              expires_at=COALESCE(members.latest + ($4::int * INTERVAL '1 day'), $3::timestamptz)
+              FROM unnest($1::text[]) AS affected(term_key)
+              CROSS JOIN LATERAL (
+                SELECT count(*)::integer AS rank, max(member.contributed_at) AS latest
+                FROM search.trending_member AS member
+                WHERE member.route=0 AND member.term_key=affected.term_key
+                  AND member.contributed_at > $2 AND member.contributed_at <= $3
+              ) AS members
+              WHERE term.route=0 AND term.term_key=affected.term_key`,
+              [termKeys, cutoff, new Date(now), TRENDING.days],
+            );
+          }
           return {
             changed: true,
             value: rows.rowCount === TRENDING.cleanup ? ('progress' as const) : ('complete' as const),
