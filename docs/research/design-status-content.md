@@ -1,21 +1,59 @@
 # Content product journey design status
 
-Planning snapshot, 31 October 2026. [Public scope](../scope.md) includes the five systems below;
-[Content's Goal](../goals/content.md) and [capability acceptance](../goals/content.capabilities.md) own their outcomes.
-This report recommends the next actions under existing owners. It adopts no new product policy or scope.
+Interface evidence reconciliation, 3 November 2026. [Content's Goal](../goals/content.md#done-when) and
+[capability acceptance](../goals/content.capabilities.md) own the outcomes; the
+[interface review rule](../development/verification.md#review) requires measured interface evidence.
+This document adopts the [detailed route, Page/Pattern inventory and owner bars](content-interface-quality-review.md),
+integrated at `1f524dcfc8d1400181614c622e46fb1e90df16e6` with continuation
+`bfd50fef349601116449aabf5ec4f197d1d4b15e`. Policy remains in the linked owner contracts.
 
-Twelve earlier product slices are integrated on dev: board continuation, targeted replies, revision provenance,
-community setup, publication shelves, membership/follow settlement, bans, question/figure presentation, opening-post
-mentions, descendant report queues, reporter receipts and appeal retry/confirmation. This is delivered source,
-not proof of served native behavior. The manager snapshot and current assignments describe pending work, not passes.
-The member Space error screen and bare board layout have source repairs. The supplied ten English Page views at
-phone 390 and desktop 1280 in light/dark, plus the phone Pattern regions, correct the earlier visible thread
-reply-target/draft findings only within that coverage. Desktop Patterns, other locales, native behavior and the
-whole journey remain pending. Moderator queue, setup and reporter layouts still need current visual review.
+The inventory maps source `88a6a9c65a15ad5314f9337a2ddf4362c9df9bed`; its continuation retained
+`f85b7a81cc54a0e1fa04ff99cd3381d2bf08150a` without a rendered catalogue or interaction verdict.
+Both integrations are present in the adoption base `cdd872a3c3f4b5b1f47191e7d24075ef37ee86ed`.
+Use that inventory for routes and exports, not the earlier planning assignments in this document.
+Source presence and illustrative response compositions establish neither current disclosure nor native completion.
+The old delivered/pending lists are replaced by the proof obligations below, rather than treated as current defects.
 
-Content owns these journeys end to end. Web owns visual design, review at phone 390 and desktop 1280 through globals,
-and group screenshots. Story IDs below identify existing review surfaces, not screenshot or native acceptance.
-Interface typing, fixtures and source integration establish neither current privacy nor asynchronous completion.
+## Evidence boundary and capture ownership
+
+- **Historical observations:** the 31 October narrative reported limited thread reply-target/draft corrections in
+  ten English Page views at 390/1280 light/dark and phone Pattern regions. That account, retained in this document
+  at `cdd872a3c3f4b5b1f47191e7d24075ef37ee86ed`, binds no current image/reviewed-source package here. It supplies
+  no current verdict for desktop Patterns, other locales, queues, setup, reporter layouts or the whole journey.
+- **Source-only:** the integrated inventory names the existing routes, Page/Pattern exports and comparison bars.
+  Its continuation maps missing states/personas for all 13 route groups. Neither attempt inspected images or
+  established a visual, keyboard or native pass. A story play or successful typing does not change that status.
+- **Historical images available, inspection outstanding:** the manager has since relayed all 48 Inbox cells in
+  `/home/edge/projects/rezics/rezics-next/.temp/goal/content/handoffs/content-interface-measurement.md` and adjacent
+  `content-interface-captures.json`. The earlier report's statement that no images were supplied describes its
+  completed attempts; it is not the present availability boundary. The manifest supplies absolute image/detail
+  paths, Page IDs, URL/globals, hashes, timestamps, status/errors, source/build, producer and fixture provenance.
+  Availability and hash matches are not inspected visual results; the manifest retains captured errors.
+- **Unmeasured:** no current-dev, dark-theme or full launch-locale Inbox package is admitted. Web's Subject
+  overview/companion and catalogue review at `88a6a9c65a15ad5314f9337a2ddf4362c9df9bed` leaves all 32
+  combinations unmeasured, with no admitted full provenance package supplied to Content. Accounts' Settings
+  notification-region images are also not supplied. Home and other Content Pages remain unmeasured here.
+
+The 48 Inbox images bind source `b29a80a0aad38c008125fb032f5fe1af96bd6164`, Storybook `11.0.0-alpha.8`,
+built `2026-10-31T08:32:54.450Z`: English/light only, paired 390×844 and 1280×900 viewports, with full-page
+capture height recorded separately. Web's completeness audit produced them through public-browser observation;
+Performance relayed them. Their recorded Inbox responses and illustrative Storybook session transport are not
+native API recording acceptance. The additional `c2c7c63ffb6397f4bb6002f0b1b4a7b63f01732c` light sweep remains
+separately historical and provenance-only until its metadata/artifact pairs are inspected; diagnostic captures
+are not passes. This adoption inspects no images and does not duplicate the separate review report's writer.
+
+| Surface | Retained ownership and next handoff |
+| --- | --- |
+| Inbox | Performance retains capture. The existing single screenshot continuation inspects the historical images and updates the separate review report; no second capture or audit owner is created. |
+| Subject overview/companion and catalogue families | Web retains frames and their provenance handoff. Content supplies vote/review and moderation-region authority; a shell-free Pattern cannot establish frame quality. |
+| Settings notification region | Accounts retains Settings and preference authority; Content supplies mandatory-notice semantics. Obtain the existing admitted package through that owner. |
+| Home and supplied Realm appearance regions | Content retains Home capture and native vote/review and Realm appearance authority. When admitted, relay Home artifacts and full provenance to Web. |
+| Shared patterns and final approval | Findings affecting shared patterns return to Web. Root retains final screenshot approval. |
+
+The [inventory continuation](content-interface-quality-review.md#retained-source-continuation) is the detailed
+missing-measurement ledger, including long/populated, empty, loading, unavailable and error states and applicable
+reader, author, member, moderator, owner, banned and suspended personas. Its locale, focus and keyboard gaps remain
+open. Static PNGs cannot establish disclosure, keyboard recovery or native API outcomes.
 
 ## Existing primary-source coverage
 
@@ -34,247 +72,139 @@ reference build or source-copy proposal is needed. Linked source files and licen
 Across the sources, adopt the interaction patterns in REZICS's existing API, document, Access and durable-work stack.
 External ranking formulas, permission bypasses and retention periods do not replace the owning contracts.
 
+## Mixed Home
+
+Authority: [feed dimensions](../feeds.md#home-dimensions) and
+[Web Home](../../apps/web/README.md#home-page-locale). The inventory identifies `/` and
+`home.stories.tsx` exports `SignedIn`, `SignedOut`, `PartialSources`, `Following`, `SparseContinuation` and the
+kind/Space/question choice and recovery states under `pages-discovery-home--`.
+
+**Bar and next proof.** Observe one mixed ordered stream, bounded supported kind/Space/question choices and sparse
+Next; unavailable sources differ from known empty. Next retains the current page while pending, then replaces one
+bounded page with usable focus. The feed owner explicitly leaves selected Discovery/Continue populations and
+question-source activation dependent on their original producers; illustrative choices do not prove those lanes.
+Content supplies admitted Home artifacts to Web. Native source readiness, session isolation and continuation need
+separate native/interaction evidence when permitted; no sectioned replacement feed or new population writer follows.
+
 ## Posts, threads and boards
 
-Authority: [Content README](../../services/kernel/src/content/README.md), its `routes.ts`/`schemas.ts`, and
-[`db/content/schema.sql`](../../services/kernel/db/content/schema.sql). Web's existing route/components consume them.
+Authority: [Content](../../services/kernel/src/content/README.md), its routes/schemas and
+[thread reading](../../apps/web/README.md#thread-reading) /
+[exact revisions](../../apps/web/README.md#exact-recorded-revision-postsidrevisionsrevisionid).
+The inventory covers `/boards?purpose=discussion|reviews`, `/boards/{id}`, `/boards/{id}/new`, the thread route,
+exact revision route and author-erasure operation. Representative current exports are `ContinueHot` in
+`board-continuation-pages.stories.tsx`, `NewThreadLong` in `composer.stories.tsx`, `SelectedParent`, `WithheldPost`
+and `HistoryRetry` in `thread-reading.stories.tsx`, and `DifferentCurrentHead` / `LongSourceReferences` in
+`exact-revision.stories.tsx`. They replace earlier story-name planning references, not missing visual evidence.
 
-| Actual page / Pattern → user step                                         | Existing API → authoritative source/storage                                                                                                                                                                                                                                |
-| ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Space home → `/boards/{id}`; Board Continuation → Active/Hot/New and Next | `GET /v1/boards/{id}`, `GET /v1/boards/{id}/threads`; native board plus asynchronous `content.board_thread` candidates and rank work.                                                                                                                                      |
-| `/boards/{id}/new` → `PostComposer`; thread page → Thread replies         | `POST /v1/threads`, `POST /v1/threads/{id}/posts` with optional `parentId`; `content.thread`, `post`, immutable `revision`, receipt and outbox commit on the thread route. Discussion `subjectIds` are additive; reviews retain one subject and an optional vote citation. |
-| Inline edit → history / Revision provenance → delete or undo              | `POST /v1/posts/{id}/revisions` with `If-Match`; revision list and exact revision GET; `DELETE /v1/posts/{id}`, `POST /v1/posts/{id}:restore`. Native revisions and tombstone/purge state remain authority.                                                                |
-
-Protected-board new-thread preparation calls `prepareSession`, uses `viewerCredential` for one authorized GET of the
-requested board, and checks the returned board ID; it has no anonymous fallback. Discussion creation uses the existing
-multi-select `EntityPicker` for zero through 128 subjects, shows a removable query preset, retains selected subjects
-when suggestions are unavailable, and reports over-limit input without silently truncating it. `PostComposer`'s
-`submissionContext` and `onIntentLockChange` freeze the exact review kind/subject/optional citation or discussion
-`subjectIds` with the body, media IDs and idempotency key across pending and uncertain retry. Existing slices also
-preserve selected reply context and stable retry intent, inherit the stored licence on ordinary edits, show
-revision-specific references, and distinguish empty-with-next from terminal empty board pages. These are delivered
-source connections; current native and visual outcomes remain unproved here.
-
-**Boundary.** Candidate indexes never authorize disclosure. Reads check current post ancestry, thread, independently
-anchored board and Realm before final output; protected denial exposes no old body or hidden parent preview.
-Sort-bound opaque continuation advances over examined candidates without refill or ancestry walks. History pages
-retain 20 revisions. Author deletion immediately hides bytes/history; replies keep parent placement, opening title
-becomes null, undo ends at 30 days, then bounded purge is irreversible. Account erasure has its separate immediate
-rules. Stable command keys do not bypass current authorization; edit conflicts retain the draft.
-
-**Next action and proof.** The Global board directory producer and consumer are integrated:
-`GET /v1/boards?purpose=discussion|reviews` → `{boards,next}` and Web's `createNativeBoardDirectoryAdapter` serve
-`/boards`. The public-only source examines at most `4 × limit` candidates, limit at most 100, with current final
-disclosure. Reuse this directory for discussion/review destinations; do not create another permission writer.
-Web reviews `pages-community-board-directory--current`, `pages-community-board-continuation--continue-hot` and
-`pages-community-thread--selected-reply-target`, retaining the supplied thread review's limited coverage above.
-The directly addressable `/posts/{id}/revisions/{revisionId}` reader and remaining feed/header review stay pending.
-Later native proof must follow compose → reply → edit → exact history → delete/restore, continuation after an empty
-page, and revocation before final output; screenshots must show the actual shared components at both widths.
-
-Native fixed-edition commands, returning-creator inventory and Web's creator list/draft resume are integrated source.
-`content-editions/edition-create-native.ts` consumes `POST /v1/contentEditions`, exact edition metadata and keyed
-publication; `/editions/new?editionId=…` resumes the stored ID/version without another create. The creator inventory
-uses the declared own-account native route. Review `pages-content-creatoreditions--editions` and
-`pages-content-editionpublication--resumed-draft`, `--reloaded-published`, `--resumed-conflict`, `--uncertain-publish`.
-Only confirmed publication exposes the separate Commerce offer next step. End-to-end native use, current source
-rights, fixed bytes, inventory disclosure, sale/entitlement and visual review remain unproved; no new writer is needed.
-Author erasure now has a usable entry contract: explicitly opening or refreshing its dialog reads the original
-private `GET /v1/threads/{id}` envelope's `authorErasure { authorId, mayErase }`, bound to the exact actor and thread;
-stale reads are invalidated. Admission requires the current caller's first selected native post and the original
-`post:erase` grant. Thread ownership or edit/delete rights are not substitutes, and no grant is guessed. Existing
-Page stories cover `pages-community-author-erasure--current-admission-available`, `--current-admission-denied` and
-`--current-admission-unavailable`. The original command and workflow remain unchanged: physical cleanup is
-irreversible and asynchronous, with no upfront total, and enqueue/running counters do not establish completion.
-Response/parser fixtures are illustrative and corrected to the canonical viewer response; the frozen served preview
-predates that correction, so it supplies no visual pass. Native API/persona, database and acceptance proof remain
-unrun; visual, main and physical-cleanup closure remain unproved.
+**Boundary and next proof.** Measure clear board purpose/ranking, sparse versus terminal empty, preserved draft and
+retry intent, stable reply context and immutable revision/licence/citation provenance. Protected bodies must remain
+concealed in previews and history; today's body cannot stand in for an exact cited revision. Candidate indexes and
+stable command keys grant no disclosure. Later native proof follows compose → reply → edit → exact history →
+delete/restore with revocation before final output. Author-erasure Page/operation states must distinguish accepted,
+running, stopped and completed work; illustrative counters prove no physical cleanup. Fixed-edition creator return,
+publication and entitlement retain their separate owner contracts and require their own native evidence.
 
 ## Realms and Spaces
 
-Authority: [Community README](../../services/kernel/src/community/README.md), its `routes.ts`, and
-[`db/community/schema.sql`](../../services/kernel/db/community/schema.sql). Accounts owns native membership/roles;
-Semantic owns the separate live Context and Realm subject-page binding.
+Authority: [Community](../../services/kernel/src/community/README.md),
+[participation](../../services/kernel/src/community/README.md#participation-on-the-space-home),
+[Web setup](../../apps/web/README.md#guided-community-setup) and
+[Realm appearance](../../apps/web/README.md#realm-appearance-and-rules).
+The inventory maps the addressed `/spaces/{address}` home and canonical `/realms/{id}` entry, `/realms/new`,
+private `/realms`, claim routes and the existing home management regions. Current review inputs include Space
+`Member` / `BoardsUnavailable`, setup `NewCommunity`, appearance `Management` / `ManagementInteractions`,
+publication `Selection` / `Chosen`, leave `OwnerRequired` / `UncertainRetry` / `AcceptedPending`, and the supplied
+`patterns-community-realm-appearance-settings--` and `patterns-community-realm-home-presentation--` regions.
+These source mappings supersede old assignments describing the home/header as pending source; they establish no
+rendered repair verdict. Use the inventory for lifecycle, bans, claims and participation exports as well.
 
-| Actual page / Pattern → user step                                                  | Existing API → authoritative source/storage                                                                                                                                                                                                                              |
-| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `/realms/new` / Space Setup → addressed home                                       | `POST /v1/spaces`, `PUT /v1/spaces/{id}/address`, `POST /v1/realms`, Realm PATCH and board-scheme PUT, Realm board POST; Space/Realm immutable heads, address claims and native grants.                                                                                  |
-| `/spaces/{address}`, `/realms/{id}`, `/realms` → join/leave and independent follow | Address/Space/Realm reads; membership POST/DELETE, `members/me`, `participation`, `GET /v1/me/realms`; Realm `realm_member` intervals are authoritative, account inverse is candidate-only. `GET/PUT/DELETE /v1/follows/{spaceId}` uses Library's separate follow store. |
-| Realm Publications / home shelf → later boards/subjects → publish/withdraw/reject  | Realm boards/publications GETs and publication POST/`:withdraw`/`:reject`; Realm-home `publication`/`publication_head` and Content board records, never Context grants.                                                                                                  |
-| Realm bans / lifecycle region → ban/unban or container management                  | Realm bans GET and keyed PUT/DELETE; native ban records and Accounts removal workflow. Lifecycle UI consumes actual admission/commands; an unavailable native adapter grants nothing.                                                                                    |
+**Boundary and next proof.** Measure one usable addressed home separating attention, participation and authority.
+Follow grants no reading rights; leave does not unfollow, unban does not rejoin, and roles do not invent membership.
+Accepted workflows remain pending until authoritative settlement; denied/unavailable reads never become empty.
+Keep independent board/publication continuation, unknown versus zero count, exact rules provenance and honest optional
+media fallback. Native create → home → board → membership → publication → ban/unban → remove/restore proof must
+include current denial and restored-destination authority. Accounts retains roles/ownership and claim authority;
+Semantic retains live Context and Realm page binding. A publication shelf grants neither Context nor subject access.
 
-Delivered setup, shelf, participation/follow and ban slices extend these existing surfaces. Separate shelf cursors
-retain 20-board/12-publication windows and recovery states. Membership acceptance is `202 {workflowId}`, followed by
-at most four authoritative refreshes and manual read retry; it is never displayed as completed solely from enqueue.
-
-**Boundary.** Owners/moderators are resource roles, not invented memberships. Follow grants no reading rights; leave
-does not unfollow, explicit unfollow survives implied follow, unban does not rejoin. Bans immediately deny protected
-reads despite independent grants while removal runs; public reads retain the anonymous floor. Hidden/failed reads
-never become empty lists. Curation requires native `realm:publish`, current subject visibility and head CAS, including
-replay. A retained Context pointer survives removed/restored containers; publication binding needs its version/fence
-before and at final output. A removed container never produces Global fallback. A separate live Context retains
-its own authority. The shared Published/RealmShelf renderer now retains the exact Realm selector on canonical
-localized subject links, including continued shelves, and explains opening the Realm's published view. The existing
-Subject reader owns current Realm/publication/Space/Context checks and reader partitioning; shelf metadata grants
-no later access, and the shelf adds no Global rescue or transport reads. This is source, not native or visual proof.
-
-Native Accounts has only its installed roles: no invented administrator. Its explicit-holder guard, atomic native
-ownership helper, erasure succession and claim approval source have been handed off; these remain the sole
-ownership authorities. Community's locked source/state application ports and Web's claim reviewer are integrated.
-The reviewer transport's current binding remains pending; source availability proves no approval or succession.
-Orphan state is read-only; a claim request after 30 days confers no ownership.
-
-Leave recovery is prepared in the existing `RealmMembership`, pending source integration, native runtime and Web
-review. Only Accounts' declared closed `409 realm_last_owner`, `retryable:false`, `effect_status:not_applied`
-problem supplies its specific reason. The current generic guard and native leave caller still need the owning
-producer/binding integration; unrelated refusals cannot identify an owner. The original `ResourceAccessLink`
-performs a current authorized Access read after explicit recovery interaction; the existing Access page can add
-another eligible explicit owner. It is not an atomic transfer route. A fresh membership/participation read is
-required before a new leave intent after refusal; an uncertain response retains its original action/key and offers
-current-state checking or explicit same-request retry. Accepted workflows still wait for authoritative settlement.
-
-**Next action and proof.** Review the repaired member Space route and existing setup at
-`pages-community-space--member` and `pages-community-space-setup--new-community`. The same setup now contains the
-Context directory picker, constrained scheme/concept picker and shared publication EntityPicker; the native Context
-directory producer and production consumer are connected through the installed generated GET. Native behavior,
-current privacy, physical cost, visual review and main proof remain pending. The scheme/
-concept and publication consumers reuse their existing sources and commands. No second setup or publish writer is needed.
-Container lifecycle HTTP, binding fences and `container-lifecycle-native.ts` are integrated source: current
-`/lifecycle`, `/removal` and `/restoration` calls retain head/version CAS, independent Context authorization and
-restored-destination validation. Content later verifies create → addressed home → board → membership settlement →
-publication → ban/unban → remove/restore with native personas and current denial races.
-
-Realm-owned presentation is adopted in the Community/Content READMEs: revisioned settings select native exact
-rules, and the shared current-authorized reader enriches board responses and the Space home. The original native
-member-count module `member-count.ts::readRealmMemberCount` is integrated, including source version, temporal
-frontier, removal coverage and bounded initialization. Count remains unknown unless its actual current read is
-covered; source availability is neither zero nor native proof. Content compares the fixed before/final Realm anchors
-and withholds changed final counts without refill. Exact rules retain native author/editor and disclosure authority.
-Native image-summary/claim, byline-avatar, thread-media/rules-byte and Worker-delivery connections remain pending
-source/runtime/review at their owning stages; optional failures retain honest fallback. Realm-home presentation and
-header integration likewise remain pending source/runtime/review. The appearance main now renders, but its controls
-and header defects remain open; the assigned controls repair is pending source/runtime/review. Web still owns
-normal 390/1280 light/dark review. Semantic's existing writer owns Realm page binding; do not duplicate it or claim
-contextual publication from a shelf.
-
-The original-public discovery source, aggregate/API and shared discovery section are integrated source; their native
-privacy, rollover, physical and served navigation proof remains deferred. Popular counts qualifying originally
-public discussion starts in the prior 30 complete UTC days; Trending uses the prior one complete UTC day.
-No memberships, views, unique people or tracking contribute. The settled interface uses the genuine committed
-source generation/predecessor log and gate; source recovery alone resolves its exact fence. Aggregate disclosure
-also needs matching applied/current generation, epoch, settled gate, current rollover and final anonymous public
-Realm/Space/carried-slot chain. Board changes touch at most 31 buckets; catch-up and due work at most 50 keys/step.
-The integrated `GET /v1/realms/discovery` response is `{realms, next}`, superseding the research's proposed `items`;
-it examines at most `min(limit,20)` candidates, permits sparse continuation, and returns `avatar:null` until genuine
-selection authority exists. No demo runtime or temporary unavailable seam is native proof. Reuse the existing
-source/API and shared section; later prove UTC expiry/replay/privacy and both-width navigation.
-
-The carried-Realm sitemap `canonicalDestination` native producer is integrated; Web remains the sole consumer.
-Its closed Space-address or Realm-ID destination follows current anonymous Realm/Space/slot and exact address-claim
-validation. Native privacy and sitemap consumer integration proof remain pending. No per-row HTTP, guessed address
-or protected-slot leak substitutes for it.
+The [Realm discovery research](content-realm-discovery-design.md) remains part of this journey. Measure declared
+completed-window Popular/Trending, sparse continuation and unavailable summaries in the existing shared section;
+do not infer privacy, UTC rollover or native ranking correctness from fixtures. Discussion activity is not people
+tracking. Source and runtime proof remain separate, as the integrated inventory's discovery bar requires.
 
 ## Ratings and reviews
 
-Authority: [Rating README](../../services/kernel/src/rating/README.md), Content's review/subject-thread contracts,
-and [`db/rating/schema.sql`](../../services/kernel/db/rating/schema.sql). Search owns public rating order.
+Authority: [Rating display](../../services/kernel/src/rating/README.md#display),
+[reviews](../../services/kernel/src/rating/README.md#reviews) and Content's exact revision/subject-thread contracts.
+Use the inventory's Subject and composed discussion/review Pages within Web's shared frames, supplemented by
+`subject-rating/subject-rating.stories.tsx` exports `SaveClearZero`, `PublishedZero`, `BelowThreshold`, `Pending`,
+`PopulationChooser`, `SparsePopulationPage`, `IndependentSources` and revision provenance `ChangedVote`.
 
-| Actual page / Pattern → user step                                 | Existing API → authoritative source/storage                                                                                                                                                                                                                                                                |
-| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Subject Rating on the subject page → save/clear, inspect figure   | Rating-question GET; own `GET/PUT/DELETE /v1/subjects/{id}/ratings/{questionId}/vote`; subject `/figure`, `/ratings`, `/source-statistics`. Private `rating.vote` on voter home; aggregate components and published `rating.public_figure` on subject anchors; independent source-statistic/facts binding. |
-| Write Review → known reviews board → Thread / Revision provenance | Thread POST cites the author's exact vote revision optionally; immutable `content.revision.vote_citation`, author-route live-review slot. Native citation validation occurs with the write.                                                                                                                |
-| Subject review preview/full list → review thread, next page       | `GET /v1/subjects/{id}/threads?place=…&kind=review`; asynchronous subject-thread candidates, then current Content disclosure. A working thread route alone does not establish a served subject review list.                                                                                                |
-
-The integrated question/figure and provenance slices connect delivered APIs: zero is a vote, clear is separate,
-published mean differs from Bayesian order, imported figures remain labelled separately. Public citations are
-immutable; only the authenticated author receives a differing current vote via their private own-vote read.
-
-**Boundary.** One live review per author/subject/board, stable retry keys and ordinary current board/Realm authority
-apply. Deleting/restoring the opening post releases/reclaims the slot, with conflict rather than overwrite.
-Public standard-question figures require 5 work/release or 10 finer-grain votes; below threshold no mean/histogram
-leaks. Bayesian prior is from the same question/population with at least 50 votes. Ready snapshots retain published
-values during pending work; a successful vote write does not prove aggregate convergence. Global public figures
-alone feed public Search; private Realm figures never do, and Realm rating sorts remain deferred. Subject-thread
-cursors bind subject/place/kind/viewer/epoch, examine at most `4 × limit`, and retain empty continuation.
-
-**Next action and proof.** Web's existing subject review-list/destination writer joins Content's list to the actual
-subject surface and the integrated Global board directory, including later membership/destination pages. Content
-supplies the existing producer, not another list. Review `patterns-subjects-subject-rating--save-clear-zero`,
-`patterns-subjects-subject-rating--below-threshold` and `patterns-community-revision-provenance--changed-vote`.
-Later native proof follows private save/clear → actual drain → public subject/Search figure → review/citation →
-paged subject list, including author-only comparison and current loss of access; visual proof includes that served list.
+**Boundary and next proof.** Observe the personal vote separately from the published population/count, question,
+units and freshness; zero, clear, no data and suppressed figures differ. Imported sources retain their own labels.
+A review may be unscored; an exact vote citation is immutable and only its author can receive a private comparison
+with their current vote. Native proof follows save/clear → processing → public subject/Search figure → review and
+citation → paged subject list with current disclosure. Vote success establishes no aggregate convergence. Web's
+missing Subject frames prevent a page-quality verdict; source-only Patterns establish neither that verdict nor
+native privacy. Search retains public ordering; deferred Realm rating sorts gain no scope here.
 
 ## Moderation, reports and appeals
 
-Authority: [Content reports/appeals](../../services/kernel/src/content/README.md#appeals), its report/moderation routes,
-and [Web's receipt and queue contracts](../../apps/web/README.md#report-receipt-moderationreportsid).
+Authority: [Content appeals](../../services/kernel/src/content/README.md#appeals),
+[Web receipt](../../apps/web/README.md#report-receipt-moderationreportsid) and
+[board queue](../../apps/web/README.md#board-moderation-reports-boardsidmoderation).
+The inventory maps report entry, `/moderation/reports/{id}`, `/boards/{id}/moderation`, `/moderation/catalogue`
+and `/moderation/decisions/{id}`. Use receipt `IllustrativeLongReferences`, board queue `RevisionDiffers`,
+`TargetUnavailable`, `EmptyWithNext` and selected-report states, plus decision `Open`, `Expired`,
+`ReversedUnavailable` and recovery states. These current source inputs replace the earlier pending layout assignments;
+no current image-based defect or repair approval is established.
 
-| Actual page / Pattern → user step                                          | Existing API → authoritative source/storage                                                                                                                                                                                             |
-| -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Post report dialog → `/moderation/reports/{id}` / Reporter status          | `POST /v1/reports`, `GET /v1/reports/{id}`; command-derived report home stores submitted references/reason/evidence and outcome. Reporter ownership is exact native authority, not queue membership.                                    |
-| `/boards/{id}/moderation` → inspect descendant reports → dismiss/take down | Board/thread/post reports GET; report `:dismiss`, target `:takeDown`; board-local `board_report_candidate` and exact-target projections are candidates only. Native report and target decision remain authoritative in their own homes. |
-| `/moderation/decisions/{id}` → appeal → Appeal Resolution confirmation     | Decision GET/`:appeal`, board/thread appeals GET, appeal `:resolve`; native `moderation_decision`/`moderation_appeal`, pending board projection, atomic lift-takedown on reversal and mandatory notices.                                |
+The retained appeals exports in `moderation-appeals.stories.tsx` are `Pending`, `Empty` and
+`IllustrativeCurrentTargetWithLongReferences` under `pages-moderation-appeals--`. The stale width/theme export names
+in the [page-story map](../development/page-stories.md) are a source documentation discrepancy owned by Web,
+not a rendered defect. Runtime story-index admission remains unconfirmed; use globals with the actual exports.
 
-Delivered slices add descendant discovery, the reporter destination, one reason field and stable retry/visible appeal
-confirmation. The integrated `DecisionPageView` now supplies kind-specific outcome and appeal recovery in one main;
-its current review IDs are `pages-community-moderation-decision--open`, `--native-denied`, `--conflict`,
-`--uncertain-retry` and the same suffixes under `patterns-moderation-decision`. Their source availability is not
-visual or native approval. The queue's complete reusable review Pattern was missing from the earlier handoff; its current writer
-owns that repair and layout. The reporter layout also has an assigned refinement; neither is visually accepted here.
-
-**Boundary.** The reporter owns submitted target/revision/reason/evidence and current outcome with `targetAvailability`;
-loss of target access retains their own submission, never hidden target text, moderator notes or other reporters.
-Availability authorizes no link or future body read. Unrelated/missing private reports return 404; dependency errors
-remain errors. Inspection checks each target independently and does not grant ordinary body access. Queue cursors
-advance over denied candidates; at most `limit + 1` candidates are admitted. One nonempty takedown reason is at most
-1,024 characters. Unchanged actions retain retry keys and authorize again before replay. Only the author appeals
-once, through the inclusive 183-day deadline; the original decider cannot resolve. Reversal restores ordinary
-readability, not erased bytes, and does not rewrite an actioned report disposition. Account erasure minimizes private
-evidence; retained moderation material requires its owner's explicit fields/purpose/expiry inventory.
-
-**Next action and proof.** Existing queue/reporter writers finish their product layouts; Web reviews
-`pages-community-moderation-reports--open-reports`, `pages-reporter-status--submitted-report` and
-`patterns-appeal-resolution--lost-response-retry`, plus the new queue Pattern. Content later proves submission →
-board discovery → exact submitted revision/current target distinction → resolution → reporter receipt → independent
-appeal → confirmed outcome, including unavailable targets, unrelated viewers and native refusal/retry behavior.
+**Boundary and next proof.** Observe submitted target/revision/reason/evidence separately from the current target;
+unavailable targets retain the reporter's submission without protected bodies or guessed links. Long references,
+dates, one legible reason, intentional target selection and the independent appeal result must remain usable.
+Later native proof follows report → descendant discovery → submitted/current distinction → resolution → receipt →
+independent appeal → confirmed outcome, including unrelated viewers, refusal and uncertain retry. The original
+decider cannot resolve the appeal. Reversal restores ordinary readability, never erased bytes or a rewritten report
+disposition. Content's board Pages and supplied catalogue region await measurement; Web retains catalogue frames.
 
 ## Minimal in-app notifications
 
 Authority: [Content notifications](../../services/kernel/src/content/README.md#notifications),
-[Web Inbox](../../apps/web/README.md#notifications-inbox-inbox), Accounts preferences and account lifecycle.
+[Web Inbox](../../apps/web/README.md#notifications-inbox-inbox) and Accounts preferences/lifecycle.
+Use the inventory's `/inbox` Pages, including `Mixed`, `ReporterUnavailable`, `ViewerBecomesUnknown`,
+`SeenRetryAfterRecovery`, `SeenDenied` and continuation recovery; match historical capture IDs to their own pinned
+source manifest. The supplied `patterns-account-notice-preferences--` region at `/settings#notifications` is not a
+Settings frame. Current source inputs replace the earlier sole-writer next-action prose without asserting delivery.
 
-| Actual page / Pattern → user step                                         | Existing API → authoritative source/storage                                                                                                                                                                                                                  |
-| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Thread authoring → recipient notice                                       | Existing thread/post commands commit first-publication events; durable reply/mention/outcome effects write text-free recipient-route `content.notice`, unique by recipient/kind/source, and delivery decisions. Opening-post mention handling is integrated. |
-| Shell badge → `/inbox` / Inbox states → target or report/decision receipt | Account notifications list/count GETs; existing post, decision or report GET per distinct target; recipient notice candidates, current native target disclosure and mandatory outcome source.                                                                |
-| Open Inbox → seen/retry; settings → optional preferences                  | `POST /v1/accounts/{id}/notifications:markSeen` with owned `through`; `content.notice_seen` forward-only marker. Accounts preference GET/PATCH uses current version and stable command key.                                                                  |
-
-**Boundary.** Reply precedes mention before preferences; first ten distinct mentions only, no self-notices or later-edit
-resends. Optional sends check current source access and preference/account authority at recipient commit; mandatory
-moderation outcomes remain readable without target access. Display rechecks current full target chain and suppresses
-hidden notice/target identities. Private viewer-bound list cursors scan at most `4 × limit` (limit at most 50), allow
-empty continuation; count examines 101 retained unread keys and caps at 100, so it need not equal visible items.
-Mark seen moves forward only; retry must not acknowledge later arrivals. Notices/delivery decisions retain at most
-180 days, with bounded recipient erasure and marker cleanup. Email remains out of scope.
-
-**Next action and proof.** Web's sole Inbox/deep-link writer owns recovery and actual destination integration:
-preserve `post-{id}` through redirects, use one exact post read for an unloaded selected post, never walk pages;
-reuse the existing reporter receipt. Keep one valid quoted key per seen intent and explicit retry/count refresh.
-Review existing Inbox mixed/hidden/unavailable states and the actual later-page post landing at both widths.
-Content later proves first-publication send → actual relay → private Inbox → currently readable destination → seen
-marker/count, preference changes before commit, revocation before landing, mandatory outcomes and recipient erasure.
+**Boundary and next proof.** Observe a private recipient Inbox, honest unavailable destinations and safe explicit
+seen retry that preserves its original intent and cannot acknowledge later arrivals. Opening a page does not mean
+all targets were read. Count/list failure is not zero or empty; mandatory outcomes stay independent of optional
+preferences. Performance's historical light images can support only historical visual findings after inspection;
+Accounts' missing Settings package remains explicit. Later native proof follows first publication → relay → private
+Inbox → currently readable destination → seen/count, with preference/access races and recipient erasure. Email
+remains outside scope. Static images prove neither forward-only marker semantics nor current target disclosure.
 
 ## Remaining proof and recommendation
 
-Finish the named existing product writers and their genuine native seams, then join each journey to Web's visual
-review. Optional metadata and provisional unavailable adapters stay honestly unavailable until their producers land.
-Do not dispatch duplicate writers or substitute another interface/typing pass for the missing product result.
+Adopt the integrated inventory as the detailed route/story reference and keep one existing screenshot continuation
+for actual image inspection. Its next useful result is a historical finding tied to the exact Inbox image/source,
+state and owner bar, or an explicit missing measurement; it must retain captured errors and fixture limits.
+Future admitted current Page evidence needs full revision/build, Page/export, path, viewport/theme/locale, producer
+and fixture/recording provenance. Keep the unmeasured 13-group state/persona matrix explicit rather than repeating
+old source assignments as open product defects. Brief repairs only from observed failures against existing bars.
 
-Original Content, Community, Rating and notice cleanup/retention and physical-cost outcomes remain open for later
-verification under [deletion](../deletion.md). Membership-erasure environment setup and notice/rating cleanup tooling recovery remain control-plane-owned.
-The original native role-predecessor source correction is delivered; its physical cost verdict and the original
-physical outcomes remain unproved, not waived requirements or evidence of cleanup.
-Queued or integrated cleanup does not establish residue removal, succession or final acknowledgement.
+Performance retains Inbox; Web retains Subject/catalogue frames and shared-pattern findings; Accounts retains
+Settings; Content retains Home and native vote/review and Realm appearance authority; Root retains final screenshot
+approval. Obtain missing shared evidence through these owners. No conflicting owner requirement is identified by
+this adoption, and no duplicate capture, UI repair or review-report writer is assigned.
 
-Native API/persona, acceptance, database, browser, remote and visual proof remain deferred. Promotion, main, root and
-final erasure closure remain unproved. No whole scope row or Goal is declared complete.
+Native API/persona, browser, keyboard and acceptance execution remain deferred by launch policy. Original cleanup,
+retention, physical-cost and erasure outcomes still require their owning [deletion](../deletion.md) evidence;
+integration, enqueue and illustrative completion states cannot close them. This documentation change affects no
+typed workspace or test file and needs no new runner or gate. The interface-review requirement of Content's six
+Done-when clauses remains unmeasured; no visual/native/keyboard pass, main promotion or Goal completion is claimed.
