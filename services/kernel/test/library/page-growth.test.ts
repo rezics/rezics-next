@@ -58,6 +58,7 @@ async function refreshDeepCursor() {
     cursor = result.next;
     if (!cursor) throw new Error('The fixed Library entries must provide a deep cursor');
   }
+  if (!cursor) throw new Error('The fixed Library entries must provide a deep cursor');
   deepCursor = cursor;
 }
 
@@ -120,9 +121,9 @@ async function growAxis(axis: GrowthAxis, database: GrowthDatabase, scale: numbe
         const sessions: Row[] = [];
         const units: Row[] = [];
         const follows: Row[] = [];
+        const subjectId = growthSubjects[index]!;
         for (const identity of identities) {
           const ownerRoute = routeOf(identity.actor.accountId)!;
-          const subjectId = growthSubjects[index]!;
           const id = newId(ownerRoute);
           entries.push({
             ...entryTemplate,
@@ -138,8 +139,8 @@ async function growAxis(axis: GrowthAxis, database: GrowthDatabase, scale: numbe
           });
           units.push({ ...unitTemplate, route: ownerRoute, session_id: id });
           follows.push(followRow(followTemplate, identity, subjectId));
-          index++;
         }
+        index++;
         return {
           'library.entry': entries,
           'library.progress_session': sessions,
