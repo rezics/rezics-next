@@ -52,12 +52,16 @@ export function admitGrowthProfileInput(sources: readonly GrowthProfileInputSour
     if (totalLines > GROWTH_PROFILE_INPUT_LIMITS.lines)
       throw inputError(source, line, `exceeds the ${GROWTH_PROFILE_INPUT_LIMITS.lines} physical profile line limit`);
 
-    for (let offset = 0; offset < source.text.length; ) {
+    for (let offset = 0; offset < source.text.length;) {
       const codePoint = source.text.codePointAt(offset)!;
       const width = utf8Width(codePoint);
       totalBytes += width;
       if (totalBytes > GROWTH_PROFILE_INPUT_LIMITS.totalBytes)
-        throw inputError(source, line, `exceeds the ${GROWTH_PROFILE_INPUT_LIMITS.totalBytes} byte profile input limit`);
+        throw inputError(
+          source,
+          line,
+          `exceeds the ${GROWTH_PROFILE_INPUT_LIMITS.totalBytes} byte profile input limit`,
+        );
 
       if (codePoint === 0x000a) {
         if (hasRecord && ++totalRecords > GROWTH_PROFILE_INPUT_LIMITS.records)
@@ -65,13 +69,21 @@ export function admitGrowthProfileInput(sources: readonly GrowthProfileInputSour
         line++;
         totalLines++;
         if (totalLines > GROWTH_PROFILE_INPUT_LIMITS.lines)
-          throw inputError(source, line, `exceeds the ${GROWTH_PROFILE_INPUT_LIMITS.lines} physical profile line limit`);
+          throw inputError(
+            source,
+            line,
+            `exceeds the ${GROWTH_PROFILE_INPUT_LIMITS.lines} physical profile line limit`,
+          );
         lineBytes = 0;
         hasRecord = false;
       } else {
         lineBytes += width;
         if (lineBytes > GROWTH_PROFILE_INPUT_LIMITS.lineBytes)
-          throw inputError(source, line, `exceeds the ${GROWTH_PROFILE_INPUT_LIMITS.lineBytes} byte profile line limit`);
+          throw inputError(
+            source,
+            line,
+            `exceeds the ${GROWTH_PROFILE_INPUT_LIMITS.lineBytes} byte profile line limit`,
+          );
         if (!isTrimWhitespace(codePoint)) hasRecord = true;
       }
 
