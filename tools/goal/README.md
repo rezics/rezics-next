@@ -1870,6 +1870,10 @@ unknown rather than clean baseline results. Findings and exact run evidence are 
 unchanged finding does not start another sweep after restart. Baseline runs, probes and retries all share the ordinary
 three-check concurrency cap.
 
+Each fresh verifier tree installs its own dependencies, even after an earlier tree's setup passed. Installation uses
+an available matching repository Bun or bootstraps with the verifier process's Bun, and logs the executable used.
+Checks still require the installed pinned Bun; an actual installation failure remains infrastructure.
+
 Promotion selects the latest eligible integration head by its expected ref identity. It does not use an older
 `dev-verified` ref to pin a candidate. Each frozen promotion candidate still passes its full required gate, ancestry,
 quarantine, stabilization, ref-race and publication checks; known verifier findings do not turn a failed promotion

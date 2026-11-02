@@ -2689,8 +2689,18 @@ export class MergeTrain {
               existsSync(join(trainTree, 'package.json'))
             )
               installShared(trainTree);
-            const checked = await runGate(request.gate, trainTree, logPath);
-            retainedSourceAcceptance.status = checked.passed ? 'passed' : checked.timedOut ? 'unavailable' : 'failed';
+            // A worker-owned acceptance leaves the brief without a command. Nothing can be rerun, and the source is
+            // already represented on the target, so it stands as a direct dev landing does without its checks.
+            const checked = request.gate.length
+              ? await runGate(request.gate, trainTree, logPath)
+              : { passed: true, output: '', timedOut: false };
+            retainedSourceAcceptance.status = !request.gate.length
+              ? 'unavailable'
+              : checked.passed
+                ? 'passed'
+                : checked.timedOut
+                  ? 'unavailable'
+                  : 'failed';
             assertCandidate(trainTree, workerCommit!, 'retained-source acceptance', logPath);
             if (git(trainTree, 'status', '--porcelain', '--untracked-files=all'))
               throw new Error('Retained-source acceptance left a dirty source worktree');
