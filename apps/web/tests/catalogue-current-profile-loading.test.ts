@@ -12,7 +12,9 @@ test('Catalogue profile Loading stays creation; current-profile loading exports 
     story('../src/stories/catalogue-addon-profile.stories.tsx'),
   ]);
 
-  expect(exported(character, 'Loading').trim()).toBe("export const Loading: Story = { args: { scenario: 'loading' } };");
+  expect(exported(character, 'Loading').trim()).toBe(
+    "export const Loading: Story = { args: { scenario: 'loading' } };",
+  );
   expect(exported(character, 'CurrentLoading').trim()).toBe(
     "export const CurrentLoading: Story = { args: { existing: true, scenario: 'loading' } };",
   );
