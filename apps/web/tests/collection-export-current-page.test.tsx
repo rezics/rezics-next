@@ -101,14 +101,7 @@ test('a replacement public Collection export stays usable while retired clipboar
     await act(async () => {
       root.render(
         <StrictMode>
-          {visible ? (
-            <CollectionExport
-              page={page}
-              context={context}
-              laterPage={laterPage}
-              request={request}
-            />
-          ) : null}
+          {visible ? <CollectionExport page={page} context={context} laterPage={laterPage} request={request} /> : null}
         </StrictMode>,
       );
     });
