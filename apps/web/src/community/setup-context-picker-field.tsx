@@ -1,4 +1,4 @@
-import { useId, useRef, useSyncExternalStore } from 'react';
+import { useId, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
 import { Check, Search } from 'lucide-react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -35,11 +35,46 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
   const state = useSyncExternalStore(picker.subscribe, picker.getSnapshot, picker.getSnapshot);
   const id = useId();
   const queryInput = useRef<HTMLInputElement>(null);
+  const resultRegion = useRef<HTMLDivElement>(null);
+  const keyboardPosition = useRef<{
+    picker: SetupContextPicker;
+    query: string;
+    cursor: string | undefined;
+    version: number;
+  } | null>(null);
   const { current, selected, page, reference } = state;
   const currentVersion = picker.currentVersion();
   const searchVersion = picker.searchVersion();
   const selectionVersion = picker.selectionVersion();
   const referenceVersion = picker.referenceVersion();
+  useLayoutEffect(() => {
+    const pending = keyboardPosition.current;
+    if (!pending) return;
+    if (
+      disabled ||
+      pending.picker !== picker ||
+      pending.version !== picker.searchVersion() ||
+      pending.query !== state.query ||
+      pending.cursor !== page.cursor
+    ) {
+      keyboardPosition.current = null;
+      return;
+    }
+    if (page.phase !== 'loading') {
+      resultRegion.current?.focus();
+      keyboardPosition.current = null;
+    }
+  }, [disabled, page, picker, state.query]);
+  const pageAction = (detail: number, cursor: string | undefined, action: () => boolean | void, mouseAccepted?: () => void) => {
+    const pending =
+      detail === 0
+        ? { picker, query: state.query, cursor, version: searchVersion + 1 }
+        : null;
+    keyboardPosition.current = pending;
+    const accepted = action();
+    if (pending && (accepted === false || picker.searchVersion() !== pending.version)) keyboardPosition.current = null;
+    else if (!pending && accepted !== false) mouseAccepted?.();
+  };
   return (
     <Field className="min-w-0 max-w-full [overflow-wrap:anywhere]">
       <div className="flex min-w-0 flex-col gap-1">
@@ -135,106 +170,126 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
           onChange={(event) => picker.search(event.target.value, state.query, searchVersion)}
         />
       </div>
-      {page.phase === 'loading' ? (
-        <p role="status" className="text-sm text-muted-foreground">
-          {m.setup_context_searching()}
-        </p>
-      ) : null}
-      {page.phase === 'ready' ? (
-        <div className="flex min-w-0 flex-col items-start gap-3" aria-live="polite">
-          <p className="text-sm text-muted-foreground">
-            {state.query.trim()
-              ? m.setup_context_results({ query: state.query.trim() })
-              : m.setup_context_results_all()}
-          </p>
-          {page.contexts.length ? (
-            <ul
-              aria-label={m.setup_context_results_label()}
-              className="w-full min-w-0 divide-y divide-border rounded-xl border border-border"
-            >
-              {page.contexts.map((choice) => (
-                <li key={choice.id} className="min-w-0">
-                  <button
-                    type="button"
-                    disabled={disabled}
-                    onClick={() =>
-                      void picker.choosePage(choice.id, {
+      {page.phase !== 'idle' ? (
+        <div
+          ref={resultRegion}
+          role="region"
+          aria-label={m.setup_context_results_label()}
+          aria-live="polite"
+          aria-busy={page.phase === 'loading'}
+          tabIndex={-1}
+          className="flex min-w-0 flex-col items-start gap-3"
+        >
+          {page.phase === 'loading' ? (
+            <p role="status" className="text-sm text-muted-foreground">
+              {m.setup_context_searching()}
+            </p>
+          ) : null}
+          {page.phase === 'ready' ? (
+            <>
+              <p className="text-sm text-muted-foreground">
+                {state.query.trim()
+                  ? m.setup_context_results({ query: state.query.trim() })
+                  : m.setup_context_results_all()}
+              </p>
+              {page.contexts.length ? (
+                <ul
+                  aria-label={m.setup_context_results_label()}
+                  className="w-full min-w-0 divide-y divide-border rounded-xl border border-border"
+                >
+                  {page.contexts.map((choice) => (
+                    <li key={choice.id} className="min-w-0">
+                      <button
+                        type="button"
+                        disabled={disabled}
+                        onClick={() =>
+                          void picker.choosePage(choice.id, {
+                            query: state.query,
+                            ...(page.cursor === undefined ? {} : { cursor: page.cursor }),
+                            version: searchVersion,
+                          })
+                        }
+                        className="flex h-auto min-h-14 min-w-0 w-full max-w-full flex-col gap-1 rounded-lg px-4 py-3 text-start whitespace-normal hover:bg-muted focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50"
+                      >
+                        <span className="min-w-0 max-w-full text-sm font-medium leading-relaxed">
+                          <bdi>{choice.label}</bdi>
+                        </span>
+                        <span className="min-w-0 max-w-full break-all font-mono text-xs leading-relaxed text-muted-foreground">
+                          <bdi dir="ltr">{choice.id}</bdi>
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">{m.setup_context_empty()}</p>
+              )}
+              {page.next !== null ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  disabled={disabled}
+                  onClick={(event) =>
+                    pageAction(event.detail, page.next, () =>
+                      picker.next({
+                        query: state.query,
+                        ...(page.cursor === undefined ? {} : { cursor: page.cursor }),
+                        next: page.next,
+                        version: searchVersion,
+                      }),
+                    )
+                  }
+                >
+                  {m.setup_context_next()}
+                </Button>
+              ) : null}
+            </>
+          ) : null}
+          {page.phase === 'unavailable' || page.phase === 'denied' ? (
+            <div className="flex min-w-0 flex-col items-start gap-3 rounded-xl bg-muted p-4">
+              <p role="alert" className="text-sm">
+                {page.phase === 'denied' ? m.setup_context_denied() : m.setup_context_unavailable()}
+              </p>
+              <div className="flex min-w-0 flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  disabled={disabled}
+                  onClick={(event) =>
+                    pageAction(event.detail, page.cursor, () =>
+                      picker.retrySearch({
                         query: state.query,
                         ...(page.cursor === undefined ? {} : { cursor: page.cursor }),
                         version: searchVersion,
-                      })
+                      }),
+                    )
+                  }
+                >
+                  {m.space_setup_retry()}
+                </Button>
+                {page.phase === 'unavailable' && page.cursor !== undefined ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+                    disabled={disabled}
+                    onClick={(event) =>
+                      pageAction(
+                        event.detail,
+                        undefined,
+                        () => picker.restartSearch({ query: state.query, cursor: page.cursor!, version: searchVersion }),
+                        () => queryInput.current?.focus(),
+                      )
                     }
-                    className="flex h-auto min-h-14 min-w-0 w-full max-w-full flex-col gap-1 rounded-lg px-4 py-3 text-start whitespace-normal hover:bg-muted focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50"
                   >
-                    <span className="min-w-0 max-w-full text-sm font-medium leading-relaxed">
-                      <bdi>{choice.label}</bdi>
-                    </span>
-                    <span className="min-w-0 max-w-full break-all font-mono text-xs leading-relaxed text-muted-foreground">
-                      <bdi dir="ltr">{choice.id}</bdi>
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-sm text-muted-foreground">{m.setup_context_empty()}</p>
-          )}
-          {page.next !== null ? (
-            <Button
-              type="button"
-              variant="outline"
-              className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
-              disabled={disabled}
-              onClick={() =>
-                picker.next({
-                  query: state.query,
-                  ...(page.cursor === undefined ? {} : { cursor: page.cursor }),
-                  next: page.next,
-                  version: searchVersion,
-                })
-              }
-            >
-              {m.setup_context_next()}
-            </Button>
+                    {m.setup_context_restart()}
+                  </Button>
+                ) : null}
+              </div>
+            </div>
           ) : null}
-        </div>
-      ) : null}
-      {page.phase === 'unavailable' || page.phase === 'denied' ? (
-        <div className="flex min-w-0 flex-col items-start gap-3 rounded-xl bg-muted p-4">
-          <p role="alert" className="text-sm">
-            {page.phase === 'denied' ? m.setup_context_denied() : m.setup_context_unavailable()}
-          </p>
-          <div className="flex min-w-0 flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
-              disabled={disabled}
-              onClick={() =>
-                picker.retrySearch({
-                  query: state.query,
-                  ...(page.cursor === undefined ? {} : { cursor: page.cursor }),
-                  version: searchVersion,
-                })
-              }
-            >
-              {m.space_setup_retry()}
-            </Button>
-            {page.phase === 'unavailable' && page.cursor !== undefined ? (
-              <Button
-                type="button"
-                variant="outline"
-                className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
-                disabled={disabled}
-                onClick={() => {
-                  if (picker.restartSearch({ query: state.query, cursor: page.cursor!, version: searchVersion }))
-                    queryInput.current?.focus();
-                }}
-              >
-                {m.setup_context_restart()}
-              </Button>
-            ) : null}
-          </div>
         </div>
       ) : null}
       <details className="min-w-0 max-w-full rounded-xl border border-border p-3" open={selected?.phase !== 'ready'}>

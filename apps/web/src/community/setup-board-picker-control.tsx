@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useMemo, useState } from 'react';
+import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Check } from 'lucide-react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -32,6 +32,8 @@ export function SetupBoardPicker({
   const [query, setQuery] = useState('');
   const [page, setPage] = useState<BoardChoicePage>({ status: 'loading', choices: [], next: null });
   const pager = useMemo(() => new BoardChoicePager(setPage), []);
+  const resultRegion = useRef<HTMLDivElement>(null);
+  const keyboardPosition = useRef<(BoardChoiceScope & { version: number }) | null>(null);
   const scope: BoardChoiceScope = { source, query, schemeId, kind };
   const expected = { ...scope, version: pager.version() };
   // Mask a previous source/query immediately, before the new effect has started.
@@ -52,8 +54,35 @@ export function SetupBoardPicker({
     else pager.cancel();
   }, [pager, source, kind, schemeId, query, disabled]);
   useLayoutEffect(() => () => pager.cancel(), [pager]);
+  useLayoutEffect(() => {
+    const pending = keyboardPosition.current;
+    if (!pending) return;
+    if (
+      disabled ||
+      !current ||
+      pending.source !== source ||
+      pending.kind !== kind ||
+      pending.schemeId !== schemeId ||
+      pending.query !== query ||
+      pending.version !== pager.version()
+    ) {
+      keyboardPosition.current = null;
+      return;
+    }
+    if (page.status !== 'loading') {
+      resultRegion.current?.focus();
+      keyboardPosition.current = null;
+    }
+  }, [current, disabled, kind, page, pager, query, schemeId, source]);
   const shown: BoardChoicePage = current ? page : { status: 'loading', choices: [], next: null };
   const label = kind === 'scheme' ? m.space_setup_scheme_label() : m.space_setup_concept_label();
+  const pageAction = (detail: number, accepted: boolean, action: () => void) => {
+    const pending =
+      detail === 0 && accepted && pager.version() === expected.version ? { ...scope, version: expected.version } : null;
+    keyboardPosition.current = pending;
+    action();
+    if (pending) pending.version = pager.version();
+  };
   return (
     <Field className="min-w-0 text-start [overflow-wrap:anywhere]">
       <FieldLabel htmlFor={id} className="min-w-0 max-w-full whitespace-normal text-start">
@@ -94,7 +123,14 @@ export function SetupBoardPicker({
         placeholder={m.space_setup_board_choice_search()}
         onChange={(event) => setQuery(event.target.value)}
       />
-      <div aria-busy={shown.status === 'loading' && !disabled} className="min-w-0 space-y-3">
+      <div
+        ref={resultRegion}
+        role="region"
+        aria-label={label}
+        aria-busy={shown.status === 'loading' && !disabled}
+        tabIndex={-1}
+        className="min-w-0 space-y-3"
+      >
         {shown.freshness?.caught_up === false ? (
           <p role="status" className="text-sm text-muted-foreground">
             {m.space_setup_board_choice_updating()}
@@ -155,7 +191,13 @@ export function SetupBoardPicker({
                 variant="outline"
                 className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
                 disabled={disabled}
-                onClick={() => pager.retry(expected)}
+                onClick={(event) =>
+                  pageAction(
+                    event.detail,
+                    shown.status !== 'ready' && shown.status !== 'loading',
+                    () => pager.retry(expected),
+                  )
+                }
               >
                 {m.space_setup_retry()}
               </Button>
@@ -165,7 +207,7 @@ export function SetupBoardPicker({
                   variant="outline"
                   className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
                   disabled={disabled}
-                  onClick={() => pager.restart(expected)}
+                  onClick={(event) => pageAction(event.detail, shown.canRestart === true, () => pager.restart(expected))}
                 >
                   {m.space_setup_board_choice_restart()}
                 </Button>
@@ -183,7 +225,9 @@ export function SetupBoardPicker({
             variant="outline"
             className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
             disabled={disabled}
-            onClick={() => pager.next(expected)}
+            onClick={(event) =>
+              pageAction(event.detail, shown.status === 'ready' && shown.next !== null, () => pager.next(expected))
+            }
           >
             {m.space_setup_board_choice_next()}
           </Button>
