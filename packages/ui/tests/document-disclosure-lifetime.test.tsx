@@ -40,3 +40,15 @@ test('independently serialized document snapshots keep SSR semantics and standal
   expect(standalone).toContain('Standalone secret');
   expect(standalone).toContain('aria-hidden="true"');
 });
+
+test('renderer-supported extension snapshots need no producer fallback to render', () => {
+  const document: DocumentSnapshot = {
+    version: 'rezics-document-v1',
+    profile: 'blocks',
+    doc: { type: 'doc', content: [{ type: 'extensionBlock', attrs: { definition: 'future' } }] },
+  };
+  expect(() => serializeDocument(document)).toThrow();
+  expect(renderToStaticMarkup(createElement(DocumentBody, { document }))).toContain(
+    'data-document-component="future">Embedded component</div>',
+  );
+});

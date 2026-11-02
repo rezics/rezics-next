@@ -1,5 +1,5 @@
 import { renderToReactElement } from '@tiptap/static-renderer/pm/react';
-import { serializeDocument, type DocumentSnapshot } from '@rezics/document';
+import { type DocumentSnapshot } from '@rezics/document';
 import { useState, type ReactNode } from 'react';
 import { DocumentSpoiler } from './document-spoiler.tsx';
 import { Prose } from './prose.tsx';
@@ -8,6 +8,18 @@ import { safeDocumentUrl } from './document-url.ts';
 import { NativeCheckbox } from './native-checkbox.tsx';
 
 const rel = 'noopener noreferrer nofollow ugc';
+
+function semanticSnapshotJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(semanticSnapshotJson).join(',')}]`;
+  if (value !== null && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${semanticSnapshotJson(record[key])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'null';
+}
 
 export const documentBodyLabels = {
   revealSpoiler: 'Reveal spoiler',
@@ -36,7 +48,7 @@ type Props = {
 
 /** Render a document snapshot without creating an editor or requiring a browser DOM. */
 export function DocumentBody({ document, className, labels, mentions, locale = 'en', renderImage }: Props) {
-  const semanticSnapshot = serializeDocument(document);
+  const semanticSnapshot = semanticSnapshotJson(document);
   const [visit, setVisit] = useState(() => ({ semanticSnapshot, id: 0 }));
   if (visit.semanticSnapshot !== semanticSnapshot) {
     // Restart this render before its children commit so replacement text cannot paint revealed.
