@@ -175,11 +175,7 @@ function EditorialContextWorkspaceLive({
       className="min-w-0 space-y-6"
       data-editorial-workspace
     >
-      <EditorialContextNavigation
-        locale={locale}
-        dirty={!currentId && draftDirty}
-        unsettled={createUnsettled}
-      />
+      <EditorialContextNavigation locale={locale} dirty={!currentId && draftDirty} unsettled={createUnsettled} />
       <ContentItemFrame as="div" className="min-w-0 space-y-6 p-4 [overflow-wrap:anywhere] sm:p-6" data-editorial-panel>
         <header className="space-y-2">
           <ContentItemHeading level={2} className="text-2xl font-semibold">
