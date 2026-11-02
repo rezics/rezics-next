@@ -17,7 +17,10 @@ import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
 
 function CreationFamily({
-  scenario = 'list', session = 'signed-in', independent = false, rtl = false,
+  scenario = 'list',
+  session = 'signed-in',
+  independent = false,
+  rtl = false,
 }: {
   scenario?: Scenario;
   session?: NavigationSession;
@@ -32,15 +35,25 @@ function CreationFamily({
       <AppShell navigation={zonesNavigation}>
         <div className="min-w-0 space-y-12" dir={rtl ? 'rtl' : undefined}>
           <div data-visit="first">
-            <CreateZone locale={locale} session={session} onCreate={first.create} onNavigate={() => {
-              /* Keep the saved Configure and Open destinations reviewable. */
-            }} />
+            <CreateZone
+              locale={locale}
+              session={session}
+              onCreate={first.create}
+              onNavigate={() => {
+                /* Keep the saved Configure and Open destinations reviewable. */
+              }}
+            />
           </div>
           {independent ? (
             <div data-visit="second">
-              <CreateZone locale={locale} session={session} onCreate={second.create} onNavigate={() => {
-                /* This visit owns its own synthetic native command and receipt. */
-              }} />
+              <CreateZone
+                locale={locale}
+                session={session}
+                onCreate={second.create}
+                onNavigate={() => {
+                  /* This visit owns its own synthetic native command and receipt. */
+                }}
+              />
             </div>
           ) : null}
         </div>
@@ -55,7 +68,9 @@ function RetiringCreation() {
   const [client] = useState(() => {
     const value = new QueryClient();
     value.setQueryData(sessionQuery.queryKey, {
-      state: 'signed-in', subject: 'synthetic-owner', csrfToken: 'AAAAAAAAAAAAAAAAAAAAAA',
+      state: 'signed-in',
+      subject: 'synthetic-owner',
+      csrfToken: 'AAAAAAAAAAAAAAAAAAAAAA',
     });
     return value;
   });
@@ -65,14 +80,27 @@ function RetiringCreation() {
     <PatternStory path="/my/zones/new" visitor="Signed In">
       <AppShell navigation={zonesNavigation}>
         <div className="min-w-0 space-y-6">
-          <Button variant="outline" onClick={() => {
-            client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null });
-            setSession('signed-out');
-          }}>{m.account_sign_out()}</Button>
-          <CreateZone locale={locale} session={session} owner={owner} onCreate={async (command, capture) => {
-            const result = await native.create(command);
-            return capture ? { ...result, ownerObservation: capture.observation } : result;
-          }} onNavigate={() => { /* Saved destination remains in the actual component. */ }} />
+          <Button
+            variant="outline"
+            onClick={() => {
+              client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null });
+              setSession('signed-out');
+            }}
+          >
+            {m.account_sign_out()}
+          </Button>
+          <CreateZone
+            locale={locale}
+            session={session}
+            owner={owner}
+            onCreate={async (command, capture) => {
+              const result = await native.create(command);
+              return capture ? { ...result, ownerObservation: capture.observation } : result;
+            }}
+            onNavigate={() => {
+              /* Saved destination remains in the actual component. */
+            }}
+          />
         </div>
       </AppShell>
     </PatternStory>
@@ -85,13 +113,18 @@ const meta = {
   tags: ['autodocs'],
   parameters: {
     layout: 'fullscreen',
-    viewport: { options: {
-      phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-      desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-    } },
-    docs: { description: { component:
-      'UNRUN actual CreateZone with the canonical zonesFixture native-shaped API. Review the complete journey at 390 and 1280, light/dark and all locale globals. The long-help example uses supplied German copy and the longest supplied starter name; no starter or help text is truncated or substituted. RTL is an inherited layout stress case, not a new supported UI language. DOM/play assertions do not establish geometry, native authorization, physical growth or browser acceptance. Creation adds zero reads, one POST per deliberate submit/retry and no whole-population traversal; the mounted regression authors 1/8/32-character and 1/4/8-language growth (the actual eight-language maximum).',
-    } },
+    viewport: {
+      options: {
+        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
+        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
+      },
+    },
+    docs: {
+      description: {
+        component:
+          'UNRUN actual CreateZone with the canonical zonesFixture native-shaped API. Review the complete journey at 390 and 1280, light/dark and all locale globals. The long-help example uses supplied German copy and the longest supplied starter name; no starter or help text is truncated or substituted. RTL is an inherited layout stress case, not a new supported UI language. DOM/play assertions do not establish geometry, native authorization, physical growth or browser acceptance. Creation adds zero reads, one POST per deliberate submit/retry and no whole-population traversal; the mounted regression authors 1/8/32-character and 1/4/8-language growth (the actual eight-language maximum).',
+      },
+    },
   },
 } satisfies Meta<typeof CreationFamily>;
 export default meta;
@@ -103,7 +136,10 @@ async function prepare(canvasElement: HTMLElement) {
   await userEvent.selectOptions(await canvas.findByLabelText(m.zones_create_starter()), 'book');
   await expect(canvas.getByLabelText(m.zone_name_primary())).toHaveValue('');
   await userEvent.selectOptions(canvas.getByLabelText(m.zone_name_language()), 'ja');
-  await userEvent.type(canvas.getByLabelText(m.zone_name_primary()), '長い名前の本棚と読書の記録、旅先で出会った物語と大切な思い出');
+  await userEvent.type(
+    canvas.getByLabelText(m.zone_name_primary()),
+    '長い名前の本棚と読書の記録、旅先で出会った物語と大切な思い出',
+  );
   await expect(canvas.getByLabelText(m.zone_name_primary())).toHaveAttribute('lang', 'ja');
   await expect(canvas.getByText(m.zones_create_names_help({}, { locale: locale as never }))).toBeVisible();
   return canvas;
@@ -139,7 +175,10 @@ export const IndependentVisits: Story = {
     const b = await second.findByLabelText(m.zones_create_starter());
     await expect(a.id).not.toBe(b.id);
     await expect(a.getAttribute('aria-describedby')).not.toBe(b.getAttribute('aria-describedby'));
-    for (const [host, select] of [[firstHost, a], [secondHost, b]] as const) {
+    for (const [host, select] of [
+      [firstHost, a],
+      [secondHost, b],
+    ] as const) {
       const label = [...host.querySelectorAll('label')].find((node) => node.htmlFor === select.id)!;
       await expect(label.control).toBe(select);
       await expect(host.contains(document.getElementById(select.getAttribute('aria-describedby')!))).toBe(true);
@@ -165,7 +204,9 @@ export const AuthoredNaming: Story = {
     const german = new Intl.DisplayNames([getLocale()], { type: 'language' }).of('de')!;
     await userEvent.type(canvas.getByLabelText(german), 'Meine Bücher und Geschichten von langen Reisen');
     await userEvent.selectOptions(canvas.getByLabelText(m.zones_create_starter()), 'visual-novel');
-    await expect(canvas.getByLabelText(m.zone_name_primary())).toHaveValue('長い名前の本棚と読書の記録、旅先で出会った物語と大切な思い出');
+    await expect(canvas.getByLabelText(m.zone_name_primary())).toHaveValue(
+      '長い名前の本棚と読書の記録、旅先で出会った物語と大切な思い出',
+    );
     await expect(canvas.getByLabelText(german)).toHaveValue('Meine Bücher und Geschichten von langen Reisen');
     await userEvent.selectOptions(canvas.getByLabelText(m.zone_name_language()), 'en');
     await expect(canvas.getByLabelText(m.zone_name_primary())).toHaveValue('');
@@ -177,10 +218,13 @@ export const LongLocalizedHelp: Story = {
   globals: { locale: 'de', viewport: { value: 'phone390', isRotated: false } },
   play: async ({ canvasElement }) => {
     const canvas = await prepare(canvasElement);
-    const longest = [...starterChoices].sort((a, b) =>
-      pickText(b.labels, 'de').text.length - pickText(a.labels, 'de').text.length)[0]!;
+    const longest = [...starterChoices].sort(
+      (a, b) => pickText(b.labels, 'de').text.length - pickText(a.labels, 'de').text.length,
+    )[0]!;
     await userEvent.selectOptions(canvas.getByLabelText(m.zones_create_starter()), longest.id);
-    await expect(canvas.getByLabelText(m.zones_create_starter())).toHaveAccessibleDescription(m.zones_create_starter_help());
+    await expect(canvas.getByLabelText(m.zones_create_starter())).toHaveAccessibleDescription(
+      m.zones_create_starter_help(),
+    );
     await expect(canvas.getByText(m.zones_create_visibility())).toBeVisible();
   },
 };
@@ -244,7 +288,9 @@ export const UncertainRetry: Story = {
     await expect(canvas.getByRole('button', { name: m.zones_create_submit() })).toBeDisabled();
     await userEvent.click(canvas.getByRole('button', { name: m.zones_owner_retry() }));
     await expect(await canvas.findByRole('link', { name: m.zones_owner_configure() })).toHaveAttribute(
-      'href', `/${getLocale()}/my/zones/${fixtureZoneId}/edit`);
+      'href',
+      `/${getLocale()}/my/zones/${fixtureZoneId}/edit`,
+    );
   },
 };
 export const RetiredOwner: Story = {
@@ -261,24 +307,39 @@ export const RetiredOwner: Story = {
 export const Loading: Story = { args: { session: 'unknown' } };
 export const SignedOut: Story = { args: { session: 'signed-out' } };
 export const SessionUnavailable: Story = { args: { session: 'unavailable' } };
-export const Saving: Story = { args: { scenario: 'saving' }, play: async ({ canvasElement }) => {
-  const canvas = await save(canvasElement);
-  await expect(canvas.getByRole('button', { name: m.zones_owner_working() })).toBeDisabled();
-} };
-export const Denied: Story = { args: { scenario: 'denied' }, play: async ({ canvasElement }) => {
-  const canvas = await save(canvasElement);
-  await expect(await canvas.findByRole('alert')).toHaveTextContent(m.zones_owner_denied());
-} };
-export const Unavailable: Story = { args: { scenario: 'unavailable' }, play: async ({ canvasElement }) => {
-  const canvas = await save(canvasElement);
-  await expect(await canvas.findByRole('alert')).toHaveTextContent(m.zones_owner_unavailable());
-  await expect(canvas.getByText(m.zones_create_uncertain())).toBeVisible();
-} };
-export const ActorDenied: Story = { args: { scenario: 'actor' }, play: async ({ canvasElement }) => {
-  const canvas = await save(canvasElement);
-  await expect(await canvas.findByRole('alert')).toHaveTextContent(m.zones_owner_actor());
-} };
-export const FeatureClosed: Story = { args: { scenario: 'closed' }, play: async ({ canvasElement }) => {
-  const canvas = await save(canvasElement);
-  await expect(await canvas.findByRole('alert')).toHaveTextContent(m.zones_owner_closed());
-} };
+export const Saving: Story = {
+  args: { scenario: 'saving' },
+  play: async ({ canvasElement }) => {
+    const canvas = await save(canvasElement);
+    await expect(canvas.getByRole('button', { name: m.zones_owner_working() })).toBeDisabled();
+  },
+};
+export const Denied: Story = {
+  args: { scenario: 'denied' },
+  play: async ({ canvasElement }) => {
+    const canvas = await save(canvasElement);
+    await expect(await canvas.findByRole('alert')).toHaveTextContent(m.zones_owner_denied());
+  },
+};
+export const Unavailable: Story = {
+  args: { scenario: 'unavailable' },
+  play: async ({ canvasElement }) => {
+    const canvas = await save(canvasElement);
+    await expect(await canvas.findByRole('alert')).toHaveTextContent(m.zones_owner_unavailable());
+    await expect(canvas.getByText(m.zones_create_uncertain())).toBeVisible();
+  },
+};
+export const ActorDenied: Story = {
+  args: { scenario: 'actor' },
+  play: async ({ canvasElement }) => {
+    const canvas = await save(canvasElement);
+    await expect(await canvas.findByRole('alert')).toHaveTextContent(m.zones_owner_actor());
+  },
+};
+export const FeatureClosed: Story = {
+  args: { scenario: 'closed' },
+  play: async ({ canvasElement }) => {
+    const canvas = await save(canvasElement);
+    await expect(await canvas.findByRole('alert')).toHaveTextContent(m.zones_owner_closed());
+  },
+};

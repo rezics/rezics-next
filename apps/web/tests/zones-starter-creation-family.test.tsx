@@ -53,11 +53,19 @@ afterAll(async () => {
     else Reflect.deleteProperty(globalThis, key);
   }
 });
-const settle = async (action: () => void | Promise<void>) => act(async () => { await action(); });
-const focusFrame = () => settle(() => { for (const callback of frames.splice(0)) callback(0); });
+const settle = async (action: () => void | Promise<void>) =>
+  act(async () => {
+    await action();
+  });
+const focusFrame = () =>
+  settle(() => {
+    for (const callback of frames.splice(0)) callback(0);
+  });
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((yes) => { resolve = yes; });
+  const promise = new Promise<T>((yes) => {
+    resolve = yes;
+  });
   return { promise, resolve };
 }
 async function mount(props: Partial<CreateProps> = {}) {
@@ -67,12 +75,19 @@ async function mount(props: Partial<CreateProps> = {}) {
   const root = createRoot(host);
   const navigations: string[] = [];
   const input: CreateProps = {
-    locale: 'en', session: 'signed-in', onCreate: native.create,
-    onNavigate: (href) => { navigations.push(href); }, ...props,
+    locale: 'en',
+    session: 'signed-in',
+    onCreate: native.create,
+    onNavigate: (href) => {
+      navigations.push(href);
+    },
+    ...props,
   };
   await settle(() => root.render(<CreateZone {...input} />));
   return {
-    host, native, navigations,
+    host,
+    native,
+    navigations,
     render: (next: Partial<CreateProps>) => settle(() => root.render(<CreateZone {...input} {...next} />)),
     close: async () => {
       await settle(() => root.unmount());
@@ -101,10 +116,10 @@ function change(control: HTMLInputElement | HTMLSelectElement, value: string) {
   control.dispatchEvent(new window.Event(control.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true }));
 }
 const choose = (host: HTMLElement, value = 'book', locale = 'en') => settle(() => change(starter(host, locale), value));
-const name = (host: HTMLElement, value: string, locale = 'en') => settle(() =>
-  change(byLabel<HTMLInputElement>(host, m.zone_name_primary({}, { locale: locale as never })), value));
-const submit = (host: HTMLElement, locale = 'en') => settle(() =>
-  button(host, m.zones_create_submit({}, { locale: locale as never })).click());
+const name = (host: HTMLElement, value: string, locale = 'en') =>
+  settle(() => change(byLabel<HTMLInputElement>(host, m.zone_name_primary({}, { locale: locale as never })), value));
+const submit = (host: HTMLElement, locale = 'en') =>
+  settle(() => button(host, m.zones_create_submit({}, { locale: locale as never })).click());
 function association(host: HTMLElement, locale: string) {
   const control = starter(host, locale);
   const label = [...host.querySelectorAll('label')].find((item) => item.htmlFor === control.id)!;
@@ -140,8 +155,9 @@ test('independent visits associate only their own localized starter label/help a
     await name(second.host, 'Meine eigenen langen Aufzeichnungen', 'de');
     await choose(first.host, 'game');
     expect(byLabel<HTMLInputElement>(first.host, m.zone_name_primary()).value).toBe('My own notes');
-    expect(byLabel<HTMLInputElement>(second.host, m.zone_name_primary({}, { locale: 'de' })).value)
-      .toBe('Meine eigenen langen Aufzeichnungen');
+    expect(byLabel<HTMLInputElement>(second.host, m.zone_name_primary({}, { locale: 'de' })).value).toBe(
+      'Meine eigenen langen Aufzeichnungen',
+    );
     expect(first.native.calls).toHaveLength(0);
     expect(second.native.calls).toHaveLength(0);
     await submit(first.host);
@@ -149,16 +165,25 @@ test('independent visits associate only their own localized starter label/help a
     expect(second.native.calls).toHaveLength(0);
     expect(first.native.calls[0]!.body).toEqual({
       configuration: { ...copyStarter('game'), labels: { en: 'My own notes' }, primaryLanguage: 'en' },
-      mounts: [], visibility: 'private',
+      mounts: [],
+      visibility: 'private',
     });
     await submit(second.host, 'de');
     expect(second.native.calls[0]!.body).toEqual({
-      configuration: { ...copyStarter('visual-novel'), labels: { de: 'Meine eigenen langen Aufzeichnungen' }, primaryLanguage: 'de' },
-      mounts: [], visibility: 'private',
+      configuration: {
+        ...copyStarter('visual-novel'),
+        labels: { de: 'Meine eigenen langen Aufzeichnungen' },
+        primaryLanguage: 'de',
+      },
+      mounts: [],
+      visibility: 'private',
     });
     expect(first.navigations).toEqual([`/en/my/zones/${fixtureZoneId}/edit`]);
     expect(second.navigations).toEqual([`/de/my/zones/${fixtureZoneId}/edit`]);
-    for (const [visit, locale] of [[first, 'en'], [second, 'de']] as const) {
+    for (const [visit, locale] of [
+      [first, 'en'],
+      [second, 'de'],
+    ] as const) {
       const links = [...visit.host.querySelectorAll('a')];
       const configure = links.find((link) => link.textContent === m.zones_owner_configure({}, { locale }))!;
       const open = links.find((link) => link.textContent === m.zones_owner_open({}, { locale }))!;
@@ -170,7 +195,10 @@ test('independent visits associate only their own localized starter label/help a
       expect(document.activeElement).toBe(open);
       expect(visit.host.textContent).toContain(m.zones_create_reader_help({}, { locale }));
     }
-  } finally { await first.close(); await second.close(); }
+  } finally {
+    await first.close();
+    await second.close();
+  }
 });
 
 test('primary language and optional translations preserve authored drafts, reveal invalid translations, and never copy starter names', async () => {
@@ -198,7 +226,10 @@ test('primary language and optional translations preserve authored drafts, revea
     await choose(visit.host, 'manga');
     expect(primary().value).toBe('私の本棚');
     const details = visit.host.querySelector('details')!;
-    await settle(() => { details.open = true; change(byLabel(visit.host, m.zone_name_add()), 'de'); });
+    await settle(() => {
+      details.open = true;
+      change(byLabel(visit.host, m.zone_name_add()), 'de');
+    });
     const german = new Intl.DisplayNames(['en'], { type: 'language' }).of('de')!;
     expect(byLabel<HTMLInputElement>(visit.host, german).value).toBe('');
     details.open = false;
@@ -214,11 +245,15 @@ test('primary language and optional translations preserve authored drafts, revea
     expect(visit.native.calls).toHaveLength(1);
     const labels = { en: 'English authored name', ja: '私の本棚' };
     expect(visit.native.calls[0]!.body).toEqual({
-      configuration: { ...copyStarter('manga'), primaryLanguage: 'ja', labels }, mounts: [], visibility: 'private',
+      configuration: { ...copyStarter('manga'), primaryLanguage: 'ja', labels },
+      mounts: [],
+      visibility: 'private',
     });
     expect(pickZoneName({ primaryLanguage: 'ja', labels }, 'fr')).toEqual({ text: '私の本棚', lang: 'ja' });
     expect(copyStarter('manga')!.labels).not.toEqual(labels);
-  } finally { await visit.close(); }
+  } finally {
+    await visit.close();
+  }
 });
 
 const csrfA = 'AAAAAAAAAAAAAAAAAAAAAA';
@@ -235,16 +270,37 @@ function sender(native: ReturnType<typeof zonesFixture>) {
     if (!capture) throw new Error('Missing original admission');
     calls.push({ command: structuredClone(command), capture });
     const env = {
-      AUTH_ISSUER: 'https://auth.test', API_RESOURCE: 'https://kernel.test', WEBSITE_SCOPES: 'openid',
-      WEBSITE_CLIENT_ID: 'site', WEBSITE_CLIENT_KEY: '{}',
+      AUTH_ISSUER: 'https://auth.test',
+      API_RESOURCE: 'https://kernel.test',
+      WEBSITE_SCOPES: 'openid',
+      WEBSITE_CLIENT_ID: 'site',
+      WEBSITE_CLIENT_KEY: '{}',
       SESSIONS: {
         idFromName: (id: string) => id,
-        get: () => ({ credential: async () => ({ status: 'active', accessToken: 'original-access', subject: 'A', csrfToken: csrfA }) }),
+        get: () => ({
+          credential: async () => ({
+            status: 'active',
+            accessToken: 'original-access',
+            subject: 'A',
+            csrfToken: csrfA,
+          }),
+        }),
       },
     } as never;
-    return createOwnedZone(native.client, new Request('https://site.test/action', {
-      method: 'POST', headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}`, origin: 'https://site.test', 'X-CSRF-Token': capture.csrfToken ?? '' },
-    }), env, command, capture.observation);
+    return createOwnedZone(
+      native.client,
+      new Request('https://site.test/action', {
+        method: 'POST',
+        headers: {
+          cookie: `__Host-rezics_session=${'a'.repeat(43)}`,
+          origin: 'https://site.test',
+          'X-CSRF-Token': capture.csrfToken ?? '',
+        },
+      }),
+      env,
+      command,
+      capture.observation,
+    );
   };
   return { calls, run };
 }
@@ -274,10 +330,15 @@ test('uncertain retry freezes the exact original body/key/credential/admission a
     expect(native.calls[1]).toEqual(native.calls[0]);
     expect(native.calls[1]!.authorization).toBe('Bearer original-access');
     expect(native.calls[1]!.body).toEqual({
-      configuration: { ...copyStarter('book'), primaryLanguage: 'en', labels: { en: 'Original request' } }, mounts: [], visibility: 'private',
+      configuration: { ...copyStarter('book'), primaryLanguage: 'en', labels: { en: 'Original request' } },
+      mounts: [],
+      visibility: 'private',
     });
     expect(visit.navigations).toEqual([`/en/my/zones/${fixtureZoneId}/edit`]);
-  } finally { await visit.close(); client.clear(); }
+  } finally {
+    await visit.close();
+    client.clear();
+  }
 });
 
 test('conflict review unlocks the retained draft, focuses its own starter and allocates only an explicit new command', async () => {
@@ -300,7 +361,9 @@ test('conflict review unlocks the retained draft, focuses its own starter and al
     expect(native.calls).toHaveLength(2);
     expect(native.calls[1]!.key).not.toBe(native.calls[0]!.key);
     expect(native.calls[1]!.body).toEqual(native.calls[0]!.body);
-  } finally { await visit.close(); }
+  } finally {
+    await visit.close();
+  }
 });
 
 for (const session of ['unknown', 'signed-out', 'unavailable'] as const) {
@@ -309,12 +372,21 @@ for (const session of ['unknown', 'signed-out', 'unavailable'] as const) {
     try {
       expect(visit.host.querySelector('form')).toBeNull();
       expect(visit.native.calls).toHaveLength(0);
-      expect(visit.host.textContent).toContain(session === 'unknown' ? m.zones_owner_loading()
-        : session === 'signed-out' ? m.zones_owner_signed_out() : m.zones_owner_unavailable());
-      if (session === 'signed-out') expect(visit.host.querySelector('a[href^="/auth/sign-in"]')?.getAttribute('href'))
-        .toBe('/auth/sign-in?return_to=%2Fen%2Fmy%2Fzones%2Fnew');
+      expect(visit.host.textContent).toContain(
+        session === 'unknown'
+          ? m.zones_owner_loading()
+          : session === 'signed-out'
+            ? m.zones_owner_signed_out()
+            : m.zones_owner_unavailable(),
+      );
+      if (session === 'signed-out')
+        expect(visit.host.querySelector('a[href^="/auth/sign-in"]')?.getAttribute('href')).toBe(
+          '/auth/sign-in?return_to=%2Fen%2Fmy%2Fzones%2Fnew',
+        );
       expect(visit.host.querySelector('[role="alert"]') !== null).toBe(session !== 'unknown');
-    } finally { await visit.close(); }
+    } finally {
+      await visit.close();
+    }
   });
 }
 for (const scenario of ['denied', 'actor', 'closed', 'missing', 'invalid', 'unavailable'] as const) {
@@ -325,22 +397,35 @@ for (const scenario of ['denied', 'actor', 'closed', 'missing', 'invalid', 'unav
       await choose(visit.host);
       await name(visit.host, 'Retained name');
       await submit(visit.host);
-      const messages = { denied: m.zones_owner_denied, actor: m.zones_owner_actor, closed: m.zones_owner_closed,
-        missing: m.zones_owner_missing, invalid: m.zones_owner_invalid, unavailable: m.zones_owner_unavailable };
+      const messages = {
+        denied: m.zones_owner_denied,
+        actor: m.zones_owner_actor,
+        closed: m.zones_owner_closed,
+        missing: m.zones_owner_missing,
+        invalid: m.zones_owner_invalid,
+        unavailable: m.zones_owner_unavailable,
+      };
       expect(visit.host.querySelector('[role="alert"]')?.textContent).toContain(messages[scenario]());
       expect(byLabel<HTMLInputElement>(visit.host, m.zone_name_primary()).value).toBe('Retained name');
       expect(visit.host.textContent).not.toContain(m.zones_create_saved());
       expect(visit.navigations).toHaveLength(0);
       expect(native.calls).toHaveLength(1);
       expect(starter(visit.host).disabled).toBe(scenario === 'unavailable');
-    } finally { await visit.close(); }
+    } finally {
+      await visit.close();
+    }
   });
 }
 
 test('saving remains busy and a missing CSRF credential cannot submit', async () => {
   const pending = deferred<CommandOutcome>();
   let calls = 0;
-  const visit = await mount({ onCreate: () => { calls++; return pending.promise; } });
+  const visit = await mount({
+    onCreate: () => {
+      calls++;
+      return pending.promise;
+    },
+  });
   try {
     await choose(visit.host);
     await name(visit.host, 'Pending');
@@ -349,9 +434,13 @@ test('saving remains busy and a missing CSRF credential cannot submit', async ()
     expect(visit.host.querySelector('form')?.getAttribute('aria-busy')).toBe('true');
     expect(button(visit.host, m.zones_owner_working()).disabled).toBe(true);
     pending.resolve({ kind: 'denied' });
-    await settle(async () => { await pending.promise; });
+    await settle(async () => {
+      await pending.promise;
+    });
     expect(visit.host.querySelector('form')?.getAttribute('aria-busy')).toBe('false');
-  } finally { await visit.close(); }
+  } finally {
+    await visit.close();
+  }
   const { client, owner } = owned();
   client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'A', csrfToken: null });
   const noCredential = await mount({ owner });
@@ -360,7 +449,10 @@ test('saving remains busy and a missing CSRF credential cannot submit', async ()
     await name(noCredential.host, 'Cannot send');
     expect(button(noCredential.host, m.zones_create_submit()).disabled).toBe(true);
     expect(noCredential.native.calls).toHaveLength(0);
-  } finally { await noCredential.close(); client.clear(); }
+  } finally {
+    await noCredential.close();
+    client.clear();
+  }
 });
 
 // Retain the actual pre-retirement React event closure, including the synchronous
@@ -377,7 +469,13 @@ for (const retirement of ['end', 'aba', 'response-aba'] as const) {
     const old = owner.capture()!;
     const pending = deferred<CommandOutcome>();
     let calls = 0;
-    const visit = await mount({ owner, onCreate: () => { calls++; return pending.promise; } });
+    const visit = await mount({
+      owner,
+      onCreate: () => {
+        calls++;
+        return pending.promise;
+      },
+    });
     try {
       await choose(visit.host);
       await name(visit.host, 'Retire this private draft');
@@ -385,17 +483,26 @@ for (const retirement of ['end', 'aba', 'response-aba'] as const) {
       await submit(visit.host);
       await settle(() => {
         if (retirement === 'end') owner.end();
-        else if (retirement === 'aba') notifyManager.batch(() => {
-          const query = client.getQueryCache().find({ queryKey: sessionQuery.queryKey, exact: true })!;
-          const original = query.state;
-          query.setState({ data: { state: 'signed-in', subject: 'B', csrfToken: csrfB } });
-          query.setState(original);
-        });
+        else if (retirement === 'aba')
+          notifyManager.batch(() => {
+            const query = client.getQueryCache().find({ queryKey: sessionQuery.queryKey, exact: true })!;
+            const original = query.state;
+            query.setState({ data: { state: 'signed-in', subject: 'B', csrfToken: csrfB } });
+            query.setState(original);
+          });
         submitAgain();
       });
-      pending.resolve({ kind: 'saved', zone: fixtureZone(), ownerObservation: retirement === 'response-aba'
-        ? { ...old.observation, admission: `0:0:${crypto.randomUUID()}` } : old.observation });
-      await settle(async () => { await pending.promise; });
+      pending.resolve({
+        kind: 'saved',
+        zone: fixtureZone(),
+        ownerObservation:
+          retirement === 'response-aba'
+            ? { ...old.observation, admission: `0:0:${crypto.randomUUID()}` }
+            : old.observation,
+      });
+      await settle(async () => {
+        await pending.promise;
+      });
       await focusFrame();
       expect(owner.isCurrent(old)).toBe(false);
       expect(calls).toBe(1);
@@ -412,7 +519,10 @@ for (const retirement of ['end', 'aba', 'response-aba'] as const) {
         expect(starter(visit.host).value).toBe('');
         expect(owner.capture()?.observation.admission).not.toBe(old.observation.admission);
       }
-    } finally { await visit.close(); client.clear(); }
+    } finally {
+      await visit.close();
+      client.clear();
+    }
   });
 }
 
@@ -434,14 +544,20 @@ test('all supplied locales retain complete starter/help text and actual bounded 
       expect(visit.host.textContent).toContain(m.zones_create_visibility({}, { locale }));
       expect(visit.host.querySelector('a')?.getAttribute('href')).toBe(`/${locale}/my/zones`);
       expect(visit.native.calls).toHaveLength(0);
-    } finally { await visit.close(); }
+    } finally {
+      await visit.close();
+    }
   }
   expect(pickText({ ja: '私の本棚' }, 'fr')).toEqual({ text: '私の本棚', lang: 'ja' });
 });
 
 test('supplied name growth at 1/8/32 characters and 1/4/8 languages adds no IO or hidden traversal', async () => {
   // Eight is the actual closed language/starter set, not an invented backend cap.
-  for (const [count, length] of [[1, 1], [4, 8], [8, 32]] as const) {
+  for (const [count, length] of [
+    [1, 1],
+    [4, 8],
+    [8, 32],
+  ] as const) {
     const visit = await mount();
     try {
       await choose(visit.host);
@@ -462,23 +578,31 @@ test('supplied name growth at 1/8/32 characters and 1/4/8 languages adds no IO o
       expect(visit.native.calls[0]!.method).toBe('POST');
       expect(visit.native.calls[0]!.path).toBe('/v1/zones');
       expect(visit.native.calls[0]!.body).toEqual({
-        configuration: { ...copyStarter('game'), primaryLanguage: 'en',
-          labels: Object.fromEntries(UI_LOCALES.slice(0, count).map((language) => [language, '名'.repeat(length)])) },
-        mounts: [], visibility: 'private',
+        configuration: {
+          ...copyStarter('game'),
+          primaryLanguage: 'en',
+          labels: Object.fromEntries(UI_LOCALES.slice(0, count).map((language) => [language, '名'.repeat(length)])),
+        },
+        mounts: [],
+        visibility: 'private',
       });
-    } finally { await visit.close(); }
+    } finally {
+      await visit.close();
+    }
   }
 });
 
 test('a thrown delivery keeps an immutable uncertain command for an explicit retry', async () => {
   const commands: CreateCommand[] = [];
-  const visit = await mount({ onCreate: async (input) => {
-    commands.push(structuredClone(input));
-    // Transport mutation cannot alter the page's retained original.
-    input.labels.en = 'Transport-local mutation';
-    if (commands.length === 1) throw new Error('Response lost');
-    return { kind: 'saved', zone: fixtureZone() };
-  } });
+  const visit = await mount({
+    onCreate: async (input) => {
+      commands.push(structuredClone(input));
+      // Transport mutation cannot alter the page's retained original.
+      input.labels.en = 'Transport-local mutation';
+      if (commands.length === 1) throw new Error('Response lost');
+      return { kind: 'saved', zone: fixtureZone() };
+    },
+  });
   try {
     await choose(visit.host);
     await name(visit.host, 'Retained across throw');
@@ -489,7 +613,9 @@ test('a thrown delivery keeps an immutable uncertain command for an explicit ret
     expect(commands[1]).toEqual(commands[0]);
     expect(commands[1]!.labels).toEqual({ en: 'Retained across throw' });
     expect(visit.navigations).toHaveLength(1);
-  } finally { await visit.close(); }
+  } finally {
+    await visit.close();
+  }
 });
 
 test('retired uncertain retry and queued native focus cannot affect another independent visit', async () => {
@@ -510,10 +636,19 @@ test('retired uncertain retry and queued native focus cannot affect another inde
     await settle(() => {
       owner.end();
       const event = new window.MouseEvent('click', { bubbles: true, cancelable: true });
-      callback({ nativeEvent: event, target: retry, currentTarget: retry,
-        get defaultPrevented() { return event.defaultPrevented; },
-        preventDefault: () => event.preventDefault(), stopPropagation: () => event.stopPropagation(),
-        isPropagationStopped: () => false, isDefaultPrevented: () => event.defaultPrevented, persist() {} });
+      callback({
+        nativeEvent: event,
+        target: retry,
+        currentTarget: retry,
+        get defaultPrevented() {
+          return event.defaultPrevented;
+        },
+        preventDefault: () => event.preventDefault(),
+        stopPropagation: () => event.stopPropagation(),
+        isPropagationStopped: () => false,
+        isDefaultPrevented: () => event.defaultPrevented,
+        persist() {},
+      });
     });
     starter(current.host).focus();
     await focusFrame();
@@ -530,5 +665,9 @@ test('retired uncertain retry and queued native focus cannot affect another inde
     expect(current.native.calls).toHaveLength(1);
     expect(retired.navigations).toHaveLength(0);
     expect(current.navigations).toHaveLength(1);
-  } finally { await retired.close(); await current.close(); client.clear(); }
+  } finally {
+    await retired.close();
+    await current.close();
+    client.clear();
+  }
 });

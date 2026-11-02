@@ -135,7 +135,10 @@ function CreateVisit({ locale, session, owner, onCreate, onNavigate }: CreatePro
       }}
       className="mx-auto w-full max-w-3xl min-w-0 space-y-6 break-words text-foreground"
     >
-      <a className={`inline-flex items-center rounded-md px-2 underline ${actionClassName}`} href={zonePaths(locale).list}>
+      <a
+        className={`inline-flex items-center rounded-md px-2 underline ${actionClassName}`}
+        href={zonePaths(locale).list}
+      >
         {m.zones_owner_title({}, options)}
       </a>
       <header className="space-y-3">
@@ -149,7 +152,10 @@ function CreateVisit({ locale, session, owner, onCreate, onNavigate }: CreatePro
             <a className={`${buttonVariants()} ${actionClassName}`} href={zonePaths(locale, result.zone.id).edit}>
               {m.zones_owner_configure({}, options)}
             </a>
-            <a className={`${buttonVariants({ variant: 'outline' })} ${actionClassName}`} href={zonePaths(locale, result.zone.id).reader}>
+            <a
+              className={`${buttonVariants({ variant: 'outline' })} ${actionClassName}`}
+              href={zonePaths(locale, result.zone.id).reader}
+            >
               {m.zones_owner_open({}, options)}
             </a>
           </div>
@@ -169,7 +175,9 @@ function CreateVisit({ locale, session, owner, onCreate, onNavigate }: CreatePro
         <form className="min-w-0 space-y-6" noValidate onSubmit={submit} aria-busy={busy}>
           <ContentItemFrame as="div" className="min-w-0 space-y-4 p-3 sm:p-4">
             <Field data-invalid={invalid && !starter}>
-              <FieldLabel className="whitespace-normal" htmlFor={`${starterId}-zone-starter`}>{m.zones_create_starter({}, options)}</FieldLabel>
+              <FieldLabel className="whitespace-normal" htmlFor={`${starterId}-zone-starter`}>
+                {m.zones_create_starter({}, options)}
+              </FieldLabel>
               <NativeSelect
                 id={`${starterId}-zone-starter`}
                 className="w-full max-w-full [&_select]:h-auto [&_select]:min-h-8 [&_select]:max-w-full [&_select]:whitespace-normal [&_select]:break-words [@media(pointer:coarse)]:[&_select]:min-h-11"
@@ -188,12 +196,19 @@ function CreateVisit({ locale, session, owner, onCreate, onNavigate }: CreatePro
               >
                 <NativeSelectOption value="">{m.zones_create_choose({}, options)}</NativeSelectOption>
                 {starterChoices.map((choice) => (
-                  <NativeSelectOption key={choice.id} value={choice.id} lang={pickText(choice.labels, locale).lang ?? undefined} dir="auto">
+                  <NativeSelectOption
+                    key={choice.id}
+                    value={choice.id}
+                    lang={pickText(choice.labels, locale).lang ?? undefined}
+                    dir="auto"
+                  >
                     {pickText(choice.labels, locale).text}
                   </NativeSelectOption>
                 ))}
               </NativeSelect>
-              <FieldDescription id={`${starterId}-zone-starter-help`}>{m.zones_create_starter_help({}, options)}</FieldDescription>
+              <FieldDescription id={`${starterId}-zone-starter-help`}>
+                {m.zones_create_starter_help({}, options)}
+              </FieldDescription>
             </Field>
             <p className="text-muted-foreground">{m.zones_create_visibility({}, options)}</p>
           </ContentItemFrame>
