@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import * as fs from 'node:fs';
 import {
   mkdirSync,
   readFileSync,
@@ -7,7 +8,6 @@ import {
   rmSync,
   rmdirSync,
   unlinkSync,
-  writeFileSync,
 } from 'node:fs';
 import { dirname, join } from 'node:path';
 
@@ -78,9 +78,9 @@ export function acquireDirectoryLease(directory: string): DirectoryLease {
   if (!identity) throw new Error('Cannot identify lease owner');
   const token = randomUUID();
   const prepared = join(dirname(directory), `${token}.initializing`);
-  mkdirSync(prepared);
-  writeFileSync(join(prepared, `${token}.json`), JSON.stringify({ ...identity, token }));
   try {
+    fs.mkdirSync(prepared);
+    fs.writeFileSync(join(prepared, `${token}.json`), JSON.stringify({ ...identity, token }));
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         // Publish a populated directory atomically: no empty new-owner window for a reaper.
@@ -125,6 +125,10 @@ export function acquireDirectoryLease(directory: string): DirectoryLease {
     }
     throw new LeaseHeldError(`Lease held: ${directory}`);
   } finally {
-    rmSync(prepared, { recursive: true, force: true });
+    try {
+      rmSync(prepared, { recursive: true, force: true });
+    } catch {
+      // Keep the original initialization or acquire error.
+    }
   }
 }
