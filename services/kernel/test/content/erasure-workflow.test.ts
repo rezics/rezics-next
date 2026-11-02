@@ -456,7 +456,7 @@ async function launchSelection(
   return { handle, workflowId, operationId: source.value.operationId };
 }
 
-test('author erasure deletes account notices and its seen marker through bounded pages', async () => {
+test('author erasure preserves the complete account inbox and its seen marker', async () => {
   const selected = await scope(1);
   const accountId = selected.actor.accountId;
   const accountRoute = routeOf(accountId)!;
@@ -474,6 +474,23 @@ test('author erasure deletes account notices and its seen marker through bounded
     [accountRoute, accountId, seenNoticeId],
   );
 
+  const readNotices = () =>
+    fixture.reader.query(
+      `SELECT to_jsonb(notice) AS notice FROM content.notice AS notice
+       WHERE route = $1 AND recipient_id = $2 ORDER BY created_at DESC, notice_id DESC`,
+      [accountRoute, accountId],
+    );
+  const readSeen = () =>
+    fixture.reader.query(
+      `SELECT to_jsonb(seen) AS seen FROM content.notice_seen AS seen
+       WHERE route = $1 AND account_id = $2`,
+      [accountRoute, accountId],
+    );
+  const noticesBefore = await readNotices();
+  const seenBefore = await readSeen();
+  expect(noticesBefore.rows).toHaveLength(2001);
+  expect(seenBefore.rows).toHaveLength(1);
+
   const trace = observeSql(systemPool);
   try {
     const { handle } = await launchSelection(selected);
@@ -481,21 +498,15 @@ test('author erasure deletes account notices and its seen marker through bounded
   } finally {
     await trace.close();
   }
+  expect(trace.records.filter((record) => /\bDELETE\s+FROM\s+content\.notice\b/i.test(record.statement))).toHaveLength(
+    0,
+  );
   expect(
-    trace.records.filter((record) => /DELETE FROM content\.notice AS notice/i.test(record.statement)),
-  ).toHaveLength(3);
-  expect(trace.records.filter((record) => /DELETE FROM content\.notice_seen/i.test(record.statement))).toHaveLength(1);
+    trace.records.filter((record) => /\bDELETE\s+FROM\s+content\.notice_seen\b/i.test(record.statement)),
+  ).toHaveLength(0);
 
-  const notices = await fixture.reader.query(
-    'SELECT notice_id FROM content.notice WHERE route = $1 AND recipient_id = $2',
-    [accountRoute, accountId],
-  );
-  const seen = await fixture.reader.query(
-    'SELECT account_id FROM content.notice_seen WHERE route = $1 AND account_id = $2',
-    [accountRoute, accountId],
-  );
-  expect(notices.rows).toHaveLength(0);
-  expect(seen.rows).toHaveLength(0);
+  expect((await readNotices()).rows).toEqual(noticesBefore.rows);
+  expect((await readSeen()).rows).toEqual(seenBefore.rows);
   await fixture.reader.query('TRUNCATE TABLE content.notice_seen, content.notice');
 });
 
