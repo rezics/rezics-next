@@ -241,7 +241,7 @@ test('inherited declarations and axes cannot establish complete funding or consu
   expect(original.available('statements')).toBe(MEMBERS_PREPARATION_CHILDREN.length * 2);
 });
 
-test('already funded rollback and cleanup survive expiry without refunding a failed producer prefix', () => {
+test('already funded rollback and cleanup survive expiry and retain dispatched producer work', () => {
   const original = parent();
   const funded = transferMembersPreparationBudget(original, 'key', declarations());
   const rollback = funded.children.rollback.reserve(cost(1), true);

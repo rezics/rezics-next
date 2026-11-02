@@ -48,22 +48,22 @@ export type MembersPreparationOwnerDeclarations = Omit<MembersPreparationDeclara
 
 function snapshot(value: WorkDimensions | null): WorkDimensions {
   if (!value) throw new ProblemError('dependency_unavailable');
-  value = { ...value };
+  const declared = { ...value };
   if (
     OPERATIONAL_WORK_AXES.some(
-      (axis) => !Object.hasOwn(value, axis) || !Number.isSafeInteger(value[axis]) || value[axis] < 0,
+      (axis) => !Object.hasOwn(declared, axis) || !Number.isSafeInteger(declared[axis]) || declared[axis] < 0,
     )
   )
     throw new TypeError('Incomplete Members preparation declaration');
   return Object.freeze({
-    candidateKeys: value.candidateKeys,
-    nativeRows: value.nativeRows,
-    identityMetadataRows: value.identityMetadataRows,
-    emptySeeks: value.emptySeeks,
-    nativePoints: value.nativePoints,
-    witnessKeys: value.witnessKeys,
-    statements: value.statements,
-    bytes: value.bytes,
+    candidateKeys: declared.candidateKeys,
+    nativeRows: declared.nativeRows,
+    identityMetadataRows: declared.identityMetadataRows,
+    emptySeeks: declared.emptySeeks,
+    nativePoints: declared.nativePoints,
+    witnessKeys: declared.witnessKeys,
+    statements: declared.statements,
+    bytes: declared.bytes,
   });
 }
 
