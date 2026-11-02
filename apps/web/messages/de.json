@@ -1,4 +1,13 @@
 {
+  "collection_filter_address_rejected": "Dieser Filterlink kann nicht angewendet werden. Für diese Adresse wurden keine Mitglieder angefordert. Korrigiere oder lösche die Filter, um fortzufahren.",
+  "collection_filter_address_limit": "Verwende höchstens 64 Werte für diese Facette. Die Korrektur entfernt die gesamte Facette.",
+  "collection_filter_address_ambiguous": "Verwende einen Bereich pro Eigenschaft. Die Korrektur entfernt alle wiederholten Bereiche.",
+  "collection_filter_address_invalid": "Diese Auswahl wird nicht unterstützt. Die Korrektur entfernt die gesamte Auswahl.",
+  "collection_filter_address_correct": "Akzeptierte Auswahl verwenden",
+  "collection_filter_address_inspect": "Filteradresse und Auswahl prüfen",
+  "collection_filter_address_original": "Ursprüngliche Adresse",
+  "collection_filter_address_accepted": "Vollständige akzeptierte Auswahl",
+  "collection_filter_address_labels": "Bezeichnungen dienen nur der Anzeige; die genauen Kennungen oben bestimmen den Filter.",
   "moderation_appeals_read_loading": "Einsprüche werden geladen…",
   "moderation_appeals_read_unavailable": "Einsprüche sind derzeit nicht verfügbar. Versuche diese Seite erneut zu laden.",
   "moderation_appeals_read_stale": "Diese Einspruchsseite ist abgelaufen. Beginne erneut auf der ersten Seite.",

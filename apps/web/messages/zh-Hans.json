@@ -1,4 +1,13 @@
 {
+  "collection_filter_address_rejected": "无法应用此筛选链接。尚未为此地址请求任何成员。请修正或清除筛选条件以继续。",
+  "collection_filter_address_limit": "每个分面最多可提供64个值。修正将移除整个分面。",
+  "collection_filter_address_ambiguous": "每个属性只能指定一个范围。修正将移除所有重复范围。",
+  "collection_filter_address_invalid": "此选项不受支持。修正将移除整个选项。",
+  "collection_filter_address_correct": "使用已接受的选项",
+  "collection_filter_address_inspect": "检查筛选地址和选项",
+  "collection_filter_address_original": "原始地址",
+  "collection_filter_address_accepted": "完整的已接受选项",
+  "collection_filter_address_labels": "标签提示仅用于显示；筛选条件由上方的精确标识符决定。",
   "moderation_appeals_read_loading": "正在加载申诉…",
   "moderation_appeals_read_unavailable": "目前无法加载申诉。请重试当前页。",
   "moderation_appeals_read_stale": "此申诉页面已过期。请从第一页重新开始。",

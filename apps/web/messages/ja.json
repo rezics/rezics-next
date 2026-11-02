@@ -1,4 +1,13 @@
 {
+  "collection_filter_address_rejected": "このフィルターリンクは適用できません。このアドレスのメンバーはリクエストされていません。フィルターを修正または解除して続行してください。",
+  "collection_filter_address_limit": "このファセットの値は64個以下にしてください。修正すると、このファセット全体が削除されます。",
+  "collection_filter_address_ambiguous": "プロパティごとに範囲を1つだけ指定してください。修正すると、重複した範囲がすべて削除されます。",
+  "collection_filter_address_invalid": "この選択には対応していません。修正すると、この選択全体が削除されます。",
+  "collection_filter_address_correct": "受け入れられた選択を使用",
+  "collection_filter_address_inspect": "フィルターのアドレスと選択を確認",
+  "collection_filter_address_original": "元のアドレス",
+  "collection_filter_address_accepted": "受け入れられた選択の全内容",
+  "collection_filter_address_labels": "ラベルは表示専用です。フィルターは上記の正確な識別子で決まります。",
   "moderation_appeals_read_loading": "異議申し立てを読み込み中…",
   "moderation_appeals_read_unavailable": "現在、異議申し立てを読み込めません。このページを再試行してください。",
   "moderation_appeals_read_stale": "この異議申し立てページは期限切れです。最初のページからやり直してください。",

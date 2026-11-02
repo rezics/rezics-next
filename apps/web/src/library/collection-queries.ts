@@ -19,6 +19,7 @@ import {
 } from './collection-load';
 import { readRelease } from '../subject/definitions';
 import { readCollectionFilterParams } from './collection-filter-params';
+import { collectionFilterSearch, readCollectionFilterAddress } from './collection-filter-address-read';
 import { facetProperties } from '@rezics/filter';
 import { requestLocale } from '../kernel/client';
 import { m } from '../paraglide/messages.js';
@@ -50,17 +51,8 @@ function validatePageInput(input: unknown): {
       input.credentialMode !== 'session')
   )
     throw notFound();
-  const search: Record<string, string | string[]> = {};
-  if ('search' in input && input.search && typeof input.search === 'object') {
-    for (const [key, value] of Object.entries(input.search).slice(0, 16)) {
-      if (key === 'type' && typeof value === 'string' && value.length <= 128) search[key] = value;
-      else if (
-        /^[frl]\.[a-zA-Z0-9:_.-]{1,128}$/.test(key) &&
-        (typeof value === 'string' || (Array.isArray(value) && value.every((entry) => typeof entry === 'string')))
-      )
-        search[key] = value as string | string[];
-    }
-  }
+  const search =
+    'search' in input && input.search && typeof input.search === 'object' ? collectionFilterSearch(input.search) : {};
   return {
     id: input.id,
     filterActive:
@@ -74,7 +66,8 @@ function validatePageInput(input: unknown): {
 
 function hasActiveFilter(search: object | undefined): boolean {
   return Object.entries(search ?? {}).some(([key, value]) => {
-    if (key !== 'type' && !/^[frl]\./.test(key)) return false;
+    if (/^[fr]\./.test(key)) return true;
+    if (key !== 'type') return false;
     return Array.isArray(value)
       ? value.some((entry) => typeof entry === 'string' && Boolean(entry))
       : typeof value === 'string' && Boolean(value);
@@ -123,15 +116,9 @@ export const readCollectionPage = createServerFn({ method: 'GET' })
               },
             ];
           });
-        filter = readCollectionFilterParams(
-          new URLSearchParams(
-            Object.entries(requested).flatMap(([key, value]) =>
-              (Array.isArray(value) ? value : [value]).map((entry) => [key, entry] as [string, string]),
-            ),
-          ),
-          release,
-          type,
-        );
+        const admission = readCollectionFilterAddress(requested, release, type);
+        filter = admission.filterParams;
+        filterStatus = admission.filterStatus;
       } catch {
         if (data.filterActive) filterStatus = 'failed';
       }
@@ -210,16 +197,8 @@ export const readDynamicCollectionMembers = createServerFn({ method: 'GET' })
         input.credentialMode !== 'session')
     )
       throw notFound();
-    const search: Record<string, string | string[]> = {};
-    if ('search' in input && input.search && typeof input.search === 'object') {
-      for (const [key, value] of Object.entries(input.search).slice(0, 16))
-        if (key === 'type' && typeof value === 'string' && value.length <= 128) search[key] = value;
-        else if (
-          /^[frl]\.[a-zA-Z0-9:_.-]{1,128}$/.test(key) &&
-          (typeof value === 'string' || (Array.isArray(value) && value.every((entry) => typeof entry === 'string')))
-        )
-          search[key] = value as string | string[];
-    }
+    const search =
+      'search' in input && input.search && typeof input.search === 'object' ? collectionFilterSearch(input.search) : {};
     return {
       id: input.id,
       credentialMode:
@@ -243,15 +222,9 @@ export const readDynamicCollectionMembers = createServerFn({ method: 'GET' })
     if (filtersOn && data.search) {
       try {
         const type = typeof data.search.type === 'string' ? data.search.type : 'schema:Book';
-        filter = readCollectionFilterParams(
-          new URLSearchParams(
-            Object.entries(data.search).flatMap(([key, value]) =>
-              (Array.isArray(value) ? value : [value]).map((entry) => [key, entry] as [string, string]),
-            ),
-          ),
-          await readRelease(),
-          type,
-        ).document;
+        const admission = readCollectionFilterAddress(data.search, await readRelease(), type);
+        filter = admission.filter;
+        filterStatus = admission.filterStatus;
       } catch {
         if (hasActiveFilter(data.search)) filterStatus = 'failed';
       }

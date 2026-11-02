@@ -1,4 +1,13 @@
 {
+  "collection_filter_address_rejected": "This filter link cannot be applied. No members were requested for this address. Correct or clear the filters to continue.",
+  "collection_filter_address_limit": "Use at most 64 values for this facet. Correction removes this entire facet.",
+  "collection_filter_address_ambiguous": "Use one range for this property. Correction removes all repeated ranges.",
+  "collection_filter_address_invalid": "This selection is not supported. Correction removes this entire selection.",
+  "collection_filter_address_correct": "Use accepted selections",
+  "collection_filter_address_inspect": "Inspect filter address and selections",
+  "collection_filter_address_original": "Original address",
+  "collection_filter_address_accepted": "Complete accepted selections",
+  "collection_filter_address_labels": "Label hints are for display only; the exact identifiers above determine the filter.",
   "moderation_appeals_read_loading": "Loading appeals…",
   "moderation_appeals_read_unavailable": "Appeals are unavailable right now. Retry this page.",
   "moderation_appeals_read_stale": "This appeals page has expired. Start again from the first page.",

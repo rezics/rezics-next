@@ -1,4 +1,13 @@
 {
+  "collection_filter_address_rejected": "No se puede aplicar este enlace de filtro. No se solicitaron miembros para esta dirección. Corrige o borra los filtros para continuar.",
+  "collection_filter_address_limit": "Usa un máximo de 64 valores para esta faceta. La corrección elimina toda la faceta.",
+  "collection_filter_address_ambiguous": "Usa un solo intervalo por propiedad. La corrección elimina todos los intervalos repetidos.",
+  "collection_filter_address_invalid": "Esta selección no es compatible. La corrección elimina toda la selección.",
+  "collection_filter_address_correct": "Usar selecciones aceptadas",
+  "collection_filter_address_inspect": "Inspeccionar la dirección y las selecciones del filtro",
+  "collection_filter_address_original": "Dirección original",
+  "collection_filter_address_accepted": "Selecciones aceptadas completas",
+  "collection_filter_address_labels": "Las etiquetas solo afectan a la presentación; los identificadores exactos de arriba determinan el filtro.",
   "moderation_appeals_read_loading": "Cargando apelaciones…",
   "moderation_appeals_read_unavailable": "Las apelaciones no están disponibles ahora. Vuelve a intentar cargar esta página.",
   "moderation_appeals_read_stale": "Esta página de apelaciones ha caducado. Empieza de nuevo desde la primera página.",

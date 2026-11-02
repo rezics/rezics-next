@@ -1,4 +1,13 @@
 {
+  "collection_filter_address_rejected": "無法套用此篩選連結。尚未為此位址請求任何成員。請修正或清除篩選條件以繼續。",
+  "collection_filter_address_limit": "每個分面最多可提供64個值。修正將移除整個分面。",
+  "collection_filter_address_ambiguous": "每個屬性只能指定一個範圍。修正將移除所有重複範圍。",
+  "collection_filter_address_invalid": "此選項不受支援。修正將移除整個選項。",
+  "collection_filter_address_correct": "使用已接受的選項",
+  "collection_filter_address_inspect": "檢查篩選位址與選項",
+  "collection_filter_address_original": "原始位址",
+  "collection_filter_address_accepted": "完整的已接受選項",
+  "collection_filter_address_labels": "標籤提示僅供顯示；篩選條件由上方的精確識別碼決定。",
   "moderation_appeals_read_loading": "正在載入申訴…",
   "moderation_appeals_read_unavailable": "目前無法載入申訴。請重試目前頁面。",
   "moderation_appeals_read_stale": "此申訴頁面已過期。請從第一頁重新開始。",

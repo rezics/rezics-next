@@ -1,4 +1,4 @@
-import { admitFilter, facetProperties, type FilterDocument, type FilterRelease } from '@rezics/filter';
+import { admitFilter, facetProperties, FILTER_LIMITS, type FilterDocument, type FilterRelease } from '@rezics/filter';
 
 export type CollectionFilterParams = {
   selected: Record<string, string[]>;
@@ -6,6 +6,7 @@ export type CollectionFilterParams = {
   ranges: Record<string, { from?: number; to?: number }>;
   ignored: string[];
   document?: FilterDocument;
+  issues?: { key: string; reason: 'limit' | 'ambiguous' | 'invalid' }[];
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -21,6 +22,11 @@ export function readCollectionFilterParams(
   const selectedLabels: Record<string, string> = {};
   const ranges: CollectionFilterParams['ranges'] = {};
   const ignored: string[] = [];
+  const issues: NonNullable<CollectionFilterParams['issues']> = [];
+  const reject = (key: string, reason: NonNullable<CollectionFilterParams['issues']>[number]['reason']) => {
+    ignored.push(key);
+    issues.push({ key, reason });
+  };
   const facets = facetProperties(release, [type]).slice(0, 8);
   const labels = new Map(
     [...params].filter(([key]) => key.startsWith('l.')).map(([key, value]) => [key.slice(2), value]),
@@ -29,26 +35,31 @@ export function readCollectionFilterParams(
   for (const [key, values] of groupParams(params)) {
     if (key === 'type') continue;
     if (key.startsWith('l.')) continue;
+    if (!/^[fr]\./.test(key)) continue;
     const match = /^(f|r)\.(.+)$/.exec(key);
     if (!match || !facets.includes(match[2]!)) {
-      ignored.push(key);
+      reject(key, 'invalid');
       continue;
     }
     const property = match[2]!;
     const definition = release.properties[property];
     if (!definition) {
-      ignored.push(key);
+      reject(key, 'invalid');
       continue;
     }
     if (match[1] === 'f' && definition.datatype === 'wikibase-item') {
-      const accepted: string[] = [];
-      for (const value of values.slice(0, 64)) {
-        try {
-          admitFilter({ statement: { property, in: [value] } }, release);
-          if (!accepted.includes(value)) accepted.push(value);
-        } catch {
-          ignored.push(key);
-        }
+      // Count the complete request before deduplication, just like native `in` admission.
+      if (values.length > FILTER_LIMITS.in) {
+        reject(key, 'limit');
+        continue;
+      }
+      let accepted: string[];
+      try {
+        admitFilter({ statement: { property, in: values } }, release);
+        accepted = [...new Set(values)];
+      } catch {
+        reject(key, 'invalid');
+        continue;
       }
       if (accepted.length) {
         selected[property] = accepted;
@@ -59,6 +70,10 @@ export function readCollectionFilterParams(
       continue;
     }
     if (match[1] === 'r' && definition.datatype === 'quantity') {
+      if (values.length !== 1) {
+        reject(key, 'ambiguous');
+        continue;
+      }
       const [fromText, toText, ...extra] = values[0]!.split(',');
       const from = fromText ? Number(fromText) : undefined;
       const to = toText ? Number(toText) : undefined;
@@ -69,12 +84,12 @@ export function readCollectionFilterParams(
         (from === undefined && to === undefined) ||
         (from !== undefined && to !== undefined && from > to)
       ) {
-        ignored.push(key);
+        reject(key, 'invalid');
         continue;
       }
       const unit = definition.units?.[0];
       if (!unit) {
-        ignored.push(key);
+        reject(key, 'invalid');
         continue;
       }
       const range = { ...(from === undefined ? {} : { gte: from }), ...(to === undefined ? {} : { lte: to }), unit };
@@ -84,18 +99,21 @@ export function readCollectionFilterParams(
         ranges[property] = { ...(from === undefined ? {} : { from }), ...(to === undefined ? {} : { to }) };
         clauses.push(clause);
       } catch {
-        ignored.push(key);
+        reject(key, 'invalid');
       }
       continue;
     }
-    ignored.push(key);
+    reject(key, 'invalid');
   }
-  if (clauses.length === 0) return { selected, selectedLabels, ranges, ignored };
+  // Keep complete accepted groups available for an explicit correction, never for a partial read.
+  const state = { selected, selectedLabels, ranges, ignored, issues };
+  if (issues.length || clauses.length === 0) return state;
   try {
     const document = admitFilter(clauses.length === 1 ? clauses[0]! : { and: clauses }, release);
-    return { selected, selectedLabels, ranges, ignored, document };
+    return { ...state, document };
   } catch {
-    return { selected: {}, selectedLabels: {}, ranges: {}, ignored: [...ignored, ...clauses.map(() => 'filter')] };
+    reject('filter', 'invalid');
+    return { selected: {}, selectedLabels: {}, ranges: {}, ignored, issues };
   }
 }
 
@@ -124,9 +142,8 @@ export function collectionFilterAddress(
   context?: URLSearchParams,
 ): string {
   const params = new URLSearchParams(context);
-  // A changed predicate starts a new members page, retaining the route's display context.
-  for (const key of [...params.keys()])
-    if (key === 'cursor' || key === 'type' || /^[frl]\./.test(key)) params.delete(key);
+  // Rebuild only filter fields; unrelated display and navigation context survives.
+  for (const key of [...params.keys()]) if (key === 'type' || /^[frl]\./.test(key)) params.delete(key);
   if (type) params.set('type', type);
   for (const [property, values] of Object.entries(selected))
     for (const value of values) params.append(`f.${property}`, value);
@@ -134,6 +151,14 @@ export function collectionFilterAddress(
     if (selected[property]?.length && label) params.set(`l.${property}`, label);
   for (const [property, range] of Object.entries(ranges))
     params.set(`r.${property}`, `${range.from ?? ''},${range.to ?? ''}`);
+  const predicate = (value: URLSearchParams) =>
+    JSON.stringify(
+      [...new Set(value.keys())]
+        .filter((key) => key === 'type' || /^[fr]\./.test(key))
+        .sort()
+        .map((key) => [key, [...new Set(value.getAll(key))].sort()]),
+    );
+  if (predicate(new URLSearchParams(context)) !== predicate(params)) params.delete('cursor');
   const query = params.toString();
   return `/${locale}/collections/${encodeURIComponent(id)}${query ? `?${query}` : ''}`;
 }

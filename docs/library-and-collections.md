@@ -213,6 +213,12 @@ revision, incarnation and command key, independent of later selection; a refused
 
 ## Indexed filtering and disclosure
 
+Decision: Collection filter links reject the whole requested read when any predicate group is invalid, exceeds
+64 supplied facet values (before deduplication), or repeats a range (even identically); explicit correction removes
+whole rejected groups and retains complete accepted groups, while clear removes all predicates. Original addresses
+and exact accepted values remain inspectable, label hints affect display only, unrelated context survives, and only
+a changed predicate resets the members cursor.
+
 Evaluate a complete identified catalogue observation or private owner observation. Admission covers filter, source
 and order together: run a direct plan bounded by the page, otherwise use prepared indexed results built in bounded
 durable steps, otherwise reject with `422` before enumeration. Return filled pages or a final page, or preparing;

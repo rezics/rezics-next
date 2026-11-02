@@ -1,11 +1,12 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
-import { useRouterState } from '@tanstack/react-router';
+import { useRouter, useRouterState } from '@tanstack/react-router';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import type { CollectionFilterParams } from './collection-filter-params';
 import type { SuggestionResult } from '../search/suggestions';
 import type { FilterDocument } from '@rezics/filter';
 import { collectionFilterAddress } from './collection-filter-params';
+import { CollectionFilterAddressState } from './collection-filter-address-state';
 import { BottomSheet } from '@rezics/ui/bottom-sheet';
 import { useIsMobile } from '@rezics/ui/hooks/use-is-mobile';
 import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle } from '@rezics/ui/shadcn/dialog';
@@ -51,11 +52,15 @@ export function CollectionFilterFeedback({
   emptyLabel: string;
   buttonClass?: string | undefined;
 }) {
+  const router = useRouter({ warn: false });
+  const rejected = status === 'failed' && ignored.length > 0;
   return (
     <>
-      {ignored.length ? <p role="status">{m.collection_filter_ignored({ filter: ignored.join(', ') })}</p> : null}
+      {ignored.length && !rejected ? (
+        <p role="status">{m.collection_filter_ignored({ filter: ignored.join(', ') })}</p>
+      ) : null}
       {status === 'unsupported' ? <p role="status">{m.collection_filter_unsupported()}</p> : null}
-      {status === 'failed' ? <p role="status">{m.collection_filter_failed()}</p> : null}
+      {status === 'failed' && !rejected ? <p role="status">{m.collection_filter_failed()}</p> : null}
       {status === 'preparing' ? (
         <p role="status">
           {m.collection_filter_preparing()} {m.collection_filter_retry_later()}
@@ -64,10 +69,18 @@ export function CollectionFilterFeedback({
       {empty && !unavailable && status !== 'preparing' && status !== 'unsupported' && status !== 'failed' ? (
         <p className="text-muted-foreground">{filter ? m.collection_filter_no_match() : emptyLabel}</p>
       ) : null}
-      {empty && !unavailable && (filter || status === 'failed') ? (
+      {empty && !unavailable && !rejected && (filter || status === 'failed') ? (
         <a
           className={buttonClass ?? 'inline-flex min-h-10 items-center rounded-lg border border-border px-3'}
-          href={collectionFilterAddress(getLocale(), id, {}, {}, {}, filterType)}
+          href={collectionFilterAddress(
+            getLocale(),
+            id,
+            {},
+            {},
+            {},
+            filterType,
+            new URLSearchParams(router?.state.location.searchStr),
+          )}
         >
           {m.collection_filter_clear()}
         </a>
@@ -102,20 +115,27 @@ export function CollectionFilters({
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const address = new URL(clearAddress, window.location.href);
-    const params = address.searchParams;
+    const selected: Record<string, string[]> = {};
+    const labels: Record<string, string> = {};
+    const ranges: CollectionFilterParams['ranges'] = {};
     form.forEach((value, key) => {
-      if ((key.startsWith('f.') || key.startsWith('l.')) && String(value)) params.append(key, String(value));
+      if (key.startsWith('f.') && String(value)) (selected[key.slice(2)] ??= []).push(String(value));
+      if (key.startsWith('l.') && String(value)) labels[key.slice(2)] = String(value);
     });
     for (const property of properties.filter((item) => item.datatype === 'quantity')) {
       const from = String(form.get(`range.from.${property.id}`) ?? '').trim();
       const to = String(form.get(`range.to.${property.id}`) ?? '').trim();
-      if (from || to) params.set(`r.${property.id}`, `${from},${to}`);
+      if (from || to)
+        ranges[property.id] = {
+          ...(from ? { from: Number(from) } : {}),
+          ...(to ? { to: Number(to) } : {}),
+        };
     }
     changeOpen(false);
-    window.location.assign(`${address.pathname}${address.search}`);
+    window.location.assign(
+      collectionFilterAddress(locale, id, selected, ranges, labels, type, new URLSearchParams(search)),
+    );
   }
-  if (properties.length === 0) return null;
   const form = open ? (
     <form
       onSubmit={submit}
@@ -128,42 +148,47 @@ export function CollectionFilters({
   ) : null;
   return (
     <section className="min-w-0">
-      <Button
-        ref={trigger}
-        type="button"
-        aria-label={m.collection_filters()}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        aria-controls={open ? surfaceId : undefined}
-        variant="outline"
-        size="icon"
-        className="min-h-11 min-w-11"
-        onClick={() => changeOpen(true)}
-      >
-        <SlidersHorizontalIcon aria-hidden="true" className="size-4" />
-      </Button>
-      {mobile ? (
-        <BottomSheet open={open} onOpenChange={changeOpen} title={m.collection_filters()}>
-          <div id={surfaceId}>{form}</div>
-        </BottomSheet>
-      ) : (
-        <Dialog open={open} onOpenChange={changeOpen}>
-          <DialogContent
-            id={surfaceId}
-            finalFocus={trigger}
-            showCloseButton={false}
-            className="max-h-[calc(100dvh-2rem)] min-w-0 overflow-y-auto sm:max-w-lg"
+      <CollectionFilterAddressState id={id} type={type} params={params} search={search} />
+      {properties.length ? (
+        <>
+          <Button
+            ref={trigger}
+            type="button"
+            aria-label={m.collection_filters()}
+            aria-haspopup="dialog"
+            aria-expanded={open}
+            aria-controls={open ? surfaceId : undefined}
+            variant="outline"
+            size="icon"
+            className="min-h-11 min-w-11"
+            onClick={() => changeOpen(true)}
           >
-            <DialogHeader className="flex-row items-center justify-between gap-4">
-              <DialogTitle className="min-w-0 break-words">{m.collection_filters()}</DialogTitle>
-              <DialogClose render={<Button type="button" variant="ghost" className="min-h-11" />}>
-                {m.library_collection_cancel()}
-              </DialogClose>
-            </DialogHeader>
-            {form}
-          </DialogContent>
-        </Dialog>
-      )}
+            <SlidersHorizontalIcon aria-hidden="true" className="size-4" />
+          </Button>
+          {mobile ? (
+            <BottomSheet open={open} onOpenChange={changeOpen} title={m.collection_filters()}>
+              <div id={surfaceId}>{form}</div>
+            </BottomSheet>
+          ) : (
+            <Dialog open={open} onOpenChange={changeOpen}>
+              <DialogContent
+                id={surfaceId}
+                finalFocus={trigger}
+                showCloseButton={false}
+                className="max-h-[calc(100dvh-2rem)] min-w-0 overflow-y-auto sm:max-w-lg"
+              >
+                <DialogHeader className="flex-row items-center justify-between gap-4">
+                  <DialogTitle className="min-w-0 break-words">{m.collection_filters()}</DialogTitle>
+                  <DialogClose render={<Button type="button" variant="ghost" className="min-h-11" />}>
+                    {m.library_collection_cancel()}
+                  </DialogClose>
+                </DialogHeader>
+                {form}
+              </DialogContent>
+            </Dialog>
+          )}
+        </>
+      ) : null}
     </section>
   );
 }
@@ -217,7 +242,10 @@ function FilterFields({
             </div>
           )}
           {params.selected[property.id]?.slice(1).map((value) => (
-            <input key={value} type="hidden" name={`f.${property.id}`} value={value} />
+            <label key={value} className="flex min-h-11 items-center gap-2 break-all text-sm">
+              <input type="checkbox" name={`f.${property.id}`} value={value} defaultChecked />
+              <code>{value}</code>
+            </label>
           ))}
         </fieldset>
       ))}

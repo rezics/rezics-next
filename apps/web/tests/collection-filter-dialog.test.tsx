@@ -169,6 +169,9 @@ test('Collection filters open a correctly sized dialog or phone sheet and apply 
       expect(surface().querySelector('form')).not.toBeNull();
       expect(surface().querySelector('[data-slot="drawer-swipe-handle"]') !== null).toBe(width === 390);
       expect(lowerBound().value).toBe('1000001');
+      const additional = surface().querySelector<HTMLInputElement>(`input[type="checkbox"][value="${otherConcept}"]`)!;
+      expect(additional.checked).toBe(true);
+      expect(additional.closest('label')?.textContent).toContain(otherConcept);
       expect(surface().contains(document.activeElement)).toBe(true);
       await edit();
       expect(visits).toHaveLength(visitsBefore);
@@ -183,6 +186,10 @@ test('Collection filters open a correctly sized dialog or phone sheet and apply 
       await settle();
       expect(lowerBound().value).toBe('1000001');
       await edit();
+      if (width === 390)
+        await act(async () => {
+          surface().querySelector<HTMLInputElement>(`input[type="checkbox"][value="${otherConcept}"]`)!.click();
+        });
       const reset = surface().querySelector<HTMLAnchorElement>('a')!;
       expect(reset.textContent).toBe(m.collection_filter_clear());
       expect(new URL(reset.href).search).toBe('?layout=grid&type=schema%3ABook');
@@ -194,7 +201,9 @@ test('Collection filters open a correctly sized dialog or phone sheet and apply 
       expect(next.searchParams.get('type')).toBe('schema:Book');
       expect(next.searchParams.get('layout')).toBe('grid');
       expect(next.searchParams.has('cursor')).toBe(false);
-      expect(next.searchParams.getAll('f.schema:keywords')).toEqual([concept, otherConcept]);
+      expect(next.searchParams.getAll('f.schema:keywords')).toEqual(
+        width === 390 ? [concept] : [concept, otherConcept],
+      );
       expect(next.searchParams.get('l.schema:keywords')).toBe(params.selectedLabels['schema:keywords']);
       expect(next.searchParams.get('r.schema:wordCount')).toBe('2000001,999999999999999');
       await settle();
