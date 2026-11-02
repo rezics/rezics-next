@@ -989,8 +989,7 @@ test('unknown and failed remote cleanup evidence stay non-green with the exact a
       expect(final.cleanup.disposition).toBe('unknown');
       expect(final.failures.cleanup.length).toBeGreaterThan(0);
       if (scenario.failures.length) expect(final.failures.cleanup).toContain(scenario.failures[0]);
-      if (scenario.settlementHost)
-        expect(final.failures.primary.join(' ')).toContain('admitted physical identity');
+      if (scenario.settlementHost) expect(final.failures.primary.join(' ')).toContain('admitted physical identity');
       if (!retained) throw new Error('unknown cleanup did not retain the original snapshot');
       expect(existsSync(retained.workspace)).toBe(true);
     } finally {

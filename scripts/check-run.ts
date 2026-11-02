@@ -1589,8 +1589,7 @@ async function runCheckWithFinalSettlement(
     if (!establishedRegistration)
       throw new CheckRunUnavailable('check-run: invocation could not be registered before workspace admission');
     const cancellationIsRequested = () =>
-      signal.aborted ||
-      readCheckRunCancellation(establishedRegistration.invocationId, stateOptions).requested;
+      signal.aborted || readCheckRunCancellation(establishedRegistration.invocationId, stateOptions).requested;
     const cancellationWon = () => {
       try {
         return cancellationIsRequested();
@@ -1651,17 +1650,12 @@ async function runCheckWithFinalSettlement(
     // This fsynced transition is the admission linearization point. A cancellation that wins
     // while the record is queued prevents host probing and any later run identity allocation.
     try {
-      await beginCheckRunAllocation(
-        establishedRegistration.invocationId,
-        establishedRegistration.nonce,
-        stateOptions,
-      );
+      await beginCheckRunAllocation(establishedRegistration.invocationId, establishedRegistration.nonce, stateOptions);
     } catch (error) {
       if (cancellationWon()) throw new Aborted('check-run: cancelled invocation cannot enter remote admission');
       throw error;
     }
-    if (cancellationIsRequested())
-      throw new Aborted('check-run: cancelled invocation cannot enter remote admission');
+    if (cancellationIsRequested()) throw new Aborted('check-run: cancelled invocation cannot enter remote admission');
 
     const remoteOptions: RemoteCheck = {
       hosts,
