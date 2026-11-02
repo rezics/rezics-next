@@ -226,10 +226,7 @@ process.exitCode = interrupted ? 125 : result.status ?? 1;
       for (const scale of [1, 10, 100]) {
         assertForeignPopulation(scale);
         foreignCount = scale;
-        const selected = [
-          create(fixedTask, 1, `fixed-${scale}-a`),
-          create(fixedTask, 1, `fixed-${scale}-b`),
-        ];
+        const selected = [create(fixedTask, 1, `fixed-${scale}-a`), create(fixedTask, 1, `fixed-${scale}-b`)];
         cleanup(fixedTask, 1, selected, foreignCount);
       }
 
@@ -271,7 +268,10 @@ process.exitCode = interrupted ? 125 : result.status ?? 1;
         const inspect = spawnSync('docker', ['inspect', '--format', '{{.Id}}', id], { encoding: 'utf8' });
         return inspect.status === 0;
       });
-      expectSameIds(remaining, interruptedIds.filter((id) => !sameId(firstAttempt[1]!.stdout.trim(), id)));
+      expectSameIds(
+        remaining,
+        interruptedIds.filter((id) => !sameId(firstAttempt[1]!.stdout.trim(), id)),
+      );
       observations.push({
         taskId: interruptedTask,
         attempt: 1,
