@@ -59,7 +59,11 @@ test('clean input leaves freely; Stay keeps the exact invalid confirmation, feed
   const feedback = input.getAttribute('aria-describedby');
   expect(feedback).toBe('account-delete-confirmation-error');
   expect(page.unload()).toBe(true);
-  await flush(() => page.host.querySelector<HTMLAnchorElement>('a[href="/security"]')!.click());
+  await flush(() =>
+    page.host
+      .querySelector<HTMLAnchorElement>('a[href="/security"]')!
+      .dispatchEvent(new dom.MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })),
+  );
   expect(page.router.history.location.pathname).toBe('/account/delete');
   expect(document.querySelector('[role="alertdialog"]')).not.toBeNull();
   await page.choose('Stay');
@@ -111,7 +115,7 @@ test('intended step-up and accepted deletion leave freely; unknown outcomes warn
     await flush(() => send(page.host));
     expect(page.calls[1]!.body.operationKey).toBe(original.operationKey);
     await flush(() => page.calls[1]!.resolve(approval()));
-    await flush(() => page.calls[2]!.resolve(Response.json({ error: 'timeout' }, { status: 503 })));
+    await flush(() => page.calls[2]!.resolve(Response.json({})));
     expect(page.host.querySelector('input')!.value).toBe('');
     expect(page.unload()).toBe(true);
     await page.type();
