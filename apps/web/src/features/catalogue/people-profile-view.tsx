@@ -229,7 +229,11 @@ function PeopleCreate({
       const id = rowId(type, property);
       const path = match[2] ?? '';
       const [presented] = presentStatementViolations(
-        [{ ...error, pointer: `/statement${path}` }], statement, read.release, locale, id,
+        [{ ...error, pointer: `/statement${path}` }],
+        statement,
+        read.release,
+        locale,
+        id,
       );
       if (!presented) continue;
       if (path === '/references' || path === '/references/0/parts/0/value/content') {
@@ -388,9 +392,7 @@ function PeopleCreate({
                             <EditorFailure reason="stale" locale={locale} />
                           )}
                           <Field>
-                            <FieldLabel htmlFor={`${id}-citation`}>
-                              {m.relation_citation({}, o)}
-                            </FieldLabel>
+                            <FieldLabel htmlFor={`${id}-citation`}>{m.relation_citation({}, o)}</FieldLabel>
                             <Input
                               id={`${id}-citation`}
                               aria-invalid={citationErrors.length ? true : undefined}
@@ -418,7 +420,9 @@ function PeopleCreate({
                             />
                           </Field>
                           {errors.map((error) => (
-                            <FieldError key={error.id} id={error.id}>{error.instruction}</FieldError>
+                            <FieldError key={error.id} id={error.id}>
+                              {error.instruction}
+                            </FieldError>
                           ))}
                           <Button
                             type="button"

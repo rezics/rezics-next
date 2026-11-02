@@ -394,17 +394,29 @@ test('whole Person and Organization creation families retain exact facts, indepe
       const commands: PeopleCommand[] = [];
       const readIds: string[] = [];
       const bad = '/statements/schema:url/0/references/0/parts/0/value/content';
-      const unknown = ['/statements/schema:url/1/value/content', '/statements/schema:url/0/qualifiers/0/value/content', '/statements/schema:url/0/references/1/parts/0/value/content'];
+      const unknown = [
+        '/statements/schema:url/1/value/content',
+        '/statements/schema:url/0/qualifiers/0/value/content',
+        '/statements/schema:url/0/references/1/parts/0/value/content',
+      ];
       const transport: PeopleTransport = {
-        load: async () => ++loads === 2 ? { ok: false, reason: 'unavailable' } : supplied,
+        load: async () => (++loads === 2 ? { ok: false, reason: 'unavailable' } : supplied),
         create: async (command) => {
           commands.push(structuredClone(command));
-          if (commands.length === 1) return { ok: false, reason: 'invalid', refreshDefinitions: true,
-            errors: [bad, ...unknown].map((pointer) => ({ pointer, code: 'invalid_format' })) };
+          if (commands.length === 1)
+            return {
+              ok: false,
+              reason: 'invalid',
+              refreshDefinitions: true,
+              errors: [bad, ...unknown].map((pointer) => ({ pointer, code: 'invalid_format' })),
+            };
           const result = await fixture.transport.create(command);
           return result.ok ? { ...result, reader: { state: 'unavailable' } } : result;
         },
-        read: async (id) => { readIds.push(id); return fixture.transport.read(id); },
+        read: async (id) => {
+          readIds.push(id);
+          return fixture.transport.read(id);
+        },
       };
       await render(editor(fixture, transport));
       await choose(type);
@@ -426,19 +438,27 @@ test('whole Person and Organization creation families retain exact facts, indepe
       const link = canvas().getByRole('link', { name: `${name(fixture, 'schema:url')} · ${m.relation_citation()}` });
       expect(link.getAttribute('href')).toBe(`#${encodeURIComponent(cite.id)}`);
       for (const pointer of unknown) {
-        const details = Array.from(host.querySelectorAll('details')).find((node) => node.textContent?.includes(pointer))!;
+        const details = Array.from(host.querySelectorAll('details')).find((node) =>
+          node.textContent?.includes(pointer),
+        )!;
         expect(details.closest('li')!.querySelector('a')).toBeNull();
       }
       await act(async () => user.click(link));
       expect(window.document.activeElement).toBe(cite);
       expect(cite.getAttribute('aria-invalid')).toBe('true');
-      await act(async () => { await user.clear(cite); await user.type(cite, 'https://example.org/corrected'); });
+      await act(async () => {
+        await user.clear(cite);
+        await user.type(cite, 'https://example.org/corrected');
+      });
       await act(async () => user.click(canvas().getByRole('button', { name: m.catalogue_create_retry() })));
       await submit();
       await waitFor(() => expect(host.textContent).toContain(m.catalogue_create_reader_unavailable()));
       expect(commands[1]!.key).not.toBe(commands[0]!.key);
       const expected = structuredClone(commands[0]!.item);
-      expected.statements!['schema:url']![0]!.references[0]!.parts[0]!.value = { type: 'value', content: 'https://example.org/corrected' };
+      expected.statements!['schema:url']![0]!.references[0]!.parts[0]!.value = {
+        type: 'value',
+        content: 'https://example.org/corrected',
+      };
       expect(commands[1]!.item).toEqual(expected);
       expect(expected.labels).toEqual({ en: 'Cited person or organization', ja: '保持する名前' });
       await act(async () => user.click(canvas().getByRole('button', { name: m.catalogue_create_retry() })));
@@ -446,7 +466,7 @@ test('whole Person and Organization creation families retain exact facts, indepe
       expect(readIds).toEqual([peopleCreatedId]);
       expect(commands).toHaveLength(2);
       expect(canvas().getByRole('link', { name: m.catalogue_create_open() }).getAttribute('href')).toBe(
-        (await fixture.transport.read(peopleCreatedId) as { state: 'ready'; href: string }).href,
+        ((await fixture.transport.read(peopleCreatedId)) as { state: 'ready'; href: string }).href,
       );
     }
 
