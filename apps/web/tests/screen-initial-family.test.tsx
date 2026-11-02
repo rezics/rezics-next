@@ -615,7 +615,12 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
         onNavigate={(href) => opened.push(href)}
         transport={{
           ...recovery.transport,
-          load: async () => (++metadataReads === 2 ? { ok: false, reason: 'unavailable' } : recovery.transport.load()),
+          load: async () => {
+            metadataReads++;
+            if ([2, 3, 7].includes(metadataReads)) throw new Error('Metadata refresh failed');
+            if (metadataReads === 4) return { ok: false, reason: 'unavailable' };
+            return recovery.transport.load();
+          },
           create: async (command) => {
             submitted.push(structuredClone(command));
             if (submitted.length <= 2)
@@ -628,7 +633,9 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
                   code: 'invalid_format',
                 })),
               };
-            if (submitted.length === 3) return { ok: false, reason: 'unavailable' };
+            recovery.creation.setScenario(submitted.length === 3 ? 'uncertain' : 'reader-unavailable');
+            if (submitted.length === 3)
+              return { ...(await recovery.transport.create(command)), refreshDefinitions: true };
             return recovery.transport.create(command);
           },
         }}
@@ -644,11 +651,19 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
     await choose(secondCredit, m.correction_add_qualifier(), 'schema:position');
     await replace(textbox(secondCredit, m.correction_value()), '3');
     await replace(textbox(secondCredit, m.relation_citation()), citation);
+    await click(host, m.catalogue_create_add_language());
+    await replace(host.querySelector<HTMLInputElement>('#create-language-1')!, 'ja');
+    await replace(host.querySelector<HTMLInputElement>('#create-label-1')!, '天文台');
     await click(host, m.catalogue_create_submit());
     await until(
       () => metadataReads === 2 && !within(host).queryByRole('button', { name: m.catalogue_create_saving() }),
     );
-    expect(textbox(host, m.catalogue_create_label()).value).toBe('The observatory');
+    expect(host.querySelector<HTMLInputElement>('#create-label-0')!.value).toBe('The observatory');
+    expect(host.querySelector<HTMLInputElement>('#create-label-1')!.value).toBe('天文台');
+    expect(host.textContent).toContain(m.catalogue_create_unavailable());
+    expect((within(host).getByRole('button', { name: m.catalogue_create_submit() }) as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => queuedSubmit()());
+    expect(submitted).toHaveLength(1);
     const correctionLinks = () => [...host.querySelectorAll<HTMLAnchorElement>('[role="alert"] a[href^="#"]')];
     expect(correctionLinks()).toHaveLength(3);
     const rejectedTargets = correctionLinks().map((link) => decodeURIComponent(link.hash.slice(1)));
@@ -658,12 +673,20 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
       expect(secondCredit.contains(window.document.activeElement as unknown as Node)).toBe(true);
       expect(firstCredit.contains(window.document.activeElement as unknown as Node)).toBe(false);
     }
-    await click(host, m.catalogue_create_retry()); // Recover metadata without replacing the draft.
+    for (const count of [3, 4]) {
+      await click(host, m.catalogue_create_retry());
+      await until(() => metadataReads === count && !(within(host).getByRole('button', { name: m.catalogue_create_retry() }) as HTMLButtonElement).disabled);
+      expect(host.textContent).toContain(m.catalogue_create_unavailable());
+      expect(submitted).toHaveLength(1);
+    }
+    await click(host, m.catalogue_create_retry()); // Only successful current metadata recovers the draft.
     await until(
       () =>
-        metadataReads === 3 &&
+        metadataReads === 5 &&
         !(within(host).getByRole('button', { name: m.catalogue_create_submit() }) as HTMLButtonElement).disabled,
     );
+    expect(host.textContent).not.toContain(m.catalogue_create_unavailable());
+    expect(host.querySelector<HTMLInputElement>('#create-label-1')!.value).toBe('天文台');
     await choose(host, m.catalogue_create_type(), 'schema:Movie');
     expect(correctionLinks()).toHaveLength(0);
     for (const id of rejectedTargets) expect(window.document.getElementById(id)).toBeNull();
@@ -688,9 +711,14 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
       references: [{ parts: [{ value: { type: 'value', content: 'https://example.org/corrected' } }] }],
     });
     expect(select(host, m.catalogue_create_type()).disabled).toBe(true);
-    await click(host, m.catalogue_create_retry());
+    await until(() => metadataReads === 7 && !within(host).queryByRole('button', { name: m.catalogue_create_saving() }));
+    expect(host.textContent).toContain(m.catalogue_create_unavailable());
+    const sealedWrite = structuredClone(nativeWrites(recovery)[0]!);
+    await click(host.querySelector('form')!, m.catalogue_create_retry());
     await until(() => host.textContent!.includes(m.catalogue_create_created()));
     expect(submitted[3]).toEqual(submitted[2]);
+    expect(nativeWrites(recovery)).toEqual([sealedWrite, sealedWrite]);
+    expect(metadataReads).toBe(7);
     expect(opened).toEqual([]);
     const exactId = recovery.creation.calls
       .find((call) => call.method === 'GET')!

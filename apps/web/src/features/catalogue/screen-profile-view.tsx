@@ -233,8 +233,10 @@ function ScreenProfileLive({
           onNavigate={onNavigate}
           transport={{
             definitions: async (refresh) => {
-              const next = refresh ? (await query.refetch()).data : read;
+              const result = refresh ? await query.refetch({ cancelRefetch: false }) : query;
               if (!lifetime.active()) return { ok: false as const, reason: 'denied' as const };
+              // Retained data supports private drafts; only a successful read admits new intent.
+              const next = !result.isError && result.data?.ok ? result.data : undefined;
               return next?.ok ? { ok: true, types: screenCreateTypes(next.release, locale) } : { ok: false };
             },
             submit: (command) => transport.create(command as ScreenCommand),
