@@ -78,7 +78,7 @@ test('grows cumulatively: seeding 0..8n after 0..n equals seeding 0..8n at once'
 
 test('seeds through a production write path when the population supplies write', async () => {
   let calls = 0;
-  const population: MutablePopulation = {
+  const population: Population = {
     name: 'write',
     hotPartition: 4,
     write: async ({ pool: writePool }, { ordinal, route }) => {
@@ -103,7 +103,7 @@ test('keeps one admitted definition and range while concurrent writes are pendin
   let finishedRange: { from: number; to: number } | undefined;
   let replacementWrites = 0;
   let replacementFinishes = 0;
-  const population: Population = {
+  const population: MutablePopulation = {
     ...original,
     write: async (_target, value) => {
       writes.push(value);
