@@ -112,12 +112,19 @@ invalidate the entire acquisition before effects or baseline replacement. Lexeme
 content remain unsupported. Properties do not count toward item survival: a replacement containing only
 Properties still triggers the existing mass-disappearance guard when prior items all vanish.
 
-Yielded Wikidata items use the registered `wikidata-4` converter and the shipped catalogue vocabulary. The public
+Yielded Wikidata items use the registered `wikidata-5` converter, the shipped catalogue vocabulary and the reviewed
+[conversion-local dish/food bindings](../../packages/conversion/README.md#source-mappings-and-limits). The public
 pure converter remains item-only. Supported
 names, dates, URLs and unresolved author statements retain their source references, supported qualifiers and
 ranks through editor acceptance/adoption and public reads. A refresh creates new cited proposals under the
 same returned subject identity; it preserves independent Context selections. Exact quantities with unsupported,
 unresolved or narrowed qualifiers are withheld as whole measurements, including after durable staging.
+The source registry reads the converter's exported `converter_revision`; changed
+records follow the ordinary revision-change path, with mass-disappearance protection
+unchanged. Dishes bootstrap as Recipe, food and food ingredients as Food, with CC0
+labels/descriptions and cited P186 material relations after binding. Dish takes
+precedence over food; other mapped-type conflicts are refused. Instruction text and
+P18/Commons images are excluded and create no assets.
 Unknown-language text and unknown-licensed prose/images confer no import authority. Keep the same state path
 for unchanged refresh and interrupted work: reopen checks current tuple fences before delivering pending facts.
 The [connected native journey](../kernel/test/imports/wikidata-rich-cli.test.ts) and its

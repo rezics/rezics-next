@@ -13,7 +13,7 @@ import {
   type ConversionContext,
 } from './support';
 
-export const converter_revision = 'wikidata-4';
+export const converter_revision = 'wikidata-5';
 export const wikidataLimits = Object.freeze({
   bytes: 128 * 1024,
   statements: 64,
@@ -52,15 +52,24 @@ export type WikidataConversion = ConvertedRecord<BatchCommand> & {
   sourceMetadata: { license: 'CC0-1.0'; attribution: string; url: string };
 };
 
-// Mapping and value validation both come from the shipped catalogue, never from source extensions.
+// Property identities and value validation come from the shipped catalogue, never source extensions.
 const properties = Object.entries(bundledRelease.properties);
 const mappings = new Map(
   properties.flatMap(([id, definition]) =>
     definition.mappings
-      .filter((mapping) => /^wd:P[1-9][0-9]*$/.test(mapping))
+      .filter(
+        (mapping) =>
+          /^wd:P[1-9][0-9]*$/.test(mapping) &&
+          mapping !== 'wd:P18' &&
+          definition.datatype !== 'media' &&
+          definition.datatype !== 'document',
+      )
       .map((mapping) => [mapping.slice(3), { id, definition }] as const),
   ),
 );
+// madeFromMaterial already has this canonical Wikidata property identity in the
+// bundle, but no redundant exact mapping. Keep this binding local and bounded.
+mappings.set('P186', { id: 'wdt:P186', definition: bundledRelease.properties['wdt:P186']! });
 function exactQuantity(definition: PropertyDefinition): boolean {
   if (definition.datatype !== 'quantity') return false;
   const value = definition.value as {
@@ -84,11 +93,19 @@ function exactQuantity(definition: PropertyDefinition): boolean {
     !Object.hasOwn(value.properties, 'upperBound')
   );
 }
-const types = new Map(
-  Object.entries(bundledRelease.types).flatMap(([id, definition]) =>
+// Reviewed source classifications, not vocabulary equivalences. Citations and
+// the CC0-only projection are maintained in the Conversion README.
+const sourceTypeBindings = [
+  ['Q746549', 'schema:Recipe'], // dish
+  ['Q2095', 'wd:Q2095'], // food
+  ['Q25403900', 'wd:Q2095'], // food ingredient
+] as const;
+const types = new Map<string, string>([
+  ...Object.entries(bundledRelease.types).flatMap(([id, definition]) =>
     definition.mappings.map((mapping) => [mapping.replace(/^wd:/, ''), id] as const),
   ),
-);
+  ...sourceTypeBindings,
+]);
 const claimProperties = [...new Set(['P31', ...mappings.keys()])];
 const referenceProperties = [...new Set(['P854', ...mappings.keys()])];
 const qid = /^Q[1-9][0-9]{0,15}$/;
@@ -504,14 +521,20 @@ export function convertWikidata(
     return { type: 'value', content };
   }
 
-  let subjectType: string | undefined;
+  const mappedTypes = new Set<string>();
+  let hasDish = false;
   for (const claim of normalizedRecord.claims.P31 ?? []) {
     if (claim.rank === 'deprecated' || claim.mainsnak.snaktype !== 'value') continue;
     const target = (claim.mainsnak.datavalue!.value as { id: string }).id;
     const mapped = types.get(target);
-    if (mapped && subjectType && subjectType !== mapped) fail('Ambiguous mapped Wikidata entity types', '/claims/P31');
-    if (mapped) subjectType = mapped;
+    if (mapped) mappedTypes.add(mapped);
+    if (target === 'Q746549') hasDish = true;
   }
+  // A dish can also be food. Resolve only that overlap, independently of claim
+  // order; every other mapped-type conflict retains the existing refusal.
+  if (hasDish) mappedTypes.delete('wd:Q2095');
+  if (mappedTypes.size > 1) fail('Ambiguous mapped Wikidata entity types', '/claims/P31');
+  const subjectType = mappedTypes.values().next().value;
   const statements: BatchStatement[] = Object.values(normalizedRecord.labels).map((term) => ({
     property: { id: 'schema:name' },
     value: { type: 'value', content: { language: term.language, text: term.value } },
