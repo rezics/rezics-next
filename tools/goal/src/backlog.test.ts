@@ -247,7 +247,10 @@ test('a running manager below eight ready briefs is woken at most once an hour',
     goalState: { status: 'budgetLimited' },
   });
   manager(f.db, 'supermanager', { kind: 'resident-supermanager', status: 'running', threadId: 'session' });
-  for (const [goal, count] of [['web', 7], ['search', 8]] as const)
+  for (const [goal, count] of [
+    ['web', 7],
+    ['search', 8],
+  ] as const)
     for (let i = 0; i < count; i++) brief(f.state, goal, `${i}.md`, 60_000);
   for (const name of ['ignored.txt', '.hidden.md']) writeFileSync(join(f.state, 'backlog', 'web', name), 'ignored\n');
 
