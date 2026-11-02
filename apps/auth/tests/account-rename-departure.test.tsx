@@ -70,7 +70,6 @@ afterAll(async () => {
 });
 
 async function mount(initial: RenameSource) {
-  console.log('mount:start');
   let replaceSource!: (next: RenameSource) => void;
   function Rename() {
     const [currentSource, setSource] = useState(initial);
@@ -88,7 +87,6 @@ async function mount(initial: RenameSource) {
   document.body.append(host);
   const root = createRoot(host);
   await flush(() => root.render(<RouterProvider router={router} />));
-  console.log('mount:rendered');
   close = async () => {
     await flush(() => root.unmount());
     host.remove();
@@ -105,33 +103,26 @@ const confirm = (host: HTMLElement) => flush(() => host.querySelector<HTMLInputE
 const submit = (host: HTMLElement) =>
   flush(() => host.querySelector('form')!.dispatchEvent(new dom.Event('submit', { bubbles: true, cancelable: true })));
 async function startNavigation(router: ReturnType<typeof createRouter>, to: string) {
-  console.log('navigate:start', to);
   let navigation!: Promise<unknown>;
   await act(async () => {
     navigation = router.navigate({ to } as never);
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
-  console.log('navigate:started', to);
-  return navigation;
+  return { navigation };
 }
 
 test('clean navigation is quiet; Stay preserves the proposed handle and confirmation', async () => {
-  console.log('test:clean');
   const ui = await mount(source());
-  const clean = await startNavigation(ui.router, '/next');
+  const { navigation: clean } = await startNavigation(ui.router, '/next');
   await flush(() => clean);
-  console.log('clean:done');
-  const back = await startNavigation(ui.router, '/account/rename');
+  const { navigation: back } = await startNavigation(ui.router, '/account/rename');
   await flush(() => back);
   await setHandle(ui.host, 'after');
   await confirm(ui.host);
-  const navigation = await startNavigation(ui.router, '/next');
-  console.log('draft:dialog', ui.host.querySelector('[role="alertdialog"]')?.textContent);
+  const { navigation } = await startNavigation(ui.router, '/next');
   expect(ui.host.querySelector('[role="alertdialog"]')).not.toBeNull();
   await flush(() => ui.host.querySelector<HTMLButtonElement>('[data-stay]')!.click());
-  console.log('draft:stay-clicked');
   await flush(() => navigation);
-  console.log('draft:navigation-settled');
   const input = ui.host.querySelector<HTMLInputElement>('#rename-handle')!;
   expect(input.value).toBe('after');
   expect(ui.host.querySelector<HTMLInputElement>('#rename-confirm')!.checked).toBe(true);
@@ -142,12 +133,9 @@ test('Leave clears an unsent review before navigation', async () => {
   const ui = await mount(source());
   await setHandle(ui.host, 'after');
   await confirm(ui.host);
-  const navigation = await startNavigation(ui.router, '/next');
-  console.log('leave:dialog', ui.host.querySelector('[role="alertdialog"]')?.textContent);
+  const { navigation } = await startNavigation(ui.router, '/next');
   await flush(() => ui.host.querySelector<HTMLButtonElement>('[data-leave]')!.click());
-  console.log('leave:clicked');
   await flush(() => navigation);
-  console.log('leave:navigation-settled');
   expect(readRenameContinuation()).toBeNull();
   await flush(() => ui.router.navigate({ to: '/account/rename' } as never));
   expect(ui.host.querySelector<HTMLInputElement>('#rename-handle')!.value).toBe('');
@@ -168,7 +156,7 @@ test('Leave preserves the identity of an unresolved dispatched rename', async ()
   await confirm(ui.host);
   await submit(ui.host);
   const saved = readRenameContinuation();
-  const navigation = await startNavigation(ui.router, '/next');
+  const { navigation } = await startNavigation(ui.router, '/next');
   expect(ui.host.textContent).toContain(m.auth_rename_departure_pending());
   await flush(() => ui.host.querySelector<HTMLButtonElement>('[data-leave]')!.click());
   await flush(() => navigation);
@@ -183,13 +171,13 @@ test('step-up return is allowed and a replacement account revokes the old review
   await setHandle(ui.host, 'after');
   await confirm(ui.host);
   await submit(ui.host);
-  const stepUp = await startNavigation(ui.router, '/step-up');
+  const { navigation: stepUp } = await startNavigation(ui.router, '/step-up');
   await flush(() => stepUp);
   expect(ui.host.querySelector('[role="alertdialog"]')).toBeNull();
-  const returned = await startNavigation(ui.router, '/account/rename');
+  const { navigation: returned } = await startNavigation(ui.router, '/account/rename');
   await flush(() => returned);
   expect(ui.host.textContent).toContain(m.auth_rename_reconfirm());
-  const leaving = await startNavigation(ui.router, '/next');
+  const { navigation: leaving } = await startNavigation(ui.router, '/next');
   await ui.replaceSource(source({ readCurrent: async () => ready('replacement') }));
   await flush(() => leaving);
   await flush(() => ui.router.navigate({ to: '/account/rename' } as never));
