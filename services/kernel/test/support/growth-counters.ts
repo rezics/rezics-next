@@ -140,7 +140,7 @@ export function validateCountedRun(
   const admitted: Record<string, number> = {};
   for (const name of keys) {
     const value = values[name];
-    if (!name || !Number.isSafeInteger(value) || value < 0)
+    if (!name || typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0)
       throw new TypeError(`Counted unit ${name || '<empty>'} at scale ${scale} must be a non-negative safe integer`);
     admitted[name] = value;
   }
