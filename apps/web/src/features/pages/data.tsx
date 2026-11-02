@@ -591,7 +591,20 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
           className="min-w-0 space-y-2 [overflow-wrap:anywhere] sm:col-start-2 [&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:items-center [&_a]:focus-visible:outline-2 [&_a]:focus-visible:outline-ring [&_a]:focus-visible:outline-offset-2"
         >
           {gated ? (
-            <SpoilerGate label={options.messages.spoilerShow} hideLabel={options.labels.spoilerHide}>
+            <SpoilerGate
+              key={JSON.stringify([
+                read.subject.id,
+                read.subject.context,
+                options.locale,
+                reader.spoilerLevel,
+                statement.id,
+                statement.property,
+                statement.value,
+                statement.qualifiers,
+              ])}
+              label={options.messages.spoilerShow}
+              hideLabel={options.labels.spoilerHide}
+            >
               {body}
             </SpoilerGate>
           ) : (
@@ -643,6 +656,17 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
   );
   const visibleKeywords = keywords.filter(({ statement }) => spoilerLevel(statement) <= reader.spoilerLevel);
   const spoilerKeywords = keywords.filter(({ statement }) => spoilerLevel(statement) > reader.spoilerLevel);
+  const spoilerKeywordPreview = options.overview ? spoilerKeywords.slice(0, 6) : spoilerKeywords;
+  const spoilerKeywordIdentity = spoilerKeywordPreview
+    .map(({ statement, text }) => [statement.id, text, spoilerLevel(statement)] as const)
+    .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
+  const spoilerKeywordKey = JSON.stringify([
+    read.subject.id,
+    read.subject.context,
+    options.locale,
+    reader.spoilerLevel,
+    spoilerKeywordIdentity,
+  ]);
   const tagList = (items: typeof keywords, slot: string) => (
     <ul
       data-slot={slot}
@@ -662,8 +686,12 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
         ? tagList(options.overview ? visibleKeywords.slice(0, 6) : visibleKeywords, 'subject-tags')
         : null}
       {spoilerKeywords.length ? (
-        <SpoilerGate label={options.messages.spoilerShow} hideLabel={options.labels.spoilerHide}>
-          {tagList(options.overview ? spoilerKeywords.slice(0, 6) : spoilerKeywords, 'subject-spoiler-tags')}
+        <SpoilerGate
+          key={spoilerKeywordKey}
+          label={options.messages.spoilerShow}
+          hideLabel={options.labels.spoilerHide}
+        >
+          {tagList(spoilerKeywordPreview, 'subject-spoiler-tags')}
         </SpoilerGate>
       ) : null}
     </>
