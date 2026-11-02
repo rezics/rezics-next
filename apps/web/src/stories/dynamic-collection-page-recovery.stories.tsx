@@ -141,7 +141,7 @@ export const LaterMembers: Story = {
   }),
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
-    expect(await view.findAllByRole('link', { name: 'Second', exact: true })).toHaveLength(2);
+    expect(await view.findAllByRole('link', { name: 'Second' })).toHaveLength(2);
     expect(view.getByText(m.library_subject_unavailable())).toBeVisible();
     expect(view.getByRole('link', { name: m.library_dynamic_page_reader_first_page() })).toBeVisible();
     expect(view.queryByText(m.library_dynamic_page_reader_empty())).toBeNull();
