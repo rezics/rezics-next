@@ -363,7 +363,7 @@ test('Recipe creation and current correction share complete frames with independ
       (within(retainedIncompatible).getByRole('button', { name: m.correction_submit() }) as HTMLButtonElement).disabled,
     ).toBe(true);
     expect(within(retainedIncompatible).queryByRole('button', { name: m.recipe_remove_field() })).not.toBeNull();
-    expect(posts(correction, '/candidates')).toHaveLength(beforeIncompatibleRefresh + 1);
+    expect(posts(correction, '/candidates')).toHaveLength(beforeIncompatibleRefresh);
 
     // Two authored method editors have their own labels, consent and documents.
     const methodA = await add(a, 'schema:recipeInstructions');
