@@ -1,9 +1,9 @@
-import { useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useId, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import type { FilterDocument, OwnerLeaf } from '@rezics/filter';
 import { parseFilter } from '@rezics/filter';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
-import { Field, FieldLabel, FieldGroup } from '@rezics/ui/shadcn/field';
+import { Field, FieldLabel, FieldGroup, FieldDescription } from '@rezics/ui/shadcn/field';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { ConditionEditor, type ConditionExtension } from '../search/condition-editor';
 import { localizedLabel } from '../search/results';
@@ -38,43 +38,104 @@ export function RuleEditLink({
   return <a href={`/${getLocale()}/collections/${encodeURIComponent(collection.id)}/rule`}>{m.library_rule_edit()}</a>;
 }
 
+function TechnicalDetails({ label, children, id }: { label: string; children: ReactNode; id?: string }) {
+  return (
+    <details id={id} className="min-w-0 text-sm">
+      <summary className="min-h-11 cursor-pointer content-center rounded-md py-2 text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+        {m.catalogue_technical_details()} · {label}
+      </summary>
+      <div className="flex min-w-0 flex-col gap-2 pt-2">{children}</div>
+    </details>
+  );
+}
+
 function Choice({
   label,
   value,
   choices,
   onChange,
   multiple = false,
+  references = [],
+  help,
 }: {
   label: string;
   value: string | readonly string[];
   choices: { id: string; name: string }[];
   onChange(value: string[]): void;
   multiple?: boolean;
+  references?: { label: string; value: string }[];
+  help?: string | undefined;
 }) {
+  const fieldId = useId();
   const selected = typeof value === 'string' ? [value] : value;
   const retained = selected.filter((id) => id && !choices.some((choice) => choice.id === id));
+  const unavailableName = (id: string) => m.library_rule_unavailable_choice({ number: retained.indexOf(id) + 1 });
+  const hasDetails = selected.some(Boolean) || references.some(({ value }) => value);
   return (
-    <Field>
-      <FieldLabel>
-        {label}
-        <NativeSelect
-          multiple={multiple}
-          value={multiple ? [...selected] : (selected[0] ?? '')}
-          onChange={(event) => onChange(Array.from(event.currentTarget.selectedOptions, (option) => option.value))}
+    <Field className="min-w-0">
+      <FieldLabel htmlFor={fieldId}>{label}</FieldLabel>
+      <NativeSelect
+        id={fieldId}
+        className="w-full min-w-0"
+        style={multiple ? { height: 'auto' } : undefined}
+        multiple={multiple}
+        value={multiple ? [...selected] : (selected[0] ?? '')}
+        aria-describedby={help || retained.length ? `${fieldId}-help` : undefined}
+        aria-details={hasDetails ? `${fieldId}-details` : undefined}
+        onChange={(event) => onChange(Array.from(event.currentTarget.selectedOptions, (option) => option.value))}
+      >
+        {!multiple && <NativeSelectOption value="">{m.condition_choose_value()}</NativeSelectOption>}
+        {retained.map((id) => (
+          <NativeSelectOption key={id} value={id}>
+            {unavailableName(id)} · {m.library_rule_retained()}
+          </NativeSelectOption>
+        ))}
+        {choices.map((choice) => (
+          <NativeSelectOption key={choice.id} value={choice.id}>
+            {choice.name}
+          </NativeSelectOption>
+        ))}
+      </NativeSelect>
+      {(help || retained.length > 0) && (
+        <FieldDescription id={`${fieldId}-help`}>{help ?? m.library_rule_retained_help()}</FieldDescription>
+      )}
+      {multiple && selected.some(Boolean) && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          aria-label={`${m.library_subject_clear()} · ${label}`}
+          onClick={() => onChange([])}
         >
-          {!multiple && <NativeSelectOption value="">{m.condition_choose_value()}</NativeSelectOption>}
-          {retained.map((id) => (
-            <NativeSelectOption key={id} value={id}>
-              {id} · {m.library_rule_retained()}
-            </NativeSelectOption>
-          ))}
-          {choices.map((choice) => (
-            <NativeSelectOption key={choice.id} value={choice.id}>
-              {choice.name}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
-      </FieldLabel>
+          {m.library_subject_clear()}
+        </Button>
+      )}
+      {hasDetails && (
+        <TechnicalDetails id={`${fieldId}-details`} label={label}>
+          <dl className="flex min-w-0 flex-col gap-2">
+            {references
+              .filter(({ value }) => value)
+              .map(({ label, value }) => (
+                <div key={label}>
+                  <dt className="text-muted-foreground">{label}</dt>
+                  <dd className="select-text break-all">
+                    <code>{value}</code>
+                  </dd>
+                </div>
+              ))}
+            {selected.filter(Boolean).map((id) => (
+              <div key={id}>
+                <dt className="text-muted-foreground">
+                  {choices.find((choice) => choice.id === id)?.name ?? unavailableName(id)}
+                </dt>
+                <dd className="select-text break-all">
+                  <code>{id}</code>
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </TechnicalDetails>
+      )}
     </Field>
   );
 }
@@ -126,20 +187,23 @@ function OwnerFields({
         }}
       />
       {'state' in owner && (
-        <>
-          <p className="text-sm text-muted-foreground">{owner.state.stateSetId}</p>
-          <Choice
-            label={m.library_rule_state()}
-            multiple
-            value={owner.state.in}
-            choices={
-              profile?.entryStateSet?.id === owner.state.stateSetId
-                ? profile.entryStateSet.states.map(({ id, labels }) => ({ id, name: label(labels) }))
-                : []
-            }
-            onChange={(selected) => onChange({ owner: { state: { ...owner.state, in: selected } } })}
-          />
-        </>
+        <Choice
+          label={m.library_rule_state()}
+          multiple
+          value={owner.state.in}
+          references={[{ label: m.library_rule_state_set(), value: owner.state.stateSetId }]}
+          help={
+            owner.state.stateSetId && profile?.entryStateSet?.id !== owner.state.stateSetId
+              ? m.library_rule_state_set_unavailable()
+              : undefined
+          }
+          choices={
+            profile?.entryStateSet?.id === owner.state.stateSetId
+              ? profile.entryStateSet.states.map(({ id, labels }) => ({ id, name: label(labels) }))
+              : []
+          }
+          onChange={(selected) => onChange({ owner: { state: { ...owner.state, in: selected } } })}
+        />
       )}
       {'session' in owner && (
         <Choice
@@ -395,6 +459,7 @@ function RuleForm({
   accepts(value: RulePage): value is AvailablePage;
   remember(value: AvailablePage): void;
 }) {
+  const metadataId = useId();
   const sourceActive = useRef(true);
   const available = useRef(sourceAvailable);
   available.current = sourceAvailable;
@@ -587,47 +652,44 @@ function RuleForm({
       ? choices
       : { ...choices, labels: { state: 'unavailable' as const, values: [], next: null } };
   return (
-    <article className="flex max-w-4xl flex-col gap-6 text-foreground">
+    <article className="flex min-w-0 max-w-4xl flex-col gap-4 text-foreground">
       <PageHeading>{base.state === 'new' ? m.library_rule_new() : m.library_rule_edit()}</PageHeading>
-      <p>{m.library_rule_private()}</p>
-      {base.state === 'ready' && (
-        <p className="break-all text-sm text-muted-foreground">
-          {m.library_rule_release()} {base.rule.releaseDigest}
-        </p>
-      )}
       <form onSubmit={(event) => void submit(event)} className="flex min-w-0 flex-col gap-6">
         <fieldset disabled={pending || !!intent || !!savedId} className="min-w-0">
           <FieldGroup>
             {base.state === 'new' && (
               <>
                 <Field>
-                  <FieldLabel>
-                    {m.library_collection_title()}
-                    <Input
-                      required
-                      maxLength={512}
-                      value={title}
-                      onChange={(event) => {
-                        if (isCurrent() && !captured.current) setTitle(event.currentTarget.value);
-                      }}
-                    />
-                  </FieldLabel>
+                  <FieldLabel htmlFor={`${metadataId}-title`}>{m.library_collection_title()}</FieldLabel>
+                  <Input
+                    id={`${metadataId}-title`}
+                    aria-describedby={`${metadataId}-title-limit`}
+                    required
+                    maxLength={512}
+                    value={title}
+                    onChange={(event) => {
+                      if (isCurrent() && !captured.current) setTitle(event.currentTarget.value);
+                    }}
+                  />
+                  <FieldDescription id={`${metadataId}-title-limit`}>{m.library_rule_title_limit()}</FieldDescription>
                 </Field>
                 <Field>
-                  <FieldLabel>
-                    {m.library_collection_description()}
-                    <Input
-                      value={description}
-                      maxLength={20000}
-                      onChange={(event) => {
-                        if (isCurrent() && !captured.current) setDescription(event.currentTarget.value);
-                      }}
-                    />
-                  </FieldLabel>
+                  <FieldLabel htmlFor={`${metadataId}-description`}>{m.library_collection_description()}</FieldLabel>
+                  <Input
+                    id={`${metadataId}-description`}
+                    aria-describedby={`${metadataId}-description-limit`}
+                    value={description}
+                    maxLength={20000}
+                    onChange={(event) => {
+                      if (isCurrent() && !captured.current) setDescription(event.currentTarget.value);
+                    }}
+                  />
+                  <FieldDescription id={`${metadataId}-description-limit`}>
+                    {m.library_rule_description_limit()}
+                  </FieldDescription>
                 </Field>
               </>
             )}
-            <p>{m.library_rule_sort()}</p>
             {choices.release.state !== 'ready' && (
               <p role="status">
                 {choices.release.state === 'preparing'
@@ -644,22 +706,25 @@ function RuleForm({
             )}
             {labels && canLabel && (
               <Field>
-                <FieldLabel>
-                  {m.library_rule_label_search()}
-                  <Input
-                    value={query}
-                    maxLength={1000}
-                    onChange={(event) => {
-                      if (!isCurrent() || !(canLabelCurrent?.() ?? true) || captured.current) return;
-                      choiceAddress.current = {
-                        q: event.currentTarget.value,
-                        cursor: undefined,
-                        generation: choiceAddress.current.generation + 1,
-                      };
-                      setQuery(event.currentTarget.value);
-                    }}
-                  />
-                </FieldLabel>
+                <FieldLabel htmlFor={`${metadataId}-label-search`}>{m.library_rule_label_search()}</FieldLabel>
+                <Input
+                  id={`${metadataId}-label-search`}
+                  aria-describedby={`${metadataId}-label-limit`}
+                  value={query}
+                  maxLength={1000}
+                  onChange={(event) => {
+                    if (!isCurrent() || !(canLabelCurrent?.() ?? true) || captured.current) return;
+                    choiceAddress.current = {
+                      q: event.currentTarget.value,
+                      cursor: undefined,
+                      generation: choiceAddress.current.generation + 1,
+                    };
+                    setQuery(event.currentTarget.value);
+                  }}
+                />
+                <FieldDescription id={`${metadataId}-label-limit`}>
+                  {m.library_rule_label_search_limit()}
+                </FieldDescription>
                 <div className="flex flex-wrap gap-2">
                   <Button type="button" variant="outline" onClick={() => void labelPage()}>
                     {m.search_apply()}
@@ -682,9 +747,18 @@ function RuleForm({
               extension={extension}
               embedded
             />
+            <details className="text-sm">
+              <summary className="min-h-11 cursor-pointer content-center rounded-md py-2 text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                {m.search_reader_condition_limits_title()}
+              </summary>
+              <p className="text-muted-foreground">{m.search_reader_condition_limits()}</p>
+            </details>
           </FieldGroup>
         </fieldset>
         {feedback && <p role="alert">{feedback}</p>}
+        {intent && !pending && <p role="status">{m.library_rule_uncertain()}</p>}
+        {savedId && <p role="status">{m.library_rule_saved()}</p>}
+        {base.state === 'new' && <p className="text-sm text-muted-foreground">{m.library_rule_private()}</p>}
         <div className="flex flex-wrap gap-3">
           <Button type="submit" disabled={pending || conflict || !filter || !!savedId}>
             {pending
@@ -700,9 +774,32 @@ function RuleForm({
         {savedId && (
           <a href={`/${getLocale()}/collections/${encodeURIComponent(savedId)}`}>{m.library_rule_members()}</a>
         )}
-        {base.state === 'ready' && (
+        {!savedId && base.state === 'ready' && (
           <a href={`/${getLocale()}/collections/${encodeURIComponent(base.id)}`}>{m.library_rule_members()}</a>
         )}
+        <TechnicalDetails label={m.library_rule_details()}>
+          <p className="text-muted-foreground">{m.library_rule_sort()}</p>
+          {base.state === 'ready' && (
+            <>
+              <p className="text-muted-foreground">{m.library_rule_loaded_references()}</p>
+              <dl className="flex min-w-0 flex-col gap-2">
+                {[
+                  { label: m.library_rule_release(), value: base.rule.releaseDigest },
+                  { label: m.library_rule_source_generation(), value: base.rule.sourceGeneration },
+                  { label: m.library_rule_revision(), value: base.rule.revision },
+                  { label: m.library_rule_collection_revision(), value: base.rule.collectionRevision },
+                ].map(({ label, value }) => (
+                  <div key={label}>
+                    <dt className="text-muted-foreground">{label}</dt>
+                    <dd className="select-text break-all">
+                      <code>{value}</code>
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </>
+          )}
+        </TechnicalDetails>
       </form>
     </article>
   );
