@@ -54,7 +54,9 @@ test('the default header history keeps removal focus useful and current', async 
   let updateDeferred!: Dispatch<SetStateAction<boolean>>;
   let outside: HTMLButtonElement | null = null;
   function Harness() {
-    const [entries, setEntries] = useState(() => Array.from({ length: 36 }, (_, index) => entry(`id-${index}`, `Query ${index}`)));
+    const [entries, setEntries] = useState(() =>
+      Array.from({ length: 36 }, (_, index) => entry(`id-${index}`, `Query ${index}`)),
+    );
     const [ownerKey, setOwnerKey] = useState('A');
     const [deferred, setDeferred] = useState(false);
     const ownerRef = useRef(ownerKey);
