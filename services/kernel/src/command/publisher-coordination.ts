@@ -69,8 +69,10 @@ export const PUBLISHER_COMMAND_COST = Object.freeze({
   // Includes the ordinary executor's two BEGINs, timeout controls, time, empty
   // event fence, absent-source finalization and COMMIT, plus one failure rollback.
   controls: cost(2, 1, 9, 8192, 1),
-  association: cost(4, 8, 3, 2 * CATALOGUE_MECHANICAL_REPRESENTATION.resultBytes + 16384, 2),
-  resolution: cost(1, 1, 1, 2 * CATALOGUE_MECHANICAL_REPRESENTATION.resultBytes + 4096, 1),
+  // Six payload passes: two for SQL wire transport, three Core digest inputs
+  // and one Core defensive copy. Semantic encoding/decoding adds separately.
+  association: cost(4, 8, 3, 6 * CATALOGUE_MECHANICAL_REPRESENTATION.resultBytes + 16384, 2),
+  resolution: cost(1, 1, 1, 4 * CATALOGUE_MECHANICAL_REPRESENTATION.resultBytes + 4096, 1),
   cleanup: cost(200, 300, 1, 32768, 1),
 });
 export function publisherCommandWork(body: WorkDimensions): WorkDimensions {

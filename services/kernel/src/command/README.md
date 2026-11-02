@@ -414,8 +414,8 @@ independent of unrelated operations. Bytes conservatively include SQL, scalar pa
 | Component                     | Rows | Points | Statements |  Bytes | Empty seeks |
 | ----------------------------- | ---: | -----: | ---------: | -----: | ----------: |
 | Controls, including rollback  |    2 |      1 |          9 |   8192 |           1 |
-| Association insert/lock/store |    4 |      8 |          3 | 147456 |           2 |
-| Resolution lookup             |    1 |      1 |          1 | 135168 |           1 |
+| Association insert/lock/store |    4 |      8 |          3 | 409600 |           2 |
+| Resolution lookup             |    1 |      1 |          1 | 266240 |           1 |
 | Cleanup batch, at most 100    |  200 |    300 |          1 |  32768 |           1 |
 
 Controls cover checkout/release (zero SQL), the executor's two BEGIN dispatches, lock timeout, initial/final
@@ -423,6 +423,9 @@ statement timeout, scalar authoritative time, one partition fence, absent-source
 and one same-client ROLLBACK including a failed COMMIT. Association bounds cover one INSERT plus its partition FK,
 one locked PK lookup and one result UPDATE, including PK and retention-index work. At most 65,536 canonical result
 bytes are stored per operation; lookup and storage carry at most twice that in bytea wire form plus fixed overhead.
+Association also includes three bounded Core digest passes and one defensive copy (six result-size passes total);
+resolution includes its digest and copy (four passes total). The separate Semantic representation multiplicities
+above cover canonical encoding/decoding rather than hiding those operations in the SQL operand.
 Replay uses a subset of association/controls. Resolution adds its lookup to controls; cleanup adds its batch to
 controls. No retry/second checkout or foreign body is included in those constants.
 
