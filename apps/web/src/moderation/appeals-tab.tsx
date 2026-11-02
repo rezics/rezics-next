@@ -1,5 +1,7 @@
-import { useContext, useId, useRef, useState, useSyncExternalStore } from 'react';
+import { useContext, useId, useRef, useState, useSyncExternalStore, type ComponentProps } from 'react';
 import { QueryClientContext } from '@tanstack/react-query';
+import { useRouter } from '@tanstack/react-router';
+import { AuthoringDepartureBoundary, AuthoringDepartureProvider } from '../threads/authoring-departure';
 import { createPrivateReaderLifetime, type PrivateReaderNavigation } from './private-reader-lifetime';
 import { Badge } from '@rezics/ui/shadcn/badge';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -13,6 +15,7 @@ import { AppealResolution } from './appeal-resolution';
 import { appealTarget, loadModerationAppeals, type Appeal } from './appeals-read';
 import {
   appealPageIsCurrent,
+  appealNavigationContext,
   appealReadKey,
   type AppealReadInput,
   type AppealReadState,
@@ -101,7 +104,6 @@ function AppealsVisit(props: AppealsPageProps) {
   }
   const leave = (action: (() => void) | undefined) => {
     if (!current()) return;
-    owner?.retire();
     action?.();
   };
   const commandCurrent = owner ? () => !reading.current && owner.canCommand() : undefined;
@@ -112,30 +114,36 @@ function AppealsVisit(props: AppealsPageProps) {
         ? 'unavailable'
         : data.state;
   return (
-    <div
-      onClickCapture={(event) => {
-        if ((event.target as Element).closest('a') && !current()) event.preventDefault();
-      }}
+    <AuthoringDepartureProvider
+      sessionBound={false}
+      navigationContext={appealNavigationContext}
+      onNavigationLeave={() => owner?.retire()}
     >
-      <ModerationAppealsView
-        key={data.generation}
-        appeals={data.appeals}
-        targets={data.targets}
-        next={data.next}
-        {...(data.viewerId !== null ? { viewerId: data.viewerId } : {})}
-        state={state}
-        {...(original.input.threadId ? { threadId: original.input.threadId } : {})}
-        {...(original.input.postId ? { postId: original.input.postId } : {})}
-        {...(original.reportsSearch !== undefined ? { reportsSearch: original.reportsSearch } : {})}
-        {...(commandCurrent ? { isCurrent: commandCurrent } : {})}
-        refreshBlocked={refreshBlocked}
-        onResolutionPending={resolutionPending}
-        onRefresh={() => void reload()}
-        onRetry={() => void reload()}
-        onNext={(cursor) => leave(() => original.onNext?.(cursor))}
-        onRestart={() => leave(original.onRestart)}
-      />
-    </div>
+      <div
+        onClickCapture={(event) => {
+          if ((event.target as Element).closest('a') && !current()) event.preventDefault();
+        }}
+      >
+        <ModerationAppealsView
+          key={data.generation}
+          appeals={data.appeals}
+          targets={data.targets}
+          next={data.next}
+          {...(data.viewerId !== null ? { viewerId: data.viewerId } : {})}
+          state={state}
+          {...(original.input.threadId ? { threadId: original.input.threadId } : {})}
+          {...(original.input.postId ? { postId: original.input.postId } : {})}
+          {...(props.reportsSearch !== undefined ? { reportsSearch: props.reportsSearch } : {})}
+          {...(commandCurrent ? { isCurrent: commandCurrent } : {})}
+          refreshBlocked={refreshBlocked}
+          onResolutionPending={resolutionPending}
+          onRefresh={() => void reload()}
+          onRetry={() => void reload()}
+          onNext={(cursor) => leave(() => props.onNext?.(cursor))}
+          onRestart={() => leave(props.onRestart)}
+        />
+      </div>
+    </AuthoringDepartureProvider>
   );
 }
 const emptySubscribe = () => () => {};
@@ -171,7 +179,15 @@ function currentTargetIsAvailable(
   return true;
 }
 
-export function ModerationAppealsView({
+export function ModerationAppealsView(props: ComponentProps<typeof AppealsView>) {
+  return (
+    <AuthoringDepartureBoundary sessionBound={false} navigationContext={appealNavigationContext}>
+      <AppealsView {...props} />
+    </AuthoringDepartureBoundary>
+  );
+}
+
+function AppealsView({
   appeals,
   targets,
   next,
@@ -206,6 +222,7 @@ export function ModerationAppealsView({
   viewerId?: string;
   canResolve?: (appeal: Appeal) => boolean;
 }) {
+  const router = useRouter({ warn: false });
   const session = useSession();
   const evidence = targets.map((target) => moderationEvidence(target.value));
   if (
@@ -228,7 +245,25 @@ export function ModerationAppealsView({
         <PageHeading>{m.moderation_appeals_heading()}</PageHeading>
       </header>
       <nav aria-label={m.moderation_tabs_label()} className="flex gap-4 border-b pb-2">
-        <a href={reportsHref}>{m.moderation_reports_tab()}</a>
+        <a
+          href={reportsHref}
+          onClick={(event) => {
+            if (
+              !router ||
+              event.defaultPrevented ||
+              event.button !== 0 ||
+              event.metaKey ||
+              event.ctrlKey ||
+              event.shiftKey ||
+              event.altKey
+            )
+              return;
+            event.preventDefault();
+            void router.navigate({ href: reportsHref });
+          }}
+        >
+          {m.moderation_reports_tab()}
+        </a>
         <span aria-current="page" className="font-semibold">
           {m.moderation_appeals_tab()}
         </span>

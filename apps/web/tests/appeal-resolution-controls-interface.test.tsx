@@ -5,6 +5,7 @@ test('An admitted moderator can resolve the intended appeal and recover a lost r
   const form = createAppealResolutionIntent('appeal');
   form.synchronize('appeal', 'reviewer-session', true);
   form.edit('  Private review.  ');
+  expect(form.needsDecision).toBe(true);
   const command = form.begin('uphold')!;
   expect(command).toMatchObject({ id: 'appeal', outcome: 'uphold', statement: 'Private review.' });
   expect(form.begin('reverse')).toBeNull();
@@ -13,6 +14,7 @@ test('An admitted moderator can resolve the intended appeal and recover a lost r
   expect(form.retry()).toBe(command);
   form.settle({ state: 'resolved', outcome: command.outcome, statement: command.statement });
   expect(form.result).toEqual({ state: 'resolved', outcome: 'uphold', statement: 'Private review.' });
+  expect(form.needsDecision).toBe(false);
   form.synchronize('another-appeal', 'reviewer-session', true);
   expect(form.statement).toBe('');
   expect(form.result).toBeNull();
@@ -44,6 +46,9 @@ test('Session hydration can admit an empty form but cannot adopt an existing pri
   const empty = createAppealResolutionIntent('appeal');
   empty.synchronize('appeal', null, false);
   empty.synchronize('appeal', 'reviewer-session', true);
+  expect(empty.needsDecision).toBe(false);
+  empty.edit('   ');
+  expect(empty.needsDecision).toBe(false);
   expect(empty.edit('New admitted draft.')).toBe(true);
   expect(empty.begin('reverse')?.statement).toBe('New admitted draft.');
 });

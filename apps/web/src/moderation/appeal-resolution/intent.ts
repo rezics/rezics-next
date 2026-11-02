@@ -31,6 +31,9 @@ export function createAppealResolutionIntent(appealId: string) {
     get unresolved() {
       return phase === 'pending' || phase === 'uncertain';
     },
+    get needsDecision() {
+      return phase !== 'retired' && result?.state !== 'resolved' && statement.trim() !== '';
+    },
     get command() {
       return command;
     },

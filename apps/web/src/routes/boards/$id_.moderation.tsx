@@ -22,7 +22,11 @@ import {
 import { ModerationReportsPage, ModerationReportsView } from '../../moderation/reports-page';
 import { loadModerationAppeals } from '../../moderation/appeals-read';
 import { ModerationAppealsPage, ModerationAppealsView } from '../../moderation/appeals-tab';
-import { moderationAppealInput, prepareModerationAppealRead } from '../../moderation/appeals-read-model';
+import {
+  appealNavigationContext,
+  moderationAppealInput,
+  prepareModerationAppealRead,
+} from '../../moderation/appeals-read-model';
 
 export const Route = createFileRoute('/boards/$id_/moderation')({
   beforeLoad: requireSignedIn,
@@ -37,7 +41,12 @@ export const Route = createFileRoute('/boards/$id_/moderation')({
     ...(typeof search.post === 'string' && search.post.length <= 128 ? { post: search.post } : {}),
     ...(search.tab === 'appeals' ? { tab: 'appeals' as const } : {}),
   }),
-  loaderDeps: ({ search }) => search,
+  loaderDeps: ({ search }) =>
+    search.tab === 'appeals'
+      ? { tab: search.tab, thread: search.thread, post: search.post, cursor: search.cursor }
+      : search,
+  // Reports selection metadata does not replace a loaded Appeals queue; explicit refresh stays page-owned.
+  shouldReload: ({ deps }) => deps.tab !== 'appeals',
   loader: async ({ params, deps, location, abortController, context }) => {
     if (deps.tab === 'appeals') {
       const page = await prepareModerationAppealRead(
@@ -46,7 +55,7 @@ export const Route = createFileRoute('/boards/$id_/moderation')({
         (data) => loadModerationAppeals({ data }),
         abortController.signal,
       );
-      return { ...page, navigationKey: location.state.__TSR_key ?? location.href };
+      return { ...page, navigationKey: appealNavigationContext(location) };
     }
     const page = await prepareModerationReportRead(
       context.queryClient,
@@ -82,25 +91,30 @@ function ModerationReportsRoute() {
   const currentInput = moderationReportInput(id, latestSearch);
   const appealPage = page as Awaited<ReturnType<typeof loadModerationAppeals>> & { navigationKey: string };
   const appealInput = moderationAppealInput(id, latestSearch);
-  const appealNavigationKey = latestLocation.state.__TSR_key ?? latestLocation.href;
+  const appealNavigationKey =
+    tab === 'appeals'
+      ? appealNavigationContext(latestLocation)
+      : (latestLocation.state.__TSR_key ?? latestLocation.href);
   const reportPage = page as Awaited<ReturnType<typeof prepareModerationReportRead>> & { navigationKey: string };
-  const reportNavigation = useMemo(
-    () => ({
-      isCurrent: () =>
-        (router.state.location.state.__TSR_key ?? router.state.location.href) === reportPage.navigationKey,
+  const reportNavigation = useMemo(() => {
+    const key = (location: typeof router.state.location) =>
+      tab === 'appeals' ? appealNavigationContext(location) : (location.state.__TSR_key ?? location.href);
+    return {
+      isCurrent: () => key(router.state.location) === reportPage.navigationKey,
       subscribe: (retire: () => void) => {
         const leave = router.subscribe('onBeforeNavigate', ({ toLocation }) => {
-          if ((toLocation.state.__TSR_key ?? toLocation.href) !== reportPage.navigationKey) retire();
+          if (key(toLocation) !== reportPage.navigationKey) retire();
         });
-        const reload = router.subscribe('onBeforeLoad', retire);
+        const reload = router.subscribe('onBeforeLoad', ({ toLocation }) => {
+          if (tab !== 'appeals' || key(toLocation) !== reportPage.navigationKey) retire();
+        });
         return () => {
           leave();
           reload();
         };
       },
-    }),
-    [router, reportPage.generation, reportPage.navigationKey],
-  );
+    };
+  }, [router, reportPage.generation, reportPage.navigationKey, tab]);
   const onNext = (nextCursor: string) =>
     void navigate({
       to: '/boards/$id/moderation',

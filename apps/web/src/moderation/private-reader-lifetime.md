@@ -57,6 +57,12 @@ cache and query admission remain authoritative; standalone injected fixtures acq
 Decision: confirmed draft discard forgets only local writing and retry recovery, keeps the current reader, and never
 claims to cancel or undo a native request.
 
+Moderator resolution forms share one queue departure decision for nonempty local statements and pending or uncertain
+commands. Stay retains exact input and the frozen outcome, payload and key; Leave retires every original intent and
+the admitted page before navigation resumes. Validated resolution receipts release protection immediately without a
+parent read; persisted outcomes and untouched forms need no decision. Session or admission retirement remains immediate.
+Decision: Appeals departure identity includes pathname, tab, thread, post and cursor; unrelated Reports selection metadata preserves the admitted queue and local resolution forms.
+
 Native limits remain 20 Reports/Appeals plus existing distinct-target/revision/author/media enrichment. Subscriptions
 are fixed per cache/owner and rendering is O(returned evidence); no history or per-row identity scan is added.
 

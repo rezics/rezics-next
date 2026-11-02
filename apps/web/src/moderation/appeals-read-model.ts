@@ -28,6 +28,15 @@ export function moderationAppealInput(boardId: string, search: Record<string, un
 export function appealReadKey(input: AppealReadInput): string {
   return JSON.stringify([input.boardId, input.threadId ?? '', input.postId ?? '', input.cursor ?? '']);
 }
+
+/** Only location changes that replace the admitted queue are departures. */
+export function appealNavigationContext(location: { pathname: string; search: Record<string, unknown> }): string {
+  return JSON.stringify([
+    location.pathname,
+    location.search.tab ?? '',
+    appealReadKey(moderationAppealInput('', location.search)),
+  ]);
+}
 export function appealPageIsCurrent(page: Pick<PrivateAppealPage, 'readKey'>, input: AppealReadInput): boolean {
   return page.readKey === appealReadKey(input);
 }

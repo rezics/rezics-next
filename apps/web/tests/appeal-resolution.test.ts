@@ -183,10 +183,14 @@ test('The actual AppealResolution form freezes an uncertain command and explicit
     document: window.document,
     navigator: window.navigator,
     HTMLElement: window.HTMLElement,
+    HTMLFormElement: window.HTMLFormElement,
     HTMLTextAreaElement: window.HTMLTextAreaElement,
     Element: window.Element,
     Node: window.Node,
     MutationObserver: window.MutationObserver,
+    ResizeObserver: window.ResizeObserver,
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
     getComputedStyle: window.getComputedStyle.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
   };
@@ -194,6 +198,11 @@ test('The actual AppealResolution form freezes an uncertain command and explicit
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   const { act } = await import('react');
+  const { createContext, useContext } = await import('react');
+  const { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } =
+    await import('@tanstack/react-router');
+  const { AuthoringDepartureProvider } = await import('../src/threads/authoring-departure');
+  const { appealNavigationContext } = await import('../src/moderation/appeals-read-model');
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const { sessionQuery } = await import('../src/session/query');
@@ -269,6 +278,32 @@ test('The actual AppealResolution form freezes an uncertain command and explicit
   const id = '0192f3a0-6c1e-7b2a-9d4e-000000000001';
   let generation = 0;
   let props = { appealId: id, mayResolve: true };
+  let sibling = false;
+  let reads = 0;
+  const notifications: boolean[] = [];
+  const Presentation = createContext<ReturnType<typeof createElement> | null>(null);
+  const parent = createRootRoute({ component: Outlet });
+  const router = createRouter({
+    history: createMemoryHistory({ initialEntries: ['/review?tab=appeals'] }),
+    routeTree: parent.addChildren([
+      createRoute({
+        getParentRoute: () => parent,
+        path: '/review',
+        validateSearch: (search) => search,
+        component: () => useContext(Presentation),
+      }),
+      createRoute({
+        getParentRoute: () => parent,
+        path: '/destination',
+        loader: () => {
+          reads++;
+          release();
+        },
+        component: () => createElement(AppealResolution, { appealId: 'replacement', mayResolve: true }),
+      }),
+    ]),
+  });
+  await router.load();
   const flush = () =>
     act(async () => {
       await new Promise((done) => setTimeout(done, 0));
@@ -279,7 +314,23 @@ test('The actual AppealResolution form freezes an uncertain command and explicit
         createElement(
           QueryClientProvider,
           { client: cache },
-          createElement(AppealResolution, { ...props, key: generation }),
+          createElement(Presentation.Provider, {
+            value: createElement(AuthoringDepartureProvider, {
+              sessionBound: false,
+              navigationContext: appealNavigationContext,
+              children: [
+                createElement(AppealResolution, {
+                  ...props,
+                  key: generation,
+                  onUnresolvedChange: (value) => notifications.push(value),
+                }),
+                sibling
+                  ? createElement(AppealResolution, { key: 'sibling', appealId: 'sibling', mayResolve: true })
+                  : null,
+              ],
+            }),
+            children: createElement(RouterProvider, { router }),
+          }),
         ),
       ),
     );
@@ -293,6 +344,24 @@ test('The actual AppealResolution form freezes an uncertain command and explicit
   const type = async () => {
     await act(async () => user.type(host.querySelector('textarea')!, '  Private independent review.  '));
   };
+  const blocked = () => {
+    const event = new window.Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  };
+  const dialog = () => window.document.querySelector('[role="alertdialog"]');
+  const depart = async (href: string) => {
+    await act(async () => {
+      void router.navigate({ href });
+    });
+    await flush();
+  };
+  const decide = async (label: string) => {
+    await act(async () =>
+      [...dialog()!.querySelectorAll('button')].find((node) => node.textContent === label)!.click(),
+    );
+    await flush();
+  };
   const hold = () => {
     gate = new Promise<void>((done) => {
       release = done;
@@ -302,7 +371,23 @@ test('The actual AppealResolution form freezes an uncertain command and explicit
     cache.setQueryData(sessionQuery.queryKey, originalSession);
     hold();
     await render();
+    expect(blocked()).toBe(false);
     await type();
+    sibling = true;
+    await render();
+    await act(async () => user.type(host.querySelectorAll('textarea')[1]!, 'Second local review.'));
+    await depart('/review?tab=appeals&selected=metadata');
+    expect(dialog()).toBeNull();
+    await depart('/review?tab=appeals&cursor=next');
+    expect(window.document.querySelectorAll('[role="alertdialog"]')).toHaveLength(1);
+    expect(dialog()!.textContent).toContain(m.moderation_resolution_leave_unsaved());
+    await decide(m.thread_authoring_stay());
+    expect([...host.querySelectorAll('textarea')].map((node) => node.value)).toEqual([
+      '  Private independent review.  ',
+      'Second local review.',
+    ]);
+    sibling = false;
+    await render();
     const reverse = button(m.moderation_appeal_reverse_action());
     await act(async () => {
       reverse.click();
@@ -312,6 +397,9 @@ test('The actual AppealResolution form freezes an uncertain command and explicit
     await flush();
     expect(calls).toHaveLength(1);
     expect(host.querySelector('textarea')!.disabled).toBe(true);
+    await depart('/review?tab=appeals&thread=another');
+    expect(dialog()!.textContent).toContain(m.moderation_resolution_leave_pending());
+    await decide(m.thread_authoring_stay());
     await act(async () => {
       release();
     });
@@ -319,6 +407,8 @@ test('The actual AppealResolution form freezes an uncertain command and explicit
     await flush();
     expect(host.querySelector('[role="alert"]')!.textContent).toBe(m.moderation_appeal_intent_uncertain());
     expect(reverse.disabled).toBe(true);
+    await depart('/review?tab=appeals&cursor=next');
+    await decide(m.thread_authoring_stay());
     expect(button(m.moderation_appeal_uphold_action()).disabled).toBe(true);
     await act(async () => user.type(host.querySelector('textarea')!, 'Contrary edit'));
     expect(host.querySelector('textarea')!.value).toBe('  Private independent review.  ');
@@ -333,11 +423,29 @@ test('The actual AppealResolution form freezes an uncertain command and explicit
     expect(authorizations).toBe(2); // Both attempts independently prepare the current session.
     expect(host.querySelector('[role="status"]')!.textContent).toContain(m.moderation_appeal_reversed());
     expect(host.querySelector('[role="status"]')!.textContent).toContain('Private independent review.');
+    expect(blocked()).toBe(false);
     // An unrelated failed refresh leaves this mounted form and its confirmed outcome intact.
     await Promise.reject(new Error('Unrelated refresh failed')).catch(() => render());
     expect(host.querySelector('[role="status"]')!.textContent).toContain('Private independent review.');
     expect(host.querySelector('textarea')).toBeNull();
     expect(calls).toHaveLength(2);
+
+    generation++;
+    hold();
+    await render();
+    await type();
+    await click(m.moderation_appeal_reverse_action());
+    const beforeLeave = [...notifications];
+    await depart('/destination');
+    expect(reads).toBe(0);
+    await decide(m.thread_authoring_leave()); // Destination read settles the already sent original command.
+    expect(reads).toBe(1);
+    expect(notifications).toEqual(beforeLeave);
+    expect(host.textContent).not.toContain('Private independent review.');
+    expect(host.querySelector('[role="status"]')).toBeNull();
+    expect(host.querySelector('textarea')!.value).toBe('');
+    gate = null;
+    await depart('/review?tab=appeals');
 
     for (const retirement of ['viewer', 'session', 'signed-out', 'admission', 'appeal', 'unmount'] as const) {
       generation++;
@@ -348,6 +456,7 @@ test('The actual AppealResolution form freezes an uncertain command and explicit
       await type();
       await click(m.moderation_appeal_reverse_action());
       const before = calls.length;
+      if (retirement === 'session') await depart('/review?tab=appeals&post=replacement');
       await act(async () => {
         if (retirement === 'viewer')
           cache.setQueryData(sessionQuery.queryKey, { ...originalSession, subject: 'another-reviewer' });
@@ -365,6 +474,7 @@ test('The actual AppealResolution form freezes an uncertain command and explicit
       });
       gate = null;
       await flush();
+      expect(dialog()).toBeNull();
       expect(host.textContent).not.toContain('Private independent review.');
       expect(host.querySelector('[role="status"]')).toBeNull();
       expect(host.querySelector('textarea')).toBeNull();

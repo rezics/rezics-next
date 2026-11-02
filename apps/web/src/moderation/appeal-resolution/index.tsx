@@ -3,6 +3,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { m } from '../../paraglide/messages.js';
 import { csrfHeaders } from '../../threads/composer';
+import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../../threads/authoring-departure';
 import { useSession } from '../../session/query';
 import { actionOnAppeal, type AppealResolutionResult } from '../actions';
 import { createAppealResolutionIntent, type ResolutionCommand } from './intent';
@@ -21,21 +22,31 @@ const resolveAppeal: ResolveAppeal = (data) => actionOnAppeal({ data, headers: c
  * The queue waits for pending or uncertain intent to settle before refreshing its native generation.
  * Unknown-session injected fixtures remain usable without granting the default action browser admission.
  */
-export function AppealResolution({
-  appealId,
-  mayResolve,
-  resolution,
-  onResolve = resolveAppeal,
-  isCurrent,
-  onUnresolvedChange,
-}: {
+type AppealResolutionProps = {
   appealId: string;
   mayResolve: boolean;
   resolution?: Resolution | null;
   onResolve?: ResolveAppeal;
   isCurrent?: () => boolean;
   onUnresolvedChange?: (unresolved: boolean) => void;
-}) {
+};
+
+export function AppealResolution(props: AppealResolutionProps) {
+  return (
+    <AuthoringDepartureBoundary sessionBound={false}>
+      <ResolutionForm {...props} />
+    </AuthoringDepartureBoundary>
+  );
+}
+
+function ResolutionForm({
+  appealId,
+  mayResolve,
+  resolution,
+  onResolve = resolveAppeal,
+  isCurrent,
+  onUnresolvedChange,
+}: AppealResolutionProps) {
   const [intent] = useState(() => createAppealResolutionIntent(appealId));
   const [, redraw] = useReducer((version: number) => version + 1, 0);
   const mounted = useRef(true);
@@ -70,6 +81,22 @@ export function AppealResolution({
       ? { outcome: response.outcome === 'uphold' ? 'upheld' : 'reversed', statement: response.statement }
       : resolution;
   const count = Array.from(statement.trim()).length;
+  const departure = useAuthoringDeparture(
+    () => mounted.current && isCurrent?.() !== false && !result && intent.needsDecision,
+    () => intent.unresolved,
+    JSON.stringify([appealId, statement, intent.phase]),
+    undefined,
+    () => {
+      intent.retire();
+      redraw();
+    },
+    undefined,
+    {
+      title: m.moderation_resolution_leave_title(),
+      unsaved: m.moderation_resolution_leave_unsaved(),
+      pending: m.moderation_resolution_leave_pending(),
+    },
+  );
   const message = uncertain
     ? m.moderation_appeal_intent_uncertain()
     : response?.state === 'forbidden'
@@ -98,7 +125,11 @@ export function AppealResolution({
     try {
       if (!current()) return;
       const response = await onResolve(command);
-      if (current()) intent.settle(response);
+      if (current()) {
+        intent.settle(response);
+        // A validated receipt acknowledges this frozen statement without waiting for any parent read.
+        if (response.state === 'resolved') departure.release();
+      }
     } catch {
       if (current()) intent.uncertain();
     } finally {
