@@ -231,6 +231,7 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
           <div className="flex min-w-0 flex-wrap gap-2">
             <Input
               id={`${id}-reference`}
+              dir="ltr"
               value={reference}
               maxLength={36}
               disabled={disabled || selected?.phase === 'loading'}

@@ -122,6 +122,7 @@ test('complete supplied current, selected and reference identities remain readab
   expect(host.textContent).toContain(saved.id);
   expect(host.textContent).toContain(chosen.id);
   expect(referenceInput().value).toBe(chosen.id);
+  expect(referenceInput().dir).toBe('ltr');
   expect(host.querySelector('details')!.open).toBe(false);
   for (const identity of host.querySelectorAll('bdi[dir="ltr"]'))
     expect([saved.id, chosen.id]).toContain(identity.textContent!);
