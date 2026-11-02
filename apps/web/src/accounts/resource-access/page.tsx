@@ -18,7 +18,7 @@ import {
   AlertDialogTitle,
 } from '@rezics/ui/shadcn/alert-dialog';
 import { EllipsisIcon } from 'lucide-react';
-import { useState, useSyncExternalStore, type FormEvent } from 'react';
+import { useLayoutEffect, useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { PageHeading } from '../../shell/page-heading';
@@ -111,6 +111,65 @@ function localDate(value: string | null) {
   return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, -1);
 }
 
+function useRecipientLookup(io: AccessIO) {
+  const [recipient, setRecipient] = useState('account');
+  const [handle, setHandle] = useState('');
+  const [identity, setIdentity] = useState<Identity | null>(null);
+  const [finding, setFinding] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const generation = useRef(0);
+  // Cancelling or replacing a form retires both successful and failed reads.
+  useLayoutEffect(
+    () => () => {
+      generation.current++;
+    },
+    [],
+  );
+
+  const invalidate = () => {
+    generation.current++;
+    setIdentity(null);
+    setFinding(false);
+    setError(null);
+  };
+  const lookup = async () => {
+    const request = ++generation.current;
+    setFinding(true);
+    setIdentity(null);
+    setError(null);
+    try {
+      const found = await io.lookup(handle);
+      if (request !== generation.current) return;
+      if (!found || (recipient === 'organization' && found.kind !== 'organization')) {
+        setError(m.access_lookup_failed());
+      } else {
+        setIdentity(found);
+      }
+    } catch {
+      if (request === generation.current) setError(m.access_unavailable());
+    } finally {
+      if (request === generation.current) setFinding(false);
+    }
+  };
+  return {
+    recipient,
+    handle,
+    identity,
+    finding,
+    error,
+    setError,
+    lookup,
+    changeHandle(value: string) {
+      invalidate();
+      setHandle(value);
+    },
+    changeRecipient(value: string) {
+      invalidate();
+      setRecipient(value);
+    },
+  };
+}
+
 function GrantForm({
   page,
   grant,
@@ -127,14 +186,11 @@ function GrantForm({
   const [kind, setKind] = useState<'role' | 'direct'>(grant?.kind ?? 'role');
   const [role, setRole] = useState(grant?.role ?? page.roles.find((role) => role.delegable)?.id ?? '');
   const [action, setAction] = useState(grant?.actions[0] ?? page.actions[0] ?? '');
-  const [recipient, setRecipient] = useState('account');
-  const [handle, setHandle] = useState('');
-  const [identity, setIdentity] = useState<Identity | null>(null);
+  const { recipient, handle, identity, finding, error, setError, lookup, changeHandle, changeRecipient } =
+    useRecipientLookup(io);
   const [groupRole, setGroupRole] = useState<'owner' | 'member'>('member');
   const [startsAt, setStartsAt] = useState(localDate(grant?.startsAt ?? null));
   const [endsAt, setEndsAt] = useState(localDate(grant?.endsAt ?? null));
-  const [finding, setFinding] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const submit = (event: FormEvent) => {
     event.preventDefault();
     const valid = interval(startsAt, endsAt);
@@ -171,25 +227,12 @@ function GrantForm({
       ...(grant ? { previous: { role: grant.role, actions: grant.actions, valid: grant.valid } } : {}),
     });
   };
-  const lookup = async () => {
-    setFinding(true);
-    setIdentity(null);
-    setError(null);
-    try {
-      const found = await io.lookup(handle);
-      if (!found || (recipient === 'organization' && found.kind !== 'organization')) setError(m.access_lookup_failed());
-      else setIdentity(found);
-    } catch {
-      setError(m.access_unavailable());
-    } finally {
-      setFinding(false);
-    }
-  };
   return (
     <form
       onSubmit={submit}
       className="space-y-5 rounded-xl bg-muted/40 p-4 sm:p-6"
       aria-labelledby="access-form-heading"
+      aria-busy={finding}
     >
       <h2 id="access-form-heading" className="text-lg font-semibold">
         {grant ? m.access_edit_grant() : m.access_add_grant()}
@@ -204,12 +247,8 @@ function GrantForm({
             <FieldLabel htmlFor="access-recipient">{m.access_recipient()}</FieldLabel>
             <NativeSelect
               id="access-recipient"
-              disabled={finding}
               value={recipient}
-              onChange={(event) => {
-                setRecipient(event.target.value);
-                setIdentity(null);
-              }}
+              onChange={(event) => changeRecipient(event.target.value)}
             >
               <NativeSelectOption value="account">{m.access_account()}</NativeSelectOption>
               <NativeSelectOption value="organization">{m.access_organization_group()}</NativeSelectOption>
@@ -223,13 +262,9 @@ function GrantForm({
                 <div className="flex flex-wrap gap-2">
                   <Input
                     id="access-handle"
-                    disabled={finding}
                     className="min-w-32 flex-1"
                     value={handle}
-                    onChange={(event) => {
-                      setHandle(event.target.value);
-                      setIdentity(null);
-                    }}
+                    onChange={(event) => changeHandle(event.target.value)}
                     autoComplete="off"
                     maxLength={64}
                   />
@@ -494,7 +529,15 @@ export function ResourceAccessPage({ initial, io }: { initial: AccessState; io: 
           ) : null}
           {form !== null && !state.busy && !state.pending ? (
             <GrantForm
-              key={form === 'new' ? 'new' : `${form.valid}:${form.role}:${form.actions.join()}`}
+              key={JSON.stringify([
+                page.resource.id,
+                page.resource.route,
+                page.resource.type,
+                page.authority.accountId,
+                page.authority.clientId,
+                page.authority.principalId,
+                form === 'new' ? 'new' : [form.subject, form.valid, form.role, form.actions],
+              ])}
               page={page}
               grant={form === 'new' ? null : form}
               io={io}
