@@ -13,7 +13,7 @@ import type {
   InitiatorRestorer,
 } from '../access/durable-initiator.ts';
 import type { WriteRateContext, WriteRateDecision, WriteRateFamily } from '../access/write-rate.ts';
-import type { Access, Actor } from '../request/access.ts';
+import type { Access, AccountActor, Actor } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkContext } from '../work/registry.ts';
 import type { EntryDeletion, EntryState } from './entry-model.ts';
@@ -129,6 +129,8 @@ export type SubjectTarget = Readonly<{
   subjectId: string;
   requestedSubjectId: string | null;
   expected: EntryExpectation;
+  /** Exact destination for add_to_collection targets; absent for other subject actions. */
+  collectionId?: string;
 }>;
 /** Exact native row stamps, captured together. member_revision alone does not cover note/order edits. */
 export type OccurrenceExpectation = Readonly<{
@@ -204,6 +206,8 @@ export type TargetCommand = Readonly<{
   sourceDigest: string;
   target: ImmutableTarget;
   receipt: ReceiptLocator;
+  /** Original command basis, checked against the durable initiator at the attempt time. */
+  identity: Readonly<Pick<AccountActor, 'clientId' | 'requestedBy'>>;
   chunkIndex: number;
   deadline: number;
 }>;
@@ -372,12 +376,7 @@ export async function executeStatusTarget(
   return executeCollectionBulkStatus(_dependencies, _command);
 }
 export { executeLibraryRemovalTarget } from './collection-bulk-library-removal.ts';
-export async function executeCollectionAddTarget(
-  _dependencies: BulkDependencies,
-  _command: TargetCommand,
-): Promise<AttemptResult> {
-  throw new Error('Library bulk Collection add is not implemented');
-}
+export { executeCollectionAddTarget } from './collection-bulk-add.ts';
 export async function executeCollectionRemoveTarget(
   dependencies: BulkDependencies,
   command: TargetCommand,

@@ -78,6 +78,8 @@ function digest(value: string): string {
 function targetKey(target: CollectionBulkTarget): string {
   if (routeOf(target.subjectId) === null) throw new TypeError('Invalid subject');
   if (target.kind === 'subject') {
+    if (target.collectionId !== undefined && routeOf(target.collectionId) === null)
+      throw new TypeError('Invalid target Collection');
     const expected = target.expected;
     if (expected.kind === 'present') {
       if (
@@ -155,6 +157,16 @@ export async function previewCollectionBulk(
 ): Promise<CollectionBulkOperation> {
   key(input);
   if (input.targets.length > COLLECTION_BULK_TARGET_LIMIT) throw new CollectionBulkSelectionTooLarge();
+  if (input.request.action === 'add_to_collection') {
+    const collectionId = input.request.collectionId;
+    if (
+      routeOf(collectionId) === null ||
+      input.targets.some((target) => target.kind !== 'subject' || target.collectionId !== collectionId)
+    )
+      throw new TypeError('Bulk add targets must capture the requested Collection');
+  } else if (input.targets.some((target) => target.kind === 'subject' && target.collectionId !== undefined)) {
+    throw new TypeError('Only Collection add targets may capture a Collection destination');
+  }
   const intent: CollectionBulkIntent = {
     ...input.request,
     selection:
@@ -186,6 +198,16 @@ export async function previewCollectionBulk(
     const frozen = JSON.parse(json(target, TARGET_BYTES)) as CollectionBulkTarget;
     return { ...frozen, operationId: input.operationId, ordinal: String(ordinal) };
   });
+  const receiptPartitions = targets.map((target) => {
+    const usesCollectionRoute =
+      target.kind === 'occurrence' ||
+      (input.request.action === 'add_to_collection' && target.kind === 'subject');
+    if (!usesCollectionRoute) return partitionOf(input.route);
+    const collectionRoute =
+      typeof target.collectionId === 'string' ? routeOf(target.collectionId) : null;
+    if (collectionRoute === null) throw new TypeError('Target Collection must be captured');
+    return partitionOf(collectionRoute);
+  });
   const sourceDigest = digest(
     json({ request: intent, targets, initiator: input.initiator, creationReceipt: receipt }, 4_600_000),
   );
@@ -215,9 +237,7 @@ export async function previewCollectionBulk(
         source_digest,receipt,created_transaction_id,state,chunk_index)
       SELECT $1,$2::uuid,(n-1),$3::uuid,(target->>'subjectId')::uuid,target->>'kind',
         (target->>'collectionId')::uuid,(target->>'memberId')::uuid,target,$5,
-        jsonb_build_object('partition',CASE WHEN target->>'kind'='occurrence' THEN
-          (get_byte(uuid_send((target->>'collectionId')::uuid),10)*256+
-           get_byte(uuid_send((target->>'collectionId')::uuid),11)) >> 4 ELSE $7::integer END,
+        jsonb_build_object('partition',($8::jsonb->>(n-1))::integer,
           'principalKind','account','principalId',($3::uuid)::text,
           'commandKind','library.collectionBulk.target','key',($2::uuid)::text||':'||(n-1)::text,
           'digest',encode(sha256(convert_to($5::text||':'||target::text,'UTF8')),'hex')),$6,'pending',(n-1)/100
@@ -230,6 +250,7 @@ export async function previewCollectionBulk(
         sourceDigest,
         input.transactionId,
         partitionOf(input.route),
+        JSON.stringify(receiptPartitions),
       ],
     );
   }

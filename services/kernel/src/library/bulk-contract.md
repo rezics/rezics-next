@@ -20,6 +20,8 @@ same home; remote commands must reconcile their original native receipts before 
 
 ## Native storage boundary
 
+Decision: each add-to-Collection Subject target captures its exact Collection; its action receipt lives on that Collection's partition, while the operation manifest remains on the operation route. Target commands carry the durable initiator's original client/request basis and verify it against current native initiator evidence before use.
+
 [`collection-bulk-store.ts`](collection-bulk-store.ts) implements the internal native transaction seam:
 
 - `collectCollectionBulkTargets` asks an admitted source for bounded useful pages, stopping at 1,001 matches.

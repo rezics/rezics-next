@@ -37,6 +37,7 @@ import type {
   MemberPosition,
   MemberReordering,
 } from './collection-model.ts';
+import type { BulkReason, TerminalOutcome } from './bulk-contract.ts';
 import {
   presentationSelection,
   preparePresentationSelection,
@@ -282,6 +283,83 @@ async function activeCollection(tx: CommandTransaction, route: number, collectio
   const current = await readCollection(tx, route, collectionId);
   if (!current || current.state !== 'active') throw notFound();
   return current;
+}
+
+export type CollectionBulkAddEffect = Readonly<{
+  state: TerminalOutcome;
+  reason: BulkReason | null;
+  resultingMemberId: string | null;
+  events: readonly CommandEvent[];
+}>;
+
+/** Apply the bulk skip-present variant inside its owning native Collection command. */
+export async function addCollectionMemberIfAbsentNative(
+  tx: CommandTransaction,
+  actor: AccountActor,
+  collectionId: string,
+  subjectId: string,
+  command: { transactionId: string; time: string },
+): Promise<CollectionBulkAddEffect> {
+  const route = collectionRoute(collectionId);
+  const first = await activeCollection(tx, route, collectionId);
+  if (first.curatorAccountId === null) throw new GrantDeniedError();
+  try {
+    await shareAccount(tx, first.curatorAccountId);
+  } catch (error) {
+    if (error instanceof LifecycleDeniedError) throw new GrantDeniedError();
+    throw error;
+  }
+  await enterShelfWrite({ client: tx, route, accountId: first.curatorAccountId });
+
+  const current = await activeCollection(tx, route, collectionId);
+  if (current.curatorAccountId !== first.curatorAccountId) throw new GrantDeniedError();
+  if (current.membershipKind !== 'curated' || current.builtinKind !== null)
+    return { state: 'failed', reason: 'dependency_unavailable', resultingMemberId: null, events: [] };
+
+  const represented = await tx.query(
+    `SELECT 1 FROM library.collection_member
+     WHERE route=$1 AND collection_id=$2 AND subject_id=$3 AND deletion_id IS NULL LIMIT 1`,
+    [route, collectionId, subjectId],
+  );
+  if (represented.rows.length > 0)
+    return { state: 'no_effect', reason: null, resultingMemberId: null, events: [] };
+  if (current.memberCount >= MAX_MEMBER_COUNT)
+    return { state: 'failed', reason: 'collection_full', resultingMemberId: null, events: [] };
+
+  try {
+    await assertCollectionOrderWritable(tx, route, collectionId);
+  } catch (error) {
+    if (error instanceof CollectionOrderRepairRequired)
+      return { state: 'failed', reason: 'dependency_unavailable', resultingMemberId: null, events: [] };
+    throw error;
+  }
+  const memberId = newId(route);
+  const placed = await placeInCollection(tx, route, collectionId, positionOf(undefined), memberId, false);
+  if (placed.respace.length > 0) {
+    await tx.query('SET CONSTRAINTS library.collection_member_ordinal_key DEFERRED');
+    const epoch = await respaceMembers(tx, route, collectionId, placed.respace, command);
+    if (epoch === null)
+      return { state: 'conflict', reason: 'revision_mismatch', resultingMemberId: null, events: [] };
+  }
+  const value = await insertMember(
+    tx,
+    route,
+    collectionId,
+    { id: memberId, subjectId, note: null, ordinalKey: placed.ordinalKey },
+    command,
+  );
+  if (!value) {
+    const latest = await readCollection(tx, route, collectionId);
+    if (latest && latest.memberCount >= MAX_MEMBER_COUNT)
+      return { state: 'failed', reason: 'collection_full', resultingMemberId: null, events: [] };
+    throw notFound();
+  }
+  return {
+    state: 'applied',
+    reason: null,
+    resultingMemberId: value.id,
+    events: [memberEvent(collectionId, value.id, value.subjectId)],
+  };
 }
 
 export function createCollectionCommands(config: {
