@@ -13,7 +13,11 @@ import { PageHeading } from '../shell/page-heading';
 import { pageHead } from '../shell/head';
 import { validatePublicOrigin } from '../shell/origin';
 import { m } from '../paraglide/messages.js';
-import { getLocale } from '../paraglide/runtime.js';
+import { getLocale, locales } from '../paraglide/runtime.js';
+
+function messageOptions(locale: string) {
+  return { locale: locales.find((value) => value === locale) ?? 'en' };
+}
 
 const publicOrigin = createIsomorphicFn()
   .server(() => validatePublicOrigin((env as { PUBLIC_ORIGIN?: string }).PUBLIC_ORIGIN))
@@ -34,26 +38,32 @@ export const Route = createFileRoute('/search')({
       isRealmDiscoverySearch(params) ? context.queryClient.fetchQuery(realmDiscoveryQueryOptions(locale)) : undefined,
     ]).then(() => ({ query: params.query }));
   },
-  head: ({ loaderData }) =>
-    pageHead(
+  head: ({ loaderData }) => {
+    const locale = getLocale();
+    const options = messageOptions(locale);
+    return pageHead(
       {
-        title: loaderData?.query ? `${loaderData.query} – ${m.search_heading()}` : m.search_heading(),
+        title: loaderData?.query
+          ? `${loaderData.query} – ${m.search_heading({}, options)}`
+          : m.search_heading({}, options),
         robots: 'noindex, follow',
       },
-      { origin: publicOrigin(), locale: getLocale(), path: '/search' },
-    ),
+      { origin: publicOrigin(), locale, path: '/search' },
+    );
+  },
   component: SearchRoute,
   errorComponent: SearchFailed,
 });
 
 /** A search the kernel could not answer says so in a sentence, in the page's own frame. */
 function SearchFailed() {
+  const options = messageOptions(getLocale());
   return (
     <section className="mx-auto max-w-5xl space-y-6">
-      <PageHeading>{m.search_heading()}</PageHeading>
+      <PageHeading>{m.search_heading({}, options)}</PageHeading>
       <Empty className="border" role="alert">
         <EmptyHeader>
-          <EmptyTitle className="text-base font-normal">{m.search_failed()}</EmptyTitle>
+          <EmptyTitle className="text-base font-normal">{m.search_failed({}, options)}</EmptyTitle>
         </EmptyHeader>
       </Empty>
     </section>
@@ -64,6 +74,7 @@ function SearchRoute() {
   const search = Route.useSearch();
   const deps = searchLoaderDeps(search);
   const navigate = Route.useNavigate();
+  const locale = getLocale();
   if (deps.invalidInput) {
     const invalidInput = deps.invalidInput;
     return (
@@ -71,6 +82,7 @@ function SearchRoute() {
         key={`${invalidInput.key}:${invalidInput.value}`}
         parameter={invalidInput.key}
         value={invalidInput.value}
+        locale={locale}
         onApply={(value) => {
           void navigate({
             search: (previous) => correctSearchInput(previous, invalidInput.key, value),
@@ -82,17 +94,17 @@ function SearchRoute() {
       />
     );
   }
-  return <SearchResults deps={deps} />;
+  return <SearchResults deps={deps} locale={locale} />;
 }
 
-function SearchResults({ deps }: { deps: ReturnType<typeof searchLoaderDeps> }) {
-  const locale = getLocale();
+function SearchResults({ deps, locale }: { deps: ReturnType<typeof searchLoaderDeps>; locale: string }) {
   const { data, retry } = useSearchQuery(locale, deps);
   const realms = useQuery({ ...realmDiscoveryQueryOptions(locale), enabled: isRealmDiscoverySearch(deps) });
   return (
     <SearchPage
       query={deps.query}
       data={data}
+      locale={locale}
       onRetry={retry}
       {...(realms.data ? { realmDiscovery: realms.data } : {})}
     />

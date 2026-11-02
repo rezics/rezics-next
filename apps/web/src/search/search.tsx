@@ -11,7 +11,7 @@ import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { cn } from '@rezics/ui/utils';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { getLocale } from '../paraglide/runtime.js';
+import { getLocale, locales } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { kernelClient } from '../kernel/client.ts';
 import { requestLanguages } from '../kernel/languages.ts';
@@ -391,6 +391,11 @@ function languageDisplayName(tag: string, locale: string) {
 }
 
 const linkClass = cn(buttonVariants({ variant: 'link' }), 'h-auto justify-start p-0');
+type MessageOptions = { locale: (typeof locales)[number] };
+
+function messageOptions(locale: string): MessageOptions {
+  return { locale: locales.find((value) => value === locale) ?? 'en' };
+}
 
 export function SearchPage({
   query,
@@ -401,6 +406,7 @@ export function SearchPage({
   realmDiscovery,
   realmDiscoveryRead,
   onRetry,
+  locale: localeProp,
 }: {
   query: string;
   cursor?: string;
@@ -410,6 +416,7 @@ export function SearchPage({
   realmDiscovery?: RealmDiscoveryState;
   realmDiscoveryRead?: RealmDiscoveryReader;
   onRetry?: (() => void) | undefined;
+  locale?: string;
 }) {
   const sourceData = data;
   const currentData = useRef(data);
@@ -421,7 +428,8 @@ export function SearchPage({
   const router = useRouter({ warn: false });
   const typeControlId = useId();
   const filterOpener = useRef<HTMLElement | null>(null);
-  const locale = getLocale();
+  const locale = localeProp ?? getLocale();
+  const options = messageOptions(locale);
   const type = data?.type;
   const result = data?.result;
   const discovery = data?.discovery;
@@ -469,7 +477,7 @@ export function SearchPage({
   if (type)
     add(
       'type',
-      `${m.search_subject_type()}: ${label(data?.typeLabels, m.search_constraint_identity_kind_unavailable())}`,
+      `${m.search_subject_type({}, options)}: ${label(data?.typeLabels, m.search_constraint_identity_kind_unavailable({}, options))}`,
       {
         ...navigationState,
         type: undefined,
@@ -479,11 +487,11 @@ export function SearchPage({
   for (const kind of navigationState.kinds ?? [])
     add(
       `kind:${kind}`,
-      `${m.home_kind_label()}: ${label(
+      `${m.home_kind_label({}, options)}: ${label(
         discovery?.status === 'ready'
           ? discovery.page.kinds.values.find((entry) => entry.id === kind)?.labels
           : undefined,
-        m.search_constraint_identity_kind_unavailable(),
+        m.search_constraint_identity_kind_unavailable({}, options),
       )}`,
       { ...navigationState, kinds: navigationState.kinds?.filter((value) => value !== kind) },
       { kind },
@@ -498,7 +506,10 @@ export function SearchPage({
           : undefined;
       add(
         `facet:${property}:${value}`,
-        `${property === 'type' ? m.search_subject_types() : label(data?.selectedFacetLabels[property], m.search_constraint_identity_property_unavailable())}: ${label(valueLabels, m.search_constraint_identity_value_unavailable())}`,
+        `${property === 'type' ? m.search_subject_types({}, options) : label(data?.selectedFacetLabels[property], m.search_constraint_identity_property_unavailable({}, options))}: ${label(
+          valueLabels,
+          m.search_constraint_identity_value_unavailable({}, options),
+        )}`,
         {
           ...navigationState,
           facets: { ...selectedFacets, [property]: values.filter((entry) => entry !== value) },
@@ -509,7 +520,9 @@ export function SearchPage({
   for (const [property, range] of Object.entries(data?.ranges ?? {}))
     add(
       `range:${property}`,
-      `${label(data?.conditionMetadata?.properties[property]?.labels, m.search_constraint_identity_property_unavailable())}: ${range.gte ?? '…'} – ${range.lte ?? '…'}${range.unit ? ` (${m.search_constraint_identity_unit_unavailable()})` : ''}`,
+      `${label(data?.conditionMetadata?.properties[property]?.labels, m.search_constraint_identity_property_unavailable({}, options))}: ${range.gte ?? '…'} – ${range.lte ?? '…'}${
+        range.unit ? ` (${m.search_constraint_identity_unit_unavailable({}, options)})` : ''
+      }`,
       {
         ...navigationState,
         ranges: Object.fromEntries(Object.entries(data?.ranges ?? {}).filter(([key]) => key !== property)),
@@ -517,12 +530,17 @@ export function SearchPage({
       { property, range },
     );
   for (const tag of draft.languages ?? [])
-    add(`language:${tag}`, `${m.condition_language()}: ${languageDisplayName(tag, locale)}`, {
-      ...navigationState,
-      languages: draft.languages?.filter((entry) => entry !== tag),
-    });
-  if (draft.condition) add('condition', m.condition_heading(), { ...navigationState, condition: undefined });
-  if (navigationState.filter) add('filter', m.search_existing_filter(), { ...navigationState, filter: undefined });
+    add(
+      `language:${tag}`,
+      `${m.condition_language({}, options)}: ${languageDisplayName(tag, locale)}`,
+      {
+        ...navigationState,
+        languages: draft.languages?.filter((entry) => entry !== tag),
+      },
+    );
+  if (draft.condition) add('condition', m.condition_heading({}, options), { ...navigationState, condition: undefined });
+  if (navigationState.filter)
+    add('filter', m.search_existing_filter({}, options), { ...navigationState, filter: undefined });
   const activeFilterCount = constraints.length;
   useEffect(() => setHydrated(true), []);
   const desktopPanel = useRef<HTMLDivElement>(null);
@@ -628,10 +646,10 @@ export function SearchPage({
         onClick={openFilters}
       >
         <SlidersHorizontalIcon aria-hidden="true" className="size-4" />
-        {m.search_filters()} ({number.format(activeFilterCount)})
+        {m.search_filters({}, options)} ({number.format(activeFilterCount)})
       </Button>
       {constraints.length > 0 && (
-        <ul aria-label={m.refinement_selected()} data-search-constraints className="flex flex-wrap gap-2">
+        <ul aria-label={m.refinement_selected({}, options)} data-search-constraints className="flex flex-wrap gap-2">
           {constraints.map(({ key, text, state }, index) => (
             <li key={key} className="min-w-0 max-w-full">
               <a
@@ -640,13 +658,19 @@ export function SearchPage({
                   'h-auto min-h-11 max-w-full whitespace-normal py-2',
                 )}
                 data-remove-condition={key === 'condition' ? 'true' : undefined}
-                aria-label={m.refinement_remove({
-                  value: m.search_constraint_identity_filter({ number: number.format(index + 1), label: text }),
-                })}
+                aria-label={m.refinement_remove(
+                  {
+                    value: m.search_constraint_identity_filter(
+                      { number: number.format(index + 1), label: text },
+                      options,
+                    ),
+                  },
+                  options,
+                )}
                 href={discoverySearchHref(locale, state)}
               >
                 <span className="min-w-0 text-start wrap-anywhere">
-                  {m.search_constraint_identity_filter({ number: number.format(index + 1), label: text })}
+                  {m.search_constraint_identity_filter({ number: number.format(index + 1), label: text }, options)}
                 </span>
                 <XIcon aria-hidden="true" className="size-3" />
               </a>
@@ -657,14 +681,14 @@ export function SearchPage({
       {constraints.some(({ details }) => details !== undefined) && (
         <details className="min-w-0 text-sm" data-search-constraint-details>
           <summary className="min-h-11 w-fit max-w-full cursor-pointer rounded-sm py-2 wrap-anywhere focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-            {m.search_constraint_identity_details()}
+            {m.search_constraint_identity_details({}, options)}
           </summary>
           <dl className="space-y-3 pt-2">
             {constraints.map(({ key, text, details }, index) =>
               details !== undefined ? (
                 <div key={key} className="min-w-0 space-y-1">
                   <dt className="font-medium wrap-anywhere">
-                    {m.search_constraint_identity_filter({ number: number.format(index + 1), label: text })}
+                    {m.search_constraint_identity_filter({ number: number.format(index + 1), label: text }, options)}
                   </dt>
                   <dd className="min-w-0">
                     <code
@@ -725,8 +749,8 @@ export function SearchPage({
         />
       )}
       <Field>
-        <FieldLabel htmlFor={`${typeControlId}-${surface}`}>{m.search_subject_type()}</FieldLabel>
-        <p className="text-sm text-muted-foreground">{m.search_subject_type_help()}</p>
+        <FieldLabel htmlFor={`${typeControlId}-${surface}`}>{m.search_subject_type({}, options)}</FieldLabel>
+        <p className="text-sm text-muted-foreground">{m.search_subject_type_help({}, options)}</p>
         <NativeSelect
           id={`${typeControlId}-${surface}`}
           name="type"
@@ -735,15 +759,15 @@ export function SearchPage({
             if (hydrated) event.currentTarget.form?.requestSubmit();
           }}
         >
-          <NativeSelectOption value="">{m.search_all_subject_types()}</NativeSelectOption>
+          <NativeSelectOption value="">{m.search_all_subject_types({}, options)}</NativeSelectOption>
           {type && !data?.conditionMetadata?.types[type] && (
             <NativeSelectOption value={type}>
-              {label(data?.typeLabels, m.search_constraint_identity_kind_unavailable())}
+              {label(data?.typeLabels, m.search_constraint_identity_kind_unavailable({}, options))}
             </NativeSelectOption>
           )}
           {Object.entries(data?.conditionMetadata?.types ?? {}).map(([id, definition]) => (
             <NativeSelectOption key={id} value={id}>
-              {label(definition.labels, m.search_constraint_identity_kind_unavailable())}
+              {label(definition.labels, m.search_constraint_identity_kind_unavailable({}, options))}
             </NativeSelectOption>
           ))}
         </NativeSelect>
@@ -817,17 +841,17 @@ export function SearchPage({
       />
       {!data?.conditionMetadata && (
         <a className={linkClass} href={discoverySearchHref(locale, committedState)}>
-          {m.search_facet_retry()}
+          {m.search_facet_retry({}, options)}
         </a>
       )}
-      {data?.queryState?.filter && <p className="text-sm text-muted-foreground">{m.condition_retained()}</p>}
+      {data?.queryState?.filter && <p className="text-sm text-muted-foreground">{m.condition_retained({}, options)}</p>}
       {Object.entries(data?.ranges ?? {}).map(([property, range]) => (
         <input key={property} type="hidden" name={`r.${property}`} value={JSON.stringify(range)} />
       ))}
       {editing && (
         <div className="flex items-center gap-2">
           <Button type="button" variant="outline" onClick={revertDraft}>
-            {m.search_filter_revert_action()}
+            {m.search_filter_revert_action({}, options)}
           </Button>
         </div>
       )}
@@ -838,7 +862,7 @@ export function SearchPage({
         tabIndex={-1}
         className="rounded-sm text-sm text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       >
-        {revertedKey === stateKey ? m.search_filter_revert_status() : ''}
+        {revertedKey === stateKey ? m.search_filter_revert_status({}, options) : ''}
       </p>
     </div>
   );
@@ -851,7 +875,7 @@ export function SearchPage({
           id="search-filters"
           ref={desktopPanel}
           role="region"
-          aria-label={m.search_filters()}
+          aria-label={m.search_filters({}, options)}
           tabIndex={-1}
           className="min-w-0 rounded-xl border border-border/60 p-4"
           onKeyDown={(event) => {
@@ -863,9 +887,9 @@ export function SearchPage({
           onClick={follow}
         >
           <div className="flex items-center justify-between gap-2">
-            <h2 className="font-medium">{m.search_filters()}</h2>
+            <h2 className="font-medium">{m.search_filters({}, options)}</h2>
             <Button type="button" variant="ghost" hidden={!hydrated} onClick={closeFilters}>
-              {m.search_close_filters()}
+              {m.search_close_filters({}, options)}
             </Button>
           </div>
           <form id="desktop-filter-form" method="get" onSubmit={submit} action={`/${locale}/search`}>
@@ -879,7 +903,7 @@ export function SearchPage({
           onOpenChange={(open) => {
             if (!open) closeFilters();
           }}
-          title={`${m.search_filters()} (${number.format(activeFilterCount)})`}
+          title={`${m.search_filters({}, options)} (${number.format(activeFilterCount)})`}
         >
           <form id="search-filters" method="get" action={`/${locale}/search`} onSubmit={submit} onClick={follow}>
             {filterContents('mobile')}
@@ -913,7 +937,7 @@ export function SearchPage({
 
   return (
     <section className="mx-auto max-w-5xl space-y-6">
-      <PageHeading>{m.search_heading()}</PageHeading>
+      <PageHeading>{m.search_heading({}, options)}</PageHeading>
       {hasFilterPanel ? (
         <>
           {filterEntrance}
@@ -942,6 +966,7 @@ function renderResults(
   retryState = data?.queryState,
 ) {
   if (!result && !data?.discovery && !data?.recovery) return null;
+  const options = messageOptions(locale);
   const next = continuationAllowed
     ? data?.discovery?.status === 'ready'
       ? data.discovery.page.next
@@ -951,7 +976,7 @@ function renderResults(
     <>
       <div className="space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-muted-foreground">{m.search_results()}</p>
+          <p className="text-sm text-muted-foreground">{m.search_results({}, options)}</p>
           <SearchSort
             sort={data?.sort ?? 'relevance'}
             locale={locale}
@@ -973,12 +998,14 @@ function renderResults(
       </div>
       {data?.staleCursorRestarted && (
         <p role="status" className="text-sm text-muted-foreground">
-          {m.search_stale_cursor_restarted()}
+          {m.search_stale_cursor_restarted({}, options)}
         </p>
       )}
       {data?.facetRetry && (
         <p role="status" className="text-sm text-muted-foreground">
-          {data.facetIndexNotReady ? m.search_reader_facets_not_ready() : m.search_reader_facets_unavailable()}{' '}
+          {data.facetIndexNotReady
+            ? m.search_reader_facets_not_ready({}, options)
+            : m.search_reader_facets_unavailable({}, options)}{' '}
           <a
             className={linkClass}
             href={searchHref(
@@ -991,7 +1018,7 @@ function renderResults(
               data.queryState,
             )}
           >
-            {m.search_facet_retry()}
+            {m.search_facet_retry({}, options)}
           </a>
         </p>
       )}
@@ -1015,7 +1042,7 @@ function renderResults(
       ) : result?.subjects.length === 0 ? (
         <Empty className="border">
           <EmptyHeader>
-            <EmptyTitle className="text-base font-normal">{m.search_no_results()}</EmptyTitle>
+            <EmptyTitle className="text-base font-normal">{m.search_no_results({}, options)}</EmptyTitle>
           </EmptyHeader>
         </Empty>
       ) : (
@@ -1049,7 +1076,7 @@ function renderResults(
           }}
           className={buttonVariants({ variant: 'outline' })}
         >
-          {m.search_more()}
+          {m.search_more({}, options)}
         </Link>
       )}
     </>
