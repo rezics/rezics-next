@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { MAX_BRIEF_BYTES, parseBrief } from './briefs.ts';
+import { controlPlaneReleaseBrief, devProductBrief, MAX_BRIEF_BYTES, parseBrief } from './briefs.ts';
 import { markdown } from './test-support.ts';
 
 test('a brief over the size limit is refused with the reason, since the prompt is one launch argument', () => {
@@ -60,4 +60,25 @@ test('verification briefs require typed proof metadata and reject source editing
     proof.replace('kind: verification', 'kind: implementation'),
   ])
     expect(() => parseBrief(invalid, ownership)).toThrow();
+});
+
+test('untargeted control-plane work is dev work; main targeting is reserved for control-plane releases', () => {
+  const ownership = { version: 1 as const, areas: {} };
+  const controlPlane = markdown.replace('goal: fixture', 'goal: control-plane');
+  const dev = parseBrief(controlPlane, ownership);
+  expect(dev.target).toBeUndefined();
+  expect(controlPlaneReleaseBrief(dev)).toBe(false);
+  expect(devProductBrief(dev)).toBe(true);
+  for (const target of ['main', 'stabilize'] as const) {
+    const release = parseBrief(
+      controlPlane.replace('goal: control-plane', `goal: control-plane\ntarget: ${target}`),
+      ownership,
+    );
+    expect(release.target).toBe(target);
+    expect(controlPlaneReleaseBrief(release)).toBe(true);
+    expect(devProductBrief(release)).toBe(false);
+  }
+  expect(() => parseBrief(markdown.replace('goal: fixture', 'goal: fixture\ntarget: main'), ownership)).toThrow(
+    'only a control-plane brief can target main',
+  );
 });

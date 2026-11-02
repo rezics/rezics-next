@@ -73,7 +73,7 @@ test('a dev product worker may merge or cherry-pick only what its contract names
   expect(product).toContain('Do not rebase; merge or cherry-pick only what the contract names.');
   expect(product).not.toContain('Do not rebase or merge.');
   for (const fenced of [
-    task({ goal: 'control-plane', paths: ['tools/goal/src/a.ts'] }),
+    task({ goal: 'control-plane', target: 'main', paths: ['tools/goal/src/a.ts'] }),
     task({ target: 'stabilize' }),
     task({}, { module: 'apps/web', taskName: 'shared' }),
   ]) {

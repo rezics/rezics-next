@@ -118,7 +118,7 @@ test('control-plane retries still refuse a second retry while one waits to start
     writeFileSync(
       h.briefFile,
       markdown
-        .replace('goal: fixture', 'goal: control-plane')
+        .replace('goal: fixture', 'goal: control-plane\ntarget: main')
         .replace('paths: [result.txt]', 'paths: [tools/goal/a.ts]'),
     );
     const task = h.tasks.dispatch(h.briefFile);

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { lstatSync, readFileSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { WorkerStore } from './store.ts';
 import type { Settings, Task, WorktreeCleanupDisposition } from './types.ts';
 import { acquireDirectoryLease, LeaseHeldError, type DirectoryLease } from './lease.ts';

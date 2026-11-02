@@ -6,7 +6,6 @@ import type { AttemptFence, GateOutcome } from './contracts.ts';
 import { StaleAttemptError } from './contracts.ts';
 import { SqliteLandingQueue } from './land.ts';
 import { MergeTrain } from './merge-train.ts';
-import { git } from './merge.ts';
 import { acquireDirectoryLease } from './lease.ts';
 import { harness, repository } from './test-support.ts';
 import { openDb } from './db.ts';

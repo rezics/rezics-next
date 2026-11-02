@@ -13,7 +13,7 @@ function briefFile(h: ReturnType<typeof integrationHarness>, paths: string): str
   return file;
 }
 
-test("a control-plane task's worktree starts from main even when dev's tools/goal differs", () => {
+test("a control-plane task for dev starts from dev; one targeting main starts from main even when dev's tools/goal differs", () => {
   const h = integrationHarness();
   try {
     h.ensureDev();
@@ -32,7 +32,13 @@ test("a control-plane task's worktree starts from main even when dev's tools/goa
       git(h.root, ['branch', '-D', 'dev-change']);
     }
 
-    const task = h.tasks.dispatch(briefFile(h, 'tools/goal/src/task.ts'));
+    const devTask = h.tasks.dispatch(briefFile(h, 'tools/goal/src/dev-task.ts'));
+    expect(devTask.base).toBe(h.head('dev'));
+    expect(git(devTask.worktree, ['show', 'HEAD:tools/goal/src/version.ts'])).toBe('dev version');
+
+    const file = briefFile(h, 'tools/goal/src/task.ts');
+    writeFileSync(file, readFileSync(file, 'utf8').replace('waiting: []', 'waiting: []\ntarget: main'));
+    const task = h.tasks.dispatch(file);
 
     expect(task.base).toBe(main);
     expect(git(task.worktree, ['rev-parse', 'HEAD'])).toBe(main);

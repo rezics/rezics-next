@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { MergeTrain } from './merge-train.ts';
 import { WorkerJob } from './job.ts';
@@ -24,7 +24,7 @@ async function startWorker(
   goal: 'control-plane' | 'fixture' = 'control-plane',
   content = `worker version for ${file}\n`,
 ) {
-  const task = h.dispatch(file, [], ['true'], goal);
+  const task = h.dispatch(file, [], ['true'], goal, goal === 'control-plane' ? 'main' : undefined);
   writePlan(task.worktree, file, content);
   installNoProgressWorker(h);
   await job.start(task.id);
@@ -140,7 +140,7 @@ test('Identical redacted failure fingerprints on different files/heads or with n
   try {
     const fileA = 'tools/goal/src/storybook-entry.ts';
     const fileB = 'tools/goal/src/storybook-layout.ts';
-    const task = h.dispatch(`${fileA}, ${fileB}`, [], ['true'], 'control-plane');
+    const task = h.dispatch(`${fileA}, ${fileB}`, [], ['true'], 'control-plane', 'main');
     writeFileSync(
       join(task.worktree, '.temp/worker-plan.json'),
       JSON.stringify({
@@ -192,7 +192,7 @@ test('Only repeated SAME files+integrationhead+workercommit without progress tri
       { path: 'tools/goal/src/storybook-a.ts', content: 'worker Storybook A\n' },
       { path: 'tools/goal/src/storybook-b.ts', content: 'worker Storybook B\n' },
     ];
-    const task = h.dispatch(files.map((file) => file.path).join(', '), [], ['true'], 'control-plane');
+    const task = h.dispatch(files.map((file) => file.path).join(', '), [], ['true'], 'control-plane', 'main');
     installMultiFilePlan(h, task.worktree, files);
     await job.start(task.id);
     await job.drain();

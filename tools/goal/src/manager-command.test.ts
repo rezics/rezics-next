@@ -1,6 +1,5 @@
 import { expect, test } from 'bun:test';
 import { readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { createRuntime, loadSettings } from './config.ts';
 import { harness } from './test-support.ts';
 

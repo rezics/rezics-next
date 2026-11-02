@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { acquireDirectoryLease, acquireDirectoryLeaseWaiting } from './lease.ts';
+import { acquireDirectoryLease } from './lease.ts';
 import { processIdentity, sameProcess } from './process.ts';
 import { temporaryDirectory } from './test-support.ts';
 

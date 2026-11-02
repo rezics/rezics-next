@@ -241,9 +241,7 @@ test('a snapshot gated while main took any other commit is dropped for a fresh g
     const candidate = h.head();
     createStabilize(h, candidate);
     let other = '';
-    let gates = 0;
     await h.promote(async () => {
-      gates++;
       other ||= commitOnMain(h, 'services/kernel/src/other.ts');
       return success;
     });

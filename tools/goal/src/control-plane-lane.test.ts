@@ -197,8 +197,9 @@ test('main-lane routing preserves dev queue priority and FIFO order within each 
     enqueue('dev-first', { goal: 'web' });
     enqueue('affected-failure', { goal: 'web' });
     enqueue('dev-second', { goal: 'web' });
-    enqueue('main-control-plane', { goal: 'control-plane' }, ['tools/goal/train.ts']);
-    enqueue('dev-control-plane', { goal: 'control-plane' });
+    enqueue('main-control-plane', { goal: 'control-plane', target: 'stabilize' }, ['tools/goal/train.ts']);
+    // Control-plane work without a target lands on dev like product work; cp-sync publishes it to main.
+    enqueue('dev-control-plane', { goal: 'control-plane' }, ['tools/goal/dev.ts']);
     enqueue('stabilize', { goal: 'web', target: 'stabilize' });
     enqueue('main-target', { goal: 'web', target: 'main' });
 

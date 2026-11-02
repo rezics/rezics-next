@@ -34,7 +34,7 @@ import {
 import { launchSmokeRequired } from './merge-train.ts';
 import { codexAdapter } from './agents/codex.ts';
 import { checkScriptFixture, fixturePool, harness, reading } from './test-support.ts';
-import { loadSettings, mainCheckout } from './config.ts';
+import { loadSettings } from './config.ts';
 import { parseBrief, readRiskOwnership } from './briefs.ts';
 import { classifyTask, readRouting } from './routing.ts';
 import { git as fixtureGit, WorkerTasks } from './tasks.ts';
@@ -460,6 +460,7 @@ function landingFixture(path: string) {
   const brief = parseBrief(
     `---
 goal: control-plane
+target: main
 kind: implementation
 paths: [${path}]
 riskAreas: []

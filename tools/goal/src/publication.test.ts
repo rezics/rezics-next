@@ -533,10 +533,6 @@ async function bootstrapAndReceive(fixture: Fixture, overrides: RuntimeOverrides
   return readAuthorityId(fixture);
 }
 
-function expectedWorkflowExecutable(fixture: Fixture): string {
-  return join(fixture.worktreeRoot, 'storybook-publications');
-}
-
 function fixtureDependencies(sourceTree: string, worktreeRoot: string) {
   const executable = join(sourceTree, '.temp/publication-fixture-bun');
   mkdirSync(dirname(executable), { recursive: true });

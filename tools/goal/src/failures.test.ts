@@ -104,7 +104,7 @@ for (const item of cases)
         writeFileSync(
           h.briefFile,
           markdown
-            .replace('goal: fixture', 'goal: control-plane')
+            .replace('goal: fixture', 'goal: control-plane\ntarget: main')
             .replace('paths: [result.txt]', `paths: [${controlPlanePath}]`),
         );
       const task = h.tasks.dispatch(h.briefFile);
@@ -338,7 +338,7 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
     writeFileSync(
       h.briefFile,
       markdown
-        .replace('goal: fixture', 'goal: control-plane')
+        .replace('goal: fixture', 'goal: control-plane\ntarget: main')
         .replace('paths: [result.txt]', `paths: [${controlPlanePath}]`),
     );
     const task = h.tasks.dispatch(h.briefFile),

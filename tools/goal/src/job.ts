@@ -36,7 +36,7 @@ import { assessUsageLimitRefusal, markExhausted } from './usage.ts';
 import { StaleAttemptError } from './contracts.ts';
 import { acquireDirectoryLease, acquireDirectoryLeaseWaiting, LeaseHeldError, type DirectoryLease } from './lease.ts';
 import { classifyFailure, estimateOverrun } from './failures.ts';
-import { devProductBrief, matchesPath } from './briefs.ts';
+import { controlPlaneReleaseBrief, devProductBrief, matchesPath } from './briefs.ts';
 import { blockerFingerprint, noProgressTwice, toolRetryDelay } from './attempt-progress.ts';
 import { checkHostsInOutage } from './watchdog.ts';
 import { evidenceBundle } from './evidence.ts';
@@ -2035,7 +2035,7 @@ export class WorkerJob implements GateOutcomeSink {
       // A control-plane landing checks the whole control-plane tree, beyond the task's estimated diff size. A failed
       // check is still the task's gate failure; retain scope-growth for an actual changed path outside the brief.
       const controlPlaneGate =
-        task.brief.goal === 'control-plane' &&
+        controlPlaneReleaseBrief(task.brief) &&
         outcome.stage === 'gate' &&
         outcome.changedFiles.every((path) => matchesPath(path, task.brief.paths));
       const classificationOutcome = controlPlaneGate

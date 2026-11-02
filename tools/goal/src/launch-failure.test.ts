@@ -398,7 +398,7 @@ test('failed check-host Bun downloads are transport failures without hiding task
     'curl: (52) Empty reply from server',
     'gzip: stdin: unexpected end of file',
     'tar: Unexpected EOF in archive',
-    'remote-check: downloaded Bun does not match packageManager 1.4.4-canary.20261027.1',
+    'remote-check: downloaded Bun does not match packageManager 1.4.4-canary.20261031.1',
   ])
     expect(CHECK_HOST_TRANSPORT.test(detail)).toBe(true);
 
