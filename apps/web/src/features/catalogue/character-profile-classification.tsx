@@ -160,7 +160,9 @@ export function CharacterClassification({
                   className="w-full min-w-0 max-w-full [&_select]:min-h-11 [&_select:focus-visible]:outline-2 [&_select:focus-visible]:outline-offset-2 [&_select:focus-visible]:outline-ring md:pointer-fine:[&_select]:min-h-8"
                   aria-label={m.facts_choose_value({}, o)}
                   value={source}
-                  onChange={(event) => setSource(event.target.value)}
+                  onChange={(event) => {
+                    if (active()) setSource(event.target.value);
+                  }}
                 >
                   <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
                   {selected.map((statement, index) => (
@@ -221,7 +223,7 @@ export function CharacterClassification({
                     )
                   }
                   onValueChange={(items) => {
-                    if (running.current || factLocked(draft)) return;
+                    if (!active() || running.current || factLocked(draft)) return;
                     setPicked(items);
                     change({
                       ...draft.statement,
@@ -245,7 +247,12 @@ export function CharacterClassification({
             {result?.ok ? (
               <>
                 <p role="status">{m.correction_proposed({}, o)}</p>
-                <Button className={actionClassName} onClick={() => setReviewing(true)}>
+                <Button
+                  className={actionClassName}
+                  onClick={() => {
+                    if (active()) setReviewing(true);
+                  }}
+                >
                   {m.correction_review({}, o)}
                 </Button>
                 {reviewing && (
