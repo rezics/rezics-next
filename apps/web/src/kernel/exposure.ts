@@ -80,8 +80,9 @@ type ExposureOperation = GatedOperation | LibraryLabelOperation;
 
 /** Resolve one operation against its admitted response, failing closed when it is absent. */
 export function operationIsAdmitted(operation: ExposureOperation, admitted: readonly string[] | undefined): boolean {
-  // This future route must be explicitly advertised; today's group admission does not imply support.
-  if (operation === 'library_entry.restore') return admitted?.includes(operation) ?? false;
+  // Entry removal and optional Undo require independent native operation admission.
+  if (operation === 'library_entry.delete' || operation === 'library_entry.restore')
+    return admitted?.includes(operation) ?? false;
   const admittedKey = Object.hasOwn(operationGroups, operation)
     ? operationGroups[operation as GatedOperation]
     : operation;

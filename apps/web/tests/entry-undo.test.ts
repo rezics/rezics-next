@@ -457,6 +457,8 @@ test('the new form endpoint validates cookie CSRF and requires each intent admis
   expect((await libraryEntryFormResponse(send(token), env, client)).status).toBe(403);
   expect((await libraryEntryFormResponse(send(token, 'remove'), env, client)).status).toBe(403);
   expect(calls.every((call) => new URL(call.url).pathname === '/v1/platform/exposure')).toBe(true);
+  setFakeAdmitted(['personal_library', 'library_entry.delete']);
+  expect((await libraryEntryFormResponse(send(token), env, client)).status).toBe(403);
   calls.length = 0;
   setFakeAdmitted(['personal_library', 'library_entry.restore']);
   expect((await libraryEntryFormResponse(send(token, 'remove'), env, client)).status).toBe(403);
@@ -479,9 +481,11 @@ test.each([
   const { EntryRemoveForm } = await import('../src/library/entry-undo');
   const client = new QueryClient();
   client.setQueryData(['exposure', 'anonymous'], admitted);
-  const html = renderToStaticMarkup(createElement(QueryClientProvider, { client }, createElement(EntryRemoveForm, {
-    locale: 'en', subjectId, revision: 7, idempotencyKey: deletionId,
-  })));
+  const html = renderToStaticMarkup(
+    createElement(QueryClientProvider, { client }, createElement(EntryRemoveForm, {
+      locale: 'en', subjectId, revision: 7, idempotencyKey: deletionId,
+    })),
+  );
   expect(html.includes('name="intent" value="remove"')).toBe(visible);
   client.clear();
 });

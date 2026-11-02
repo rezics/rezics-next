@@ -288,6 +288,8 @@ Invalid credentials never downgrade to anonymous, including public/unlisted read
 Ordinary individual deletion hides immediately and preserves exact owner undo only while kernel time is strictly
 before the original 720-hour deadline. Restores recheck authority/CAS/capacity and retain accepted pins and identity;
 replay never renews the window. Takedown withholds the least covered material and alone schedules no purge.
+Web removal requires actual `library_entry.delete` admission independently of optional Undo's
+`library_entry.restore` admission; group presence grants neither operation.
 
 Terminal account time T immediately fences every private/unlisted read, export, count and producer. Accounts owns
 one erasure coordinator with fixed versioned participants, including separate Library and financial Commerce.

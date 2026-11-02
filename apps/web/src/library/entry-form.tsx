@@ -79,12 +79,14 @@ export async function libraryEntryFormResponse(
         !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(idempotencyKey))
     )
       return problemResponse(problem(400, 'invalid_request', 'Invalid Request'));
-    // Old kernels advertise the group alone; only this explicit operation enables the new form path.
+    // Group presence grants neither removal nor restore, and Undo cannot gate removal.
     const exposure = await client.platform.exposure.get({
       headers: { authorization },
       fetch: { cache: 'no-store', redirect: 'manual' },
     });
-    if (exposure.error || !exposure.data?.admitted.includes('library_entry.restore' as never))
+    const operation = intent === 'remove' ? 'library_entry.delete' : 'library_entry.restore';
+    const admitted = exposure.error ? undefined : exposure.data?.admitted;
+    if (!admitted?.includes(operation as never))
       return problemResponse(problem(403, 'platform_closed', 'Platform Closed'));
     const locale = locales.find((value) => value === single('locale')) ?? 'en';
     const back = new URL(single('returnTo') || `/${locale}/library`, request.url);
@@ -113,7 +115,8 @@ export async function libraryEntryFormResponse(
         },
       );
       removed = result.ok || result.reason === 'missing';
-      if (result.ok && result.undo) undo = { subjectId, ...result.undo };
+      if (result.ok && result.undo && admitted.includes('library_entry.restore' as never))
+        undo = { subjectId, ...result.undo };
       else if (!result.ok && result.reason === 'conflict') {
         conflict = true;
         restore = { ok: true, entry: result.entry };
@@ -121,7 +124,8 @@ export async function libraryEntryFormResponse(
     }
     const csrfToken = single('csrf_token') || null;
     const queryClient = new QueryClient();
-    queryClient.setQueryData(['exposure', 'anonymous'], ['personal_library', 'library_entry.restore']);
+    // Render only the operations observed from the native admission response.
+    queryClient.setQueryData(['exposure', 'anonymous'], admitted);
     const context = new Request(new URL(`/${locale}/library`, request.url), { headers: request.headers });
     return await paraglideMiddleware(context, () => {
       const markup = renderToStaticMarkup(

@@ -64,22 +64,20 @@ export function EntryRemoveForm({
   const client = useContext(QueryClientContext);
   const session = client?.getQueryData<{ csrfToken: string | null }>(['session']);
   return (
-    <Exposure operation="library_entry.restore">
-      <Exposure operation="library_entry.delete">
-        <form method="post" action="/library/entry" className="my-2 min-w-0 max-w-full">
-          <ContextFields {...context} csrfToken={context.csrfToken ?? session?.csrfToken ?? null} />
-          <input type="hidden" name="intent" value="remove" />
-          <input type="hidden" name="subjectId" value={subjectId} />
-          <input type="hidden" name="revision" value={revision} />
-          {typeof incarnationId === 'string' ? (
-            <input type="hidden" name="incarnationId" value={incarnationId} />
-          ) : null}
-          <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
-          <button className={entryActionClassName} type="submit">
-            {m.library_remove_from_library()}
-          </button>
-        </form>
-      </Exposure>
+    <Exposure operation="library_entry.delete">
+      <form method="post" action="/library/entry" className="my-2 min-w-0 max-w-full">
+        <ContextFields {...context} csrfToken={context.csrfToken ?? session?.csrfToken ?? null} />
+        <input type="hidden" name="intent" value="remove" />
+        <input type="hidden" name="subjectId" value={subjectId} />
+        <input type="hidden" name="revision" value={revision} />
+        {typeof incarnationId === 'string' ? (
+          <input type="hidden" name="incarnationId" value={incarnationId} />
+        ) : null}
+        <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
+        <button className={entryActionClassName} type="submit">
+          {m.library_remove_from_library()}
+        </button>
+      </form>
     </Exposure>
   );
 }
