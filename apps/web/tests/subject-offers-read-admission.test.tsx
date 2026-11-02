@@ -47,14 +47,14 @@ test('tokenless session discovery retries exact pages and retires late reads on 
   try {
     observe(); await flush(render); await flush();
     expect(rows()).toBe(1); expect(calls).toHaveLength(1); expect(calls[0]!.credentialMode).toBe('session');
+    read = async () => ({ kind: 'unavailable' });
     await click(m.subject_purchase_next()); await flush();
     expect(calls.at(-1)!.cursor).toBe('native/+?=#cursor');
-    read = async () => ({ kind: 'unavailable' });
-    await click(m.subject_purchase_restart()); await flush();
     expect(rows()).toBe(0); expect(host.textContent).toContain(m.subject_purchase_unavailable());
     read = async () => page;
     await click(m.subject_purchase_retry()); await flush();
-    expect(calls.at(-1)!.cursor).toBeUndefined(); expect(rows()).toBe(1);
+    expect(calls.at(-1)!.cursor).toBe('native/+?=#cursor'); expect(rows()).toBe(1);
+    await click(m.subject_purchase_restart()); await flush(); expect(calls.at(-1)!.cursor).toBeUndefined();
     for (const change of [
       () => { observe('signed-in', 'reader-b'); observe(); },
       () => client.setQueryData(['exposure', 'viewer'], ['reading']),
