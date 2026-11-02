@@ -220,13 +220,17 @@ export async function loadSubjectPage(
       const reads = planReads(platformRegistry, raw.document as CompositionDocument, pageContext(raw)).reads;
       for (const [key, read] of Object.entries(reads)) {
         if (read.kind !== 'account' || raw.reads[key]?.status !== 200) continue;
-        const handle = accountOf(raw.reads[key]?.body)?.handle;
-        if (handle) return { kind: 'redirect', id: handle, target: 'account' };
+        // Account descriptors select by handle, which this envelope does not carry.
+        // The native profile's immutable ID binds the planned slot to the admitted account.
+        const profile = accountOf(raw.reads[key]?.body);
+        if (profile?.id === result.data.account && subjectIdPattern.test(profile.id) && profile.handle)
+          return { kind: 'redirect', id: profile.handle, target: 'account' };
       }
-      // A handleless account supplies no public @ address. Retain the valid catalogue identity.
+      // An absent, handleless or foreign profile supplies no admitted public @ address.
       const { account: _account, ...catalogue } = result.data;
-      if (catalogue.subject === id)
-        return { kind: 'page', page: { ...catalogue, subject: id, requestedRealm: options.realm } };
+      if (catalogue.subject !== id || (options.realm && !catalogue.context))
+        throw new PageReadError('dependency_unavailable', 503);
+      return { kind: 'page', page: { ...catalogue, subject: id, requestedRealm: options.realm } };
     }
     const survivor = result.data.subject;
     if (typeof survivor === 'string' && survivor !== id) return { kind: 'redirect', id: survivor };

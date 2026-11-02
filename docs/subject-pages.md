@@ -264,6 +264,8 @@ the forwarding clock, active-state rule or claim syntax. All former-handle, redi
 are `private, no-store`; mutable aliases must never receive five-minute caching. Successful public subject HTML
 retains the existing [bounded public cache](../apps/web/README.md#routing).
 
+A composed Subject-to-account redirect requires the planned active profile's immutable ID to match the admitted account ID; absent, handleless or mismatched profiles retain the matching catalogue Subject and selected Realm, or return unavailable when that fallback identity is missing.
+
 A closed view redirects temporarily to the overview. A list whose preview contains everything can omit its tab
 while retaining its direct view URL. A slug that equals a view name still identifies the canonical overview when
 it matches the current localized slug; otherwise that id/view shorthand redirects to the full view address.
