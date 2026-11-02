@@ -6,6 +6,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient } from '@tanstack/react-query';
 import { ReporterStatusView } from '../src/moderation/reporter-status-view';
 import type { ReporterStatus } from '../src/moderation/reporter-status-model';
+import { getLocale } from '../src/paraglide/runtime.js';
 import type { InboxPage } from '../src/inbox/inbox-read';
 import {
   emptyInboxPagination,
@@ -77,7 +78,7 @@ test('inbox lists the kernel notification page newest first and renders each ite
   expect(calls).toEqual([`post:${thread}:post-2`, `decision:${decision}`, `post:${thread}:${post}`]);
 });
 
-test('readable replies and mentions use native post anchors when target reads omit an href', async () => {
+test('readable replies and mentions carry their exact post through localized thread links', async () => {
   const reads: InboxReads = {
     post: async (_threadId, postId) => ({ text: `Readable ${postId}` }),
     decision: async () => null,
@@ -86,8 +87,8 @@ test('readable replies and mentions use native post anchors when target reads om
   const page = await resolveInboxItems(
     {
       items: [
-        notice({ id: 'reply-without-href', postId: 'reply-post' }),
-        notice({ id: 'mention-without-href', kind: 'mention', postId: 'mentioned-post' }),
+        notice({ id: 'reply-without-href', threadId: 'thread-雪', postId: 'reply-雪' }),
+        notice({ id: 'mention-without-href', kind: 'mention', threadId: 'thread-雪', postId: 'mentioned-雪' }),
       ],
       next: null,
     },
@@ -95,8 +96,8 @@ test('readable replies and mentions use native post anchors when target reads om
   );
 
   expect(page.items.map(({ href, unavailable }) => ({ href, unavailable }))).toEqual([
-    { href: `/threads/${thread}#post-reply-post`, unavailable: false },
-    { href: `/threads/${thread}#post-mentioned-post`, unavailable: false },
+    { href: `/${getLocale()}/threads/thread-%E9%9B%AA?post=reply-%E9%9B%AA#post-reply-%E9%9B%AA`, unavailable: false },
+    { href: `/${getLocale()}/threads/thread-%E9%9B%AA?post=mentioned-%E9%9B%AA#post-mentioned-%E9%9B%AA`, unavailable: false },
   ]);
 });
 
@@ -209,7 +210,7 @@ test('a readable native post gets its exact Thread post anchor through loadInbox
   const page = await loadInboxPage(client, 'reporter-1', 'Bearer reporter');
 
   expect(page.items[0]).toMatchObject({
-    href: `/threads/${thread}#post-native-post`,
+    href: `/${getLocale()}/threads/${thread}?post=native-post#post-native-post`,
     text: 'A readable reply.',
     unavailable: false,
   });

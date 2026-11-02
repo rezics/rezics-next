@@ -11,6 +11,8 @@ import { prepareSession, sessionSubject, viewerCredential } from '../session/req
 import { reporterStatusResponse } from '../moderation/reporter-status-model';
 import { MediaProblem } from '../media/kernel';
 import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
+import { threadLocation } from '../threads/thread-href';
 
 export const INBOX_PAGE_SIZE = 20;
 /** One private list read, one batched author read, and at most one target read per notice. */
@@ -174,7 +176,7 @@ export async function resolveInboxItems(page: NoticePage, reads: InboxReads): Pr
           const post = await reads.post(notice.threadId!, notice.postId!);
           return post
             ? {
-                href: post.href ?? `/threads/${notice.threadId}#post-${notice.postId}`,
+                href: post.href ?? threadLocation(getLocale(), { id: notice.threadId! }, undefined, notice.postId!),
                 text: post.text ?? post.title ?? '',
               }
             : null;
@@ -245,7 +247,7 @@ async function currentInboxReads(client: InboxKernelClient, authorization: strin
         data.post.removed === true
       )
         return null;
-      return { text: postText(data.post), href: `/threads/${threadId}#post-${postId}` };
+      return { text: postText(data.post) };
     },
     decision: async (id) => {
       const result = await client['moderation-decisions']({ id }).get({ headers: authHeaders(authorization) });

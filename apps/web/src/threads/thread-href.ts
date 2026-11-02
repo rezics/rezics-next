@@ -20,11 +20,16 @@ export function threadHref(thread: { id: string; title: string | null }): string
 /** The locale path of a thread, keeping an opaque cursor when the reader is past the first page. */
 export function threadLocation(
   locale: string,
-  thread: { id: string; title: string | null },
+  thread: { id: string; title?: string | null },
   cursor?: string,
   post?: string,
 ): string {
-  const path = `/${locale}${threadHref(thread)}`;
+  // With no title projection, use the ID route so its normal reader can canonicalize after reading.
+  const route =
+    thread.title === undefined
+      ? `/threads/${encodeURIComponent(thread.id)}`
+      : threadHref({ id: thread.id, title: thread.title });
+  const path = `/${locale}${route}`;
   const search: string[] = [];
   if (cursor !== undefined) search.push(`cursor=${encodeURIComponent(cursor)}`);
   if (post !== undefined) search.push(`post=${encodeURIComponent(post)}`);
