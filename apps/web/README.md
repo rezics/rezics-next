@@ -2737,6 +2737,8 @@ minimal verification contract. No screenshots are produced by this slice.
 
 ### Realm appearance and rules
 
+Realm appearance departure treats a changed draft, a nonempty or previewed source reference, and an active or reserved upload as unsaved; opening an empty selector does not prompt.
+
 #### Carried Realm on Space home
 
 `community/space.ts` loads the ordinary Space and readable carried Realm before

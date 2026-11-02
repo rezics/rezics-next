@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import {
   createRealmAppearance,
+  realmAppearanceHasUnsavedChanges,
   type RealmAppearanceAdapter,
   type RealmAppearanceCommand,
   type RealmAppearanceResult,
@@ -39,11 +40,13 @@ test('cancel and clear retire a pending upload preview before a late response or
   const pending = control.upload('avatar', file());
   await Promise.resolve();
   expect(control.getSnapshot().pendingUpload?.mediaId).toBe(image.id);
+  expect(realmAppearanceHasUnsavedChanges(control.getSnapshot(), configured.presentation)).toBe(true);
   control.cancelUpload();
   control.choose('avatar', { kind: 'image', image });
   const clearing = control.upload('avatar', file());
   await Promise.resolve();
   control.clear('avatar');
+  expect(realmAppearanceHasUnsavedChanges(control.getSnapshot(), configured.presentation)).toBe(false);
   preview.resolve({ kind: 'image', image });
   await Promise.all([pending, clearing]);
   expect(control.getSnapshot().draft?.avatar.state).toBe('none');

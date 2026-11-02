@@ -1,4 +1,13 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
@@ -7,6 +16,7 @@ import { localizeUrl } from '../paraglide/runtime.js';
 import { useCommunityManagementAdmission } from './community-management';
 import {
   createRealmAppearance,
+  realmAppearanceHasUnsavedChanges,
   realmImageSource,
   type RealmAppearanceAdapter,
   type RealmAppearanceRead,
@@ -17,6 +27,7 @@ import {
 } from './realm-presentation';
 import { realmAppearanceReference, type RealmAppearanceReference } from './realm-appearance-reference';
 import type { RealmAppearanceCallerLifetime } from './realm-appearance-caller-lifetime';
+import { RealmAppearanceDeparture } from './realm-appearance-departure';
 
 function ImagePreview({
   image,
@@ -150,6 +161,42 @@ export function RealmAppearanceSettings({
     clearState.head === read.snapshot.head
       ? clearState.slot
       : null;
+  const departureBaseline =
+    state.read.kind === 'ready'
+      ? state.read.snapshot.presentation
+      : initial.kind === 'ready'
+        ? initial.snapshot.presentation
+        : undefined;
+  const departureAuthority =
+    visible &&
+    (!lifetime || lifetime.current()) &&
+    state.draft !== null &&
+    (read.kind === 'ready'
+      ? read.snapshot.realmId === realmId && read.snapshot.state === 'active' && read.snapshot.canManage
+      : read.kind === 'unavailable' &&
+        (state.read.kind === 'unavailable' ||
+          (state.read.kind === 'ready' &&
+            state.read.snapshot.realmId === realmId &&
+            state.read.snapshot.state === 'active' &&
+            state.read.snapshot.canManage)));
+  const changedReference = Boolean(
+    visibleSelection &&
+      (visibleSelection.link.trim() !== '' ||
+        visibleSelection.reference ||
+        visibleSelection.candidate ||
+        visibleSelection.busy),
+  );
+  const departureDirty =
+    departureAuthority && (realmAppearanceHasUnsavedChanges(state, departureBaseline) || changedReference);
+  const withDeparture = (children: ReactNode) => (
+    <RealmAppearanceDeparture
+      active={departureAuthority}
+      dirty={departureDirty}
+      unresolvedSave={state.phase === 'saving' || state.phase === 'uncertain'}
+    >
+      {children}
+    </RealmAppearanceDeparture>
+  );
   const selectionGeneration = useRef(0);
   function setSelection(value: Selection | null) {
     if (value === null) selectionGeneration.current++;
@@ -225,14 +272,14 @@ export function RealmAppearanceSettings({
   useLayoutEffect(() => control.connect(), [control]);
   useEffect(() => () => control.cancelUpload(), [control]);
   useEffect(() => () => control.disconnect(), [control]);
-  if (!visible || (lifetime && !lifetime.current())) return null;
+  if (!visible || (lifetime && !lifetime.current())) return withDeparture(null);
   const heading = (
     <h2 id={`${ids}-heading`} className="text-xl font-semibold">
       {m.realm_appearance_heading()}
     </h2>
   );
-  if (read.kind === 'hidden')
-    return state.draft ? (
+  if (read.kind === 'hidden') {
+    return withDeparture(state.draft ? (
       <section aria-labelledby={`${ids}-heading`} className="space-y-4 rounded-2xl border p-4 sm:p-6">
         {heading}
         <p role="alert">{m.community_management_denied()}</p>
@@ -240,10 +287,12 @@ export function RealmAppearanceSettings({
           {m.realm_appearance_refresh()}
         </Button>
       </section>
-    ) : null;
-  if (read.kind === 'ready' && (read.snapshot.state !== 'active' || read.snapshot.realmId !== realmId)) return null;
+    ) : null);
+  }
+  if (read.kind === 'ready' && (read.snapshot.state !== 'active' || read.snapshot.realmId !== realmId))
+    return withDeparture(null);
   if (read.kind !== 'ready' || !state.draft)
-    return (
+    return withDeparture(
       <section aria-labelledby={`${ids}-heading`} className="space-y-4 rounded-2xl border p-4 sm:p-6">
         {heading}
         <p role="status">{m.realm_appearance_unavailable()}</p>
@@ -318,7 +367,7 @@ export function RealmAppearanceSettings({
       : null;
   }
   const rules = draft.rules.state === 'available' ? draft.rules.value : null;
-  return (
+  return withDeparture(
     <section aria-labelledby={`${ids}-heading`} className="space-y-6 rounded-2xl border p-4 sm:p-6">
       {heading}
       <p className="text-sm text-muted-foreground">
