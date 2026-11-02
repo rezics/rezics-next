@@ -94,3 +94,35 @@ test('exactly 1,000 targets preview; larger selections refuse before writing; un
       .rejects.toThrow('bounded progress');
   } finally { await tx.query('ROLLBACK'); tx.release(); }
 });
+
+test('explicit subjects and duplicate-subject occurrences retain their exact identities; empty previews complete', async () => {
+  const tx = await db.admin.connect();
+  try {
+    await tx.query('BEGIN');
+    const subject = target(), input = preview([subject]);
+    await previewCollectionBulk(tx, { ...input, request: { action: 'set_status', state: 'completed',
+      selection: { kind: 'explicit', targets: [{ subjectId: subject.subjectId }] } } });
+    expect((await readCollectionBulk(tx, input))?.request.selection).toEqual({ kind: 'explicit' });
+    const collectionId = newId(route), memberIds = [newId(route), newId(route)];
+    const occurrences = preview([]);
+    await previewCollectionBulk(tx, { ...occurrences,
+      request: { action: 'remove_from_collection', collectionId, selection: { kind: 'occurrences', memberIds } },
+      targets: memberIds.map(memberId => ({ kind: 'occurrence', subjectId: subject.subjectId, collectionId,
+        memberId, incarnation: newId(route), admissionSequence: '1', revision: 1 })),
+    });
+    expect((await pageCollectionBulkManifest(tx, occurrences)).map(row => row.target.subjectId))
+      .toEqual([subject.subjectId,subject.subjectId]);
+    expect((await pageCollectionBulkManifest(tx, occurrences)).map(row =>
+      row.target.kind === 'occurrence' ? row.target.memberId : null)).toEqual(memberIds);
+    const empty = preview([]);
+    await previewCollectionBulk(tx, empty);
+    expect(await confirmCollectionBulk(tx, empty)).toBe(true);
+    expect((await readCollectionBulk(tx, empty))?.phase).toBe('completed');
+    const duplicate = preview([subject, subject]);
+    await expect(previewCollectionBulk(tx, duplicate)).rejects.toThrow('Duplicate manifest target');
+    expect(await readCollectionBulk(tx, duplicate)).toBeNull();
+    const expired = preview([target()]);
+    await previewCollectionBulk(tx, expired);
+    expect(await confirmCollectionBulk(tx, { ...expired, now: '2026-11-05T12:00:00Z' })).toBe(false);
+  } finally { await tx.query('ROLLBACK'); tx.release(); }
+});

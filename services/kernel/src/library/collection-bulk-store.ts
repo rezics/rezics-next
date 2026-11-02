@@ -126,8 +126,10 @@ export async function previewCollectionBulk(
     const identity = targetKey(target);
     if (seen.has(identity)) throw new TypeError('Duplicate manifest target');
     seen.add(identity);
-    if (input.request.action === 'remove_from_collection' && target.kind === 'occurrence' &&
-      target.collectionId !== input.request.collectionId) throw new TypeError('Occurrence belongs to another Collection');
+    if (input.request.action === 'remove_from_collection') {
+      if (target.kind !== 'occurrence' || target.collectionId !== input.request.collectionId)
+        throw new TypeError('Removal must capture actual occurrences of this Collection');
+    } else if (target.kind !== 'subject') throw new TypeError('This action requires subject targets');
     const frozen = JSON.parse(json(target, TARGET_BYTES)) as CollectionBulkTarget;
     return { ...frozen, operationId: input.operationId, ordinal: String(ordinal) };
   });
