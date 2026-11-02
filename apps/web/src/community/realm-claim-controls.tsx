@@ -91,6 +91,11 @@ function RealmClaimControlsContent({
   copyContext.current = { control, lifetime };
   const copyButton = useRef<HTMLButtonElement>(null);
   const copyFallback = useRef<HTMLInputElement>(null);
+  const copyFocus = useRef<{
+    trigger: HTMLButtonElement;
+    canPublish: () => boolean;
+    cancel: () => void;
+  } | null>(null);
   const pageSnapshot = initial.kind === 'ready' ? initial.snapshot : null;
   const pageKind = initial.kind;
   useEffect(() => {
@@ -208,12 +213,60 @@ function RealmClaimControlsContent({
   useEffect(() => {
     if (copy && copyState === 'idle') setCopy(null);
   }, [copy, copyState, lifetimeRevision]);
+  function retainCopyFocus(event: MouseEvent<HTMLButtonElement>, canPublish: () => boolean) {
+    const trigger = event.currentTarget;
+    const document = trigger.ownerDocument;
+    const details = trigger.closest('details');
+    if (!active || event.detail !== 0 || document.activeElement !== trigger || !details?.open) return;
+    const pending = { trigger, canPublish, cancel };
+    let unsubscribe: (() => void) | undefined;
+    function cancel() {
+      if (copyFocus.current === pending) copyFocus.current = null;
+      unsubscribe?.();
+      trigger.removeEventListener('blur', cancel);
+      document.removeEventListener('pointerdown', cancel, true);
+      document.removeEventListener('keydown', keydown, true);
+      document.defaultView?.removeEventListener('blur', cancel);
+      details?.removeEventListener('toggle', toggled);
+    }
+    function keydown(event: KeyboardEvent) {
+      if (event.key === 'Tab') cancel();
+    }
+    function toggled() {
+      if (!details?.open) cancel();
+    }
+    copyFocus.current = pending;
+    trigger.addEventListener('blur', cancel);
+    document.addEventListener('pointerdown', cancel, true);
+    document.addEventListener('keydown', keydown, true);
+    document.defaultView?.addEventListener('blur', cancel);
+    details.addEventListener('toggle', toggled);
+    // Observe intermediate retirement too, even if a later read restores the same objects.
+    unsubscribe = control.subscribe(() => {
+      if (!canPublish()) cancel();
+    });
+    if (copyFocus.current !== pending) unsubscribe();
+  }
+  useEffect(() => () => copyFocus.current?.cancel(), [control, lifetime]);
   useEffect(() => {
+    const pending = copyFocus.current;
+    if (!pending) return;
+    if (
+      !active ||
+      !pending.canPublish() ||
+      !pending.trigger.isConnected ||
+      pending.trigger.ownerDocument.activeElement !== pending.trigger ||
+      !pending.trigger.closest('details')?.open
+    ) {
+      pending.cancel();
+      return;
+    }
     if (copyState === 'failed') {
+      pending.cancel();
       copyFallback.current?.focus();
       copyFallback.current?.select();
-    }
-  }, [copyState]);
+    } else if (copyState === 'copied') pending.cancel();
+  }, [active, copy, copyState, control, lifetime, lifetimeRevision, state, request]);
   if (recoveryOnly && !orphan && !state.intent) return null;
   return (
     <section aria-labelledby={`${id}-heading`} aria-busy={state.busy}>
@@ -289,7 +342,8 @@ function RealmClaimControlsContent({
                 <Button
                   ref={copyButton}
                   variant="outline"
-                  onClick={async () => {
+                  onClick={async (event) => {
+                    copyFocus.current?.cancel();
                     const read = state.read;
                     const ticket = lifetime.ticket();
                     const attempt = ++copyAttempt.current;
@@ -314,6 +368,7 @@ function RealmClaimControlsContent({
                     };
                     setCopy(null);
                     if (!canPublish()) return;
+                    retainCopyFocus(event, canPublish);
                     try {
                       await navigator.clipboard.writeText(request.requestId);
                       if (canPublish()) setCopy({ control, request, read, lifetime, state: 'copied' });
@@ -344,6 +399,7 @@ function RealmClaimControlsContent({
                     <Button
                       variant="outline"
                       onClick={() => {
+                        copyFocus.current?.cancel();
                         setCopy(null);
                         copyButton.current?.focus();
                       }}

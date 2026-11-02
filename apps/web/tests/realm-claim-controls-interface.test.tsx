@@ -201,56 +201,100 @@ test('bounded recovery replaces uncertainty with the supplied outcome; retired s
   expect(button(m.realm_claim_retry())).toBeUndefined();
 });
 
-test('clipboard denial selects the current reference; superseded and retired writes cannot restore it', async () => {
-  let write: () => Promise<void> = () => Promise.reject(new Error('denied'));
-  let currentRequest = receipt;
-  clipboardDescriptor = Object.getOwnPropertyDescriptor(window.navigator, 'clipboard');
-  Object.defineProperty(window.navigator, 'clipboard', {
-    configurable: true,
-    value: { writeText: () => write() },
-  });
-  const adapter: RealmClaimAdapter = {
-    read: async () => eligible,
-    mine: async () => ({ kind: 'ready', source: orphan, claimRequest: currentRequest }),
-    request: async () => ({ kind: 'pending', request: receipt }),
-  };
-  await paint(adapter);
-  await click(m.realm_claim_request());
-  await act(async () => {
-    host.querySelector('details summary')?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
-  });
-  await click(m.realm_claim_copy());
-  const fallback = host.querySelector<HTMLInputElement>('input[readonly]')!;
-  expect(fallback.value).toBe(receipt.requestId);
-  expect(fallback.readOnly).toBe(true);
-  expect(host.querySelector(`label[for="${fallback.id}"]`)?.textContent).toBe(m.realm_claim_copy_fallback_label());
-  expect(window.document.activeElement).toBe(fallback);
-  expect(fallback.selectionStart).toBe(0);
-  expect(fallback.selectionEnd).toBe(receipt.requestId.length);
-  await click(m.realm_claim_copy_close());
-  expect(window.document.activeElement).toBe(button(m.realm_claim_copy()));
+test.each(['keyboard', 'pointer', 'Tab', 'pointerdown', 'focus', 'blur', 'close', 'another'])(
+  'clipboard denial respects the current activation; superseded and retired writes cannot restore it: %s',
+  async (scenario) => {
+    let denied = deferred<void>();
+    let write: () => Promise<void> = () => denied.promise;
+    const writes: string[] = [];
+    let currentRequest = receipt;
+    clipboardDescriptor = Object.getOwnPropertyDescriptor(window.navigator, 'clipboard');
+    Object.defineProperty(window.navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: (value: string) => {
+          writes.push(value);
+          return write();
+        },
+      },
+    });
+    const adapter: RealmClaimAdapter = {
+      read: async () => eligible,
+      mine: async () => ({ kind: 'ready', source: orphan, claimRequest: currentRequest }),
+      request: async () => ({ kind: 'pending', request: receipt }),
+    };
+    await paint(adapter);
+    await click(m.realm_claim_request());
+    await act(async () => {
+      host.querySelector('details summary')?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+      button(m.realm_claim_copy())?.focus();
+    });
+    const trigger = button(m.realm_claim_copy())!;
+    await act(async () =>
+      trigger.dispatchEvent(new window.MouseEvent('click', { bubbles: true, detail: scenario === 'pointer' ? 1 : 0 })),
+    );
+    expect(host.querySelector('input[readonly]')).toBeNull();
+    expect(writes).toEqual([receipt.requestId]);
+    await act(async () => {
+      if (scenario === 'Tab') trigger.dispatchEvent(new window.KeyboardEvent('keydown', { bubbles: true, key: 'Tab' }));
+      if (scenario === 'pointerdown') trigger.dispatchEvent(new window.Event('pointerdown', { bubbles: true }));
+      if (scenario === 'focus') {
+        button(m.realm_claim_refresh())!.focus();
+        trigger.focus();
+      }
+      if (scenario === 'blur') window.dispatchEvent(new window.Event('blur'));
+      if (scenario === 'close') {
+        const details = host.querySelector('details')!;
+        details.open = false;
+        details.dispatchEvent(new window.Event('toggle'));
+        details.open = true;
+      }
+    });
+    if (scenario === 'another') {
+      write = async () => {};
+      await click(m.realm_claim_copy());
+      await act(async () => denied.reject(new Error('denied')));
+      expect(host.querySelector('input[readonly]')).toBeNull();
+      expect(host.textContent).toContain(m.realm_claim_copied());
+      denied = deferred<void>();
+      write = () => denied.promise;
+      await click(m.realm_claim_copy());
+    }
+    await act(async () => denied.reject(new Error('denied')));
+    const fallback = host.querySelector<HTMLInputElement>('input[readonly]')!;
+    expect(fallback.value).toBe(receipt.requestId);
+    expect(fallback.readOnly).toBe(true);
+    expect(host.querySelector(`label[for="${fallback.id}"]`)?.textContent).toBe(m.realm_claim_copy_fallback_label());
+    expect(window.document.activeElement === fallback).toBe(['keyboard', 'another'].includes(scenario));
+    expect(host.textContent).toContain(m.realm_claim_copy_failed());
+    await act(async () => fallback.focus());
+    expect(fallback.selectionStart).toBe(0);
+    expect(fallback.selectionEnd).toBe(receipt.requestId.length);
+    await click(m.realm_claim_copy_close());
+    expect(window.document.activeElement).toBe(button(m.realm_claim_copy()));
 
-  const superseded = deferred<void>();
-  write = () => superseded.promise;
-  await click(m.realm_claim_copy());
-  currentRequest = { ...receipt, requestId: '018f0000-0000-7000-8000-000000000111' };
-  await click(m.realm_claim_refresh());
-  expect(host.textContent).toContain(currentRequest.requestId);
-  await act(async () => superseded.resolve());
-  expect(host.textContent).not.toContain(receipt.requestId);
-  expect(host.textContent).not.toContain(m.realm_claim_copied());
-  expect(host.querySelector('input[readonly]')).toBeNull();
+    const superseded = deferred<void>();
+    write = () => superseded.promise;
+    await click(m.realm_claim_copy());
+    currentRequest = { ...receipt, requestId: '018f0000-0000-7000-8000-000000000111' };
+    await click(m.realm_claim_refresh());
+    expect(host.textContent).toContain(currentRequest.requestId);
+    await act(async () => superseded.resolve());
+    expect(host.textContent).not.toContain(receipt.requestId);
+    expect(host.textContent).not.toContain(m.realm_claim_copied());
+    expect(host.querySelector('input[readonly]')).toBeNull();
 
-  const retired = deferred<void>();
-  write = () => retired.promise;
-  await click(m.realm_claim_copy());
-  await act(async () => {
-    client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', csrfToken: null });
-  });
-  await act(async () => retired.reject(new Error('denied')));
-  expect(host.textContent).not.toContain(currentRequest.requestId);
-  expect(host.textContent).not.toContain(m.realm_claim_copy_failed());
-});
+    const retired = deferred<void>();
+    write = () => retired.promise;
+    await click(m.realm_claim_copy());
+    await act(async () => {
+      client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', csrfToken: null });
+    });
+    await act(async () => retired.reject(new Error('denied')));
+    expect(host.textContent).not.toContain(currentRequest.requestId);
+    expect(host.textContent).not.toContain(m.realm_claim_copy_failed());
+  },
+);
 
 test.each(['submit', 'retry', 'pointer', 'move', 'input', 'realm', 'session', 'recover'])(
   'receipt keyboard handoff through the caller: %s',
