@@ -12,9 +12,7 @@ const restartHref = '/en/search?q=kept';
 const options = { en: { locale: 'en' as const }, 'zh-Hans': { locale: 'zh-Hans' as const } };
 
 function recoveryMarkup(locale: 'en' | 'zh-Hans', state: SearchRecoveryState) {
-  return renderToStaticMarkup(
-    createElement(SearchRecovery, { state, retryHref, restartHref, locale, onRetry() {} }),
-  );
+  return renderToStaticMarkup(createElement(SearchRecovery, { state, retryHref, restartHref, locale, onRetry() {} }));
 }
 
 test('search recovery messages and actions follow the owning locale against the opposite ambient language', () => {
