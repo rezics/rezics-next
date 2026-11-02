@@ -1640,6 +1640,9 @@ are deferred to integration; local workspace typing does not establish visual or
 
 ### Copies
 
+Private Copy notes use multiline entry and keep exact text through Stay and recoverable refusal. The existing write
+adapter enforces the 1,000-Unicode-character note bound; browser UTF-16 length limits would reject valid text.
+
 - **Touches:** One session read, then `GET /v1/copies?view=FULL` with `subjectId` when the URL names a subject,
   for one page of the viewer’s copies. The subject also pre-fills the Edition field in the add form. Adding, editing and
   deleting each send one write with an `Idempotency-Key`; an edit sends the revision in the body and a deletion sends

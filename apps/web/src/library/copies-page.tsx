@@ -7,6 +7,7 @@ import { BottomSheet } from '@rezics/ui/bottom-sheet';
 import { useIsMobile } from '@rezics/ui/hooks/use-is-mobile';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { Link } from '@tanstack/react-router';
 import { useLayoutEffect, useId, useState, useRef, type FormEvent, type ReactNode } from 'react';
 import { m } from '../paraglide/messages.js';
@@ -68,6 +69,23 @@ function TextField({ label, value, onChange }: { label: string; value: string; o
       <input
         id={id}
         className={inputClass}
+        value={value}
+        autoComplete="off"
+        onChange={(event) => onChange(event.currentTarget.value)}
+      />
+    </Field>
+  );
+}
+
+function NoteField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const id = useId();
+  return (
+    <Field>
+      <FieldLabel htmlFor={id}>{m.library_copy_note()}</FieldLabel>
+      <Textarea
+        id={id}
+        className="min-h-28 min-w-0 max-w-full"
+        rows={4}
         value={value}
         autoComplete="off"
         onChange={(event) => onChange(event.currentTarget.value)}
@@ -638,7 +656,7 @@ export function CopyForm({
               value={draft.disposedOn}
               onChange={(value) => change('disposedOn', value)}
             />
-            <TextField label={m.library_copy_note()} value={draft.note} onChange={(value) => change('note', value)} />
+            <NoteField value={draft.note} onChange={(value) => change('note', value)} />
           </div>
         </>
       ) : null}

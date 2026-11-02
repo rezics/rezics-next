@@ -72,7 +72,9 @@ window.document.body.append(host);
 let root: ReturnType<typeof createRoot>;
 let router: ReturnType<typeof createRouter>;
 const created = mock(() => {});
+const saved = mock(() => {});
 const closed = mock(() => {});
+const paragraphs = `${'📚'.repeat(995)}\n\nend`;
 const copy: CopyItem = {
   id: 'copy-1',
   revision: 7,
@@ -120,7 +122,7 @@ function mount(mode: 'create' | 'edit' | 'picker') {
               setOpen(false);
             }}
             onCreated={created}
-            onSaved={() => {}}
+            onSaved={saved}
             onRemoved={() => {}}
             onKey={() => {}}
           />
@@ -161,7 +163,7 @@ afterAll(async () => {
   }
 });
 beforeEach(() => {
-  for (const fn of [create, update, created, closed]) fn.mockClear();
+  for (const fn of [create, update, created, saved, closed]) fn.mockClear();
 });
 
 const form = () => host.querySelector('form')!;
@@ -179,7 +181,7 @@ const select = (label: string) => field(label) as unknown as HTMLSelectElement;
 async function changeInput(label: string, value: string) {
   const input = field(label);
   await act(async () => {
-    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+    Object.getOwnPropertyDescriptor(input.constructor.prototype, 'value')!.set!.call(input, value);
     input.dispatchEvent(new window.Event('input', { bubbles: true }));
     input.dispatchEvent(new window.Event('change', { bubbles: true }));
   });
@@ -202,23 +204,30 @@ test('create drafts compare exact fields and kind, and offer Stay or Discard on 
   await mount('create');
   expect(beforeUnloadIsBlocked()).toBe(false);
   await click(m.library_copy_more());
-  await changeInput(m.library_copy_note(), 'Temporary note');
+  expect(field(m.library_copy_note()).tagName).toBe('TEXTAREA');
+  await changeInput(m.library_copy_note(), '\n');
   expect(beforeUnloadIsBlocked()).toBe(true);
   await changeInput(m.library_copy_note(), '');
   expect(beforeUnloadIsBlocked()).toBe(false);
   await choose(m.library_copy_kind(), 'digital');
+  await changeInput(m.library_copy_note(), paragraphs);
   expect(select(m.library_copy_status()).value).toBe('kept');
   expect(beforeUnloadIsBlocked()).toBe(true);
   await click(m.library_copy_cancel());
   expect(host.querySelector('[role="alertdialog"]')?.textContent).toContain(m.library_copy_draft_navigation_title());
   await click(m.library_copy_draft_navigation_stay());
+  expect(field(m.library_copy_note()).value).toBe(paragraphs);
   expect(select(m.library_copy_kind()).value).toBe('digital');
   expect(select(m.library_copy_status()).value).toBe('kept');
+  create.mockResolvedValueOnce({ ok: false, reason: 'unsupported' });
+  await act(async () => form().dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })));
+  expect((create.mock.calls[0]![0] as { data: { note: string } }).data.note).toBe(paragraphs);
+  expect(field(m.library_copy_note()).value).toBe(paragraphs);
   await act(async () => nextLink().click());
   expect(host.querySelector('[role="alertdialog"]')).not.toBeNull();
   await click(m.library_copy_draft_navigation_discard());
   expect(host.querySelector('h1')?.textContent).toBe('Next page');
-  expect(create).not.toHaveBeenCalled();
+  expect(create).toHaveBeenCalledTimes(1);
   expect(update).not.toHaveBeenCalled();
 });
 
@@ -247,7 +256,7 @@ test('pending and uncertain updates keep their exact intent until resolution', a
   });
   update.mockImplementationOnce(() => first).mockImplementationOnce(() => retry);
   await click(m.library_copy_more());
-  await changeInput(m.library_copy_note(), 'Exact edited note');
+  await changeInput(m.library_copy_note(), paragraphs);
   await act(async () => form().dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })));
   expect(beforeUnloadIsBlocked()).toBe(true);
   await click(m.library_copy_cancel());
@@ -258,17 +267,20 @@ test('pending and uncertain updates keep their exact intent until resolution', a
     finishFirst({ ok: false, reason: 'unavailable' });
     await first;
   });
-  expect(field(m.library_copy_note()).value).toBe('Exact edited note');
+  expect(field(m.library_copy_note()).value).toBe(paragraphs);
   expect(beforeUnloadIsBlocked()).toBe(true);
   await act(async () => nextLink().click());
   expect(host.querySelector('[role="alertdialog"]')?.textContent).toContain(m.library_copy_draft_navigation_pending());
   await click(m.library_copy_draft_navigation_stay());
   await act(async () => form().dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })));
   expect(update).toHaveBeenCalledTimes(2);
+  expect((update.mock.calls[0]![0] as { data: { note: string } }).data.note).toBe(paragraphs);
   expect(update.mock.calls[1]![0]).toEqual(update.mock.calls[0]![0]);
-  expect(new Headers(update.mock.calls[1]![0].headers).get('x-csrf-token')).toBe('current');
+  expect(new Headers((update.mock.calls[1]![0] as { headers: HeadersInit }).headers).get('x-csrf-token')).toBe(
+    'current',
+  );
   await act(async () => {
-    finishRetry({ ok: true, copy: { ...copy, revision: 8, note: 'Exact edited note' } });
+    finishRetry({ ok: true, copy: { ...copy, revision: 8, note: paragraphs } });
     await retry;
   });
   expect(saved).toHaveBeenCalledTimes(1);
