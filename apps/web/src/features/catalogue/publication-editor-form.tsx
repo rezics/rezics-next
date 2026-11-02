@@ -19,6 +19,7 @@ import {
   publicationDraft,
   publicationTarget,
   type PublicationCommand,
+  type PublicationProfile,
   type PublicationTransport,
 } from './publication-editor';
 import { ScalarControl } from './statement-editor-view';
@@ -64,7 +65,11 @@ function PublicationEditorLive({
     retry: false,
   });
   const read = query.data?.ok ? query.data : undefined;
-  const profile = read?.profiles[0];
+  const [draftProfile, setDraftProfile] = useState<PublicationProfile>();
+  const currentProfile = read?.profiles.find((entry) => !draftProfile || entry.id === draftProfile.id);
+  const profile = currentProfile ?? draftProfile;
+  const [reviewDefinitions, setReviewDefinitions] = useState(false);
+  const [refreshRequired, setRefreshRequired] = useState(false);
   const [relationChoice, setRelation] = useState('');
   const relation = relationChoice || profile?.relations[0] || '';
   const [language, setLanguage] = useState(locale);
@@ -80,11 +85,48 @@ function PublicationEditorLive({
   const running = useRef(false);
   const command = useRef<PublicationCommand | null>(null);
   const uncertain = failure?.reason === 'unavailable' && command.current !== null;
-  const locked = busy || uncertain || failure?.reason === 'conflict';
+  const locked = busy || uncertain || (failure?.reason === 'conflict' && !reviewDefinitions);
   const disabled = locked || session !== 'signed-in';
   const name = (id: string) => pickText(read?.release.properties[id]?.labels ?? {}, locale).text;
   const title = read ? pickText(read.public.subject.labels, locale).text : '';
   const back = read ? subjectHref({ id: work, label: title }, locale).href : `/${locale}/search`;
+  // Reuse the producer's current profile and schema validation; never narrow the staged draft to fit it.
+  const reviewErrors =
+    reviewDefinitions && read && profile
+      ? publicationDraft(
+          read,
+          profile.id,
+          relation,
+          [{ language, label, description: '', aliases: '' }],
+          facts,
+          citation,
+          independent,
+        ).errors
+      : [];
+  const unsupportedRelation = reviewDefinitions && !currentProfile?.relations.includes(relation);
+  const unsupportedFact = (property: string) => reviewDefinitions && !currentProfile?.fields.includes(property);
+  const unsupportedPublisher =
+    reviewDefinitions &&
+    !!read &&
+    Object.hasOwn(facts, 'schema:publisher') &&
+    publisher.some((item) => !item.types.some((type) => publicationTarget(read.release, type, 'schema:publisher')));
+  const factNeedsReview = (property: string) =>
+    unsupportedFact(property) ||
+    (property === 'schema:publisher' && unsupportedPublisher) ||
+    reviewErrors.some((error) => error.pointer.startsWith(`/statements/${property}`));
+  const correctionsRequired =
+    !currentProfile ||
+    unsupportedRelation ||
+    unsupportedPublisher ||
+    Object.keys(facts).some(unsupportedFact) ||
+    reviewErrors.length > 0;
+
+  async function refreshDefinitions() {
+    setRefreshRequired(true);
+    const refreshed = await query.refetch();
+    if (!lifetime.active()) return;
+    if (!refreshed.isError && refreshed.data?.ok) setRefreshRequired(false);
+  }
 
   function edit(change: () => void) {
     change();
@@ -115,7 +157,16 @@ function PublicationEditorLive({
   async function submit(event: FormEvent) {
     if (!lifetime.active()) return;
     event.preventDefault();
-    if (running.current || created || !read || !profile || session !== 'signed-in' || failure?.reason === 'conflict')
+    if (
+      running.current ||
+      created ||
+      !read ||
+      !profile ||
+      session !== 'signed-in' ||
+      failure?.reason === 'conflict' ||
+      reviewDefinitions ||
+      refreshRequired
+    )
       return;
     if (!command.current) {
       const draft = publicationDraft(
@@ -132,6 +183,8 @@ function PublicationEditorLive({
         return;
       }
       command.current = { work, relation, item: draft.item, key: crypto.randomUUID() };
+      setDraftProfile(profile);
+      setRelation(relation);
     }
     running.current = true;
     setBusy(true);
@@ -144,7 +197,11 @@ function PublicationEditorLive({
         if (result.reader.state === 'ready') onNavigate(result.reader.href);
       } else {
         setFailure(result);
-        if (result.refreshDefinitions) await query.refetch();
+        // Uncertain commands retain their exact original body/key, even if a response asks for new metadata.
+        if (result.refreshDefinitions && result.reason !== 'unavailable') {
+          setReviewDefinitions(true);
+          await refreshDefinitions();
+        }
         if (!lifetime.active()) return;
       }
     } catch {
@@ -235,7 +292,7 @@ function PublicationEditorLive({
                   {m.catalogue_create_search({}, o)}
                 </a>
               ) : (
-                <Button className={actionClassName} variant="outline" onClick={() => void query.refetch()}>
+                <Button className={actionClassName} variant="outline" onClick={() => void refreshDefinitions()}>
                   {m.catalogue_create_retry({}, o)}
                 </Button>
               )}
@@ -268,6 +325,38 @@ function PublicationEditorLive({
                 </ContentItemFrame>
               ) : (
                 <form onSubmit={(event) => void submit(event)} noValidate className="space-y-6" aria-busy={busy}>
+                  {reviewDefinitions && (
+                    <ContentItemFrame as="div" role="status" className="min-w-0 space-y-3 p-4">
+                      <p>{m.publication_definitions_review({}, o)}</p>
+                      {!currentProfile && <p>{m.publication_empty({}, o)}</p>}
+                      {reviewErrors.length > 0 && (
+                        <ul className="list-inside list-disc">
+                          {[...new Set(reviewErrors.map((error) => errorControl(error.pointer).label))].map((label) => (
+                            <li key={label}>
+                              {label}: {m.catalogue_create_invalid_field({}, o)}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      <Button
+                        className={actionClassName}
+                        type="button"
+                        variant="outline"
+                        disabled={busy || query.isFetching}
+                        onClick={() => void refreshDefinitions()}
+                      >
+                        {m.publication_refresh({}, o)}
+                      </Button>
+                      <Button
+                        className={actionClassName}
+                        type="button"
+                        disabled={busy || query.isFetching || refreshRequired || correctionsRequired}
+                        onClick={() => edit(() => setReviewDefinitions(false))}
+                      >
+                        {m.catalogue_create_review_new({}, o)}
+                      </Button>
+                    </ContentItemFrame>
+                  )}
                   {session === 'unknown' && (
                     <ContentItemFrame as="div" role="status" className="p-4">
                       {m.catalogue_create_loading({}, o)}
@@ -364,12 +453,18 @@ function PublicationEditorLive({
                           value={relation}
                           onChange={(e) => edit(() => setRelation(e.target.value))}
                         >
-                          {profile.relations.map((id) => (
+                          {unsupportedRelation && (
+                            <NativeSelectOption value={relation} disabled>
+                              {name(relation) || relation}
+                            </NativeSelectOption>
+                          )}
+                          {(currentProfile?.relations ?? []).map((id) => (
                             <NativeSelectOption key={id} value={id}>
                               {name(id)}
                             </NativeSelectOption>
                           ))}
                         </NativeSelect>
+                        {unsupportedRelation && <FieldError>{m.publication_choice_review({}, o)}</FieldError>}
                       </Field>
                       <Field orientation="horizontal" data-invalid={invalid('/independent') || undefined}>
                         <Checkbox
@@ -412,7 +507,19 @@ function PublicationEditorLive({
                             {name(property) || m.correction_preserved({}, o)}
                           </ContentItemHeading>
                         </FieldLegend>
-                        {property === 'schema:publisher' ? (
+                        {factNeedsReview(property) && (
+                          <>
+                            <FieldError>{m.publication_choice_review({}, o)}</FieldError>
+                            {property === 'schema:publisher' && <p>{publisher.map((item) => item.title).join(', ')}</p>}
+                            <details>
+                              <summary className={linkClassName}>{m.publication_staged_value({}, o)}</summary>
+                              <pre className="whitespace-pre-wrap [overflow-wrap:anywhere]">
+                                {JSON.stringify(value, null, 2)}
+                              </pre>
+                            </details>
+                          </>
+                        )}
+                        {unsupportedFact(property) ? null : property === 'schema:publisher' ? (
                           <EntityPicker
                             label={name(property)}
                             value={publisher}
@@ -473,7 +580,7 @@ function PublicationEditorLive({
                           onChange={(e) => setField(e.target.value)}
                         >
                           <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
-                          {profile.fields
+                          {(currentProfile?.fields ?? [])
                             .filter((id) => !Object.hasOwn(facts, id))
                             .map((id) => (
                               <NativeSelectOption key={id} value={id}>
@@ -486,7 +593,7 @@ function PublicationEditorLive({
                         className={actionClassName}
                         type="button"
                         variant="outline"
-                        disabled={!field}
+                        disabled={!field || !currentProfile?.fields.includes(field) || Object.hasOwn(facts, field)}
                         onClick={() =>
                           edit(() => {
                             const datatype = read.release.properties[field]?.datatype;
@@ -505,7 +612,7 @@ function PublicationEditorLive({
                       </Button>
                     </FieldSet>
                   </ContentItemFrame>
-                  {read.release.properties['schema:url'] && (
+                  {(read.release.properties['schema:url'] || citation) && (
                     <ContentItemFrame as="div" className="min-w-0 p-4 sm:p-6">
                       <FieldSet disabled={disabled} className="min-w-0 gap-3">
                         <FieldLegend className="max-w-full">
@@ -529,6 +636,9 @@ function PublicationEditorLive({
                           <FieldDescription id={`${id}-citation-help`} className="text-start">
                             {m.publication_citation({}, o)}
                           </FieldDescription>
+                          {reviewErrors.some((error) => error.pointer.includes('/references/')) && (
+                            <FieldError>{m.publication_choice_review({}, o)}</FieldError>
+                          )}
                         </Field>
                       </FieldSet>
                     </ContentItemFrame>
@@ -570,7 +680,7 @@ function PublicationEditorLive({
                         </ul>
                       ) : null}
                       {failure.refreshDefinitions && <p>{m.catalogue_create_refresh({}, o)}</p>}
-                      {failure.reason === 'conflict' && (
+                      {failure.reason === 'conflict' && !reviewDefinitions && (
                         <Button
                           className={actionClassName}
                           type="button"
@@ -586,7 +696,13 @@ function PublicationEditorLive({
                     <Button
                       className={actionClassName}
                       type="submit"
-                      disabled={busy || session !== 'signed-in' || failure?.reason === 'conflict'}
+                      disabled={
+                        busy ||
+                        session !== 'signed-in' ||
+                        failure?.reason === 'conflict' ||
+                        reviewDefinitions ||
+                        refreshRequired
+                      }
                     >
                       {busy
                         ? m.catalogue_create_saving({}, o)

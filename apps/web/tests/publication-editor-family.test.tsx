@@ -78,7 +78,8 @@ test('independent publication creation, local corrections, immutable recovery an
       },
       submit: async (command) => {
         commands.push(structuredClone(command));
-        return fixture.transport.submit(command);
+        const result = await fixture.transport.submit(command);
+        return !result.ok && result.reason === 'unavailable' ? { ...result, refreshDefinitions: true } : result;
       },
       read: async (id) => {
         reads.push(id);
@@ -295,6 +296,7 @@ test('independent publication creation, local corrections, immutable recovery an
     const reader = await scope().findByRole('link', { name: m.catalogue_create_open() });
     expect(reader.getAttribute('href')).toBe(`/en/subjects/${publicationCreatedId}/a-distinct-edition`);
     expect(uncertain.commands).toEqual([original, original]);
+    expect(uncertain.loads()).toBe(1); // Even a refresh hint cannot rewrite an uncertain command.
     const posts = uncertain.fixture.calls.filter((call) => call.method === 'POST');
     expect(posts).toHaveLength(2);
     expect(posts[0]).toMatchObject({ body: original.item, key: original.key, authorization: 'Bearer fixture' });
@@ -361,6 +363,99 @@ test('independent publication creation, local corrections, immutable recovery an
         expect(refusal.commands[1]!.item).toEqual(old.item);
       }
     }
+
+    // A definite definitions refusal reconciles every staged choice before a deliberate new command.
+    const recovery = tracked('ready', 'schema:Movie');
+    const release = recovery.fixture.release;
+    const originalSubmit = recovery.transport.submit;
+    const originalLoad = recovery.transport.load;
+    let refusals = 0;
+    let failRefresh = false;
+    const releasedProfile = structuredClone(release.types['rezics:AnimeRelease']!);
+    recovery.transport = {
+      ...recovery.transport,
+      load: async () => (failRefresh ? { ok: false, reason: 'unavailable' } : originalLoad()),
+      submit: async (command) => {
+        if (refusals++ > 1) return originalSubmit(command);
+        recovery.commands.push(structuredClone(command));
+        if (refusals === 1) {
+          release.types['rezics:AnimeRelease']!.properties = releasedProfile.properties.filter(
+            (property) => !['bf:hasPart', 'schema:inLanguage'].includes(property),
+          );
+        } else {
+          delete release.types['rezics:AnimeRelease'];
+          delete release.properties['schema:url'];
+          release.properties['schema:publisher']!.targets = ['schema:Person'];
+        }
+        return { ok: false, reason: 'invalid', refreshDefinitions: true };
+      },
+    };
+    await mount(recovery);
+    await ready();
+    await replace(input(m.catalogue_create_language()), 'en-GB');
+    await act(async () =>
+      user.selectOptions(scope().getByRole('combobox', { name: m.relation_property() }), 'bf:hasPart'),
+    );
+    await add('schema:inLanguage');
+    await replace(input(m.correction_value()), 'ja');
+    await add('schema:publisher');
+    await replace(scope().getByRole('combobox', { name: 'publisher' }), 'Supplied');
+    await scope().findByRole('option', { name: /Supplied publisher/ });
+    await act(async () => user.click(scope().getByRole('option', { name: /Supplied publisher/ })));
+    await replace(input(m.relation_citation()), 'https://publisher.example/edition');
+    await click(m.publication_submit());
+    await scope().findByText(m.publication_definitions_review());
+    const recoveryButton = () =>
+      scope().getByRole('button', { name: m.catalogue_create_review_new() }) as HTMLButtonElement;
+    expect(recoveryButton().disabled).toBe(true);
+    expect((scope().getByRole('combobox', { name: m.relation_property() }) as HTMLSelectElement).value).toBe(
+      'bf:hasPart',
+    );
+    expect(article().textContent).toContain('"ja"');
+    expect(input(m.catalogue_create_language()).value).toBe('en-GB');
+    expect(input(m.relation_citation()).value).toBe('https://publisher.example/edition');
+    await click(m.publication_submit());
+    expect(recovery.commands).toHaveLength(1);
+    await act(async () =>
+      user.selectOptions(scope().getByRole('combobox', { name: m.relation_property() }), 'schema:exampleOfWork'),
+    );
+    const removedFact = scope().getByRole('heading', { name: 'language', level: 3 }).closest('fieldset')!;
+    await act(async () => user.click(within(removedFact).getByRole('button', { name: m.relation_remove() })));
+    expect(recoveryButton().disabled).toBe(false);
+    await click(m.catalogue_create_review_new());
+    await click(m.publication_submit());
+    await scope().findByText(m.publication_empty());
+    const corrected = recovery.commands[1]!;
+    expect(corrected.key).not.toBe(recovery.commands[0]!.key);
+    expect(corrected.item.labels).toEqual({ 'en-GB': 'A distinct edition' });
+    expect(corrected.relation).toBe('schema:exampleOfWork');
+    expect(corrected.item.statements['schema:publisher']).toEqual(
+      recovery.commands[0]!.item.statements['schema:publisher'],
+    );
+    expect(corrected.item.statements['schema:inLanguage']).toBeUndefined();
+    expect(input(m.catalogue_create_label()).value).toBe('A distinct edition');
+    expect(article().textContent).toContain(publisherId);
+    expect(input(m.relation_citation()).value).toBe('https://publisher.example/edition');
+    // An unavailable reload cannot unlock creation, and a removed profile never hides the draft.
+    failRefresh = true;
+    await click(m.publication_refresh());
+    await scope().findByRole('heading', { name: m.catalogue_create_unavailable() });
+    release.types['rezics:AnimeRelease'] = structuredClone(releasedProfile);
+    failRefresh = false;
+    await click(m.catalogue_create_retry());
+    await scope().findByText(m.publication_definitions_review());
+    expect(recoveryButton().disabled).toBe(true);
+    expect(article().textContent).toContain('Supplied publisher');
+    const publisherFact = scope().getByRole('heading', { name: 'publisher', level: 3 }).closest('fieldset')!;
+    await act(async () => user.click(within(publisherFact).getByRole('button', { name: m.relation_remove() })));
+    await replace(input(m.relation_citation()), '');
+    expect(recoveryButton().disabled).toBe(false);
+    await click(m.catalogue_create_review_new());
+    await click(m.publication_submit());
+    await scope().findByRole('link', { name: m.catalogue_create_open() });
+    expect(recovery.commands).toHaveLength(3);
+    expect(recovery.commands[2]!.key).not.toBe(corrected.key);
+    expect(Object.keys(recovery.commands[2]!.item.statements)).toEqual(['schema:exampleOfWork']);
 
     // Constructed supplied release/profile tests DOM injectivity independently of native vocabulary acceptance.
     const collision = tracked();
