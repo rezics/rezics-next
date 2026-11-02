@@ -48,7 +48,12 @@ export type MembersPreparationOwnerDeclarations = Omit<MembersPreparationDeclara
 
 function snapshot(value: WorkDimensions | null): WorkDimensions {
   if (!value) throw new ProblemError('dependency_unavailable');
-  if (OPERATIONAL_WORK_AXES.some((axis) => !Number.isSafeInteger(value[axis]) || value[axis] < 0))
+  value = { ...value };
+  if (
+    OPERATIONAL_WORK_AXES.some(
+      (axis) => !Object.hasOwn(value, axis) || !Number.isSafeInteger(value[axis]) || value[axis] < 0,
+    )
+  )
     throw new TypeError('Incomplete Members preparation declaration');
   return Object.freeze({
     candidateKeys: value.candidateKeys,
@@ -73,7 +78,11 @@ export function declareMembersPreparationParent(owners: MembersPreparationOwnerD
 }> {
   const children = Object.create(null) as Record<MembersPreparationChild, WorkDimensions>;
   for (const name of MEMBERS_PREPARATION_CHILDREN) {
-    const declaration = name in history ? history[name as keyof typeof history] : owners[name as keyof typeof owners];
+    const declaration = Object.hasOwn(history, name)
+      ? history[name as keyof typeof history]
+      : Object.hasOwn(owners, name)
+        ? owners[name as keyof typeof owners]
+        : null;
     children[name] = snapshot(declaration);
   }
   if (children.members.statements > 16) throw new TypeError('Members preparation body exceeds 16 statements');
@@ -96,9 +105,8 @@ export function transferMembersPreparationBudget(
   if (!preparationKey || registered.get(parent)?.has(preparationKey)) throw new ProblemError('dependency_unavailable');
   const complete = Object.create(null) as Record<MembersPreparationChild, WorkDimensions>;
   for (const name of MEMBERS_PREPARATION_CHILDREN) {
-    const declaration = declarations[name];
-    if (!declaration) throw new ProblemError('dependency_unavailable');
-    complete[name] = declaration;
+    const declaration = Object.hasOwn(declarations, name) ? declarations[name] : null;
+    complete[name] = snapshot(declaration);
   }
   const transferred = parent.transferChildren(complete);
   const keys = registered.get(parent) ?? new Set<string>();

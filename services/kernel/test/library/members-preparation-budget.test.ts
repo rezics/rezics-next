@@ -229,3 +229,32 @@ test('expiration refuses initial and transferred work before checkout without ex
     now.mockRestore();
   }
 });
+
+test('inherited declarations and axes cannot establish complete funding or consume the original', () => {
+  const inherited = Object.create(declarations()) as MembersPreparationDeclarations;
+  const original = parent();
+  expect(() => declareMembersPreparationParent(inherited)).toThrow(ProblemError);
+  expect(() => transferMembersPreparationBudget(original, 'key', inherited)).toThrow(ProblemError);
+  const inheritedAxes = { ...declarations(), sourceResolve: Object.create(cost(2)) as WorkDimensions };
+  expect(() => declareMembersPreparationParent(inheritedAxes)).toThrow(TypeError);
+  expect(() => transferMembersPreparationBudget(original, 'key', inheritedAxes)).toThrow(TypeError);
+  expect(original.available('statements')).toBe(MEMBERS_PREPARATION_CHILDREN.length * 2);
+});
+
+test('already funded rollback and cleanup survive expiry without refunding a failed producer prefix', () => {
+  const original = parent();
+  const funded = transferMembersPreparationBudget(original, 'key', declarations());
+  const rollback = funded.children.rollback.reserve(cost(1), true);
+  const cleanup = funded.children.cleanup.reserve(cost(1), true);
+  dispatch(funded.children.members, 1);
+  const now = spyOn(Date, 'now').mockReturnValue(original.deadlineAt);
+  try {
+    rollback.dispatch();
+    rollback.settle();
+    cleanup.dispatch();
+    cleanup.settle();
+    expect(funded.finish().used).toEqual(cost(3));
+  } finally {
+    now.mockRestore();
+  }
+});

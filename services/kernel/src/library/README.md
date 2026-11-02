@@ -2362,10 +2362,10 @@ one reservation per list, rotating through the current page in each reader insta
 logical/dynamic sources receive no retained authority. The unfiltered definition uses the shared FilterDocument
 Type tautology at the current immutable release; unknown evidence remains unknown under NOT.
 
-The exact producer declarations include `id | ordinal`. This checkout carries explicitly unavailable producer
-adapters for reservation and default `library.membersPreparation` work. They perform no storage mutation,
-produce no ready result and acknowledge no custody. The authoritative reservation/storage/cleanup worker must
-replace those adapters through integration. `MembersPreparation` declares no retained ordered-result reader
+The exact producer declarations include `id | ordinal`. Native reservation now deduplicates current owner episodes,
+maintains quota/LRU and commits locator-only intents under current Core/Access fences. Default
+`library.membersPreparation` work still returns typed unavailable: reservation supplies no current Source binding,
+ready result or custody acknowledgement. The bounded producer and cleanup worker remain required. `MembersPreparation` declares no retained ordered-result reader
 on this base; prepared result consumption and finite native sparse-source completion remain deferred with the
 actual ordered/scoped source binding. Successful direct previews never establish those wider capabilities.
 
@@ -2696,3 +2696,18 @@ local ledger, ACK or this live-copy result. Foreign SDK/History/Source retiremen
 - Growth check: `test/access/live-copy.test.ts` authors the actual foreign positive, immutable guard, repeated
   negative/no-new-payload and deletion/recovery outcomes. Existing listing and History acceptance remains intact;
   execution and measured physical/failure/repeat/rollback work are deferred to controller integration.
+
+
+### Members reservation expiry frontier
+
+The reservation/result schema and native reservation bodies already exist. `members_preparation_expiry` adds a
+route-leading live-header frontier ordered by idle read time; maintenance can retire a bounded page without
+scanning owners or retained results. No second reservation schema or allocation API is introduced.
+
+Decision: preserve the native reservation and shared child-transfer allocator; extend its complete declarations
+with own-property validation and pre-funded rollback/cleanup after expiry, keeping Source authority independent.
+
+The budget tests retain existing admission, concurrency, completion, failure and expiry assertions and add
+inherited-declaration refusal and terminal-control settlement after expiry. Numerical accounting does not prove
+native Source currentness. The producer, current physical Source binding, prepared readback and cleanup remain
+required before the funded journey can return useful results.
