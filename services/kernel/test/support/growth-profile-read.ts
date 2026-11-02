@@ -256,9 +256,7 @@ export function readGrowthProfiles(sources: readonly GrowthProfileRunSource[]): 
         occurrence: first.occurrence,
         missingRuns,
         scalesByRun,
-        ...(boundsMatch
-          ? {}
-          : { incompatibleBoundsByRun: group.map(({ run, bounds }) => ({ run, bounds })) }),
+        ...(boundsMatch ? {} : { incompatibleBoundsByRun: group.map(({ run, bounds }) => ({ run, bounds })) }),
       });
       continue;
     }
