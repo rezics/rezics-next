@@ -215,7 +215,8 @@ export async function advanceSharedHistory(
           }>(
             `SELECT artifact_type,locator,minimizer_version,state FROM core.history_locator
              WHERE partition_no=$1 AND account_route=$2 AND account_id=$3
-               AND (artifact_type,locator)>($4::text COLLATE "C",$5::bytea)
+               AND ((artifact_type,locator)>($4::text COLLATE "C",$5::bytea)
+                 OR (artifact_type=$4::text COLLATE "C" AND locator=$5::bytea AND state='pending'))
              ORDER BY artifact_type,locator LIMIT 8`,
             [partition, job.account_route, job.account_id, job.scan_type ?? '', job.scan_locator ?? Buffer.alloc(0)],
           );
@@ -267,9 +268,10 @@ export async function advanceSharedHistory(
                 deps.pool,
                 { deadline },
               );
+              await scannedArtifact(tx, job, selectedLocator.artifactType, first.locator, null);
               answer = {
                 receiving: {
-                  job,
+                  job: { ...job, scan_type: selectedLocator.artifactType, scan_locator: first.locator },
                   proof,
                   type: selectedLocator.artifactType as Extract<HistoryArtifactType, 'command-receipt/v1' | 'outbox-event/v1'>,
                   locator: first.locator,
@@ -327,7 +329,15 @@ export async function advanceSharedHistory(
       throw error;
     }
   });
-  if ('receiving' in deferred) return continueRecoveryReceiving(deps, jobId, deferred.receiving);
+  if ('receiving' in deferred) {
+    try {
+      return await continueRecoveryReceiving(deps, jobId, deferred.receiving);
+    } catch (error) {
+      if (error instanceof IdentityHistoryWorkUnavailable || error instanceof IdentityOriginalUnavailable)
+        return result('more', error.message);
+      throw error;
+    }
+  }
   if (!('work' in deferred)) return deferred;
   // No source checkout survives SDK calls. Permanent native retirement makes either crash cut replayable.
   const { job, work, proof } = deferred;
@@ -498,13 +508,10 @@ async function continueRecoveryReceiving(
     ...(searchObservation ? { accountErasureSearchObservation: searchObservation } : {}),
     recoveryReceivingReserved,
   };
-  return withConnection(deps.pool, async (tx) => {
-    await tx.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
-    try {
-      await tx.query("SET LOCAL lock_timeout='200ms'");
-      await tx.query(
-        `SET LOCAL statement_timeout='${Math.max(1, Math.min(2000, selected.deadline - Date.now()))}ms'`,
-      );
+  return identityHistoryCommand(
+    deps.pool,
+    receivingContext,
+    async (tx) => {
       const current = (
         await tx.query<Job>('SELECT * FROM core.preference_history_job WHERE job_id=$1 FOR UPDATE', [jobId])
       ).rows[0];
@@ -523,7 +530,6 @@ async function continueRecoveryReceiving(
         current.barrier_version !== selected.job.barrier_version ||
         current.barrier_at !== selected.job.barrier_at
       ) {
-        await tx.query('COMMIT');
         return result('more', 'identity-history-selected-cursor-changed');
       }
       const proof = await barrier(tx, current);
@@ -546,13 +552,10 @@ async function continueRecoveryReceiving(
           receivingContext,
         );
       await scannedArtifact(tx, current, selected.type, selected.locator, gap);
-      await tx.query('COMMIT');
       return result('more');
-    } catch (error) {
-      await tx.query('ROLLBACK');
-      throw error;
-    }
-  });
+    },
+    selected.job.scan_partition,
+  );
 }
 
 async function scannedArtifact(
