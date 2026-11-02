@@ -102,6 +102,7 @@ export async function readIdentityVotes(
 }
 
 export function identityPageDigest(page: Omit<IdentityRepairPage, 'digest'>): string {
+  const key = (value: IdentityVoteKey | null) => (value === null ? null : [value.questionId, value.targetId]);
   return createHash('sha256')
     .update(
       JSON.stringify([
@@ -110,9 +111,9 @@ export function identityPageDigest(page: Omit<IdentityRepairPage, 'digest'>): st
         page.generation,
         page.pageId,
         page.mode,
-        page.after,
-        page.through,
-        page.next,
+        key(page.after),
+        key(page.through),
+        key(page.next),
         page.terminal,
         page.votes.map((vote) => [
           vote.questionId,
