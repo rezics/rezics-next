@@ -4863,7 +4863,7 @@ test('repeated, decreasing, malformed and diagnostic-only rsync output cannot ex
   }
 });
 
-test('a transfer that stalls after real progress reports its byte count and reaps the original rsync', async () => {
+test('transfer progress that stalls after real progress reports its byte count and reaps the original rsync', async () => {
   const upload = scenario({ a: { available: 8e9, uploadProgressMode: 'progress-then-stall' } });
   upload.env.REMOTE_CHECK_TRANSFER_TIMEOUT_MS = '50';
   upload.env.REMOTE_CHECK_RETRY_BACKOFF_MS = '1';
@@ -4897,7 +4897,7 @@ test('a transfer that stalls after real progress reports its byte count and reap
   expect(slotMarkers(returns.env, 'a')).toEqual([]);
 });
 
-test('cancellation racing active rsync output and the transfer deadline reaps only that child', async () => {
+test('transfer progress cancellation racing active output and the deadline reaps only that child', async () => {
   for (const phase of ['upload', 'returns'] as const) {
     const fixture = scenario({
       a: {
