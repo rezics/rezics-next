@@ -334,6 +334,9 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
         <FieldLabel htmlFor={id}>
           {kind === 'request' ? m.auth_transfer_handoff_select_request() : m.auth_transfer_handoff_select_acceptance()}
         </FieldLabel>
+        <p id="transfer-file-help">
+          {m.auth_transfer_guide_file_formats()} {m.auth_transfer_handoff_file_help()}
+        </p>
         <Input
           id={id}
           type="file"
@@ -352,15 +355,8 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
 
   return (
     <AuthPage returnToSecurity heading={m.auth_transfer_heading()}>
-      <div className="auth-login-form text-start">
-        <p>{m.auth_transfer_handoff_explanation()}</p>
-        <ol className="list-decimal space-y-3 ps-6">
-          <li>{m.auth_transfer_handoff_step_request()}</li>
-          <li>{m.auth_transfer_handoff_step_accept()}</li>
-          <li>{m.auth_transfer_handoff_step_submit()}</li>
-          <li>{m.auth_transfer_handoff_step_readback()}</li>
-        </ol>
-        <p id="transfer-file-help">{m.auth_transfer_handoff_file_help()}</p>
+      <div className="auth-login-form min-w-0 text-start wrap-anywhere">
+        <p>{m.auth_transfer_guide_orientation()}</p>
         {!session ? <p role="status">{m.auth_inventory_loading()}</p> : null}
         {session?.kind === 'signed-out' ? (
           <p>
@@ -673,6 +669,18 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
             </details>
           </div>
         ) : null}
+        <details>
+          <summary className="min-h-11 cursor-pointer py-3">{m.auth_transfer_guide_heading()}</summary>
+          <div className="space-y-3">
+            <p>{m.auth_transfer_handoff_explanation()}</p>
+            <ol className="list-decimal space-y-3 ps-6">
+              <li>{m.auth_transfer_handoff_step_request()}</li>
+              <li>{m.auth_transfer_handoff_step_accept()}</li>
+              <li>{m.auth_transfer_handoff_step_submit()}</li>
+              <li>{m.auth_transfer_handoff_step_readback()}</li>
+            </ol>
+          </div>
+        </details>
       </div>
     </AuthPage>
   );

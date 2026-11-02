@@ -106,13 +106,86 @@ async function submit(canvas: HTMLElement) {
   await waitFor(() => !button(canvas, m.auth_transfer_submit())?.disabled);
   button(canvas, m.auth_transfer_submit())!.click();
 }
-export const IndependentForms = { render: () => page(undefined, 'ready') };
-export const SourceRequest = { render: () => page(source, 'ready') };
-export const DestinationReview = { render: () => page({ ...source, side: 'destination' }, 'ready') };
+async function hierarchy(canvas: HTMLElement, selector: string) {
+  const action = await waitFor(() => canvas.querySelector<HTMLElement>(selector));
+  const summary = [...canvas.querySelectorAll('summary')].find(
+    (entry) => entry.textContent === m.auth_transfer_guide_heading(),
+  );
+  const guide = summary?.parentElement as HTMLDetailsElement | undefined;
+  if (!guide || guide.open || !(action.compareDocumentPosition(guide) & Node.DOCUMENT_POSITION_FOLLOWING))
+    throw new Error('The participant entry must precede the closed handoff guide.');
+  const controls = [...canvas.querySelectorAll('input, textarea, button, a, summary')];
+  for (let repeat = 0; repeat < 3; repeat++) {
+    summary!.focus();
+    if (document.activeElement !== summary) throw new Error('The guide summary must accept keyboard focus.');
+    summary!.click();
+    if (!guide.open || guide.querySelectorAll('ol > li').length !== 4)
+      throw new Error('The complete four-step handoff must remain reachable.');
+    summary!.click();
+    const currentControls = [...canvas.querySelectorAll('input, textarea, button, a, summary')];
+    if (
+      guide.open ||
+      controls.length !== currentControls.length ||
+      controls.some((control, index) => currentControls[index] !== control)
+    )
+      throw new Error('Opening the guide must preserve the participant controls.');
+  }
+  for (const file of canvas.querySelectorAll('input[type="file"]')) {
+    for (const id of file.getAttribute('aria-describedby')!.split(' ')) {
+      const target = canvas.querySelectorAll(`[id="${id}"]`);
+      if (target.length !== 1 || target[0]!.closest('details'))
+        throw new Error('File guidance and feedback must resolve uniquely outside closed disclosures.');
+    }
+  }
+}
+export const IndependentForms = {
+  render: () => page(undefined, 'ready'),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await hierarchy(canvasElement, '#transfer-subject');
+    await hierarchy(canvasElement, '#transfer-request-file');
+  },
+};
+export const SourceRequest = {
+  render: () => page(source, 'ready'),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => hierarchy(canvasElement, '#transfer-confirm'),
+};
+export const DestinationReview = {
+  render: () => page({ ...source, side: 'destination' }, 'ready'),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => hierarchy(canvasElement, '#transfer-confirm'),
+};
+export const UncertainRestore = {
+  render: () =>
+    page({ ...source, phase: 'execute', acceptance: 'opaque-acceptance', reference: 'original-approval' }, 'ready'),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await hierarchy(canvasElement, '#transfer-confirm');
+    if (!canvasElement.querySelector('[role="alert"]')?.textContent?.includes(m.auth_transfer_uncertain()))
+      throw new Error('The restored uncertain result must remain visible outside the guide.');
+  },
+};
+export const LongIdentifiers = {
+  render: () =>
+    page(
+      {
+        ...source,
+        request: {
+          ...source.request,
+          previous: {
+            ...source.request.previous,
+            subjectAccountId: 'subject-' + 'a'.repeat(120),
+            operatorAccountId: 'source-' + 'b'.repeat(120),
+          },
+          operatorAccountId: 'destination-' + 'c'.repeat(116),
+        },
+      },
+      'ready',
+    ),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => hierarchy(canvasElement, '#transfer-confirm'),
+};
 export const DestinationAccepted = {
   render: () => page({ ...source, side: 'destination', phase: 'accepted', reference: 'opaque-destination-acceptance' }),
 };
 export const SameAccountReconfirmation = {
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => hierarchy(canvasElement, '#transfer-email'),
   render: () => (
     <Fixture attempt={source}>
       <OperatorTransferPage initial={{ kind: 'ready', accountId: session.accountId, clientId: 'login', scopes: [] }} />
