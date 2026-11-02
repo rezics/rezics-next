@@ -678,7 +678,7 @@ Cancel preserves picker summaries, statement, citation and focus; confirmed clos
 and reopening starts a fresh editor from the admitted reading. A changed correction requires confirmation; an
 untouched staged addition also confirms because its selected target is authored input, while an untouched correction
 closes directly. A submitted, uncertain or stale command and an already proposed relation cannot be discarded here.
-After More, Restart and explicit read retry, focus the current slice status. Focus the visible alert on failure; retired reads stay silent.
+After More, Restart and explicit read retry, focus the count-bearing current slice status. Focus the visible alert on failure; retired reads stay silent.
 
 ## Statement consent
 

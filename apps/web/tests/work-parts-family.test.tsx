@@ -439,7 +439,7 @@ test('Work Parts keeps independent streams, full supplied composition, deliberat
     expect(action.holder.subject.statements[action.property]![0]!.id).toBe('00000000-0000-4000-8000-000000000804');
 
     // Retain a queued control across reader A-B-A and unmount: no late action/read or focus theft.
-    const retired = workPartsFixture();
+    const retired = workPartsFixture('partial');
     const retiredInitial = ready(retired.snapshot());
     let finishRetiredRead!: (value: WorkPartsRead) => void;
     const retiredTransport = {
