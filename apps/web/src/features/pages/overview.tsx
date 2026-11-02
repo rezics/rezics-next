@@ -121,6 +121,8 @@ export const headingClass =
   'text-2xl leading-snug font-semibold tracking-tight text-balance in-data-[heading-scale=lg]:text-3xl';
 export const sectionClass = 'min-w-0 space-y-4 in-data-[density=compact]:space-y-3';
 const anchorClass = 'scroll-mt-32';
+const sectionTitleClass = `${headingClass} min-w-0 max-w-full [overflow-wrap:anywhere]`;
+const sectionActionClass = `${linkClass} ${linkColor} inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm py-2 text-sm font-medium whitespace-normal [overflow-wrap:anywhere] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`;
 
 /** What a row of related subjects needs from its page; the full relations view supplies the same fields. */
 export type RowValue = Pick<
@@ -271,24 +273,22 @@ export function Preview({
 }) {
   return (
     <section id={id} data-slot={slot} aria-labelledby={`${id}-title`} className={`${sectionClass} ${anchorClass}`}>
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h2 id={`${id}-title`} lang={titleLang} className={headingClass}>
+      <div className="flex min-w-0 flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-baseline sm:justify-between sm:gap-x-4">
+        <div className="flex min-w-0 max-w-full flex-wrap items-baseline gap-x-3 gap-y-1 sm:flex-1">
+          <h2 id={`${id}-title`} lang={titleLang} className={sectionTitleClass}>
             {title}
           </h2>
           {count && (
-            <span data-slot="count" className="text-sm text-muted-foreground tabular-nums">
+            <span
+              data-slot="count"
+              className="max-w-full text-sm text-muted-foreground tabular-nums [overflow-wrap:anywhere]"
+            >
               {formatCount(count, locale)}
             </span>
           )}
         </div>
         {more && href && (
-          <a
-            data-slot="see-all"
-            href={href}
-            aria-describedby={`${id}-title`}
-            className={`${linkClass} ${linkColor} text-sm font-medium hover:underline`}
-          >
+          <a data-slot="see-all" href={href} aria-describedby={`${id}-title`} className={sectionActionClass}>
             {m.subject_view_all({ label: title }, { locale: locale as never })}
           </a>
         )}
@@ -299,7 +299,19 @@ export function Preview({
 }
 
 /** A section whose read did not succeed says so with a retry; the rest of the page is unaffected. */
-export function Failed({ slot, id, title, locale }: { slot: string; id: string; title: string; locale: string }) {
+export function Failed({
+  slot,
+  id,
+  title,
+  titleLang,
+  locale,
+}: {
+  slot: string;
+  id: string;
+  title: string;
+  titleLang?: string | undefined;
+  locale: string;
+}) {
   const options = { locale: locale as never };
   return (
     <section
@@ -309,13 +321,13 @@ export function Failed({ slot, id, title, locale }: { slot: string; id: string; 
       aria-labelledby={`${id}-title`}
       className={`${sectionClass} ${anchorClass}`}
     >
-      <h2 id={`${id}-title`} className={headingClass}>
+      <h2 id={`${id}-title`} lang={titleLang} className={sectionTitleClass}>
         {title}
       </h2>
-      <p role="status" className="text-sm text-muted-foreground">
+      <p id={`${id}-status`} role="status" className="text-sm text-muted-foreground [overflow-wrap:anywhere]">
         {m.subject_section_failed({}, options)}
       </p>
-      <a data-slot="retry" href="" className={`${linkClass} ${linkColor} text-sm font-medium hover:underline`}>
+      <a data-slot="retry" href="" aria-describedby={`${id}-title ${id}-status`} className={sectionActionClass}>
         {m.subject_section_retry({}, options)}
       </a>
     </section>
@@ -525,13 +537,14 @@ function LinkSection(
   if (!section?.ok)
     return (
       <>
-        <Failed slot={slot} id={id} title={title} locale={value.locale} />
+        <Failed slot={slot} id={id} title={text.text || title} titleLang={text.lang} locale={value.locale} />
         {props.paged === true && <StreamLink value={value} view={view} node={id} />}
       </>
     );
   const limit = props.paged === true ? Number.POSITIVE_INFINITY : limitOf(props);
   const found = forward ? statementItems(section, props.property, limit, value) : linkItems(section, limit, value);
-  if (!found) return <Failed slot={slot} id={id} title={title} locale={value.locale} />;
+  if (!found)
+    return <Failed slot={slot} id={id} title={text.text || title} titleLang={text.lang} locale={value.locale} />;
   if (found.items.length === 0 && !found.more && !found.count?.value && props.paged !== true) return null;
   const listed = forward ? found : { ...found, items: datedItems(found.items, value.locale) };
   return (
@@ -778,8 +791,9 @@ export function CollectionList(props: Record<string, unknown>) {
   const { value, section } = state;
   const id = String(props.id);
   const title = pageText(props.title, value.locale);
+  const heading = title.text || m.subject_lists({}, { locale: value.locale as never });
   if (!section?.ok || section.read.kind !== 'collections' || !Array.isArray(section.body.collections))
-    return <Failed slot="collection-list" id={id} title={title.text} locale={value.locale} />;
+    return <Failed slot="collection-list" id={id} title={heading} titleLang={title.lang} locale={value.locale} />;
   const allCollections = section.body.collections.filter(isRecord);
   const collections = props.paged === true ? allCollections : allCollections.slice(0, limitOf(props));
   if (collections.length === 0) return null;
@@ -796,7 +810,7 @@ export function CollectionList(props: Record<string, unknown>) {
     <Preview
       slot="collection-list"
       id={id}
-      title={title.text || m.subject_lists({}, { locale: value.locale as never })}
+      title={heading}
       titleLang={title.lang}
       count={count}
       more={props.paged !== true && more}
