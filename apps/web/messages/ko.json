@@ -4155,5 +4155,15 @@
   "rating_population_source_selected": "선택한 모집단",
   "rating_population_source_comparison": "비교",
   "rating_population_failed": "이 평가 출처를 불러오지 못했습니다.",
-  "rating_population_unavailable": "이 평가 출처는 현재 이용할 수 없습니다."
+  "rating_population_unavailable": "이 평가 출처는 현재 이용할 수 없습니다.",
+  "realm_appearance_image_link": "이미지 링크",
+  "realm_appearance_rules_link": "규칙 수정본 링크",
+  "realm_appearance_image_link_help": "이 사이트의 기존 이미지 링크(예: /media/…/webp-320)를 붙여 넣으세요. 미리보기에서 이 위치에 사용할 수 있는지 확인합니다.",
+  "realm_appearance_rules_link_help": "이 사이트에 게시된 규칙 글의 정확한 수정본 링크를 붙여 넣으세요. 미리보기에서 이 커뮤니티가 현재 사용할 수 있는지 확인합니다.",
+  "realm_appearance_invalid_image_link": "이 사이트의 이미지 링크를 /media/…/avif-320 또는 /media/…/webp-320 형식으로 입력하세요.",
+  "realm_appearance_invalid_rules_link": "이 사이트의 정확한 규칙 수정본 링크를 /posts/…/revisions/… 형식으로 입력하세요.",
+  "realm_appearance_reference_pending": "처리된 이미지를 이 커뮤니티의 지정 위치에 사용할 수 있음을 확인했습니다. 저장하면 적용되고 미리보기를 불러옵니다.",
+  "realm_appearance_selection_for": "{realm}의 {slot} 선택",
+  "realm_appearance_source_link": "원본 링크",
+  "realm_appearance_link_unavailable": "현재 이 커뮤니티의 지정 위치에서 이 원본을 사용할 수 없습니다. 링크와 접근 권한을 확인한 뒤 다시 미리 보세요. 초안은 유지됩니다."
 }

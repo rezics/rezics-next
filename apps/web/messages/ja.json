@@ -4155,5 +4155,15 @@
   "rating_population_source_selected": "選択した母集団",
   "rating_population_source_comparison": "比較",
   "rating_population_failed": "この評価情報を読み込めませんでした。",
-  "rating_population_unavailable": "この評価情報は現在利用できません。"
+  "rating_population_unavailable": "この評価情報は現在利用できません。",
+  "realm_appearance_image_link": "画像のリンク",
+  "realm_appearance_rules_link": "ルールのリビジョンへのリンク",
+  "realm_appearance_image_link_help": "このサイトの既存画像へのリンク（例：/media/…/webp-320）を貼り付けてください。プレビューで、この場所に使用できるかを確認します。",
+  "realm_appearance_rules_link_help": "このサイトで公開済みのルール投稿から、特定のリビジョンへのリンクを貼り付けてください。プレビューで、このコミュニティで現在利用できるかを確認します。",
+  "realm_appearance_invalid_image_link": "このサイトの画像リンクを /media/…/avif-320 または /media/…/webp-320 の形式で入力してください。",
+  "realm_appearance_invalid_rules_link": "このサイトのルールの特定リビジョンへのリンクを /posts/…/revisions/… の形式で入力してください。",
+  "realm_appearance_reference_pending": "処理済み画像をこのコミュニティの指定位置に使用できることを確認しました。保存すると適用され、プレビューが読み込まれます。",
+  "realm_appearance_selection_for": "「{realm}」の{slot}を選択",
+  "realm_appearance_source_link": "元のリンク",
+  "realm_appearance_link_unavailable": "この参照元は現在、このコミュニティの指定位置に使用できません。リンクとアクセス権を確認し、もう一度プレビューしてください。下書きは保持されています。"
 }

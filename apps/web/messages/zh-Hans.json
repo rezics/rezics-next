@@ -4156,5 +4156,15 @@
   "rating_population_source_selected": "已选人群",
   "rating_population_source_comparison": "比较",
   "rating_population_failed": "此评分来源加载失败。",
-  "rating_population_unavailable": "此评分来源当前不可用。"
+  "rating_population_unavailable": "此评分来源当前不可用。",
+  "realm_appearance_image_link": "图片链接",
+  "realm_appearance_rules_link": "规则修订版链接",
+  "realm_appearance_image_link_help": "粘贴本站现有图片的链接，例如 /media/…/webp-320。预览时会确认是否能在此使用。",
+  "realm_appearance_rules_link_help": "粘贴本站已发布规则帖子的确切修订版链接。预览时会确认该修订版目前是否可供此社区使用。",
+  "realm_appearance_invalid_image_link": "请输入本站图片链接，格式为 /media/…/avif-320 或 /media/…/webp-320。",
+  "realm_appearance_invalid_rules_link": "请输入本站规则的确切修订版链接，格式为 /posts/…/revisions/…。",
+  "realm_appearance_reference_pending": "已确认处理完成的图片可供此社区的指定位置使用。保存后才会应用并加载预览。",
+  "realm_appearance_selection_for": "为“{realm}”选择{slot}",
+  "realm_appearance_source_link": "来源链接",
+  "realm_appearance_link_unavailable": "此来源目前无法用于此社区的指定位置。请检查链接与访问权限，再次预览。草稿已保留。"
 }

@@ -4155,5 +4155,15 @@
   "rating_population_source_selected": "Populations sélectionnées",
   "rating_population_source_comparison": "Comparaison",
   "rating_population_failed": "Le chargement de cette source de notes a échoué.",
-  "rating_population_unavailable": "Cette source de notes est actuellement indisponible."
+  "rating_population_unavailable": "Cette source de notes est actuellement indisponible.",
+  "realm_appearance_image_link": "Lien de l’image",
+  "realm_appearance_rules_link": "Lien de la révision des règles",
+  "realm_appearance_image_link_help": "Collez le lien d’une image existante de ce site, par exemple /media/…/webp-320. L’aperçu vérifie si elle peut être utilisée ici.",
+  "realm_appearance_rules_link_help": "Collez le lien de la révision exacte d’un message de règles publié sur ce site. L’aperçu vérifie sa disponibilité actuelle pour cette communauté.",
+  "realm_appearance_invalid_image_link": "Saisissez un lien d’image de ce site au format /media/…/avif-320 ou /media/…/webp-320.",
+  "realm_appearance_invalid_rules_link": "Saisissez le lien d’une révision exacte des règles de ce site au format /posts/…/revisions/….",
+  "realm_appearance_reference_pending": "La référence à l’image traitée est confirmée pour cette communauté et cet emplacement. Enregistrez pour l’appliquer et charger son aperçu.",
+  "realm_appearance_selection_for": "Sélection pour {slot} dans {realm}",
+  "realm_appearance_source_link": "Lien source",
+  "realm_appearance_link_unavailable": "Cette source est actuellement indisponible pour cette communauté et cet emplacement. Vérifiez le lien et vos droits d’accès, puis relancez l’aperçu. Votre brouillon est conservé."
 }

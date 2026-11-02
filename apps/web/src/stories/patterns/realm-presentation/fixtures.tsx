@@ -4,6 +4,7 @@ import type {
   RealmAppearanceChoice,
 } from '../../../community/realm-presentation';
 import { createKernelClient } from '@rezics/client';
+import { coverSrc } from '../../../media/cover-src';
 import { readRealmAppearance } from '../../../community/realm-presentation-native';
 import {
   available,
@@ -15,6 +16,9 @@ import {
   appearanceRecording,
 } from '../../../kernel/fake/community';
 export { available, configured, image, bannerImage, imageId, revisionId } from '../../../kernel/fake/community';
+
+export const imageLink = coverSrc(imageId, 'webp', 320);
+export const rulesLink = `/posts/${imageId}/revisions/${revisionId}`;
 
 /** An exact revision fixture keeps the selection contract explicit and does not imply authored content. */
 export function rulesSelectionFixture(
@@ -31,7 +35,7 @@ export function rulesSelectionFixture(
   };
 }
 
-export function fixtureAdapter(snapshot = configured): RealmAppearanceAdapter {
+export function fixtureAdapter(snapshot = configured, pendingPreview = false): RealmAppearanceAdapter {
   return {
     read: async () => ({ kind: 'ready', snapshot }),
     change: async (command) => ({
@@ -51,7 +55,9 @@ export function fixtureAdapter(snapshot = configured): RealmAppearanceAdapter {
     }),
     select: async (choice) =>
       choice.kind === 'image'
-        ? { kind: 'image', image: { ...(choice.purpose === 'realm-icon' ? image : bannerImage), id: choice.mediaId } }
+        ? pendingPreview
+          ? { kind: 'image-reference', mediaId: choice.mediaId, realmId: choice.realmId, purpose: choice.purpose }
+          : { kind: 'image', image: { ...(choice.purpose === 'realm-icon' ? image : bannerImage), id: choice.mediaId } }
         : rulesSelectionFixture(choice),
     upload: async (_realmId, slot) => ({ id: slot === 'avatar' ? imageId : bannerImage.id }),
     resume: async (id) => ({ id }),

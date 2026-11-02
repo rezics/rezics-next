@@ -4155,5 +4155,15 @@
   "rating_population_source_selected": "已選群體",
   "rating_population_source_comparison": "比較",
   "rating_population_failed": "此評分來源載入失敗。",
-  "rating_population_unavailable": "此評分來源目前無法使用。"
+  "rating_population_unavailable": "此評分來源目前無法使用。",
+  "realm_appearance_image_link": "圖片連結",
+  "realm_appearance_rules_link": "規則修訂版連結",
+  "realm_appearance_image_link_help": "貼上本站現有圖片的連結，例如 /media/…/webp-320。預覽時會確認是否能在此使用。",
+  "realm_appearance_rules_link_help": "貼上本站已發布規則貼文的確切修訂版連結。預覽時會確認該修訂版目前是否可供此社群使用。",
+  "realm_appearance_invalid_image_link": "請輸入本站圖片連結，格式為 /media/…/avif-320 或 /media/…/webp-320。",
+  "realm_appearance_invalid_rules_link": "請輸入本站規則的確切修訂版連結，格式為 /posts/…/revisions/…。",
+  "realm_appearance_reference_pending": "已確認處理完成的圖片可供此社群的指定位置使用。儲存後才會套用並載入預覽。",
+  "realm_appearance_selection_for": "為「{realm}」選擇{slot}",
+  "realm_appearance_source_link": "來源連結",
+  "realm_appearance_link_unavailable": "此來源目前無法用於此社群的指定位置。請檢查連結與存取權限，再次預覽。草稿已保留。"
 }

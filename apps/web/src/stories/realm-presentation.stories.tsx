@@ -6,8 +6,8 @@ import {
   available,
   configured,
   fixtureAdapter,
-  imageId,
-  revisionId,
+  imageLink,
+  rulesLink,
   readFixtureAppearance,
 } from './patterns/realm-presentation/fixtures';
 import { PatternStory } from './page';
@@ -39,6 +39,18 @@ const render: NonNullable<Story['render']> = (args) => (
 export const Manage: Story = {
   args: { realmId: configured.realmId, initial: { kind: 'ready', snapshot: configured }, adapter: fixtureAdapter() },
   render,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await userEvent.click(view.getByRole('button', { name: m.realm_appearance_select_rules() }));
+    await userEvent.type(view.getByRole('textbox', { name: m.realm_appearance_rules_link() }), rulesLink);
+    await userEvent.click(view.getByRole('button', { name: m.realm_appearance_preview() }));
+    await view.findByText('A thoughtful reading room');
+    await expect(view.getByRole('link', { name: m.realm_appearance_open_revision() })).toHaveAttribute(
+      'href',
+      expect.stringContaining(rulesLink),
+    );
+    await userEvent.click(view.getByRole('button', { name: m.realm_appearance_use_selection() }));
+  },
 };
 export const Available: Story = {
   args: { ...Manage.args, initial: { kind: 'ready', snapshot: available }, adapter: fixtureAdapter(available) },
@@ -120,8 +132,7 @@ export const UncertainRetry: Story = {
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
     await userEvent.click(view.getByRole('button', { name: m.realm_appearance_select_rules() }));
-    await userEvent.type(view.getByRole('textbox', { name: m.realm_appearance_post_id() }), imageId);
-    await userEvent.type(view.getByRole('textbox', { name: m.realm_appearance_revision_id() }), revisionId);
+    await userEvent.type(view.getByRole('textbox', { name: m.realm_appearance_rules_link() }), rulesLink);
     await userEvent.click(view.getByRole('button', { name: m.realm_appearance_preview() }));
     await userEvent.click(await view.findByRole('button', { name: m.realm_appearance_use_selection() }));
     await userEvent.click(view.getByRole('button', { name: m.realm_appearance_save() }));
@@ -137,7 +148,7 @@ export const SelectionCancelled: Story = {
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
     await userEvent.click(view.getAllByRole('button', { name: m.realm_appearance_choose() })[0]!);
-    await userEvent.type(view.getByRole('textbox', { name: m.realm_appearance_media_id() }), imageId);
+    await userEvent.type(view.getByRole('textbox', { name: m.realm_appearance_image_link() }), imageLink);
     await userEvent.click(view.getByRole('button', { name: m.realm_appearance_preview() }));
     await view.findByRole('button', { name: m.realm_appearance_use_selection() });
     await userEvent.click(view.getByRole('button', { name: m.editor_cancel() }));
@@ -152,14 +163,12 @@ export const SelectionReopened: Story = {
     const view = within(canvasElement);
     const open = view.getByRole('button', { name: m.realm_appearance_select_rules() });
     await userEvent.click(open);
-    await userEvent.type(view.getByRole('textbox', { name: m.realm_appearance_post_id() }), imageId);
-    await userEvent.type(view.getByRole('textbox', { name: m.realm_appearance_revision_id() }), revisionId);
+    await userEvent.type(view.getByRole('textbox', { name: m.realm_appearance_rules_link() }), rulesLink);
     await userEvent.click(view.getByRole('button', { name: m.realm_appearance_preview() }));
     await view.findByText('A thoughtful reading room');
     await userEvent.click(view.getByRole('button', { name: m.editor_cancel() }));
     await userEvent.click(open);
-    await userEvent.type(view.getByRole('textbox', { name: m.realm_appearance_post_id() }), imageId);
-    await userEvent.type(view.getByRole('textbox', { name: m.realm_appearance_revision_id() }), revisionId);
+    await userEvent.type(view.getByRole('textbox', { name: m.realm_appearance_rules_link() }), rulesLink);
     await userEvent.click(view.getByRole('button', { name: m.realm_appearance_preview() }));
     await view.findByText('A thoughtful reading room');
     await userEvent.click(view.getByRole('button', { name: m.realm_appearance_use_selection() }));
@@ -173,24 +182,17 @@ export const NativeSource: Story = {
   render: (args, context) => render({ ...args, initial: context.loaded.initial }, context),
 };
 export const ProcessedImage: Story = {
-  args: {
-    ...Manage.args,
-    adapter: {
-      ...fixtureAdapter(),
-      select: async (choice) =>
-        choice.kind === 'image'
-          ? { kind: 'image-reference', mediaId: choice.mediaId, realmId: choice.realmId, purpose: choice.purpose }
-          : { kind: 'unavailable' },
-    },
-  },
+  args: { ...Manage.args, adapter: fixtureAdapter(configured, true) },
   render,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
-    await userEvent.upload(
-      view.getByLabelText(`${m.realm_appearance_icon()}: ${m.realm_appearance_upload()}`),
-      new File(['image'], 'icon.png', { type: 'image/png' }),
-    );
-    await view.findByText(m.realm_appearance_preview_after_save());
+    await userEvent.click(view.getAllByRole('button', { name: m.realm_appearance_choose() })[0]!);
+    await userEvent.type(view.getByRole('textbox', { name: m.realm_appearance_image_link() }), imageLink);
+    await userEvent.click(view.getByRole('button', { name: m.realm_appearance_preview() }));
+    await view.findByText(m.realm_appearance_reference_pending());
+    await expect(view.getByRole('link', { name: m.realm_appearance_source_link() })).toHaveAttribute('href', imageLink);
+    await userEvent.click(view.getByRole('button', { name: m.realm_appearance_use_selection() }));
+    await view.findByText(m.realm_appearance_reference_pending());
     await expect(view.getByRole('button', { name: m.realm_appearance_save() })).toBeEnabled();
     await userEvent.click(view.getByRole('button', { name: m.realm_appearance_save() }));
     await view.findByText(m.realm_appearance_saved());

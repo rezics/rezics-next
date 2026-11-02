@@ -4156,5 +4156,15 @@
   "rating_population_source_selected": "Selected populations",
   "rating_population_source_comparison": "Comparison",
   "rating_population_failed": "This rating source failed to load.",
-  "rating_population_unavailable": "This rating source is currently unavailable."
+  "rating_population_unavailable": "This rating source is currently unavailable.",
+  "realm_appearance_image_link": "Image link",
+  "realm_appearance_rules_link": "Rules revision link",
+  "realm_appearance_image_link_help": "Paste a link to an existing image on this site, such as /media/…/webp-320. Preview checks whether it can be used here.",
+  "realm_appearance_rules_link_help": "Paste the exact revision link from a published rules post on this site. Preview checks its current availability for this community.",
+  "realm_appearance_invalid_image_link": "Enter an image link from this site in the form /media/…/avif-320 or /media/…/webp-320.",
+  "realm_appearance_invalid_rules_link": "Enter an exact rules revision link from this site in the form /posts/…/revisions/….",
+  "realm_appearance_reference_pending": "The processed image reference is confirmed for this community and slot. Save to apply it and load its preview.",
+  "realm_appearance_selection_for": "Selection for {slot} in {realm}",
+  "realm_appearance_source_link": "Source link",
+  "realm_appearance_link_unavailable": "This source is currently unavailable for this community and slot. Check the link and your access, then preview again. Your draft is preserved."
 }

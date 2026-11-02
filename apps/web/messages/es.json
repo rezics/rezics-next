@@ -4155,5 +4155,15 @@
   "rating_population_source_selected": "Poblaciones seleccionadas",
   "rating_population_source_comparison": "Comparación",
   "rating_population_failed": "No se pudo cargar esta fuente de valoraciones.",
-  "rating_population_unavailable": "Esta fuente de valoraciones no está disponible actualmente."
+  "rating_population_unavailable": "Esta fuente de valoraciones no está disponible actualmente.",
+  "realm_appearance_image_link": "Enlace de imagen",
+  "realm_appearance_rules_link": "Enlace de revisión de las reglas",
+  "realm_appearance_image_link_help": "Pega un enlace a una imagen existente de este sitio, como /media/…/webp-320. La vista previa comprueba si se puede usar aquí.",
+  "realm_appearance_rules_link_help": "Pega el enlace a la revisión exacta de una publicación de reglas publicada en este sitio. La vista previa comprueba su disponibilidad actual para esta comunidad.",
+  "realm_appearance_invalid_image_link": "Introduce un enlace de imagen de este sitio con el formato /media/…/avif-320 o /media/…/webp-320.",
+  "realm_appearance_invalid_rules_link": "Introduce un enlace a la revisión exacta de las reglas de este sitio con el formato /posts/…/revisions/….",
+  "realm_appearance_reference_pending": "La referencia a la imagen procesada está confirmada para esta comunidad y ubicación. Guarda para aplicarla y cargar su vista previa.",
+  "realm_appearance_selection_for": "Selección de {slot} en {realm}",
+  "realm_appearance_source_link": "Enlace de origen",
+  "realm_appearance_link_unavailable": "Esta fuente no está disponible actualmente para esta comunidad y ubicación. Comprueba el enlace y tus permisos de acceso y vuelve a abrir la vista previa. Tu borrador se conserva."
 }

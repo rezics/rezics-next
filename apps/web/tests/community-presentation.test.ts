@@ -688,3 +688,267 @@ test('Realm appearance cache, drafts and uploads are scoped to the current signe
   expect(panel).toContain('key={`${realmId}:${viewer}`}');
   expect(settings).toContain('useEffect(() => () => control.cancelUpload(), [control]);');
 });
+
+test('The default admitted community management journey resolves a same-site image or exact rules revision link through native selection and saves the exact reviewed reference while stale selections and uncertain original writes stay isolated', async () => {
+  const { mock } = await import('bun:test');
+  const { createRequire } = await import('node:module');
+  const require = createRequire(import.meta.url);
+  const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
+  const window = new Window({ url: 'https://site.test/en/spaces/quiet-novel-club' });
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    location: window.location,
+    HTMLElement: window.HTMLElement,
+    HTMLInputElement: window.HTMLInputElement,
+    HTMLButtonElement: window.HTMLButtonElement,
+    Element: window.Element,
+    Node: window.Node,
+    Document: window.Document,
+    DocumentFragment: window.DocumentFragment,
+    MutationObserver: window.MutationObserver,
+    ResizeObserver: window.ResizeObserver,
+    getComputedStyle: window.getComputedStyle.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    matchMedia: window.matchMedia.bind(window),
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const saved = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const start = await import('../.storybook/react-start');
+  mock.module('@tanstack/react-start', () => start);
+  mock.module('@tanstack/react-start/server', () => start);
+  mock.module('cloudflare:workers', () => ({ env: {} }));
+  const query = { ...(await import('../src/kernel/query')) };
+  mock.module('../src/kernel/query', () => ({ ...query, personalRead: { ...query.personalRead, enabled: true } }));
+  const native = nativeSource();
+  const selections: Parameters<RealmAppearanceAdapter['select']>[0][] = [];
+  const commands: RealmAppearanceCommand[] = [];
+  const releases: (() => void)[] = [];
+  let holdNext = false;
+  const actions = { ...(await import('../src/community/space-actions')) };
+  mock.module('../src/community/space-actions', () => ({
+    ...actions,
+    readRealmAppearanceSettings: async () => readRealmAppearance(native.client, 'Bearer manager', realmId),
+    resolveRealmAppearanceChoice: async ({ data }: { data: Parameters<RealmAppearanceAdapter['select']>[0] }) => {
+      selections.push(structuredClone(data));
+      const held = holdNext;
+      holdNext = false;
+      const candidate = await selectRealmAppearance(data, native.client, 'Bearer manager');
+      return held ? new Promise((resolve) => releases.push(() => resolve(candidate))) : candidate;
+    },
+    changeRealmAppearanceSettings: async ({
+      data,
+      headers,
+    }: {
+      data: RealmAppearanceCommand;
+      headers: HeadersInit;
+    }) => {
+      expect(new Headers(headers).get('X-CSRF-Token')).toBe('manager-csrf');
+      commands.push(structuredClone(data));
+      return changeRealmAppearance(data, native.client, 'Bearer manager');
+    },
+    // Other management operations are denied, so only actual native appearance admission exposes Manage.
+    readSpaceSetup: async () => ({ kind: 'failure', reason: 'denied', status: 403 }),
+    readRealmBans: async () => ({ state: 'forbidden' }),
+    readContainerLifecycle: async () => ({ kind: 'refused', status: 403, code: 'forbidden' }),
+    readRealmClaimState: async () => ({ kind: 'unavailable' }),
+  }));
+  const { act, createElement: h } = await import('react');
+  const { createRoot } = await import('react-dom/client');
+  const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
+  const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+  const { sessionQuery, exposureQuery } = await import('../src/session/query');
+  const { SpacePage } = await import('../src/community/space-page');
+  const { loadSpacePage } = await import('../src/community/space');
+  const { createStoryRecordedKernelFetch } = await import('../src/kernel/fake');
+  const { m } = await import('../src/paraglide/messages.js');
+  const { setLocale, localizeUrl } = await import('../src/paraglide/runtime.js');
+  const { within, userEvent, waitFor } = await import('storybook/test');
+  setLocale('en', { reload: false });
+  const recorded = createKernelClient('https://kernel.test', { fetch: createStoryRecordedKernelFetch() });
+  const page = await loadSpacePage(
+    recorded,
+    new Request(window.location.href),
+    {},
+    { address: 'quiet-novel-club' },
+    'anonymous',
+  );
+  expect(page.realm?.id).toBe(realmId);
+  const queries = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+  queries.setQueryData(sessionQuery.queryKey, {
+    state: 'signed-in',
+    subject: realm.realm.creator,
+    csrfToken: 'manager-csrf',
+  });
+  queries.setQueryData(exposureQuery.queryKey, []);
+  const route = createRootRoute({ component: () => h(SpacePage, { page }) });
+  const router = createRouter({
+    routeTree: route,
+    history: createMemoryHistory({ initialEntries: ['/en/spaces/quiet-novel-club'] }),
+  });
+  await router.load();
+  const host = window.document.createElement('main') as unknown as HTMLElement;
+  window.document.body.append(host);
+  const root = createRoot(host);
+  const user = userEvent.setup({ document: window.document as unknown as Document });
+  const view = within(host);
+  const click = async (name: string) => act(async () => user.click(view.getByRole('button', { name })));
+  const imageLink = `/media/${id}/webp-320`;
+  const rulesLink = `/posts/${id}/revisions/${revisionId}`;
+  const edit = async (label: string, value: string) => {
+    const input = view.getByRole('textbox', { name: label });
+    await act(async () => {
+      await user.clear(input);
+      await user.type(input, value);
+    });
+  };
+  const preview = async (cost: number) => {
+    const before = native.requests.length;
+    await click(m.realm_appearance_preview());
+    await waitFor(() => expect(native.requests).toHaveLength(before + cost));
+  };
+  try {
+    await act(async () => root.render(h(QueryClientProvider, { client: queries }, h(RouterProvider, { router }))));
+    await view.findByRole('button', { name: m.community_manage() });
+    expect(selections).toHaveLength(0);
+    expect(commands).toHaveLength(0);
+    expect(native.requests).toHaveLength(4);
+    expect(view.queryByRole('region', { name: m.realm_appearance_heading() })).toBeNull();
+    await click(m.community_manage());
+    await view.findByRole('region', { name: m.realm_appearance_heading() });
+    await act(async () => user.click(view.getAllByRole('button', { name: m.realm_appearance_choose() })[0]!));
+    for (const invalid of [
+      id,
+      `/media/${id}/original`,
+      `/media/${id}/png-320`,
+      `/media/${id}/webp-0`,
+      '/media/not-an-id/webp-320',
+      `https://foreign.test${imageLink}`,
+      `https://reader:secret@site.test${imageLink}`,
+      `//site.test${imageLink}`,
+      `/en${imageLink}`,
+      `/ignored/..${imageLink}`,
+      imageLink.replace('/media/', '/%6dedia/'),
+      `${imageLink}?fetch=https://foreign.test/image.png`,
+      `${imageLink}#save`,
+    ]) {
+      await edit(m.realm_appearance_image_link(), invalid);
+      expect(view.queryByRole('alert')).toBeNull();
+      await click(m.realm_appearance_preview());
+      await view.findByText(m.realm_appearance_invalid_image_link());
+      expect(view.getByRole('button', { name: m.realm_appearance_use_selection() }).hasAttribute('disabled')).toBe(
+        true,
+      );
+    }
+    expect(selections).toHaveLength(0);
+    expect(native.requests).toHaveLength(4);
+
+    // Editing invalidates an in-flight read even when its exact native response arrives later.
+    await edit(m.realm_appearance_image_link(), `https://site.test${imageLink}`);
+    holdNext = true;
+    await preview(6);
+    await waitFor(() => expect(releases).toHaveLength(1));
+    expect(view.getByRole('button', { name: m.editor_cancel() }).hasAttribute('disabled')).toBe(false);
+    await edit(m.realm_appearance_image_link(), 'changed link');
+    await act(async () => releases.shift()!());
+    expect(view.queryByText(m.realm_appearance_reference_pending())).toBeNull();
+    expect(view.queryByRole('alert')).toBeNull();
+    await edit(m.realm_appearance_image_link(), imageLink);
+    await preview(6);
+    await view.findByText(m.realm_appearance_reference_pending());
+    expect(selections[1]).toEqual({ kind: 'image', realmId, mediaId: id, purpose: 'realm-icon' });
+    expect(view.getByRole('link', { name: m.realm_appearance_source_link() }).getAttribute('href')).toBe(imageLink);
+    expect(host.querySelector(`img[src="${imageLink}"]`)).toBeNull();
+    await click(m.realm_appearance_use_selection());
+    expect(commands).toHaveLength(0);
+    expect(view.getByText(m.realm_appearance_reference_pending())).toBeDefined();
+    expect(
+      view.getByText(m.realm_appearance_selection_for({ slot: m.realm_appearance_icon(), realm: current.title })),
+    ).toBeDefined();
+
+    await click(m.realm_appearance_select_rules());
+    await edit(m.realm_appearance_rules_link(), `/posts/${id}`);
+    await click(m.realm_appearance_preview());
+    await view.findByText(m.realm_appearance_invalid_rules_link());
+    expect(selections).toHaveLength(2);
+    await edit(m.realm_appearance_rules_link(), rulesLink);
+    holdNext = true;
+    await preview(8);
+    await waitFor(() => expect(releases).toHaveLength(1));
+    // The actual panel receives a fresh source at the same head. The old read must not cross it or a reopened selection.
+    await act(async () => {
+      for (const entry of queries.getQueryCache().findAll({ queryKey: ['realm-appearance', realmId] }))
+        queries.setQueryData(entry.queryKey, {
+          kind: 'ready',
+          snapshot: { ...current, title: 'Refreshed reading room' },
+        });
+    });
+    expect(view.queryByRole('textbox', { name: m.realm_appearance_rules_link() })).toBeNull();
+    await click(m.realm_appearance_select_rules());
+    await act(async () => releases.shift()!());
+    expect(view.queryByText('Reading room rules')).toBeNull();
+    expect(view.queryByRole('alert')).toBeNull();
+    await edit(m.realm_appearance_rules_link(), `https://site.test/zh-Hant${rulesLink}`);
+    await preview(8);
+    await view.findByText('Reading room rules');
+    expect(view.getByText('Discuss the work and respect other readers.')).toBeDefined();
+    expect(view.getByRole('link', { name: m.realm_appearance_open_revision() }).getAttribute('href')).toBe(
+      localizeUrl(new URL(rulesLink, window.location.origin)).pathname,
+    );
+    expect(selections[3]).toEqual({ kind: 'rules', realmId, postId: id, revisionId });
+    await click(m.realm_appearance_use_selection());
+    expect(commands).toHaveLength(0);
+    native.fail('lost');
+    await click(m.realm_appearance_save());
+    await view.findByText(m.realm_appearance_uncertain());
+    expect(commands).toHaveLength(1);
+    const original = structuredClone(commands[0]!);
+    expect(original).toEqual({
+      realmId,
+      head: current.head,
+      key: expect.any(String),
+      presentation: { avatarMediaId: id, bannerMediaId: null, rules: { postId: id, revisionId } },
+    });
+    expect(v.safeParse(v.pipe(v.string(), v.uuid()), original.key).success).toBe(true);
+    expect(view.getByRole('button', { name: m.realm_appearance_select_rules() }).hasAttribute('disabled')).toBe(true);
+    expect(
+      view
+        .getAllByRole('button', { name: m.realm_appearance_choose() })
+        .every((button) => button.hasAttribute('disabled')),
+    ).toBe(true);
+    const beforeRetry = native.requests.length;
+    await click(m.community_manage_close());
+    await click(m.community_manage());
+    expect(view.getByText(m.realm_appearance_uncertain())).toBeDefined();
+    expect(native.requests).toHaveLength(beforeRetry);
+    native.fail(null);
+    await click(m.realm_appearance_retry());
+    await view.findByText(m.realm_appearance_saved());
+    expect(commands).toEqual([original, original]);
+    expect(native.requests).toHaveLength(beforeRetry + 5);
+    const patches = native.requests.filter((request) => request.method === 'PATCH');
+    expect(patches).toHaveLength(2);
+    for (const patch of patches) {
+      expect(patch.headers.get('idempotency-key')).toBe(JSON.stringify(original.key));
+      expect(patch.headers.get('if-match')).toBe(JSON.stringify(original.head));
+    }
+    expect(host.querySelector(`img[src="${imageLink}"]`)).not.toBeNull();
+    expect(view.queryByText(m.realm_appearance_reference_pending())).toBeNull();
+    expect(view.getByText('Reading room rules')).toBeDefined();
+    expect(selections).toHaveLength(4);
+  } finally {
+    await act(async () => root.unmount());
+    queries.clear();
+    mock.module('../src/community/space-actions', () => actions);
+    mock.module('../src/kernel/query', () => query);
+    for (const [key, descriptor] of saved) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+    await window.happyDOM.abort();
+  }
+});

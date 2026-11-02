@@ -34,14 +34,14 @@ export const ManagementInteractions: Story = {
     const selectRules = appearance.getByRole('button', { name: m.realm_appearance_select_rules() });
     selectRules.focus();
     await userEvent.keyboard('{Enter}');
-    await appearance.findByRole('textbox', { name: m.realm_appearance_post_id() });
+    await appearance.findByRole('textbox', { name: m.realm_appearance_rules_link() });
     await expect(appearance.getByRole('button', { name: m.realm_appearance_save() })).toBeDisabled();
     await userEvent.click(page.getByRole('button', { name: m.community_manage_close() }));
     await expect(page.queryByRole('region', { name: m.realm_appearance_heading() })).toBeNull();
     await userEvent.click(page.getByRole('button', { name: m.community_manage() }));
-    await expect(appearance.getByRole('textbox', { name: m.realm_appearance_post_id() })).toBeVisible();
+    await expect(appearance.getByRole('textbox', { name: m.realm_appearance_rules_link() })).toBeVisible();
     await userEvent.click(appearance.getByRole('button', { name: m.editor_cancel() }));
-    await expect(appearance.queryByRole('textbox', { name: m.realm_appearance_post_id() })).toBeNull();
+    await expect(appearance.queryByRole('textbox', { name: m.realm_appearance_rules_link() })).toBeNull();
 
     await userEvent.click(appearance.getAllByRole('button', { name: m.realm_appearance_clear() })[0]!);
     const confirmation = within(appearance.getByRole('group', { name: m.realm_appearance_clear_confirm() }));

@@ -15,18 +15,19 @@ import {
   type RealmPresentationImage,
   type RealmPresentationOptional,
 } from './realm-presentation';
+import { realmAppearanceReference, type RealmAppearanceReference } from './realm-appearance-reference';
 import type { RealmAppearanceCallerLifetime } from './realm-appearance-caller-lifetime';
 
 function ImagePreview({
   image,
   title,
   banner = false,
-  pending = false,
+  pending,
 }: {
   image: RealmPresentationOptional<RealmPresentationImage>;
   title: string;
   banner?: boolean;
-  pending?: boolean;
+  pending?: string;
 }) {
   const src = realmImageSource(image);
   const [failed, setFailed] = useState(false);
@@ -55,7 +56,7 @@ function ImagePreview({
         )}
       </div>
       {pending ? (
-        <p className="text-sm text-muted-foreground">{m.realm_appearance_preview_after_save()}</p>
+        <p className="text-sm text-muted-foreground">{pending}</p>
       ) : image.state === 'unavailable' || failed || (image.state === 'available' && !src) ? (
         <p className="text-sm text-muted-foreground">{m.realm_appearance_image_unavailable()}</p>
       ) : image.state === 'none' ? (
@@ -77,12 +78,18 @@ type Selection = {
   callerTicket: number;
   head: string | null;
   slot: RealmImageSlot | 'rules';
-  first: string;
-  second: string;
+  source: RealmAppearanceRead;
+  link: string;
+  reference: RealmAppearanceReference | null;
+  invalid: boolean;
   candidate: RealmAppearanceSelection | null;
   busy: boolean;
   unavailable: boolean;
 };
+
+function rulesHref(postId: string, revisionId: string) {
+  return localizeUrl(new URL(`/posts/${postId}/revisions/${revisionId}`, 'https://rezics.local')).pathname;
+}
 
 /** Reusable settings Pattern. Pages provide only current native data and ordinary command transport. */
 export function RealmAppearanceSettings({
@@ -103,6 +110,9 @@ export function RealmAppearanceSettings({
   const state = useSyncExternalStore(control.subscribe, control.getSnapshot, control.getSnapshot);
   const [selectionState, setSelectionState] = useState<Selection | null>(null);
   const selectionRef = useRef<Selection | null>(null);
+  const [usedReferences, setUsedReferences] = useState<
+    Partial<Record<RealmImageSlot, { owner: object; callerId: number; reference: RealmAppearanceReference }>>
+  >({});
   const [clearState, setClearState] = useState<{
     slot: RealmImageSlot | 'rules';
     owner: object;
@@ -125,6 +135,7 @@ export function RealmAppearanceSettings({
   const visibleSelection =
     selectionState?.owner === control &&
     selectionState.callerId === callerId &&
+    selectionState.source === initial &&
     read.kind === 'ready' &&
     selectionState.head === read.snapshot.head
       ? selectionState
@@ -149,8 +160,9 @@ export function RealmAppearanceSettings({
       current.callerTicket === selected.callerTicket &&
       current.head === selected.head &&
       current.slot === selected.slot &&
-      current.first === selected.first &&
-      current.second === selected.second &&
+      current.link === selected.link &&
+      current.source === incoming.current &&
+      current.source === selected.source &&
       (!lifetime || (lifetime.current() && lifetime.owns(selected.callerTicket))) &&
       snapshot.read.kind === 'ready' &&
       snapshot.read.snapshot.head === selected.head
@@ -166,8 +178,10 @@ export function RealmAppearanceSettings({
       callerTicket: lifetime?.ticket() ?? 0,
       head,
       slot,
-      first: '',
-      second: '',
+      source: initial,
+      link: '',
+      reference: null,
+      invalid: false,
       candidate: null,
       busy: false,
       unavailable: false,
@@ -184,7 +198,7 @@ export function RealmAppearanceSettings({
     previousOwner.current = control;
     previousCaller.current = callerId;
     control.observe(initial);
-    if (ownerChanged || callerChanged || previousHead !== currentHead) {
+    if (ownerChanged || callerChanged || previousRead !== initial || previousHead !== currentHead) {
       setSelection(null);
       setClear(null);
     }
@@ -243,36 +257,45 @@ export function RealmAppearanceSettings({
         ? m.realm_appearance_banner()
         : m.realm_appearance_rules();
   async function resolve() {
-    if (!selection || selection.busy) return;
-    const selected = selection;
-    const resolving = { ...selected, busy: true, unavailable: false };
-    setSelection(resolving);
-    const candidate = await control.resolveSelection(
-      selected.slot === 'rules'
-        ? { kind: 'rules', realmId, postId: selected.first, revisionId: selected.second }
-        : {
-            kind: 'image',
-            realmId,
-            mediaId: selected.first,
-            purpose: selected.slot === 'avatar' ? 'realm-icon' : 'realm-banner',
-          },
-      () => currentSelection(resolving),
-    );
-    if (candidate === null || !currentSelection(resolving)) return;
+    if (!selection || selectionRef.current?.busy || !currentSelection(selection)) return;
+    const reference = realmAppearanceReference(selection.link, window.location.origin, realmId, selection.slot);
+    const selected = {
+      ...selection,
+      generation: ++selectionGeneration.current,
+      reference,
+      candidate: null,
+      invalid: !reference,
+      unavailable: false,
+      busy: Boolean(reference),
+    };
+    setSelection(selected);
+    if (!reference) return;
+    const candidate = await control.resolveSelection(reference.choice, () => currentSelection(selected));
+    if (candidate === null || !currentSelection(selected)) return;
+    const choice = reference.choice;
     const valid =
-      selected.slot === 'rules'
+      choice.kind === 'rules'
         ? candidate.kind === 'rules' &&
-          candidate.rules.postId === selected.first &&
-          candidate.rules.revisionId === selected.second
+          candidate.rules.postId === choice.postId &&
+          candidate.rules.revisionId === choice.revisionId
         : (candidate.kind === 'image' &&
-            candidate.image.id === selected.first &&
+            candidate.image.id === choice.mediaId &&
             candidate.image.containerId === realmId &&
             Boolean(realmImageSource({ state: 'available', value: candidate.image }))) ||
           (candidate.kind === 'image-reference' &&
-            candidate.mediaId === selected.first &&
+            candidate.mediaId === choice.mediaId &&
             candidate.realmId === realmId &&
-            candidate.purpose === (selected.slot === 'avatar' ? 'realm-icon' : 'realm-banner'));
-    setSelection({ ...resolving, busy: false, candidate: valid ? candidate : null, unavailable: !valid });
+            candidate.purpose === choice.purpose);
+    setSelection({ ...selected, busy: false, candidate: valid ? candidate : null, unavailable: !valid });
+  }
+  function usedReference(slot: RealmImageSlot) {
+    const used = usedReferences[slot];
+    return used?.owner === control &&
+      used.callerId === callerId &&
+      used.reference.choice.kind === 'image' &&
+      used.reference.choice.mediaId === draft.presentation[slot === 'avatar' ? 'avatarMediaId' : 'bannerMediaId']
+      ? used.reference
+      : null;
   }
   const rules = draft.rules.state === 'available' ? draft.rules.value : null;
   return (
@@ -294,8 +317,20 @@ export function RealmAppearanceSettings({
                 draft.presentation[slot === 'avatar' ? 'avatarMediaId' : 'bannerMediaId'] !== null &&
                 draft.presentation[slot === 'avatar' ? 'avatarMediaId' : 'bannerMediaId'] !==
                   snapshot.presentation[slot === 'avatar' ? 'avatarMediaId' : 'bannerMediaId']
+                  ? usedReference(slot)
+                    ? m.realm_appearance_reference_pending()
+                    : m.realm_appearance_preview_after_save()
+                  : undefined
               }
             />
+            {usedReference(slot) ? (
+              <p className="text-sm text-muted-foreground">
+                {m.realm_appearance_selection_for({ slot: label(slot), realm: snapshot.title })}{' '}
+                <a className="text-primary underline" href={usedReference(slot)!.href}>
+                  {m.realm_appearance_source_link()}
+                </a>
+              </p>
+            ) : null}
             {snapshot.canManage ? (
               <div className="flex flex-wrap gap-2">
                 <Button variant="outline" disabled={!editable} onClick={() => openSelection(slot)}>
@@ -339,13 +374,7 @@ export function RealmAppearanceSettings({
           <div className="space-y-2 rounded-xl bg-muted p-4">
             <p className="font-medium">{rules.title}</p>
             <p className="whitespace-pre-wrap text-sm">{rules.summary}</p>
-            <a
-              className="text-sm text-primary underline"
-              href={
-                localizeUrl(new URL(`/posts/${rules.postId}/revisions/${rules.revisionId}`, 'https://rezics.local'))
-                  .pathname
-              }
-            >
+            <a className="text-sm text-primary underline" href={rulesHref(rules.postId, rules.revisionId)}>
               {m.realm_appearance_open_revision()}
             </a>
           </div>
@@ -377,46 +406,36 @@ export function RealmAppearanceSettings({
       {selection ? (
         <fieldset className="space-y-4 rounded-xl border p-4" aria-busy={selection.busy}>
           <legend className="px-2 font-medium">{label(selection.slot)}</legend>
+          <p className="text-sm text-muted-foreground">
+            {m.realm_appearance_selection_for({ slot: label(selection.slot), realm: snapshot.title })}
+          </p>
           <Field>
             <FieldLabel htmlFor={`${ids}-reference`}>
-              {selection.slot === 'rules' ? m.realm_appearance_post_id() : m.realm_appearance_media_id()}
+              {selection.slot === 'rules' ? m.realm_appearance_rules_link() : m.realm_appearance_image_link()}
             </FieldLabel>
             <Input
               id={`${ids}-reference`}
-              value={selection.first}
-              maxLength={36}
+              value={selection.link}
+              maxLength={2048}
+              aria-invalid={selection.invalid || selection.unavailable}
+              aria-describedby={`${ids}-reference-help${selection.invalid || selection.unavailable ? ` ${ids}-reference-error` : ''}`}
               onChange={(event) =>
                 setSelection({
                   ...selection,
                   generation: ++selectionGeneration.current,
-                  first: event.target.value,
+                  link: event.target.value,
+                  reference: null,
                   candidate: null,
                   busy: false,
+                  invalid: false,
                   unavailable: false,
                 })
               }
             />
+            <p id={`${ids}-reference-help`} className="text-sm text-muted-foreground">
+              {selection.slot === 'rules' ? m.realm_appearance_rules_link_help() : m.realm_appearance_image_link_help()}
+            </p>
           </Field>
-          {selection.slot === 'rules' ? (
-            <Field>
-              <FieldLabel htmlFor={`${ids}-revision`}>{m.realm_appearance_revision_id()}</FieldLabel>
-              <Input
-                id={`${ids}-revision`}
-                value={selection.second}
-                maxLength={36}
-                onChange={(event) =>
-                  setSelection({
-                    ...selection,
-                    generation: ++selectionGeneration.current,
-                    second: event.target.value,
-                    candidate: null,
-                    busy: false,
-                    unavailable: false,
-                  })
-                }
-              />
-            </Field>
-          ) : null}
           {selection.candidate?.kind === 'image' ? (
             <ImagePreview
               image={{ state: 'available', value: selection.candidate.image }}
@@ -426,20 +445,39 @@ export function RealmAppearanceSettings({
           ) : null}
           {selection.candidate?.kind === 'image-reference' ? (
             <p role="status" className="text-sm text-muted-foreground">
-              {m.realm_appearance_preview_after_save()}
+              {m.realm_appearance_reference_pending()}
             </p>
           ) : null}
           {selection.candidate?.kind === 'rules' ? (
             <div>
               <p className="font-medium">{selection.candidate.rules.title}</p>
               <p className="whitespace-pre-wrap text-sm">{selection.candidate.rules.summary}</p>
+              <a
+                className="text-sm text-primary underline"
+                href={rulesHref(selection.candidate.rules.postId, selection.candidate.rules.revisionId)}
+              >
+                {m.realm_appearance_open_revision()}
+              </a>
             </div>
           ) : null}
-          {selection.unavailable ? <p role="alert">{m.realm_appearance_selection_unavailable()}</p> : null}
+          {selection.candidate && selection.reference ? (
+            <a className="text-sm text-primary underline" href={selection.reference.href}>
+              {m.realm_appearance_source_link()}
+            </a>
+          ) : null}
+          {selection.invalid || selection.unavailable ? (
+            <p id={`${ids}-reference-error`} role="alert">
+              {selection.unavailable
+                ? m.realm_appearance_link_unavailable()
+                : selection.slot === 'rules'
+                  ? m.realm_appearance_invalid_rules_link()
+                  : m.realm_appearance_invalid_image_link()}
+            </p>
+          ) : null}
           <div className="flex flex-wrap gap-2">
             <Button
               variant="outline"
-              disabled={selection.busy || !selection.first || (selection.slot === 'rules' && !selection.second)}
+              disabled={selection.busy || !selection.link.trim()}
               onClick={() => void resolve()}
             >
               {m.realm_appearance_preview()}
@@ -447,8 +485,14 @@ export function RealmAppearanceSettings({
             <Button
               disabled={!selection.candidate}
               onClick={() => {
-                if (selection.candidate && currentSelection(selection))
+                if (selection.candidate && currentSelection(selection)) {
                   control.choose(selection.slot, selection.candidate);
+                  if (selection.slot !== 'rules' && selection.reference)
+                    setUsedReferences((previous) => ({
+                      ...previous,
+                      [selection.slot]: { owner: control, callerId, reference: selection.reference! },
+                    }));
+                }
                 setSelection(null);
               }}
             >
