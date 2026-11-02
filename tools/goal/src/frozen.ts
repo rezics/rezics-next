@@ -4,15 +4,11 @@ import { matchesPath } from './briefs.ts';
 
 export type FrozenFile = { path: string; content: string; hash: string };
 
-const utf8 = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
-
 /** Keep the content and hash tied to the exact UTF-8 bytes written to disk. */
 export function frozenFile(path: string, content: string | Uint8Array): FrozenFile {
   const bytes = typeof content === 'string' ? Buffer.from(content, 'utf8') : Buffer.from(content);
-  let text: string;
-  try {
-    text = utf8.decode(bytes);
-  } catch {
+  const text = bytes.toString('utf8');
+  if (!Buffer.from(text, 'utf8').equals(bytes)) {
     throw new Error(`frozen file is not valid UTF-8: ${path}`);
   }
   return {
