@@ -147,7 +147,10 @@ async function createIndex(
   await observedWrite(
     async () => {
       try {
-        return await search.request('PUT', `/${index}`, { ...body, aliases: { [writeAlias]: { is_write_index: true } } });
+        return await search.request('PUT', `/${index}`, {
+          ...body,
+          aliases: { [writeAlias]: { is_write_index: true } },
+        });
       } catch (error) {
         if (error instanceof OpenSearchError && error.type === 'resource_already_exists_exception') {
           alreadyAllocated = true;
