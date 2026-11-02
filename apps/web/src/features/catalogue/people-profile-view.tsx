@@ -1,6 +1,15 @@
 import { CatalogueCurrentReading, catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, type Ref } from 'react';
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+  type ReactNode,
+  type Ref,
+} from 'react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Field, FieldError, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -28,6 +37,7 @@ import {
 
 type Current = Extract<PeopleRead, { ok: true }>;
 type Session = 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
+type CorrectionReloadIntent = { opener: HTMLButtonElement; scope: string; completed: boolean };
 
 const peopleActionTarget =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere] md:pointer-fine:min-h-8 md:pointer-fine:min-w-0 md:pointer-fine:py-1';
@@ -638,10 +648,18 @@ function PeopleProfileEditorLive({
   const client = useQueryClient();
   const retryHeading = useRef<HTMLHeadingElement>(null);
   const retryButton = useRef<HTMLButtonElement>(null);
+  const correctionRetryButton = useRef<HTMLButtonElement>(null);
   const nextRetryOrigin = useRef(0);
   const retryInFlight = useRef(false);
   const [retryOrigin, setRetryOrigin] = useState(0);
   const [retryCompleted, setRetryCompleted] = useState(0);
+  const correctionIntent = useRef<CorrectionReloadIntent | undefined>(undefined);
+  const correctionScope = JSON.stringify([id ?? null, work ?? null, locale, session, lifetime.generation]);
+  const correctionScopeRef = useRef(correctionScope);
+  if (correctionScopeRef.current !== correctionScope) {
+    correctionScopeRef.current = correctionScope;
+    correctionIntent.current = undefined;
+  }
   // Retained metadata supports private holders; only an admitted query supplies public authority.
   const retained = useRef<Current | undefined>(undefined);
   function matching(next: PeopleRead): PeopleRead {
@@ -681,13 +699,45 @@ function PeopleProfileEditorLive({
   useEffect(() => {
     if (!refreshing) return;
     void query.refetch({ cancelRefetch: false }).finally(() => {
-      if (!lifetime.active()) return;
+      if (!lifetime.active()) {
+        correctionIntent.current = undefined;
+        return;
+      }
+      const intent = correctionIntent.current;
+      if (intent?.scope === correctionScopeRef.current) intent.completed = true;
+      else correctionIntent.current = undefined;
       refreshingNow.current = false;
       setRefreshing(false);
     });
   }, [refreshing]);
-  function reloadCorrection() {
+  useEffect(() => {
+    const cancel = (event: Event) => {
+      const intent = correctionIntent.current;
+      if (!intent) return;
+      if (event.type === 'pointerdown') {
+        correctionIntent.current = undefined;
+        return;
+      }
+      if (
+        event.target !== intent.opener &&
+        event.target !== document.body &&
+        event.target !== document.documentElement
+      )
+        correctionIntent.current = undefined;
+    };
+    document.addEventListener('pointerdown', cancel, true);
+    document.addEventListener('focusin', cancel, true);
+    return () => {
+      document.removeEventListener('pointerdown', cancel, true);
+      document.removeEventListener('focusin', cancel, true);
+    };
+  }, []);
+  function reloadCorrection(event: MouseEvent<HTMLButtonElement>) {
     if (!lifetime.active() || refreshingNow.current || query.isFetching) return;
+    correctionIntent.current =
+      event.detail === 0 && event.currentTarget === document.activeElement && event.currentTarget.isConnected
+        ? { opener: event.currentTarget, scope: correctionScopeRef.current, completed: false }
+        : undefined;
     refreshingNow.current = true;
     setRefreshing(true);
   }
@@ -712,6 +762,26 @@ function PeopleProfileEditorLive({
     else retryButton.current?.focus();
     setRetryOrigin((currentOrigin) => (currentOrigin === retryOrigin ? 0 : currentOrigin));
   }, [lifetime, query.dataUpdatedAt, query.errorUpdatedAt, query.isFetching, read?.ok, retryCompleted, retryOrigin]);
+  useEffect(() => {
+    const intent = correctionIntent.current;
+    if (!intent) return;
+    if (!lifetime.active() || intent.scope !== correctionScopeRef.current) {
+      correctionIntent.current = undefined;
+      return;
+    }
+    if (!intent.completed || refreshing || query.isFetching) return;
+    const active = document.activeElement;
+    if (intent.opener.isConnected && active === intent.opener) {
+      correctionIntent.current = undefined;
+      return;
+    }
+    if (active && active !== document.body && active !== document.documentElement) {
+      correctionIntent.current = undefined;
+      return;
+    }
+    correctionIntent.current = undefined;
+    (current && read?.ok ? retryHeading.current : correctionRetryButton.current)?.focus();
+  }, [correctionScope, current, lifetime, query.isFetching, read?.ok, refreshing]);
   if (id && session === 'signed-in' && retained.current?.public) {
     const privateRead = retained.current;
     const visible = current;
@@ -726,10 +796,11 @@ function PeopleProfileEditorLive({
               <EditorFailure reason={observed && !observed.ok ? observed.reason : 'unavailable'} locale={locale} />
             )}
             <Button
+              ref={correctionRetryButton}
               type="button"
               variant="outline"
               className={peopleActionTarget}
-              disabled={query.isFetching || refreshing}
+              aria-disabled={query.isFetching || refreshing}
               onClick={reloadCorrection}
             >
               {m.correction_retry({}, o)}

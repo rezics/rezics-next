@@ -517,6 +517,9 @@ Corrections reuse the integrated multi-field editor's selected values, qualifier
 partial results and exact-candidate review. Submission proposes an alternative; acceptance and selection remain
 separate. Unchanged fields and all other term languages remain intact. The profile links the existing terms adapter
 for the mounted native terms command; unavailable responses remain unavailable in this journey.
+For correction reload, keyboard intent keeps a surviving focused opener; otherwise current success focuses the
+profile heading and current failure focuses Retry. Focus movement, pointer use and route, locale, session, reader or
+workspace retirement cancel that handoff.
 `schema:name` proposals never replace term-map editing. Account-agent derived names, software-agent creation,
 eligibility, personal disclosure and `sourceOrConsent` stay with their existing native authorities. Ordinary forms
 never send ingestion Source metadata or infer private relationships.

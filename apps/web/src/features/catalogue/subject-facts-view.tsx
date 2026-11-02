@@ -7,7 +7,7 @@ import {
 } from './editor-lifetime';
 import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import type { ReactNode, RefObject, Ref } from 'react';
+import type { MouseEvent, ReactNode, RefObject, Ref } from 'react';
 import {
   AuthoringDepartureBoundary,
   useAuthoringDeparture,
@@ -598,7 +598,7 @@ function SubjectFactsLive({
   profileRelations?: ReactNode;
   embedded?: boolean;
   /** A whole-profile owner refreshes identity and facts under the same read authority. */
-  onReload?: () => void;
+  onReload?: (event: MouseEvent<HTMLButtonElement>) => void;
 }) {
   const lifetime = useEditorLifetime();
   const workspace = useEditorWorkspaceLifetime();
@@ -906,7 +906,7 @@ function SubjectFactsLive({
         variant="outline"
         className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
         disabled={busy && !onReload}
-        onClick={() => (onReload ? onReload() : void reload())}
+        onClick={(event) => (onReload ? onReload(event) : void reload())}
       >
         {m.correction_reload({}, o)}
       </Button>
