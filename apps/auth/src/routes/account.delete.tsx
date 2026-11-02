@@ -383,8 +383,6 @@ export function DeleteAccountContent({
     if (result.reason === 'denied') {
       // A denied operation cannot preserve the previous person's display context.
       // Keep the original operation key and the existing prerequisite explanation.
-      authorityGeneration.current++;
-      activeAccount.current = '';
       unresolved.current = false;
       setIdentityVisible(false);
       setMessage(m.auth_account_delete_denied());
