@@ -286,7 +286,6 @@ export function createMembersPreparation(config: {
         );
         return key;
       });
-      }
 
       const deadline = options.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
       const authorization = await accessCommandAuthorization(
