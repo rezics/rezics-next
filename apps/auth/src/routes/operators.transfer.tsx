@@ -37,7 +37,11 @@ export const Route = createFileRoute('/operators/transfer')({
 });
 
 // The transfer page alone owns this guard; standalone fixtures need no router.
-function TransferDeparture({ work, validate, retire }: {
+function TransferDeparture({
+  work,
+  validate,
+  retire,
+}: {
   work: () => boolean;
   validate: () => Promise<void>;
   retire: () => void;
@@ -68,16 +72,30 @@ function TransferDeparture({ work, validate, retire }: {
     };
   }, [blocker.status, work]);
   return blocker.status === 'blocked' ? (
-    <dialog ref={dialog} aria-labelledby="transfer-departure-title" onCancel={(event) => {
-      event.preventDefault();
-      blocker.reset();
-    }}>
+    <dialog
+      ref={dialog}
+      aria-labelledby="transfer-departure-title"
+      onCancel={(event) => {
+        event.preventDefault();
+        blocker.reset();
+      }}
+    >
       <h2 id="transfer-departure-title">{m.auth_transfer_departure_heading()}</h2>
       <p>{m.auth_transfer_departure_description()}</p>
       <p>{m.auth_account_operation_leave_notice()}</p>
       <div className="flex gap-3">
-        <Button ref={stay} type="button" onClick={() => blocker.reset()}>{m.auth_organization_departure_stay()}</Button>
-        <Button type="button" onClick={() => { retire(); blocker.proceed(); }}>{m.auth_organization_departure_leave()}</Button>
+        <Button ref={stay} type="button" onClick={() => blocker.reset()}>
+          {m.auth_organization_departure_stay()}
+        </Button>
+        <Button
+          type="button"
+          onClick={() => {
+            retire();
+            blocker.proceed();
+          }}
+        >
+          {m.auth_organization_departure_leave()}
+        </Button>
       </div>
     </dialog>
   ) : null;
@@ -148,13 +166,33 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
   const retired = useRef(false);
   // Only a review created here is known to be unsent. Restored commands may be unresolved.
   const unsent = useRef<TransferAttempt | null>(null);
-  const state = useRef({ session, result, attempt, subject, destination, requestText, acceptance, invalidContinuation });
+  const state = useRef({
+    session,
+    result,
+    attempt,
+    subject,
+    destination,
+    requestText,
+    acceptance,
+    invalidContinuation,
+  });
   state.current = { session, result, attempt, subject, destination, requestText, acceptance, invalidContinuation };
   const protectedWork = () => {
     const value = state.current;
-    return !retired.current && !value.invalidContinuation && value.session?.kind === 'ready' &&
-      value.result?.kind !== 'current' && Boolean(value.attempt || value.subject.trim() ||
-        value.destination.trim() || value.requestText.trim() || value.acceptance.trim());
+    return (
+      !retired.current &&
+      !value.invalidContinuation &&
+      value.session?.kind === 'ready' &&
+      Boolean(value.session.scopes?.includes('account:manage')) &&
+      value.result?.kind !== 'current' &&
+      Boolean(
+        value.attempt ||
+        value.subject.trim() ||
+        value.destination.trim() ||
+        value.requestText.trim() ||
+        value.acceptance.trim(),
+      )
+    );
   };
   function retire() {
     if (retired.current) return;
@@ -163,7 +201,11 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     fileRead.current++;
     // Never remove a command that may have reached native, or another view's saved work.
     if (unsent.current && JSON.stringify(restoreTransferAttempt()) === JSON.stringify(unsent.current)) {
-      try { window.sessionStorage.removeItem('rezics.operator-transfer.attempt'); } catch { /* Recovery remains saved. */ }
+      try {
+        window.sessionStorage.removeItem('rezics.operator-transfer.attempt');
+      } catch {
+        /* Recovery remains saved. */
+      }
     }
     unsent.current = null;
     liveAttempt.current = null;
@@ -186,8 +228,10 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     if (retired.current || owner?.kind !== 'ready') return;
     const caller = await loadAccountSession();
     if (started !== view.current) return;
-    if (caller.kind === 'signed-out' || (caller.kind === 'ready' &&
-      (caller.accountId !== owner.accountId || !caller.scopes?.includes('account:manage')))) {
+    if (
+      caller.kind === 'signed-out' ||
+      (caller.kind === 'ready' && (caller.accountId !== owner.accountId || !caller.scopes?.includes('account:manage')))
+    ) {
       retire();
       setSession(caller);
       setInvalidContinuation(true);
@@ -195,7 +239,9 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     }
   }
   useEffect(() => {
-    const restore = (event: PageTransitionEvent) => { if (event.persisted) setReload((value) => value + 1); };
+    const restore = (event: PageTransitionEvent) => {
+      if (event.persisted) setReload((value) => value + 1);
+    };
     window.addEventListener('pagehide', retire);
     window.addEventListener('pageshow', restore);
     window.addEventListener('focus', validateCaller);
@@ -391,12 +437,16 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     void perform(async () => {
       const value = { ...attempt, ...(attempt.side === 'source' ? { acceptance } : {}) };
       unsent.current = null;
-      const outcome = await submitTransferAttempt(value, (next) => {
-        if (started !== view.current) return false;
-        liveAttempt.current = { ...next };
-        setAttempt(liveAttempt.current);
-        return storeTransferAttempt(next);
-      }, () => started === view.current && !retired.current);
+      const outcome = await submitTransferAttempt(
+        value,
+        (next) => {
+          if (started !== view.current) return false;
+          liveAttempt.current = { ...next };
+          setAttempt(liveAttempt.current);
+          return storeTransferAttempt(next);
+        },
+        () => started === view.current && !retired.current,
+      );
       if (started !== view.current) return;
       setConfirmed(false);
       if (outcome.kind === 'failure') {
@@ -415,7 +465,12 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     if (session?.kind !== 'ready') return;
     const started = view.current;
     void perform(async () => {
-      const outcome = await reauthenticateTransfer(session.accountId, email, password, () => started === view.current && !retired.current);
+      const outcome = await reauthenticateTransfer(
+        session.accountId,
+        email,
+        password,
+        () => started === view.current && !retired.current,
+      );
       if (started !== view.current) return;
       setPassword('');
       if (outcome) showFailure(outcome);
