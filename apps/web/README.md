@@ -77,27 +77,6 @@ Vite pre-bundles browser dependencies by scanning the site routes and their impo
 Run `bun run storybook` to browse the page stories. Run `bun run record` to create committed page recordings; it needs Docker with permission to start a disposable PostgreSQL container and Bun, and does not use a development kernel or database.
 The Worker inspector is off by default; `WORKER_INSPECTOR_PORT=<port> bun run dev` opens it on that port for DevTools.
 
-## Creator statement recovery
-
-Creator statement list/detail pages use the private owner-self payout statement APIs, with at most 20 rows per
-page and no per-line enrichment. The point read precedes the line read; refusal of either conceals the inspector.
-Recorded money units, signed amounts and zero remain unchanged. Missing unit facts render amounts unavailable.
-The delivered external-payment evidence consists only of the statement's recorded reference and time; it does
-not establish receipt, provider bank payout, reserves or payability. Richer payment attestations remain unavailable.
-
-Recovery discards only the cursor explicitly rejected by its paginated API; point-read failures and pending
-navigation retain the original line cursor and list return cursor. An `invalid_cursor` (400) or `stale_cursor` (409)
-restarts that list or line page. Other failures retry the exact requested page. Line restart preserves `from`,
-and Back uses it only as the statement-list cursor. Pending detail navigation carries the same statement ID and
-return address. No recovery follows a provider redirect or refreshes a cursor automatically.
-
-Source contracts: the Commerce owner README's financial-evidence and recorded-display sections, payout route DTOs,
-the generated payout client and existing statement fixtures/pages. No external reference source applies.
-Focused recovery acceptance lives in `tests/creator-statement-current-read.test.ts` and `tests/creator-statements.test.ts`.
-
-Decision: statement recovery uses the shared creator read and command admission contract above; healthy reads require
-no CSRF, and payment mutations retain their original credential, operands and request identity.
-
 ## Testing
 
 For a focused fake, component, route-loader or story-render test that does not need native services, run it locally:
@@ -3333,7 +3312,28 @@ uncertain commands retain their original payload and key.
 
 An unsent reference warns only while it satisfies the existing non-blank, 256-character validator; clearing it removes the warning, and a captured `markPaid` attempt remains command custody.
 
-## Creator statement addresses
+### Creator statement recovery
+
+Creator statement list/detail pages use the private owner-self payout statement APIs, with at most 20 rows per
+page and no per-line enrichment. The point read precedes the line read; refusal of either conceals the inspector.
+Recorded money units, signed amounts and zero remain unchanged. Missing unit facts render amounts unavailable.
+The delivered external-payment evidence consists only of the statement's recorded reference and time; it does
+not establish receipt, provider bank payout, reserves or payability. Richer payment attestations remain unavailable.
+
+Recovery discards only the cursor explicitly rejected by its paginated API; point-read failures and pending
+navigation retain the original line cursor and list return cursor. An `invalid_cursor` (400) or `stale_cursor` (409)
+restarts that list or line page. Other failures retry the exact requested page. Line restart preserves `from`,
+and Back uses it only as the statement-list cursor. Pending detail navigation carries the same statement ID and
+return address. No recovery follows a provider redirect or refreshes a cursor automatically.
+
+Source contracts: the Commerce owner README's financial-evidence and recorded-display sections, payout route DTOs,
+the generated payout client and existing statement fixtures/pages. No external reference source applies.
+Focused recovery acceptance lives in `tests/creator-statement-current-read.test.ts` and `tests/creator-statements.test.ts`.
+
+Decision: statement recovery uses the [shared creator read and command admission contract](#creator-read-and-command-admission); healthy reads require
+no CSRF, and payment mutations retain their original credential, operands and request identity.
+
+### Creator statement addresses
 
 Decision: restart malformed list/evidence positions before reading; discard a malformed return hint while preserving the statement ID and exact valid evidence position.
 
