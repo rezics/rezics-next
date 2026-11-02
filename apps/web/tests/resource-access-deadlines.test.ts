@@ -34,7 +34,7 @@ const change: Change = {
 };
 const transfer: OwnerTransfer = {
   kind: 'realm-owner-transfer',
-  resource: snapshot.resource,
+  resource: { route: snapshot.resource.route, id: resourceId },
   fromAccountId: managerId,
   toAccountId: readerId,
   previousValid: change.previous!.valid,
@@ -128,11 +128,12 @@ test.each(['grant', 'transfer'] as const)(
   'stalled %s BFF preserves its exact pending operation through review and explicit retry',
   async (kind) => {
     const commands: unknown[] = [];
+    const late = Promise.withResolvers<{ status: 'saved' }>();
     let signal!: AbortSignal;
     const write = async (input: unknown, caller?: AbortSignal) => {
       commands.push(structuredClone(input));
       signal = caller!;
-      return commands.length === 1 ? new Promise<never>(() => {}) : { status: 'saved' as const };
+      return commands.length === 1 ? late.promise : { status: 'saved' as const };
     };
     const controller = new AccessRecovery(ready, {
       read: async () => ready,
@@ -145,7 +146,9 @@ test.each(['grant', 'transfer'] as const)(
     const original = structuredClone(controller.snapshot().pending);
     expect(controller.snapshot()).toMatchObject({ busy: false, phase: 'uncertain', pending: commands[0] });
     expect(signal.aborted).toBe(true);
+    late.resolve({ status: 'saved' });
     await controller.reload();
+    expect(controller.snapshot().phase).toBe('uncertain');
     await controller.submit({ ...change, valid: '[2027-01-01,)' });
     expect(commands).toHaveLength(1);
     expect(controller.snapshot().pending).toEqual(original);
@@ -187,11 +190,14 @@ test('caller cancellation releases stalled review and lookup; an already cancell
   expect((await reading).status).toBe('unavailable');
   expect(signal.aborted).toBe(true);
   expect(remove.mock.calls[0]).toEqual(add.mock.calls[0]!.slice(0, 2));
+  let called = false;
   await expect(
     recipientRequest(() => {
+      called = true;
       throw new Error('must not start');
     }, caller.signal),
   ).rejects.toThrow();
+  expect(called).toBe(false);
   add.mockRestore();
   remove.mockRestore();
 });
