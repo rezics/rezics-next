@@ -58,7 +58,7 @@ function MyRealmsErrorPage({ error, reset }: { error: unknown; reset?: () => voi
   const { cursor } = Route.useSearch();
   return (
     <>
-      <ClosedErrorPage error={error} reset={reset} />
+      <ClosedErrorPage error={error} {...(reset ? { reset } : {})} />
       {cursor && canRestartContinuation(error) ? (
         <nav aria-label={m.realms_heading()} className="max-w-prose">
           <Link
