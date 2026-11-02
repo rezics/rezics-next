@@ -384,7 +384,7 @@ export function HeaderSearchView({
                 disabled={retryWaiting}
                 onClick={(event) => {
                   if (retryWaiting) return;
-                  onRetry({
+                  onRetry?.({
                     keyboard:
                       event.detail === 0 && event.currentTarget.ownerDocument.activeElement === event.currentTarget,
                   });
