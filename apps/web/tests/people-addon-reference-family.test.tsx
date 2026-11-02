@@ -403,6 +403,7 @@ test('People credit and Addon base references share installed parts without chan
       recovered.public.subject.descriptions = { ja: '新しい説明' };
       recovered.public.subject.aliases = { ja: ['新しい別名'] };
       recovered.work.subject.labels.en = 'Fresh Work';
+      nested.public = recovered.public;
       personNext = recovered;
       await click(m.correction_retry());
       await waitFor(() => expect(host.textContent).toContain('Fresh Person'));
@@ -444,6 +445,7 @@ test('People credit and Addon base references share installed parts without chan
       });
       await click(m.correction_reload());
       retired();
+      personNext = { ok: false, reason: 'unavailable' };
       await render(
         <PeopleProfileEditor
           id={peoplePersonId}
@@ -458,7 +460,8 @@ test('People credit and Addon base references share installed parts without chan
         false,
       );
       await act(async () => finishPerson(currentRead));
-      await waitFor(() => expect(readingText()).toContain(m.catalogue_create_signed_out()));
+      await waitFor(() => expect(readingText()).toContain(m.correction_unavailable()));
+      expect(host.innerHTML).not.toContain(personTitle);
       expect(host.querySelector('form')).toBeNull();
 
       const addon = addonProfileFixture();
