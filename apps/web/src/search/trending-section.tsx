@@ -1,19 +1,31 @@
 import { TrendingUp } from 'lucide-react';
+import { useCallback, useContext } from 'react';
+import { QueryClientContext } from '@tanstack/react-query';
 import { m } from '../paraglide/messages.js';
-import { useSession } from '../session/query';
+import { AnonymousSessionContext, useSession } from '../session/query';
 import { useTrendingSearches, type TrendingState } from './trending';
+import { headerSearchSessionKey, observeHeaderSearchSession } from './header-search/session-key';
+import { useSearchRetryWait } from './search-recovery-retry';
 
 /** Owner operation rendered in the existing Search frame; shadcn has no discovery-section primitive. */
 export function TrendingSearchesSection({
   state,
   onSelect,
+  onRetry,
 }: {
   state: TrendingState;
   onSelect?: ((query: string) => void) | undefined;
+  onRetry?: (() => void) | undefined;
 }) {
   const values = state.status === 'ready' ? state.page.trendingSearches : [];
+  const waiting = useSearchRetryWait(state.status === 'ready' ? undefined : state.retryAt);
   return (
-    <section className="space-y-2 pt-5" aria-label={m.header_search_trending_searches()} data-trending-searches>
+    <section
+      className="space-y-2 pt-5"
+      aria-label={m.header_search_trending_searches()}
+      aria-busy={state.status === 'loading'}
+      data-trending-searches
+    >
       <h3 className="px-2 text-sm font-semibold">{m.header_search_trending_searches()}</h3>
       {values.length ? (
         <ul>
@@ -41,6 +53,19 @@ export function TrendingSearchesSection({
                 : m.trending_empty()}
         </p>
       )}
+      {onRetry && state.status !== 'ready' && (
+        <>
+          {waiting && <p className="px-2 text-sm text-muted-foreground">{m.search_recovery_wait()}</p>}
+          <button
+            type="button"
+            className="min-h-11 rounded-xl px-2 text-sm outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+            disabled={waiting || state.status === 'loading'}
+            onClick={onRetry}
+          >
+            {m.search_facet_retry()}
+          </button>
+        </>
+      )}
     </section>
   );
 }
@@ -52,8 +77,21 @@ export function CurrentTrendingSearches({
   onSelect?: ((query: string) => void) | undefined;
 }) {
   const session = useSession();
-  const identity =
-    session.state === 'signed-in' ? (session.subject ?? null) : session.state === 'signed-out' ? 'anonymous' : null;
-  const state = useTrendingSearches(language, identity);
-  return <TrendingSearchesSection state={state} onSelect={onSelect} />;
+  const client = useContext(QueryClientContext);
+  const anonymous = useContext(AnonymousSessionContext);
+  const observe = useCallback(
+    (retire: () => void) => (anonymous || !client ? () => {} : observeHeaderSearchSession(client, retire)),
+    [anonymous, client],
+  );
+  const identity = headerSearchSessionKey(session);
+  const { state, retry, isCurrent } = useTrendingSearches(language, identity, observe);
+  return (
+    <TrendingSearchesSection
+      state={state}
+      onRetry={identity === null ? undefined : retry}
+      onSelect={(query) => {
+        if (isCurrent()) onSelect?.(query);
+      }}
+    />
+  );
 }

@@ -1,13 +1,14 @@
 import { createServerOnlyFn } from '@tanstack/react-start';
 import type { KernelClient } from '@rezics/client';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { problem, problemResponse } from '../media/kernel';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
+import { searchRetryAt } from './search-recovery-retry';
 
 export type TrendingPage = NonNullable<Awaited<ReturnType<KernelClient['trendingSearches']['get']>>['data']>;
 export type TrendingState =
-  | { status: 'loading' | 'preparing' | 'unavailable' }
+  | { status: 'loading' | 'preparing' | 'unavailable'; retryAt?: number }
   | { status: 'ready'; page: TrendingPage };
 
 /** The actual typed API, carrying the current BFF credential exactly once, with no anonymous retry. */
@@ -26,11 +27,14 @@ export async function readTrendingSearches(
   signal.throwIfAborted();
   if (result.error) {
     const code = (result.error.value as { code?: unknown }).code;
-    throw problem(
+    const failure = problem(
       result.status,
       typeof code === 'string' ? code : 'dependency_unavailable',
       'Trending searches unavailable',
     );
+    const retryAfter = new Headers(result.headers).get('retry-after');
+    if (retryAfter !== null) throw Object.assign(failure, { headers: { 'retry-after': retryAfter } });
+    throw failure;
   }
   return result.data;
 }
@@ -60,35 +64,87 @@ export async function trendingResponse(request: Request, env: Partial<SessionEnv
   }
 }
 
-/** Reopening mounts a new request. Identity/language changes hide the old response before effects run. */
-export function useTrendingSearches(language: string, identity: string | null): TrendingState {
-  const key = JSON.stringify([language, identity]);
+/** Session observations retire requests synchronously, including batched A-B-A transitions. */
+export function useTrendingSearches(
+  language: string,
+  identity: string | null,
+  observeIdentity: (retire: () => void) => () => void,
+) {
+  const [epoch, setEpoch] = useState(0);
+  const key = JSON.stringify([language, identity, epoch]);
+  const currentKey = useRef<string | null>(key);
+  currentKey.current = key;
+  const active = useRef<{ key: string; controller: AbortController; state: TrendingState; pending: boolean }>(null);
   const [snapshot, setSnapshot] = useState<{ key: string; state: TrendingState }>();
-  useEffect(() => {
-    if (identity === null) return;
-    const controller = new AbortController();
-    const settle = (state: TrendingState) => {
-      if (!controller.signal.aborted) setSnapshot({ key, state });
-    };
-    settle({ status: 'loading' });
-    void fetch(`/api/search/trending?language=${encodeURIComponent(language)}`, {
-      credentials: 'same-origin',
-      cache: 'no-store',
-      signal: controller.signal,
-    })
-      .then(async (response) => {
-        const body = (await response.json()) as TrendingPage & { code?: string };
-        if (!response.ok)
-          return settle({
-            status: body.code === 'semantic_not_ready' || body.code === 'index_not_ready' ? 'preparing' : 'unavailable',
-          });
-        if (!validTrendingPage(body)) return settle({ status: 'unavailable' });
-        settle({ status: 'ready', page: body });
+  useEffect(
+    () =>
+      observeIdentity(() => {
+        currentKey.current = null;
+        active.current?.controller.abort();
+        setEpoch((value) => value + 1);
+      }),
+    [observeIdentity],
+  );
+  const start = useCallback(
+    (manual: boolean) => {
+      if (identity === null || currentKey.current !== key) return;
+      const previous = active.current;
+      if (
+        manual &&
+        (!previous ||
+          previous.key !== key ||
+          previous.pending ||
+          !['preparing', 'unavailable'].includes(previous.state.status) ||
+          (previous.state.status !== 'ready' && (previous.state.retryAt ?? 0) > Date.now()))
+      )
+        return;
+      previous?.controller.abort();
+      const request = {
+        key,
+        controller: new AbortController(),
+        state: { status: 'loading' } as TrendingState,
+        pending: true,
+      };
+      active.current = request;
+      const { controller } = request;
+      const settle = (state: TrendingState) => {
+        if (controller.signal.aborted || currentKey.current !== key || active.current !== request) return;
+        request.state = state;
+        request.pending = false;
+        setSnapshot({ key, state });
+      };
+      setSnapshot({ key, state: request.state });
+      void fetch(`/api/search/trending?language=${encodeURIComponent(language)}`, {
+        credentials: 'same-origin',
+        cache: 'no-store',
+        signal: controller.signal,
       })
-      .catch(() => settle({ status: 'unavailable' }));
-    return () => controller.abort();
-  }, [key, language, identity]);
-  return identity === null ? { status: 'unavailable' } : snapshot?.key === key ? snapshot.state : { status: 'loading' };
+        .then(async (response) => {
+          const retryAt = searchRetryAt(response.headers.get('retry-after'), Date.now());
+          const body: unknown = await response.json().catch(() => null);
+          if (!response.ok) {
+            const code = body && typeof body === 'object' && 'code' in body ? body.code : undefined;
+            return settle({
+              status: code === 'semantic_not_ready' || code === 'index_not_ready' ? 'preparing' : 'unavailable',
+              ...(retryAt !== undefined ? { retryAt } : {}),
+            });
+          }
+          if (!validTrendingPage(body)) return settle({ status: 'unavailable' });
+          settle({ status: 'ready', page: body });
+        })
+        .catch(() => settle({ status: 'unavailable' }));
+    },
+    [identity, key, language],
+  );
+  useEffect(() => {
+    start(false);
+    return () => {
+      if (active.current?.key === key) active.current.controller.abort();
+    };
+  }, [key, start]);
+  const state: TrendingState =
+    identity === null ? { status: 'unavailable' } : snapshot?.key === key ? snapshot.state : { status: 'loading' };
+  return { state, retry: () => start(true), isCurrent: () => identity !== null && currentKey.current === key };
 }
 export function validTrendingPage(value: unknown): value is TrendingPage {
   if (!value || typeof value !== 'object') return false;
