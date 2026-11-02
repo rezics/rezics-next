@@ -60,8 +60,22 @@ function useGuideFocusIntent() {
       const current = intent.current;
       if (current && !current.opener.contains(event.target as Node)) current.cancelled = true;
     };
+    const retireOnFocus = (event: globalThis.FocusEvent) => {
+      const current = intent.current;
+      if (!current || event.target === current.opener) return;
+      if (
+        event.target === document.body &&
+        (!current.opener.isConnected || (current.opener instanceof HTMLButtonElement && current.opener.disabled))
+      )
+        return;
+      current.cancelled = true;
+    };
     document.addEventListener('pointerdown', retireOnPointer, true);
-    return () => document.removeEventListener('pointerdown', retireOnPointer, true);
+    document.addEventListener('focusin', retireOnFocus, true);
+    return () => {
+      document.removeEventListener('pointerdown', retireOnPointer, true);
+      document.removeEventListener('focusin', retireOnFocus, true);
+    };
   }, []);
   return intent;
 }

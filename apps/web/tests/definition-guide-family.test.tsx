@@ -88,6 +88,14 @@ async function surface() {
       input.dispatchEvent(new window.Event('input', { bubbles: true }));
     });
   };
+  const keyboardClick = (element: HTMLElement) => {
+    element.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    element.dispatchEvent(new window.MouseEvent('click', { bubbles: true, detail: 0 }));
+  };
+  const pointerClick = (element: HTMLElement) => {
+    element.dispatchEvent(new window.Event('pointerdown', { bubbles: true }));
+    element.dispatchEvent(new window.MouseEvent('click', { bubbles: true, detail: 1 }));
+  };
   return {
     act,
     root,
@@ -96,6 +104,8 @@ async function surface() {
     render,
     change,
     changeText,
+    keyboardClick,
+    pointerClick,
     DefinitionGuide,
     DefinitionGuideContent,
     DefinitionGuideLink,
@@ -110,7 +120,7 @@ async function surface() {
 
 test('paged prefix browsing, exact lookup and selected Type ignore late results from an older query or selection', async () => {
   await mounted(
-    async ({ host, render, act, changeText, DefinitionGuide, definitionGuideFixture, m, definitionText }) => {
+    async ({ host, render, act, changeText, DefinitionGuide, definitionGuideFixture, m, definitionText, pointerClick }) => {
       const fixture = definitionGuideFixture();
       const [bookRead, recipeRead] = await Promise.all([
         fixture.transport.exact('en', 'schema:Book'),
@@ -205,16 +215,17 @@ test('paged prefix browsing, exact lookup and selected Type ignore late results 
       expect(host.textContent).not.toContain('Old result');
 
       await act(async () =>
-        [...host.querySelectorAll('button')].find((button) => button.textContent?.includes('Book result'))!.click(),
+        pointerClick([...host.querySelectorAll('button')].find((button) => button.textContent?.includes('Book result'))!),
       );
       await render(component);
       await act(async () =>
-        [...host.querySelectorAll('button')].find((button) => button.textContent?.includes('Recipe result'))!.click(),
+        pointerClick([...host.querySelectorAll('button')].find((button) => button.textContent?.includes('Recipe result'))!),
       );
       await render(component);
       expect(host.querySelector('h2')!.textContent).toBe(
         definitionText(recipeRead.descriptor.definition.labels, 'en').text,
       );
+      expect(document.activeElement).not.toBe(host.querySelector('h2'));
       await act(async () => settleOldType(bookRead));
       await render(component);
       expect(host.querySelector('h2')!.textContent).toBe(
@@ -511,7 +522,7 @@ test('loading, failure eligibility, empty and missing meaning stay distinct and 
 
 test('active exact descriptor reads retry only on explicit eligible actions and never fetch a Release', async () => {
   for (const scenario of ['unavailable', 'denied'] as const) {
-    await mounted(async ({ host, render, act, DefinitionGuide, definitionGuideFixture, m }) => {
+    await mounted(async ({ host, render, act, DefinitionGuide, definitionGuideFixture, m, pointerClick }) => {
       const fixture = definitionGuideFixture(scenario);
       const component = <DefinitionGuide locale="en" address={fixture.address} transport={fixture.transport} />;
       await render(component);
@@ -521,11 +532,13 @@ test('active exact descriptor reads retry only on explicit eligible actions and 
       expect(fixture.calls.map((call) => call.path)).toEqual(['/v1/definitionTypes/schema:Book']);
       const retry = [...host.querySelectorAll('button')].find((button) => button.textContent === m.guide_retry())!;
       expect(retry.textContent).toBe(m.guide_retry());
-      await act(async () => retry.click());
+      retry.focus();
+      await act(async () => pointerClick(retry));
       await render(component);
       if (scenario === 'unavailable') {
         expect(host.querySelector('[role="alert"]')).toBeNull();
         expect(host.querySelector('h2')).not.toBeNull();
+        expect(document.activeElement).not.toBe(host.querySelector('h2'));
         expect(fixture.calls.map((call) => call.path)).toEqual([
           '/v1/definitionTypes/schema:Book',
           '/v1/definitionTypes/schema:Book',
@@ -547,79 +560,167 @@ test('active exact descriptor reads retry only on explicit eligible actions and 
   }
 });
 
-test('deliberate pinned retries lock one read and focus returned guidance or the truthful empty/denied boundary', async () => {
-  for (const ending of ['field', 'empty', 'denied'] as const) {
-    await mounted(async ({ host, render, act, DefinitionGuide, definitionGuideFixture, definitionText, m }) => {
-      const fixture = definitionGuideFixture('pinned');
-      const read = await fixture.transport.read();
-      if (!read.ok || read.pin !== 'pinned') throw new Error('Expected pinned definitions');
-      const back = '/en/subjects/00000000-0000-4000-8000-000000000001/a-book/edit?statement=uncertain#value';
-      const address = { ...fixture.address, returnTo: back };
-      let reads = 0;
-      let settle!: (read: GuideRead) => void;
+test('a delayed active Type result stays quiet after its query and focus intent retire', async () => {
+  await mounted(
+    async ({
+      host,
+      render,
+      act,
+      changeText,
+      DefinitionGuide,
+      definitionGuideFixture,
+      definitionText,
+      keyboardClick,
+      m,
+    }) => {
+      const fixture = definitionGuideFixture();
+      const book = await fixture.transport.exact('en', 'schema:Book');
+      if (!book.ok) throw new Error('Expected a Book Type descriptor');
+      const entry = {
+        typeId: 'schema:Book',
+        releaseDigest: book.descriptor.releaseDigest,
+        label: 'Book',
+        language: 'en',
+        parents: [],
+        description: null,
+        descriptionLanguage: null,
+      };
+      const initial: GuideRead = { ok: true, pin: 'active', page: { types: [entry], next: null } };
+      let settle!: (read: GuideTypeRead) => void;
+      let exactReads = 0;
       const transport: GuideTransport = {
-        read: () => {
-          reads++;
-          return new Promise<GuideRead>((resolve) => {
+        read: async () => initial,
+        directory: async (_locale, query) => ({ ok: true, page: { types: query ? [] : [entry], next: null } }),
+        exact: async () => {
+          exactReads++;
+          return new Promise<GuideTypeRead>((resolve) => {
             settle = resolve;
           });
         },
-        directory: async () => ({ ok: true, page: { types: [], next: null } }),
-        exact: async () => ({ ok: false, reason: 'no-match' }),
       };
-      const component = (
-        <DefinitionGuide
-          address={address}
-          locale="en"
-          transport={transport}
-          initial={{ ok: false, reason: 'unavailable' }}
-        />
-      );
+      const component = <DefinitionGuide address={{}} locale="en" transport={transport} initial={initial} />;
       await render(component);
-      expect(reads).toBe(0);
-      expect(document.activeElement).toBe(document.body);
-      const retry = host.querySelector('button')!;
-      retry.focus();
+      const type = [...host.querySelectorAll('button')].find((button) => button.textContent?.includes('schema:Book'))!;
       await act(async () => {
-        retry.click();
-        retry.click();
+        type.focus();
+        keyboardClick(type);
       });
+      const prefix = host.querySelector<HTMLInputElement>('input')!;
+      prefix.focus();
+      type.focus();
+      prefix.focus();
+      await changeText(prefix, 'retired query');
+      const search = [...host.querySelectorAll('button')].find((button) => button.textContent === m.guide_search())!;
+      await act(async () => search.click());
       await render(component);
-      expect(reads).toBe(1);
-      expect(retry.disabled).toBe(true);
-      expect(retry.getAttribute('aria-busy')).toBe('true');
-      expect(host.querySelector('[role="status"]')!.textContent).toBe(m.guide_loading());
-      expect(host.querySelector('[role="alert"]')).toBeNull();
-      await act(async () =>
-        settle(
-          ending === 'denied'
-            ? { ok: false, reason: 'denied' }
-            : ending === 'empty'
-              ? { ...read, release: { digest: read.release.digest, types: {}, properties: {} } }
-              : read,
-        ),
-      );
+      expect(host.textContent).toContain(m.guide_no_prefix_matches());
+      await act(async () => settle(book));
       await render(component);
-      const target = host.querySelector(
-        ending === 'field' ? 'h3' : ending === 'empty' ? '[role="status"]' : '[role="alert"]',
-      )!;
-      expect(document.activeElement).toBe(target);
-      expect(target.getAttribute('tabindex')).toBe('-1');
-      expect(target.className).toContain('focus:outline-2');
-      expect(target.textContent).toBe(
-        ending === 'field'
-          ? definitionText(read.release.properties[address.property!]!.labels, 'en').text
-          : ending === 'empty'
-            ? m.guide_empty()
-            : m.guide_denied(),
-      );
-      expect(host.querySelector('[aria-live]')).toBeNull();
-      expect(reads).toBe(1);
-      expect(host.querySelector('a')!.getAttribute('href')).toBe(back);
-      if (ending === 'field') expect(host.querySelector('code')!.textContent).toBe(fixture.address.release!);
-      if (ending === 'denied') expect(host.querySelector('button')!.disabled).toBe(false);
-      expect(fixture.calls.map((call) => call.path)).toEqual([`/v1/definitions/releases/${fixture.address.release}`]);
-    });
+      expect(exactReads).toBe(1);
+      expect(host.querySelector('h2')!.textContent).toBe(definitionText(book.descriptor.definition.labels, 'en').text);
+      expect(document.activeElement).toBe(prefix);
+    },
+  );
+});
+
+test('keyboard pinned retries lock one read and preserve a surviving retry or focus returned guidance', async () => {
+  for (const ending of ['field', 'empty', 'denied'] as const) {
+    await mounted(
+      async ({
+        host,
+        render,
+        act,
+        DefinitionGuide,
+        definitionGuideFixture,
+        definitionText,
+        keyboardClick,
+        pointerClick,
+        m,
+      }) => {
+        const fixture = definitionGuideFixture('pinned');
+        const read = await fixture.transport.read();
+        if (!read.ok || read.pin !== 'pinned') throw new Error('Expected pinned definitions');
+        const back = '/en/subjects/00000000-0000-4000-8000-000000000001/a-book/edit?statement=uncertain#value';
+        const address = { ...fixture.address, returnTo: back };
+        let reads = 0;
+        let settle!: (read: GuideRead) => void;
+        const transport: GuideTransport = {
+          read: () => {
+            reads++;
+            return new Promise<GuideRead>((resolve) => {
+              settle = resolve;
+            });
+          },
+          directory: async () => ({ ok: true, page: { types: [], next: null } }),
+          exact: async () => ({ ok: false, reason: 'no-match' }),
+        };
+        const component = (
+          <DefinitionGuide
+            address={address}
+            locale="en"
+            transport={transport}
+            initial={{ ok: false, reason: 'unavailable' }}
+          />
+        );
+        await render(component);
+        expect(reads).toBe(0);
+        expect(document.activeElement).toBe(document.body);
+        const retry = host.querySelector('button')!;
+        retry.focus();
+        await act(async () => keyboardClick(retry));
+        await act(async () => retry.click());
+        await render(component);
+        expect(reads).toBe(1);
+        expect(retry.disabled).toBe(true);
+        expect(retry.getAttribute('aria-busy')).toBe('true');
+        expect(host.querySelector('[role="status"]')!.textContent).toBe(m.guide_loading());
+        expect(host.querySelector('[role="alert"]')).toBeNull();
+        if (ending === 'denied') host.querySelector('a')!.focus();
+        await act(async () =>
+          settle(
+            ending === 'denied'
+              ? { ok: false, reason: 'denied' }
+              : ending === 'empty'
+                ? { ...read, release: { digest: read.release.digest, types: {}, properties: {} } }
+                : read,
+          ),
+        );
+        await render(component);
+        const target = host.querySelector(
+          ending === 'field' ? 'h3' : ending === 'empty' ? '[role="status"]' : 'button',
+        )!;
+        if (ending === 'denied') {
+          expect(target.textContent).toBe(m.guide_retry());
+          expect(host.querySelector('[role="alert"]')!.textContent).toBe(m.guide_denied());
+          expect(document.activeElement).toBe(host.querySelector('a'));
+          const retryAgain = host.querySelector<HTMLButtonElement>('button')!;
+          expect(retryAgain.disabled).toBe(false);
+          await act(async () => pointerClick(retryAgain));
+          await render(component);
+          expect(reads).toBe(2);
+          await act(async () => settle(read));
+          await render(component);
+          expect(host.querySelector('h3')).not.toBeNull();
+          expect(document.activeElement).not.toBe(host.querySelector('h3'));
+        } else {
+          expect(document.activeElement).toBe(target);
+          expect(target.getAttribute('tabindex')).toBe('-1');
+          expect(target.className).toContain('focus:outline-2');
+          expect(target.textContent).toBe(
+            ending === 'field'
+              ? definitionText(read.release.properties[address.property!]!.labels, 'en').text
+              : m.guide_empty(),
+          );
+        }
+        expect(host.querySelector('[aria-live]')).toBeNull();
+        expect(reads).toBe(ending === 'denied' ? 2 : 1);
+        expect(host.querySelector('a')!.getAttribute('href')).toBe(back);
+        if (ending === 'field') expect(host.querySelector('code')!.textContent).toBe(fixture.address.release!);
+        expect(fixture.calls.map((call) => call.path)).toEqual([
+          `/v1/definitions/releases/${fixture.address.release}`,
+        ]);
+      },
+    );
   }
 });
 
