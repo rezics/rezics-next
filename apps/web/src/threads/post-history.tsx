@@ -2,7 +2,7 @@ import { DocumentBody } from '../document-body';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { QueryClientContext } from '@tanstack/react-query';
-import { useContext, useId, useLayoutEffect, useMemo, useRef, useSyncExternalStore } from 'react';
+import { useContext, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { Byline } from './byline';
@@ -108,6 +108,8 @@ function HistoryDisclosure({
   ready: () => boolean;
 }) {
   const regionId = `post-history-${useId().replaceAll(':', '')}`;
+  const [continuationStatus, setContinuationStatus] = useState<string | null>(null);
+  const continuationBoundary = useRef<{ connection: number; revisionId: string | null }>();
   const {
     open,
     loading,
@@ -124,8 +126,30 @@ function HistoryDisclosure({
   } = useSyncExternalStore(lifetime.subscribe, lifetime.snapshot, lifetime.snapshot);
   const connection = lifetime.ticket();
   const pageFailed = available && failedCursor !== undefined;
+  const retryPage = !available || pageFailed;
+  const showHistoryAction = available ? next !== null || pageFailed : loaded;
+
+  useLayoutEffect(() => {
+    const pending = continuationBoundary.current;
+    if (!pending) return;
+    if (pending.connection !== connection || !lifetime.ownsConnection(connection)) {
+      continuationBoundary.current = undefined;
+      return;
+    }
+    const boundary = document
+      .getElementById(regionId)
+      ?.querySelector<HTMLElement>('[data-history-focus-boundary]');
+    if (!boundary) {
+      continuationBoundary.current = undefined;
+      return;
+    }
+    boundary.focus({ preventScroll: true });
+    continuationBoundary.current = undefined;
+  }, [connection, continuationStatus, lifetime, regionId, revisions]);
 
   async function load(cursor?: string) {
+    continuationBoundary.current = undefined;
+    setContinuationStatus(null);
     const request = lifetime.begin(connection, source, postId, cursor, locale, credentialMode, viewerId);
     if (!request) return;
     lifetime.update(connection, (view) => ({ ...view, loading: true }));
@@ -172,6 +196,21 @@ function HistoryDisclosure({
       }
       const page = result.data;
       const entries = page.revisions.map((revision) => ({ revision, documentMedia: page.documentMedia }));
+      if (cursor !== undefined && lifetime.snapshot().open) {
+        continuationBoundary.current = {
+          connection,
+          revisionId: entries[0]?.revision.revisionId ?? null,
+        };
+        setContinuationStatus(
+          entries.length === 0
+            ? page.next === null
+              ? m.thread_history_complete()
+              : m.thread_history_page_empty()
+            : page.next === null
+              ? m.thread_history_complete()
+              : m.thread_history_page_loaded(),
+        );
+      }
       lifetime.update(connection, (view) => ({
         ...view,
         revisions: cursor ? [...view.revisions, ...entries] : entries,
@@ -230,7 +269,7 @@ function HistoryDisclosure({
         ) : null}
         {available && loaded && revisions.length === 0 ? (
           <p role="status" className="text-sm text-muted-foreground">
-            {m.thread_history_unavailable()}
+            {m.thread_history_empty()}
           </p>
         ) : null}
         {available && revisions.length > 0 ? (
@@ -247,42 +286,51 @@ function HistoryDisclosure({
                 subjects={subjects}
                 currentVote={viewerId === revision.authorId ? reviewVotes[revision.id] : undefined}
                 review={review}
+                focusBoundary={
+                  continuationBoundary.current?.connection === connection &&
+                  continuationBoundary.current.revisionId === revision.revisionId
+                }
               />
             ))}
           </ol>
         ) : null}
+        {continuationBoundary.current?.connection === connection && continuationBoundary.current.revisionId === null ? (
+          <ContentItemHeading
+            level={4}
+            tabIndex={-1}
+            data-history-focus-boundary
+            className="font-semibold"
+          >
+            {continuationStatus}
+          </ContentItemHeading>
+        ) : null}
+        {continuationStatus &&
+        continuationBoundary.current?.connection === connection &&
+        continuationBoundary.current.revisionId !== null ? (
+          <p role="status" className="sr-only">
+            {continuationStatus}
+          </p>
+        ) : null}
         {!available || pageFailed ? (
-          <div className="space-y-3">
-            <p role="status" className="text-sm text-muted-foreground">
-              {pageFailed ? m.thread_history_page_failed() : m.thread_history_unavailable()}
-            </p>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
-              disabled={loading}
-              onClick={() => void load(failedCursor)}
-            >
-              {m.exact_revision_retry()}
-            </Button>
-          </div>
+          <p role="status" className="text-sm text-muted-foreground">
+            {pageFailed ? m.thread_history_page_failed() : m.thread_history_unavailable()}
+          </p>
         ) : null}
         {loading && loaded ? (
           <p role="status" className="text-sm text-muted-foreground">
             {m.thread_history_loading()}
           </p>
         ) : null}
-        {available && next && !pageFailed ? (
+        {showHistoryAction ? (
           <Button
             type="button"
             variant="outline"
             size="sm"
             className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
             disabled={loading}
-            onClick={() => void load(next!)}
+            onClick={() => void load(retryPage ? failedCursor : (next ?? undefined))}
           >
-            {m.thread_history_more()}
+            {retryPage ? m.exact_revision_retry() : m.thread_history_more()}
           </Button>
         ) : null}
       </section>
@@ -300,6 +348,7 @@ export function RevisionEntry({
   subjects,
   currentVote,
   review,
+  focusBoundary = false,
 }: {
   revision: Revision;
   number: number;
@@ -310,6 +359,7 @@ export function RevisionEntry({
   subjects: HistoryPage['subjects'];
   currentVote: HistoryPage['reviewVotes'][string] | undefined;
   review: boolean;
+  focusBoundary?: boolean;
 }) {
   const locale = getLocale();
   const headingId = `revision-entry-${useId().replaceAll(':', '')}`;
@@ -321,7 +371,13 @@ export function RevisionEntry({
         aria-labelledby={headingId}
         className="min-w-0 space-y-3 rounded-xl [overflow-wrap:anywhere]"
       >
-        <ContentItemHeading level={4} id={headingId} className="font-semibold">
+        <ContentItemHeading
+          level={4}
+          id={headingId}
+          tabIndex={focusBoundary ? -1 : undefined}
+          data-history-focus-boundary={focusBoundary ? '' : undefined}
+          className="font-semibold"
+        >
           <a
             href={exactRevisionHref({ postId: revision.id, revisionId: revision.revisionId }, locale)}
             className="inline-flex min-h-11 max-w-full items-center rounded-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"

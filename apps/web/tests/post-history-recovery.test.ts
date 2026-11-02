@@ -269,6 +269,10 @@ test('A transport failure keeps admitted revisions readable through close, reope
     await finish(page, { revisions: [first], next: cursor });
     await versions(page, 1);
     expect(
+      await page.getByRole('button', { name: m.thread_history_hide() }).evaluate((button) => button === document.activeElement),
+    ).toBe(true);
+    expect(await page.locator('[data-history-focus-boundary]').count()).toBe(0);
+    expect(
       await page
         .getByRole('link', { name: m.thread_history_version({ number: '1' }), exact: true })
         .getAttribute('href'),
@@ -313,6 +317,8 @@ test('A transport failure keeps admitted revisions readable through close, reope
     await pending(page);
     await page.evaluate(() => (window as unknown as Driver).rejectHistory());
     await page.getByText(m.thread_history_page_failed(), { exact: true }).waitFor();
+    const continuationRetry = page.getByRole('button', { name: m.exact_revision_retry() });
+    expect(await continuationRetry.evaluate((button) => button === document.activeElement)).toBe(true);
     expect(await firstEntry!.isVisible()).toBe(true);
     await page.getByRole('button', { name: m.thread_history_hide() }).click();
     await page.getByRole('button', { name: m.thread_history_show() }).click();
@@ -326,6 +332,10 @@ test('A transport failure keeps admitted revisions readable through close, reope
     expect(await page.getByText(m.thread_history_page_failed(), { exact: true }).isVisible()).toBe(true);
     await finish(page, { revisions: [second], next: null });
     await versions(page, 2);
+    const boundary = page.locator('h4[data-history-focus-boundary]');
+    expect(await boundary.evaluate((heading) => heading === document.activeElement)).toBe(true);
+    expect(await boundary.getAttribute('tabindex')).toBe('-1');
+    expect(await page.getByText(m.thread_history_complete(), { exact: true }).count()).toBe(1);
     expect(await page.locator('section > ol > li').count()).toBe(2);
     expect(await firstEntry!.isVisible()).toBe(true);
     expect(await page.getByText(m.thread_history_page_failed(), { exact: true }).count()).toBe(0);
@@ -336,6 +346,39 @@ test('A transport failure keeps admitted revisions readable through close, reope
       { cursor, limit: '20' },
       { cursor, limit: '20' },
     ]);
+  } finally {
+    await page.close();
+  }
+});
+
+test('empty continuation pages keep the admitted window, move focus to their boundary and explain the terminal page', async () => {
+  const page = await mounted();
+  try {
+    const nextCursor = 'older/continuation';
+    await open(page);
+    await finish(page, { revisions: [first], next: cursor });
+    await versions(page, 1);
+    await page.getByRole('button', { name: m.thread_history_more() }).click();
+    await pending(page);
+    await finish(page, { revisions: [], next: nextCursor });
+
+    const emptyBoundary = page.locator('h4[data-history-focus-boundary]');
+    await emptyBoundary.waitFor();
+    expect(await emptyBoundary.evaluate((heading) => heading === document.activeElement)).toBe(true);
+    expect(await emptyBoundary.textContent()).toBe(m.thread_history_page_empty());
+    expect(await page.getByRole('button', { name: m.thread_history_more() }).count()).toBe(1);
+    expect(await page.locator('section > ol > li').count()).toBe(1);
+
+    await page.getByRole('button', { name: m.thread_history_more() }).click();
+    await pending(page);
+    await finish(page, { revisions: [], next: null });
+    const terminalBoundary = page.locator('h4[data-history-focus-boundary]');
+    await terminalBoundary.waitFor();
+    expect(await terminalBoundary.evaluate((heading) => heading === document.activeElement)).toBe(true);
+    expect(await terminalBoundary.textContent()).toBe(m.thread_history_complete());
+    expect(await page.getByRole('button', { name: m.thread_history_more() }).count()).toBe(0);
+    expect(await page.locator('section > ol > li').count()).toBe(1);
+    expect((await calls(page)).map(({ cursor }) => cursor)).toEqual([null, cursor, nextCursor]);
   } finally {
     await page.close();
   }
@@ -708,6 +751,10 @@ test('obsolete success, unavailable, rejection and finally cannot revive data or
           settlement === 'success' ? 200 : 403,
         );
       await pending(page);
+      if (settlement === 'success') {
+        expect(await page.locator('[data-history-focus-boundary]').count()).toBe(0);
+        expect(await page.getByText(m.thread_history_page_loaded(), { exact: true }).count()).toBe(0);
+      }
       const count = (await calls(page)).length;
       expect(await page.locator('section > ol').count()).toBe(0);
       expect(await page.getByText(m.thread_history_unavailable(), { exact: true }).count()).toBe(0);

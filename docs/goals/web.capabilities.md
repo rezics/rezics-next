@@ -232,6 +232,9 @@ a served-page binding marked pending does not become covered merely by linking a
   `WWW-Authenticate: Bearer error="invalid_token"`, and correct-password sign-in gets
   `403 ACCOUNT_SUSPENDED` with no session; ban precedence still applies.
   Older contradictory owner assertions are not silently edited or adopted here.
+- **Post revision history continuation**: Explicit continuations focus the newly admitted revision heading; empty and
+  terminal pages get concise localized status; retry controls retain focus across failures; retired scopes cannot
+  announce or focus old data.
 - **Acceptance command**: Publication verifier above for discovery/cache cells. Owner acceptance:
   `bun test specs/community-outcomes.test.ts specs/content-thread-outcomes.test.ts specs/content-notification-outcomes.test.ts`
   with their native drivers; this does not establish the pending web interaction bindings.
