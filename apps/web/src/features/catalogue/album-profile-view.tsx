@@ -9,7 +9,7 @@ import { pickText } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import type { EntityPickerSearch } from '@rezics/ui/entity-picker';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { m } from '../../paraglide/messages.js';
 import { PageHeading } from '../../shell/page-heading';
@@ -83,6 +83,37 @@ function AlbumProfileLive({
   const admitted = !!read?.release.types[albumType];
   metadata.current = !id && admitted ? read?.release : undefined;
   if (metadata.current) retainedRelease.current = metadata.current;
+  const [initialRetry, setInitialRetry] = useState<'pending' | 'settled'>();
+  const initialRetryRunning = useRef(false);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const failureBoundary = useRef<HTMLDivElement>(null);
+  const origin = useMemo(() => ({}), [query.data, query.error, query.dataUpdatedAt, query.errorUpdatedAt]);
+  const currentOrigin = useRef<object | undefined>(undefined);
+  const initialRecoverable =
+    !retainedRelease.current && (query.isError || (query.data && !query.data.ok) || (!id && read && !admitted));
+  currentOrigin.current = initialRecoverable && !query.isFetching ? origin : undefined;
+  const initialPending = !retainedRelease.current && (query.isFetching || initialRetry === 'pending');
+  const retryInitial = async () => {
+    if (!lifetime.active() || currentOrigin.current !== origin || initialRetryRunning.current || query.isFetching)
+      return;
+    initialRetryRunning.current = true;
+    currentOrigin.current = undefined;
+    setInitialRetry('pending');
+    try {
+      await query.refetch({ cancelRefetch: false });
+    } finally {
+      if (lifetime.active()) {
+        initialRetryRunning.current = false;
+        setInitialRetry('settled');
+      }
+    }
+  };
+  // Only deliberate recovery owns focus, after the current result has mounted.
+  useLayoutEffect(() => {
+    if (initialRetry !== 'settled' || query.isFetching || !lifetime.active()) return;
+    (failureBoundary.current ?? heading.current)?.focus();
+    setInitialRetry(undefined);
+  }, [initialRetry, query.isFetching, lifetime]);
   const reloadMetadata = async () => {
     if (!lifetime.active() || metadataReloading.current || query.isFetching) return;
     metadataReloading.current = true;
@@ -100,7 +131,9 @@ function AlbumProfileLive({
   return (
     <article className="mx-auto w-full max-w-4xl space-y-6 px-4 py-8 sm:px-6">
       <header className="space-y-3">
-        <PageHeading className="font-sans">{id ? m.album_edit({}, o) : m.album_title({}, o)}</PageHeading>
+        <PageHeading ref={heading} tabIndex={-1} className="font-sans">
+          {id ? m.album_edit({}, o) : m.album_title({}, o)}
+        </PageHeading>
         {!id && <p className="max-w-prose text-muted-foreground">{m.album_grain({}, o)}</p>}
         {read && admitted && !id && (
           <div className="flex flex-wrap items-center gap-3">
@@ -128,24 +161,24 @@ function AlbumProfileLive({
               : m.candidate_loading({}, o)}
         </p>
       )}
-      {query.isPending && <p role="status">{m.candidate_loading({}, o)}</p>}
-      {(query.isError || (query.data && !query.data.ok)) && (
-        <div className="space-y-3">
+      {(query.isPending || initialPending) && <p role="status">{m.candidate_loading({}, o)}</p>}
+      {!initialPending && (query.isError || (query.data && !query.data.ok)) && (
+        <div ref={failureBoundary} tabIndex={-1} className="space-y-3">
           {query.data && !query.data.ok && query.data.reason === 'concealed' ? (
             <p role="alert">{m.catalogue_create_concealed({}, o)}</p>
           ) : (
             <EditorFailure reason={query.data && !query.data.ok ? query.data.reason : 'unavailable'} locale={locale} />
           )}
           {(id || !retainedRelease.current) && (
-            <Button onClick={() => void query.refetch()}>{m.correction_retry({}, o)}</Button>
+            <Button onClick={() => void retryInitial()}>{m.correction_retry({}, o)}</Button>
           )}
         </div>
       )}
-      {read && !admitted && (
-        <div className="space-y-3">
+      {!initialPending && read && !admitted && (
+        <div ref={failureBoundary} tabIndex={-1} className="space-y-3">
           <p role="status">{m.album_missing({}, o)}</p>
           {!id && !retainedRelease.current && (
-            <Button onClick={() => void reloadMetadata()}>{m.correction_reload({}, o)}</Button>
+            <Button onClick={() => void retryInitial()}>{m.correction_reload({}, o)}</Button>
           )}
         </div>
       )}
@@ -172,7 +205,9 @@ function AlbumProfileLive({
             editors={editors}
           />
         ) : (
-          <EditorFailure reason="unavailable" locale={locale} />
+          <div ref={failureBoundary} tabIndex={-1}>
+            <EditorFailure reason="unavailable" locale={locale} />
+          </div>
         ))}
     </article>
   );

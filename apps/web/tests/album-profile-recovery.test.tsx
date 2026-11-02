@@ -126,6 +126,108 @@ test('Album recovery retires every current surface and retains private drafts an
     expect(host.querySelectorAll('input,select,textarea,a')).toHaveLength(0);
   };
   try {
+    // Initial recovery has no private holder: only the admitted request owns result focus.
+    const outside = window.document.createElement('button');
+    window.document.body.append(outside);
+    for (const scenario of ['throw', 'failure', 'missing', 'profile', 'address', 'viewer']) {
+      let loads = 0;
+      let nextInitial: AlbumRead | Error | Promise<AlbumRead> =
+        scenario === 'throw'
+          ? new Error('initial offline')
+          : scenario === 'missing'
+            ? { ok: true, release: { ...fixture.release, types: {} }, public: null }
+            : { ok: false, reason: 'unavailable' };
+      const initialTransport = {
+        ...fixture.transport,
+        load: async () => {
+          loads++;
+          if (nextInitial instanceof Error) throw nextInitial;
+          return await nextInitial;
+        },
+      };
+      const showInitial = (id = scenario === 'profile' ? albumId : undefined, viewer = 'viewer') =>
+        act(async () =>
+          root.render(
+            <QueryClientProvider client={client}>
+              <CandidateReaderBoundary
+                observed={{ state: 'signed-in', subject: viewer, csrfToken: scenario }}
+                address={id ?? 'initial-create'}
+              >
+                <AlbumProfile
+                  id={id}
+                  locale="en"
+                  session="signed-in"
+                  transport={initialTransport}
+                  search={async () => []}
+                  editors={fixture.editors}
+                />
+              </CandidateReaderBoundary>
+            </QueryClientProvider>,
+          ),
+        );
+      outside.focus();
+      await showInitial();
+      await settle();
+      expect(window.document.activeElement).toBe(outside);
+      const retry = within(host).getByRole('button', {
+        name: scenario === 'missing' ? m.correction_reload() : m.correction_retry(),
+      });
+      const props = Reflect.get(
+        retry,
+        Object.keys(retry).find((key) => key.startsWith('__reactProps$'))!,
+      );
+      const staleRetry = () => props.onClick({ currentTarget: retry });
+      let finishInitial!: (read: AlbumRead) => void;
+      nextInitial = new Promise((resolve) => {
+        finishInitial = resolve;
+      });
+      await settle(() => {
+        staleRetry();
+        staleRetry();
+      });
+      expect(loads).toBe(2);
+      expect(
+        within(host)
+          .getAllByRole('status')
+          .map((node) => node.textContent),
+      ).toEqual([m.candidate_loading()]);
+      expect(within(host).queryByRole('alert')).toBeNull();
+      expect(within(host).queryByRole('button', { name: m.correction_retry() })).toBeNull();
+      expect(within(host).queryByRole('button', { name: m.correction_reload() })).toBeNull();
+      expect(host.querySelector('form')).toBeNull();
+      const recovered: AlbumRead = { ok: true, release: fixture.release, public: fixture.publicRead };
+      if (scenario === 'address' || scenario === 'viewer') {
+        nextInitial = recovered;
+        await showInitial(
+          scenario === 'address' ? albumId : undefined,
+          scenario === 'viewer' ? 'fresh-viewer' : 'viewer',
+        );
+        await settle();
+        outside.focus();
+        await settle(() => {
+          finishInitial(recovered);
+          staleRetry();
+        });
+        expect(loads).toBe(3);
+        expect(window.document.activeElement).toBe(outside);
+        continue;
+      }
+      if (scenario === 'throw') {
+        await settle(() => finishInitial({ ok: false, reason: 'denied' }));
+        const failure = within(host).getByRole('alert');
+        expect(window.document.activeElement).toBe(failure.parentElement);
+        await settle(staleRetry);
+        expect(loads).toBe(2);
+        nextInitial = recovered;
+        await click(m.correction_retry());
+        await settle();
+      } else await settle(() => finishInitial(recovered));
+      expect(window.document.activeElement).toBe(within(host).getByRole('heading', { level: 1 }));
+      expect(host.querySelector('form')).not.toBeNull();
+      const completedLoads = loads;
+      await settle(staleRetry);
+      expect(loads).toBe(completedLoads);
+    }
     await show();
     await settle();
     for (const property of properties) {
