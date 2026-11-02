@@ -349,7 +349,9 @@ export class WorkerStore implements AttemptFence {
     const { afterAttempt, limit } = attemptPageOptions(taskId, options);
     this.refreshSnapshot();
     const rows = this.db
-      .query('SELECT task_id, attempt, body FROM worker_attempts WHERE task_id=? AND attempt>? ORDER BY attempt LIMIT ?')
+      .query(
+        'SELECT task_id, attempt, body FROM worker_attempts WHERE task_id=? AND attempt>? ORDER BY attempt LIMIT ?',
+      )
       .all(taskId, afterAttempt, limit + 1) as { task_id: string; attempt: number; body: string }[];
     const pageRows = rows.slice(0, limit);
     const hasMore = rows.length > limit;

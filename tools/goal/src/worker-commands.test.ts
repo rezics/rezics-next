@@ -121,14 +121,22 @@ test('attempts selects a bounded task page and keeps the complete JSON export av
     insertTask.run('target', 1, 2, JSON.stringify({ id: 'target', state: 'running' }));
     insertTask.run('other', 2, 1, JSON.stringify({ id: 'other', state: 'running' }));
     const insertAttempt = db.query('INSERT INTO worker_attempts(task_id, attempt, body) VALUES (?, ?, ?)');
-    for (const [taskId, attempt] of [['target', 1], ['target', 2], ['other', 1]] as const)
-      insertAttempt.run(taskId, attempt, JSON.stringify({
+    for (const [taskId, attempt] of [
+      ['target', 1],
+      ['target', 2],
+      ['other', 1],
+    ] as const)
+      insertAttempt.run(
         taskId,
         attempt,
-        state: 'running',
-        profile: { model: 'model', effort: 'high' },
-        pool: 'default',
-      }));
+        JSON.stringify({
+          taskId,
+          attempt,
+          state: 'running',
+          profile: { model: 'model', effort: 'high' },
+          pool: 'default',
+        }),
+      );
     const insertRecord = db.query('INSERT INTO worker_records(task_id, attempt, body) VALUES (?, ?, ?)');
     const records = [
       { taskId: 'target', attempt: 1, pool: 'default', outcome: 'passed', legacyField: 'kept' },

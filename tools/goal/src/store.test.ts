@@ -16,9 +16,7 @@ test('task history pages decode only selected rows and return a stable continuat
     insertAttempt.run('other', 1, JSON.stringify({ taskId: 'other', attempt: 1, state: 'running' }));
     store.resetDecodedRows();
     const first = store.attemptsPage('picked', { limit: 1 });
-    expect(first.items.map(({ taskId, attempt }) => ({ taskId, attempt }))).toEqual([
-      { taskId: 'picked', attempt: 1 },
-    ]);
+    expect(first.items.map(({ taskId, attempt }) => ({ taskId, attempt }))).toEqual([{ taskId: 'picked', attempt: 1 }]);
     expect(first.hasMore).toBe(true);
     expect(first.nextAfter).toBe(1);
     expect(store.decodedRows().attempts).toBe(1);
