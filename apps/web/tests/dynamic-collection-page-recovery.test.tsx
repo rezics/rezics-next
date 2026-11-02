@@ -117,7 +117,9 @@ function memberNavigation(host: HTMLElement) {
   return host.querySelector<HTMLElement>(`nav[aria-label="${m.library_collection_members()}"]`);
 }
 function link(host: HTMLElement, label: string) {
-  const matches = [...host.querySelectorAll<HTMLAnchorElement>('a')].filter((node) => node.textContent?.trim() === label);
+  const matches = [...host.querySelectorAll<HTMLAnchorElement>('a')].filter(
+    (node) => node.textContent?.trim() === label,
+  );
   expect(matches).toHaveLength(1);
   return matches[0]!;
 }
@@ -151,7 +153,9 @@ test('Only an exhausted ready first page asserts builtin, state or admitted-filt
     expect(link(h.host, m.collection_filter_clear())).toBeDefined();
     expect(memberNavigation(h.host)).toBeNull();
     expect(h.read).not.toHaveBeenCalled();
-  } finally { await h.close(); }
+  } finally {
+    await h.close();
+  }
 });
 
 test('Empty later pages, including sparse continuations, assert only page-local absence', async () => {
@@ -176,7 +180,9 @@ test('Empty later pages, including sparse continuations, assert only page-local 
     expect(memberNavigation(h.host)!.querySelectorAll('a')).toHaveLength(1);
     expect(link(memberNavigation(h.host)!, m.library_collection_more())).toBeDefined();
     expect(h.read).not.toHaveBeenCalled();
-  } finally { await h.close(); }
+  } finally {
+    await h.close();
+  }
 });
 
 test('First members page removes only cursor from the admitted protocol; Next carries the exact native cursor', async () => {
@@ -192,10 +198,16 @@ test('First members page removes only cursor from the admitted protocol; Next ca
     'f.bad/key': 'excluded',
   };
   const expected = [
-    ['type', 'schema:Book'], ['type', 'schema:Book'],
-    ['f.schema:keywords', 'concept-b'], ['f.schema:keywords', 'concept-a'], ['f.schema:keywords', 'concept-b'],
-    ['r.schema:wordCount', '0,0010'], ['r.schema:wordCount', ' 2,3 '],
-    ['l.schema:keywords', '  Original + & ? / 二  '], ['l.schema:keywords', 'Repeated'], ['l.schema:keywords', 'Repeated'],
+    ['type', 'schema:Book'],
+    ['type', 'schema:Book'],
+    ['f.schema:keywords', 'concept-b'],
+    ['f.schema:keywords', 'concept-a'],
+    ['f.schema:keywords', 'concept-b'],
+    ['r.schema:wordCount', '0,0010'],
+    ['r.schema:wordCount', ' 2,3 '],
+    ['l.schema:keywords', '  Original + & ? / 二  '],
+    ['l.schema:keywords', 'Repeated'],
+    ['l.schema:keywords', 'Repeated'],
   ];
   const original = structuredClone(search);
   try {
@@ -219,7 +231,9 @@ test('First members page removes only cursor from the admitted protocol; Next ca
       `/fr/collections/${encodeURIComponent(data.id)}`,
     );
     expect(h.read).not.toHaveBeenCalled();
-  } finally { await h.close(); }
+  } finally {
+    await h.close();
+  }
 });
 
 test('Nonempty later recovery preserves shared rows, native order, duplicate destinations and unavailable subjects', async () => {
@@ -251,7 +265,9 @@ test('Nonempty later recovery preserves shared rows, native order, duplicate des
     await h.render(page({ members }));
     expect(memberNavigation(h.host)).toBeNull();
     expect(h.read).not.toHaveBeenCalled();
-  } finally { await h.close(); }
+  } finally {
+    await h.close();
+  }
 });
 
 test('Unavailable, preparing and filter failure feedback never becomes ready emptiness or retained-member authority', async () => {
@@ -266,7 +282,9 @@ test('Unavailable, preparing and filter failure feedback never becomes ready emp
     ] as const) {
       for (const requested of [undefined, cursor]) {
         for (const retained of [[], [subject('old', 'Retained member')]]) {
-          await h.render(page({ ...(requested ? { cursor: requested } : {}), next, filter, members: retained, ...change }));
+          await h.render(
+            page({ ...(requested ? { cursor: requested } : {}), next, filter, members: retained, ...change }),
+          );
           expect(h.host.textContent).toContain(expected);
           noGlobalEmpty(h.host);
           expect(h.host.textContent).not.toContain(m.library_dynamic_page_reader_empty());
@@ -279,7 +297,9 @@ test('Unavailable, preparing and filter failure feedback never becomes ready emp
     expect(h.host.textContent).toContain(m.collection_filter_ignored({ filter: 'f.unavailable' }));
     expect(h.host.textContent).toContain(m.library_dynamic_page_reader_empty());
     expect(h.read).not.toHaveBeenCalled();
-  } finally { await h.close(); }
+  } finally {
+    await h.close();
+  }
 });
 
 test('All eight locale variants supply named recovery and page-local absence', async () => {
@@ -292,9 +312,11 @@ test('All eight locale variants supply named recovery and page-local absence', a
       setLocale(locale, { reload: false });
       await h.render(page({ cursor, next }));
       expect(h.host.textContent).toContain(messages.library_dynamic_page_reader_empty);
-      expect(link(memberNavigation(h.host)!, messages.library_dynamic_page_reader_first_page).getAttribute('href')).toStartWith(
-        `/${locale}/collections/`,
-      );
+      expect(
+        link(memberNavigation(h.host)!, messages.library_dynamic_page_reader_first_page).getAttribute('href'),
+      ).toStartWith(`/${locale}/collections/`);
     }
-  } finally { await h.close(); }
+  } finally {
+    await h.close();
+  }
 });

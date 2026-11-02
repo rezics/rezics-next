@@ -134,11 +134,12 @@ export const SparseFirstPage: Story = {
 };
 export const LaterMembers: Story = {
   name: 'Later members, first page recovery',
-  render: () => render({
-    cursor,
-    next,
-    members: [member('second', 'Second'), { subject: null }, member('first', 'First'), member('second', 'Second')],
-  }),
+  render: () =>
+    render({
+      cursor,
+      next,
+      members: [member('second', 'Second'), { subject: null }, member('first', 'First'), member('second', 'Second')],
+    }),
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
     expect(await view.findAllByRole('link', { name: 'Second' })).toHaveLength(2);
@@ -150,10 +151,8 @@ export const LaterMembers: Story = {
 export const RepeatedFiltersAndKeyboardRecovery: Story = {
   name: 'Repeated filters, named keyboard recovery',
   globals: { viewport: { value: 'phone390', isRotated: false } },
-  render: () => render(
-    { cursor, next, filter, title: Array(12).fill(m.library_dynamic_everything()).join(' · ') },
-    search,
-  ),
+  render: () =>
+    render({ cursor, next, filter, title: Array(12).fill(m.library_dynamic_everything()).join(' · ') }, search),
   play: async (context) => {
     await localEmpty(true)(context);
     const view = within(context.canvasElement);
@@ -193,12 +192,17 @@ export const Unavailable: Story = notReady({ unavailable: true }, m.library_dyna
 export const Preparing: Story = notReady({ preparing: true }, m.library_dynamic_preparing);
 export const FilterUnsupported: Story = notReady({ filterStatus: 'unsupported' }, m.collection_filter_unsupported);
 export const FilterFailed: Story = notReady({ filterStatus: 'failed' }, m.collection_filter_failed);
-export const FilterPreparing: Story = notReady({ preparing: true, filterStatus: 'preparing' }, m.collection_filter_preparing);
+export const FilterPreparing: Story = notReady(
+  { preparing: true, filterStatus: 'preparing' },
+  m.collection_filter_preparing,
+);
 export const IgnoredFilter: Story = {
   name: 'Ignored filter feedback with page-local absence',
   render: () => render({ cursor, next, filterIgnored: ['f.unavailable'] }),
   play: async (context) => {
     await localEmpty(true)(context);
-    expect(within(context.canvasElement).getByText(m.collection_filter_ignored({ filter: 'f.unavailable' }))).toBeVisible();
+    expect(
+      within(context.canvasElement).getByText(m.collection_filter_ignored({ filter: 'f.unavailable' })),
+    ).toBeVisible();
   },
 };
