@@ -130,7 +130,7 @@ export async function commandLifecycle(
   try {
     const target = client.accounts({ accountId: intent.accountId });
     const result = await readWithin(
-      (signal) => {
+      async (signal) => {
         const options = { headers: { authorization, 'idempotency-key': intent.key }, fetch: { signal } };
         return intent.action === 'suspend'
           ? target.$suspend.post(body, options)
