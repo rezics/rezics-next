@@ -188,3 +188,30 @@ test.serial('docker cleanup errors are logged and do not escape attempt settleme
     box.close();
   }
 });
+
+test.serial('attempt cleanup returns when removing an owned container hangs', () => {
+  const box = sandbox();
+  const previousPath = process.env.PATH;
+  const errors: string[] = [];
+  const originalError = console.error;
+  try {
+    const bin = join(box.directory, 'bin');
+    mkdirSync(bin);
+    executable(
+      join(bin, 'docker'),
+      '#!/bin/sh\ncase "$1" in\n  ps) printf "owned\\n" ;;\n  rm) exec sleep 60 ;;\n  *) exit 2 ;;\nesac\n',
+    );
+    process.env.PATH = `${bin}:${previousPath ?? ''}`;
+    console.error = (message?: unknown) => errors.push(String(message));
+    const started = Date.now();
+    expect(() => removeAttemptContainers('task-7', 3)).not.toThrow();
+    expect(Date.now() - started).toBeLessThan(25_000);
+    expect(errors.join('\n')).toContain('rezics.worker.attempt=task-7/3');
+    expect(errors.join('\n')).toContain('ETIMEDOUT');
+  } finally {
+    console.error = originalError;
+    if (previousPath === undefined) delete process.env.PATH;
+    else process.env.PATH = previousPath;
+    box.close();
+  }
+});

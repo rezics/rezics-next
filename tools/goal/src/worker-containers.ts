@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 
 const ATTEMPT_LABEL = 'rezics.worker.attempt';
+const DOCKER_TIMEOUT_MS = 15_000;
 function logRemovalError(message: string): void {
   try {
     console.error(message);
@@ -13,7 +14,10 @@ function logRemovalError(message: string): void {
 export function removeAttemptContainers(taskId: string, attempt: number): void {
   const label = `${ATTEMPT_LABEL}=${taskId}/${attempt}`;
   try {
-    const listed = spawnSync('docker', ['ps', '-aq', '--filter', `label=${label}`], { encoding: 'utf8' });
+    const listed = spawnSync('docker', ['ps', '-aq', '--filter', `label=${label}`], {
+      encoding: 'utf8',
+      timeout: DOCKER_TIMEOUT_MS,
+    });
     if (listed.error || listed.status !== 0) {
       logRemovalError(
         `Could not list worker containers for ${label}: ${listed.error ?? listed.stderr ?? listed.status}`,
@@ -22,7 +26,10 @@ export function removeAttemptContainers(taskId: string, attempt: number): void {
     }
     const ids = listed.stdout.trim().split(/\s+/).filter(Boolean);
     if (!ids.length) return;
-    const removed = spawnSync('docker', ['rm', '-f', '-v', ...ids], { encoding: 'utf8' });
+    const removed = spawnSync('docker', ['rm', '-f', '-v', ...ids], {
+      encoding: 'utf8',
+      timeout: DOCKER_TIMEOUT_MS,
+    });
     if (removed.error || removed.status !== 0)
       logRemovalError(
         `Could not remove worker containers for ${label}: ${removed.error ?? removed.stderr ?? removed.status}`,
