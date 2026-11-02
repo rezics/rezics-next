@@ -9,35 +9,65 @@ mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 
 test('relation consent follows accepted content in cards and qualified credits', async () => {
-  const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
   const window = new Window({ url: 'https://site.test/en/subjects/subject' });
-  const globals = { window, document: window.document, navigator: window.navigator, HTMLElement: window.HTMLElement,
-    Element: window.Element, Node: window.Node, Document: window.Document, DocumentFragment: window.DocumentFragment,
-    MutationObserver: window.MutationObserver, getComputedStyle: window.getComputedStyle.bind(window),
-    requestAnimationFrame: window.requestAnimationFrame.bind(window), cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
-    IS_REACT_ACT_ENVIRONMENT: true };
-  const previous = new Map(Object.keys(globals).map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-  for (const [key, value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    Element: window.Element,
+    Node: window.Node,
+    Document: window.Document,
+    DocumentFragment: window.DocumentFragment,
+    MutationObserver: window.MutationObserver,
+    getComputedStyle: window.getComputedStyle.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   const { createRoot } = await import('react-dom/client');
   const { CoverList } = await import('../src/features/pages/cover-list');
   type Props = ComponentProps<typeof CoverList>;
   const host = window.document.createElement('main');
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
-  const value: Props['value'] = { subject: 'subject', locale: 'en', reader: { spoilerLevel: 0, suitability: 'blur' },
-    link: ({ children, ...props }) => <a {...props}>{children}</a>, unlabelled: 'Unlabelled', spoilerShow: 'Reveal relation',
-    labels: { spoilerShow: 'Reveal relation', spoilerHide: 'Conceal relation', documentSpoiler: 'Reveal passage',
-      cover: { withheld: '', reveal: '', credit: '', via: '' } } };
-  const show = (items: Item[], overrides: Partial<Props> = {}) => act(async () => root.render(
-    <CoverList items={items} value={value} label="Relations" {...overrides} />,
-  ));
+  const value: Props['value'] = {
+    subject: 'subject',
+    locale: 'en',
+    reader: { spoilerLevel: 0, suitability: 'blur' },
+    link: ({ children, ...props }) => <a {...props}>{children}</a>,
+    unlabelled: 'Unlabelled',
+    spoilerShow: 'Reveal relation',
+    labels: {
+      spoilerShow: 'Reveal relation',
+      spoilerHide: 'Conceal relation',
+      documentSpoiler: 'Reveal passage',
+      cover: { withheld: '', reveal: '', credit: '', via: '' },
+    },
+  };
+  const show = (items: Item[], overrides: Partial<Props> = {}) =>
+    act(async () => root.render(<CoverList items={items} value={value} label="Relations" {...overrides} />));
   const rows = () => [...host.querySelectorAll('[data-statement]')];
   const open = (row: Element) => act(async () => (row.querySelector('button') as HTMLButtonElement).click());
-  const revealed = () => rows().map(row => row.querySelector('button')?.getAttribute('aria-expanded') === 'true');
+  const revealed = () => rows().map((row) => row.querySelector('button')?.getAttribute('aria-expanded') === 'true');
   try {
     for (const credit of [false, true]) {
-      const first: Item = { id: 'target', statement: 'first', label: { text: 'Hidden target', lang: 'en' },
-        notes: ['First role'], gated: true, ...(credit ? { qualified: [{ text: 'Hidden character', subject: { id: 'character', label: 'Character' } }] } : {}) };
+      const first: Item = {
+        id: 'target',
+        statement: 'first',
+        label: { text: 'Hidden target', lang: 'en' },
+        notes: ['First role'],
+        gated: true,
+        ...(credit
+          ? { qualified: [{ text: 'Hidden character', subject: { id: 'character', label: 'Character' } }] }
+          : {}),
+      };
       const second = { ...first, statement: 'second', notes: ['Second role'] };
       await show([]);
       await show([first, second]);
@@ -52,9 +82,12 @@ test('relation consent follows accepted content in cards and qualified credits',
       await show([second, { ...first, statement: 'replacement' }]);
       expect(revealed()).toEqual([false, false]);
       // A delivered same-ID revision must retire the old reveal permanently, including when it returns.
-      for (const revised of [{ ...first, label: { text: 'Revised target', lang: 'en' } },
-        { ...first, notes: ['Revised role'] }, { ...first, qualified: [{ text: 'Revised character' }] },
-        { ...first, summary: { id: 'target', type: 'schema:Movie' } }]) {
+      for (const revised of [
+        { ...first, label: { text: 'Revised target', lang: 'en' } },
+        { ...first, notes: ['Revised role'] },
+        { ...first, qualified: [{ text: 'Revised character' }] },
+        { ...first, summary: { id: 'target', type: 'schema:Movie' } },
+      ]) {
         await show([first]);
         await open(rows()[0]!);
         await show([revised]);
@@ -62,11 +95,13 @@ test('relation consent follows accepted content in cards and qualified credits',
         await show([first]);
         expect(revealed()).toEqual([false]);
       }
-      for (const changed of [{ ...value, subject: 'another-subject' },
+      for (const changed of [
+        { ...value, subject: 'another-subject' },
         { ...value, context: { id: 'context', population: { kind: 'global' as const } } },
         { ...value, context: { id: 'context', population: { kind: 'realm' as const, id: 'realm', title: 'Realm' } } },
         { ...value, reader: { ...value.reader, spoilerLevel: 1 as const } },
-        { ...value, reader: { ...value.reader, suitability: 'show' as const } }]) {
+        { ...value, reader: { ...value.reader, suitability: 'show' as const } },
+      ]) {
         await open(rows()[0]!);
         await show([first], { value: changed });
         expect(revealed()).toEqual([false]);
@@ -89,7 +124,10 @@ test('relation consent follows accepted content in cards and qualified credits',
       await open(rows()[0]!);
       await show([first], { memberFacts: structuredClone(facts), listPresentationFor: () => presentation() });
       expect(revealed()).toEqual([true]);
-      await show([first], { memberFacts: { target: { 'schema:datePublished': [{ kind: 'time', year: 2001 }] } }, listPresentationFor: presentation });
+      await show([first], {
+        memberFacts: { target: { 'schema:datePublished': [{ kind: 'time', year: 2001 }] } },
+        listPresentationFor: presentation,
+      });
       expect(revealed()).toEqual([false]);
     }
   } finally {

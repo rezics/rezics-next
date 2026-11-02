@@ -92,7 +92,9 @@ function ItemCard({
     <SpoilerGate key={disclosure} label={value.spoilerShow} hideLabel={value.labels.spoilerHide}>
       {card}
     </SpoilerGate>
-  ) : card;
+  ) : (
+    card
+  );
 }
 
 /**
