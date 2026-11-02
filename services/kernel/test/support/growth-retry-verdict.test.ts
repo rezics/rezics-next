@@ -113,7 +113,7 @@ function mixedRun(scale: number): {
     statements,
     ledger,
     cost: {
-      statements: 6,
+      statements: 5,
       rows: 3 + 5 + 7 * scale + 11 + 13,
       blocks: 2 + 4 + 6 * scale + 8 + 9,
       catalogStatements: 0,
