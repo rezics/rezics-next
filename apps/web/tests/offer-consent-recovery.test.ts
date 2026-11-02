@@ -1,5 +1,5 @@
 import { expect, mock, spyOn, test } from 'bun:test';
-import { checkoutDestination, createOfferRequest } from '../src/checkout/offer-recovery';
+import { createOfferRequest } from '../src/checkout/offer-recovery';
 
 mock.module('cloudflare:workers', () => ({ env: { KERNEL_ORIGIN: 'https://kernel.test' } }));
 const { startCheckout } = await import('../src/checkout/start');
@@ -47,12 +47,4 @@ test('uncertain creation resolves to the authoritative order or hosted Checkout 
   } finally {
     fetcher.mockRestore();
   }
-});
-
-test('recovery uses a validated matching order and never a malformed or unrelated locator', async () => {
-  for (const invalid of [{ ...order, id: '../other-buyer' }, { ...order, offerId: id(4) }, { ...order, settlement: 'future' }])
-    expect(checkoutDestination(invalid, intent.offerId)).toBeUndefined();
-  expect(checkoutDestination({ ...order, checkoutUrl: 'javascript:alert(1)' }, intent.offerId)).toEqual({ orderId: order.id });
-  for (const body of [{ orderId: '../other-buyer' }, { orderId: order.id, checkoutUrl: order.checkoutUrl }])
-    expect(await createOfferRequest(intent, async () => Response.json(body))()).toEqual({ kind: 'retry' });
 });

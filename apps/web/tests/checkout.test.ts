@@ -222,6 +222,7 @@ async function kernel(request: Request, url: URL): Promise<Response> {
   if (url.pathname === `/v1/orders/${id(10)}`) return read(10, 'paid');
   if (url.pathname === `/v1/orders/${id(11)}`) return read(11, settlePending ? 'paid' : 'pending');
   if (url.pathname === `/v1/orders/${id(12)}`) return read(12, 'pending');
+  if (url.pathname === `/v1/orders/${id(20)}`) return json(order(20, 'failed', id(4)));
   if (url.pathname === `/v1/orders/${orderWithoutSubject}`) return read(14, 'pending', false);
   if (url.pathname === `/v1/orders/${id(15)}`) return read(15, 'failed');
   if (url.pathname === `/v1/orders/${id(16)}`) return read(16, 'unknown');
@@ -626,9 +627,8 @@ test(
   timeout,
 );
 
-// Preserve the rendered idempotency key across 503 and null-URL retries to turn this into test(...).
 test(
-  'an unavailable kernel lets the buyer retry with the same idempotency key',
+  'unavailable creation retains its key and a confirmed failed order opens without another create',
   async () => {
     const auth = await signIn();
     for (const n of [5, 4]) {
@@ -643,6 +643,15 @@ test(
           if (request.method() === 'POST') tokens.push(request.headers()['x-csrf-token']);
         });
         await buy(page).click();
+        if (n === 4) {
+          await page.waitForURL(`${await site()}/en/orders/${id(20)}`);
+          expect(starts()).toHaveLength(1);
+          expect(html).toContain(starts()[0]!.key!);
+          expect(starts()[0]).toMatchObject({ body: { offerId: id(4) }, authorization: `Bearer ${auth.access}` });
+          expect(await retry(page).count()).toBe(0);
+          expect(tokens).toEqual([csrf!]);
+          continue;
+        }
         await retry(page).waitFor();
         expect(new URL(page.url()).origin).toBe(await site());
         expect(starts()).toHaveLength(1);

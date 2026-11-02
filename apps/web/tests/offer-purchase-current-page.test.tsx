@@ -333,11 +333,11 @@ for (const [name, viewer, admitted] of authorityChanges) {
   });
 }
 
-test('same-offer refresh and repricing preserve uncertain consent, request identity, disclosure and deliberate retry', async () => {
-  for (const [response, destination] of [
-    [checkout(), 'https://checkout.stripe.com/current'],
-    [staleResults.order(), `/en/orders/${id(3)}`],
-  ] as const) {
+for (const [response, destination] of [
+  [checkout, 'https://checkout.stripe.com/current'],
+  [staleResults.order, `/en/orders/${id(3)}`],
+] as const)
+test(`same-offer refresh and repricing preserve uncertain consent and deliberate retry to ${destination}`, async () => {
   await withPage(async (page) => {
     const pending = deferred<Response>();
     page.enqueue(pending.promise);
@@ -366,10 +366,9 @@ test('same-offer refresh and repricing preserve uncertain consent, request ident
       { intent: intent(first), csrf: signedIn.csrfToken },
       { intent: intent(first), csrf: rotated.csrfToken },
     ]);
-    await page.settle(retried, response);
+    await page.settle(retried, response());
     expect(page.redirects).toEqual([destination]);
   });
-  }
 });
 
 test('current native recovery and explicit terms review persist across same-offer rerenders, then clear for a new viewer', async () => {
