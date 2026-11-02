@@ -90,6 +90,7 @@ async function mount(initial: RenameSource) {
   const root = createRoot(host);
   await flush(() => root.render(<RouterProvider router={router} />));
   await tick();
+  console.log('router-state', router.state.location.pathname, router.state.matches.length, host.innerHTML);
   close = async () => {
     await flush(() => root.unmount());
     host.remove();
