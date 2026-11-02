@@ -6,7 +6,10 @@ const { startCheckout } = await import('../src/checkout/start');
 const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
 const intent = { offerId: id(1), expectedOfferRevision: 7, idempotencyKey: id(2) };
 const order: { id: string; offerId: string; settlement: string; checkoutUrl: string | null } = {
-  id: id(3), offerId: id(1), settlement: 'pending', checkoutUrl: 'https://checkout.stripe.com/current',
+  id: id(3),
+  offerId: id(1),
+  settlement: 'pending',
+  checkoutUrl: 'https://checkout.stripe.com/current',
 };
 
 test('uncertain creation resolves to the authoritative order or hosted Checkout using only the original intent as history grows', async () => {
@@ -28,13 +31,19 @@ test('uncertain creation resolves to the authoritative order or hosted Checkout 
           if (calls.length === 1) throw new Error('Response lost after creation');
           return Response.json({ order: records.get(order.id) });
         });
-        const submit = createOfferRequest(intent, (input) => startCheckout(new Request('https://site.test/checkout', {
-          method: 'POST',
-          headers: { authorization: 'Bearer current-buyer', 'content-type': 'application/json' },
-          body: JSON.stringify(input),
-        }), {}));
+        const submit = createOfferRequest(intent, (input) =>
+          startCheckout(
+            new Request('https://site.test/checkout', {
+              method: 'POST',
+              headers: { authorization: 'Bearer current-buyer', 'content-type': 'application/json' },
+              body: JSON.stringify(input),
+            }),
+            {},
+          ),
+        );
         expect(await submit()).toEqual({ kind: 'retry' });
-        const expected = state === 'pending' ? { kind: 'checkout', url: order.checkoutUrl } : { kind: 'order', orderId: order.id };
+        const expected =
+          state === 'pending' ? { kind: 'checkout', url: order.checkoutUrl } : { kind: 'order', orderId: order.id };
         expect(await submit()).toEqual(expected);
         expect(await submit()).toEqual(expected);
         expect(calls).toHaveLength(2);
