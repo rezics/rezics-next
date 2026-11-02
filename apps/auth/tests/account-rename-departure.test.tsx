@@ -1,11 +1,7 @@
 import { afterAll, afterEach, expect, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, useState } from 'react';
-import type {
-  RenameRead,
-  RenameResult,
-  RenameSource,
-} from '../src/account-rename';
+import type { RenameRead, RenameResult, RenameSource } from '../src/account-rename';
 
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', `${import.meta.dir}/../../web`)))
@@ -28,9 +24,8 @@ const previous = new Map(
 for (const [name, value] of Object.entries(globals))
   Object.defineProperty(globalThis, name, { value, configurable: true, writable: true });
 const { readRenameContinuation, saveRenameContinuation, RENAME_PROFILE } = await import('../src/account-rename');
-const { createBrowserHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } = await import(
-  '@tanstack/react-router'
-);
+const { createBrowserHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } =
+  await import('@tanstack/react-router');
 const { createRoot } = await import('react-dom/client');
 const { RenameAccountPage } = await import('../src/routes/account.rename');
 const { overwriteGetLocale } = await import('../src/paraglide/runtime.js');
