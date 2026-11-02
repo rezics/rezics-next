@@ -1,6 +1,6 @@
 import { createServerFn } from '@tanstack/react-start';
 import { issuerSecurityRequest } from './security-inventory';
-import type { SecurityPasskey, SecuritySession } from './security';
+import type { SecurityLoadResult, SecurityPasskey, SecuritySession } from './security';
 
 // Only this exact target is retained, in page memory. No cookie, proof, nonce or row metadata.
 export type SecurityTarget = { accountId: string; kind: 'session' | 'passkey'; id: string };
@@ -21,6 +21,7 @@ export type SecurityReadback =
 
 // A fixed, typed presentation seam matching the existing inventory source pattern.
 export type SecuritySource = {
+  load?: (withPasskeys: boolean) => Promise<SecurityLoadResult>;
   read: (target: SecurityTarget) => Promise<SecurityReadback>;
   act: (target: SecurityTarget) => Promise<SecurityActionResult>;
 };

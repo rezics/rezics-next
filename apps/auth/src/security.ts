@@ -115,9 +115,11 @@ export async function loadSecurity(withPasskeys: boolean): Promise<SecurityLoadR
   };
 }
 
-async function postEffect<Body>(path: string, body: unknown): Promise<AuthPostResult<Body>> {
+async function postEffect<Body>(path: string, body: unknown, signal?: AbortSignal): Promise<AuthPostResult<Body>> {
+  if (signal?.aborted) return { ok: false, status: 503, code: 'unavailable', retryAfter: null };
   const result = await authPost<Body>(path, body);
-  if (!result.ok && result.status === 503 && result.code === 'unavailable') return authPost<Body>(path, body);
+  if (!signal?.aborted && !result.ok && result.status === 503 && result.code === 'unavailable')
+    return authPost<Body>(path, body);
   return result;
 }
 
@@ -127,13 +129,21 @@ function hasEffectDenial(status: number, code: string): boolean {
 
 export type PasswordChangeResult = { ok: true } | { ok: false; reason: 'step-up' | 'failure'; message?: string };
 
-export async function changePassword(subjectId: string, password: string): Promise<PasswordChangeResult> {
+export async function changePassword(
+  subjectId: string,
+  password: string,
+  signal?: AbortSignal,
+): Promise<PasswordChangeResult> {
   const key = crypto.randomUUID();
-  const staged = await postEffect<EffectStage>('/credential-effects/stage', {
-    key,
-    subjectId,
-    credential: { kind: 'password', password },
-  });
+  const staged = await postEffect<EffectStage>(
+    '/credential-effects/stage',
+    {
+      key,
+      subjectId,
+      credential: { kind: 'password', password },
+    },
+    signal,
+  );
   if (!staged.ok) {
     if (staged.status === 401 && staged.code === 'step_up_required') return { ok: false, reason: 'step-up' };
     return {
@@ -154,11 +164,15 @@ export async function changePassword(subjectId: string, password: string): Promi
   )
     return { ok: false, reason: 'failure', message: failureMessage(503, 'unavailable', null) };
 
-  const approved = await postEffect<EffectApproval>('/credential-effects/approve', {
-    key,
-    subjectId,
-    effectRef: staged.body.effectRef,
-  });
+  const approved = await postEffect<EffectApproval>(
+    '/credential-effects/approve',
+    {
+      key,
+      subjectId,
+      effectRef: staged.body.effectRef,
+    },
+    signal,
+  );
   if (!approved.ok) {
     if (approved.status === 401 && approved.code === 'step_up_required') return { ok: false, reason: 'step-up' };
     return {
@@ -176,12 +190,16 @@ export async function changePassword(subjectId: string, password: string): Promi
   )
     return { ok: false, reason: 'failure', message: failureMessage(503, 'unavailable', null) };
 
-  const applied = await postEffect<{ receiptId: string; replayed: boolean }>('/credential-effects/apply', {
-    key,
-    subjectId,
-    effectRef: staged.body.effectRef,
-    reference: approved.body.reference,
-  });
+  const applied = await postEffect<{ receiptId: string; replayed: boolean }>(
+    '/credential-effects/apply',
+    {
+      key,
+      subjectId,
+      effectRef: staged.body.effectRef,
+      reference: approved.body.reference,
+    },
+    signal,
+  );
   if (!applied.ok) {
     if (applied.status === 401 && applied.code === 'step_up_required') return { ok: false, reason: 'step-up' };
     return {

@@ -3,6 +3,7 @@ import {
   browserSupportsWebAuthnAutofill,
   startAuthentication,
   startRegistration,
+  WebAuthnAbortService,
   type PublicKeyCredentialCreationOptionsJSON,
   type PublicKeyCredentialRequestOptionsJSON,
 } from '@simplewebauthn/browser';
@@ -136,17 +137,24 @@ function addFailure(result: Extract<AuthPostResult, { ok: false }>): PasskeyAddR
   return { ok: false, reason: 'failure', message };
 }
 
-export async function addPasskey(name: string): Promise<PasskeyAddResult> {
+export async function addPasskey(name: string, signal?: AbortSignal): Promise<PasskeyAddResult> {
+  if (signal?.aborted) return { ok: false, reason: 'cancelled' };
   const options = await authPost<PublicKeyCredentialCreationOptionsJSON>('/passkeys/register/options', {});
+  if (signal?.aborted) return { ok: false, reason: 'cancelled' };
   if (!options.ok) return addFailure(options);
   let response;
+  const cancel = () => WebAuthnAbortService.cancelCeremony();
+  signal?.addEventListener('abort', cancel, { once: true });
   try {
     response = await startRegistration({ optionsJSON: options.body });
   } catch (error) {
     return isCancellation(error)
       ? { ok: false, reason: 'cancelled' }
       : { ok: false, reason: 'failure', message: m.auth_security_passkey_add_failed() };
+  } finally {
+    signal?.removeEventListener('abort', cancel);
   }
+  if (signal?.aborted) return { ok: false, reason: 'cancelled' };
   const chosen = name.trim() || defaultPasskeyName();
   const created = await postCreated<{ id?: unknown; name?: unknown; created_at?: unknown }>(
     '/passkeys/register',

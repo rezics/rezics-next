@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Alert, AlertDescription } from '@rezics/ui/shadcn/alert';
 import { Badge } from '@rezics/ui/shadcn/badge';
 import { Item, ItemContent, ItemDescription, ItemGroup, ItemTitle } from '@rezics/ui/shadcn/item';
@@ -31,11 +31,13 @@ function InventoryList<V extends InventoryView>({
   source,
   preflight,
   onSessionEnded,
+  lifetime,
 }: {
   view: V;
   source: InventorySource;
   preflight: boolean;
   onSessionEnded?: (reduced: boolean) => void;
+  lifetime?: AbortSignal;
 }) {
   const [page, setPage] = useState<InventoryPage<V> | null>(null);
   const [cursor, setCursor] = useState<string | undefined>();
@@ -51,7 +53,24 @@ function InventoryList<V extends InventoryView>({
   const heading = view === 'clients' ? m.auth_inventory_clients_heading() : m.auth_inventory_consents_heading();
   const headingId = `inventory-${view}-heading`;
 
+  useLayoutEffect(() => {
+    // The containing page can depart without React unmounting (browser cache).
+    function retire() {
+      generation.current++;
+      setPage(null);
+      setSelection(null);
+      setError('');
+      setNotice('');
+    }
+    lifetime?.addEventListener('abort', retire, { once: true });
+    return () => {
+      lifetime?.removeEventListener('abort', retire);
+      generation.current++;
+    };
+  }, [lifetime]);
+
   useEffect(() => {
+    if (lifetime?.aborted) return;
     const current = ++generation.current;
     setPending(true);
     setPage(null);
@@ -66,7 +85,7 @@ function InventoryList<V extends InventoryView>({
     return () => {
       generation.current++;
     };
-  }, [source, view]);
+  }, [source, view, lifetime]);
 
   useEffect(() => {
     if (!selection) return;
@@ -76,7 +95,7 @@ function InventoryList<V extends InventoryView>({
   }, [selection]);
 
   async function navigate(target?: string, direction: 'next' | 'previous' | 'reset' = 'reset') {
-    if (pending || reducing) return;
+    if (lifetime?.aborted || pending || reducing) return;
     const current = ++generation.current;
     setPending(true);
     setError('');
@@ -97,6 +116,7 @@ function InventoryList<V extends InventoryView>({
   }
 
   function select(consent: GrantedConsent, removeAll: boolean) {
+    if (lifetime?.aborted) return;
     // Keep only public inventory fields; drafts never leave this mounted row.
     const snapshot: GrantedConsent = {
       client_id: consent.client_id,
@@ -111,7 +131,7 @@ function InventoryList<V extends InventoryView>({
   }
 
   async function reduce() {
-    if (!selection?.confirming || preflight || pending || submitting.current) return;
+    if (lifetime?.aborted || !selection?.confirming || preflight || pending || submitting.current) return;
     const { consent, retained } = selection;
     const target = createConsentReduction(consent, retained);
     if (!target) return;
@@ -401,18 +421,21 @@ export function SecurityInventory({
   source = loadInventory,
   preflight = false,
   onSessionEnded,
+  lifetime,
 }: {
   source?: InventorySource;
   preflight?: boolean;
   onSessionEnded?: (reduced: boolean) => void;
+  lifetime?: AbortSignal;
 }) {
   return (
     <div className="flex min-w-0 flex-col gap-8">
-      <InventoryList view="clients" source={source} preflight={preflight} />
+      <InventoryList view="clients" source={source} preflight={preflight} {...(lifetime ? { lifetime } : {})} />
       <InventoryList
         view="consents"
         source={source}
         preflight={preflight}
+        {...(lifetime ? { lifetime } : {})}
         {...(onSessionEnded ? { onSessionEnded } : {})}
       />
     </div>

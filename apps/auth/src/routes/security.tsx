@@ -8,6 +8,7 @@ import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemTitle }
 import { PasswordInput } from '../password-input';
 import { Trash2 } from 'lucide-react';
 import { useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { flushSync } from 'react-dom';
 import { m } from '../paraglide/messages.js';
 import { AuthPage } from '../frame';
 import { useAccountIdentity, type AccountIdentitySource } from '../account-identity';
@@ -88,6 +89,7 @@ export function SecurityPage({
   const [signedOutNotice, setSignedOutNotice] = useState('');
   const activeAccount = useRef('');
   const authorityGeneration = useRef(0);
+  const lifetime = useRef(new AbortController());
   const retryLoad = useRef<(() => void) | null>(null);
   const recoveryStatus = useRef<HTMLDivElement>(null);
   const sessionStatus = useRef<HTMLDivElement>(null);
@@ -105,39 +107,73 @@ export function SecurityPage({
   useLayoutEffect(() => {
     let active = true;
     let pending = false;
+    let departed = false;
+    let unresolved: SecurityTarget | null = null;
     async function load(provided?: SecurityLoadResult) {
-      if (!active || pending) return;
+      if (!active || departed || pending) return;
       pending = true;
       clearPrivateData('loading');
       setConsentReduced(false);
       const generation = authorityGeneration.current;
-      const result = provided ?? (await loadSecurity(passkeysSupported()));
-      if (!active) return;
+      const result =
+        provided ??
+        (await (securitySource?.load ?? loadSecurity)(passkeysSupported()).catch((): SecurityLoadResult => ({
+          kind: 'failure',
+          message: failureMessage(503, 'unavailable', null),
+        })));
+      if (!active || departed || authorityGeneration.current !== generation) return;
       pending = false;
-      if (authorityGeneration.current !== generation) return;
       if (result.kind === 'ready') {
         activeAccount.current = result.accountId;
         setAccountId(result.accountId);
         setSessions(result.sessions);
         setPasskeysLoad(result.passkeys);
         if (result.passkeys.kind === 'ready') setPasskeys(result.passkeys.passkeys);
+        if (unresolved?.accountId === result.accountId)
+          updateOperation({ kind: 'recovery', target: unresolved, phase: 'unknown', reading: false });
+        unresolved = null;
         setLoadState('ready');
       } else if (result.kind === 'signed-out') {
+        unresolved = null;
         setLoadState('signed-out');
       } else {
         setLoadMessage(result.message);
         setLoadState('failure');
       }
     }
+    function depart() {
+      if (departed) return;
+      departed = true;
+      const held = activeOperation.current;
+      if (held?.kind === 'target' || held?.kind === 'recovery') unresolved = held.target;
+      pending = false;
+      // Commit the cleared DOM before the browser freezes this document.
+      flushSync(() => {
+        clearPrivateData('loading');
+        setConsentReduced(false);
+      });
+    }
+    function restore(event: PageTransitionEvent) {
+      if (!departed && !event.persisted) return;
+      // Never reuse the initial render snapshot or an old read's pending flag.
+      if (!departed) depart();
+      departed = false;
+      void load();
+    }
+    window.addEventListener('pagehide', depart);
+    window.addEventListener('pageshow', restore);
     retryLoad.current = () => void load();
     void load(initial);
     return () => {
       active = false;
+      window.removeEventListener('pagehide', depart);
+      window.removeEventListener('pageshow', restore);
+      lifetime.current.abort();
       retryLoad.current = null;
       authorityGeneration.current++;
       activeAccount.current = '';
     };
-  }, [initial]);
+  }, [initial, securitySource]);
 
   useLayoutEffect(() => {
     if (passwordFieldError) passwordInput.current?.focus();
@@ -156,6 +192,8 @@ export function SecurityPage({
 
   function clearPrivateData(state: Exclude<LoadState, 'ready'>, notice = '') {
     authorityGeneration.current++;
+    lifetime.current.abort();
+    lifetime.current = new AbortController();
     activeAccount.current = '';
     updateOperation(null);
     setAccountId('');
@@ -250,6 +288,7 @@ export function SecurityPage({
       held.target.kind === target.kind &&
       held.target.id === target.id;
     if ((held && !retryAllowed) || activeAccount.current !== target.accountId || !target.accountId) return;
+    const generation = authorityGeneration.current;
     if (
       !window.confirm(
         target.kind === 'session'
@@ -258,12 +297,13 @@ export function SecurityPage({
       )
     )
       return;
+    // A browser confirmation may have outlived the document's authority.
+    if (authorityGeneration.current !== generation || activeAccount.current !== target.accountId) return;
     updateOperation({ kind: 'target', target });
     setSessionNotice('');
     setSessionError('');
     setPasskeyNotice('');
     setPasskeyError('');
-    const generation = authorityGeneration.current;
     const result = securitySource
       ? await securitySource.act(target)
       : target.kind === 'session'
@@ -290,7 +330,7 @@ export function SecurityPage({
     setPasswordError('');
     const owner = accountId;
     const generation = authorityGeneration.current;
-    const result = await changePassword(accountId, password);
+    const result = await changePassword(accountId, password, lifetime.current.signal);
     if (authorityGeneration.current !== generation) return;
     updateOperation(null);
     if (activeAccount.current !== owner) return;
@@ -314,7 +354,7 @@ export function SecurityPage({
     setPasskeyError('');
     const owner = accountId;
     const generation = authorityGeneration.current;
-    const result = await addPasskey(passkeyName);
+    const result = await addPasskey(passkeyName, lifetime.current.signal);
     if (authorityGeneration.current !== generation) return;
     updateOperation(null);
     if (activeAccount.current !== owner) return;
@@ -617,6 +657,7 @@ export function SecurityPage({
             </section>
 
             <SecurityInventory
+              lifetime={lifetime.current.signal}
               {...(inventorySource ? { source: inventorySource } : {})}
               onSessionEnded={(reduced) => {
                 setConsentReduced(reduced);
