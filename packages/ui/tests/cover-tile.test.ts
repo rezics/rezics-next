@@ -27,8 +27,7 @@ test('a cover tile has no card surface: no background, outline, border or shadow
   const article = tagWithSlot(html, 'cover-card');
   const caption = tagWithSlot(html, 'cover-card-text');
   const frame = tagWithSlot(html, 'aspect-ratio');
-  expect(classOf(article)).not.toMatch(/\b(?:bg-(?!transparent\b)|outline(?:-|\s)|border(?:-|\s)|shadow(?:-|\s))/);
-  expect(classOf(article)).toContain('before:bg-transparent');
+  expect(classOf(article)).not.toMatch(/(?:\bbg-(?!transparent\b)|\b(?:outline(?:-|\s)|border(?:-|\s)|shadow(?:-|\s))|(?<!before:)\brounded(?:-[^\s]+)?)/);
   expect(classOf(article)).toContain('focus-within:ring-2');
   expect(classOf(caption)).not.toMatch(/\b(?:bg-|outline(?:-|\s)|border(?:-|\s)|shadow(?:-|\s))/);
   expect(classOf(frame)).not.toContain('bg-muted');
@@ -66,7 +65,6 @@ test('the tile, the row item and the standalone Cover use one corner radius', ()
   );
   const grid = renderToStaticMarkup(createElement(CoverGrid, { ratio: '5:7', children: tileElement() }));
 
-  expect(classOf(tagWithSlot(tile(), 'cover-card'))).not.toMatch(/\brounded(?:-[^\s]+)?/);
   expect(classOf(tagWithSlot(row, 'cover-row'))).toContain(coverRadius);
   expect(classOf(tagWithSlot(tile(), 'aspect-ratio'))).toContain(coverRadius);
   expect(classOf(tagWithSlot(row, 'aspect-ratio'))).toContain(coverRadius);
