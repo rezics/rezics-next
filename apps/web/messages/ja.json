@@ -4345,5 +4345,7 @@
   "library_progress_history_reader_change_details": "記録された変更の全文 · {number} 件目",
   "library_progress_history_reader_unit_details": "記録された単位の全文 · {number} 件目",
   "library_progress_history_reader_changes_page_empty": "このページに進捗の変更はありません。",
-  "library_progress_history_reader_units_page_empty": "このページに完了した単位はありません。"
+  "library_progress_history_reader_units_page_empty": "このページに完了した単位はありません。",
+  "library_dynamic_page_reader_empty": "このページには項目がありません。",
+  "library_dynamic_page_reader_first_page": "項目の最初のページ"
 }

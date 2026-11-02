@@ -4346,5 +4346,7 @@
   "library_progress_history_reader_change_details": "Full recorded change · entry {number}",
   "library_progress_history_reader_unit_details": "Full recorded unit · entry {number}",
   "library_progress_history_reader_changes_page_empty": "No progress changes on this page.",
-  "library_progress_history_reader_units_page_empty": "No completed units on this page."
+  "library_progress_history_reader_units_page_empty": "No completed units on this page.",
+  "library_dynamic_page_reader_empty": "No members on this page.",
+  "library_dynamic_page_reader_first_page": "First members page"
 }

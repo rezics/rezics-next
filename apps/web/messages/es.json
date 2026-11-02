@@ -4345,5 +4345,7 @@
   "library_progress_history_reader_change_details": "Cambio registrado completo · entrada {number}",
   "library_progress_history_reader_unit_details": "Unidad registrada completa · entrada {number}",
   "library_progress_history_reader_changes_page_empty": "No hay cambios de progreso en esta página.",
-  "library_progress_history_reader_units_page_empty": "No hay unidades completadas en esta página."
+  "library_progress_history_reader_units_page_empty": "No hay unidades completadas en esta página.",
+  "library_dynamic_page_reader_empty": "No hay elementos en esta página.",
+  "library_dynamic_page_reader_first_page": "Primera página de elementos"
 }

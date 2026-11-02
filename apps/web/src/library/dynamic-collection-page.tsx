@@ -102,6 +102,8 @@ function DynamicCollectionPageLifetime({
       : current.builtinKind === 'liked'
         ? m.library_dynamic_empty_liked()
         : m.library_collection_empty();
+  const membersReady = !current.preparing && !current.unavailable && current.filterStatus === undefined;
+  const laterPage = current.cursor !== undefined;
   async function copyLink(href: string) {
     if (!active.current) return;
     setCopyFailure(false);
@@ -151,17 +153,22 @@ function DynamicCollectionPageLifetime({
           {...(current.filterIgnored === undefined ? {} : { ignored: current.filterIgnored })}
           {...(current.filterStatus === undefined ? {} : { status: current.filterStatus })}
           {...(current.filterType === undefined ? {} : { filterType: current.filterType })}
-          empty={!current.preparing && current.members.length === 0}
+          empty={!current.preparing && current.members.length === 0 && !laterPage && !current.next}
           emptyLabel={empty}
           {...(current.unavailable !== undefined ? { unavailable: current.unavailable } : {})}
         />
+        {membersReady && current.members.length === 0 && (laterPage || current.next) ? (
+          <p role="status" className="text-muted-foreground">
+            {m.library_dynamic_page_reader_empty()}
+          </p>
+        ) : null}
         {current.preparing ? (
           current.filterStatus === 'preparing' ? null : (
             <p role="status">{m.library_dynamic_preparing()}</p>
           )
         ) : current.unavailable ? (
           <p role="alert">{m.library_dynamic_unavailable()}</p>
-        ) : current.members.length ? (
+        ) : membersReady && current.members.length ? (
           <CollectionReadMembers
             members={current.members}
             typeRatios={current.typeRatios}
@@ -188,17 +195,35 @@ function DynamicCollectionPageLifetime({
             </button>
           </div>
         ) : null}
-        {current.next ? (
-          <nav aria-label={m.library_collection_members()}>
-            <a
-              href={collectionPageAddress(locale, current.id, current.next, search)}
-              className="inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted hover:underline"
-            >
-              {m.library_collection_more()}
-            </a>
+        {membersReady && (laterPage || current.next) ? (
+          <nav aria-label={m.library_collection_members()} className="flex min-w-0 flex-wrap gap-2">
+            {laterPage ? (
+              <a
+                href={firstMembersPageAddress(locale, current.id, search)}
+                className="inline-flex min-h-11 min-w-0 max-w-full items-center justify-center break-words rounded-lg border border-border px-4 py-2 text-primary underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
+              >
+                {m.library_dynamic_page_reader_first_page()}
+              </a>
+            ) : null}
+            {current.next ? (
+              <a
+                href={collectionPageAddress(locale, current.id, current.next, search)}
+                className="inline-flex min-h-11 min-w-0 max-w-full items-center justify-center break-words rounded-lg border border-border px-4 py-2 text-primary underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
+              >
+                {m.library_collection_more()}
+              </a>
+            ) : null}
           </nav>
         ) : null}
       </article>
     </div>
   );
+}
+
+function firstMembersPageAddress(locale: string, id: string, search: DynamicCollectionPageProps['search']): string {
+  // Reuse the admitted shell-filter protocol, then remove only the members cursor.
+  const [pathname, query] = collectionPageAddress(locale, id, '', search).split('?');
+  const params = new URLSearchParams(query);
+  params.delete('cursor');
+  return `${pathname}${params.size ? `?${params}` : ''}`;
 }

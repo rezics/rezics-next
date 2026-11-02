@@ -4345,5 +4345,7 @@
   "library_progress_history_reader_change_details": "기록된 변경 전체 · {number}번째 항목",
   "library_progress_history_reader_unit_details": "기록된 단위 전체 · {number}번째 항목",
   "library_progress_history_reader_changes_page_empty": "이 페이지에는 진행 변경 기록이 없습니다.",
-  "library_progress_history_reader_units_page_empty": "이 페이지에는 완료한 단위가 없습니다."
+  "library_progress_history_reader_units_page_empty": "이 페이지에는 완료한 단위가 없습니다.",
+  "library_dynamic_page_reader_empty": "이 페이지에는 항목이 없습니다.",
+  "library_dynamic_page_reader_first_page": "항목의 첫 페이지"
 }

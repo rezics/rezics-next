@@ -4346,5 +4346,7 @@
   "library_progress_history_reader_change_details": "完整的变更记录 · 第 {number} 项",
   "library_progress_history_reader_unit_details": "完整的单位记录 · 第 {number} 项",
   "library_progress_history_reader_changes_page_empty": "此页没有进度变更记录。",
-  "library_progress_history_reader_units_page_empty": "此页没有已完成的单位。"
+  "library_progress_history_reader_units_page_empty": "此页没有已完成的单位。",
+  "library_dynamic_page_reader_empty": "此页没有成员。",
+  "library_dynamic_page_reader_first_page": "成员首页"
 }
