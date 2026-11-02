@@ -3,6 +3,7 @@ import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platfo
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
 import { normalizeLibraryLabelName } from './subject-label-name';
+import { subjectLabelInputIssue } from './subject-label-input';
 import { readSubjectSlotSession, type SubjectLibraryReadIdentity } from './subject-slot';
 
 export { normalizeLibraryLabelName } from './subject-label-name';
@@ -74,10 +75,6 @@ function refused(result: Result<unknown>, intent: SubjectLabelMutationInput['int
     if (code === 'library_label_restore_capacity') return { ok: false, reason: 'restore-capacity' };
   }
   return { ok: false, reason: 'unavailable' };
-}
-
-function validLabelName(name: string): boolean {
-  return name.length > 0 && !/[\u0000-\u001f\u007f-\u009f]/u.test(name) && [...name].length <= 100;
 }
 
 /** One bounded prefix request for a settled picker value. Out-of-date input is handled by the caller. */
@@ -154,7 +151,7 @@ export async function applySubjectLabelMutation(
     const headers = { authorization, 'idempotency-key': input.idempotencyKey };
     if (input.intent === 'create-and-assign') {
       const name = normalizeLibraryLabelName(input.name);
-      if (!validLabelName(name)) return { ok: false, reason: 'unavailable' };
+      if (subjectLabelInputIssue(input.name)) return { ok: false, reason: 'unavailable' };
       const search = await client.libraryLabels.get({
         query: { q: input.name, limit: 20 },
         headers: { authorization },

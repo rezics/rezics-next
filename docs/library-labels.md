@@ -97,6 +97,8 @@ scopes. They add no resource type or scope and change no Collection action. The 
 
 **WEB NAME INPUT DECISION:** Create and rename explain and validate the normalized 100-scalar native bound without rewriting raw drafts or captured commands; the separate 1000 UTF-16-unit input cap remains, and uncertain retries retain their original operands.
 
+**SUBJECT PICKER INPUT DECISION:** Preserve raw drafts with local normalized-name feedback and a separate 1000 UTF-16-unit transport bound; empty prefixes list labels, while empty names require correction before creation.
+
 **WEB NAME READER DECISION:** Measured overflow offers local inline expansion and collapse beside the independent shelf link, following the Collection note reader; fitting names have no reader control, and reading preserves exact text, locale and focus without requests or rename permission.
 
 The catalogue's single visible heading name is the shelf link; its row hit area stays separate from the local reader control, whose actual touch target is at least 44px in each dimension.

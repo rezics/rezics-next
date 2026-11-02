@@ -620,17 +620,25 @@ test('The mounted leaf partitions admission and return-address ABA reads and req
 test('Subject label input explains native failures locally and preserves valid raw drafts through Create', async () => {
   await paint();
   await openLabels();
+  await act(async () => prefixes[0]!.resolve(page('A', '', 'old-cursor')));
   const input = host.querySelector<HTMLInputElement>('input[name="name"]')!;
-  const feedback = () => input.getAttribute('aria-describedby')!.split(' ').map((id) => window.document.getElementById(id)?.textContent).join(' ');
+  const feedback = () =>
+    input
+      .getAttribute('aria-describedby')!
+      .split(' ')
+      .map((id) => window.document.getElementById(id)?.textContent)
+      .join(' ');
   for (const [raw, reason] of [
     ['📚'.repeat(101), m.library_subject_label_input_too_long()],
     ['A\u0000B', m.library_subject_label_input_controls()],
     ['A\ud800', m.library_subject_label_input_surrogates()],
     ['\udc00B', m.library_subject_label_input_surrogates()],
+    [`A${' '.repeat(999)}B`, m.library_subject_label_input_transport()],
   ]) {
     await labelName(raw!);
     expect(input.value).toBe(raw);
     expect(input.getAttribute('aria-invalid')).toBe('true');
+    expect(host.querySelector('[data-subject-label-picker] ul')).toBeNull();
     expect(feedback()).toContain(reason!);
     expect(feedback()).toContain(m.library_subject_label_input_hint());
     await submit('[data-subject-label-picker]');
@@ -661,7 +669,9 @@ test('Correcting invalid Subject label input settles one search and fences earli
   expect(host.querySelector('[data-subject-label-picker] ul')).toBeNull();
   await labelName('Recovered');
   expect(prefixes).toHaveLength(3);
-  await act(async () => prefixes.at(-1)!.resolve({ ...page('A', 'Recovered'), labels: [{ id: id(22), name: 'Recovered', revision: 1 }] }));
+  await act(async () =>
+    prefixes.at(-1)!.resolve({ ...page('A', 'Recovered'), labels: [{ id: id(22), name: 'Recovered', revision: 1 }] }),
+  );
   await act(async () => old.resolve(page('A', 'Recovered', 'old-cursor')));
   expect(host.textContent).not.toContain('A choice');
   expect(host.textContent).not.toContain(m.library_label_more());
@@ -675,12 +685,18 @@ test('Empty normalized Subject prefixes list labels with null CSRF; empty creati
   await openLabels();
   await labelName(' \t\u2003 ');
   expect(prefixes).toHaveLength(2);
-  await act(async () => prefixes.at(-1)!.resolve({ ...page('A', ' \t\u2003 '), provenance: { viewer: 'A', csrfToken: null, query: ' \t\u2003 ' } }));
+  await act(async () =>
+    prefixes
+      .at(-1)!
+      .resolve({ ...page('A', ' \t\u2003 '), provenance: { viewer: 'A', csrfToken: null, query: ' \t\u2003 ' } }),
+  );
   expect(button('A choice').disabled).toBe(true);
   await submit('[data-subject-label-picker]');
   const input = host.querySelector<HTMLInputElement>('input[name="name"]')!;
   expect(input.getAttribute('aria-invalid')).toBe('true');
-  expect(window.document.getElementById(input.getAttribute('aria-errormessage')!)?.textContent).toBe(m.library_subject_label_input_empty());
+  expect(window.document.getElementById(input.getAttribute('aria-errormessage')!)?.textContent).toBe(
+    m.library_subject_label_input_empty(),
+  );
   expect(labels).toHaveLength(0);
 });
 

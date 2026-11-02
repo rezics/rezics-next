@@ -4,6 +4,7 @@ import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import { applySubjectLabelMutation } from './subject-labels.ts';
 import { validateSubjectLabelMutation } from './subject-slot-actions';
+import { subjectLabelInputLimit } from './subject-label-input';
 
 /** The ordinary HTML form action is server-only so its kernel client never enters the hydrated subject page. */
 export const submitSubjectLabelForm = createServerOnlyFn(async (request: Request) => {
@@ -57,7 +58,8 @@ export const submitSubjectLabelForm = createServerOnlyFn(async (request: Request
     const client = kernelClient();
     if (intent === 'assign-by-name') {
       const name = one('name');
-      if (name === null || name.length > 200) return { ok: false as const, reason: 'unavailable' as const };
+      if (name === null || name.length > subjectLabelInputLimit)
+        return { ok: false as const, reason: 'unavailable' as const };
       const input = validateSubjectLabelMutation({
         intent: 'create-and-assign',
         subjectId,

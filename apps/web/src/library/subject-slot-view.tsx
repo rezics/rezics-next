@@ -41,6 +41,8 @@ import type {
   SubjectLibrarySlotData,
 } from './subject-slot';
 import { normalizeLibraryLabelName } from './subject-label-name';
+import { subjectLabelInputIssue } from './subject-label-input';
+import { SubjectLabelInput } from './subject-label-input.tsx';
 import type {
   LibraryLabelSummary,
   SubjectLabel,
@@ -362,6 +364,8 @@ function SubjectLibrarySlotView({
   const labelListAdmitted = useOperation('library_label.list');
   const [labels, setLabels] = useState(data.labels ?? []);
   const [labelQuery, setLabelQuery] = useState('');
+  const [labelNameSubmitted, setLabelNameSubmitted] = useState(false);
+  const labelInputIssue = subjectLabelInputIssue(labelQuery, !labelNameSubmitted);
   const [labelNext, setLabelNext] = useState<string | null>(null);
   const [labelReadReason, setLabelReadReason] = useState<string>();
   const [labelChoices, setLabelChoices] = useState<LibraryLabelSummary[]>([]);
@@ -418,6 +422,7 @@ function SubjectLibrarySlotView({
     setLabels(data.labels ?? []);
     setLabelPickerOpen(false);
     setLabelQuery('');
+    setLabelNameSubmitted(false);
     latestLabelQuery.current = '';
     setLabelChoices([]);
     setLabelNext(null);
@@ -483,6 +488,7 @@ function SubjectLibrarySlotView({
     setLabelChoices([]);
     setLabelSearchState('idle');
     setLabelReadReason(undefined);
+    if (subjectLabelInputIssue(query, true)) return;
     const timeout = setTimeout(() => {
       if (!currentSearch()) return;
       void searchSubjectLabelsAction({ data: { query } })
@@ -927,6 +933,7 @@ function SubjectLibrarySlotView({
         }
         setLabelPickerOpen(false);
         setLabelQuery('');
+        setLabelNameSubmitted(false);
         latestLabelQuery.current = '';
         setLabelChoices([]);
       }
@@ -953,6 +960,10 @@ function SubjectLibrarySlotView({
     revision?: number;
   }) {
     if (!labelLifetime.current()) return;
+    if (input.intent === 'create-and-assign') {
+      setLabelNameSubmitted(true);
+      if (subjectLabelInputIssue(input.name ?? '')) return;
+    }
     const labelId = input.label && 'labelId' in input.label ? input.label.labelId : (input.label?.id ?? '');
     const command: SubjectLabelMutationInput =
       input.intent === 'create-and-assign'
@@ -984,6 +995,9 @@ function SubjectLibrarySlotView({
   async function submitLabelName(event: FormEvent<HTMLFormElement>) {
     if (!hydrated) return;
     event.preventDefault();
+    if (!labelLifetime.current()) return;
+    setLabelNameSubmitted(true);
+    if (subjectLabelInputIssue(labelQuery)) return;
     if (
       !labelLifetime.current('library_label.assignment_list', 'library_label.list') ||
       !labelListAdmitted ||
@@ -1302,6 +1316,7 @@ function SubjectLibrarySlotView({
                 onToggle={(event) => {
                   if (hydrated && !labelLifetime.current()) return;
                   const open = event.currentTarget.open;
+                  if (!open) setLabelNameSubmitted(false);
                   if (searchOrigin.current.open !== open)
                     searchOrigin.current = {
                       ...searchOrigin.current,
@@ -1334,31 +1349,25 @@ function SubjectLibrarySlotView({
                     <input type="hidden" name="createKey" value={data.labelCreateKey} />
                     <input type="hidden" name="subjectId" value={subject.id} />
                     <input type="hidden" name="csrf_token" value={data.csrfToken ?? ''} />
-                    <label className="grid gap-1 text-sm font-medium">
-                      {m.library_subject_label_input()}
-                      <input
-                        name="name"
-                        aria-label={m.library_subject_label_name()}
-                        autoComplete="off"
-                        maxLength={200}
-                        required
-                        value={labelQuery}
-                        onChange={(event) => {
-                          if (!labelLifetime.current()) return;
-                          searchOrigin.current = {
-                            ...searchOrigin.current,
-                            query: event.currentTarget.value,
-                            sequence: searchOrigin.current.sequence + 1,
-                          };
-                          setLabelChoices([]);
-                          setLabelNext(null);
-                          setLabelSearchState('idle');
-                          latestLabelQuery.current = event.currentTarget.value;
-                          setLabelQuery(event.currentTarget.value);
-                        }}
-                        className="h-11 w-full min-w-0 rounded-md border bg-background px-3 text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring"
-                      />
-                    </label>
+                    <SubjectLabelInput
+                      value={labelQuery}
+                      issue={labelInputIssue}
+                      onChange={(value) => {
+                        if (!labelLifetime.current()) return;
+                        searchOrigin.current = {
+                          ...searchOrigin.current,
+                          query: value,
+                          sequence: searchOrigin.current.sequence + 1,
+                        };
+                        setLabelNameSubmitted(false);
+                        setLabelChoices([]);
+                        setLabelNext(null);
+                        setLabelSearchState('idle');
+                        setLabelReadReason(undefined);
+                        latestLabelQuery.current = value;
+                        setLabelQuery(value);
+                      }}
+                    />
                     <div className="flex flex-wrap gap-2">
                       <Exposure operation="library_label.create">
                         <button
@@ -1381,6 +1390,7 @@ function SubjectLibrarySlotView({
                           };
                           setLabelPickerOpen(false);
                           setLabelQuery('');
+                          setLabelNameSubmitted(false);
                           latestLabelQuery.current = '';
                           labelPickerTrigger.current?.focus();
                         }}

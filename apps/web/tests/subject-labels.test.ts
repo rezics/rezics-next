@@ -237,9 +237,17 @@ test('catalogue search makes one bounded read with three or five hundred labels'
 test('Subject create-and-assign refuses normalized native failures before any catalogue or command request', async () => {
   for (const name of ['', ' \t\u2003 ', '📚'.repeat(101), 'A\u0000B', 'A\ud800', '\udc00B']) {
     reset();
-    const result = await applySubjectLabelMutation(mutationRequest(), sessionEnv(), {
-      intent: 'create-and-assign', subjectId, name, idempotencyKey: crypto.randomUUID(),
-    }, client() as never);
+    const result = await applySubjectLabelMutation(
+      mutationRequest(),
+      sessionEnv(),
+      {
+        intent: 'create-and-assign',
+        subjectId,
+        name,
+        idempotencyKey: crypto.randomUUID(),
+      },
+      client() as never,
+    );
     expect(result.ok).toBe(false);
     expect(requests).toHaveLength(0);
   }
