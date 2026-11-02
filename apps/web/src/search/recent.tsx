@@ -98,8 +98,7 @@ export function restoreRecent(value: string | null, now = Date.now()): LocalRece
             bounded(
               entry.languages,
               8,
-              (language) =>
-                text(language, 35) && /^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/.test(language),
+              (language) => text(language, 35) && /^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/.test(language),
             ))
         );
       if (entry?.kind !== 'scope' || !entry.scope) return false;

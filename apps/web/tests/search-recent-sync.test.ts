@@ -105,7 +105,12 @@ test('one existing local store serves PhoneShell Recent and History, hydrates na
 test('ordered language selections stay distinct through local sync and resume with the same scoped search; old entries keep locale fallback', async () => {
   const storage = memory(),
     now = Date.now(),
-    scope = { kind: 'Collection' as const, id: collectionId, name: 'Reading', searchAction: `/collections/${collectionId}` };
+    scope = {
+      kind: 'Collection' as const,
+      id: collectionId,
+      name: 'Reading',
+      searchAction: `/collections/${collectionId}`,
+    };
   const first = rememberRecent([], 'same query', scope, now, ['fr', 'en']);
   const second = rememberRecent(first, 'same query', scope, now + 1, ['ja']);
   const legacy = rememberRecent(second, 'old query', undefined, now + 2);
@@ -180,7 +185,10 @@ test('ordered language selections stay distinct through local sync and resume wi
   expect(markup).toContain('/en/search?q=old%20query');
   expect(markup).not.toContain('old%20query&amp;language=');
 
-  const resumed = new URL('/collections/current?collection=reading&language=de&q=stale&cursor=old', 'https://test.invalid');
+  const resumed = new URL(
+    '/collections/current?collection=reading&language=de&q=stale&cursor=old',
+    'https://test.invalid',
+  );
   applyRecentSearch(resumed.searchParams, 'same query', ['fr', 'en']);
   expect(resumed.searchParams.get('collection')).toBe('reading');
   expect(resumed.searchParams.getAll('language')).toEqual(['fr', 'en']);

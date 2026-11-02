@@ -581,8 +581,7 @@ function HeaderSearchController({
     url.searchParams.delete('cursor');
     // Follow the same native GET context as the mounted form. Native routes revalidate remembered scopes.
     if (!scope)
-      for (const [key, value] of fields ?? [])
-        if (!resumed || key !== 'language') url.searchParams.append(key, value);
+      for (const [key, value] of fields ?? []) if (!resumed || key !== 'language') url.searchParams.append(key, value);
     if (resumed) applyRecentSearch(url.searchParams, query, resumed.languages);
     else if (query.trim()) url.searchParams.set('q', query);
     visit(`${url.pathname}${url.search}`);
