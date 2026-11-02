@@ -365,10 +365,23 @@ export function MangaInitialField({
             >
               <p>{m.candidate_confirm_title({ action: m.recipe_remove_field({}, o) }, o)}</p>
               <div className="flex flex-wrap gap-2">
-                <Button ref={cancel} type="button" variant="outline" className="h-auto min-h-11 whitespace-normal" disabled={disabled} onClick={cancelRemoval}>
+                <Button
+                  ref={cancel}
+                  type="button"
+                  variant="outline"
+                  className="h-auto min-h-11 whitespace-normal"
+                  disabled={disabled}
+                  onClick={cancelRemoval}
+                >
                   {m.candidate_cancel({}, o)}
                 </Button>
-                <Button type="button" variant="destructive" className="h-auto min-h-11 whitespace-normal" disabled={disabled} onClick={remove}>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  className="h-auto min-h-11 whitespace-normal"
+                  disabled={disabled}
+                  onClick={remove}
+                >
                   {m.recipe_remove_field({}, o)}
                 </Button>
               </div>
