@@ -251,3 +251,62 @@ test('clipboard denial selects the current reference; superseded and retired wri
   expect(host.textContent).not.toContain(currentRequest.requestId);
   expect(host.textContent).not.toContain(m.realm_claim_copy_failed());
 });
+
+test.each(['submit', 'retry', 'pointer', 'move', 'input', 'realm', 'session', 'recover'])(
+  'receipt keyboard handoff through the caller: %s',
+  async (scenario) => {
+    let reply = deferred<RealmClaimResult>();
+    let recovered = false;
+    const calls: RealmClaimInput[] = [];
+    const adapter: RealmClaimAdapter = {
+      read: async () => eligible,
+      mine: async () => ({
+        kind: 'ready',
+        source: orphan,
+        claimRequest: recovered
+          ? { ...receipt, state: 'approved', approvedAt: '2026-10-31T12:34:56.123456Z', currentEpisode: true }
+          : null,
+      }),
+      request: async (input) => {
+        calls.push(input);
+        return reply.promise;
+      },
+    };
+    await paint(adapter);
+    const activate = (label: string, detail = 0) =>
+      act(async () => {
+        const node = button(label)!;
+        node.focus();
+        node.dispatchEvent(new window.MouseEvent('click', { bubbles: true, detail }));
+      });
+    await activate(m.realm_claim_request(), scenario === 'pointer' ? 1 : 0);
+    if (scenario === 'retry' || scenario === 'recover') {
+      await act(async () => reply.resolve({ kind: 'unavailable' }));
+      expect(host.querySelector('h3')).toBeNull();
+      reply = deferred<RealmClaimResult>();
+      recovered = scenario === 'recover';
+      await activate(recovered ? m.realm_claim_refresh() : m.realm_claim_retry());
+    }
+    await act(async () => {
+      if (scenario === 'move') {
+        const heading = host.querySelector('h2')!;
+        heading.tabIndex = -1;
+        heading.focus();
+        heading.blur();
+      }
+      if (scenario === 'input') host.dispatchEvent(new window.Event('pointerdown', { bubbles: true }));
+      if (scenario === 'session') client.setQueryData(sessionQuery.queryKey, viewer('replacement'));
+    });
+    if (scenario === 'realm') await paint(adapter, '01a1a000-0000-7000-8000-000000000098');
+    if (!recovered) await act(async () => reply.resolve({ kind: 'pending', request: receipt }));
+    const heading = host.querySelector('h3');
+    expect(window.document.activeElement === heading).toBe(scenario === 'submit' || scenario === 'retry');
+    expect(host.querySelector('details')?.open ?? false).toBe(false);
+    if (recovered) {
+      expect(heading?.textContent).toBe(m.realm_claim_status_approved());
+      expect(window.document.activeElement).toBe(button(m.realm_claim_refresh()));
+    }
+    expect(calls).toHaveLength(scenario === 'retry' ? 2 : 1);
+    if (scenario === 'retry') expect(calls[1]).toEqual(calls[0]);
+  },
+);

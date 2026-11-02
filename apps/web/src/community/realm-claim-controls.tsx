@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type MouseEvent } from 'react';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
@@ -130,6 +130,77 @@ function RealmClaimControlsContent({
       ? receipt
       : null;
   const owned = current?.snapshot.ownershipState === 'owned';
+  const receiptHeading = useRef<HTMLHeadingElement>(null);
+  const receiptFocus = useRef<{
+    control: typeof control;
+    lifetime: RealmClaimCallerLifetime;
+    ticket: number;
+    read: RealmClaimRead;
+    orphanedAt: string | null;
+    intent: typeof state.intent;
+    trigger: HTMLButtonElement;
+    cancel: () => void;
+  } | null>(null);
+  function activateClaim(event: MouseEvent<HTMLButtonElement>, action: () => Promise<void>) {
+    receiptFocus.current?.cancel();
+    const trigger = event.currentTarget;
+    const document = trigger.ownerDocument;
+    if (active && orphan && event.detail === 0 && document.activeElement === trigger) {
+      const pending = {
+        control,
+        lifetime,
+        ticket: lifetime.ticket(),
+        read: state.read,
+        orphanedAt: orphan.orphanedAt,
+        intent: state.intent,
+        trigger,
+        cancel,
+      };
+      function cancel() {
+        if (receiptFocus.current === pending) receiptFocus.current = null;
+        document.removeEventListener('focusin', moved, true);
+        document.removeEventListener('pointerdown', cancel, true);
+        document.defaultView?.removeEventListener('blur', cancel);
+      }
+      function moved(event: FocusEvent) {
+        if (event.target !== trigger) cancel();
+      }
+      receiptFocus.current = pending;
+      document.addEventListener('focusin', moved, true);
+      document.addEventListener('pointerdown', cancel, true);
+      document.defaultView?.addEventListener('blur', cancel);
+    }
+    void action();
+    // submit creates the immutable intent synchronously; retry keeps that same intent.
+    if (receiptFocus.current) receiptFocus.current.intent = control.getSnapshot().intent;
+  }
+  useEffect(() => () => receiptFocus.current?.cancel(), [control, lifetime]);
+  useEffect(() => {
+    const pending = receiptFocus.current;
+    if (!pending) return;
+    if (
+      !active ||
+      pending.control !== control ||
+      pending.lifetime !== lifetime ||
+      !lifetime.owns(pending.ticket) ||
+      pending.read !== state.read ||
+      pending.orphanedAt !== orphan?.orphanedAt ||
+      !pending.intent ||
+      pending.intent !== state.intent
+    ) {
+      pending.cancel();
+      return;
+    }
+    if (state.busy) return;
+    pending.cancel();
+    if (!request || state.outcome !== 'pending' || control.getSnapshot() !== state || pending.trigger.isConnected)
+      return;
+    const document = pending.trigger.ownerDocument;
+    // Removal may leave focus on body. Any deliberate movement has already cancelled the handoff.
+    if (document.activeElement === document.body || document.activeElement === pending.trigger) {
+      receiptHeading.current?.focus();
+    }
+  }, [active, control, lifetime, lifetimeRevision, state, orphan, request]);
   const copyState =
     copy?.control === control && copy.request === request && copy.read === state.read && copy.lifetime === lifetime
       ? copy.state
@@ -184,9 +255,9 @@ function RealmClaimControlsContent({
         ) : null}
         {request ? (
           <div role="status" className="space-y-3 rounded-xl bg-muted p-4 text-sm">
-            <p className="font-semibold">
+            <h3 ref={receiptHeading} tabIndex={-1} className="font-semibold">
               {request.state === 'approved' ? m.realm_claim_status_approved() : m.realm_claim_pending()}
-            </p>
+            </h3>
             <p>{request.state === 'approved' ? m.realm_claim_status_approved_help() : m.realm_claim_review_help()}</p>
             <dl className="space-y-2">
               <div>
@@ -327,12 +398,12 @@ function RealmClaimControlsContent({
         ) : null}
         <div className="flex flex-wrap gap-2">
           {current?.admission === 'allowed' && mayRequestRealmClaim(state) ? (
-            <Button disabled={!ready} onClick={() => void control.submit()}>
+            <Button disabled={!ready} onClick={(event) => activateClaim(event, control.submit)}>
               {m.realm_claim_request()}
             </Button>
           ) : null}
           {current?.admission === 'allowed' && mayRetryRealmClaim(state) ? (
-            <Button disabled={!ready} onClick={() => void control.retry()}>
+            <Button disabled={!ready} onClick={(event) => activateClaim(event, control.retry)}>
               {m.realm_claim_retry()}
             </Button>
           ) : null}
