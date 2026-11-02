@@ -3,6 +3,8 @@ import { join, resolve } from 'node:path';
 import type { Brief } from './types.ts';
 
 export type StorybookProject = 'packages/ui' | 'apps/web';
+const LOCAL_STORYBOOK_AVAILABLE = false;
+
 export type StorybookServer = { project: StorybookProject; name: string; port: number; url: string; start: string };
 
 function touches(paths: readonly string[], project: StorybookProject): boolean {
@@ -32,6 +34,9 @@ export function storybookServers(
   brief: Pick<Brief, 'kind' | 'paths'> | undefined,
 ): StorybookServer[] {
   if (!worktree || !brief) return [];
+  // Both catalogues start through apps/web/scripts/storybook-dev.ts, which still refuses interactive use; offering
+  // the servers only makes workers fail. Re-enable once that script serves a local worktree Storybook.
+  if (!LOCAL_STORYBOOK_AVAILABLE) return [];
   const paths = brief.paths ?? [];
   const web = touches(paths, 'apps/web');
   const ui = touches(paths, 'packages/ui');
