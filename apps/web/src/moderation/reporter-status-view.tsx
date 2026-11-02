@@ -417,7 +417,15 @@ function ReportReference({ report, isCurrent = alwaysCurrent }: { report: Report
     const attempt = ++copyGeneration.current;
     const details = source.closest('details');
     if (keyboard && details) {
-      manualFocus.current = { source, details, report, isCurrent, referenceText, lifetime: mounted, generation: attempt };
+      manualFocus.current = {
+        source,
+        details,
+        report,
+        isCurrent,
+        referenceText,
+        lifetime: mounted,
+        generation: attempt,
+      };
       const document = source.ownerDocument;
       const retire = () => cancelManualFocus();
       const focusMoved = (event: FocusEvent) => {

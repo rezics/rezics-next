@@ -145,7 +145,9 @@ test('clipboard denial selects the exact current reference and retirement hides 
   expect(document.activeElement).toBe(host.querySelector('textarea'));
   await act(() => elsewhere.focus());
   const rerenderedAdmission = () => admitted;
-  await act(() => root.render(createElement(ReporterStatusPage, { report: focusReport, isCurrent: rerenderedAdmission })));
+  await act(() =>
+    root.render(createElement(ReporterStatusPage, { report: focusReport, isCurrent: rerenderedAdmission })),
+  );
   expect(document.activeElement).toBe(elsewhere);
 
   const copyButton = await keyboardCopy();
