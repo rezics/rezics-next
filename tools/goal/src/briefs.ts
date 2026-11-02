@@ -111,8 +111,7 @@ function continuation(value: unknown): BriefContinuation | undefined {
   if (value === undefined) return undefined;
   const raw = object(value, 'continuation');
   const taskId = text(raw.taskId, 'continuation.taskId');
-  if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(taskId))
-    throw new Error('continuation.taskId must be a valid task ID');
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(taskId)) throw new Error('continuation.taskId must be a valid task ID');
   if (!Number.isSafeInteger(raw.expectedAttempt) || (raw.expectedAttempt as number) < 1)
     throw new Error('continuation.expectedAttempt must be a positive integer');
   return { taskId, expectedAttempt: raw.expectedAttempt as number };

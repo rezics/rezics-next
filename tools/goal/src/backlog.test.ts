@@ -85,13 +85,25 @@ function existingTask(
     .run(JSON.stringify({ ...created, currentAttempt: 1, state }), id);
   h.store.db
     .query('INSERT INTO worker_attempts(task_id, attempt, body) VALUES (?, 1, ?)')
-    .run(id, JSON.stringify({ state: attemptState, session: `paid-${id}`, process: null, driver: null, auxiliaryProcesses: [] }));
+    .run(
+      id,
+      JSON.stringify({
+        state: attemptState,
+        session: `paid-${id}`,
+        process: null,
+        driver: null,
+        auxiliaryProcesses: [],
+      }),
+    );
   return created;
 }
 
 function continuationBrief(taskId: string, expectedAttempt: number, goal = 'fixture'): string {
   return markdown
-    .replace('goal: fixture', `goal: ${goal}\nmanager: fixture\ncontinuation:\n  taskId: ${taskId}\n  expectedAttempt: ${expectedAttempt}`)
+    .replace(
+      'goal: fixture',
+      `goal: ${goal}\nmanager: fixture\ncontinuation:\n  taskId: ${taskId}\n  expectedAttempt: ${expectedAttempt}`,
+    )
     .replace('Write the requested result and commit it.', `Continue ${taskId} and keep its existing work.`);
 }
 
@@ -232,7 +244,10 @@ test('the controller resumes an exact owner task once and refuses stale, foreign
   h.store.db.exec('CREATE TABLE manager_sessions (id TEXT PRIMARY KEY, state TEXT NOT NULL)');
   h.store.db
     .query('INSERT INTO manager_sessions(id, state) VALUES (?, ?)')
-    .run('fixture', JSON.stringify({ id: 'fixture', kind: 'managed', engine: 'codex', status: 'running', threadId: 'owner-session' }));
+    .run(
+      'fixture',
+      JSON.stringify({ id: 'fixture', kind: 'managed', engine: 'codex', status: 'running', threadId: 'owner-session' }),
+    );
 
   const directory = join(h.settings.stateDirectory, 'backlog', 'fixture');
   const claimed = join(directory, '.dispatching', 'resume.md');
@@ -278,7 +293,11 @@ test('the controller resumes an exact owner task once and refuses stale, foreign
   );
   expect(resumed.branch).toBe(original.branch);
   expect(resumed.worktree).toBe(original.worktree);
-  expect(h.store.db.query('SELECT json_extract(body, \'$.session\') AS session FROM worker_attempts WHERE task_id=? AND attempt=1').get(original.id)).toEqual({ session: 'paid-retained' });
+  expect(
+    h.store.db
+      .query("SELECT json_extract(body, '$.session') AS session FROM worker_attempts WHERE task_id=? AND attempt=1")
+      .get(original.id),
+  ).toEqual({ session: 'paid-retained' });
 
   const refusals = [
     ['stale', 'stopped', 'fixture', 'exited', 2],

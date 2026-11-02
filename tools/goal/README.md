@@ -1391,6 +1391,7 @@ host's socket. The host skips the minute while the previous child is still runni
   claimed continuation returns to the ready backlog after a controller interruption so the pending retry can be
   recognized idempotently. Stale, foreign, cancelled, live or otherwise ineligible tasks move to `failed/` with a
   reason. Briefs without this marker continue to create new tasks.
+
 - **Stopped tasks.** A product task that has been `stopped` for more than 60 minutes since its last event, with no
   pending retry, is cancelled through the `goal cancel` path, at most 20 per Goal per run, longest stopped first. Its
   brief is written to `failed/<task-id>.md` and its blocker and branch to `failed/<task-id>.reason`; each owner

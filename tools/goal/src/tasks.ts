@@ -936,7 +936,8 @@ export class WorkerTasks {
       if (task.currentAttempt !== expectedAttempt)
         throw new StaleAttemptError({ taskId, attempt: expectedAttempt }, task.currentAttempt);
       if (task.brief.goal !== goal) throw new Error(`task ${taskId} belongs to Goal ${task.brief.goal}, not ${goal}`);
-      if (actor.id !== task.brief.manager) throw new Error(`only task manager ${task.brief.manager} may continue ${taskId}`);
+      if (actor.id !== task.brief.manager)
+        throw new Error(`only task manager ${task.brief.manager} may continue ${taskId}`);
       if (task.state === 'cancelled') throw new Error(`task ${taskId} is cancelled; dispatch a new brief instead`);
       if (task.currentAttempt < 1) throw new Error(`task ${taskId} has no existing attempt to continue`);
       if (task.state === 'running' || task.state === 'landing')
@@ -950,7 +951,9 @@ export class WorkerTasks {
       if (attempt.state === 'cancelled') throw new Error(`attempt ${expectedAttempt} for ${taskId} is cancelled`);
       if (
         ['pending', 'running', 'waiting'].includes(attempt.state) ||
-        [attempt.process, attempt.driver, ...(attempt.auxiliaryProcesses ?? [])].some((identity) => identity && sameProcess(identity))
+        [attempt.process, attempt.driver, ...(attempt.auxiliaryProcesses ?? [])].some(
+          (identity) => identity && sameProcess(identity),
+        )
       )
         throw new Error(`attempt ${expectedAttempt} for ${taskId} is still live; wait for it to stop`);
 
