@@ -344,14 +344,33 @@ test('individual settlement follows only the current keyboard submit or retry in
     const { ReportReviewCard } = await import('../src/moderation/reports-view-card');
     const { createReportsBulkAction } = await import('../src/moderation/reports-bulk-action');
     for (const mode of [
-      'current', 'submit', 'focus', 'focus-return', 'pointer', 'pointer-submit', 'activation',
-      'report-return', 'owner-return', 'read-return', 'connection-return', 'retired', 'unmount',
+      'current',
+      'submit',
+      'focus',
+      'focus-return',
+      'pointer',
+      'pointer-submit',
+      'activation',
+      'report-return',
+      'owner-return',
+      'read-return',
+      'connection-return',
+      'retired',
+      'unmount',
     ]) {
       const pending = deferred<ActionResult>();
       const owner = createReportsBulkAction([report]);
       const card = (row = report, intentOwner = owner) => (
-        <ReportReviewCard key={mode} report={row} intentOwner={intentOwner} target={target} revision={revision}
-          takenDown={false} onAction={() => pending.promise} onTakenDown={() => {}} />
+        <ReportReviewCard
+          key={mode}
+          report={row}
+          intentOwner={intentOwner}
+          target={target}
+          revision={revision}
+          takenDown={false}
+          onAction={() => pending.promise}
+          onTakenDown={() => {}}
+        />
       );
       await render(card());
       await click(host, m.moderation_queue_review(), flush);
@@ -365,7 +384,9 @@ test('individual settlement follows only the current keyboard submit or retry in
       const source = button(host, mode === 'submit' ? m.moderation_take_down() : m.moderation_dismiss());
       source.focus();
       await act(async () => {
-        source.dispatchEvent(new window.MouseEvent('click', { bubbles: true, detail: mode === 'pointer-submit' ? 1 : 0 }));
+        source.dispatchEvent(
+          new window.MouseEvent('click', { bubbles: true, detail: mode === 'pointer-submit' ? 1 : 0 }),
+        );
       });
       await flush();
       const summary = host.querySelector('summary')!;
@@ -384,7 +405,10 @@ test('individual settlement follows only the current keyboard submit or retry in
         await render(card());
       }
       if (mode === 'read-return') await act(async () => owner.read(async () => {}));
-      if (mode === 'connection-return') { owner.detach(); owner.attach(); }
+      if (mode === 'connection-return') {
+        owner.detach();
+        owner.attach();
+      }
       if (mode === 'retired') owner.leave();
       if (mode === 'unmount') {
         await render(<button>Elsewhere</button>);

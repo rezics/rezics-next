@@ -167,11 +167,7 @@ export function ReportReviewCard({
     }
   }
 
-  function finish(
-    result: ReportReviewResult | undefined,
-    confirmation: Confirmation,
-    focus: SettlementFocus | null,
-  ) {
+  function finish(result: ReportReviewResult | undefined, confirmation: Confirmation, focus: SettlementFocus | null) {
     if (!result) {
       focus?.cancel();
       return;
