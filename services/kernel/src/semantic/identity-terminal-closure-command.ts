@@ -8,7 +8,6 @@ import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { IdentityEpochStoreError } from './identity-epoch-store.ts';
 import { bindIdentityTerminalMutation, cancelUnregisteredIdentityTerminalCapture, drainIdentityTerminalClosure, releaseIdentityTerminalClaim } from './identity-terminal-closure.ts';
-import { requireIdentityTerminalExecutor } from './identity-terminal-closure-cost.ts';
 import { IdentityTerminalClaimReleaseError } from './identity-terminal-closure-errors.ts';
 
 type Drain = NonNullable<Awaited<ReturnType<typeof drainIdentityTerminalClosure>>>;
@@ -77,15 +76,6 @@ export function runIdentityTerminalCommand<T>(pool: Pool, options: PrincipalOpti
 export async function runIdentityTerminalCommand<T>(pool: Pool, options: LegacyOptions | PrincipalOptions, body: Body<T>): Promise<CommandOutcome<T>> {
   const scope: Scope = { pool, deadline: options.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS), drained: new Map() };
   const attempt = () => {
-    // No body inspection or failed attempt may discover that an authorization
-    // profile is unsupported. In particular, never read a receipt under the
-    // delivered no-effect quote and never execute these bodies then roll back.
-    if ('principal' in options || options.basis || options.receipt || options.authorization || options.clock)
-      requireIdentityTerminalExecutor('runIdentityTerminalCommand', 'principal-authorization-receipt');
-    // Receipt-free platform producers still run source capture, mutation events
-    // and native callbacks. Omitting principal options does not turn their real
-    // source command into the supported no-effect executor profile.
-    requireIdentityTerminalExecutor('runIdentityTerminalCommand source discovery/attempt', 'mutation-events-native-callbacks');
     return scopes.run(scope, () => withSingleCommandAttempt(() => {
       const selected = { ...options, deadline: scope.deadline };
       return 'principal' in selected ? runCommand(pool, selected, body) : runCommand(pool, selected, body);

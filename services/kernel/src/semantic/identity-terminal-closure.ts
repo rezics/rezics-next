@@ -10,7 +10,6 @@ import { bindSemanticProducerRoles } from './erasure-producer.ts';
 import { IDENTITY_EPOCH_PROGRESS } from './events.ts';
 import { IDENTITY_EPOCH_BOOTSTRAP } from './events.ts';
 import bootstrapHome from './identity-epoch-bootstrap-insert-bootstrap-home.sql';
-import { requireIdentityTerminalExecutor } from './identity-terminal-closure-cost.ts';
 import deleteEmptySlot from './identity-terminal-closure-delete-empty-slot.sql';
 
 export type TerminalClosureSource = Readonly<{
@@ -36,8 +35,6 @@ const key = (id: string) => routeOf(id)!;
  * exact native phase fields; an SDK response is never used as custody evidence.
  */
 async function native<T>(pool: Pool, partition: number, body: (tx: CommandTransaction) => Promise<T>, schedule = false) {
-  requireIdentityTerminalExecutor('terminal directory native phase (bootstrap event, erasure role and native-commit callbacks)',
-    'mutation-events-native-callbacks');
   return withSingleCommandAttempt(() => runCommand(pool, { partition }, async (tx) => {
     bindSemanticProducerRoles(tx, []);
     const value = await body(tx);
