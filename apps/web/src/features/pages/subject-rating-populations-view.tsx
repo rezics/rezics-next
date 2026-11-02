@@ -535,7 +535,9 @@ function PopulationVisit({
                 className={actionClass}
                 type="button"
                 variant="outline"
-                disabled={!pageState.stopped && !pageState.unusableContinuation && request.cursor === undefined && !pending}
+                disabled={
+                  !pageState.stopped && !pageState.unusableContinuation && request.cursor === undefined && !pending
+                }
                 onClick={() => move(true)}
               >
                 {m.rating_population_restart({}, options)}
@@ -544,7 +546,9 @@ function PopulationVisit({
                 className={actionClass}
                 type="button"
                 variant="outline"
-                disabled={busy || pending || !!pageState.stopped || pageState.unusableContinuation || page.next === null}
+                disabled={
+                  busy || pending || !!pageState.stopped || pageState.unusableContinuation || page.next === null
+                }
                 onClick={() => move()}
               >
                 {m.rating_population_next({}, options)}
