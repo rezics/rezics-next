@@ -23,8 +23,10 @@ test('only exact stored applied removal evidence enters the typed page, with ori
   };
   const row = { ordinal: '0', subjectId, memberId: null, collectionId: null, state: 'applied', reason: null,
     resultingMemberId: null, target, receipt, evidence, sourceDigest };
-  const page = (patch = {}, source = operation) => pageBulkOutcomes({ query: async () => ({ rows: [{ ...row, ...patch }] }) }
-    as unknown as Pick<PoolClient, 'query'>, { route, accountId, operationId, after: null, limit: 1, state: null, operation: source });
+  const page = (patch = {}, source = operation) => {
+    const client = { query: async () => ({ rows: [{ ...row, ...patch }] }) } as unknown as Pick<PoolClient, 'query'>;
+    return pageBulkOutcomes(client, { route, accountId, operationId, after: null, limit: 1, state: null, operation: source });
+  };
   const first = await page();
   expect(first.outcomes[0]?.deletion).toEqual(evidence.deletion);
   expect(Value.Check(bulkOutcomePageSchema, { outcomes: first.outcomes, next: null })).toBe(true);
