@@ -61,7 +61,7 @@ async function rowsOf(canvasElement: HTMLElement) {
 }
 
 function reader(row: HTMLElement, label: string) {
-  const group = within(row).getByRole('group', { name: label, exact: true });
+  const group = within(row).getByRole('group', { name: label });
   const control = within(group).getByRole('button');
   const text = row.ownerDocument.getElementById(control.getAttribute('aria-controls')!)!;
   return { group, control, text };

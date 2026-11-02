@@ -145,7 +145,7 @@ async function mount(copies: CopyItem[], originating = true) {
 }
 
 function reader(row: Element, label: string) {
-  const group = within(row as HTMLElement).getByRole('group', { name: label, exact: true });
+  const group = within(row as HTMLElement).getByRole('group', { name: label });
   const control = within(group).getByRole('button');
   const text = window.document.getElementById(control.getAttribute('aria-controls')!)!;
   expect(group.contains(text)).toBe(true);
