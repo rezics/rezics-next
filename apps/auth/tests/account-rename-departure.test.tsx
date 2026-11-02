@@ -15,6 +15,7 @@ const globals = {
   HTMLElement: dom.HTMLElement,
   Element: dom.Element,
   Node: dom.Node,
+  MutationObserver: dom.MutationObserver,
   scrollTo: (_options?: unknown) => {},
   requestAnimationFrame: dom.requestAnimationFrame.bind(dom),
   cancelAnimationFrame: dom.cancelAnimationFrame.bind(dom),
