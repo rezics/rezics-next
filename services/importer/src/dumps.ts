@@ -24,10 +24,17 @@ function object(text: string): Record<string, unknown> {
 const positive = (value: unknown): value is number =>
   typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
 
-type WikiScan = { depth: number; quoted: boolean; escaped: boolean; started: boolean };
+type WikiScan = { depth: number; quoted: boolean; escaped: boolean; started: boolean; bytes: number };
 function scanWikiEntity(text: string, scan: WikiScan): boolean | null {
   for (let i = 0; i < text.length; i++) {
     const char = text[i]!;
+    const code = text.charCodeAt(i);
+    if (code <= 0x7f) scan.bytes++;
+    else if (code <= 0x7ff) scan.bytes += 2;
+    else if (code >= 0xd800 && code <= 0xdbff) {
+      scan.bytes += 4;
+      i++;
+    } else scan.bytes += 3;
     if (scan.quoted) {
       if (scan.escaped) scan.escaped = false;
       else if (char === '\\') scan.escaped = true;
@@ -117,7 +124,7 @@ export async function* readDump(
   let wiki: 'start' | 'lines' | 'first' | 'value' | 'valueOrClose' | 'separator' | 'closed' = 'start';
   let wikiParts: string[] | null = null;
   let wikiBytes = 0;
-  const wikiScan: WikiScan = { depth: 0, quoted: false, escaped: false, started: false };
+  const wikiScan: WikiScan = { depth: 0, quoted: false, escaped: false, started: false, bytes: 0 };
   const lineCap = () =>
     source === 'vndb' && table === null ? Math.max(cap + 1, 65536) : cap + (source === 'wikidata' ? 2 : 1);
   try {
@@ -166,8 +173,10 @@ export async function* readDump(
               wikiScan.quoted = false;
               wikiScan.escaped = false;
               wikiScan.started = false;
+              wikiScan.bytes = 0;
             }
             wikiParts.push(text);
+            if (wikiParts.length > 1) wikiScan.bytes++;
             wikiBytes += bytes.length + (wikiParts.length > 1 ? 1 : 0);
             memory.hold(4, wikiParts);
             const comma = scanWikiEntity(text, wikiScan);
@@ -175,8 +184,11 @@ export async function* readDump(
               if (wikiBytes > cap + 1) return invalid();
               continue;
             }
+            if (comma) {
+              const last = wikiParts.length - 1;
+              wikiParts[last] = wikiParts[last]!.slice(0, -1);
+            }
             text = wikiParts.join('\n');
-            if (comma) text = text.slice(0, -1);
             memory.hold(14, text);
             wikiParts = null;
             memory.hold(4, null);
@@ -186,12 +198,8 @@ export async function* readDump(
             assembled = true;
           }
           memory.hold(4, text);
-          const encoded = new TextEncoder().encode(text);
-          memory.hold(11, encoded);
-          if (assembled) counters.copiedBytes += encoded.length;
-          counters.copiedBytes += encoded.length;
-          recordBytes = encoded.length;
-          memory.hold(11, null);
+          if (assembled) counters.copiedBytes += wikiScan.bytes;
+          recordBytes = wikiScan.bytes;
         }
         if (source === 'vndb') {
           if (table === null) {
