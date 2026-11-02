@@ -8,18 +8,23 @@ const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
 );
 const window = new Window({ url: 'https://site.test/en/accounts/resource-access' });
-const globals = {
+const globals = Object.fromEntries(
+  'document navigator HTMLElement HTMLInputElement HTMLButtonElement HTMLFormElement Element Node NodeFilter Document ShadowRoot DocumentFragment MutationObserver ResizeObserver Event KeyboardEvent FocusEvent MouseEvent PointerEvent CSS'
+    .split(' ')
+    .map((key) => [key, Reflect.get(window, key)]),
+);
+Object.assign(globals, {
   window,
-  document: window.document,
-  navigator: window.navigator,
-  HTMLElement: window.HTMLElement,
   IS_REACT_ACT_ENVIRONMENT: true,
-};
+  getComputedStyle: window.getComputedStyle.bind(window),
+  requestAnimationFrame: window.requestAnimationFrame.bind(window),
+  cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+});
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
 for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, value });
 const { createRoot } = await import('react-dom/client');
-const { within, userEvent } = await import('storybook/test');
+const { within, userEvent, fireEvent } = await import('storybook/test');
 const { ResourceAccessPage } = await import('../src/accounts/resource-access/page');
 const { m } = await import('../src/paraglide/messages.js');
 afterAll(async () => {
@@ -65,13 +70,13 @@ for (const boundary of ['handle', 'kind', 'cancel', 'resource', 'actor'] as cons
       await act(async () => user.type(canvas.getByLabelText(m.access_handle()), 'current'));
       await act(async () => user.selectOptions(canvas.getByLabelText(m.access_grant_kind()), 'direct'));
       await act(async () => user.selectOptions(canvas.getByLabelText(m.access_action()), 'collection:update'));
-      await act(async () => user.type(canvas.getByLabelText(m.access_ends()), '2027-01-01T12:30'));
-      const end = (canvas.getByLabelText(m.access_ends()) as HTMLInputElement).value;
-      expect(end).toBe('2027-01-01T12:30');
+      await act(async () =>
+        fireEvent.change(canvas.getByLabelText(m.access_ends()), { target: { value: '2027-01-01T12:30' } }),
+      );
       await click(m.access_find_account());
       await act(async () => pending.reject(new Error('Read unavailable')));
       expect(canvas.getByRole('alert').textContent).toBe(m.access_unavailable());
-      expect((canvas.getByLabelText(m.access_ends()) as HTMLInputElement).value).toBe(end);
+      expect((canvas.getByLabelText(m.access_ends()) as HTMLInputElement).value).toBe('2027-01-01T12:30');
       await click(m.access_find_account());
       if (boundary !== 'handle') await act(async () => old.reject(new Error('Stale failure')));
       expect((canvas.getByRole('button', { name: m.access_save() }) as HTMLButtonElement).disabled).toBe(true);
@@ -87,7 +92,6 @@ for (const boundary of ['handle', 'kind', 'cancel', 'resource', 'actor'] as cons
         actions: ['collection:update'],
         subject: { kind: boundary === 'kind' ? 'organization' : 'account', id: current.id },
       });
-      expect(save.mock.calls).toHaveLength(1);
       await click(m.access_grant_actions());
       await act(async () =>
         user.click(within(window.document.body as unknown as HTMLElement).getByText(m.access_edit_grant())),

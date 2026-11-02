@@ -277,7 +277,9 @@ function GrantForm({
                     {m.access_find_account()}
                   </Button>
                 </div>
-                <FieldDescription>{identity ? identityName(identity) : m.access_confirm_identity()}</FieldDescription>
+                <FieldDescription aria-live="polite">
+                  {identity ? identityName(identity) : m.access_confirm_identity()}
+                </FieldDescription>
               </Field>
               {recipient === 'organization' ? (
                 <Field>
@@ -367,6 +369,11 @@ function GrantForm({
         </Field>
       </div>
       <p className="text-sm text-muted-foreground">{m.access_interval_help()}</p>
+      {finding ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          {m.access_loading()}
+        </p>
+      ) : null}
       {error ? (
         <p role="alert" className="text-sm text-destructive">
           {error}
