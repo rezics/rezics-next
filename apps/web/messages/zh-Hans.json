@@ -4482,5 +4482,10 @@
   "authored_discard": "丢弃草稿",
   "authored_discard_warning": "丢弃此字段尚未提交的替换内容？正文、语言、许可、引用和原创声明都将清空。其他字段的草稿和公开正文将保留。",
   "authored_keep_draft": "继续编辑",
-  "authored_discard_confirm": "丢弃并重新撰写"
+  "authored_discard_confirm": "丢弃并重新撰写",
+  "search_input_recovery_title": "此搜索链接包含无效输入。",
+  "search_input_recovery_description": "{parameter} 输入无效。请在下方更正并应用，或删除此输入。其他选择会保留。",
+  "search_input_recovery_input_label": "{parameter} 输入",
+  "search_input_recovery_apply": "应用更正",
+  "search_input_recovery_remove": "删除此输入"
 }

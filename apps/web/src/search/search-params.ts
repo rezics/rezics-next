@@ -43,6 +43,7 @@ export const searchParams = v.objectWithRest(
 
 export type SearchParams = v.InferOutput<typeof searchParams>;
 export type SearchFacetValues = Record<string, string[]>;
+export type InvalidSearchInput = { key: string; value: string };
 
 export type SearchLoaderDeps = {
   query: string;
@@ -55,7 +56,58 @@ export type SearchLoaderDeps = {
   kinds?: string[] | undefined;
   languages?: string[] | undefined;
   filter?: string | undefined;
+  invalidInput?: InvalidSearchInput | undefined;
 };
+
+function printableSearchValue(value: unknown): string {
+  if (typeof value === 'string') return value;
+  try {
+    return JSON.stringify(value) ?? String(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function filterInputsFromSearch(search: Record<string, unknown>): {
+  ranges: Record<string, FilterRange>;
+  condition?: FilterDocument;
+  invalidInput?: InvalidSearchInput;
+} {
+  const ranges: Record<string, FilterRange> = Object.create(null);
+  let condition: FilterDocument | undefined;
+  let invalidInput: InvalidSearchInput | undefined;
+  const invalid = (key: string, value: unknown) => {
+    invalidInput ??= { key, value: printableSearchValue(value) };
+  };
+
+  if (search.condition !== undefined) {
+    if (typeof search.condition !== 'string') invalid('condition', search.condition);
+    else {
+      try {
+        condition = parseFilter(JSON.parse(search.condition));
+      } catch {
+        invalid('condition', search.condition);
+      }
+    }
+  }
+
+  for (const [key, value] of Object.entries(search)) {
+    if (!key.startsWith('r.')) continue;
+    if (typeof value !== 'string') {
+      invalid(key, value);
+      continue;
+    }
+    try {
+      const parsed = parseFilter({ statement: { property: key.slice(2), range: JSON.parse(value) } });
+      if ('statement' in parsed && 'range' in parsed.statement) ranges[key.slice(2)] = parsed.statement.range;
+      else invalid(key, value);
+    } catch {
+      invalid(key, value);
+    }
+  }
+
+  return { ranges, ...(condition ? { condition } : {}), ...(invalidInput ? { invalidInput } : {}) };
+}
 
 export function facetValuesFromSearch(search: Record<string, unknown>): SearchFacetValues {
   const facets: SearchFacetValues = Object.create(null);
@@ -73,23 +125,19 @@ export function facetValuesFromSearch(search: Record<string, unknown>): SearchFa
 }
 
 export function rangeValuesFromSearch(search: Record<string, unknown>): Record<string, FilterRange> {
-  const ranges: Record<string, FilterRange> = Object.create(null);
-  for (const [key, value] of Object.entries(search)) {
-    if (!key.startsWith('r.') || typeof value !== 'string') continue;
-    const parsed = parseFilter({ statement: { property: key.slice(2), range: JSON.parse(value) } });
-    if ('statement' in parsed && 'range' in parsed.statement) ranges[key.slice(2)] = parsed.statement.range;
-  }
-  return ranges;
+  return filterInputsFromSearch(search).ranges;
 }
 
 /** The only URL params that affect the search loader's read. */
 export function searchLoaderDeps(search: Record<string, unknown>): SearchLoaderDeps {
+  const filterInputs = filterInputsFromSearch(search);
   return {
     query: typeof search.q === 'string' ? search.q : '',
     type: typeof search.type === 'string' ? search.type : undefined,
     facets: facetValuesFromSearch(search),
-    ranges: rangeValuesFromSearch(search),
-    ...(typeof search.condition === 'string' ? { condition: parseFilter(JSON.parse(search.condition)) } : {}),
+    ranges: filterInputs.ranges,
+    ...(filterInputs.condition ? { condition: filterInputs.condition } : {}),
+    ...(filterInputs.invalidInput ? { invalidInput: filterInputs.invalidInput } : {}),
     cursor: typeof search.cursor === 'string' ? search.cursor : undefined,
     sort: search.sort === 'rating' ? 'rating' : undefined,
     ...(typeof search.filter === 'string' ? { filter: search.filter } : {}),
@@ -116,24 +164,39 @@ export function searchLoaderDeps(search: Record<string, unknown>): SearchLoaderD
   };
 }
 
-/** Carry the route's supported conditions through the header's ordinary GET form; a new query drops its cursor. */
+/** Carry URL inputs through the header's ordinary GET form without parsing away an invalid predicate. */
 export function searchFormFields(search: Record<string, unknown>): [string, string][] {
-  const { type, facets, ranges, condition, sort, kinds, languages, filter } = searchLoaderDeps(search);
-  return [
-    ...(type ? [['type', type] as [string, string]] : []),
-    ...(sort ? [['sort', sort] as [string, string]] : []),
-    ...(filter ? [['filter', filter] as [string, string]] : []),
-    ...(condition ? [['condition', JSON.stringify(condition)] as [string, string]] : []),
-    ...Object.entries(ranges ?? {}).map(([property, range]): [string, string] => [
-      `r.${property}`,
-      JSON.stringify(range),
-    ]),
-    ...(kinds ?? []).map((kind): [string, string] => ['kinds', kind]),
-    ...(languages ?? []).map((language): [string, string] => ['language', language]),
-    ...Object.entries(facets).flatMap(([property, values]) =>
-      values.map((value): [string, string] => [`f.${property}`, value]),
-    ),
-  ];
+  const fields: [string, string][] = [];
+  const append = (key: string, value: unknown) => {
+    if (typeof value === 'string') fields.push([key, value]);
+    else if (Array.isArray(value) && value.every((item) => typeof item === 'string')) {
+      for (const item of value) fields.push([key, item]);
+    }
+  };
+
+  if (typeof search.type === 'string' && search.type) append('type', search.type);
+  if (search.sort === 'rating') append('sort', 'rating');
+  if (typeof search.filter === 'string' && search.filter) append('filter', search.filter);
+  append('condition', search.condition);
+  for (const [key, value] of Object.entries(search)) {
+    if (key.startsWith('r.')) append(key, value);
+  }
+  append('kinds', search.kinds);
+  append('language', search.language);
+  for (const [key, value] of Object.entries(search)) {
+    if (key.startsWith('f.') && key.length > 2) append(key, value);
+  }
+  return fields;
+}
+
+export function correctSearchInput<Search extends object>(search: Search, key: string, value: string): Search {
+  return Object.assign({}, search, { [key]: value, cursor: undefined }) as Search;
+}
+
+export function removeSearchInput<Search extends object>(search: Search, key: string): Search {
+  const next = { ...search, cursor: undefined } as Record<string, unknown>;
+  delete next[key];
+  return next as Search;
 }
 
 /** Native opaque tokens are only encoded for transport, never decoded, trimmed or regenerated. */

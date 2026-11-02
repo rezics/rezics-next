@@ -4482,5 +4482,10 @@
   "authored_discard": "Entwurf verwerfen",
   "authored_discard_warning": "Den ungesendeten Ersatz für dieses Feld verwerfen? Text, Sprache, Lizenz, Quellenangabe und Urheberschaftserklärung werden gelöscht. Andere Feldentwürfe und der öffentliche Text bleiben erhalten.",
   "authored_keep_draft": "Weiter bearbeiten",
-  "authored_discard_confirm": "Verwerfen und neu beginnen"
+  "authored_discard_confirm": "Verwerfen und neu beginnen",
+  "search_input_recovery_title": "Dieser Suchlink enthält eine ungültige Eingabe.",
+  "search_input_recovery_description": "Die Eingabe {parameter} ist ungültig. Korrigieren Sie sie unten und wenden Sie die Änderung an, oder entfernen Sie diese Eingabe. Andere Auswahlen bleiben erhalten.",
+  "search_input_recovery_input_label": "Eingabe für {parameter}",
+  "search_input_recovery_apply": "Korrektur anwenden",
+  "search_input_recovery_remove": "Diese Eingabe entfernen"
 }

@@ -4482,5 +4482,10 @@
   "authored_discard": "초안 버리기",
   "authored_discard_warning": "이 필드의 아직 제출하지 않은 대체안을 버릴까요? 본문, 언어, 라이선스, 인용 출처와 창작물 선언이 지워집니다. 다른 필드의 초안과 공개된 본문은 유지됩니다.",
   "authored_keep_draft": "계속 편집",
-  "authored_discard_confirm": "버리고 다시 작성"
+  "authored_discard_confirm": "버리고 다시 작성",
+  "search_input_recovery_title": "이 검색 링크에 잘못된 입력이 있습니다.",
+  "search_input_recovery_description": "{parameter} 입력이 올바르지 않습니다. 아래에서 수정한 뒤 적용하거나 이 입력을 삭제하세요. 다른 선택 항목은 유지됩니다.",
+  "search_input_recovery_input_label": "{parameter} 입력",
+  "search_input_recovery_apply": "수정 적용",
+  "search_input_recovery_remove": "이 입력 삭제"
 }

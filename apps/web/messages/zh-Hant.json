@@ -4482,5 +4482,10 @@
   "authored_discard": "捨棄草稿",
   "authored_discard_warning": "捨棄此欄位尚未提交的替換內容？正文、語言、授權、引用和原創聲明都將清空。其他欄位的草稿和公開正文將保留。",
   "authored_keep_draft": "繼續編輯",
-  "authored_discard_confirm": "捨棄並重新撰寫"
+  "authored_discard_confirm": "捨棄並重新撰寫",
+  "search_input_recovery_title": "這個搜尋連結包含無效輸入。",
+  "search_input_recovery_description": "{parameter} 輸入無效。請在下方修正並套用，或移除此輸入。其他選取項目會保留。",
+  "search_input_recovery_input_label": "{parameter} 輸入",
+  "search_input_recovery_apply": "套用修正",
+  "search_input_recovery_remove": "移除此輸入"
 }

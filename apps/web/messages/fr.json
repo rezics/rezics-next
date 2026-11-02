@@ -4482,5 +4482,10 @@
   "authored_discard": "Abandonner le brouillon",
   "authored_discard_warning": "Abandonner le remplacement non envoyé pour ce champ ? Le texte, la langue, la licence, la citation et la déclaration de création originale seront effacés. Les brouillons des autres champs et le texte public seront conservés.",
   "authored_keep_draft": "Continuer à modifier",
-  "authored_discard_confirm": "Abandonner et recommencer"
+  "authored_discard_confirm": "Abandonner et recommencer",
+  "search_input_recovery_title": "Ce lien de recherche contient une entrée non valide.",
+  "search_input_recovery_description": "L’entrée {parameter} n’est pas valide. Corrigez-la ci-dessous et appliquez la modification, ou supprimez cette entrée. Les autres sélections seront conservées.",
+  "search_input_recovery_input_label": "Entrée pour {parameter}",
+  "search_input_recovery_apply": "Appliquer la correction",
+  "search_input_recovery_remove": "Supprimer cette entrée"
 }

@@ -357,3 +357,5 @@ Required missing producers and their native failing/unsupported cases are:
 
 These cases are future native delivery requirements, not tests supplied or passed by this documentation change.
 No invented callable ABI closes them. Full Scope, original Goal acceptance and main/root gates remain unchanged.
+
+When a reader corrects or removes malformed shared-search filter input, clear `cursor` because either change alters the hit set.

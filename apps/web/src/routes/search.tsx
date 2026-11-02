@@ -7,7 +7,13 @@ import { SearchPage } from '../search/search.tsx';
 import { searchQueryOptions } from '../search/search-queries';
 import { useSearchQuery } from '../search/use-search-query';
 import { isRealmDiscoverySearch, realmDiscoveryQueryOptions } from '../search/realm-discovery-loader';
-import { searchLoaderDeps, searchParams } from '../search/search-params';
+import {
+  correctSearchInput,
+  removeSearchInput,
+  searchLoaderDeps,
+  searchParams,
+} from '../search/search-params';
+import { SearchInputRecovery } from '../search/search-input-recovery';
 import { PageHeading } from '../shell/page-heading';
 import { pageHead } from '../shell/head';
 import { validatePublicOrigin } from '../shell/origin';
@@ -26,6 +32,7 @@ export const Route = createFileRoute('/search')({
   loaderDeps: ({ search }) => searchLoaderDeps(search),
   loader: ({ deps, context }) => {
     const params = deps;
+    if (params.invalidInput) return { query: params.query, invalidInput: params.invalidInput };
     const locale = getLocale();
     return Promise.all([
       context.queryClient.fetchQuery(searchQueryOptions(locale, params)),
@@ -61,6 +68,25 @@ function SearchFailed() {
 function SearchRoute() {
   const search = Route.useSearch();
   const deps = searchLoaderDeps(search);
+  const navigate = Route.useNavigate();
+  if (deps.invalidInput) {
+    const invalidInput = deps.invalidInput;
+    return (
+      <SearchInputRecovery
+        key={`${invalidInput.key}:${invalidInput.value}`}
+        parameter={invalidInput.key}
+        value={invalidInput.value}
+        onApply={(value) => {
+          void navigate({
+            search: (previous) => correctSearchInput(previous, invalidInput.key, value),
+          });
+        }}
+        onRemove={() => {
+          void navigate({ search: (previous) => removeSearchInput(previous, invalidInput.key) });
+        }}
+      />
+    );
+  }
   return <SearchResults deps={deps} />;
 }
 

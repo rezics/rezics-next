@@ -4517,5 +4517,10 @@
   "payment_attestation_conflict": "This request conflicts with the recorded statement or an existing request. Refresh the evidence and review it. No replacement request has been created.",
   "payment_attestation_retry": "Retry original request",
   "payment_attestation_submit": "Record payment reference",
-  "payment_attestation_refresh_failed": "The command result is retained, but current statement evidence could not be refreshed. Retry the refresh."
+  "payment_attestation_refresh_failed": "The command result is retained, but current statement evidence could not be refreshed. Retry the refresh.",
+  "search_input_recovery_title": "This search link contains an invalid input.",
+  "search_input_recovery_description": "The {parameter} input is invalid. Correct it below and apply the change, or remove this input. Other selections will be kept.",
+  "search_input_recovery_input_label": "Input for {parameter}",
+  "search_input_recovery_apply": "Apply correction",
+  "search_input_recovery_remove": "Remove this input"
 }

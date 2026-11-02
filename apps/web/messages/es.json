@@ -4482,5 +4482,10 @@
   "authored_discard": "Descartar borrador",
   "authored_discard_warning": "¿Descartar el reemplazo sin enviar de este campo? Se borrarán el texto, el idioma, la licencia, la cita y la declaración de autoría original. Se conservarán los borradores de otros campos y el texto público.",
   "authored_keep_draft": "Seguir editando",
-  "authored_discard_confirm": "Descartar y empezar de nuevo"
+  "authored_discard_confirm": "Descartar y empezar de nuevo",
+  "search_input_recovery_title": "Este enlace de búsqueda contiene una entrada no válida.",
+  "search_input_recovery_description": "La entrada {parameter} no es válida. Corrígela abajo y aplica el cambio, o elimina esta entrada. Se conservarán las demás selecciones.",
+  "search_input_recovery_input_label": "Entrada para {parameter}",
+  "search_input_recovery_apply": "Aplicar corrección",
+  "search_input_recovery_remove": "Eliminar esta entrada"
 }
