@@ -24,7 +24,8 @@ const MANIFEST_FILE = 'manifest.json';
 const PACK_FILE = 'snapshot.pack';
 const FORMAT = 'rezics-native-git-snapshot-v1';
 const OBJECT_FORMATS = ['sha1', 'sha256'] as const;
-const GIT_OPERATION_TIMEOUT_MS = 120_000;
+// Dozens of workers pack concurrently on a loaded host; two minutes was too short at load 70.
+const GIT_OPERATION_TIMEOUT_MS = 600_000;
 
 type ObjectFormat = (typeof OBJECT_FORMATS)[number];
 type Manifest = {
@@ -290,19 +291,20 @@ export async function stageCheckGit(workspace: string, artifactDirectory: string
     const descriptor = openSync(packPath, 'wx', 0o600);
     let packed: ReturnType<typeof Bun.spawnSync>;
     try {
-      packed = Bun.spawnSync(['git', 'pack-objects', '--stdout', '--revs'], {
+      packed = Bun.spawnSync(['git', 'pack-objects', '--stdout', '--revs', '--threads=2'], {
         cwd: build,
         env: environment(isolatedGit),
         stdin: new Blob(['refs/heads/check-snapshot\nrefs/rezics-check/staged-index\n']),
         stdout: descriptor,
-        stderr: 'ignore',
+        stderr: 'pipe',
         timeout: GIT_OPERATION_TIMEOUT_MS,
       });
     } finally {
       closeSync(descriptor);
     }
     if (packed.exitCode !== 0 || !isRegularFile(packPath)) {
-      throw new Error('check-git: native Git snapshot packing failed');
+      const reason = packed.exitedDueToTimeout ? 'timed out' : (packed.stderr?.toString() ?? '').trim().slice(-300);
+      throw new Error(`check-git: native Git snapshot packing failed${reason ? `: ${reason}` : ''}`);
     }
 
     const manifestWithoutPack: Omit<Manifest, 'pack'> = { format: FORMAT, objectFormat, head, indexTree };
