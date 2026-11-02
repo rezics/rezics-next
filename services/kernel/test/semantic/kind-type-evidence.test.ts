@@ -148,3 +148,128 @@ test('a private native Kind audience cannot be borrowed by anonymous or unrelate
     expect(body).not.toHaveProperty('typeCounts');
   }
 }, 120000);
+
+
+// Additional regressions are authored for integrated native verification; UNRUN.
+import {
+  captureNativeKindTypeDependency,
+  compareNativeKindTypeDependencyBody,
+  retainNativeKindTypeDependencyBody,
+  readNativeKindTypeDependencyBody,
+  selectNativeKindTypeDependency,
+  kindTypeEvidenceLocalFootprint,
+  type NativeKindTypeRetainedBody,
+} from '../../src/semantic/kind-type-evidence.ts';
+import type { NativeKindTypeAnchor } from '../../src/semantic/scope-leaf-selection.ts';
+import { NativeCollectionWork } from '../../src/library/collection-source-work.ts';
+import { routeOf } from '../../src/route/route.ts';
+
+function structuralAnchor(subjectId: string): NativeKindTypeAnchor {
+  return {
+    subject_id: subjectId, present: true, writer_enrolled: true, writer_version: '1',
+    visibility: 'visible', security_revision: '1', current_release: `sha256:${'a'.repeat(64)}`,
+    type: 'schema:Person', type_oversized: false, revision: 1,
+    revision_transaction: crypto.randomUUID(), revision_epoch: 1, revision_position: '1',
+    redirect: null, redirect_sequence: null, redirect_transaction: null, redirect_epoch: null,
+    redirect_position: null, account_id: null,
+  };
+}
+
+test('native Type dependency selection retains negative, one-hop and duplicate original semantics', () => {
+  const id = newId(0xc100);
+  const other = newId(0xc100);
+  const reference = { canonicalSubjectId: id, key: { driver: 'member' as const, storedSubjectId: id, factId: newId(0xc100) } };
+  const original = { ...structuralAnchor(id), type: null };
+  const terminal = structuralAnchor(id);
+  const select = (patch: Partial<NativeKindTypeAnchor>, target: NativeKindTypeAnchor | null = terminal) =>
+    selectNativeKindTypeDependency({ reference, original: { ...original, ...patch }, terminal: target });
+  expect(select({}).state).toBe('candidate');
+  expect(select({ present: false, revision: null, current_release: null }).state).toBe('excluded');
+  expect(select({ visibility: 'hidden' }).state).toBe('excluded');
+  expect(select({ writer_enrolled: false }).state).toBe('unavailable');
+  expect(select({ revision_transaction: null }).state).toBe('unavailable');
+  expect(select({ redirect: other }).state).toBe('unavailable');
+  expect(select({}, null).state).toBe('unavailable');
+  expect(select({}, { ...terminal, redirect: other }).state).toBe('unavailable');
+  expect(select({}, { ...terminal, present: false }).state).toBe('excluded');
+  expect(select({}, { ...terminal, visibility: 'hidden', type: null }).state).toBe('excluded');
+  expect(select({}, { ...terminal, type_oversized: true, type: null }).state).toBe('unavailable');
+  expect(select({}, { ...terminal, type: 'a'.repeat(4096) }).state).toBe('unavailable');
+  const duplicate = { ...reference, key: { ...reference.key, factId: newId(0xc100) } };
+  const first = selectNativeKindTypeDependency({ reference, original, terminal });
+  const second = selectNativeKindTypeDependency({ reference: duplicate, original, terminal });
+  expect(first.state).toBe('candidate');
+  expect(second.state).toBe('candidate');
+  expect(second.dependencies.reference.key.factId).not.toBe(first.dependencies.reference.key.factId);
+  // Both raw dependencies survive. Native Library terminal uniqueness, rather
+  // than this structural projection, determines the single canonical vote.
+  expect(second.dependencies.reference.canonicalSubjectId).toBe(first.dependencies.reference.canonicalSubjectId);
+});
+
+test('local Type body quote includes every repeated anchor lock and retained record point', () => {
+  const quote = kindTypeEvidenceLocalFootprint({ anchorInputBytes: 1000, lockInputBytes: 200, writeValues: [], readValues: [] });
+  expect(quote).toMatchObject({ candidateKeys: 11, nativeRows: 56, nativePoints: 56,
+    identityMetadataRows: 0, witnessKeys: 0, statements: 11, emptySeeks: 11 });
+  expect(quote.bytes).toBeGreaterThan(2 * 6 * (16384 + 16384 + 4096));
+});
+
+test('native dependency bodies cannot bypass original admission with a structural home or a second ledger', async () => {
+  let io = 0;
+  const pool = { connect() { io++; throw new Error('Unadmitted checkout'); } } as unknown as Pool;
+  const tx = { query() { io++; throw new Error('Unadmitted native body'); } } as unknown as OperationalTransaction;
+  const locator = { route: 0xc100, ownerAccountId: newId(0xc100), collectionId: newId(0xc100), preparationId: crypto.randomUUID() };
+  const context = { kind: 'collection-kind-preparation' as const, tx, locator };
+  const deadline = Date.now() + 10000;
+  const work = new NativeCollectionWork(allowance(), deadline);
+  const id = newId(0xc100);
+  await expect(captureNativeKindTypeDependency(pool, context, {
+    reference: { canonicalSubjectId: id, key: { driver: 'member', storedSubjectId: id, factId: newId(0xc100) } },
+    originalDisclosure: 'readable', terminalDisclosure: 'readable', releaseDigest: `sha256:${'a'.repeat(64)}`,
+  }, work, deadline)).rejects.toThrow();
+  const ref = { locator, evidenceId: crypto.randomUUID() };
+  // No projected source binding, including one copied from a retained record,
+  // is consulted before rejecting the unadmitted native transaction.
+  const forged = {} as NativeKindTypeRetainedBody;
+  await expect(retainNativeKindTypeDependencyBody(pool, context, ref, forged, work, deadline)).rejects.toThrow();
+  await expect(compareNativeKindTypeDependencyBody(pool, context, ref, forged, work, deadline)).rejects.toThrow();
+  await expect(readNativeKindTypeDependencyBody(pool, context, ref, forged.binding, work, deadline)).rejects.toThrow();
+  expect(Object.values(work.receipt().used).every((value) => value === 0)).toBe(true);
+  expect(io).toBe(0);
+});
+
+test('Native Kind-Type original and terminal retained dependency read and final same-home verification', async () => {
+  await f.refresh();
+  const collection = await f.collection({ visibility: 'public' });
+  const route = routeOf(collection.id)!;
+  const identities = await identityFixture(f.database.pool, f.database.admin);
+  const original = await identities.create(route);
+  const terminal = await identities.create(route);
+  await f.add(collection.id, original);
+  await f.add(collection.id, original);
+  await identities.merge(original, terminal);
+  await identities.finishMove(original, terminal);
+  expect(await f.complete(collection.id, null)).toMatchObject({ presentationKind: 'schema:Person', presentationKindSource: 'members' });
+  const retained = await f.database.admin.query<{
+    body: { dependencies: { original: NativeKindTypeAnchor; terminal: NativeKindTypeAnchor } };
+    producer_transaction: string;
+  }>(`SELECT body, producer_transaction FROM semantic.kind_type_evidence_body
+      WHERE route=$1 AND collection_id=$2`, [route, collection.id]);
+  expect(retained.rows.length).toBeGreaterThan(0);
+  const body = retained.rows.find((row) => row.body.dependencies.original.subject_id === original);
+  expect(body).toBeDefined();
+  expect(body!.body.dependencies.original.type).toBeNull();
+  expect(body!.body.dependencies.terminal.subject_id).toBe(terminal);
+  expect(body!.body.dependencies.terminal.type).toBe('schema:Person');
+  expect(body!.producer_transaction).toMatch(/^[0-9]+$/);
+  // Same-home subject writers share the exact anchor fence held by final
+  // verification. Neither an old retained body nor its readable terminal may
+  // rescue the now-hidden original on the next native adoption.
+  await identities.hide(original);
+  expect(await f.complete(collection.id, null)).toMatchObject({ presentationKind: null, presentationKindSource: 'empty' });
+  await identities.hide(original, 'restore');
+  expect(await f.complete(collection.id, null)).toMatchObject({ presentationKind: 'schema:Person', presentationKindSource: 'members' });
+  await identities.hide(terminal);
+  expect(await f.complete(collection.id, null)).toMatchObject({ presentationKind: null, presentationKindSource: 'empty' });
+  await identities.hide(terminal, 'restore');
+  expect(await f.complete(collection.id, null)).toMatchObject({ presentationKind: 'schema:Person', presentationKindSource: 'members' });
+}, 120000);

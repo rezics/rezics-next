@@ -971,61 +971,117 @@ successful mapping or participant receipt.
 
 ## Native Kind Type dependencies
 
-`kind-type-evidence.ts` and `scope-leaf-evidence.ts` export
-`createNativeKindTypeEvidence({pool,access})`. Its closed `read({locator,audience?,allowance,deadline})`
-input uses the original Library `CollectionKindPreparationLocator`; `audience`, when supplied,
-is exactly the original Accounts `PrepareKindAudienceInput` origin/input reference pair.
-Accounts resolves that pair from the committed Library interval before detached preparation.
-The Source consults only the original `Access.kindAudience.prepare.bound` declaration; a
-reference or declared bound does not admit work. The input accepts no Actor,
-time, subjects or permission claims. `verify({work,evidence,allowance,deadline})` uses the
-original distinct `CollectionKindPreparationWorkContext` and checks the genuine live Core
-transaction/time, exact Source home, owner and locator. References locate native records;
-possession supplies neither admission nor audience authority.
+`createNativeKindTypeEvidence({pool,access})` retains its original public signatures:
+`read({locator,audience?,allowance,deadline})` and
+`verify({work,evidence,allowance,deadline})`. Locators are lookup keys only. No Actor,
+JWT, restored principal, arbitrary subject vector or permission assertion enters
+these methods. The original public prepared/current result types, one original/group
+frontier and exact `KindTypeEvidenceReference` are unchanged.
 
-The public methods currently return unavailable before IO. Library's original admission/getter
-exports are unavailable and have no bounded attempt/origin/receipt declaration. Accounts has
-delivered `access/kind-audience.ts`, reexported through request/access and composed by the original
-evaluator. Its capture, resolveInput, prepare and verifySource operations have bound/run/actual
-declarations, but the native factory declares no admitted bound and refuses before IO. All five
-formula, negative, temporal, Type/disclosure and writer closures remain required. Core has no
-original per-home Kind attempt admission outside a held Source transaction. Actual owner bodies,
-finite work declarations and Source-local currentness remain indispensable.
-The module names those missing bindings explicitly. No prepared/current evidence, count, empty
-proof, private repair completion or supported native positive is claimed by these declarations.
+The independent native bodies in `kind-type-evidence.ts` are implemented:
 
-The native body in `scope-leaf-selection.ts` supplies bounded exact header projection and local
-comparison, including absent originals and redirects. It reads native Type, visibility/security,
-current release, latest revision and redirect with their actual write-basis provenance, and the
-account-agent association. Original observations omit Type; hidden terminal Type is not transferred.
-Native Type has no imported-field tuple. The pure dependency selector retains each actual raw
-`CanonicalDerivedRow`, including excluded and duplicate supports. It yields a structural candidate,
-never an admitted vote. A denied original cannot be rescued by its terminal; only original Accounts
-decisions for both anchors can admit support to Library's existing terminal uniqueness/count CAS.
-Each raw projection requires the genuine live Core operational transaction/time on its exact
-native home before and after IO. Structural clients, foreign-home and ended transactions refuse;
-this necessary home check does not replace original Kind attempt admission or audience authority.
+- `captureNativeKindTypeDependency(pool,context,input,work,deadline)` observes the
+  original without Type, then the exact one-hop canonical terminal. It retains both
+  native anchors even when an original/terminal is missing, hidden or denied.
+  It preflights both homes before any dispatch. An unreadable original suppresses
+  terminal Type hydration; a readable terminal never rescues that original.
+- `retainNativeKindTypeDependencyBody(pool,context,reference,value,work,deadline)`
+  inserts one immutable dependency body, then resolves its exact primary key and
+  compares the complete retained binding/body/frontier. Reusing a key with different
+  data fails; registration returns no prepared/current evidence or contribution.
+- `readNativeKindTypeDependencyBody(pool,context,reference,binding,work,deadline)`
+  resolves one retained native body and compares its complete binding against the
+  original owner's resolved records. It returns a data projection or a missing/
+  mismatched result; it restores neither a definition nor principal as authority.
+- `compareNativeKindTypeDependencyBody(pool,context,reference,expected,work,deadline)`
+  locks the exact retained row and re-enrolls/rechecks both original and terminal
+  native anchors. It performs both checks even after a stale original. Locks remain
+  in the caller's actual same-home transaction through commit/rollback. Its result
+  is a local structural selection or mismatch, never public currentness authority.
 
-The exact per-subject writer fence enrolls a missing key before observation and locks the same key
-before subject, revision, redirect and agent-link mutations become visible. This supplies local
-Semantic negative-key coverage. Released foreign observations cannot be adopted merely by comparing
-their data or retaining their native T: Source-local maintained Accounts/identity/audience and
-foreign Semantic closure is still required. No foreign checkout or callback belongs inside final
-Source verification. Old transactions and times are unusable after their original attempt ends.
+All four use the caller's actual `NativeCollectionWork`; they create no allowance,
+reservation root, UUID funding, transaction, connection or clock. The invocation pin
+checks exact live transaction, Pool, owner account, home, absolute deadline and live
+command time before and after awaits. Foreign homes are refused before the first
+native dispatch, including on excluded branches. The raw input includes disclosure
+projections only as dependency data; these are never accepted as authority by the
+public factory. Canonical duplicates retain distinct original/fact dependencies;
+Library's existing canonical-terminal uniqueness/count CAS owns vote deduplication.
+The pinned release is retained exactly without requiring each item's native release
+to equal the meaning pin. Native Type is not an imported statement or Content tuple.
 
-One existing `NativeCollectionWork` reservation pays each fence enrollment, header point, final
-comparison and dispatched failure. Each anchor observation reserves two candidate keys, eleven
-native rows/points and two statements, including exact missing-key work. Final comparison pays
-the same work again; result-row counts never refund native rows. Admission, original/terminal
-Accounts eligibility, original Source references, persistence, lookahead and separately paid identity
-basis work must fit in the same remaining allowance before dispatch. Additional anchors reduce
-capacity below raw100; progress retains one original/group frontier and the existing 4096-byte
-envelope. Unknown owner footprints refuse before IO. No new ledger or unit conversion is used.
+Dispatch is still held at the precise **original admission association** operation.
+The actual installed `command/operational.ts` exports no admission-to-ledger lookup
+and cannot bind a passed ledger to its live invocation. Installed Library
+`admitCollectionKindPreparationStep(tx,locator)` and
+`readCollectionKindWorkDefinition(tx,locator)` throw `dependency_unavailable`, have
+no ledger operand and publish no finite original-input declaration. The different
+retained implementation is reading material, not installed ABI. Consequently the
+native body invocation constructor refuses before dispatch after checking liveness;
+it cannot be enabled with a caller callback, projected binding, fresh ledger or
+copied handle. Public read/verify also remain unavailable at that boundary. This is
+an explicit missing owner operation, not successful native preparation. The private
+association must be consumed from actual delivered owner exports before activation;
+no future overload or authority token is inferred here.
 
-`test/semantic/kind-type-evidence.test.ts` retains forged-admission refusals and the native positive,
-canonical duplicate, original/terminal hide/restore, negative-dependency and private-audience outcomes.
-It is unrun during implementation. Native writer races, foreign closure, retained evidence and
-all-copy/root/physical proof remain outstanding; structural Source code and typing are not that proof.
+Accounts' installed `KindAudienceAccess` declares capture/resolveInput/prepare/
+verifySource but its native factory supplies no bound. Original/formula, all
+negative/excluded dependencies, authoritative future time transitions, Type/disclosure
+and writer-before-visibility closures remain required. The retained body includes
+exact episode/owner, original origin/input lookup refs, complete native Source
+identity/incarnation/generation, observation/custody/identity records, pinned release
+and the database's actual producing transaction ID. Those values remain dependency
+data: the database transaction ID is not the missing private original admission
+association. Neither immutable registration nor local comparison supplies Source
+custody, committed identity receipt, catalogue root, Search population or Content
+closure. The public factory never promotes a body on that basis.
+
+`kind-type-evidence-write.sql` is one INSERT/conflict point; its subsequent
+`kind-type-evidence-read.sql` is one exact primary-key read with a retained row lock.
+The additive migration stores a maximum 16 KiB binding, 16 KiB dependency body and
+4096-byte frontier using database `jsonb::text` size guards. An UPDATE trigger
+preserves immutable records; deletion still belongs to native retirement/erasure,
+not a public evidence operation. The full contribution/progress envelope remains
+4096 bytes. Unknown/oversized evidence is unavailable, never false, EOF or a vote.
+
+`kindTypeEvidenceBodyFootprint` declares only these literal SQL statements and
+returns undefined for everything else. It includes encoded SQL/parameters, native
+rows/points, empty seeks and a conservative sixfold JSON encoding bound on output.
+`kindTypeEvidenceLocalFootprint` publishes the complete local worst case for one
+raw reference: four anchor observations (capture and final verification for both
+keys), their four enrollment locks, one insert, immutable readback and final retained
+read. This is **11 candidate keys, 56 native rows, 56 native points, 11 statements,
+11 empty seeks, zero identity metadata rows and zero witness keys**, plus the actual
+encoded SQL/parameter bytes and declared bounded output. Same-key originals and
+terminals may still pay the full repeated plan. Each repeat has a fresh debit in
+the same remainder. A dispatched failure burns its admitted footprint; native rows
+are never refunded from result counts. The anchor helpers suppress only duplicate
+observation of their already-reserved exact query.
+
+This is a local body cost, not a delivered whole-parent quote. Checkout, original
+admission/input reads, Access/bridge work, Source/custody, identity, catalogue,
+BEGIN/SET/COMMIT/rollback/settlement and retries need the original owners' complete
+finite declaration before the parent can dispatch. No zero-work or guessed-control
+quote is supplied for those undelivered operations.
+
+The existing per-key Semantic fence enrolls absent subjects before observation.
+BEFORE INSERT/UPDATE/DELETE triggers on subject, revision, redirect and agent links
+serialize the exact keys before visibility; subject changes include Type, release
+and visibility. Both final anchor locks are held to the caller's commit. These
+anchor read also takes exact `FOR SHARE` locks on revision/redirect
+`editorial.write_basis` provenance rows. This serializes the native
+`semantic/account-erasure.ts` `stepSemanticErasure` → `minimizePayload` write-basis DELETE/UPDATE
+path, which does not take the subject-key fence; a missing provenance row remains
+unavailable. Release strings are projected only at the native digest bound. These
+fences do not close foreign Accounts/time/identity/Source dependencies, and no
+foreign home is acquired while this native transaction is held.
+
+`test/semantic/kind-type-evidence.test.ts` preserves all prior positive/private/
+negative assertions and adds the named retained original/terminal same-home journey,
+structural exclusion/one-hop/duplicate cases, complete local-cost assertions and
+unadmitted-body rejection. These regressions are authored **UNRUN**. Whole native
+acceptance, foreign closure, writer-race, root/physical/custody proof and normal
+composition remain deferred to the controller; source and typing are separate facts.
 
 ## Deletion and retention
 

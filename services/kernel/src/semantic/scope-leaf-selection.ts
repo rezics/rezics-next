@@ -76,18 +76,29 @@ export type NativeKindTypeAnchor = Readonly<{
 export const KIND_TYPE_MAX_BYTES = 4096;
 /** Eight exact/indexed head points: subject, fence, revision, revision write
  * basis, redirect, redirect write basis and agent link (seven), plus the wanted
- * key. No history payload, candidate, label, account or tuple hydration.
+ * key. Two additional exact provenance row locks serialize native write-basis
+ * erasure/updates. No history payload, candidate, label, account or tuple hydration.
  */
 export function kindTypeAnchorFootprint(inputBytes: number): WorkDimensions {
   return {
     candidateKeys: 1,
-    nativeRows: 8,
+    nativeRows: 10,
     identityMetadataRows: 0,
-    nativePoints: 8,
+    nativePoints: 10,
     witnessKeys: 0,
     statements: 1,
     bytes: inputBytes + KIND_TYPE_MAX_BYTES + 2048,
     emptySeeks: 1,
+  };
+}
+
+/** INSERT/conflict enrollment plus the exact fence point. The row lock is held
+ * by the caller's native transaction; absent keys use the same full declaration.
+ */
+export function kindTypeAnchorLockFootprint(inputBytes: number): WorkDimensions {
+  return {
+    candidateKeys: 1, nativeRows: 3, identityMetadataRows: 0, nativePoints: 3,
+    witnessKeys: 0, statements: 1, bytes: inputBytes + 128, emptySeeks: 1,
   };
 }
 
@@ -129,16 +140,7 @@ export async function readNativeKindTypeAnchor(
   const lockInput = { route: input.route, subject_id: input.subjectId };
   const lockValues = kindTypeLock.params.map((name) => lockInput[name as keyof typeof lockInput]);
   const lockBytes = Buffer.byteLength(kindTypeLock.sql) + sourceBytes(lockValues);
-  const lockReservation = work.reserve({
-    candidateKeys: 1,
-    nativeRows: 3,
-    identityMetadataRows: 0,
-    nativePoints: 3,
-    witnessKeys: 0,
-    statements: 1,
-    bytes: lockBytes + 128,
-    emptySeeks: 1,
-  });
+  const lockReservation = work.reserve(kindTypeAnchorLockFootprint(lockBytes));
   lockReservation.dispatch();
   try {
     const query = {
@@ -146,7 +148,7 @@ export async function readNativeKindTypeAnchor(
       values: lockValues,
       query_timeout: Math.max(1, deadline - Date.now()),
     };
-    const locked = await client.query<{ version: string }>(query);
+    const locked = await lockReservation.query(() => client.query<{ version: string }>(query));
     requireKindTypeHome(client, input, deadline);
     if (locked.rows.length !== 1) throw new AccessUnavailableError('contention');
     lockReservation.settle({ bytes: lockBytes + sourceBytes(locked.rows), emptySeeks: 0 });
@@ -172,7 +174,7 @@ export async function readNativeKindTypeAnchor(
       values,
       query_timeout: Math.max(1, deadline - Date.now()),
     };
-    const result = await client.query<NativeKindTypeAnchor>(query);
+    const result = await reservation.query(() => client.query<NativeKindTypeAnchor>(query));
     requireKindTypeHome(client, input, deadline);
     const row = result.rows[0];
     if (result.rows.length !== 1 || !row || !row.writer_enrolled || row.subject_id !== input.subjectId)
