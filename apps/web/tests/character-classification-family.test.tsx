@@ -102,12 +102,12 @@ test('discarding a changed classification returns to another source without a re
     const sources = setup.read.public.subject.statements[property]!;
     sources[1]!.qualifiers = [{ property: { id: 'schema:url', data_type: 'url' }, value: { type: 'value', content: evidence } }];
     await render(<CharacterClassification {...setup} property={property} locale="en" search={async () => []} />);
-    const section = host.querySelector('section');
+    const input = () => [...host.querySelectorAll<HTMLInputElement>('fieldset input[type="url"]')].at(-1)!;
     await choose(host.querySelector('select')!, sources[0]!.id);
     await act(async () => button(host, m.facts_edit_field()).click());
-    await enter(host.querySelector<HTMLInputElement>(`input[aria-label="${m.correction_value()}"]`)!, replacement);
+    await enter(input(), evidence + 'draft');
     await act(async () => button(host, m.curation_view_discard()).click());
-    expect(host.querySelector('section')).toBe(section);
+    expect(host.ownerDocument.activeElement).toBe(host.querySelector('select'));
     expect(host.querySelector('fieldset')).toBeNull();
     expect(host.querySelector<HTMLSelectElement>('select')!.value).toBe('');
     expect(setup.fixture.calls).toEqual([]);
@@ -115,10 +115,13 @@ test('discarding a changed classification returns to another source without a re
     await act(async () => button(host, m.facts_edit_field()).click());
     expect(host.querySelector<HTMLInputElement>('[role="combobox"]')!.value).toBe(setup.read.public.related[replacement]!.labels.en!);
     expect(button(host, m.correction_submit()).disabled).toBe(true);
-    await enter(host.querySelector<HTMLInputElement>(`input[aria-label="${m.correction_value()}"]`)!, concept);
+    expect(input().value).toBe(evidence);
+    await enter(input(), evidence + 'replacement');
     await act(async () => button(host, m.correction_submit()).click());
     const { statementInput } = await import('../src/features/catalogue/statement-editor');
-    expect(setup.commands[0]!.statement).toEqual({ ...statementInput(sources[1]!), value: { type: 'value', content: concept } });
+    const expected = statementInput(sources[1]!);
+    expected.references[0]!.parts[0]!.value = { type: 'value', content: evidence + 'replacement' };
+    expect(setup.commands[0]!.statement).toEqual(expected);
   });
 });
 
@@ -131,7 +134,7 @@ test('pending and uncertain classification commands cannot be discarded; retry k
     const transport = { ...setup.transport, propose: async (command: FactCommand) => { await gate.promise; return setup.transport.propose(command); } };
     await render(<CharacterClassification {...setup} transport={transport} property={property} locale="en" search={async () => []} />);
     await act(async () => button(host, m.facts_edit_field()).click());
-    await enter(host.querySelector<HTMLInputElement>(`input[aria-label="${m.correction_value()}"]`)!, replacement);
+    await enter(host.querySelector<HTMLInputElement>('fieldset input[type="url"]')!, evidence + 'replacement');
     await act(async () => button(host, m.correction_submit()).click());
     expect(button(host, m.curation_view_discard()).disabled).toBe(true);
     await act(async () => gate.resolve());
