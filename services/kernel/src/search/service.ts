@@ -64,6 +64,7 @@ import {
 } from './facet-discovery-runtime.ts';
 import type { FacetDiscoveryProvider } from './facet-discovery-native.ts';
 import type { FacetDiscovery200Response } from './facet-discovery-contract.ts';
+import { ownSubjectRequest } from './service-request.ts';
 
 export type SearchRequest = {
   text?: string;
@@ -399,6 +400,7 @@ export function createSearchService({
       active?: { digest: string; release: FilterRelease } | null,
       readContext?: PublicSearchReadContext,
     ) {
+      request = ownSubjectRequest(request);
       const { text, filter, sort, limit, hitOptions, bindingRequest } = validate(request);
       // One lookup serves filter admission and the requested properties.
       const native = active === undefined && !releaseOverride ? await activeRelease(pool) : active;
@@ -714,6 +716,7 @@ export function createSearchService({
       now = clock().getTime(),
       context = { deadline: deadlineFor(30_000) },
     ): Promise<FacetDiscovery200Response> {
+      request = ownSubjectRequest(request);
       const { languages: languageChain, ...facetRequest } = request;
       const { languages } = validateHitOptions({ languages: languageChain });
       const facets = validateFacets(facetRequest);
@@ -763,6 +766,7 @@ export function createSearchService({
       languages?: string[],
       read?: { deadline: number; complete(page: { subjects: Result[]; as_of: string }): Promise<void> },
     ) {
+      languages = ownSubjectRequest(languages);
       if (typeof q !== 'string' || q.length > 128 || [...q].length < 1 || [...q].length > 64)
         invalid('/q', 'out_of_range');
       if (!Number.isInteger(limit) || limit < 1 || limit > 10) invalid('/limit', 'out_of_range');

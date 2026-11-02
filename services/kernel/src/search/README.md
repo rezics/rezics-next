@@ -18,6 +18,9 @@ through the existing unavailable/rebuild path.
 The optional `languages` request field is the reader's language chain, in priority order. Search follows semantic's
 label choice rule for hit labels, requested descriptions and item fact labels, returning one entry per nonempty map.
 Omitting `languages` keeps every language.
+Subject search, facet and suggestion entry copy bounded public request JSON (query, filters, language order, properties
+and cursors) before the first await so later caller mutation cannot change the admitted invocation or continuation
+binding. Live Access, read-context and release objects stay by identity.
 
 ## Review-backed question admission
 
