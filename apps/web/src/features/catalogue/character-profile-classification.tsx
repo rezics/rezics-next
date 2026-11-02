@@ -8,6 +8,7 @@ import { pageText } from '../pages/data';
 import { m } from '../../paraglide/messages.js';
 import { coverSrc } from '../../media/cover-src';
 import { CandidateReview, type CandidateTransport } from '../../subject/candidate-review';
+import { useAuthoringDeparture } from '../../threads/authoring-departure';
 import {
   factChanged,
   factLocked,
@@ -70,13 +71,14 @@ export function CharacterClassification({
   const [reviewing, setReviewing] = useState(false);
   const [confirmation, setConfirmation] = useState<{ draft: FactDraft; active: () => boolean }>();
   const running = useRef(false);
+  const retired = useRef(false);
+  const usable = () => !retired.current && active();
   const wasVisible = useRef(visible);
   if (wasVisible.current !== visible) {
     wasVisible.current = visible;
     running.current = false;
     setBusy(false);
     if (!visible) {
-      setPicked([]);
       setConfirmation(undefined);
     }
     if (!visible)
@@ -96,8 +98,33 @@ export function CharacterClassification({
     const control = chooser.current?.querySelector<HTMLElement>('select, button');
     control?.focus();
   }, [draft]);
-  const latestState = useRef({ draft, confirmation, busy, active });
-  latestState.current = { draft, confirmation, busy, active };
+  const unresolved = (value: FactDraft | undefined) =>
+    !!value?.command &&
+    (!value.result ||
+      (!value.result.ok && (value.result.reason === 'uncertain' || value.result.reason === 'unavailable')));
+  const needsDeparture = (value: FactDraft | undefined) =>
+    !!value &&
+    !value.result?.ok &&
+    ((factChanged(value) && (value.baseline !== null || hasAuthoredFactContent(value.statement))) ||
+      unresolved(value));
+  useAuthoringDeparture(
+    () => !retired.current && needsDeparture(draft),
+    () => !retired.current && unresolved(draft),
+    `${read.public.subject.id}:${property}`,
+    undefined,
+    () => {
+      retired.current = true;
+      running.current = false;
+      setBusy(false);
+      setDraft(undefined);
+      setPicked([]);
+      setConfirmation(undefined);
+      setReviewing(false);
+      setSource(selected.length === 1 ? selected[0]!.id : '');
+    },
+  );
+  const latestState = useRef({ draft, confirmation, busy, active: usable });
+  latestState.current = { draft, confirmation, busy, active: usable };
   const confirming =
     !!draft &&
     confirmation?.draft === draft &&
@@ -122,7 +149,7 @@ export function CharacterClassification({
   const label = pageText(definition.labels, locale);
   const current = selected.find((statement) => statement.id === draft?.source);
   const stage = (id: string | null) => {
-    if (!active()) return;
+    if (!usable()) return;
     if (running.current || (draft && factLocked(draft))) return;
     const source = selected.find((statement) => statement.id === id);
     if (id && !source) return;
@@ -166,9 +193,9 @@ export function CharacterClassification({
     setSource(selected.length === 1 ? selected[0]!.id : '');
   };
   const discard = () => {
-    if (!active() || !draft || running.current || busy || factLocked(draft)) return;
+    if (!usable() || !draft || running.current || busy || factLocked(draft)) return;
     if (factChanged(draft) && (draft.baseline !== null || hasAuthoredFactContent(draft.statement))) {
-      setConfirmation({ draft, active });
+      setConfirmation({ draft, active: usable });
       return;
     }
     closeDraft(draft);
@@ -187,12 +214,12 @@ export function CharacterClassification({
   };
   const confirmDiscard = (pending: { draft: FactDraft; active: () => boolean }) => closeDraft(pending.draft, pending);
   const change = (statement: StatementInput) => {
-    if (!active()) return;
+    if (!usable()) return;
     if (!draft || running.current || factLocked(draft)) return;
     setDraft({ ...draft, statement, command: undefined, result: undefined });
   };
   async function submit() {
-    if (!active()) return;
+    if (!usable()) return;
     if (!draft || running.current) return;
     const [sealed] = sealFacts(read.public.subject.id, read.release, [draft]);
     if (!sealed) return;
@@ -201,10 +228,10 @@ export function CharacterClassification({
     setBusy(true);
     try {
       await sendFacts([sealed], transport.propose, (_property, result) => {
-        if (active()) setDraft({ ...sealed, result });
+        if (usable()) setDraft({ ...sealed, result });
       });
     } finally {
-      if (!active()) return;
+      if (!usable()) return;
       setBusy(false);
       running.current = false;
     }
@@ -236,7 +263,7 @@ export function CharacterClassification({
                   aria-label={m.facts_choose_value({}, o)}
                   value={source}
                   onChange={(event) => {
-                    if (active()) setSource(event.target.value);
+                    if (usable()) setSource(event.target.value);
                   }}
                 >
                   <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
@@ -298,7 +325,7 @@ export function CharacterClassification({
                     )
                   }
                   onValueChange={(items) => {
-                    if (!active() || running.current || factLocked(draft)) return;
+                    if (!usable() || running.current || factLocked(draft)) return;
                     setPicked(items);
                     change({
                       ...draft.statement,
@@ -325,7 +352,7 @@ export function CharacterClassification({
                 <Button
                   className={actionClassName}
                   onClick={() => {
-                    if (active()) setReviewing(true);
+                    if (usable()) setReviewing(true);
                   }}
                 >
                   {m.correction_review({}, o)}
