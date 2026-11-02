@@ -30,3 +30,5 @@ post-verification effects; its route host; this document; and the three connecte
 membership query, page reader, session producer, native query, and renderer remain unchanged. The existing first-page
 request, cursor recovery and continuation, order, private disclosure and null-CSRF read-only behavior are preserved.
 No extra session read, authentication preflight, polling, per-row hydration or native request is added.
+
+Decision: offer first-page recovery only for cursor failures without an HTTP status or with status 408 or 5xx; other HTTP failures, including admission denial and platform-closed, keep their existing retry or closed handling. The localized action targets `/realms` with empty search so the route guard and a fresh caller own the visit.

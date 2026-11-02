@@ -1,10 +1,11 @@
 import { requireSignedIn } from '../../session/guard';
 import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, Link } from '@tanstack/react-router';
 import { myRealmsQuery } from '../../community/realm-membership-queries';
 import { captureMyRealmsCaller, MyRealmsCallerHost } from '../../community/my-realms-caller';
 import { ClosedErrorPage } from '../../shell/closed';
+import { isPlatformClosedError } from '../../kernel/platform-closed';
 import { getLocale } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
 
@@ -35,9 +36,43 @@ export const Route = createFileRoute('/realms/')({
   },
   head: ({ match }) =>
     pageHead({ title: m.realms_heading(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
-  errorComponent: ClosedErrorPage,
+  errorComponent: MyRealmsErrorPage,
   component: MyRealms,
 });
+
+function failureStatus(error: unknown): number | undefined {
+  if (typeof error !== 'object' || error === null) return undefined;
+  const value = error as { status?: unknown; statusCode?: unknown; problem?: { status?: unknown } };
+  for (const status of [value.status, value.statusCode, value.problem?.status])
+    if (typeof status === 'number' && Number.isInteger(status) && status >= 400 && status <= 599) return status;
+  return undefined;
+}
+
+function canRestartContinuation(error: unknown) {
+  if (isPlatformClosedError(error)) return false;
+  const status = failureStatus(error);
+  return status === undefined || status === 408 || status >= 500;
+}
+
+function MyRealmsErrorPage({ error, reset }: { error: unknown; reset?: () => void }) {
+  const { cursor } = Route.useSearch();
+  return (
+    <>
+      <ClosedErrorPage error={error} reset={reset} />
+      {cursor && canRestartContinuation(error) ? (
+        <nav aria-label={m.realms_heading()} className="max-w-prose">
+          <Link
+            to="/realms"
+            search={{}}
+            className="inline-flex min-h-11 min-w-11 max-w-full items-center justify-center whitespace-normal rounded-lg border border-border px-4 py-2 text-start text-primary underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
+            {m.realms_first_page()}
+          </Link>
+        </nav>
+      ) : null}
+    </>
+  );
+}
 
 function MyRealms() {
   const initial = Route.useLoaderData();

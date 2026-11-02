@@ -901,6 +901,7 @@
   "community_space_context": "此{realm}所在的空間",
   "community_management_denied": "目前權限不再允許這些變更。請重新整理以再次檢查存取權限。",
   "realms_more": "更多社群",
+  "realms_first_page": "從第一頁重新開始",
   "realms_sign_in": "登入後即可查看你的社群。",
   "report_action": "檢舉",
   "report_cancel": "取消",

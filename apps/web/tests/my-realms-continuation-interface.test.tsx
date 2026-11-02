@@ -94,6 +94,8 @@ test('all eight installed catalogs supply the sparse-page message without a no-m
     expect(copy.trim().length).toBeGreaterThan(0);
     expect(copy).not.toBe(catalog.realms_empty);
     expect(m.realm_list_details_sparse_page_empty({}, { locale: locale as keyof typeof catalogs })).toBe(copy);
+    expect(catalog.realms_first_page.trim().length).toBeGreaterThan(0);
+    expect(m.realms_first_page({}, { locale: locale as keyof typeof catalogs })).toBe(catalog.realms_first_page);
   }
   expect(en.realm_list_details_sparse_page_empty).toBe('No communities on this page. Continue to see more.');
   expect(zhHant.realm_list_details_sparse_page_empty).toBe('此頁沒有社群。繼續查看其他社群。');

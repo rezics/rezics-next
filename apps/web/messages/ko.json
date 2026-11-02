@@ -901,6 +901,7 @@
   "community_space_context": "이 {realm}의 스페이스",
   "community_management_denied": "현재 권한으로는 더 이상 이러한 변경을 할 수 없습니다. 새로 고침하여 접근 권한을 다시 확인하세요.",
   "realms_more": "커뮤니티 더 보기",
+  "realms_first_page": "첫 페이지부터 다시 시작",
   "realms_sign_in": "내 커뮤니티를 보려면 로그인하세요.",
   "report_action": "신고",
   "report_cancel": "취소",

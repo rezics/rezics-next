@@ -901,6 +901,7 @@
   "community_space_context": "この{realm}のスペース",
   "community_management_denied": "現在の権限では、これらの変更は許可されていません。再読み込みしてアクセス権を確認してください。",
   "realms_more": "さらにコミュニティを表示",
+  "realms_first_page": "最初のページから再開",
   "realms_sign_in": "参加中のコミュニティを見るにはサインインしてください。",
   "report_action": "報告",
   "report_cancel": "キャンセル",

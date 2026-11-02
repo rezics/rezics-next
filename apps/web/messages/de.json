@@ -901,6 +901,7 @@
   "community_space_context": "Space dieser {realm}",
   "community_management_denied": "Deine aktuellen Berechtigungen erlauben diese Änderungen nicht mehr. Aktualisiere die Ansicht, um deinen Zugriff erneut zu prüfen.",
   "realms_more": "Weitere Communities",
+  "realms_first_page": "Auf der ersten Seite beginnen",
   "realms_sign_in": "Melde dich an, um deine Communities zu sehen.",
   "report_action": "Melden",
   "report_cancel": "Abbrechen",

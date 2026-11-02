@@ -397,6 +397,47 @@ test('cursor and locale changes form a new route visit, keep native cursor order
   }
 });
 
+test('a failed continuation keeps same-request retry and restarts through a fresh first-page visit', async () => {
+  const cursor = 'opaque/failed?private=%25';
+  resetReader(async (input) => {
+    if (input.cursor) throw new Error('Realm list is unavailable');
+    return page('Recovered first-page realm');
+  });
+  const surface = await createSurface({ cursor });
+  try {
+    await expect(surface.load()).rejects.toThrow();
+    await surface.mount();
+    expect(surface.host.querySelector('button')).not.toBeNull();
+    const retry = surface.host.querySelector('button')!;
+    await act(async () => retry.click());
+    await until(() => readCalls.length === 2 && surface.router.state.status === 'idle', 'the same cursor retry');
+    expect(readCalls).toEqual([{ cursor }, { cursor }]);
+    expect(surface.client.getQueryState(['my-realms', cursor])).toBeUndefined();
+
+    const firstPage = surface.host.querySelector<HTMLAnchorElement>('a[href="/en/realms"]');
+    expect(firstPage?.textContent).toBe(m.realms_first_page());
+    await act(async () => firstPage!.click());
+    await until(() => visiblePrivateNames(surface).includes('Recovered first-page realm'), 'the first-page route');
+    expect(readCalls).toEqual([{ cursor }, { cursor }, {}]);
+    expect(surface.router.state.location.search).toEqual({});
+    expect(surface.client.getQueryState(['my-realms', cursor])).toBeUndefined();
+  } finally {
+    await surface.dispose();
+  }
+
+  resetReader(async () => {
+    throw Object.assign(new Error('My Realms access is denied'), { status: 403 });
+  });
+  const denied = await createSurface({ cursor });
+  try {
+    await expect(denied.load()).rejects.toThrow();
+    await denied.mount();
+    expect(denied.host.querySelector('a[href="/en/realms"]')).toBeNull();
+  } finally {
+    await denied.dispose();
+  }
+});
+
 test('unmount retires saved loader callbacks; a later explicit visit can load a fresh list', async () => {
   resetReader(async () => page(`Mounted visit ${readCalls.length + 1}`));
   const surface = await createSurface();

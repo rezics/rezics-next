@@ -917,6 +917,7 @@
   "community_space_context": "Space hosting this {realm}",
   "community_management_denied": "Current permission no longer allows these changes. Refresh to check access again.",
   "realms_more": "More Realms",
+  "realms_first_page": "Start from the first page",
   "realms_sign_in": "Sign in to see your Realms.",
   "report_action": "Report",
   "report_cancel": "Cancel",

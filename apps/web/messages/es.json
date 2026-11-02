@@ -901,6 +901,7 @@
   "community_space_context": "Espacio que alberga esta {realm}",
   "community_management_denied": "Tus permisos actuales ya no permiten estos cambios. Actualiza para volver a comprobar el acceso.",
   "realms_more": "Más comunidades",
+  "realms_first_page": "Empezar desde la primera página",
   "realms_sign_in": "Inicia sesión para ver tus comunidades.",
   "report_action": "Denunciar",
   "report_cancel": "Cancelar",
