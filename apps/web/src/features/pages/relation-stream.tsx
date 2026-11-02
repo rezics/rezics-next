@@ -17,6 +17,13 @@ import {
   type Section,
 } from './overview';
 import { loadRelationGroup, relationGroupKey, type RelationGroupRequest } from './relation-stream-query';
+import {
+  advanceRelationProgress,
+  relationCursor,
+  relationFailureStatus,
+  startRelationProgress,
+  type RelationProgress,
+} from './relation-stream-progress';
 import { StreamHeading, type StreamHeadingLevel } from './view-heading';
 
 let nextRelationIncarnation = 0;
@@ -164,6 +171,15 @@ export function relationStreamItems(section: Section, value: OverviewValue, limi
     : statementItems(section, section.read.kind === 'relations' ? section.read.property : undefined, limit, value);
 }
 
+function windowItems(section: Section | undefined, value: OverviewValue): Item[] {
+  const unique = new Map<string, Item>();
+  for (const item of section ? (relationStreamItems(section, value)?.items ?? []) : []) {
+    const identity = item.statement ?? item.id;
+    if (!unique.has(identity)) unique.set(identity, item);
+  }
+  return [...unique.values()];
+}
+
 /** Independent state per current subject, Context and node; a More click requests just that stream. */
 export function RelationStream(props: {
   value: OverviewValue;
@@ -237,14 +253,19 @@ function StreamState({
   const queryClient = useQueryClient();
   const router = useRouter({ warn: false });
   type State = {
-    pages: Section[];
+    page: Section | undefined;
+    progress: RelationProgress;
     pending: boolean;
     error?: { status?: number | undefined } | undefined;
-    completion?: { added: number; exhausted: boolean; trigger: HTMLAnchorElement | null } | undefined;
+    completion?: { count: number; terminal: boolean; trigger: HTMLAnchorElement | null } | undefined;
   };
-  const [state, setState] = useState<State>(() => ({ pages: [section], pending: false }));
+  const [state, setState] = useState<State>(() => ({
+    page: section,
+    progress: startRelationProgress(section.ok ? relationCursor(section.body) : undefined),
+    pending: false,
+  }));
   const [, refreshOwner] = useState(0);
-  const { pages, pending, error, completion } = state;
+  const { page, progress, pending, error, completion } = state;
   const end = useRef<HTMLParagraphElement>(null);
   const active = useRef(false);
   const incarnation = useRelationIncarnation();
@@ -298,7 +319,8 @@ function StreamState({
       if (updateState) {
         setState((previous) => ({
           ...previous,
-          pages: [],
+          page: undefined,
+          progress: startRelationProgress(undefined),
           pending: false,
           error: undefined,
           completion: undefined,
@@ -319,7 +341,8 @@ function StreamState({
       actualReading?.query === owner.sessionQuery &&
       actualReading?.admitted === true);
   const readerUnavailable = owner.expectedReader !== null && !currentSession;
-  const visiblePages = currentSession ? pages : [];
+  const visiblePage = currentSession ? page : undefined;
+  const stopped = currentSession ? progress.stopped : undefined;
   const visiblePending = currentSession && pending;
   const visibleError = currentSession ? error : undefined;
   const visibleCompletion = currentSession ? completion : undefined;
@@ -395,7 +418,7 @@ function StreamState({
     // Only replace focus lost with the activated anchor. A reader may have moved to another stream.
     if (
       owner.current(readingGeneration) &&
-      visibleCompletion?.exhausted &&
+      visibleCompletion?.terminal &&
       trigger &&
       (trigger.ownerDocument.activeElement === trigger ||
         trigger.ownerDocument.activeElement === trigger.ownerDocument.body)
@@ -403,11 +426,8 @@ function StreamState({
       end.current?.focus({ preventScroll: true });
   }, [owner, readingGeneration, visibleCompletion]);
 
-  const latest = visiblePages[visiblePages.length - 1];
-  const cursor = latest?.ok && typeof latest.body.next === 'string' ? latest.body.next : undefined;
-  const items = visiblePages.flatMap((page) => relationStreamItems(page, value)?.items ?? []);
-  const unique = new Map<string, Item>();
-  for (const item of items) unique.set(item.statement ?? item.id, item);
+  const cursor = !stopped && visiblePage?.ok ? relationCursor(visiblePage.body) : undefined;
+  const items = windowItems(visiblePage, value);
   const continuationEnabled = owner.expectedReader === null || (currentSession && owner.matches(readingGeneration));
   const currentView = isView(view) ? view : 'relations';
   const base = value.subject
@@ -471,37 +491,49 @@ function StreamState({
         },
       });
       if (!owner.current(generation)) return;
+      if (next.ok && owner.expectedReader !== null) {
+        const nextObjects = privateReadingObjects(next);
+        if (!claimPrivateReading(nextObjects, owner)) {
+          owner.retire();
+          return;
+        }
+        closePrivateReading(owner.readingObjects);
+        owner.readingObjects = nextObjects;
+      }
       const focusTrigger = trigger.ownerDocument.activeElement === trigger ? trigger : null;
       setState((previous) => {
         if (!owner.matches(generation)) return previous;
-        const visible = new Set(
-          previous.pages.flatMap((page) =>
-            (relationStreamItems(page, value)?.items ?? []).map((item) => item.statement ?? item.id),
-          ),
-        );
-        const before = visible.size;
-        if (next.ok)
-          for (const item of relationStreamItems(next, value)?.items ?? []) visible.add(item.statement ?? item.id);
+        const nextCursor = next.ok ? relationCursor(next.body) : undefined;
+        const nextProgress = next.ok ? advanceRelationProgress(previous.progress, nextCursor) : previous.progress;
         return {
           ...previous,
-          pages: next.ok ? [...previous.pages, next] : [],
+          page: next.ok ? next : undefined,
+          progress: nextProgress,
           error: next.ok ? undefined : { status: next.status },
           completion: next.ok
             ? {
-                added: visible.size - before,
-                exhausted: typeof next.body.next !== 'string' || !next.body.next,
+                count: windowItems(next, value).length,
+                terminal: !nextCursor || !!nextProgress.stopped,
                 trigger: focusTrigger,
               }
             : undefined,
         };
       });
       if (!next.ok && owner.current(generation)) void router?.invalidate();
-    } catch {
+    } catch (cause) {
       if (owner.current(generation)) {
+        const status = relationFailureStatus(cause);
         setState((previous) =>
-          owner.matches(generation) ? { ...previous, pages: [], error: {}, completion: undefined } : previous,
+          owner.matches(generation)
+            ? {
+                ...previous,
+                page: status === undefined ? previous.page : undefined,
+                error: { status },
+                completion: undefined,
+              }
+            : previous,
         );
-        if (owner.current(generation)) void router?.invalidate();
+        if (status !== undefined && owner.current(generation)) void router?.invalidate();
       }
     } finally {
       if (queryKey && ownedKey) {
@@ -534,8 +566,8 @@ function StreamState({
       </StreamHeading>
       {readerUnavailable ? (
         <p role="alert">{m.subject_relation_unavailable({}, options)}</p>
-      ) : unique.size ? (
-        <CoverList items={[...unique.values()]} value={value} label={title} />
+      ) : items.length ? (
+        <CoverList items={items} value={value} label={title} />
       ) : !visibleError ? (
         <p role={!section.ok ? 'status' : undefined}>
           {section.ok ? m.subject_relation_empty_page({}, options) : failure(section.status, value.locale)}
@@ -551,19 +583,25 @@ function StreamState({
         {visiblePending
           ? m.subject_relation_loading({}, options)
           : visibleCompletion
-            ? visibleCompletion.exhausted
-              ? m.subject_relation_completed_end({ label: title, count: visibleCompletion.added }, options)
-              : m.subject_relation_completed_more({ label: title, count: visibleCompletion.added }, options)
+            ? stopped
+              ? m.relation_window_completed_stop({ label: title, count: visibleCompletion.count }, options)
+              : visibleCompletion.terminal
+                ? m.relation_window_completed_end({ label: title, count: visibleCompletion.count }, options)
+                : m.relation_window_completed_more({ label: title, count: visibleCompletion.count }, options)
             : null}
       </p>
-      {visibleCompletion?.exhausted && (
+      {visibleCompletion?.terminal && (
         <p
           ref={end}
           tabIndex={-1}
           data-slot="relation-stream-end"
           className="rounded-sm text-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
         >
-          {m.subject_relation_end({ label: title }, options)}
+          {stopped === 'cycle'
+            ? m.relation_window_cycle({}, options)
+            : stopped === 'limit'
+              ? m.relation_window_limit({}, options)
+              : m.subject_relation_end({ label: title }, options)}
         </p>
       )}
       {visibleError && <p role="alert">{failure(visibleError.status, value.locale)}</p>}
@@ -579,8 +617,9 @@ function StreamState({
           {visibleError ? m.subject_section_retry({}, options) : m.subject_section_more({ label: title }, options)}
         </a>
       )}
-      {(visibleError || !section.ok || readerUnavailable) && base && (
+      {(stopped || visibleError || !section.ok || readerUnavailable) && base && (
         <a
+          data-slot="restart-group"
           href={`${base}?${new URLSearchParams({ node, ...(realm ? { realm } : {}) })}`}
           className={cn(buttonVariants({ variant: 'link' }), actionClass)}
         >

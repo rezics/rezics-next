@@ -4570,5 +4570,10 @@
   "library_labels_address_clear": "Suche löschen",
   "correction_remove_qualifier": "Hinzugefügten Qualifikator entfernen",
   "correction_remove_reference": "Hinzugefügte Referenz entfernen",
-  "correction_remove_reference_part": "Hinzugefügten Referenzteil entfernen"
+  "correction_remove_reference_part": "Hinzugefügten Referenzteil entfernen",
+  "relation_window_completed_more": "Sichtbare Einträge in {label}: {count}. Du kannst weitere laden.",
+  "relation_window_completed_end": "Sichtbare Einträge in {label}: {count}. Ende dieser Liste.",
+  "relation_window_completed_stop": "Sichtbare Einträge in {label}: {count}. Starte erneut, um fortzufahren.",
+  "relation_window_cycle": "Diese Liste hat einen Seitencursor wiederholt. Starte erneut, um die aktuellen Einträge zu lesen.",
+  "relation_window_limit": "Du hast das Leselimit erreicht. Starte erneut, um ab der ersten Seite zu lesen."
 }

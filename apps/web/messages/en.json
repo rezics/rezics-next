@@ -4606,5 +4606,10 @@
   "library_labels_address_clear": "Clear search",
   "correction_remove_qualifier": "Remove added qualifier",
   "correction_remove_reference": "Remove added reference",
-  "correction_remove_reference_part": "Remove added reference part"
+  "correction_remove_reference_part": "Remove added reference part",
+  "relation_window_completed_more": "Visible items in {label}: {count}. You can load more.",
+  "relation_window_completed_end": "Visible items in {label}: {count}. End of this list.",
+  "relation_window_completed_stop": "Visible items in {label}: {count}. Start again to continue.",
+  "relation_window_cycle": "This list repeated a page cursor. Start again to read its current entries.",
+  "relation_window_limit": "You have reached the reading limit. Start again to read from the first page."
 }

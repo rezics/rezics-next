@@ -651,7 +651,7 @@ test('private unmount cannot bless borrowed relation rows after unobserved sessi
       const healthySessionQuery = clientB.getQueryCache().find({ queryKey: sessionQuery.queryKey, exact: true });
       const expectRecoveredReading = () => {
         const rows = stream('side-stories').querySelector('[data-layout="cover-grid"]');
-        expect(rows?.textContent).toContain('Fresh A after retained error');
+        expect(rows?.textContent).not.toContain('Fresh A after retained error');
         expect(rows?.textContent).toContain('Recovered continuation');
         expect(status('side-stories').textContent).toContain(': 1. You can load more.');
         expect(trigger('side-stories')).toBe(recoveredAction);
@@ -966,7 +966,7 @@ test('private unmount cannot bless borrowed relation rows after unobserved sessi
       expect(stream(afterRoute.node).textContent).toContain('Fresh after route');
       void routeAction;
 
-      // Healthy keyboard continuations retain empty and duplicate-only counts and focus behavior.
+      // Healthy keyboard continuations report the accepted empty or populated window and preserve focus behavior.
       const emptyAction = await startMore(afterRoute.node);
       const emptyRequest = heldRelations.at(-1)!;
       const emptyKey = assertPendingKey(clientC, emptyRequest);
@@ -1014,7 +1014,7 @@ test('private unmount cannot bless borrowed relation rows after unobserved sessi
         },
       });
       await settle();
-      expect(status(afterRoute.node).textContent).toContain(': 0. End of this list.');
+      expect(status(afterRoute.node).textContent).toContain(': 1. End of this list.');
       expect(stream(afterRoute.node).querySelector('[data-slot="continue-group"]')).toBeNull();
       expect(stream(afterRoute.node).querySelector('[data-slot="relation-stream-end"]')).not.toBeNull();
       expect(window.document.activeElement).toBe(

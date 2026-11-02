@@ -722,6 +722,8 @@ count; a concealed or closed read does not expose a tab. A full-view frame suppl
 paged list owns its own heading and continuation; the frame adds a page heading only for documents with several
 groups or without a list heading, and never repeats a list's continuation.
 
+Relations retain one native page per stream: successful More replaces it, pending or transport failure preserves its exact retry, native refusal removes it, and repeated cursors or 64 successful requests (including the supplied page, excluding retries) require a native first-page restart; empty pages follow their actual continuation and announcements count only the accepted window.
+
 ## Agents
 
 People, organizations (studios, publishers, bands, groups) and automated agents are agents, whether they arrived

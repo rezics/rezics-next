@@ -4570,5 +4570,10 @@
   "library_labels_address_clear": "清除搜尋",
   "correction_remove_qualifier": "移除新增的限定詞",
   "correction_remove_reference": "移除新增的參考資料",
-  "correction_remove_reference_part": "移除新增的參考資料部分"
+  "correction_remove_reference_part": "移除新增的參考資料部分",
+  "relation_window_completed_more": "{label}目前顯示 {count} 項。可以載入更多。",
+  "relation_window_completed_end": "{label}目前顯示 {count} 項。已到清單末尾。",
+  "relation_window_completed_stop": "{label}目前顯示 {count} 項。請重新開始以繼續閱讀。",
+  "relation_window_cycle": "此清單傳回了重複的分頁游標。請重新開始以閱讀目前的項目。",
+  "relation_window_limit": "已達閱讀上限。請從第一頁重新開始。"
 }

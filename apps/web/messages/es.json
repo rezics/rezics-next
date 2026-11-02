@@ -4570,5 +4570,10 @@
   "library_labels_address_clear": "Borrar búsqueda",
   "correction_remove_qualifier": "Quitar el calificador añadido",
   "correction_remove_reference": "Quitar la referencia añadida",
-  "correction_remove_reference_part": "Quitar la parte de referencia añadida"
+  "correction_remove_reference_part": "Quitar la parte de referencia añadida",
+  "relation_window_completed_more": "Elementos visibles en {label}: {count}. Puedes cargar más.",
+  "relation_window_completed_end": "Elementos visibles en {label}: {count}. Fin de esta lista.",
+  "relation_window_completed_stop": "Elementos visibles en {label}: {count}. Vuelve a empezar para continuar.",
+  "relation_window_cycle": "Esta lista ha repetido un cursor de página. Vuelve a empezar para leer las entradas actuales.",
+  "relation_window_limit": "Has alcanzado el límite de lectura. Vuelve a empezar desde la primera página."
 }

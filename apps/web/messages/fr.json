@@ -4570,5 +4570,10 @@
   "library_labels_address_clear": "Effacer la recherche",
   "correction_remove_qualifier": "Retirer le qualificatif ajouté",
   "correction_remove_reference": "Retirer la référence ajoutée",
-  "correction_remove_reference_part": "Retirer la partie de référence ajoutée"
+  "correction_remove_reference_part": "Retirer la partie de référence ajoutée",
+  "relation_window_completed_more": "Éléments visibles dans {label} : {count}. Vous pouvez en charger davantage.",
+  "relation_window_completed_end": "Éléments visibles dans {label} : {count}. Fin de cette liste.",
+  "relation_window_completed_stop": "Éléments visibles dans {label} : {count}. Recommencez pour continuer.",
+  "relation_window_cycle": "Cette liste a répété un curseur de page. Recommencez pour lire les entrées actuelles.",
+  "relation_window_limit": "Vous avez atteint la limite de lecture. Recommencez depuis la première page."
 }
