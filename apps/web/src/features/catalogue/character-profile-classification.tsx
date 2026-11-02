@@ -106,7 +106,15 @@ export function CharacterClassification({
   useLayoutEffect(() => {
     if (source && !selected.some((statement) => statement.id === source)) setSource('');
   }, [selected, source]);
-  const [draft, setDraft] = useState<FactDraft>();
+  const [draft, setDraftState] = useState<FactDraft>();
+  const currentDraft = useRef(draft);
+  currentDraft.current = draft;
+  // Retire deliveries immediately, including a second callback before React renders.
+  const setDraft = (next: Parameters<typeof setDraftState>[0]) => {
+    const value = typeof next === 'function' ? next(currentDraft.current) : next;
+    currentDraft.current = value;
+    setDraftState(value);
+  };
   const [picked, setPicked] = useState<EntityPickerSubject[]>([]);
   const [busy, setBusy] = useState(false);
   const [reviewing, setReviewing] = useState(false);
@@ -194,6 +202,7 @@ export function CharacterClassification({
   const current = selected.find((statement) => statement.id === draft?.source);
   const stage = (id: string | null) => {
     if (!usable() || !admitted) return;
+    if (currentDraft.current !== draft) return;
     if (running.current || (draft && factLocked(draft))) return;
     const currentRead = latestRead.current;
     const currentDefinition = currentRead.release.properties[property];
@@ -231,6 +240,7 @@ export function CharacterClassification({
     if (
       !latest.active() ||
       latest.draft !== original ||
+      currentDraft.current !== original ||
       latest.busy ||
       running.current ||
       factLocked(original) ||
@@ -248,6 +258,7 @@ export function CharacterClassification({
   };
   const discard = () => {
     if (!usable() || !draft || running.current || busy || factLocked(draft) || (!admitted && draft.command)) return;
+    if (currentDraft.current !== draft) return;
     if (factChanged(draft) && (draft.baseline !== null || hasAuthoredFactContent(draft.statement))) {
       setConfirmation({ draft, active: usable });
       return;
@@ -268,13 +279,15 @@ export function CharacterClassification({
   };
   const confirmDiscard = (pending: { draft: FactDraft; active: () => boolean }) => closeDraft(pending.draft, pending);
   const change = (statement: StatementInput) => {
-    if (!usable() || !admitted) return;
-    if (!draft || running.current || factLocked(draft)) return;
+    if (!usable() || !admitted) return false;
+    if (!draft || currentDraft.current !== draft || running.current || factLocked(draft)) return false;
     setDraft({ ...draft, statement, command: undefined, result: undefined });
+    return true;
   };
   async function submit() {
     if (!usable()) return;
     if (!draft || running.current || (!admitted && !draft.command)) return;
+    if (currentDraft.current !== draft) return;
     const sealed = draft.command ? draft : sealFacts(read.public.subject.id, read.release, [draft])[0];
     if (!sealed) return;
     setDraft(sealed);
@@ -282,7 +295,7 @@ export function CharacterClassification({
     setBusy(true);
     try {
       await sendFacts([sealed], transport.propose, (_property, result) => {
-        if (usable()) setDraft({ ...sealed, result });
+        if (usable() && currentDraft.current === sealed) setDraft({ ...sealed, result });
       });
     } finally {
       if (!usable()) return;
@@ -384,12 +397,13 @@ export function CharacterClassification({
                     )
                   }
                   onValueChange={(items) => {
-                    if (!usable() || running.current || factLocked(draft)) return;
-                    setPicked(items);
-                    change({
-                      ...draft.statement,
-                      value: { type: 'value', content: items[0]?.id ?? '' },
-                    });
+                    if (
+                      change({
+                        ...draft.statement,
+                        value: { type: 'value', content: items[0]?.id ?? '' },
+                      })
+                    )
+                      setPicked(items);
                   }}
                 />
                 <StatementFields
