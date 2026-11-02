@@ -94,7 +94,8 @@ test('resume during an unresolved discovery pause wins after drains settle; stop
   globalThis.setTimeout = new Proxy(originalSet, {
     apply(target, receiver, args: unknown[]) {
       const delay = args[1];
-      if (delay !== 0 && delay !== INTERVAL) return Reflect.apply(target, receiver, args) as ReturnType<typeof setTimeout>;
+      if (delay !== 0 && delay !== INTERVAL)
+        return Reflect.apply(target, receiver, args) as ReturnType<typeof setTimeout>;
       const callback = args[0] as (...cb: unknown[]) => unknown;
       let timer: ReturnType<typeof setTimeout>;
       timer = Reflect.apply(target, receiver, [
