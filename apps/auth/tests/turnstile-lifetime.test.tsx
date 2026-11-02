@@ -26,6 +26,7 @@ const globals = {
   Element: dom.Element,
   Node: dom.Node,
   MutationObserver: dom.MutationObserver,
+  scrollTo: dom.scrollTo.bind(dom),
   getComputedStyle: dom.getComputedStyle.bind(dom),
   requestAnimationFrame: dom.requestAnimationFrame.bind(dom),
   cancelAnimationFrame: dom.cancelAnimationFrame.bind(dom),
