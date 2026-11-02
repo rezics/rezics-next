@@ -5,10 +5,12 @@ const useFocusLayoutEffect = typeof document === 'undefined' ? useEffect : useBr
 function actionButton(target: EventTarget | null): HTMLButtonElement | null {
   if (target instanceof HTMLButtonElement) return target;
   if (!(target instanceof Node)) return null;
-  const start = target.nodeType === 1 ? target : target.parentElement;
-  if (!start || typeof (start as { closest?: unknown }).closest !== 'function') return null;
-  const button = (start as { closest(selector: string): unknown }).closest('button');
-  return button instanceof HTMLButtonElement ? button : null;
+  let node: Node | null = target;
+  while (node) {
+    if (node instanceof HTMLButtonElement) return node;
+    node = node.parentNode;
+  }
+  return null;
 }
 
 function recoverTarget(root: HTMLElement | null, source: HTMLButtonElement): HTMLElement | null {
