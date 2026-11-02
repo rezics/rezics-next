@@ -267,6 +267,41 @@ test('all supplied native unavailable states retain selection and manual retry w
   });
 });
 
+test('an unavailable continuation can restart at the first page with its purpose and Subject', async () => {
+  await withDirectory(async ({ host, render, click }) => {
+    const firstPage = { purpose: request.purpose, limit: request.limit };
+    const calls: BoardDirectoryRequest[] = [];
+    await render(
+      <BoardDirectory
+        {...props}
+        result={{ state: 'unavailable' }}
+        onNavigate={(destination) => calls.push(destination)}
+      />,
+    );
+    const restart = [...host.querySelectorAll<HTMLAnchorElement>('a')].find(
+      (link) => link.textContent === m.board_directory_restart(),
+    )!;
+    expect(restart.getAttribute('href')).toBe(boardDirectoryHref(firstPage, 'en', contribution));
+    expect(await click(restart, { ctrlKey: true })).toBe(false);
+    expect(await click(restart)).toBe(true);
+    expect(calls).toEqual([firstPage]);
+
+    let retries = 0;
+    await render(
+      <BoardDirectory
+        {...ordinaryProps}
+        request={firstPage}
+        result={{ state: 'unavailable' }}
+        onRetry={() => retries++}
+      />,
+    );
+    expect(host.querySelector('a[href*="cursor"]')).toBeNull();
+    expect(host.querySelector('button')?.textContent).toBe(m.board_directory_retry());
+    await click(host.querySelector('button')!);
+    expect(retries).toBe(1);
+  });
+});
+
 test('loading, sparse continuation and final empty differ while every native write predicate remains authoritative', async () => {
   await withDirectory(async ({ host, render }) => {
     await render(<BoardDirectory {...props} result={{ state: 'loading' }} />);

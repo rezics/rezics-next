@@ -71,3 +71,9 @@ foreground budget. Automatic reads remain visible-tab-only and capped at four; t
 automatic refresh. Explicit manual recovery remains available for a nonterminal unavailable result, and a late read
 cannot update a replacement visit or replenish its budget. A caller read failure stays unavailable rather than
 claiming completion.
+
+## Board directory continuation recovery
+
+Unavailable continuation pages offer a localized “Start from the first page” link that drops the cursor while
+retaining purpose and contribution Subject context through ordinary route navigation. First-page failures keep retry,
+and the recovery action does not imply why a read was unavailable.

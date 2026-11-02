@@ -2414,6 +2414,7 @@
   "board_directory_loading": "Loading boards…",
   "board_directory_unavailable": "Boards could not be loaded. Your selection is preserved. Try again.",
   "board_directory_retry": "Try again",
+  "board_directory_restart": "Start from the first page",
   "board_directory_denied": "You cannot access this board directory.",
   "board_directory_empty": "No boards are available for this purpose.",
   "board_directory_sparse": "No boards are visible on this page. Continue to the next page.",

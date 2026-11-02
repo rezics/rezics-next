@@ -2422,6 +2422,7 @@
   "board_directory_loading": "正在加载版块…",
   "board_directory_unavailable": "无法加载版块。已保留你的选择，请重试。",
   "board_directory_retry": "重试",
+  "board_directory_restart": "从第一页重新开始",
   "board_directory_denied": "你无法访问此版块目录。",
   "board_directory_empty": "此用途暂无可用版块。",
   "board_directory_sparse": "此页没有可见的版块，请继续下一页。",

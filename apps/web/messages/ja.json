@@ -2422,6 +2422,7 @@
   "board_directory_loading": "掲示板を読み込み中…",
   "board_directory_unavailable": "掲示板を読み込めませんでした。選択は保持されています。再試行してください。",
   "board_directory_retry": "再試行",
+  "board_directory_restart": "最初のページから再開",
   "board_directory_denied": "この掲示板一覧にはアクセスできません。",
   "board_directory_empty": "この用途の掲示板はありません。",
   "board_directory_sparse": "このページに表示できる掲示板はありません。次のページに進んでください。",

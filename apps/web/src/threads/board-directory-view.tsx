@@ -78,6 +78,15 @@ export function BoardDirectory({ request, contribution, result, previous, onNavi
             <Button variant="outline" size="lg" className={actionClassName} onClick={onRetry}>
               {m.board_directory_retry()}
             </Button>
+            {request.cursor ? (
+              <a
+                href={boardDirectoryHref({ purpose: request.purpose, limit: request.limit }, locale, contribution)}
+                onClick={navigate({ purpose: request.purpose, limit: request.limit })}
+                className={cn(buttonVariants({ variant: 'outline', size: 'lg' }), actionClassName)}
+              >
+                {m.board_directory_restart()}
+              </a>
+            ) : null}
           </div>
         ) : null}
         {result.state === 'closed' ? (

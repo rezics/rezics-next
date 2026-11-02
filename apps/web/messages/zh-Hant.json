@@ -2422,6 +2422,7 @@
   "board_directory_loading": "正在載入看板…",
   "board_directory_unavailable": "無法載入看板。已保留你的選擇，請重試。",
   "board_directory_retry": "重試",
+  "board_directory_restart": "從第一頁重新開始",
   "board_directory_denied": "你無法存取此看板目錄。",
   "board_directory_empty": "此用途尚無可用看板。",
   "board_directory_sparse": "此頁沒有可見的看板，請繼續下一頁。",

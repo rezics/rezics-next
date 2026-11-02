@@ -2422,6 +2422,7 @@
   "board_directory_loading": "Cargando foros…",
   "board_directory_unavailable": "No se pudieron cargar los foros. Tu selección se conserva. Inténtalo de nuevo.",
   "board_directory_retry": "Reintentar",
+  "board_directory_restart": "Empezar desde la primera página",
   "board_directory_denied": "No puedes acceder a este directorio de foros.",
   "board_directory_empty": "No hay foros disponibles para este uso.",
   "board_directory_sparse": "No hay foros visibles en esta página. Continúa a la siguiente.",

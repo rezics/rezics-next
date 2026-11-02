@@ -2422,6 +2422,7 @@
   "board_directory_loading": "게시판 불러오는 중…",
   "board_directory_unavailable": "게시판을 불러오지 못했습니다. 선택은 유지됩니다. 다시 시도하세요.",
   "board_directory_retry": "다시 시도",
+  "board_directory_restart": "첫 페이지부터 다시 시작",
   "board_directory_denied": "이 게시판 목록에 접근할 수 없습니다.",
   "board_directory_empty": "이 용도의 게시판이 없습니다.",
   "board_directory_sparse": "이 페이지에 표시할 게시판이 없습니다. 다음 페이지로 이동하세요.",

@@ -2422,6 +2422,7 @@
   "board_directory_loading": "Boards werden geladen…",
   "board_directory_unavailable": "Die Boards konnten nicht geladen werden. Deine Auswahl bleibt erhalten. Versuche es erneut.",
   "board_directory_retry": "Erneut versuchen",
+  "board_directory_restart": "Auf der ersten Seite neu beginnen",
   "board_directory_denied": "Du hast keinen Zugriff auf dieses Board-Verzeichnis.",
   "board_directory_empty": "Für diesen Zweck sind keine Boards verfügbar.",
   "board_directory_sparse": "Auf dieser Seite sind keine Boards sichtbar. Gehe zur nächsten Seite.",
