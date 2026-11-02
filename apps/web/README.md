@@ -3162,9 +3162,11 @@ constructed story responses do not establish native disclosure or growth proof.
 
 `/curate/presentation` edits each locally defined view of the active generic, structural-base, type and route
 templates using the same Puck registry, schema-derived fields and layout renderers. The closed native view list
-supplies the order; missing views are not materialized, so native route/type/nearest-base/generic fallback stays
-intact. Route templates retain their overview-only contract. Adding a type or route template starts with a copy
+supplies the order; missing views are not materialized automatically, so native route/type/nearest-base/generic
+fallback stays intact until a curator explicitly adds an override. Route templates retain their overview-only
+contract. Adding a type or route template starts with a copy
 of the current generic overview. No subject labels, private data or extra page reads populate these controls.
+Adding a companion view to a generic, base or type template explicitly offers only that template's local overview or an empty valid document as its source.
 
 Each template/view keeps both its composition and its raw Puck editing data in memory. Switching selections retains
 unfinished language fields, node IDs and uncommitted edits. The selected locale controls the preview; editing one

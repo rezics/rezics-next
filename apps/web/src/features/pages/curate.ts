@@ -8,6 +8,7 @@ import {
   type PresentationProfile,
   type TemplateBody,
   type View,
+  type ViewDocuments,
 } from '@rezics/composition';
 
 export type Template = { scope: 'generic'; key: null } | { scope: 'base' | 'type' | 'route'; key: string };
@@ -134,6 +135,82 @@ export function withView(
           ),
         }),
       };
+  }
+}
+
+export type CompanionViewSource = 'overview' | 'empty';
+
+/** Add one supported local view from an explicit source without aliasing the overview document. */
+export function addCompanionView(
+  profile: PresentationProfile,
+  template: Template,
+  view: View,
+  source: CompanionViewSource,
+): PresentationProfile {
+  if (template.scope === 'route' || !isView(view) || view === 'overview' || viewOf(profile, template, view))
+    throw new TypeError('Unsupported companion view');
+  const document =
+    source === 'overview'
+      ? overviewOf(profile, template)
+      : source === 'empty'
+        ? { root: { props: {} }, content: [] }
+        : undefined;
+  if (!document) throw new TypeError('A companion view requires an explicit local overview or empty document');
+  return withView(profile, template, view, structuredClone(document));
+}
+
+/** Remove only the selected local override; overview shorthand and every sibling remain intact. */
+export function resetCompanionView(
+  profile: PresentationProfile,
+  template: Template,
+  view: View,
+): PresentationProfile {
+  if (template.scope === 'route' || !isView(view) || view === 'overview')
+    throw new TypeError('Unsupported companion view');
+
+  function resetBody(body: TemplateBody): TemplateBody {
+    if (!('views' in body) || body.views[view] === undefined) return body;
+    const views: Partial<ViewDocuments> = { ...body.views };
+    delete views[view];
+    const overview = views.overview;
+    if (!overview) throw new TypeError('A template requires an overview');
+    return Object.keys(views).length === 1 ? { document: overview } : { views: views as ViewDocuments };
+  }
+
+  switch (template.scope) {
+    case 'generic': {
+      if (!('views' in profile.generic) || profile.generic.views[view] === undefined) return profile;
+      const views: Partial<ViewDocuments> = { ...profile.generic.views };
+      delete views[view];
+      const overview = views.overview;
+      if (!overview) throw new TypeError('A template requires an overview');
+      return {
+        ...profile,
+        generic: Object.keys(views).length === 1 ? overview : { views: views as ViewDocuments },
+      };
+    }
+    case 'base': {
+      const entry = profile.bases.find((item) => item.base === template.key);
+      if (!entry || !('views' in entry) || entry.views[view] === undefined) return profile;
+      return {
+        ...profile,
+        bases: replace(profile.bases, (item) => item.base, template.key, {
+          base: template.key,
+          ...resetBody(entry),
+        }),
+      };
+    }
+    case 'type': {
+      const entry = profile.types.find((item) => item.type === template.key);
+      if (!entry || !('views' in entry) || entry.views[view] === undefined) return profile;
+      return {
+        ...profile,
+        types: replace(profile.types, (item) => item.type, template.key, {
+          type: template.key,
+          ...resetBody(entry),
+        }),
+      };
+    }
   }
 }
 

@@ -33,13 +33,16 @@ import {
 import { m } from '../../paraglide/messages.js';
 import { ErrorPage } from '../../shell/shell';
 import {
+  addCompanionView,
   overviewOf,
   profileTemplates,
+  resetCompanionView,
   templateViewNames,
   viewOf,
   viewPointer,
   withTemplate,
   withView,
+  type CompanionViewSource,
   type CurationFailure,
   type Template,
 } from './curate';
@@ -70,6 +73,7 @@ import { type CurationAdmissionLease, CurationReaderAdmission } from './curation
 import { CurationFailureNotice, CurationPublicationRecovery } from './curation-publish-view';
 import { CurationNavigationGuard } from './curation-navigation-guard';
 import { removeKeyedTemplate, type KeyedTemplate } from './curation-template-removal';
+import { CurationCompanionViews } from './curation-companion-views';
 
 const PageEditor = lazy(() => import('./editor').then((module) => ({ default: module.PageEditor })));
 
@@ -708,6 +712,56 @@ function AdmittedPresentationViewEditor({
     if (!correction) setOwned(setMessage, '');
   }
 
+  function addCompanion(view: View, source: CompanionViewSource) {
+    if (!isCurrent() || !draft || inFlight.current || publication.getSnapshot().busy) return;
+    const template = draft.selection.template;
+    setOwned(setDraft, (value) => {
+      if (!value) return value;
+      const editors = { ...value.editors };
+      delete editors[selectionKey({ template, view })];
+      return {
+        ...value,
+        profile: addCompanionView(value.profile, template, view, source),
+        selection: { template, view },
+        editors,
+      };
+    });
+    setOwned(setCorrection, null);
+    setOwned(setFailure, null);
+    setOwned(setFailureProfile, null);
+    setOwned(setMessage, '');
+    setOwned(setEditorOpen, true);
+  }
+
+  function resetCompanion(view: View) {
+    if (
+      !isCurrent() ||
+      !draft ||
+      inFlight.current ||
+      publication.getSnapshot().busy ||
+      draft.selection.view !== view ||
+      viewOf(draft.profile, draft.selection.template, view) === undefined
+    )
+      return;
+    const template = draft.selection.template;
+    setOwned(setDraft, (value) => {
+      if (!value) return value;
+      const editors = { ...value.editors };
+      delete editors[selectionKey({ template, view })];
+      return {
+        ...value,
+        profile: resetCompanionView(value.profile, template, view),
+        selection: { template, view: 'overview' },
+        editors,
+      };
+    });
+    setOwned(setCorrection, null);
+    setOwned(setFailure, null);
+    setOwned(setFailureProfile, null);
+    setOwned(setMessage, '');
+    setOwned(setEditorOpen, true);
+  }
+
   function addTemplate(event: FormEvent) {
     event.preventDefault();
     if (!isCurrent() || !draft || inFlight.current || publication.getSnapshot().busy) return;
@@ -950,6 +1004,15 @@ function AdmittedPresentationViewEditor({
               </NativeSelect>
             </Field>
           </div>
+          <CurationCompanionViews
+            key={JSON.stringify(selection.template)}
+            profile={profile}
+            selection={selection}
+            viewNames={viewNames}
+            disabled={busy}
+            onAdd={addCompanion}
+            onReset={resetCompanion}
+          />
           <details className="text-sm">
             <summary className={editorDisclosureClass}>{m.presentation_editor_resolver_details()}</summary>
             <p className="mt-2 text-muted-foreground">{m.curation_fallback()}</p>
