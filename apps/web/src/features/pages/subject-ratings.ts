@@ -123,6 +123,142 @@ export function ratingFailure(status: number): Exclude<RatingOutcome<never>, { k
   return { kind: 'failed' };
 }
 
+type RatingRecord = Record<string, unknown>;
+
+function isRecord(value: unknown): value is RatingRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isInteger(value: unknown): value is number {
+  return Number.isInteger(value);
+}
+
+function isDate(value: unknown): value is string {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+function isDateTime(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value) &&
+    isDate(value.slice(0, 10)) &&
+    Number.isFinite(Date.parse(value))
+  );
+}
+
+function isRatingQuestion(value: unknown): value is RatingQuestion {
+  if (!isRecord(value) || !isRecord(value.scale)) return false;
+  return (
+    value.id === QUESTION &&
+    isInteger(value.revision) &&
+    value.revision >= 1 &&
+    value.revision <= 2_147_483_647 &&
+    typeof value.label === 'string' &&
+    value.label.length >= 1 &&
+    value.label.length <= 200 &&
+    ['work', 'release', 'episode', 'character'].includes(value.grain as string) &&
+    isInteger(value.scale.min) &&
+    isInteger(value.scale.max) &&
+    value.scale.max > value.scale.min &&
+    isInteger(value.scale.displayStep) &&
+    value.scale.displayStep >= 1
+  );
+}
+
+function isPublicFigure(value: unknown): value is PublicFigure {
+  if (!isRecord(value) || !isRecord(value.scale)) return false;
+  const validDisplayNumber = (number: unknown) =>
+    number === null || (typeof number === 'number' && Number.isFinite(number) && number >= 0 && number <= 10);
+  return (
+    value.questionId === QUESTION &&
+    value.populationId === GLOBAL &&
+    isInteger(value.scale.min) &&
+    isInteger(value.scale.max) &&
+    isInteger(value.scale.displayStep) &&
+    value.scale.displayStep >= 1 &&
+    isInteger(value.count) &&
+    value.count >= 0 &&
+    ['ready', 'insufficient_data', 'updating'].includes(value.state as string) &&
+    validDisplayNumber(value.mean) &&
+    validDisplayNumber(value.score)
+  );
+}
+
+function isFreshness(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    (value.asOf === null || isDateTime(value.asOf)) &&
+    typeof value.updating === 'boolean'
+  );
+}
+
+function isAggregateFigure(value: unknown): value is Figure {
+  if (
+    !isRecord(value) ||
+    typeof value.population !== 'string' ||
+    !isInteger(value.count) ||
+    value.count < 0 ||
+    !isFreshness(value.freshness)
+  )
+    return false;
+
+  const hasMean = 'mean' in value;
+  const hasHistogram = 'histogram' in value;
+  const hasRemaining = 'remaining' in value;
+  if (hasMean || hasHistogram) {
+    return (
+      hasMean &&
+      hasHistogram &&
+      !hasRemaining &&
+      typeof value.mean === 'number' &&
+      Number.isFinite(value.mean) &&
+      Array.isArray(value.histogram) &&
+      value.histogram.length >= 1 &&
+      value.histogram.every((count) => isInteger(count) && count >= 0)
+    );
+  }
+  return !hasRemaining || (isInteger(value.remaining) && value.remaining >= 1);
+}
+
+function isStatistic(value: unknown): value is Statistic {
+  if (!isRecord(value) || !isRecord(value.scale)) return false;
+  const { min, max } = value.scale;
+  return (
+    value.source === 'vndb' &&
+    typeof value.sourceRecordId === 'string' &&
+    value.sourceRecordId.length >= 1 &&
+    value.sourceRecordId.length <= 1024 &&
+    (value.sourceAlias === undefined ||
+      (typeof value.sourceAlias === 'string' && /^[a-z][a-z0-9_-]{0,31}$/.test(value.sourceAlias))) &&
+    isInteger(min) &&
+    min >= 0 &&
+    min <= 4096 &&
+    isInteger(max) &&
+    max > min &&
+    max <= 4096 &&
+    typeof value.mean === 'number' &&
+    Number.isFinite(value.mean) &&
+    value.mean >= min &&
+    value.mean <= max &&
+    Number.isSafeInteger(value.count) &&
+    value.count >= 1 &&
+    value.count <= 2_147_483_647 &&
+    isDate(value.asOf) &&
+    typeof value.licence === 'string' &&
+    value.licence.length >= 1 &&
+    value.licence.length <= 1024 &&
+    typeof value.attribution === 'string' &&
+    value.attribution.length >= 1 &&
+    value.attribution.length <= 2000
+  );
+}
+
+function isStatistics(value: unknown): value is Statistic[] {
+  return Array.isArray(value) && value.every(isStatistic);
+}
+
 /** Legacy supplied display fixtures are adapted explicitly; they are never native population authority. */
 export function suppliedRatingSources(data: Ratings): RatingSources {
   const global = data.figures.find((item) => item.population === GLOBAL);
@@ -149,29 +285,37 @@ export async function readRatings(client: KernelClient, id: string, only?: Ratin
   const [question, figure, global, statistics] = await Promise.all([
     settle('question', async () => {
       const result = await client['rating-questions']({ questionId: QUESTION }).get();
-      return result.status === 200 && result.data?.id === QUESTION
+      return result.status === 200 && isRatingQuestion(result.data)
         ? { kind: 'ready', value: result.data }
         : ratingFailure(result.status);
     }),
     settle('figure', async () => {
       const result = await subject.figure.get();
-      return result.status === 200 &&
-        result.data?.figure.questionId === QUESTION &&
-        result.data.figure.populationId === GLOBAL
+      return result.status === 200 && isPublicFigure(result.data?.figure)
         ? { kind: 'ready', value: result.data.figure }
         : ratingFailure(result.status);
     }),
     settle('global', async () => {
       const result = await subject.ratings.get({ query: { question: QUESTION, population: [GLOBAL] } });
       if (result.status !== 200 || !result.data) return ratingFailure(result.status);
+      if (
+        !isRecord(result.data) ||
+        result.data.subject !== id ||
+        result.data.question !== QUESTION ||
+        !Array.isArray(result.data.figures) ||
+        result.data.figures.length < 1 ||
+        result.data.figures.length > 20 ||
+        !result.data.figures.every(isAggregateFigure)
+      )
+        return { kind: 'failed' };
       const value = result.data.figures.find((item) => item.population === GLOBAL);
-      return result.data.subject === id && result.data.question === QUESTION && value
+      return value
         ? { kind: 'ready', value }
         : { kind: 'failed' };
     }),
     settle('statistics', async () => {
       const result = await subject['source-statistics'].get();
-      return result.status === 200 && result.data
+      return result.status === 200 && isStatistics(result.data)
         ? { kind: 'ready', value: result.data }
         : ratingFailure(result.status);
     }),
