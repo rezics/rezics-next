@@ -50,6 +50,8 @@ Ban controls register with the existing page authoring departure owner; standalo
 Nonempty target input or reason, an explicit selected account, either reviewed confirmation, and sending or
 uncertain commands require the shared Stay/Leave decision. Opening management and inspecting rows are browsing.
 Cancelling an unsent confirmation clears only that confirmation; remaining draft fields still protect departure.
+Keyboard review keeps its current focus position; Cancel returns focus to the review trigger, and a successful settlement
+focuses the existing result boundary only when focus remains on the removed confirmation action.
 Stay preserves the exact reviewed identity, reason and confirmation without resolving the handle again or
 generating a new key. An uncertain retry retains the original immutable command and excludes refresh.
 
