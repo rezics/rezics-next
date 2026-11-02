@@ -46,7 +46,23 @@ test('The mounted standalone Subject Relations page distinguishes failed, empty 
   const cursor = 'opaque:/+?=&% 日本語#';
   const base = `/en/subjects/${frame.id}/the-little-prince/relations?property=wdt%3AP155`;
   const definitions = { 'wdt:P155': { label: 'Sequel', group: 'order' as const, symmetric: false } };
-  const value = { locale: 'en', link: PlainLink, reader: defaultReader, unlabelled: 'Unlabelled', spoilerShow: 'Show' };
+  const value = {
+    locale: 'en',
+    link: PlainLink,
+    reader: defaultReader,
+    unlabelled: 'Unlabelled',
+    spoilerShow: 'Show',
+    labels: {
+      spoilerShow: m.subject_spoiler_show(),
+      documentSpoiler: m.thread_reveal_spoiler(),
+      cover: {
+        withheld: m.subject_cover_withheld(),
+        reveal: m.subject_cover_reveal(),
+        credit: m.subject_cover_credit(),
+        via: m.subject_cover_via(),
+      },
+    },
+  };
   const render = async (body?: Record<string, unknown>) =>
     act(async () =>
       root.render(

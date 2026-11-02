@@ -53,6 +53,16 @@ function ReadingPage({ state }: { state: State }) {
               reader: defaultReader,
               unlabelled: m.subject_value_unlabelled(),
               spoilerShow: m.subject_spoiler_show(),
+              labels: {
+                spoilerShow: m.subject_spoiler_show(),
+                documentSpoiler: m.thread_reveal_spoiler(),
+                cover: {
+                  withheld: m.subject_cover_withheld(),
+                  reveal: m.subject_cover_reveal(),
+                  credit: m.subject_cover_credit(),
+                  via: m.subject_cover_via(),
+                },
+              },
             }}
           />
         )}
