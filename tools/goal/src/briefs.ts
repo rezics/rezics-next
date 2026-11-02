@@ -95,7 +95,7 @@ function object(value: unknown, label: string): Record<string, unknown> {
 }
 function list(value: unknown, label: string, nonempty = false): string[] {
   if (!Array.isArray(value) || value.some((x) => typeof x !== 'string' || !x.trim()) || (nonempty && !value.length))
-    throw new Error(`${label} must be a string list`);
+    throw new Error(`${label} must be a${nonempty ? ' non-empty' : ''} string list`);
   return value;
 }
 function text(value: unknown, label: string): string {
@@ -319,39 +319,69 @@ export function parseBrief(markdown: string, ownership: RiskOwnership): Brief {
   if (!match) throw new Error('brief needs Markdown front matter');
   const raw = object(Bun.YAML.parse(match[1]!), 'front matter');
   if (!BRIEF_KINDS.includes(raw.kind as TaskKind)) throw new Error('unsupported brief kind');
-  const acceptance = object(raw.acceptance, 'acceptance');
-  const placement = acceptance.placement;
-  if (placement !== undefined && placement !== 'local' && placement !== 'default')
-    throw new Error('acceptance.placement must be local or default');
-  const estimate = object(
-    raw.estimate ?? (raw.kind === 'verification' ? { lines: 1, files: 1 } : undefined),
-    'estimate',
-  );
-  for (const key of ['lines', 'files'])
-    if (!Number.isSafeInteger(estimate[key]) || (estimate[key] as number) < 1)
-      throw new Error(`estimate.${key} must be positive`);
-  if (raw.target === 'main' && raw.goal !== 'control-plane')
+  const goal = text(raw.goal, 'goal');
+  const manager = text(raw.manager ?? goal, 'manager');
+  const kind = raw.kind as TaskKind;
+  if (raw.target === 'main' && goal !== 'control-plane')
     throw new Error('only a control-plane brief can target main; a brief without a target line goes to dev');
   if (raw.target !== undefined && raw.target !== 'stabilize' && raw.target !== 'main')
     throw new Error(
       'brief target must be stabilize or, for control-plane, main; a brief without a target line goes to dev',
     );
+  const target = raw.target === 'stabilize' || raw.target === 'main' ? raw.target : undefined;
+  const hasFrozenAcceptance = /^\s*(?:`{3,}|~{3,})(?:[^\r\n]*[ \t])?path=/m.test(markdown);
+  const ordinaryDevProduct = devProductBrief({ goal, kind, ...(target ? { target } : {}) });
+  const acceptance: Record<string, unknown> = raw.acceptance === undefined ? {} : object(raw.acceptance, 'acceptance');
+  const commandMissing = acceptance.command === undefined;
+  const workerOwnedAcceptance = ordinaryDevProduct && !hasFrozenAcceptance && commandMissing;
+  const placement = acceptance.placement;
+  if (placement !== undefined && placement !== 'local' && placement !== 'default')
+    throw new Error('acceptance.placement must be local or default');
+  if (commandMissing && placement !== undefined)
+    throw new Error('acceptance.placement requires acceptance.command; omit placement for worker-owned validation');
+  if (commandMissing && !workerOwnedAcceptance)
+    throw new Error(
+      'acceptance.command is required for main/stabilize releases, verification, and frozen acceptance briefs; provide a non-empty argv list',
+    );
+  if (acceptance.tests === undefined && !workerOwnedAcceptance)
+    throw new Error('acceptance.tests is required with acceptance.command; list the behavior the command verifies');
+  const estimateValue =
+    raw.estimate === undefined
+      ? kind === 'verification'
+        ? { lines: 1, files: 1 }
+        : ordinaryDevProduct && !hasFrozenAcceptance
+          ? { lines: 1500, files: 24 }
+          : undefined
+      : raw.estimate;
+  if (estimateValue === undefined)
+    throw new Error(
+      'estimate is required for main/stabilize releases and frozen acceptance briefs; provide positive integer lines and files',
+    );
+  if (!estimateValue || typeof estimateValue !== 'object' || Array.isArray(estimateValue))
+    throw new Error(
+      'estimate must be an object with positive integer lines and files; ordinary dev product briefs may omit it',
+    );
+  const estimate = estimateValue as Record<string, unknown>;
+  for (const key of ['lines', 'files'])
+    if (!Number.isSafeInteger(estimate[key]) || (estimate[key] as number) < 1)
+      throw new Error(`estimate.${key} must be a positive integer`);
   const continuationRequest = continuation(raw.continuation);
   const brief: Brief = {
     ...(continuationRequest ? { continuation: continuationRequest } : {}),
-    goal: text(raw.goal, 'goal'),
-    manager: text(raw.manager ?? raw.goal, 'manager'),
-    kind: raw.kind as TaskKind,
+    goal,
+    manager,
+    kind,
     paths: list(raw.paths ?? (raw.kind === 'verification' ? [] : undefined), 'paths', raw.kind !== 'verification'),
     ...(raw.kind === 'verification' ? { proof: parseProofMetadata(raw.proof) } : {}),
     riskAreas: list(raw.riskAreas, 'riskAreas'),
-    ...(raw.target === 'stabilize' || raw.target === 'main' ? { target: raw.target } : {}),
+    ...(target ? { target } : {}),
     ...(raw.model === undefined ? {} : { model: text(raw.model, 'model') }),
     ...(raw.effort === undefined ? {} : { effort: text(raw.effort, 'effort') }),
     acceptance: {
-      command: list(acceptance.command, 'acceptance.command', true),
-      tests: list(acceptance.tests, 'acceptance.tests', true),
-      failing: boolean(acceptance.failing, 'acceptance.failing', false),
+      command: commandMissing ? [] : list(acceptance.command, 'acceptance.command', true),
+      tests: acceptance.tests === undefined ? [] : list(acceptance.tests, 'acceptance.tests', true),
+      failing: boolean(acceptance.failing, 'acceptance.failing', workerOwnedAcceptance),
+      ...(workerOwnedAcceptance ? { workerOwned: true as const } : {}),
       ...(placement === undefined ? {} : { placement: placement as AcceptancePlacement }),
     },
     estimate: { lines: estimate.lines as number, files: estimate.files as number },
@@ -368,7 +398,7 @@ export function parseBrief(markdown: string, ownership: RiskOwnership): Brief {
       throw new Error(
         'verification is ordinary, read-only original acceptance; paths, risk areas, target and local override are forbidden',
       );
-    if (/^\s*```[^\n]*\bpath=/m.test(markdown)) throw new Error('verification cannot supply frozen input blocks');
+    if (hasFrozenAcceptance) throw new Error('verification cannot supply frozen input blocks');
   } else if (raw.proof !== undefined) throw new Error('proof metadata requires kind verification');
   if (brief.acceptance.placement === 'local') validateLocalAcceptanceCommand(brief.acceptance.command);
   brief.paths.forEach(validatePath);

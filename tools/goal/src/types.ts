@@ -160,12 +160,16 @@ export type Brief = {
   paths: string[];
   riskAreas: string[];
   acceptance: {
+    /** For ordinary dev outcome briefs, an empty command is paired with workerOwned. */
     command: string[];
     tests: string[];
     failing: boolean;
+    /** Set by the parser when an ordinary dev product brief omits its acceptance command. */
+    workerOwned?: true;
     /** Omitted briefs keep the existing placement policy; local opts into the audited local command boundary. */
     placement?: AcceptancePlacement;
   };
+  /** Ordinary dev product briefs default to the routing slice ceiling when no estimate is supplied. */
   estimate: { lines: number; files: number };
   criticalPath: boolean;
   waiting: string[];

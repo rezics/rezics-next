@@ -174,10 +174,16 @@ export function workerCheckProtocol(
       'Success requires the actual declared command to finish with exit zero and unchanged captured source. Missing, unknown and nonzero results stay non-green; return the exact failed assertion or setup error and log reference to the original owner.',
     ].join(' ');
   }
+  const workerOwnedAcceptance = typeof briefOrContract !== 'string' && briefOrContract.acceptance.workerOwned === true;
   if (minimalVerification(stateDirectory))
     return [
       'Verification is minimal: do not run acceptance, native or browser checks, a root check, worker-check or remote-check; they run after integration.',
       'Before finishing, type-check each workspace you changed from the worktree root (`bun run --cwd <workspace> typecheck`, or `bun scripts/typecheck.ts` for several) and fix every error; services/kernel and services/auth may use the compiler database or a check host: do not force `env -u KERNEL_CHECK_REMOTE` or local placement.',
+      ...(workerOwnedAcceptance
+        ? [
+            'This brief leaves validation to the worker. Choose or add focused tests that exercise the stated outcome, run them with the landing command below, and report the exact command and actual result; a missing acceptance command is not a pass. Broader acceptance remains deferred under this policy.',
+          ]
+        : []),
       LONG_WAIT,
       OWN_TESTS,
       'Then commit and return success (blocker null, `"checks":[]`), naming what you completed and the deferred acceptance, which is neither a blocker nor a reason to wait; return waiting only for a still-running check UUID this attempt started.',
@@ -187,7 +193,9 @@ export function workerCheckProtocol(
   const placement: AcceptancePlacement =
     typeof briefOrContract === 'string' ? 'default' : (briefOrContract.acceptance?.placement ?? 'default');
   const command = typeof briefOrContract === 'string' ? undefined : briefOrContract.acceptance?.command;
-  const once = 'Check slots are scarce: run your acceptance command once after your last relevant edit.';
+  const once = workerOwnedAcceptance
+    ? 'This brief leaves acceptance to the worker. Choose or add a focused, meaningful check that exercises the stated outcome; no pass is presumed. Run the chosen command once after your last relevant edit and report its exact command and observed result.'
+    : 'Check slots are scarce: run your acceptance command once after your last relevant edit.';
   const localRunner = join(worktree, 'scripts/worker-check.ts');
   const namedRunner = namedWorkerCheck(contractText);
   const runner = existsSync(localRunner)
@@ -217,7 +225,10 @@ export function workerCheckProtocol(
   if (!runner)
     return [
       once,
-      'This base has no scripts/worker-check.ts; do not add one. Run the acceptance command in the foreground from the worktree root and let it finish, then report its actual exit status; it gives no check id and no waiting result.',
+      workerOwnedAcceptance
+        ? 'This base has no scripts/worker-check.ts; do not add one. Run your focused validation command in the foreground from the worktree root and let it finish; it gives no check id and no waiting result.'
+        : 'This base has no scripts/worker-check.ts; do not add one. Run the acceptance command in the foreground from the worktree root and let it finish, then report its actual exit status; it gives no check id and no waiting result.',
+      ...(workerOwnedAcceptance ? ['Do not report success unless the chosen validation actually exits zero.'] : []),
       LONG_WAIT,
       REGRESSION,
     ].join(' ');

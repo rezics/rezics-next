@@ -1446,7 +1446,7 @@ export class WorkerTasks {
       }
       this.assertLocalAcceptanceCustody(task, nextBrief);
       const nextTaskClass = reshaped?.taskClass ?? task.taskClass;
-      if (!nextBrief.acceptance.command.length)
+      if (!nextBrief.acceptance.command.length && !nextBrief.acceptance.workerOwned)
         throw new Error('Imported attempts need a dispatchable contract before retry');
       const heldAmendment = task.state === 'held' && reshaped !== undefined;
       if (heldAmendment) {

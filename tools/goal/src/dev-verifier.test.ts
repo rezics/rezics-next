@@ -162,6 +162,28 @@ test('reuses a failed verifier check while its workspace inputs stay unchanged',
   expect(failedCalls).toBe(1);
 });
 
+test('worker-owned briefs keep affected verification without inventing an acceptance command', async () => {
+  const root = repo(),
+    base = git(root, 'rev-parse', 'dev-verified');
+  const landing = commit(root, 'services/kernel/change.ts', 'export const changed = true;\n', 'outcome');
+  git(root, 'branch', '-f', 'dev', landing);
+  const task = landedTask(base, landing);
+  task.brief.acceptance = { command: [], tests: [], failing: true, workerOwned: true };
+  const ctx = setup(root, [task]);
+  const commands: string[] = [];
+  await verifyDev({
+    ...ctx,
+    runGate: async (command) => {
+      commands.push(command.join(' '));
+      return { passed: true, output: '', timedOut: false };
+    },
+  });
+  expect(commands).toContain('affected-check');
+  expect(commands).not.toContain('');
+  expect(commands.some((command) => command.startsWith('acceptance'))).toBe(false);
+  expect(devVerificationState(root).behind).toBe(0);
+});
+
 test('passes all work since dev-verified once and advances the ref to the captured dev head', async () => {
   const root = repo();
   const first = commit(root, 'services/kernel/one.ts', 'export const one = 1;\n', 'landing one');

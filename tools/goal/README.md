@@ -48,7 +48,9 @@ does not add a wrapper. Workers do not run the root typecheck or other regressio
 run the tests in the test files they created or changed once, with the command the landing's verification uses for
 them: `bun test <files>`, the kernel check for kernel tests and the focused Web runner for Web tests. The prompt names
 these commands for the files the branch already changes, including the sibling tests of changed sources. Waits use one
-call with a yield of at least 300 seconds. The task's acceptance command defines when its work is done.
+call with a yield of at least 300 seconds. A supplied acceptance command defines the worker's check. For an ordinary
+dev product brief without one, the worker chooses focused validation and reports its exact command and actual result;
+the missing command never counts as a pass.
 
 A task whose paths touch `apps/web` or `packages/ui`, or an interface task without either, works against Storybook
 served from its own worktree (`storybook.ts`). Each catalogue gets a loopback port derived from the worktree path, so
@@ -545,26 +547,30 @@ manager: example
 kind: implementation
 paths: [tools/goal/src/example.ts]
 riskAreas: []
-acceptance:
-  command: [bun, test, tools/goal/src/example.test.ts]
-  tests: [rejects invalid input]
-  failing: true
-estimate:
-  lines: 100
-  files: 2
 criticalPath: false
 waiting: []
 ---
 
-Implement the behavior described by the failing acceptance test.
+Operators can see why an example input was refused. Follow the diagnostic conventions in
+[the CLI owner documentation](tools/goal/README.md#briefs-and-routing), and include the field and a repair hint.
+Done means invalid input names the field to fix while valid input keeps its current result.
+Choose the implementation and focused validation.
 ```
 
-Use the actual declared files and machine acceptance tests for the task. `manager` defaults to `goal`. Additional
-observable features are `inseparable`, `citesSources` and `hostileInput`. Kinds are `implementation`, `interface`,
-`bulk-text`, `claim`, `specification`, `research` and `mechanical`. A specified implementation must declare failing
-acceptance tests and fit within 1,500 lines and 24 files: one complete user-visible slice, never padded. Mechanical work is refused by model dispatch. Risk paths,
-source citations and hostile input take precedence over cheaper classes. Critical-path classification additionally
-requires waiting tasks and `inseparable`.
+Use the actual declared files. `manager` defaults to `goal`. Additional observable features are `inseparable`,
+`citesSources` and `hostileInput`. Kinds are `implementation`, `interface`, `bulk-text`, `claim`, `specification`,
+`research` and `mechanical`. An ordinary dev product brief (including untargeted control-plane work, excluding
+main/stabilize releases and verification work, and without frozen acceptance files) may omit `estimate` and `acceptance.command`. An omitted estimate uses the existing
+routing ceiling of 1,500 lines and 24 files. With no command, acceptance is worker-owned: the worker chooses or adds a
+focused check, runs it under the normal check protocol, and reports the exact command and observed result. The parser
+does not insert a passing command. Under minimal verification, the worker supplies outcome tests and runs them with
+the landing's command; broader acceptance stays deferred. The dev verifier keeps its affected and sibling checks and
+executes only supplied acceptance commands; omission earns no task acceptance pass. Any supplied `acceptance` fields keep their existing behavior; a supplied command
+still requires non-empty `tests`, and an implementation with supplied acceptance keeps the existing failing-test
+requirement. Main/stabilize releases, verification, and frozen acceptance briefs continue to require an explicit
+command and tests. `acceptance.placement` requires an explicit command. Mechanical work is refused
+by model dispatch. Risk paths, source citations and hostile input take precedence over cheaper classes. Critical-path
+classification additionally requires waiting tasks and `inseparable`.
 
 ### Acceptance placement
 
