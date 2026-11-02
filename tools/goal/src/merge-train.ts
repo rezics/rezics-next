@@ -1,3 +1,5 @@
+import { closeSync, constants, fchmodSync, fstatSync, lstatSync, openSync, readdirSync, realpathSync } from 'node:fs';
+import { basename } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { TrainResolver, TrainResolverInfrastructureError, type TrainConflict } from './train-resolver.ts';
 import { groupMembers, processIdentity, sameProcess, type ProcessIdentity } from './process.ts';
@@ -131,6 +133,58 @@ export function landingAffectedChecks(
 }
 /** A landing may change only files the formatter does not handle, such as SQL; that is not a formatter failure. */
 export const FORMAT_FLAGS = ['--no-error-on-unmatched-pattern'];
+
+/** Capture only a newly added disposable train tree, before any check can leave immutable fixture directories. */
+export function captureTrainWorktreeRemoval(tree: string): () => void {
+  const path = resolve(tree);
+  const parentPath = dirname(path);
+  const parent = realpathSync(parentPath);
+  const rootIdentity = lstatSync(path);
+  const parentIdentity = lstatSync(parent);
+  const sameInode = (left: ReturnType<typeof fstatSync>, right: ReturnType<typeof fstatSync>) =>
+    left.dev === right.dev && left.ino === right.ino;
+  const refuse = () => new Error(`Refusing cleanup of replaced train worktree: ${path}`);
+  if (!rootIdentity.isDirectory() || !parentIdentity.isDirectory()) throw refuse();
+  const flags = constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW;
+  const descriptorPath = (fd: number) => `/proc/self/fd/${fd}`;
+  const prepare = (fd: number) => {
+    const stat = fstatSync(fd);
+    if (stat.dev !== rootIdentity.dev) throw new Error(`Refusing cleanup across train filesystem boundary: ${path}`);
+    if ((stat.mode & 0o700) !== 0o700) fchmodSync(fd, (stat.mode & 0o7777) | 0o700);
+    for (const name of readdirSync(descriptorPath(fd))) {
+      const child = join(descriptorPath(fd), name);
+      const before = lstatSync(child);
+      // Directory permissions govern deletion. Never chmod package files (which can be hardlinks), or follow links
+      // to shared dependency stores, another worktree, or any other outside directory.
+      if (!before.isDirectory()) continue;
+      const childFd = openSync(child, flags);
+      try {
+        if (!sameInode(before, fstatSync(childFd))) throw refuse();
+        prepare(childFd);
+        if (!sameInode(before, lstatSync(child))) throw refuse();
+      } finally {
+        closeSync(childFd);
+      }
+    }
+  };
+  return () => {
+    if (realpathSync(parentPath) !== parent) throw refuse();
+    const parentFd = openSync(parent, flags);
+    try {
+      if (!sameInode(parentIdentity, fstatSync(parentFd))) throw refuse();
+      const rootFd = openSync(join(descriptorPath(parentFd), basename(path)), flags);
+      try {
+        if (!sameInode(rootIdentity, fstatSync(rootFd))) throw refuse();
+        prepare(rootFd);
+        if (!sameInode(rootIdentity, lstatSync(path))) throw refuse();
+      } finally {
+        closeSync(rootFd);
+      }
+    } finally {
+      closeSync(parentFd);
+    }
+  };
+}
 
 /** Kernel's lane runner prints failed-file summaries; passing file headings and stack frames are not failures. */
 export function failingTestFiles(output: string): string[] {
@@ -1587,6 +1641,7 @@ export class MergeTrain {
       let base = '';
       let previous = '';
       let added = false;
+      let prepareRemoval: (() => void) | undefined;
       let retry = false;
       let committed = false;
       let stale: LandingEntry | undefined;
@@ -1604,6 +1659,7 @@ export class MergeTrain {
         mkdirSync(resolve(o.worktreeRoot), { recursive: true });
         git(o.mainCheckout, 'worktree', 'add', '--detach', trainTree, base);
         added = true;
+        prepareRemoval = captureTrainWorktreeRemoval(trainTree);
 
         for (const entry of pending) {
           const request = entry.request;
@@ -2015,7 +2071,13 @@ export class MergeTrain {
           try {
             git(trainTree, 'merge', '--abort');
           } catch {}
-          git(o.mainCheckout, 'worktree', 'remove', '--force', trainTree);
+          try {
+            prepareRemoval?.();
+            git(o.mainCheckout, 'worktree', 'remove', '--force', trainTree);
+          } catch (error) {
+            for (const logPath of logPaths.values())
+              appendFileSync(logPath, `Train tree cleanup deferred: ${trainTree}: ${error}\n`);
+          }
         }
       }
       if (retry) continue;
@@ -2325,6 +2387,7 @@ export class MergeTrain {
     let stage: GateStage = 'setup';
     const trainTree = resolve(o.worktreeRoot, `train-${randomUUID()}`);
     let added = false;
+    let prepareRemoval: (() => void) | undefined;
     let workerCommit: string | undefined;
     let activeTargetHead: string | undefined;
     const runOwnedAffected = (command: readonly string[], cwd: string, log: string, env: NodeJS.ProcessEnv) =>
@@ -2391,6 +2454,7 @@ export class MergeTrain {
         mkdirSync(resolve(o.worktreeRoot), { recursive: true });
         git(o.mainCheckout, 'worktree', 'add', '--detach', trainTree, entry.candidate);
         added = true;
+        prepareRemoval = captureTrainWorktreeRemoval(trainTree);
         await this.mergeStabilizedCommitIntoDev(entry.candidate, trainTree, request.taskId, recorded.manager, logPath);
       }
       return true;
@@ -2454,6 +2518,7 @@ export class MergeTrain {
       mkdirSync(resolve(o.worktreeRoot), { recursive: true });
       git(o.mainCheckout, 'worktree', 'add', '--detach', trainTree, tip);
       added = true;
+      prepareRemoval = captureTrainWorktreeRemoval(trainTree);
       for (;;) {
         o.fence.assertCurrent(request);
         delete result.firstFailure;
@@ -3158,6 +3223,7 @@ export class MergeTrain {
           git(trainTree, 'merge', '--abort');
         } catch {}
         try {
+          prepareRemoval?.();
           git(o.mainCheckout, 'worktree', 'remove', '--force', trainTree);
         } catch (error) {
           // Retain the tree and exact cleanup failure without replacing a failed proof or a committed outcome.

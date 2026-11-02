@@ -271,12 +271,7 @@ export function dependencyInstallationMatches(worktree: string): boolean {
   }
   if (!prior || basename(dirname(dirname(prior))) !== key || !existsSync(prior)) return false;
   const template = dirname(dirname(prior));
-  return (
-    dependencyKey(template) === key &&
-    !bunInstallationFailure(template) &&
-    dependencyLinksMatch(template) &&
-    dependencyLinksMatch(worktree, template)
-  );
+  return dependencyStoreMatches(template, key) && dependencyLinksMatch(worktree, template);
 }
 
 /** Validate a published immutable dependency store itself, without accepting a consumer's receipt as proof. */
@@ -407,7 +402,7 @@ export function installShared(
       }
     }
     // An incomplete old store is never repaired in place while peers may be using its sealed packages.
-    if (dependencyKey(store) !== key || bunInstallationFailure(store) || !dependencyLinksMatch(store)) {
+    if (!dependencyStoreMatches(store, key)) {
       installPrivate(worktree, processLimits);
       return;
     }

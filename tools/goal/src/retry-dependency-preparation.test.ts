@@ -639,3 +639,73 @@ test('a matching private receipt cannot certify a changed Bun executable lookup'
     h.close();
   }
 });
+
+test('corrupt published store manifests prepare a same-base resume privately without changing peer dependencies', async () => {
+  for (const defect of ['missing-root', 'malformed-root', 'malformed-workspace']) {
+    const h = fixture();
+    try {
+      const task = h.tasks.dispatch(h.briefFile);
+      const peer = h.tasks.dispatch(h.briefFile);
+      await h.tasks.retry(task.id);
+      const paid = git(task.worktree, ['rev-parse', 'HEAD']);
+      const packages = readlinkSync(join(task.worktree, 'node_modules/.bun'));
+      const store = dirname(dirname(packages));
+      const metadata = join(store, defect === 'malformed-workspace' ? manifestPath : 'package.json');
+      // Inject incomplete publication only into this fixture's owned metadata; sealed packages stay untouched.
+      if (defect === 'missing-root') rmSync(metadata);
+      else writeFileSync(metadata, '{incomplete publication');
+      const peerLink = join(peer.worktree, 'node_modules/.bun');
+      const peerInode = lstatSync(peerLink).ino;
+      const peerPackage = join(peer.worktree, 'packages/definitions/node_modules/alpha/package.json');
+      const peerBytes = readFileSync(peerPackage);
+      const peerMode = lstatSync(realpathSync(peerPackage)).mode;
+      expect(dependencyInstallationMatches(task.worktree)).toBe(false);
+      const count = h.count();
+      await h.tasks.retry(task.id);
+      expect(h.count()).toBe(count + 1);
+      expect(dependencyInstallationMatches(task.worktree)).toBe(true);
+      expect(lstatSync(join(task.worktree, 'node_modules/.bun')).isSymbolicLink()).toBe(false);
+      expect(h.launches.at(-1)?.session).toBe('paid-session');
+      expect(h.store.task(task.id).base).toBe(task.base);
+      expect(git(task.worktree, ['rev-parse', 'HEAD'])).toBe(paid);
+      expect(lstatSync(peerLink).ino).toBe(peerInode);
+      expect(readlinkSync(peerLink)).toBe(packages);
+      expect(readFileSync(peerPackage)).toEqual(peerBytes);
+      expect(lstatSync(realpathSync(peerPackage)).mode).toBe(peerMode);
+      if (defect === 'missing-root') expect(existsSync(metadata)).toBe(false);
+      else expect(readFileSync(metadata, 'utf8')).toBe('{incomplete publication');
+      // Private recovery is reusable; a corrupt shared store does not force further healthy installs.
+      installShared(task.worktree, h.stores);
+      expect(h.count()).toBe(count + 1);
+    } finally {
+      h.close();
+    }
+  }
+});
+
+test('corrupt store recovery retains bounded install failure, while invalid current source never installs', async () => {
+  for (const defect of ['store', 'source']) {
+    const h = fixture();
+    try {
+      const task = h.tasks.dispatch(h.briefFile);
+      await h.tasks.retry(task.id);
+      let paid = git(task.worktree, ['rev-parse', 'HEAD']);
+      if (defect === 'store') {
+        const store = dirname(dirname(readlinkSync(join(task.worktree, 'node_modules/.bun'))));
+        writeFileSync(join(store, 'package.json'), '{incomplete publication');
+        writeFileSync(h.fail, 'fail');
+      } else paid = h.commit(task.worktree, 'package.json', '{invalid current source');
+      const count = h.count();
+      if (defect === 'store') await expect(h.tasks.retry(task.id)).rejects.toThrow('fixture install failure');
+      else await expect(h.tasks.retry(task.id)).rejects.toBeInstanceOf(SyntaxError);
+      expect(h.count()).toBe(count + (defect === 'store' ? 1 : 0));
+      expect(h.launches).toHaveLength(1);
+      expect(git(task.worktree, ['rev-parse', 'HEAD'])).toBe(paid);
+      expect(existsSync(join(task.worktree, 'node_modules/.goal-private-dependencies'))).toBe(false);
+      expect(h.store.attempt({ taskId: task.id, attempt: 2 })).toMatchObject({ failureKind: 'tool', exitCode: -1 });
+      expect(h.store.events(task.id, 2).some((event) => event.kind === 'launch-failed')).toBe(true);
+    } finally {
+      h.close();
+    }
+  }
+});
