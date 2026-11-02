@@ -1,6 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import { PageStory, pagePaths, pageReady } from './page';
+import { PageStory, PatternStory, pagePaths, pageReady } from './page';
+import { LabelsPageView } from '../library/labels-page';
+import type { LabelsPage } from '../library/labels-read';
+import { getLocale } from '../paraglide/runtime.js';
 import { labelOperations } from '../kernel/fake/library-labels';
 import { setFakeAdmitted } from '../kernel/fake';
 import { setLibraryLabelStorySizes } from '../kernel/fake/library-label-assignments';
@@ -159,7 +162,11 @@ export const NextPage: Story = {
     await target(more);
     await expect(more).toHaveAttribute('href', expect.stringContaining('cursor=next-label-page'));
     await userEvent.click(more);
-    await view.findByText(m.library_labels_empty());
+    await view.findByText(m.library_labels_page_empty());
+    await expect(view.getByRole('link', { name: m.library_collections_first_page() })).toHaveAttribute(
+      'href',
+      `/${getLocale()}/library/labels`,
+    );
     await expect(view.queryByRole('link', { name: m.library_label_more() })).toBeNull();
   },
 };
@@ -231,6 +238,93 @@ export const EmptyPrefix: Story = {
   },
 };
 
+export const LaterPagePrefix: Story = {
+  name: 'Empty later page, keep the filter',
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  render: () => (
+    <PageStory
+      visitor="Signed In"
+      path={`${pagePaths['library-labels']}?${new URLSearchParams({ q: 'No match %_ + 読書', cursor: 'next-label-page' })}`}
+      labelsFixture="catalogue"
+    />
+  ),
+  play: async (context) => {
+    await pageReady(context);
+    const view = within(context.canvasElement);
+    await view.findByText(m.library_labels_page_empty());
+    await expect(view.queryByText(m.library_labels_empty())).toBeNull();
+    await expect(view.queryByText(m.library_subject_label_no_results())).toBeNull();
+    const first = view.getByRole('link', { name: m.library_collections_first_page() });
+    await expect(first).toHaveAttribute(
+      'href',
+      `/${getLocale()}/library/labels?${new URLSearchParams({ q: 'No match %_ + 読書' })}`,
+    );
+    await userEvent.click(first);
+    await view.findByText(m.library_subject_label_no_results());
+    await expect(view.getByRole('textbox', { name: m.library_labels_prefix() })).toHaveValue('No match %_ + 読書');
+  },
+};
+
+// Supplied presentation states illustrate recovery only; they do not establish native outcomes.
+function RecoveryState({ uncertain = false }: { uncertain?: boolean }) {
+  const page: LabelsPage = {
+    signedIn: true,
+    state: uncertain ? 'loaded' : 'unavailable',
+    query: '読み返したい本 · Books to revisit · '.repeat(4),
+    operations: ['library_label.list', 'library_label.create'],
+    csrfToken: 'illustrative-csrf',
+    createKey: '00000000-0000-4000-8000-000000000001',
+    undoKey: '00000000-0000-4000-8000-000000000002',
+    labels: [],
+    next: null,
+    feedback: uncertain
+      ? {
+          ok: false,
+          reason: 'unavailable',
+          operation: 'create',
+          name: '読み返したい本 · Books to revisit · '.repeat(3),
+        }
+      : { ok: false, reason: 'stale_cursor' },
+  };
+  return (
+    <PatternStory visitor="Signed In" path={pagePaths['library-labels']}>
+      <div className="min-w-0 p-4">
+        <LabelsPageView page={page} cursor="exact+/old-page==" />
+      </div>
+    </PatternStory>
+  );
+}
+
+export const StalePage: Story = {
+  name: 'Stale page, restart with the same filter',
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  render: () => <RecoveryState />,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await expect(await view.findByRole('alert')).toHaveTextContent(m.library_labels_stale_cursor());
+    await expect(view.getByRole('link', { name: m.library_collections_first_page() })).toHaveAttribute(
+      'href',
+      `/${getLocale()}/library/labels?${new URLSearchParams({ q: '読み返したい本 · Books to revisit · '.repeat(4) })}`,
+    );
+    await expect(view.queryByRole('link', { name: m.subject_view_retry() })).toBeNull();
+  },
+};
+
+export const UnconfirmedChange: Story = {
+  name: 'Unconfirmed create, retained long draft',
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  render: () => <RecoveryState uncertain />,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await expect(await view.findByRole('alert')).toHaveTextContent(m.library_label_unconfirmed());
+    await expect(view.getByRole('textbox', { name: m.library_label_name() })).toHaveValue(
+      '読み返したい本 · Books to revisit · '.repeat(3),
+    );
+    await expect(view.getByRole('button', { name: m.library_label_create() })).toBeEnabled();
+    await view.findByText(m.library_labels_page_empty());
+  },
+};
+
 export const RetainedUndoAfterStale: Story = {
   render: () => <PageStory visitor="Signed In" path={pagePaths['library-labels']} labelsFixture="conflict" />,
   play: async (context) => {
@@ -262,13 +356,22 @@ export const Unavailable: Story = {
   render: () => (
     <PageStory
       visitor="Signed In"
-      path={`${pagePaths['library-labels']}?labelRead=unavailable`}
+      path={`${pagePaths['library-labels']}?labelRead=unavailable&q=Winter%20%25_&cursor=exact%2B%2Fpage%3D%3D`}
       labelsFixture="catalogue"
     />
   ),
   play: async (context) => {
     await pageReady(context);
-    await within(context.canvasElement).findAllByText(m.library_labels_unavailable());
+    const view = within(context.canvasElement);
+    await view.findAllByText(m.library_labels_unavailable());
+    await expect(view.getByRole('alert')).toHaveTextContent(m.library_labels_unavailable());
+    await expect(view.getByRole('link', { name: m.subject_view_retry() })).toHaveAttribute(
+      'href',
+      `/${getLocale()}/library/labels?${new URLSearchParams({ q: 'Winter %_', cursor: 'exact+/page==' })}`,
+    );
+    await expect(view.queryByText(m.library_labels_empty())).toBeNull();
+    await expect(view.queryByText(m.library_subject_label_no_results())).toBeNull();
+    await expect(view.queryByRole('link', { name: 'Winter reads' })).toBeNull();
   },
 };
 

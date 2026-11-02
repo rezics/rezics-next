@@ -345,6 +345,10 @@ export function LabelsPageView({
     </>
   );
   const feedback = page.feedback;
+  const staleCursor =
+    feedback?.reason === 'stale_cursor' && (!page.state || page.state === 'loaded' || page.state === 'unavailable');
+  const firstPageSearch = new URLSearchParams(page.query !== undefined ? { q: page.query } : {});
+  const firstPagePath = firstPageSearch.size ? `${path}?${firstPageSearch}` : path;
   const search = new URLSearchParams({
     ...(page.query !== undefined ? { q: page.query } : {}),
     ...(cursor !== undefined ? { cursor } : {}),
@@ -461,24 +465,26 @@ export function LabelsPageView({
       <article className="max-w-3xl space-y-6">
         <PageHeading>{m.library_labels_heading()}</PageHeading>
         <p role={page.state === 'unavailable' ? 'alert' : 'status'}>
-          {page.state === 'preparing'
-            ? m.library_labels_preparing()
-            : page.state === 'denied'
-              ? m.library_labels_denied()
-              : page.state === 'closed'
-                ? m.library_subject_label_closed()
-                : m.library_labels_unavailable()}
+          {staleCursor
+            ? m.library_labels_stale_cursor()
+            : page.state === 'preparing'
+              ? m.library_labels_preparing()
+              : page.state === 'denied'
+                ? m.library_labels_denied()
+                : page.state === 'closed'
+                  ? m.library_subject_label_closed()
+                  : m.library_labels_unavailable()}
         </p>
-        {feedback && !feedback.ok ? error('label-error') : null}
+        {feedback && !feedback.ok && feedback.operation ? error('label-error') : null}
         {undoForm}
         <a
           onClick={(event) => {
             if (!alive()) event.preventDefault();
           }}
-          href={mutationPath}
+          href={staleCursor ? firstPagePath : mutationPath}
           className={buttonVariants({ variant: 'outline', className: actionClass })}
         >
-          {m.library_labels_heading()}
+          {staleCursor ? m.library_collections_first_page() : m.subject_view_retry()}
         </a>
       </article>
     );
@@ -672,7 +678,11 @@ export function LabelsPageView({
         </ul>
       ) : !feedback || feedback.ok || feedback.operation ? (
         <p className="text-muted-foreground">
-          {page.query ? m.library_subject_label_no_results() : m.library_labels_empty()}
+          {cursor !== undefined
+            ? m.library_labels_page_empty()
+            : page.query
+              ? m.library_subject_label_no_results()
+              : m.library_labels_empty()}
         </p>
       ) : null}
       {hydrated &&
@@ -708,29 +718,31 @@ export function LabelsPageView({
           </DialogContent>
         </Dialog>
       ) : null}
-      {page.next ? (
-        <nav>
-          <a
-            className={buttonVariants({ variant: 'outline', className: actionClass })}
-            onClick={(event) => {
-              if (!alive()) event.preventDefault();
-            }}
-            href={`${path}?${new URLSearchParams({ ...(page.query ? { q: page.query } : {}), cursor: page.next })}`}
-          >
-            {m.library_label_more()}
-          </a>
+      {cursor !== undefined || page.next || staleCursor ? (
+        <nav className="flex flex-wrap gap-2">
+          {cursor !== undefined || staleCursor ? (
+            <a
+              onClick={(event) => {
+                if (!alive()) event.preventDefault();
+              }}
+              href={firstPagePath}
+              className={buttonVariants({ variant: 'outline', className: actionClass })}
+            >
+              {m.library_collections_first_page()}
+            </a>
+          ) : null}
+          {page.next && !staleCursor ? (
+            <a
+              className={buttonVariants({ variant: 'outline', className: actionClass })}
+              onClick={(event) => {
+                if (!alive()) event.preventDefault();
+              }}
+              href={`${path}?${new URLSearchParams({ ...(page.query !== undefined ? { q: page.query } : {}), cursor: page.next })}`}
+            >
+              {m.library_label_more()}
+            </a>
+          ) : null}
         </nav>
-      ) : null}
-      {feedback?.reason === 'stale_cursor' ? (
-        <a
-          onClick={(event) => {
-            if (!alive()) event.preventDefault();
-          }}
-          href={path}
-          className={buttonVariants({ variant: 'outline', className: actionClass })}
-        >
-          {m.library_labels_heading()}
-        </a>
       ) : null}
     </article>
   );
@@ -744,7 +756,9 @@ function labelError(feedback: LabelFeedback): string {
   if (reason === 'library_label_capacity') return m.library_subject_label_capacity();
   if (feedback.detail) return feedback.detail;
   if (reason === 'conflict') return m.library_label_stale();
-  if (reason === 'unavailable' || reason === 'stale_cursor' || reason === 'unauthorized')
-    return m.library_labels_unavailable();
+  if (reason === 'stale_cursor') return m.library_labels_stale_cursor();
+  if (reason === 'unavailable')
+    return feedback.operation ? m.library_label_unconfirmed() : m.library_labels_unavailable();
+  if (reason === 'unauthorized') return m.library_labels_unavailable();
   return m.library_label_invalid();
 }
