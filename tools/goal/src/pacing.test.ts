@@ -1,9 +1,16 @@
 import { expect, test } from 'bun:test';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { choosePoolWithFallback } from './allowance.ts';
-import { alertUnspentAllowances, pace, parseCodexStatus } from './pacing.ts';
+import {
+  alertUnspentAllowances,
+  pace,
+  parseCodexStatus,
+  publishCodexSchedule,
+  readCodexSchedule,
+  refreshCodexSchedule,
+} from './pacing.ts';
 import type { Pool, PoolReading, Profile } from './types.ts';
 
 // Readings are relative to the real clock, which the allowance code also reads.
@@ -143,4 +150,58 @@ test("an ending week's reserve shrinks to the managers' need for the hours left,
     ],
   };
   expect(() => choosePoolWithFallback(sonnet, [], [ending], [fiveHourFull])).toThrow('no allowed pool');
+});
+
+test('Malformed or future-dated caches cannot prevent eventual refresh; simultaneous refresh publication retains a complete valid schedule without sharing a temporary-file identity, and unavailable hints never block admission.', () => {
+  const state = mkdtempSync(join(tmpdir(), 'codex-schedule-'));
+  const status = JSON.stringify({
+    data: {
+      scheduled_reset: { status: 'scheduled', scheduled_for: '2026-10-28T07:00:00.000Z' },
+      latest_reset: { announced_at: '2026-10-26T07:00:00Z' },
+    },
+  });
+  const readings = [reading(claude, 52, 5), reading(codex, 20, 150)];
+  const urgency = (pool: Pool) =>
+    pace(
+      readings.find((r) => r.pool === pool.name)!,
+      pool,
+      now,
+      readCodexSchedule(state),
+    )?.urgency;
+  try {
+    expect(refreshCodexSchedule(state, now, () => undefined)).toBeUndefined();
+    expect(choosePoolWithFallback(luna, [sonnet], [claude, codex], readings, { now }, urgency).pool.name).toBe(
+      'claude-worker',
+    );
+    writeFileSync(join(state, 'codex-schedule.json'), '{');
+    expect(readCodexSchedule(state)).toBeUndefined();
+    expect(refreshCodexSchedule(state, now, () => status)?.scheduledAt).toBe('2026-10-28T07:00:00.000Z');
+    writeFileSync(
+      join(state, 'codex-schedule.json'),
+      JSON.stringify({
+        scheduledAt: '2026-10-28T07:00:00.000Z',
+        latestResetAt: '2026-10-26T07:00:00Z',
+        fetchedAt: new Date(now + hour).toISOString(),
+      }),
+    );
+    expect(
+      refreshCodexSchedule(state, now, () => JSON.stringify({ data: { scheduled_reset: '2026-10-29T07:00:00.000Z' } }))
+        ?.scheduledAt,
+    ).toBe('2026-10-29T07:00:00.000Z');
+    const sharedTmp = join(state, 'codex-schedule.json.tmp');
+    writeFileSync(sharedTmp, '{incomplete');
+    const first = {
+      scheduledAt: '2026-10-28T07:00:00.000Z',
+      latestResetAt: null,
+      fetchedAt: new Date(now).toISOString(),
+    };
+    const second = { ...first, scheduledAt: '2026-10-29T07:00:00.000Z' };
+    publishCodexSchedule(state, first);
+    publishCodexSchedule(state, second);
+    expect(readCodexSchedule(state)).toEqual(second);
+    expect(readFileSync(sharedTmp, 'utf8')).toBe('{incomplete');
+    expect(refreshCodexSchedule(state, now + hour, () => undefined)).toEqual(second);
+  } finally {
+    rmSync(state, { recursive: true, force: true });
+  }
 });
