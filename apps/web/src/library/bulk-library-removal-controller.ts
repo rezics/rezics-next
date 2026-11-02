@@ -74,9 +74,7 @@ function selectedRows(options: BulkLibraryRemovalControllerOptions): ShelfRow[] 
   return options.rows.filter(({ entry }) => selected.has(entry.subjectId));
 }
 
-export function useBulkLibraryRemoval(
-  options: BulkLibraryRemovalControllerOptions,
-): BulkLibraryRemovalController {
+export function useBulkLibraryRemoval(options: BulkLibraryRemovalControllerOptions): BulkLibraryRemovalController {
   const optionsRef = useRef(options);
   optionsRef.current = options;
   const [reviewState, setReviewState] = useState<BulkLibraryRemovalReview | null>(null);
@@ -165,8 +163,7 @@ export function useBulkLibraryRemoval(
       invalidate(false);
       return;
     }
-    if (review && pageOwned(review.phase) && currentSignature() !== review.signature)
-      invalidate(true);
+    if (review && pageOwned(review.phase) && currentSignature() !== review.signature) invalidate(true);
   }, [options.rows, options.selected, options.locale, options.isCurrent]);
 
   useEffect(
@@ -238,13 +235,7 @@ export function useBulkLibraryRemoval(
 
   const retryPreview = async () => {
     const review = reviewRef.current;
-    if (
-      !review ||
-      review.phase !== 'preview-uncertain' ||
-      !reviewCurrent(review, true) ||
-      !writeCurrent()
-    )
-      return;
+    if (!review || review.phase !== 'preview-uncertain' || !reviewCurrent(review, true) || !writeCurrent()) return;
     const release = acquire(writeCurrent);
     if (!release) return;
     updateReview({ ...review, phase: 'previewing' });
@@ -288,8 +279,7 @@ export function useBulkLibraryRemoval(
         readError: false,
       });
       const landed = landedBulkLibraryRemovalEntries(review.targets, outcomes);
-      if (landed.length && reviewCurrent({ ...review, phase: 'complete' }, false))
-        optionsRef.current.onLanded(landed);
+      if (landed.length && reviewCurrent({ ...review, phase: 'complete' }, false)) optionsRef.current.onLanded(landed);
     } catch {
       if (reviewCurrent(review, false) && readCurrent()) {
         updateReview({ ...review, phase: returnPhase, readError: true });
@@ -340,9 +330,7 @@ export function useBulkLibraryRemoval(
   };
 
   const activeReview =
-    reviewState?.locale === options.locale &&
-    options.isCurrent() &&
-    (options.writeAdmitted || options.readAdmitted)
+    reviewState?.locale === options.locale && options.isCurrent() && (options.writeAdmitted || options.readAdmitted)
       ? reviewState
       : null;
   const selectionMatches = activeReview ? reviewCurrent(activeReview, true) : false;
@@ -373,12 +361,7 @@ export function useBulkLibraryRemoval(
       options.writeAdmitted &&
       !options.pending &&
       !busy,
-    canRecover:
-      !!activeReview?.operationId &&
-      options.readAdmitted &&
-      options.isCurrent() &&
-      !options.pending &&
-      !busy,
+    canRecover: !!activeReview?.operationId && options.readAdmitted && options.isCurrent() && !options.pending && !busy,
     preview,
     retryPreview,
     confirm,

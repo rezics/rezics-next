@@ -7,7 +7,10 @@ import {
   type BulkLibraryRemovalOperation,
   type BulkLibraryRemovalTargetOutcome,
 } from '../src/library/bulk-library-removal';
-import type { BulkLibraryRemovalController, BulkLibraryRemovalReview } from '../src/library/bulk-library-removal-controller';
+import type {
+  BulkLibraryRemovalController,
+  BulkLibraryRemovalReview,
+} from '../src/library/bulk-library-removal-controller';
 import { BulkLibraryRemovalReviewView } from '../src/library/bulk-library-removal-view';
 
 const ids = ['subject-1', 'subject-2'];
@@ -65,20 +68,24 @@ test('shows the exact action, count, operation identity and independent data kep
   );
   if (!captured.ok) throw new Error('Expected an explicit native preview');
   const calls: string[] = [];
-  const manifest = createBulkLibraryRemovalManifest(captured, {}, {
-    preview: async () => {
-      calls.push('preview');
-      return operation;
+  const manifest = createBulkLibraryRemovalManifest(
+    captured,
+    {},
+    {
+      preview: async () => {
+        calls.push('preview');
+        return operation;
+      },
+      confirm: async () => {
+        calls.push('confirm');
+        return operation;
+      },
+      read: async () => {
+        calls.push('read');
+        return { operation, outcomes: [] };
+      },
     },
-    confirm: async () => {
-      calls.push('confirm');
-      return operation;
-    },
-    read: async () => {
-      calls.push('read');
-      return { operation, outcomes: [] };
-    },
-  });
+  );
   const review: BulkLibraryRemovalReview = {
     manifest,
     signature: captured.signature,
@@ -107,9 +114,7 @@ test('shows the exact action, count, operation identity and independent data kep
     confirm: async () => calls.push('confirm'),
     recover: async () => calls.push('read'),
   };
-  const html = renderToStaticMarkup(
-    createElement(BulkLibraryRemovalReviewView, { controller, pending: false }),
-  );
+  const html = renderToStaticMarkup(createElement(BulkLibraryRemovalReviewView, { controller, pending: false }));
 
   expect(html).toContain('Remove 2 entries');
   expect(html).toContain('Operation ID:');

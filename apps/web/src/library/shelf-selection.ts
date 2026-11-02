@@ -7,10 +7,7 @@ export type ShelfStateIntent = LibraryChangeInput & { revision: number };
 export type ShelfSelectionCandidate = Pick<PersonalLibraryEntry, 'subjectId' | 'stateOptions'> & {
   subject: { id: string } | null;
 };
-export type ShelfRemovalIdentity = Pick<
-  PersonalLibraryEntry,
-  'subjectId' | 'revision' | 'incarnationId' | 'removeKey'
->;
+export type ShelfRemovalIdentity = Pick<PersonalLibraryEntry, 'subjectId' | 'revision' | 'incarnationId' | 'removeKey'>;
 export type ShelfOutcome = {
   subjectId: string;
   title: string;

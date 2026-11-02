@@ -15,11 +15,7 @@ import {
 } from '../src/library/bulk-library-removal';
 
 const id = (value: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(value).padStart(12, '0')}`;
-const entry = (
-  value: number,
-  revision = 1,
-  incarnationId = `incarnation-${value}`,
-): BulkLibraryRemovalCandidate => ({
+const entry = (value: number, revision = 1, incarnationId = `incarnation-${value}`): BulkLibraryRemovalCandidate => ({
   subjectId: id(value),
   subject: { id: id(value) },
   revision,
@@ -86,20 +82,10 @@ test('previews the exact loaded subjects and binds review to revision and incarn
   });
   if (!captured.ok) throw new Error('Expected an explicit native preview');
   expect(JSON.parse(captured.body)).toEqual(captured.request);
+  expect(bulkLibraryRemovalReviewMatches(captured.signature, loaded, 'en', 'en', true)).toBe(true);
+  expect(bulkLibraryRemovalReviewMatches(captured.signature, [entry(1, 2), loaded[1]!], 'en', 'en', true)).toBe(false);
   expect(
-    bulkLibraryRemovalReviewMatches(captured.signature, loaded, 'en', 'en', true),
-  ).toBe(true);
-  expect(
-    bulkLibraryRemovalReviewMatches(captured.signature, [entry(1, 2), loaded[1]!], 'en', 'en', true),
-  ).toBe(false);
-  expect(
-    bulkLibraryRemovalReviewMatches(
-      captured.signature,
-      [entry(1, 1, 'recreated'), loaded[1]!],
-      'en',
-      'en',
-      true,
-    ),
+    bulkLibraryRemovalReviewMatches(captured.signature, [entry(1, 1, 'recreated'), loaded[1]!], 'en', 'en', true),
   ).toBe(false);
   expect(bulkLibraryRemovalReviewMatches(captured.signature, loaded, 'en', 'fr', true)).toBe(false);
   expect(bulkLibraryRemovalReviewMatches(captured.signature, loaded, 'en', 'en', false)).toBe(false);
@@ -173,9 +159,7 @@ test('keeps preview effect-free and replays uncertain confirmation with the same
   expect(calls.every(({ headers }) => headers === manifest.confirm.headers)).toBe(true);
 
   const confirmCount = calls.length;
-  expect(
-    await sendCapturedBulkLibraryRemovalConfirmation(manifest, operation().id, () => false),
-  ).toBeNull();
+  expect(await sendCapturedBulkLibraryRemovalConfirmation(manifest, operation().id, () => false)).toBeNull();
   expect(await readCapturedBulkLibraryRemoval(manifest, operation().id, () => false)).toBeNull();
   expect(calls).toHaveLength(confirmCount);
   expect(readCalls).toBe(0);
@@ -197,9 +181,14 @@ test('lands only authentic removal outcomes and keeps conflicts for changed or r
     id(3),
     id(4),
   ]);
-  expect(landedBulkLibraryRemovalEntries(targets.map((target, index) => ({
-    ...target,
-    revision: 1,
-    removeKey: `remove-${index}`,
-  })), outcomes).map(({ subjectId }) => subjectId)).toEqual([id(1), id(4)]);
+  expect(
+    landedBulkLibraryRemovalEntries(
+      targets.map((target, index) => ({
+        ...target,
+        revision: 1,
+        removeKey: `remove-${index}`,
+      })),
+      outcomes,
+    ).map(({ subjectId }) => subjectId),
+  ).toEqual([id(1), id(4)]);
 });

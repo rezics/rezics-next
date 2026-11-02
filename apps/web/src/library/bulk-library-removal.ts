@@ -29,8 +29,7 @@ export type BulkLibraryRemovalCandidate = Pick<
 type KernelRoutes = Kernel['~Routes']['v1'];
 type OperationRoute = KernelRoutes['libraryOperations'][':operationId'];
 export type BulkLibraryRemovalOperation = OperationRoute['get']['response'][200]['operation'];
-export type BulkLibraryRemovalTargetOutcome =
-  OperationRoute['outcomes']['get']['response'][200]['outcomes'][number];
+export type BulkLibraryRemovalTargetOutcome = OperationRoute['outcomes']['get']['response'][200]['outcomes'][number];
 export type BulkLibraryRemovalOutcomes = OperationRoute['outcomes']['get']['response'][200];
 export type BulkLibraryRemovalReadResult = Readonly<{
   operation: BulkLibraryRemovalOperation;
@@ -48,7 +47,12 @@ export type BulkLibraryRemovalPreviewCapture =
     }>
   | Readonly<{
       ok: false;
-      reason: 'empty_selection' | 'unsupported_selection' | 'duplicate_target' | 'too_many_targets' | 'command_too_large';
+      reason:
+        | 'empty_selection'
+        | 'unsupported_selection'
+        | 'duplicate_target'
+        | 'too_many_targets'
+        | 'command_too_large';
     }>;
 
 // Reject the whole loaded selection when it exceeds native limits; never submit a truncated target list.
@@ -56,11 +60,7 @@ export function captureBulkLibraryRemovalPreview(
   entries: readonly BulkLibraryRemovalCandidate[],
 ): BulkLibraryRemovalPreviewCapture {
   if (!entries.length) return { ok: false, reason: 'empty_selection' };
-  if (
-    entries.some(
-      ({ subjectId, subject }) => !subjectId || !subject || subject.id !== subjectId,
-    )
-  )
+  if (entries.some(({ subjectId, subject }) => !subjectId || !subject || subject.id !== subjectId))
     return { ok: false, reason: 'unsupported_selection' };
 
   const subjectIds = entries.map(({ subject }) => subject!.id);
@@ -168,11 +168,7 @@ export function bulkLibraryRemovalReviewMatches(
   currentLocale: string,
   current: boolean,
 ): boolean {
-  return (
-    current &&
-    reviewLocale === currentLocale &&
-    expectedSignature === shelfRemovalSelectionSignature(entries)
-  );
+  return current && reviewLocale === currentLocale && expectedSignature === shelfRemovalSelectionSignature(entries);
 }
 
 export function outcomesForBulkLibraryRemovalTargets(
@@ -189,9 +185,7 @@ export function landedBulkLibraryRemovalEntries<Target extends ShelfRemovalIdent
 ): readonly Target[] {
   const landed = new Set(
     outcomes
-      .filter(
-        ({ state, reason }) => state === 'applied' || (state === 'no_effect' && reason === 'missing_target'),
-      )
+      .filter(({ state, reason }) => state === 'applied' || (state === 'no_effect' && reason === 'missing_target'))
       .map(({ subjectId }) => subjectId),
   );
   return targets.filter(({ subjectId }) => landed.has(subjectId));

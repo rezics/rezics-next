@@ -1,9 +1,6 @@
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
-import type {
-  BulkLibraryRemovalController,
-  BulkLibraryRemovalReview,
-} from './bulk-library-removal-controller';
+import type { BulkLibraryRemovalController, BulkLibraryRemovalReview } from './bulk-library-removal-controller';
 import type { BulkLibraryRemovalTargetOutcome } from './bulk-library-removal';
 
 function outcomeText(outcome: BulkLibraryRemovalTargetOutcome): string {
@@ -93,9 +90,7 @@ function BulkLibraryRemovalReview({
           <p>{m.library_bulk_entry_remove_kept()}</p>
         </>
       ) : null}
-      {review.phase === 'previewing' ? (
-        <p role="status">{m.library_bulk_entry_remove_previewing()}</p>
-      ) : null}
+      {review.phase === 'previewing' ? <p role="status">{m.library_bulk_entry_remove_previewing()}</p> : null}
       {review.phase === 'preview-uncertain' ? (
         <>
           <p role="alert">{m.library_bulk_entry_remove_preview_error()}</p>
@@ -118,15 +113,9 @@ function BulkLibraryRemovalReview({
             : m.library_bulk_entry_remove_confirm({ count: review.targets.length })}
         </Button>
       ) : null}
-      {review.phase === 'confirming' ? (
-        <p role="status">{m.library_bulk_entry_remove_confirming()}</p>
-      ) : null}
-      {review.phase === 'uncertain' ? (
-        <p role="alert">{m.library_bulk_entry_remove_confirmation_uncertain()}</p>
-      ) : null}
-      {review.phase === 'recovering' ? (
-        <p role="status">{m.library_bulk_entry_remove_recovering()}</p>
-      ) : null}
+      {review.phase === 'confirming' ? <p role="status">{m.library_bulk_entry_remove_confirming()}</p> : null}
+      {review.phase === 'uncertain' ? <p role="alert">{m.library_bulk_entry_remove_confirmation_uncertain()}</p> : null}
+      {review.phase === 'recovering' ? <p role="status">{m.library_bulk_entry_remove_recovering()}</p> : null}
       {review.readError ? <p role="alert">{m.library_bulk_entry_remove_read_error()}</p> : null}
       {review.operationId ? (
         <Button
@@ -142,10 +131,7 @@ function BulkLibraryRemovalReview({
           <h3 className="font-medium">{m.library_bulk_entry_remove_results()}</h3>
           <ul className="max-h-48 space-y-1 overflow-y-auto">
             {review.outcomes.map((outcome) => (
-              <li
-                key={`${outcome.ordinal}:${outcome.subjectId}`}
-                data-bulk-library-removal-outcome={outcome.state}
-              >
+              <li key={`${outcome.ordinal}:${outcome.subjectId}`} data-bulk-library-removal-outcome={outcome.state}>
                 {titleOf(outcome.subjectId)}: {outcomeText(outcome)}
               </li>
             ))}
