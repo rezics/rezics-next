@@ -29,6 +29,10 @@ export type SessionUsage = {
   compactions: number;
 };
 export type AgentUsage = { tokens: Tokens; usage: SessionUsage; source?: 'codex-session' | 'attempt-profile' } | null;
+export type AgentUsageAccumulator = {
+  add(event: Record<string, any>): void;
+  finish(): AgentUsage;
+};
 /** Provider events are normalized before the control plane accounts for them. */
 export type AgentEvent = {
   usage?: { tokens: Tokens; delta: boolean };
@@ -49,6 +53,7 @@ export type AgentAdapter = {
   hasRollout?(events: Record<string, any>[]): boolean;
   parseEvent?(event: Record<string, any>, hasRollout: boolean): AgentEvent | null;
   readSession?(configDirectory: string, session: string): string | null;
+  readSessionPath?(configDirectory: string, session: string): string | null;
   readAllowance?(pool: Pool, now: number): PoolReading;
   signals?(text: string): { allowance: boolean; usageLimit: boolean; capacity: boolean };
   isUsageLimit?(event: Record<string, any>): boolean;
@@ -63,6 +68,7 @@ export type AgentAdapter = {
   matchesEvent(event: Record<string, any>): boolean;
   afterExit(pool: Pool, log: string): void;
   parseUsage(events: Record<string, any>[], start: number, end: number): AgentUsage;
+  createUsageAccumulator?(start: number, end: number): AgentUsageAccumulator;
   failure(event: Record<string, any>): string | null;
   completed(event: Record<string, any>): boolean;
 };
