@@ -184,13 +184,12 @@ function ScreenProfileLive({
         reload={() => lifetime.active() && void query.refetch({ cancelRefetch: false })}
         intro={intro}
         observe={(next) => {
-          if (lifetime.active())
-            client.setQueryData<ScreenRead>(
-              queryKey,
-              next.ok && next.public.subject.id === id
-                ? { ok: true, release: next.release, public: next.public }
-                : { ok: false, reason: !next.ok && next.reason === 'denied' ? 'concealed' : 'unavailable' },
-            );
+          if (!lifetime.active()) return;
+          const observed: ScreenRead =
+            next.ok && next.public.subject.id === id
+              ? { ok: true, release: next.release, public: next.public }
+              : { ok: false, reason: !next.ok && next.reason === 'denied' ? 'concealed' : 'unavailable' };
+          client.setQueryData<ScreenRead>(queryKey, observed);
         }}
       />
     );
