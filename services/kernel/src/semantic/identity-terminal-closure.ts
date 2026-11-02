@@ -597,7 +597,7 @@ async function recoverSuccessorTickets(pool: Pool, partition: number) {
     if (!resolved) continue;
     await native(pool, partition, async (tx) => {
       const current = await source(tx, ticket.original);
-      if (current?.closure_successor_ticket !== ticket.enrollment) return false;
+      if (!current || current.closure_successor_ticket !== ticket.enrollment) return false;
       await tx.query(`UPDATE semantic.identity_epoch_mapping SET closure_successor_ticket=NULL,
         closure_successor_original=NULL,closure_ticket_reservation=NULL WHERE route=$1 AND original=$2`,
       [key(ticket.original), ticket.original]);
