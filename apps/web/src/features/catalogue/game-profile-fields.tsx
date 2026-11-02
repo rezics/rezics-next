@@ -1,6 +1,7 @@
-import { useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { pickText } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
@@ -17,6 +18,9 @@ const gameActionClass =
   'min-h-8 min-w-8 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [@media(max-width:639px)_and_(pointer:coarse)]:h-auto [@media(max-width:639px)_and_(pointer:coarse)]:min-h-11 [@media(max-width:639px)_and_(pointer:coarse)]:min-w-11';
 const gamePropertySelectClass =
   'w-fit min-w-0 max-w-full [&>select]:max-w-full [@media(max-width:639px)_and_(pointer:coarse)]:w-full [@media(max-width:639px)_and_(pointer:coarse)]:[&>select]:min-h-11';
+// Raise native controls individually above the shared surface, without a panel-wide hit target.
+const gameFieldFrameClass =
+  'min-w-0 max-w-full space-y-4 p-4 [overflow-wrap:anywhere] [&_a]:relative [&_a]:z-10 [&_button]:relative [&_button]:z-10 [&_label]:relative [&_label]:z-10 [&_input]:relative [&_input]:z-10 [&_select]:relative [&_select]:z-10 [&_textarea]:relative [&_textarea]:z-10 [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring [&_input:focus-visible]:outline-2 [&_input:focus-visible]:outline-offset-2 [&_input:focus-visible]:outline-ring [&_select:focus-visible]:outline-2 [&_select:focus-visible]:outline-offset-2 [&_select:focus-visible]:outline-ring';
 
 type Ready = Extract<GameRead, { ok: true }>;
 export function gameGroupLabel(group: string, locale: string) {
@@ -124,6 +128,7 @@ export function GameInitialFacts({
   disabled: boolean;
   change: (rows: { key: string; statement: StatementInput }[]) => void;
 }) {
+  const propertySelectId = useId();
   const [property, setProperty] = useState('');
   const o = { locale: locale as never };
   const groups = gameGroups(release, type);
@@ -133,10 +138,14 @@ export function GameInitialFacts({
       <legend className="font-sans text-lg font-semibold">{m.game_profile_initial({}, o)}</legend>
       <p className="text-sm text-muted-foreground">{m.game_profile_optional({}, o)}</p>
       <Field className="min-w-0 max-w-full">
-        <FieldLabel className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]">
+        <FieldLabel
+          htmlFor={propertySelectId}
+          className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]"
+        >
           {m.character_add_fact({}, o)}
         </FieldLabel>
         <NativeSelect
+          id={propertySelectId}
           className={gamePropertySelectClass}
           aria-label={m.character_add_fact({}, o)}
           value={property}
@@ -192,33 +201,33 @@ export function GameInitialFacts({
       {statements.map((row) => {
         const label = pickText(release.properties[row.statement.property.id]?.labels ?? {}, locale);
         return (
-          <section
-            key={row.key}
-            className="min-w-0 max-w-full space-y-4 rounded-xl border border-border p-4 [overflow-wrap:anywhere]"
-          >
-            <h2
-              className="max-w-full whitespace-normal break-words font-sans text-lg font-semibold"
-              lang={label.lang ?? undefined}
-            >
-              {label.text}
-            </h2>
-            <GameStatementFields
-              statement={row.statement}
-              context={context}
-              locale={locale}
-              search={search}
-              change={(statement) =>
-                change(statements.map((item) => (item.key === row.key ? { ...item, statement } : item)))
-              }
-            />
-            <Button
-              type="button"
-              className={gameActionClass}
-              variant="ghost"
-              onClick={() => change(statements.filter((item) => item.key !== row.key))}
-            >
-              {m.recipe_remove_field({}, o)}
-            </Button>
+          <section key={row.key} className="min-w-0 max-w-full">
+            <ContentItemFrame as="div" data-slot="game-initial-fact" className={gameFieldFrameClass}>
+              <ContentItemHeading
+                level={2}
+                className="min-w-0 max-w-full whitespace-normal break-words font-sans text-lg font-semibold"
+                lang={label.lang ?? undefined}
+              >
+                {label.text}
+              </ContentItemHeading>
+              <GameStatementFields
+                statement={row.statement}
+                context={context}
+                locale={locale}
+                search={search}
+                change={(statement) =>
+                  change(statements.map((item) => (item.key === row.key ? { ...item, statement } : item)))
+                }
+              />
+              <Button
+                type="button"
+                className={gameActionClass}
+                variant="ghost"
+                onClick={() => change(statements.filter((item) => item.key !== row.key))}
+              >
+                {m.recipe_remove_field({}, o)}
+              </Button>
+            </ContentItemFrame>
           </section>
         );
       })}
@@ -292,109 +301,115 @@ export function GameClassifications({
           ]);
         };
         return (
-          <section key={property} className="min-w-0 max-w-full space-y-4 rounded-xl border border-border bg-card p-4">
-            <h3
-              className="max-w-full whitespace-normal break-words [overflow-wrap:anywhere] font-sans font-semibold"
-              lang={label.lang ?? undefined}
-            >
-              {label.text}
-            </h3>
-            {!selected.length && <p>{m.facts_no_value({}, o)}</p>}
-            {selected.map((statement) => (
-              <div key={statement.id} className="min-w-0 max-w-full space-y-2 border-s-2 ps-3 [overflow-wrap:anywhere]">
-                <PartValue part={statement} read={context} locale={locale} />
-                {statement.qualifiers.map((part, i) => (
-                  <div key={i} className="min-w-0 [overflow-wrap:anywhere]">
-                    <span>{pickText(read.release.properties[part.property.id]?.labels ?? {}, locale).text}: </span>
-                    <PartValue part={part} read={context} locale={locale} />
-                  </div>
-                ))}
-                {statement.references.map((reference, i) => (
-                  <div key={i} className="min-w-0 [overflow-wrap:anywhere]">
-                    {reference.parts.map((part, j) => (
-                      <PartValue key={j} part={part} read={context} locale={locale} />
-                    ))}
-                  </div>
-                ))}
-                {!draft && (
-                  <Button
-                    className={gameActionClass}
-                    type="button"
-                    variant="outline"
-                    disabled={busy}
-                    onClick={() => stage(statement)}
-                  >
-                    {m.facts_edit_field({}, o)}
-                  </Button>
-                )}
-              </div>
-            ))}
-            {!draft && (!selected.length || read.release.properties[property]!.multivalued) && (
-              <Button
-                className={gameActionClass}
-                type="button"
-                variant="outline"
-                disabled={busy}
-                onClick={() => stage(null)}
+          <section key={property} className="min-w-0 max-w-full">
+            <ContentItemFrame as="div" data-slot="game-classification" className={gameFieldFrameClass}>
+              <ContentItemHeading
+                level={3}
+                className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] font-sans font-semibold"
+                lang={label.lang ?? undefined}
               >
-                {m.facts_add_value({}, o)}
-              </Button>
-            )}
-            {draft && (
-              <>
-                <fieldset className="space-y-4" disabled={busy || factLocked(draft) || !!draft.command}>
-                  <GameStatementFields
-                    statement={draft.statement}
-                    context={context}
-                    locale={locale}
-                    search={search}
-                    change={(statement) =>
-                      setDrafts((rows) =>
-                        rows.map((row) =>
-                          row.property === property
-                            ? { ...row, statement, result: undefined, command: undefined }
-                            : row,
-                        ),
-                      )
-                    }
-                  />
-                </fieldset>
-                {draft.result && !draft.result.ok && <EditorFailure reason={draft.result.reason} locale={locale} />}
-                {draft.result?.ok && (
-                  <div role="status">
-                    <p>{m.correction_proposed({}, o)}</p>
+                {label.text}
+              </ContentItemHeading>
+              {!selected.length && <p>{m.facts_no_value({}, o)}</p>}
+              {selected.map((statement) => (
+                <div
+                  key={statement.id}
+                  className="min-w-0 max-w-full space-y-2 border-s-2 ps-3 [overflow-wrap:anywhere]"
+                >
+                  <PartValue part={statement} read={context} locale={locale} />
+                  {statement.qualifiers.map((part, i) => (
+                    <div key={i} className="min-w-0 [overflow-wrap:anywhere]">
+                      <span>{pickText(read.release.properties[part.property.id]?.labels ?? {}, locale).text}: </span>
+                      <PartValue part={part} read={context} locale={locale} />
+                    </div>
+                  ))}
+                  {statement.references.map((reference, i) => (
+                    <div key={i} className="min-w-0 [overflow-wrap:anywhere]">
+                      {reference.parts.map((part, j) => (
+                        <PartValue key={j} part={part} read={context} locale={locale} />
+                      ))}
+                    </div>
+                  ))}
+                  {!draft && (
                     <Button
                       className={gameActionClass}
                       type="button"
-                      onClick={() => {
-                        if (draft.result?.ok) {
-                          setAddress({ property, candidate: draft.result.candidate, session: draft.result.session });
-                          setComparison(review(property, draft.result.session));
-                        }
-                      }}
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => stage(statement)}
                     >
-                      {m.correction_review({}, o)}
+                      {m.facts_edit_field({}, o)}
                     </Button>
-                  </div>
-                )}
-                {draft.command && draft.result && !draft.result.ok && !factLocked(draft) && (
-                  <Button
-                    className={gameActionClass}
-                    type="button"
-                    variant="outline"
-                    onClick={() =>
-                      setDrafts((rows) =>
-                        rows.map((row) =>
-                          row.property === property ? { ...row, command: undefined, result: undefined } : row,
-                        ),
-                      )
-                    }
-                  >
-                    {m.catalogue_create_review_new({}, o)}
-                  </Button>
-                )}
-              </>
-            )}
+                  )}
+                </div>
+              ))}
+              {!draft && (!selected.length || read.release.properties[property]!.multivalued) && (
+                <Button
+                  className={gameActionClass}
+                  type="button"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => stage(null)}
+                >
+                  {m.facts_add_value({}, o)}
+                </Button>
+              )}
+              {draft && (
+                <>
+                  <fieldset className="space-y-4" disabled={busy || factLocked(draft) || !!draft.command}>
+                    <GameStatementFields
+                      statement={draft.statement}
+                      context={context}
+                      locale={locale}
+                      search={search}
+                      change={(statement) =>
+                        setDrafts((rows) =>
+                          rows.map((row) =>
+                            row.property === property
+                              ? { ...row, statement, result: undefined, command: undefined }
+                              : row,
+                          ),
+                        )
+                      }
+                    />
+                  </fieldset>
+                  {draft.result && !draft.result.ok && <EditorFailure reason={draft.result.reason} locale={locale} />}
+                  {draft.result?.ok && (
+                    <div role="status">
+                      <p>{m.correction_proposed({}, o)}</p>
+                      <Button
+                        className={gameActionClass}
+                        type="button"
+                        onClick={() => {
+                          if (draft.result?.ok) {
+                            setAddress({ property, candidate: draft.result.candidate, session: draft.result.session });
+                            setComparison(review(property, draft.result.session));
+                          }
+                        }}
+                      >
+                        {m.correction_review({}, o)}
+                      </Button>
+                    </div>
+                  )}
+                  {draft.command && draft.result && !draft.result.ok && !factLocked(draft) && (
+                    <Button
+                      className={gameActionClass}
+                      type="button"
+                      variant="outline"
+                      onClick={() =>
+                        setDrafts((rows) =>
+                          rows.map((row) =>
+                            row.property === property ? { ...row, command: undefined, result: undefined } : row,
+                          ),
+                        )
+                      }
+                    >
+                      {m.catalogue_create_review_new({}, o)}
+                    </Button>
+                  )}
+                </>
+              )}
+            </ContentItemFrame>
           </section>
         );
       })}
