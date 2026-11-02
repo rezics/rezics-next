@@ -191,9 +191,7 @@ export function clientDeclarations(
     }
   }
   assertNoServiceImports(declarations, repositoryRoot);
-  return sorted(
-    new Map([...declarations].map(([key, content]) => [key, withOrderReconcileAuthorization(content)])),
-  );
+  return sorted(new Map([...declarations].map(([key, content]) => [key, withOrderReconcileAuthorization(content)])));
 }
 
 /** Per-request bearer header the Commerce owner README requires for `order.reconcile`. */
@@ -201,7 +199,10 @@ export function withOrderReconcileAuthorization(content: string): string {
   return content.replace(/\$reconcile:\s*\{[\s\S]*?headers:\s*\{([\s\S]*?)\}/, (block, inner: string) => {
     if (/(?:^|[\s{])authorization\s*:/.test(inner)) return block;
     const indent = inner.match(/\n([ \t]*)\S/)?.[1] ?? '                            ';
-    return block.replace(inner, `\n${indent}authorization: string;${inner.startsWith('\n') ? inner : `\n${indent}${inner}`}`);
+    return block.replace(
+      inner,
+      `\n${indent}authorization: string;${inner.startsWith('\n') ? inner : `\n${indent}${inner}`}`,
+    );
   });
 }
 
