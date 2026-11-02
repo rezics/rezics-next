@@ -2631,6 +2631,7 @@
   "statement_consent_terminal": "この記述は最終的に撤回され、ここでの値は消去されました。取り消しや同意の復元はできません。",
   "statement_consent_refresh_public": "現在の公開結果を読む",
   "statement_consent_uncertain": "応答が不確かです。同じ記述、操作、リクエストキーで再試行します。",
+  "statement_consent_leave_warning": "結果はまだ確認できていません。コマンドはすでに適用されている可能性があります。このページを離れると、同じコマンドを再試行できなくなります。リクエストは完了する可能性があり、ページを離れてもキャンセルや取り消しにはなりません。",
   "statement_consent_confirm": "確認",
   "provider_title": "提供元からの提案",
   "provider_intro": "表示中の提案を確認します。承認しても値は公開されず、却下しても削除されません。",

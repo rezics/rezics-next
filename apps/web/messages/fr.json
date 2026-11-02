@@ -2631,6 +2631,7 @@
   "statement_consent_terminal": "Cette affirmation est définitivement rétractée. Sa valeur a été effacée ici. Aucune annulation ni restauration du consentement.",
   "statement_consent_refresh_public": "Lire le résultat public actuel",
   "statement_consent_uncertain": "La réponse est incertaine. Réessayer conserve l’affirmation, l’opération et la clé de demande exactes.",
+  "statement_consent_leave_warning": "Le résultat n’est pas confirmé ; la commande a peut-être déjà été appliquée. En quittant cette page, vous ne pourrez plus réessayer exactement la même commande. La requête peut encore aboutir ; quitter ne l’annulera pas et n’en annulera pas les effets.",
   "statement_consent_confirm": "Confirmer",
   "provider_title": "Suggestions des fournisseurs",
   "provider_intro": "Examinez les suggestions visibles. Accepter ne publie pas de valeur ; rejeter ne la supprime pas.",

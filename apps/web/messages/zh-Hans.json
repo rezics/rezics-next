@@ -2632,6 +2632,7 @@
   "statement_consent_terminal": "这项陈述已永久撤回，此处已清除内容。无法撤销或恢复同意。",
   "statement_consent_refresh_public": "读取当前公开结果",
   "statement_consent_uncertain": "响应尚不确定。重试会保留相同陈述、操作及请求密钥。",
+  "statement_consent_leave_warning": "结果尚未确认；命令可能已经生效。离开此页面后，你将无法重试同一命令。请求仍可能完成，离开不会取消请求或撤销其效果。",
   "statement_consent_confirm": "确认",
   "provider_title": "提供方建议",
   "provider_intro": "审核当前显示的建议。接受不会发布值，拒绝也不会删除候选项。",

@@ -4,6 +4,7 @@ import { dirname } from 'node:path';
 import { act, type ReactNode } from 'react';
 import type { ConsentCommand, ConsentRead, ConsentTransport } from '../src/features/catalogue/statement-consent';
 import { consentFixture } from '../src/kernel/fake/statement-consent';
+import { isStatementConsentDeparture } from '../src/features/catalogue/statement-consent-navigation';
 import { m } from '../src/paraglide/messages.js';
 import { getLocale, setLocale } from '../src/paraglide/runtime.js';
 
@@ -90,6 +91,9 @@ test('Statement consent composes the complete family with isolated confirmation,
     await click(button(host, operation === 'disclose' ? m.statement_consent_share() : m.statement_consent_retract()));
     expect(button(host, m.statement_consent_confirm()).disabled).toBe(true);
     await click(label(host));
+    const ownershipDeparture = new window.Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(ownershipDeparture);
+    expect(ownershipDeparture.defaultPrevented).toBe(false);
     await click(button(host, m.statement_consent_confirm()));
   };
   const prepared = async (fixture: ReturnType<typeof consentFixture>) => {
@@ -300,8 +304,14 @@ test('Statement consent composes the complete family with isolated confirmation,
       expect([...host.querySelectorAll('button')].some((node) => node.textContent === readAction)).toBe(false);
     expect(checkbox(host).hasAttribute('data-disabled')).toBe(true);
     expect([...host.querySelectorAll('button')].some((node) => node.textContent === m.candidate_cancel())).toBe(false);
+    const uncertainDeparture = new window.Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(uncertainDeparture);
+    expect(uncertainDeparture.defaultPrevented).toBe(true);
     await click(button(host, m.candidate_retry()));
     await until(() => host.textContent!.includes(m.statement_consent_shared()));
+    const confirmedDeparture = new window.Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(confirmedDeparture);
+    expect(confirmedDeparture.defaultPrevented).toBe(false);
     expect(commands).toHaveLength(2);
     expect(commands[1]).toBe(commands[0]);
     expect(commands[1]).toEqual(original);
@@ -494,4 +504,17 @@ test('Statement consent composes the complete family with isolated confirmation,
     for (const [key, descriptor] of previous)
       descriptor ? Object.defineProperty(globalThis, key, descriptor) : Reflect.deleteProperty(globalThis, key);
   }
+});
+
+test('Statement consent treats a changed address query as a departure from the mounted command', () => {
+  const current = {
+    routeId: '/subjects/$id/$slug/statement-consent',
+    pathname: '/subjects/book/title/statement-consent',
+    params: { id: 'book', slug: 'title' },
+    search: { property: 'P1', candidate: 'claim-1', target: 'agent-1', sameAs: 'same', key: 'slot-1' },
+  };
+  expect(isStatementConsentDeparture(current, { ...current, search: { ...current.search, candidate: 'claim-2' } })).toBe(
+    true,
+  );
+  expect(isStatementConsentDeparture(current, current)).toBe(false);
 });

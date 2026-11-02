@@ -2631,6 +2631,7 @@
   "statement_consent_terminal": "Diese Aussage ist endgültig widerrufen. Ihr Wert wurde hier gelöscht. Widerruf und Zustimmung lassen sich nicht wiederherstellen.",
   "statement_consent_refresh_public": "Aktuelles öffentliches Ergebnis lesen",
   "statement_consent_uncertain": "Die Antwort ist ungewiss. Der erneute Versuch behält Aussage, Aktion und Anfrageschlüssel bei.",
+  "statement_consent_leave_warning": "Das Ergebnis wurde nicht bestätigt; der Befehl wurde möglicherweise bereits ausgeführt. Wenn du diese Seite verlässt, kannst du genau diesen Befehl nicht erneut versuchen. Die Anfrage kann noch abgeschlossen werden; das Verlassen bricht sie nicht ab und macht ihre Wirkung nicht rückgängig.",
   "statement_consent_confirm": "Bestätigen",
   "provider_title": "Anbietervorschläge",
   "provider_intro": "Sichtbare Vorschläge prüfen. Annehmen veröffentlicht keinen Wert; Ablehnen löscht ihn nicht.",

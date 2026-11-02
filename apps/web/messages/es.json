@@ -2631,6 +2631,7 @@
   "statement_consent_terminal": "Esta afirmación se ha retractado definitivamente. Su valor se ha borrado aquí. No se puede deshacer ni restaurar el consentimiento.",
   "statement_consent_refresh_public": "Leer el resultado público actual",
   "statement_consent_uncertain": "La respuesta es incierta. El reintento conserva la misma afirmación, operación y clave de solicitud.",
+  "statement_consent_leave_warning": "El resultado aún no se ha confirmado; es posible que el comando ya se haya aplicado. Al salir de esta página, perderás la posibilidad de reintentar el mismo comando. La solicitud aún puede completarse y salir no la cancelará ni deshará.",
   "statement_consent_confirm": "Confirmar",
   "provider_title": "Sugerencias de proveedores",
   "provider_intro": "Revisa las sugerencias visibles. Aceptar no publica un valor; rechazar no lo elimina.",

@@ -2625,6 +2625,7 @@
   "statement_consent_terminal": "This assertion is terminally retracted. Its value has been cleared here. There is no undo or consent restore.",
   "statement_consent_refresh_public": "Read current public result",
   "statement_consent_uncertain": "The response is uncertain. Retry keeps the exact assertion, operation and request key.",
+  "statement_consent_leave_warning": "The result has not been confirmed; the command may already have applied. Leaving this page removes your ability to retry the exact command. The request may still finish, and leaving will not cancel or undo it.",
   "statement_consent_confirm": "Confirm",
   "provider_title": "Provider suggestions",
   "provider_intro": "Review visible suggestions. Accepting does not publish a value; rejecting does not delete it.",

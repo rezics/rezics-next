@@ -8,6 +8,7 @@ import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { CandidateValue } from '../pages/data';
 import { subjectHref } from '../../subject/subject-href';
 import { m } from '../../paraglide/messages.js';
+import { StatementConsentNavigation } from './statement-consent-navigation';
 import {
   consentAfterChange,
   consentAssertion,
@@ -261,6 +262,7 @@ function StatementConsentPageLive({
       lang={locale}
       className="mx-auto flex min-w-0 w-full max-w-3xl flex-col gap-6 p-4 text-start break-words [overflow-wrap:anywhere] sm:p-6"
     >
+      <StatementConsentNavigation active={uncertain && lifetime.active()} locale={locale} />
       <header className="flex min-w-0 flex-col gap-2">
         <h1 className="text-2xl font-semibold">{m.statement_consent_title({}, options)}</h1>
         <p className="text-muted-foreground">{m.statement_consent_intro({}, options)}</p>

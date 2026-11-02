@@ -2631,6 +2631,7 @@
   "statement_consent_terminal": "這項陳述已永久撤回，此處已清除內容。無法復原或恢復同意。",
   "statement_consent_refresh_public": "讀取目前公開結果",
   "statement_consent_uncertain": "回應尚不確定。重試會保留相同陳述、操作及要求金鑰。",
+  "statement_consent_leave_warning": "結果尚未確認；命令可能已經生效。離開此頁後，你將無法重試同一命令。請求仍可能完成，離開不會取消請求或撤銷其效果。",
   "statement_consent_confirm": "確認",
   "provider_title": "提供方建議",
   "provider_intro": "審核目前顯示的建議。接受不會發布值，拒絕也不會刪除候選項。",
