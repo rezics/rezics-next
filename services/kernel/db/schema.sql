@@ -2483,6 +2483,31 @@ CREATE TABLE core.preference_history_job (
 
 
 --
+-- Name: publisher_operation; Type: TABLE; Schema: core; Owner: -
+--
+
+CREATE TABLE core.publisher_operation (
+    partition_no integer NOT NULL,
+    original_key text NOT NULL,
+    input_digest text NOT NULL,
+    result_digest text,
+    result_bytes bytea,
+    epoch integer,
+    "position" bigint,
+    transaction_id uuid,
+    retain_until timestamp with time zone NOT NULL,
+    CONSTRAINT publisher_operation_check CHECK ((((transaction_id IS NULL) AND (epoch IS NULL) AND ("position" IS NULL) AND (result_digest IS NULL) AND (result_bytes IS NULL)) OR ((transaction_id IS NOT NULL) AND (epoch IS NOT NULL) AND ("position" IS NOT NULL) AND (result_digest IS NOT NULL)))),
+    CONSTRAINT publisher_operation_epoch_check CHECK ((epoch > 0)),
+    CONSTRAINT publisher_operation_input_digest_check CHECK ((input_digest ~ '^sha256:[a-f0-9]{64}$'::text)),
+    CONSTRAINT publisher_operation_original_key_check CHECK ((original_key ~ '^[a-f0-9]{64}$'::text)),
+    CONSTRAINT publisher_operation_partition_no_check CHECK ((partition_no = 0)),
+    CONSTRAINT publisher_operation_position_check CHECK (("position" > 0)),
+    CONSTRAINT publisher_operation_result_bytes_check CHECK ((octet_length(result_bytes) <= 65536)),
+    CONSTRAINT publisher_operation_result_digest_check CHECK ((result_digest ~ '^sha256:[a-f0-9]{64}$'::text))
+);
+
+
+--
 -- Name: receipt; Type: TABLE; Schema: core; Owner: -
 --
 
@@ -3050,6 +3075,14 @@ ALTER TABLE ONLY core.preference_history_job
 
 
 --
+-- Name: publisher_operation publisher_operation_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.publisher_operation
+    ADD CONSTRAINT publisher_operation_pkey PRIMARY KEY (partition_no, original_key);
+
+
+--
 -- Name: receipt receipt_pkey; Type: CONSTRAINT; Schema: core; Owner: -
 --
 
@@ -3275,6 +3308,13 @@ CREATE UNIQUE INDEX preference_history_barrier ON core.preference_history_job US
 --
 
 CREATE INDEX preference_history_runnable ON core.preference_history_job USING btree (next_run, job_id) WHERE (phase = ANY (ARRAY['scan'::text, 'verify'::text]));
+
+
+--
+-- Name: publisher_operation_retention; Type: INDEX; Schema: core; Owner: -
+--
+
+CREATE INDEX publisher_operation_retention ON core.publisher_operation USING btree (partition_no, retain_until, original_key) WHERE (result_bytes IS NOT NULL);
 
 
 --
@@ -4210,6 +4250,14 @@ ALTER TABLE ONLY core.preference_history_job
 
 ALTER TABLE ONLY core.preference_history_job
     ADD CONSTRAINT preference_history_job_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES core.partition(partition_no);
+
+
+--
+-- Name: publisher_operation publisher_operation_partition_no_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.publisher_operation
+    ADD CONSTRAINT publisher_operation_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES core.partition(partition_no);
 
 
 --
