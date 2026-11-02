@@ -108,24 +108,30 @@ export function discoveryDocumentActions(
   const bound = observation.owner === 'accounts' ? ACCOUNT_DISCOVERY_BATCH_SIZE : 256;
   if (keys.length > bound) throw new RangeError('Discovery source batch exceeds its owner bound');
   const requested = new Map<string, DiscoveryKey>();
+  const kindsById = new Map<string, Set<string>>();
+  const firstById = new Map<string, DiscoveryKey>();
   for (const input of keys) {
     const key = registry.key(input);
     if (key.owner !== observation.owner || partitionOf(key.route) !== snapshot.partition)
       throw new RangeError('Discovery source and requested owner/partition disagree');
-    const previous = requested.get(key.id);
-    if (previous && previous.kind !== key.kind)
-      throw new TypeError('One native source record cannot have two configured kinds');
-    requested.set(key.id, key);
+    const identity = discoveryDocumentId(registry, key);
+    if (requested.has(identity)) continue;
+    requested.set(identity, key);
+    const kinds = kindsById.get(key.id) ?? new Set();
+    kinds.add(key.kind);
+    kindsById.set(key.id, kinds);
+    firstById.set(key.id, firstById.get(key.id) ?? key);
   }
   const values = observation.owner === 'accounts' ? observation.snapshot.accounts : observation.snapshot.subjects;
-  if (!Array.isArray(values) || values.length > requested.size) throw new TypeError('Invalid discovery source rows');
+  if (!Array.isArray(values) || values.length > kindsById.size) throw new TypeError('Invalid discovery source rows');
   const rows = new Map<string, (typeof values)[number]>();
   for (const value of values) {
     if (!record(value)) throw new TypeError('Invalid discovery source row');
-    const key = requested.get(value.id);
-    if (!key || routeOf(value.id) !== key.route || rows.has(value.id))
+    const kinds = kindsById.get(value.id);
+    const key = firstById.get(value.id);
+    if (!kinds || !key || routeOf(value.id) !== key.route || rows.has(value.id))
       throw new TypeError('Discovery source returned duplicate, unrequested or foreign rows');
-    if (observation.owner === 'semantic' && (!('type' in value) || value.type !== key.kind))
+    if (observation.owner === 'semantic' && (!('type' in value) || !kinds.has(value.type)))
       throw new TypeError('Subject type does not match its registered discovery kind');
     rows.set(value.id, value);
   }
@@ -167,11 +173,12 @@ export function discoveryDocumentActions(
     } else {
       const value = rows.get(key.id);
       if (value !== undefined && !('type' in value)) throw new TypeError('Expected a Subject source row');
+      const current = value !== undefined && 'type' in value && value.type === key.kind ? value : undefined;
       const [action] = documentActions(
         {
           partition: snapshot.partition,
           position: snapshot.position,
-          subjects: value === undefined ? [] : [value],
+          subjects: current === undefined ? [] : [current],
         },
         [key.id],
         counts,

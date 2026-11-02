@@ -173,7 +173,10 @@ adapter. Current returned-row checks and Account witnesses cannot substitute for
 observation, including excluded rows, order and counts. Missing owner composition returns readiness.
 
 [discovery-documents.ts](discovery-documents.ts) constructs bounded actions from an already authorized source
-snapshot, without additional source enumeration or profile reads. Account projection copies only native ID,
+snapshot, without additional source enumeration or profile reads. Ordinary projection may request a Subject's
+current released kind together with retained `discovery_copy` kinds for the same ID: the matching kind indexes at
+the snapshot position and every other requested kind deletes at that position. Account keys that share the UUID
+remain a separate native identity. Account projection copies only native ID,
 account kind, current claim-approved handle, displayName and revision plus internal identity/position fields.
 A null handle retains displayName. Revisions and snapshot positions remain exact bigint internally and canonical
 decimal strings in documents. `discoveryBulkBody` serializes the exact native signed-bigint external version as

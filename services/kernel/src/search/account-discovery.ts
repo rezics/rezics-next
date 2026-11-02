@@ -474,10 +474,15 @@ export function createDiscoveryProjection(options: {
         partition,
         snapshot.subjects.filter((row) => row.visibility === 'visible' && row.redirect === null).map(({ id }) => id),
       );
-      const kinds = new Map(chunk.map((key) => [key.id, key.kind]));
+      const kinds = new Map<string, Set<string>>();
+      for (const key of chunk) {
+        const requested = kinds.get(key.id) ?? new Set();
+        requested.add(key.kind);
+        kinds.set(key.id, requested);
+      }
       const keyedSnapshot = {
         ...snapshot,
-        subjects: snapshot.subjects.filter((row) => kinds.get(row.id) === row.type),
+        subjects: snapshot.subjects.filter((row) => kinds.get(row.id)?.has(row.type)),
       };
       actions = discoveryDocumentActions(
         registry,
