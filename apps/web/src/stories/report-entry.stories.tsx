@@ -35,7 +35,13 @@ const verificationSource = `
   };
 `;
 
-type HeldReport = { request: Request; resolve: (response: Response) => void };
+type HeldReport = {
+  request: {
+    headers: Pick<Headers, 'get'>;
+    clone: () => { json: () => Promise<unknown> };
+  };
+  resolve: (response: Response) => void;
+};
 type StoryTransport = { scriptUrl: string; requests: HeldReport[] };
 let transport: StoryTransport | undefined;
 
