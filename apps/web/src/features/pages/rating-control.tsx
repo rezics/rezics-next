@@ -1,7 +1,8 @@
 import { Button } from '@rezics/ui/shadcn/button';
 import { Slider } from '@base-ui/react/slider';
+import { Field } from '@base-ui/react/field';
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { changeSubjectRating } from './rating-actions';
 import { subjectOwnRatingQuery, subjectRatingQuery } from './subject-queries';
@@ -89,8 +90,19 @@ export function RatingControlView({
   onClear: () => void;
 }) {
   const options = { locale: locale as never };
+  const formId = useId();
+  const labelId = `${formId}-label`;
   const [draft, setDraft] = useState<number | null>(state.kind === 'ready' ? state.units : null);
   const editing = useRef(false);
+  const fallback = (
+    <NoScriptForm
+      question={question}
+      subjectId={subjectId}
+      returnTo={returnTo}
+      locale={locale}
+      value={state.kind === 'ready' ? state.units : null}
+    />
+  );
 
   useEffect(() => {
     if (!editing.current && !pending) setDraft(state.kind === 'ready' ? state.units : null);
@@ -108,7 +120,7 @@ export function RatingControlView({
         >
           {m.account_sign_in({}, options)}
         </a>
-        <NoScriptForm question={question} returnTo={returnTo} locale={locale} value={null} />
+        {fallback}
       </div>
     );
 
@@ -120,7 +132,7 @@ export function RatingControlView({
             {failure}
           </p>
         )}
-        <NoScriptForm question={question} returnTo={returnTo} locale={locale} value={null} />
+        {fallback}
       </div>
     );
 
@@ -156,109 +168,161 @@ export function RatingControlView({
       data-slot="rating-control-reserved"
       onKeyDownCapture={clearOnKey}
     >
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-        <span className="min-w-0 wrap-anywhere font-medium text-sm">{question.label}</span>
-        <output aria-live="polite" className="font-semibold tabular-nums" data-slot="rating-control-value">
-          {valueText}
-        </output>
-      </div>
-      <Slider.Root
-        className="[&>div]:min-h-11 **:data-[slot=slider-thumb]:size-5 **:data-[slot=slider-thumb]:ring-2 **:data-[slot=slider-thumb]:ring-primary"
-        data-slot="slider"
-        disabled={pending}
-        locale={locale}
-        thumbAlignment="edge"
-        max={question.scale.max}
-        min={question.scale.min}
-        onValueChange={(next) => {
-          const units = Array.isArray(next) ? next[0] : next;
-          if (typeof units === 'number') {
-            editing.current = true;
-            setDraft(
-              Math.min(
-                scale.max,
-                Math.max(
-                  scale.min,
-                  scale.min + Math.round((units - scale.min) / scale.displayStep) * scale.displayStep,
-                ),
-              ),
-            );
-          }
-        }}
-        step={question.scale.displayStep}
-        value={[sliderValue]}
-      >
-        <Slider.Control className="relative flex min-h-11 w-full touch-none items-center select-none data-disabled:opacity-50">
-          <Slider.Track
-            data-slot="slider-track"
-            className="relative h-1 w-full grow overflow-hidden rounded-2xl bg-input/90"
-          >
-            <Slider.Indicator data-slot="slider-range" className="h-full bg-primary" />
-          </Slider.Track>
-          <Slider.Thumb
-            aria-label={question.label}
-            aria-valuetext={valueText}
-            data-slot="slider-thumb"
-            className="block size-5 shrink-0 rounded-2xl bg-white shadow-md ring-2 ring-primary not-dark:bg-clip-padding transition-[color,box-shadow] duration-200 select-none hover:ring-4 hover:ring-ring/30 focus-visible:ring-4 focus-visible:ring-ring/30 focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50"
+      <Field.Root
+        className="space-y-2"
+        render={
+          <form
+            action={returnTo}
+            aria-labelledby={labelId}
+            id={formId}
+            method="post"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (pending || value === null || value === state.units) return;
+              editing.current = false;
+              onSet(value);
+            }}
           />
-        </Slider.Control>
-      </Slider.Root>
-      <div aria-hidden="true" className="flex justify-between text-muted-foreground text-xs tabular-nums">
-        <span>{displayRating(scale.min, scale)}</span>
-        <span>{displayRating(scale.max, scale)}</span>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <Button
-          className={actionClassName}
-          disabled={pending || value === null || value === state.units}
-          onClick={() => {
-            editing.current = false;
-            if (value !== null) onSet(value);
+        }
+      >
+        <RatingFormIdentity question={question} subjectId={subjectId} returnTo={returnTo} />
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+          <Field.Label className="min-w-0 wrap-anywhere font-medium text-sm" id={labelId}>
+            {question.label}
+          </Field.Label>
+          <output aria-live="polite" className="font-semibold tabular-nums" data-slot="rating-control-value">
+            {valueText}
+          </output>
+        </div>
+        <Slider.Root
+          className="[&>div]:min-h-11 **:data-[slot=slider-thumb]:size-5 **:data-[slot=slider-thumb]:ring-2 **:data-[slot=slider-thumb]:ring-primary"
+          data-slot="slider"
+          disabled={pending}
+          locale={locale}
+          name="units"
+          thumbAlignment="edge"
+          max={question.scale.max}
+          min={question.scale.min}
+          onValueChange={(next) => {
+            const units = Array.isArray(next) ? next[0] : next;
+            if (typeof units === 'number') {
+              editing.current = true;
+              setDraft(
+                Math.min(
+                  scale.max,
+                  Math.max(
+                    scale.min,
+                    scale.min + Math.round((units - scale.min) / scale.displayStep) * scale.displayStep,
+                  ),
+                ),
+              );
+            }
           }}
-          type="button"
+          step={question.scale.displayStep}
+          value={[sliderValue]}
         >
-          {m.subject_rating_control_save({}, options)}
-        </Button>
-        <Button
-          className={actionClassName}
-          disabled={pending || state.units === null}
-          onClick={() => {
-            editing.current = false;
-            setDraft(null);
-            onClear();
-          }}
-          type="button"
-          variant="outline"
-        >
-          {m.subject_rating_control_clear({}, options)}
-        </Button>
-      </div>
-      {failure === null ? null : (
-        <p className="text-sm" role="status">
-          {failure}
-        </p>
-      )}
-      <NoScriptForm question={question} returnTo={returnTo} locale={locale} value={state.units} />
+          <Slider.Control className="relative flex min-h-11 w-full touch-none items-center select-none data-disabled:opacity-50">
+            <Slider.Track
+              data-slot="slider-track"
+              className="relative h-1 w-full grow overflow-hidden rounded-2xl bg-input/90"
+            >
+              <Slider.Indicator data-slot="slider-range" className="h-full bg-primary" />
+            </Slider.Track>
+            <Slider.Thumb
+              aria-label={question.label}
+              aria-valuetext={valueText}
+              data-slot="slider-thumb"
+              className="block size-5 shrink-0 rounded-2xl bg-white shadow-md ring-2 ring-primary not-dark:bg-clip-padding transition-[color,box-shadow] duration-200 select-none hover:ring-4 hover:ring-ring/30 focus-visible:ring-4 focus-visible:ring-ring/30 focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50"
+            />
+          </Slider.Control>
+        </Slider.Root>
+        <div aria-hidden="true" className="flex justify-between text-muted-foreground text-xs tabular-nums">
+          <span>{displayRating(scale.min, scale)}</span>
+          <span>{displayRating(scale.max, scale)}</span>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            className={actionClassName}
+            disabled={pending || value === null || value === state.units}
+            onClick={() => {
+              editing.current = false;
+              if (value !== null) onSet(value);
+            }}
+            type="button"
+          >
+            {m.subject_rating_control_save({}, options)}
+          </Button>
+          <Button
+            className={actionClassName}
+            disabled={pending || state.units === null}
+            onClick={() => {
+              editing.current = false;
+              setDraft(null);
+              onClear();
+            }}
+            type="button"
+            variant="outline"
+          >
+            {m.subject_rating_control_clear({}, options)}
+          </Button>
+        </div>
+        {failure === null ? null : (
+          <p className="text-sm" role="status">
+            {failure}
+          </p>
+        )}
+      </Field.Root>
+      {fallback}
     </div>
+  );
+}
+
+function RatingFormIdentity({
+  question,
+  subjectId,
+  returnTo,
+}: {
+  question: RatingQuestion;
+  subjectId: string;
+  returnTo: string;
+}) {
+  return (
+    <>
+      <input name="questionId" type="hidden" value={question.id} />
+      <input name="subjectId" type="hidden" value={subjectId} />
+      <input name="returnTo" type="hidden" value={returnTo} />
+    </>
   );
 }
 
 function NoScriptForm({
   question,
+  subjectId,
   returnTo,
   locale,
   value,
 }: {
   question: RatingQuestion;
+  subjectId: string;
   returnTo: string;
   locale: string;
   value: number | null;
 }) {
   const options = { locale: locale as never };
+  const formId = useId();
+  const inputId = `${formId}-units`;
+  const labelId = `${formId}-label`;
   return (
     <noscript>
-      <form action={returnTo} className="mt-3 flex flex-wrap items-center gap-2" method="post">
-        <label className="min-w-0 wrap-anywhere text-sm" htmlFor="rating-no-script">
+      <form
+        action={returnTo}
+        aria-labelledby={labelId}
+        className="mt-3 flex flex-wrap items-center gap-2"
+        id={formId}
+        method="post"
+      >
+        <RatingFormIdentity question={question} subjectId={subjectId} returnTo={returnTo} />
+        <label className="min-w-0 wrap-anywhere text-sm" htmlFor={inputId} id={labelId}>
           {question.label}
         </label>
         <input
@@ -270,7 +334,7 @@ function NoScriptForm({
               Math.floor((question.scale.max - question.scale.min) / question.scale.displayStep / 2) *
                 question.scale.displayStep
           }
-          id="rating-no-script"
+          id={inputId}
           max={question.scale.max}
           min={question.scale.min}
           name="units"
