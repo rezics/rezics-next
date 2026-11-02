@@ -226,6 +226,10 @@ type Head = {
   enrollment_home: number;
   maintenance_allowance: WorkAllowance | null;
 };
+
+function isReadyScopeState(state: Head['state']): boolean {
+  return state === 'ready';
+}
 type PublicLocator = NonNullable<ReturnType<typeof publicIdentityCaptureLocator>> & { kind: 'public-locator' };
 type Dependency = {
   dependency: string;
@@ -1161,7 +1165,7 @@ export function createIdentityScopedObservations(pool: Pool): S.IdentityScopedOb
           [...params(key), locked.registration],
         );
         if (unresolved.rowCount) return noEffect({ status: 'pending', work: measured });
-        if (locked.state === 'ready')
+        if (isReadyScopeState(locked.state))
           return noEffect({ status: 'registered', observation: observation(key, locked), work: measured });
         if (locked.state !== 'ready') {
           await query(
