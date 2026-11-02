@@ -259,17 +259,23 @@ function AuthoredFieldLive({
     setErrors([]);
   };
   function questionLive(question: DiscardQuestion | undefined): question is DiscardQuestion {
-    return !!question && discardQuestion.current === question && readingLive() && canDiscard &&
-      !running.current && currentDraft.current === question.draft &&
-      editorGeneration.current === question.editor;
+    return (
+      !!question &&
+      discardQuestion.current === question &&
+      readingLive() &&
+      canDiscard &&
+      !running.current &&
+      currentDraft.current === question.draft &&
+      editorGeneration.current === question.editor
+    );
   }
   function questionFocused() {
     return !!discardGroup.current?.contains(discardGroup.current.ownerDocument.activeElement);
   }
   function discard(question: DiscardQuestion | undefined, keyboard: boolean) {
     if (!questionLive(question)) return;
-    focusEditor.current = keyboard && (questionFocused() ||
-      discardButton.current?.ownerDocument.activeElement === discardButton.current);
+    focusEditor.current =
+      keyboard && (questionFocused() || discardButton.current?.ownerDocument.activeElement === discardButton.current);
     // Consume synchronously: callbacks retained by this question cannot act again before React commits.
     retireDiscard();
     dispatch({ type: 'discard', property: question.property });
@@ -284,10 +290,21 @@ function AuthoredFieldLive({
     if (restoreFocus) discardButton.current?.focus();
   }
   function requestDiscard(keyboard: boolean) {
-    if (!readingLive() || !canDiscard || running.current || !draft ||
-      currentDraft.current !== draft || editorGeneration.current !== editorVersion) return;
-    const question = { property, draft, editor: editorVersion,
-      keyboard: keyboard && discardButton.current?.ownerDocument.activeElement === discardButton.current };
+    if (
+      !readingLive() ||
+      !canDiscard ||
+      running.current ||
+      !draft ||
+      currentDraft.current !== draft ||
+      editorGeneration.current !== editorVersion
+    )
+      return;
+    const question = {
+      property,
+      draft,
+      editor: editorVersion,
+      keyboard: keyboard && discardButton.current?.ownerDocument.activeElement === discardButton.current,
+    };
     discardQuestion.current = question;
     if (
       hasDocumentContent(draft.document) ||
@@ -796,8 +813,11 @@ function AuthoredFieldLive({
                           >
                             {m.authored_keep_draft({}, o)}
                           </Button>
-                          <Button type="button" className={actionClassName}
-                            onClick={(event) => discard(discarding, event.detail === 0)}>
+                          <Button
+                            type="button"
+                            className={actionClassName}
+                            onClick={(event) => discard(discarding, event.detail === 0)}
+                          >
                             {m.authored_discard_confirm({}, o)}
                           </Button>
                         </div>
