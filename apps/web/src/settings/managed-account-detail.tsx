@@ -403,7 +403,7 @@ export function ManagedAccountDetail({ accountId, backHref }: { accountId: strin
         ? new ManagedAccountReader(
             viewerId,
             accountId,
-            (data, signal) => readManagedAccountDetail({ data, signal }),
+            (data, signal) => readManagedAccountDetail({ data, ...(signal ? { signal } : {}) }),
             session.csrfToken,
             owner.isCurrent,
           )

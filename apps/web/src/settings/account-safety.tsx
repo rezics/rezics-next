@@ -111,7 +111,7 @@ export class AccountRenameRegion {
     if (this.pending) return this.pending;
     // Clear all old identity, links and failure metadata before awaiting a fresh read.
     this.publish({ loading: true, context: null, retryAt: 0 });
-    this.pending = withManagedReadDeadline(async (signal) => {
+    this.pending = withManagedReadDeadline<AccountRenameResult>(async (signal) => {
       const ready =
         refresh && this.refreshSession
           ? Promise.resolve().then(() => (this.live() && this.active ? this.refreshSession!() : undefined))
@@ -148,7 +148,7 @@ export async function readCurrentAccountRename(
   if (!csrfToken || !current()) return { context: null };
   const { readAccountRename } = await load();
   if (!current() || signal?.aborted) return { context: null };
-  const result = await readAccountRename({ headers: { 'X-CSRF-Token': csrfToken }, signal });
+  const result = await readAccountRename({ headers: { 'X-CSRF-Token': csrfToken }, ...(signal ? { signal } : {}) });
   return current() ? result : { context: null };
 }
 

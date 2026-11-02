@@ -94,7 +94,7 @@ export function createEditableProfileSource(client: KernelClient): EditableProfi
     async read(authorization, accountId, signal) {
       const result = await client.accounts({ accountId }).profile.get({
         headers: { authorization, 'cache-control': 'no-store' },
-        fetch: { cache: 'no-store', signal },
+        fetch: { cache: 'no-store', ...(signal ? { signal } : {}) },
       });
       if (result.error || !result.data) {
         const failure = nativeProfileFailure(result.status, result.error?.value, result.headers);

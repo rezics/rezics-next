@@ -102,7 +102,10 @@ test('inventory timeout preserves its cursor, independent actions recover, and l
           })
         : Promise.resolve({ ok: true, page });
     });
-    const actions = new ManagedAccountActionsRead(target, () => never());
+    let actionCalls = 0;
+    const actions = new ManagedAccountActionsRead(target, async () =>
+      ++actionCalls === 1 ? never() : { state: 'denied', status: 403, code: null },
+    );
     await inventory.load();
     await Promise.all([inventory.more('organizations'), actions.load()]);
     expect(inventory.snapshot().organizations).toMatchObject({
@@ -113,6 +116,9 @@ test('inventory timeout preserves its cursor, independent actions recover, and l
     });
     expect(actions.snapshot()).toMatchObject({ pending: false, result: { state: 'unavailable' } });
     await inventory.more('organizations');
+    await actions.retry();
+    expect(actions.snapshot()).toMatchObject({ pending: false, result: { state: 'denied' } });
+    expect(actionCalls).toBe(2);
     late({ ok: true, page: { ...page, organizations: { ...page.organizations, next: 'obsolete' } } });
     await Promise.resolve();
     expect(cursors).toEqual([{}, { organizationsCursor: 'opaque/+=' }, { organizationsCursor: 'opaque/+=' }]);
@@ -122,7 +128,7 @@ test('inventory timeout preserves its cursor, independent actions recover, and l
   });
 });
 
-test('detail and rename entry unlock deliberate recovery and retired readers discard late completion', async () => {
+test('detail and rename entry unlock deliberate recovery and retirement clears observations', async () => {
   await fastDeadlines(async () => {
     let detailCalls = 0;
     const detail = new ManagedAccountReader(viewerId, viewerId, () => {
