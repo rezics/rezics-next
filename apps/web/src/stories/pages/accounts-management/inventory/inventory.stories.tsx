@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
-import { automation, organization, selectManagementStory } from '../../../../accounts/management/story-api';
+import { automation, human, organization, selectManagementStory } from '../../../../accounts/management/story-api';
 import { m } from '../../../../paraglide/messages.js';
 import { getLocale } from '../../../../paraglide/runtime.js';
 import { PageStory } from '../../../page';
@@ -68,4 +68,63 @@ export const UnavailableRetry: Story = {
     await userEvent.click(main.getByRole('button', { name: m.managed_refresh() }));
     await expect(await main.findByText(m.managed_no_organizations())).toBeVisible();
   },
+};
+
+// Connected route examples are illustrative responses, not native or visual acceptance evidence.
+async function directoryJourney({ canvasElement }: { canvasElement: HTMLElement }) {
+  await ready({ canvasElement });
+  const main = within(within(canvasElement).getByRole('main'));
+  const inspect = async () => {
+    const article = canvasElement.querySelector('main article')!;
+    await expect(article.scrollWidth).toBeLessThanOrEqual(article.clientWidth + 1);
+    for (const control of article.querySelectorAll<HTMLElement>('a, button')) {
+      const bounds = control.getBoundingClientRect();
+      await expect(bounds.height).toBeGreaterThanOrEqual(44);
+      await expect(bounds.left).toBeGreaterThanOrEqual(article.getBoundingClientRect().left - 1);
+      await expect(bounds.right).toBeLessThanOrEqual(article.getBoundingClientRect().right + 1);
+      await expect(control.scrollWidth).toBeLessThanOrEqual(control.clientWidth + 1);
+    }
+  };
+  await inspect();
+  await userEvent.click(main.getByRole('link', { name: organization.displayName }));
+  await expect(await main.findByRole('heading', { level: 2, name: m.managed_holders_title() })).toBeVisible();
+  await inspect();
+  await expect(main.getByRole('link', { name: m.managed_options() })).toHaveAttribute(
+    'href',
+    `/${getLocale()}/settings?managedAccount=${organization.id}#account`,
+  );
+  await userEvent.click(main.getByRole('link', { name: m.managed_back() }));
+  await userEvent.click(await main.findByRole('link', { name: human.displayName }));
+  await expect(await main.findByRole('link', { name: m.managed_delete_self() })).toBeVisible();
+  await expect(main.getByText(m.managed_operation_status())).toBeVisible();
+  await inspect();
+  await userEvent.click(main.getByRole('link', { name: m.managed_back() }));
+  await userEvent.click(await main.findByRole('link', { name: automation.displayName }));
+  await expect(await main.findByText(m.managed_transfer_unavailable())).toBeVisible();
+  selectManagementStory('unavailable');
+  await userEvent.click(main.getByRole('button', { name: m.managed_refresh() }));
+  await expect(await main.findByText(m.managed_unavailable_title())).toBeVisible();
+  await expect(main.queryByRole('link', { name: m.managed_options() })).toBeNull();
+  await inspect();
+  selectManagementStory('populated');
+  const refresh = main.getByRole('button', { name: m.managed_refresh() });
+  await userEvent.keyboard('{Tab}');
+  refresh.focus();
+  await expect(refresh).toHaveFocus();
+  await expect(refresh.matches(':focus-visible')).toBe(true);
+  await userEvent.keyboard('{Enter}');
+  await expect(await main.findByText(m.managed_transfer_unavailable())).toBeVisible();
+}
+export const CompletePhoneJourney: Story = {
+  render: () => render('populated'),
+  globals: { locale: 'de', viewport: { value: 'phone390', isRotated: false } },
+  play: directoryJourney,
+};
+export const CompleteDesktopJourney: Story = {
+  ...CompletePhoneJourney,
+  globals: { locale: 'de', viewport: { value: 'desktop1280', isRotated: false } },
+};
+export const CompleteRtlJourney: Story = {
+  ...CompletePhoneJourney,
+  render: () => <div dir="rtl">{render('populated')}</div>,
 };

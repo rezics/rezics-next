@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { ContentItem } from '@rezics/ui/content-item';
+import { ContentItem, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@rezics/ui/shadcn/card';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
@@ -12,7 +12,8 @@ import { managedAccountHref } from '../../settings/managed-accounts-read';
 import { issuerPage, type Cursors, type Detail, type Identity, type Inventory, type Page } from './data';
 
 const linkClass =
-  'inline-flex min-h-11 max-w-full items-center wrap-anywhere text-primary underline underline-offset-4';
+  'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal wrap-anywhere rounded-sm text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const retryClass = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-3 text-start';
 export function managementHref(account: Identity) {
   return `/${getLocale()}/${account.kind === 'organization' ? 'organizations' : 'accounts'}/${encodeURIComponent(account.id)}`;
 }
@@ -21,7 +22,7 @@ function name(account: Identity) {
 }
 function Frame({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <article className="mx-auto w-full max-w-4xl space-y-8 pb-8">
+    <article className="mx-auto w-full max-w-4xl min-w-0 space-y-8 pb-8 wrap-anywhere">
       <header className="space-y-3">
         <PageHeading>{title}</PageHeading>
         <p className="max-w-prose text-muted-foreground">{m.managed_intro()}</p>
@@ -61,7 +62,7 @@ function Failure({ page, retry }: { page: Exclude<Page<unknown>, { state: 'ready
             {m.managed_sign_in_title()}
           </a>
         ) : (
-          <Button variant="outline" onClick={retry}>
+          <Button className={retryClass} variant="outline" onClick={retry}>
             {m.managed_refresh()}
           </Button>
         )}
@@ -103,7 +104,7 @@ function Responsibilities({ page, cursors }: { page: Inventory['responsibilities
     <Card>
       <CardHeader>
         <CardTitle>
-          <h2>{m.managed_operated_title()}</h2>
+          <ContentItemHeading level={2}>{m.managed_operated_title()}</ContentItemHeading>
         </CardTitle>
         <CardDescription>{m.managed_responsibility_text()}</CardDescription>
       </CardHeader>
@@ -125,7 +126,10 @@ function Responsibilities({ page, cursors }: { page: Inventory['responsibilities
                   : {})}
                 metadata={item.account?.handle && item.account.displayName ? <p>@{item.account.handle}</p> : null}
                 state={
-                  <Badge variant="secondary">
+                  <Badge
+                    variant="secondary"
+                    className="h-auto min-h-5 max-w-full whitespace-normal wrap-anywhere text-start"
+                  >
                     {item.state === 'current' ? m.managed_current() : m.managed_reconciling()}
                   </Badge>
                 }
@@ -161,7 +165,7 @@ export function ManagedAccountsPage({
       <Card>
         <CardHeader>
           <CardTitle>
-            <h2>{m.managed_your_account()}</h2>
+            <ContentItemHeading level={2}>{m.managed_your_account()}</ContentItemHeading>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -185,7 +189,7 @@ export function ManagedAccountsPage({
       <Card>
         <CardHeader>
           <CardTitle>
-            <h2>{m.managed_organizations_title()}</h2>
+            <ContentItemHeading level={2}>{m.managed_organizations_title()}</ContentItemHeading>
           </CardTitle>
           <CardDescription>{m.managed_membership_text()}</CardDescription>
         </CardHeader>
@@ -201,7 +205,14 @@ export function ManagedAccountsPage({
                   title={name(account)}
                   href={managementHref(account)}
                   metadata={account.handle && account.displayName ? <p>@{account.handle}</p> : null}
-                  state={<Badge variant="secondary">{role === 'owner' ? m.managed_owner() : m.managed_member()}</Badge>}
+                  state={
+                    <Badge
+                      variant="secondary"
+                      className="h-auto min-h-5 max-w-full whitespace-normal wrap-anywhere text-start"
+                    >
+                      {role === 'owner' ? m.managed_owner() : m.managed_member()}
+                    </Badge>
+                  }
                 />
               ))}
             </ul>
@@ -227,7 +238,7 @@ export function ManagedAccountsPage({
         <AlertTitle>{m.managed_automation_title()}</AlertTitle>
         <AlertDescription>{m.managed_automation_unavailable()}</AlertDescription>
       </Alert>
-      <Button variant="outline" onClick={retry}>
+      <Button className={retryClass} variant="outline" onClick={retry}>
         {m.managed_refresh()}
       </Button>
     </Frame>
@@ -260,7 +271,7 @@ export function AccountManagementPage({
       <Card>
         <CardHeader>
           <CardTitle>
-            <h2>{m.managed_target_title()}</h2>
+            <ContentItemHeading level={2}>{m.managed_target_title()}</ContentItemHeading>
           </CardTitle>
           <CardDescription>
             {value.account.kind === 'organization'
@@ -281,12 +292,19 @@ export function AccountManagementPage({
           {value.role ? (
             <p>
               {m.managed_your_role()}{' '}
-              <Badge variant="secondary">{value.role === 'owner' ? m.managed_owner() : m.managed_member()}</Badge>
+              <Badge
+                variant="secondary"
+                className="h-auto min-h-5 max-w-full whitespace-normal wrap-anywhere text-start"
+              >
+                {value.role === 'owner' ? m.managed_owner() : m.managed_member()}
+              </Badge>
             </p>
           ) : null}
           {value.relation ? (
             <div>
-              <h3 className="font-medium">{m.managed_operator_title()}</h3>
+              <ContentItemHeading level={3} className="font-medium">
+                {m.managed_operator_title()}
+              </ContentItemHeading>
               <IdentityLink account={value.operator} management={false} />
               <p className="text-sm text-muted-foreground">{m.managed_operator_text()}</p>
             </div>
@@ -302,7 +320,7 @@ export function AccountManagementPage({
         <Card>
           <CardHeader>
             <CardTitle>
-              <h2>{m.managed_holders_title()}</h2>
+              <ContentItemHeading level={2}>{m.managed_holders_title()}</ContentItemHeading>
             </CardTitle>
             <CardDescription>{m.managed_holders_text()}</CardDescription>
           </CardHeader>
@@ -321,7 +339,10 @@ export function AccountManagementPage({
                       : {})}
                     metadata={item.account?.handle && item.account.displayName ? <p>@{item.account.handle}</p> : null}
                     state={
-                      <Badge variant="secondary">
+                      <Badge
+                        variant="secondary"
+                        className="h-auto min-h-5 max-w-full whitespace-normal wrap-anywhere text-start"
+                      >
                         {item.role === 'owner' ? m.managed_owner() : m.managed_member()}
                       </Badge>
                     }
@@ -339,7 +360,7 @@ export function AccountManagementPage({
       <Card>
         <CardHeader>
           <CardTitle>
-            <h2>{m.managed_changes_title()}</h2>
+            <ContentItemHeading level={2}>{m.managed_changes_title()}</ContentItemHeading>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 text-sm text-muted-foreground">
@@ -356,7 +377,7 @@ export function AccountManagementPage({
           ) : null}
         </CardContent>
       </Card>
-      <Button variant="outline" onClick={retry}>
+      <Button className={retryClass} variant="outline" onClick={retry}>
         {m.managed_refresh()}
       </Button>
     </Frame>

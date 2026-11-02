@@ -1,9 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, within } from 'storybook/test';
-import { selectManagementStory, human, automation } from '../../../../accounts/management/story-api';
+import { expect, fn, userEvent, within } from 'storybook/test';
+import { selectManagementStory, human, automation, detailExample } from '../../../../accounts/management/story-api';
 import { m } from '../../../../paraglide/messages.js';
 import { getLocale } from '../../../../paraglide/runtime.js';
-import { PageStory } from '../../../page';
+import { AccountManagementPage } from '../../../../accounts/management/pages';
+import { PageStory, PatternStory } from '../../../page';
 import { ready, reviewParameters } from '../support';
 const meta = { title: 'Pages/Account/Management/Account', parameters: reviewParameters } satisfies Meta;
 export default meta;
@@ -61,3 +62,96 @@ export const Denied: Story = {
 };
 export const Unavailable: Story = { render: () => render('unavailable'), play: ready };
 export const Missing: Story = { render: () => render('missing'), play: ready };
+
+const retrySupplied = fn();
+function suppliedAccount(unavailableIdentity = false) {
+  const value = detailExample(unavailableIdentity ? automation.id : human.id);
+  value.account = {
+    ...value.account,
+    displayName: 'Alexandria · 読書会 · Cercle de lecture · 독서 모임 · ' + 'LongHumanName'.repeat(12),
+  };
+  if (unavailableIdentity) value.operator = null;
+  return (
+    <PatternStory visitor="Signed In" path={`/accounts/${value.account.id}`}>
+      <div dir="rtl" className="p-4">
+        <AccountManagementPage
+          page={{ state: 'ready', value, issuer: 'https://auth.example.test', organizationsAvailable: null }}
+          retry={retrySupplied}
+        />
+      </div>
+    </PatternStory>
+  );
+}
+async function accountControls({ canvasElement }: { canvasElement: HTMLElement }) {
+  const canvas = within(canvasElement);
+  const article = canvasElement.querySelector('article')!;
+  await expect(article.scrollWidth).toBeLessThanOrEqual(article.clientWidth + 1);
+  for (const control of article.querySelectorAll<HTMLElement>('a, button')) {
+    const bounds = control.getBoundingClientRect();
+    await expect(bounds.height).toBeGreaterThanOrEqual(44);
+    await expect(bounds.left).toBeGreaterThanOrEqual(article.getBoundingClientRect().left - 1);
+    await expect(bounds.right).toBeLessThanOrEqual(article.getBoundingClientRect().right + 1);
+    await expect(control.scrollWidth).toBeLessThanOrEqual(control.clientWidth + 1);
+    control.focus();
+    await expect(control).toHaveFocus();
+  }
+  const refresh = canvas.getByRole('button', { name: m.managed_refresh() });
+  retrySupplied.mockClear();
+  refresh.focus();
+  await userEvent.keyboard('{Enter}');
+  await expect(refresh).toHaveFocus();
+  await expect(refresh.matches(':focus-visible')).toBe(true);
+  await expect(retrySupplied).toHaveBeenCalledTimes(1);
+  await expect(canvas.getByText(m.managed_options_guidance())).toBeVisible();
+  await expect(canvas.getByText(m.managed_operation_status())).toBeVisible();
+}
+export const LongSelfPhoneRtl: Story = {
+  render: () => suppliedAccount(),
+  globals: { locale: 'de', viewport: { value: 'phone390', isRotated: false } },
+  play: accountControls,
+};
+export const LongSelfDesktopRtl: Story = {
+  ...LongSelfPhoneRtl,
+  globals: { locale: 'de', viewport: { value: 'desktop1280', isRotated: false } },
+};
+export const OperatorIdentityUnavailable: Story = {
+  ...LongSelfPhoneRtl,
+  render: () => suppliedAccount(true),
+  play: async (context) => {
+    await accountControls(context);
+    const canvas = within(context.canvasElement);
+    await expect(canvas.getByText(m.managed_missing_title())).toBeVisible();
+    await expect(canvas.getByText(m.managed_transfer_unavailable())).toBeVisible();
+    await expect(canvas.queryByRole('link', { name: m.managed_delete_self() })).toBeNull();
+  },
+};
+export const Preparing: Story = {
+  render: () => (
+    <PatternStory visitor="Signed In">
+      <AccountManagementPage page={{ state: 'preparing' }} retry={retrySupplied} />
+    </PatternStory>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText(m.managed_preparing_text())).toBeVisible();
+    retrySupplied.mockClear();
+    await userEvent.click(canvas.getByRole('button', { name: m.managed_refresh() }));
+    await expect(retrySupplied).toHaveBeenCalledTimes(1);
+  },
+};
+export const SignedOut: Story = {
+  render: () => (
+    <PatternStory>
+      <AccountManagementPage page={{ state: 'signed-out' }} retry={retrySupplied} />
+    </PatternStory>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('link', { name: m.managed_sign_in_title() })).toHaveAttribute(
+      'href',
+      `/auth/sign-in?return_to=${encodeURIComponent(`/${getLocale()}/accounts`)}`,
+    );
+    await expect(canvas.queryByRole('button')).toBeNull();
+    await expect(canvas.queryByRole('link', { name: m.managed_options() })).toBeNull();
+  },
+};
