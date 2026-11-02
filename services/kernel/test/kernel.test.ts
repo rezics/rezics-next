@@ -237,6 +237,8 @@ const typed = [
   'GET /v1/threads/:id/appeals',
   'GET /v1/threads/:id/reports',
   'GET /v1/posts/:id/reports',
+  'GET /v1/subjects/:id/reports',
+  'GET /v1/catalogue/reports',
   'POST /v1/boards/:id/$takeDown',
   'POST /v1/threads/:id/$takeDown',
   'POST /v1/posts/:id/$takeDown',

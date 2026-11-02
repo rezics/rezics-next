@@ -103,6 +103,7 @@ const fixtures = {
   'com.rezics.content.post.restored.v1': { postId: itemId, securityRevision: '9223372036854775807' },
   'com.rezics.content.report.resolved.v1': { reportId },
   'com.rezics.content.report.created.v1': { reportId, targetKind: 'post', targetId: itemId, revisionId },
+  'com.rezics.content.catalogue-report.projected.v1': { reportId },
   'com.rezics.content.report-target.projected.v1': { reportId, targetKind: 'post', targetId: itemId },
   'com.rezics.content.reaction.changed.v1': {
     actorId,

@@ -745,6 +745,7 @@ function publishedModels(): void {
       | Readonly<{ kind: 'board'; id: string }>
       | Readonly<{ kind: 'thread'; id: string }>
       | Readonly<{ kind: 'post'; id: string }>
+      | Readonly<{ kind: 'subject'; id: string }>
     >
   >();
   same<
@@ -789,7 +790,14 @@ function publishedModels(): void {
       Readonly<{ pool: Pool; access: Access; routeKey: Uint8Array; clock?: () => Date }>
     >
   >();
-  same<Equal<moderation.TakedownTarget, reports.ReportTarget>>();
+  same<
+    Equal<
+      moderation.TakedownTarget,
+      | Readonly<{ kind: 'board'; id: string }>
+      | Readonly<{ kind: 'thread'; id: string }>
+      | Readonly<{ kind: 'post'; id: string }>
+    >
+  >();
   same<Equal<moderation.TakedownInput, Readonly<{ target: moderation.TakedownTarget; reason: string }>>>();
   same<Equal<AuthorErasureInput, Readonly<{ threadId: string; authorId: string }>>>();
   same<
