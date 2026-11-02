@@ -139,8 +139,8 @@ export const LongPaginationLabels: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const nav = await canvas.findByRole('navigation', { name: m.library_progress_index_reader_pagination() });
-    const first = within(nav).getByRole('link', { name: m.library_collections_first_page(), exact: true });
-    const more = within(nav).getByRole('link', { name: m.library_progress_more(), exact: true });
+    const first = within(nav).getByRole('link', { name: m.library_collections_first_page() });
+    const more = within(nav).getByRole('link', { name: m.library_progress_more() });
     for (const [index, link] of [first, more].entries()) {
       const destination = new URL(link.getAttribute('href')!, window.location.origin);
       expect(destination.pathname).toBe(`/${getLocale()}/library/progress`);
