@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useLayoutEffect, useId, useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import {
@@ -101,7 +101,7 @@ function CollectionExportActions({
   const inFlight = useRef<object | null>(null);
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState('');
-  useEffect(() => () => {
+  useLayoutEffect(() => () => {
     attempt.current.cancel();
     inFlight.current = null;
   }, []);
