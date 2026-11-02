@@ -78,6 +78,8 @@ export function useEditorialCommandFocus(active: () => boolean, busy: boolean) {
         },
       };
       function moved(event: FocusEvent) {
+        const { opener } = request;
+        const document = opener.ownerDocument;
         if (event.target === opener) return;
         // Removal/disable may return focus to the document without a reader choice.
         if (
