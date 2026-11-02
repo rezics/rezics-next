@@ -27,6 +27,7 @@ implemented, exposed, tested and promoted are separate states; a passing local c
 Includes the public index tier, admitted catalogue plans and preparation, presentation profiles, compositions and
 page read aggregation. [Public scope](../scope.md) owns discovery boundaries. Private library facts remain in their
 owner's PostgreSQL partition; a public index is never an authorization authority. Web owns interface integration.
+Subject population switches clear `context`, `node` and `cursor`, preserve the localized subject/view and fragment, and add `realm` only for a Realm retry.
 
 ## Ownership
 

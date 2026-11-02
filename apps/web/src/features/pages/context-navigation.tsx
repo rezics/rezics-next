@@ -4,11 +4,18 @@ import { m } from '../../paraglide/messages.js';
 const recoveryLinkClass =
   'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-md border border-border px-3 py-2 text-left whitespace-normal text-primary underline underline-offset-4 [overflow-wrap:anywhere] hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary';
 
-/** Retain only the requested Realm selector. Context ids and cursors never become link authority. */
-export function contextHref(href: string, realm?: string): string {
-  if (!realm || !/^\/[^/]+\/subjects\//.test(href)) return href;
+/** Keep subject navigation in its population and reset continuation when changing selection. */
+export function contextHref(
+  href: string,
+  realm?: string,
+  options: { resetSelection?: boolean } = {},
+): string {
+  if ((!realm && !options.resetSelection) || !/^\/[^/]+\/subjects\//.test(href)) return href;
   const url = new URL(href, 'https://rezics.invalid');
-  url.searchParams.set('realm', realm);
+  if (options.resetSelection) {
+    for (const key of ['realm', 'context', 'node', 'cursor']) url.searchParams.delete(key);
+  }
+  if (realm) url.searchParams.set('realm', realm);
   return `${url.pathname}${url.search}${url.hash}`;
 }
 
@@ -44,11 +51,11 @@ export function ContextNavigation({
             {m.subject_context_return({ title: selected.title }, o)}
           </a>
         )}
-        <a className={recoveryLinkClass} href={href}>
+        <a className={recoveryLinkClass} href={contextHref(href, undefined, { resetSelection: true })}>
           {m.subject_context_switch_global({}, o)}
         </a>
         {!selected && selection && (
-          <a className={recoveryLinkClass} href={contextHref(href, selection)}>
+          <a className={recoveryLinkClass} href={contextHref(href, selection, { resetSelection: true })}>
             {m.subject_context_retry({}, o)}
           </a>
         )}
