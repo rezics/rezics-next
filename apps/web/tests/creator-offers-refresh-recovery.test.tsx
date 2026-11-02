@@ -408,6 +408,57 @@ describe('Creator offer editing recovery retains real drafts without extending p
       expect(p.writes[3]!.data).toEqual(p.writes[2]!.data);
     }));
 
+  for (const operation of ['reprice', 'delist'] as const)
+    test(`confirmed ${operation} refreshes availability without replaying a saved command`, async () =>
+      workspace(async (p) => {
+        await p.show();
+        await p.fill('price', '13.25');
+        if (operation === 'reprice') await p.submit(true);
+        else await p.click(m.creator_delist());
+        expect(p.listReads).toHaveLength(0);
+        await p.settle(p.writes[0]!.work, { kind: 'retry' });
+        expect(p.listReads).toHaveLength(0);
+        await p.click(m.creator_retry());
+        expect(p.writes[1]!.data).toEqual(p.writes[0]!.data);
+        await p.settle(p.writes[1]!.work, { kind: 'saved', id: creatorOfferFixture.id });
+        expect(p.listReads).toHaveLength(1);
+        for (const outcome of [new Error('Read response lost'), list()]) {
+          await p.settle(p.listReads.at(-1)!, outcome);
+          expect(p.host.textContent).toContain(m.creator_saved());
+          expect(p.host.textContent).not.toContain(m.creator_uncertain());
+          expect(p.input('price').value).toBe('13.25');
+          expect(p.input('price').disabled).toBe(true);
+          // Use the saved command's read-only recovery rather than the page refresh.
+          await act(async () => {
+            [...p.host.querySelectorAll('button')]
+              .filter((button) => button.textContent === m.creator_offers_refresh()).at(-1)!.click();
+          });
+          expect(p.writes).toHaveLength(2);
+        }
+        const latest = list();
+        if (latest.data.page.kind !== 'ready') throw new Error('Expected seller page');
+        Object.assign(latest.data.page.offers[0]!, {
+          revision: creatorOfferFixture.revision + 1,
+          unitAmountMinor: 1325,
+          state: operation === 'delist' ? 'delisted' : 'active',
+        });
+        latest.data.keys[creatorOfferFixture.id] = { reprice: id(80), delist: id(81) };
+        await p.settle(p.listReads.at(-1)!, latest);
+        expect(p.host.textContent).toContain(m.creator_saved());
+        expect(p.host.textContent).toContain('$13.25');
+        if (operation === 'delist') {
+          expect(p.host.textContent).toContain(m.creator_offers_delisted());
+          expect(p.host.querySelector(`a[href="/en/offers/${creatorOfferFixture.id}"]`)).toBeNull();
+          expect(p.host.querySelector('form')).toBeNull();
+        } else {
+          expect(p.input('price').disabled).toBe(false);
+          await p.fill('price', '14.00');
+          await p.submit(true);
+          expect(p.writes).toHaveLength(3);
+          expect(p.writes[2]!.data.idempotencyKey).toBe(id(80));
+        }
+      }));
+
   test('pristine reads still replace current rows and edition facts', async () =>
     workspace(async (p) => {
       await p.show();

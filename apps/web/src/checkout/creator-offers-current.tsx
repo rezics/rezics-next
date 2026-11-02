@@ -223,6 +223,16 @@ function CreatorRead({
         data={data}
         guard={guard}
         onRefresh={() => void query.refetch()}
+        onConfirm={async (id) => {
+          const refreshed = await query.refetch({ cancelRefetch: true });
+          const outcome = refreshed.data;
+          if (!origin.isCurrent() || outcome?.kind !== 'accepted' || !matches(outcome.value, subject, address))
+            return null;
+          const latest = outcome.value.data;
+          return 'page' in latest && latest.selling && latest.page.kind === 'ready'
+            ? (latest.page.offers.find((offer) => offer.id === id) ?? null)
+            : null;
+        }}
         refreshing={query.isFetching}
         locale={locale}
         offerPageAvailable={offerPageAvailable ?? false}

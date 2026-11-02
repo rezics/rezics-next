@@ -20,6 +20,8 @@ import { formatMinorAmount } from './money';
 
 // Only this page's edited rows are retained; untouched rows follow the current read.
 const RetainOffer = createContext<(offer: CreatorOffer) => void>(() => {});
+const ReleaseOffer = createContext<(id: string) => void>(() => {});
+const ConfirmOffer = createContext<((id: string) => Promise<CreatorOffer | null>) | undefined>(undefined);
 
 function OwnedOfferControls({
   offer,
@@ -93,12 +95,17 @@ function OfferCommands({
   const memory = useCreatorIntent<ChangeIntent>(guard, offer.id);
   const [resume] = useState(memory.value);
   const retain = useContext(RetainOffer);
+  const release = useContext(ReleaseOffer);
+  const confirmOffer = useContext(ConfirmOffer);
   // Keep the observed row and original command stable while a write's outcome is uncertain.
   const [draft, setDraft] = useState(resume);
   const observed = draft?.observed ?? offer;
   const [text, setText] = useState(resume?.text ?? '');
   const [result, setResult] = useState<CreatorOfferResult | null>(resume?.result ?? null);
   const [busy, setBusy] = useState(false);
+  const [confirmed, setConfirmed] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const reading = useRef(false);
   const [open, setOpen] = useState(false);
   const controlsId = useId();
   const pending = useRef<CreatorOfferMutation | null>(resume?.pending ?? null);
@@ -119,7 +126,7 @@ function OfferCommands({
   const isCurrent = () => mounted.current.active && guard.isCurrent();
   const csrf = () => guard.csrfToken();
   const uncertain = result?.kind === 'retry';
-  const frozen = busy || uncertain || result?.kind === 'saved';
+  const frozen = busy || uncertain || (result?.kind === 'saved' && !confirmed);
   const editable = observed.state === 'active' && data.selling && !!csrf() && !!keys.current && guard.isCurrent();
   // Disclosure never hides an edited intent or an operation's recovery/result. Authority
   // withdrawal still belongs to the current-origin boundary that mounts these controls.
@@ -130,11 +137,36 @@ function OfferCommands({
     setDraft(next);
     retain(observed);
   }
+  async function refreshSaved() {
+    if (!confirmOffer || reading.current || !isCurrent()) return;
+    const lifetime = mounted.current;
+    reading.current = true;
+    setChecking(true);
+    try {
+      // This read starts after the command result. An older or missing row cannot
+      // settle the display, and reading never resubmits the saved command.
+      const current = await confirmOffer(observed.id);
+      if (!lifetime.active || !guard.isCurrent() || !current || current.revision <= observed.revision) return;
+      pending.current = null;
+      keys.current = { reprice: crypto.randomUUID(), delist: crypto.randomUUID() };
+      memory.value = undefined;
+      setDraft(undefined);
+      setText('');
+      setConfirmed(true);
+      locked.current = false;
+      release(observed.id);
+    } catch {
+      // The write is confirmed even when the subsequent availability read fails.
+    } finally {
+      reading.current = false;
+      if (lifetime.active && guard.isCurrent()) setChecking(false);
+    }
+  }
   async function change(operation: 'reprice' | 'delist') {
     const lifetime = mounted.current;
     const owns = () => lifetime.active && guard.isCurrent();
     const csrfToken = csrf();
-    if (!isCurrent() || !csrfToken || locked.current || !editable || result?.kind === 'saved') return;
+    if (!isCurrent() || !csrfToken || locked.current || !editable) return;
     if (!pending.current) {
       const key = keys.current?.[operation];
       if (!key) return;
@@ -147,6 +179,8 @@ function OfferCommands({
     }
     keepDraft({ observed, text, pending: pending.current, keys: keys.current, rule, result: { kind: 'retry' } });
     locked.current = true;
+    setConfirmed(false);
+    setResult(null);
     setBusy(true);
     let saved = false;
     try {
@@ -159,6 +193,7 @@ function OfferCommands({
         keys.current = { reprice: crypto.randomUUID(), delist: crypto.randomUUID() };
       }
       memory.value = { observed, text, pending: pending.current, keys: keys.current, rule, result: next };
+      if (saved) void refreshSaved();
     } catch {
       if (owns()) setResult({ kind: 'retry' });
     } finally {
@@ -253,6 +288,11 @@ function OfferCommands({
           </form>
         )}
         {result && <p role={result.kind === 'saved' ? 'status' : 'alert'}>{creatorNotice(result.kind)}</p>}
+        {result?.kind === 'saved' && !confirmed && confirmOffer && (
+          <Button type="button" variant="outline" className="min-h-11" disabled={checking} onClick={() => void refreshSaved()}>
+            {checking ? m.creator_offers_preparing() : m.creator_offers_refresh()}
+          </Button>
+        )}
       </div>
     </div>
   );
@@ -270,6 +310,7 @@ export function CreatorOffersPage({
   offerPageAvailable = true,
   guard,
   onRefresh,
+  onConfirm,
   refreshing = false,
 }: {
   page?: CreatorOffersData;
@@ -279,6 +320,7 @@ export function CreatorOffersPage({
   offerPageAvailable?: boolean;
   guard?: CreatorOfferGuard | undefined;
   onRefresh?: () => void;
+  onConfirm?: (id: string) => Promise<CreatorOffer | null>;
   refreshing?: boolean;
 }) {
   const memory = useCreatorIntent<Record<string, CreatorOffer>>(guard ?? creatorPreviewGuard, 'offer-rows');
@@ -288,6 +330,13 @@ export function CreatorOffersPage({
     const previous = memory.value ?? retained;
     if (previous[offer.id] === offer) return;
     const next = { ...previous, [offer.id]: offer };
+    memory.value = next;
+    setRetained(next);
+  }
+  function release(id: string) {
+    if (!guard?.isCurrent()) return;
+    const next = { ...(memory.value ?? retained) };
+    delete next[id];
     memory.value = next;
     setRetained(next);
   }
@@ -361,6 +410,8 @@ export function CreatorOffersPage({
             </div>
           ) : (
             <RetainOffer.Provider value={retain}>
+              <ReleaseOffer.Provider value={release}>
+                <ConfirmOffer.Provider value={onConfirm}>
               <ul className="space-y-3 rounded-xl border bg-card p-3 text-card-foreground sm:p-5">
                 {offers.map((offer) => (
                   <ContentItem
@@ -412,6 +463,8 @@ export function CreatorOffersPage({
                   />
                 ))}
               </ul>
+                </ConfirmOffer.Provider>
+              </ReleaseOffer.Provider>
             </RetainOffer.Provider>
           )}
           <nav aria-label={m.creator_offers_pagination()} className="flex flex-wrap gap-3">
