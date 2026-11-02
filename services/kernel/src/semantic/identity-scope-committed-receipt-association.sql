@@ -11,7 +11,7 @@ JOIN semantic.identity_scope_native_association a ON a.partition_no=s.partition_
 JOIN semantic.identity_epoch_native_commit n ON n.partition_no=a.partition_no AND n.transaction_id=a.transaction_id
 JOIN core.partition p ON p.partition_no=a.partition_no
 WHERE s.registration=i.registration AND s.capture_id=i.capture_id AND s.revision=i.revision AND s.source=i.source
- AND s.state='ready' AND s.active=0 AND s.scan_complete AND a.source=s.source
+ AND s.state='ready' AND s.active=0 AND s.scan_complete AND a.scan_complete AND a.source=s.source
  AND n.epoch=a.epoch AND n.position=a.position AND n.purpose=a.purpose
  AND n.purpose='identity-scope-registration' AND n.xmin=a.xmin AND n.position>0
  AND p.epoch=n.epoch AND p.position>=n.position AND p.write_state='active' AND p.moved_to IS NULL
@@ -29,4 +29,5 @@ WHERE s.registration=i.registration AND s.capture_id=i.capture_id AND s.revision
    AND captured.source=i.source AND cn.xmin=captured.xmin AND cn.purpose='identity-scope-registration'
    AND cn.epoch=captured.epoch AND cn.position=captured.position AND cn.epoch=n.epoch
    AND cn.position>0 AND cn.position<n.position
-   AND captured.xmin IS DISTINCT FROM pg_current_xact_id_if_assigned()::xid))
+   AND captured.xmin IS DISTINCT FROM pg_current_xact_id_if_assigned()::xid
+   /* capture-lock */))

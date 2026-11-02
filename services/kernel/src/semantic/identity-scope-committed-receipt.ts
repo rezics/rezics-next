@@ -75,7 +75,8 @@ const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 const unsigned = /^(0|[1-9][0-9]{0,18})$/;
 const maxBigint = 9223372036854775807n;
 const currentLocked = current.sql + '\nFOR UPDATE OF s FOR SHARE OF p,l,a,c,r,h,fc,fa';
-const associationLocked = association.sql + '\nFOR SHARE OF s,a,n,p';
+const associationLocked = association.sql.replace('/* capture-lock */', 'FOR SHARE OF captured,cn') +
+  '\nFOR SHARE OF s,a,n,p';
 const repairLocked = repair.sql + '\nFOR SHARE OF s,a,c,r,n,prepared';
 const zero = (): WorkDimensions => ({
   candidateKeys: 0, identityMetadataRows: 0, nativeRows: 0, nativePoints: 0,

@@ -84,7 +84,9 @@ export function bindIdentityScopeNativeAssociation(
       currentCommandResources(tx).pool !== b.pool || currentCommandResources(tx).deadline !== token.deadline ||
       identitySourceConsumerLibraryWork(b.pool, b.context.identityConsumerWork, token.deadline) !== b.work)
     throw new ProblemError('dependency_unavailable');
-  currentCommand(tx);
+  // Released hooks are platform commands. An attributed command may write a
+  // basis/receipt as well, which this fixed native/event package does not admit.
+  if (currentCommand(tx).basis !== null) throw new ProblemError('dependency_unavailable');
   b.tx = tx;
 }
 

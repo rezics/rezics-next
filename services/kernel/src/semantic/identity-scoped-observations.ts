@@ -9,6 +9,7 @@ import {
   currentCommandResources,
   registerCommandCallback,
   runCommand,
+  withSingleCommandAttempt,
   type CommandTransaction,
 } from '../command/command.ts';
 import {
@@ -986,7 +987,7 @@ export function createIdentityScopedObservations(pool: Pool): S.IdentityScopedOb
       if (key.source.kind === 'public') {
         const prior = row;
         const nativeAssociation1 = prepayIdentityScopeNativeAssociation(pool, deadline);
-        await runCommand(pool, { partition: k.partition, deadline: nativeAssociation1.deadline }, async (tx) => {
+        await withSingleCommandAttempt(() => runCommand(pool, { partition: k.partition, deadline: nativeAssociation1.deadline }, async (tx) => {
           bindIdentityScopeNativeAssociation(tx, nativeAssociation1);
           const locked = await head(tx, key, measured, true);
           if (
@@ -1021,7 +1022,7 @@ export function createIdentityScopedObservations(pool: Pool): S.IdentityScopedOb
             [...params(key), locked.enrollment_home],
           );
           return { value: null, events: [recordIdentityScopeNativeAssociation(tx, nativeAssociation1, key, 'capture')] };
-        });
+        }));
         return { status: 'pending', work: measured };
       }
       if (!allowance && row.capture.kind === 'library')
@@ -1044,7 +1045,7 @@ export function createIdentityScopedObservations(pool: Pool): S.IdentityScopedOb
       if (captured.status === 'unavailable') return fail('source_unready', measured);
       const prior = row;
       const nativeAssociation2 = prepayIdentityScopeNativeAssociation(pool, deadline);
-      await runCommand(pool, { partition: k.partition, deadline: nativeAssociation2.deadline }, async (tx) => {
+      await withSingleCommandAttempt(() => runCommand(pool, { partition: k.partition, deadline: nativeAssociation2.deadline }, async (tx) => {
         bindIdentityScopeNativeAssociation(tx, nativeAssociation2);
         const locked = await head(tx, key, measured, true);
         if (
@@ -1101,7 +1102,7 @@ export function createIdentityScopedObservations(pool: Pool): S.IdentityScopedOb
           );
         }
         return { value: null, events: [recordIdentityScopeNativeAssociation(tx, nativeAssociation2, key, 'capture')] };
-      });
+      }));
       return { status: 'pending', work: measured };
     }
     const dep = await withReadTransaction(
@@ -1121,7 +1122,7 @@ export function createIdentityScopedObservations(pool: Pool): S.IdentityScopedOb
       const ticket = await enroll(pool, key, row, dep, deadline, measured);
       if (!ticket) return { status: 'pending', work: measured };
       const nativeAssociation3 = prepayIdentityScopeNativeAssociation(pool, deadline);
-      await runCommand(pool, { partition: k.partition, deadline: nativeAssociation3.deadline }, async (tx) => {
+      await withSingleCommandAttempt(() => runCommand(pool, { partition: k.partition, deadline: nativeAssociation3.deadline }, async (tx) => {
         bindIdentityScopeNativeAssociation(tx, nativeAssociation3);
         const locked = await head(tx, key, measured, true);
         if (
@@ -1140,12 +1141,12 @@ export function createIdentityScopedObservations(pool: Pool): S.IdentityScopedOb
         );
         if (enrolled.rowCount === 0) return noEffect(null);
         return { value: null, events: [recordIdentityScopeNativeAssociation(tx, nativeAssociation3, key, 'enrollment', { dependency: dep.dependency })] };
-      });
+      }));
       return { status: 'pending', work: measured };
     }
     const nativeAssociation4 = prepayIdentityScopeNativeAssociation(pool, deadline);
     return (
-      await runCommand<S.IdentityScopeRegistrationResult>(pool, { partition: k.partition, deadline: nativeAssociation4.deadline }, async (tx) => {
+      await withSingleCommandAttempt(() => runCommand<S.IdentityScopeRegistrationResult>(pool, { partition: k.partition, deadline: nativeAssociation4.deadline }, async (tx) => {
         bindIdentityScopeNativeAssociation(tx, nativeAssociation4);
         const locked = await head(tx, key, measured, true);
         if (
@@ -1178,7 +1179,7 @@ export function createIdentityScopedObservations(pool: Pool): S.IdentityScopedOb
         }
         return { value: { status: 'registered', observation: observation(key, locked), work: measured },
           events: [recordIdentityScopeNativeAssociation(tx, nativeAssociation4, key, 'ready')] };
-      })
+      }))
     ).value;
   }
   async function finishScope(input: S.IdentityScopeFinishInput): Promise<S.IdentityScopeFinishResult> {
@@ -1190,7 +1191,7 @@ export function createIdentityScopedObservations(pool: Pool): S.IdentityScopedOb
     const nativeAssociation5 = prepayIdentityScopeNativeAssociation(pool, input.deadline);
     input = { ...input, deadline: nativeAssociation5.deadline };
     const budget = new NativeCollectionWork(input.allowance, input.deadline);
-    const snapshot = await runCommand(
+    const snapshot = await withSingleCommandAttempt(() => runCommand(
       pool,
       { partition: identityScopeAddress(input.key).partition, deadline: nativeAssociation5.deadline },
       async (tx) => {
@@ -1219,7 +1220,7 @@ export function createIdentityScopedObservations(pool: Pool): S.IdentityScopedOb
         return { value: { row, attempt, progress },
           events: [recordIdentityScopeNativeAssociation(tx, nativeAssociation5, input.key, 'progress', { job: input.job })] };
       },
-    );
+    ));
     if (!snapshot.value) return fail('custody_missing', measured);
     const { row, attempt, progress } = snapshot.value;
     if (attempt.state === 'finished')
@@ -1234,7 +1235,7 @@ export function createIdentityScopedObservations(pool: Pool): S.IdentityScopedOb
     // The missing public effect enumeration/receiving ABI is named in the owner contract.
     if (input.key.source.kind === 'public') {
       const nativeAssociation6 = prepayIdentityScopeNativeAssociation(pool, input.deadline);
-      await runCommand(
+      await withSingleCommandAttempt(() => runCommand(
         pool,
         { partition: identityScopeAddress(input.key).partition, deadline: nativeAssociation6.deadline },
         async (tx) => {
@@ -1268,7 +1269,7 @@ export function createIdentityScopedObservations(pool: Pool): S.IdentityScopedOb
           if (stored.rowCount === 0) return noEffect(null);
           return { value: null, events: [recordIdentityScopeNativeAssociation(tx, nativeAssociation6, input.key, 'progress', { job: input.job })] };
         },
-      );
+      ));
       return fail('custody_missing', measured);
     }
     if (row.capture.kind !== 'library') return fail('capture_incomplete', measured);
@@ -1305,7 +1306,7 @@ export function createIdentityScopedObservations(pool: Pool): S.IdentityScopedOb
         (progress.seal === null && progress.after_key !== null));
     if (sealChanged) {
       const nativeAssociation7 = prepayIdentityScopeNativeAssociation(pool, input.deadline);
-      await runCommand(
+      await withSingleCommandAttempt(() => runCommand(
         pool,
         { partition: identityScopeAddress(input.key).partition, deadline: nativeAssociation7.deadline },
         async (tx) => {
@@ -1329,7 +1330,7 @@ export function createIdentityScopedObservations(pool: Pool): S.IdentityScopedOb
           if (reset.rowCount === 0) return noEffect(null);
           return { value: null, events: [recordIdentityScopeNativeAssociation(tx, nativeAssociation7, input.key, 'progress', { job: input.job })] };
         },
-      );
+      ));
       return pending();
     }
     for (const selection of page.rows) {
@@ -1351,7 +1352,7 @@ export function createIdentityScopedObservations(pool: Pool): S.IdentityScopedOb
     if (Date.now() >= input.deadline) return fail('deadline', measured);
     const nativeAssociation8 = prepayIdentityScopeNativeAssociation(pool, input.deadline);
     return (
-      await runCommand<S.IdentityScopeFinishResult>(
+      await withSingleCommandAttempt(() => runCommand<S.IdentityScopeFinishResult>(
         pool,
         { partition: identityScopeAddress(input.key).partition, deadline: nativeAssociation8.deadline },
         async (tx) => {
@@ -1435,7 +1436,7 @@ export function createIdentityScopedObservations(pool: Pool): S.IdentityScopedOb
             events: [recordIdentityScopeNativeAssociation(tx, nativeAssociation8, input.key, 'finish', { job: input.job })],
           };
         },
-      )
+      ))
     ).value;
   }
 
@@ -1601,7 +1602,7 @@ export function createIdentityScopedObservations(pool: Pool): S.IdentityScopedOb
         captureId = input.capture.capture.captureId;
       else return fail('source_unready', measured);
       const nativeAssociation = prepayIdentityScopeNativeAssociation(pool, input.deadline);
-      await runCommand(pool, { partition: k.partition, deadline: nativeAssociation.deadline }, async (tx) => {
+      await withSingleCommandAttempt(() => runCommand(pool, { partition: k.partition, deadline: nativeAssociation.deadline }, async (tx) => {
         bindIdentityScopeNativeAssociation(tx, nativeAssociation);
         if (!(await ownerCurrent(tx, input.key))) throw unavailable();
         if (capture.kind === 'public-locator' && !(await verifyPublicIdentitySourceCaptureLocator(tx, capture)))
@@ -1641,7 +1642,7 @@ export function createIdentityScopedObservations(pool: Pool): S.IdentityScopedOb
         else if (inserted.rowCount === 0) return noEffect(null);
         return { value: null,
           events: [recordIdentityScopeNativeAssociation(tx, nativeAssociation, input.key, 'registration')] };
-      });
+      }));
       return advance(
         input.key,
         nativeAssociation.deadline,

@@ -23,8 +23,10 @@ both writer fences, owner epoch/movement, complete capture/frontier/native recei
 committed unreleased registration hold, exact summary state and absence of active
 attempts, consumer withdrawal fences and unresolved enrollment work. The verifier
 holds the summary, partition, Collection, account, capture, receipt, hold and both
-fences. All SQL stays in that source home. Foreign receiving/capture work completes
-before the writer takes its source-home transaction.
+fences, plus every resolved association and native component, including the
+initial capture-completion pair inside its bounded existence probe. All SQL stays
+in that source home. Foreign receiving/capture work completes before the writer
+takes its source-home transaction.
 
 ## Durable writer association
 
@@ -43,7 +45,9 @@ The exported internal writer operations are:
   deadline is the lesser of the supplied deadline and the immutable original.
 * `bindIdentityScopeNativeAssociation(tx, admission)` checks that original's Pool,
   live async episode/deadline and the actual executor transaction. Reuse on a second
-  transaction, a copied admission or an escaped callback refuses.
+  transaction, a copied admission or an escaped callback refuses. Attributed
+  commands refuse because their extra basis/receipt writes are outside this
+  platform-command package.
 * `recordIdentityScopeNativeAssociation(tx, admission, key, phase, binding?)` queues
   the existing executor native component and the association in that same command.
   Its return is the genuine additive closed `IDENTITY_SCOPE_NATIVE_ASSOCIATED`
@@ -124,7 +128,10 @@ parameter/output envelope. This fixed command package charges 13 rows, 14 points
 10 statements and the sum of those bytes on every admission, including unchanged
 replay, refusal after admission, failure and rollback. Both terminal alternatives
 remain charged. There is no success/absence refund, balance reset, new allowance,
-configuration, independent parent or caller-provided callback authority. Existing
+configuration, independent parent or caller-provided callback authority. Each
+released hook uses the existing single-command-attempt executor profile: a failed
+fence or serialization conflict returns after rollback; it cannot start another
+unfunded checkout or command before the admission is rebound. Existing
 observation/foreign producer bodies keep their own original accounting; this
 additive package cannot stand in for their whole-parent funding.
 
@@ -142,10 +149,12 @@ refuses only the affected dispatch; the storage, native association, resolution 
 locking bodies are implemented independently.
 
 Library alone owns positive `readLibraryScopeEffectsPage` and
-`verifyLibraryScopeEffectsSeal`. The current adapter's unavailable/false results
-continue to prevent an ordinary repaired journey from falsely closing. This slice
-adds no replacement Library page/seal producer. Public population and explicit
-public-output custody require their owners' native evidence and private admission;
+`verifyLibraryScopeEffectsSeal`. Their current native bodies read the retained
+sealed plan and exact native seal receipt. The final verifier also requires
+`currentLibraryIdentityWork(tx)`: a repaired dispatch lacking that original
+private binding continues to refuse. There is no unconditional positive seal
+and this slice adds no replacement Library page/seal producer. Public population
+and explicit public-output custody require their owners' native evidence and private admission;
 this resolver continues to refuse those source kinds. Accounts owns origin/formula/
 time and whole Kind composition, Content owns native tuple/disclosure, and Search
 owns native population/custody. Local scope receipts supply none of those closures.
@@ -154,7 +163,8 @@ Original acceptance bytes are preserved. Appended native regressions cover funde
 real initial registration, atomic event/native association, ready replay without
 backfill, exact finish binding, ready advancement, native substitution, original
 Pool/episode/deadline admission, rollback/expired callback, held-versus-released
-currentness and bounded revision growth. Native/unit/growth/full acceptance are
+currentness, capture-component lock retention, platform-only writer admission
+and bounded revision growth. Native/unit/growth/full acceptance are
 unrun under the current launch policy. The permitted Kernel compiler result is
 reported in the delivery summary; it is not native or whole-feature proof.
 
@@ -166,13 +176,8 @@ and both the Semantic native writer decision and Commerce regional consent. No
 external reference project is prescribed for this surface.
 
 The migration has its required `-- migrate:up` and forward-only `-- migrate:down`
-blocks. The supported foreground
-Kernel compiler can normalize this module's schema snapshot with
+blocks; existing migrations are unchanged by this continuation. The supported
+foreground Kernel compiler can normalize this module's schema snapshot with
 `bun run --cwd services/kernel typecheck --emit-schema=semantic` using its existing
 placement and compiler database. Compiler success alone does not establish native
 acceptance, source custody, a foreign dispatch grant or an audience closure.
-
-The current foreground compiler exited 1 during migration setup because the new
-migration lacked its down block. The block is corrected; the one-invocation policy
-leaves TypeScript and generated snapshot normalization unverified. Native/unit/
-growth/full acceptance remain unrun.

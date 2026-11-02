@@ -665,3 +665,58 @@ test('initial held verification locks the ready association through commit and l
     });
   });
 },120000);
+
+test('initial held verification retains both capture association and its native component locks', async () => {
+  const s = await fundedInitial();
+  const a = identityScopeAddress(s.key);
+  const capture = (await associationsFor(s.locator)).find((row) => row.phase === 'capture' && row.scan_complete);
+  if (!capture) throw new Error('Completed capture association absent');
+  await frame(async (context) => {
+    await runCommand(f.pool, { partition: a.partition, deadline: context.deadline }, async (tx) => {
+      const held = await holdCommittedIdentityScopeReceipt(tx, f.pool, { evidence: s.evidence, context });
+      expect(held.status).toBe('held');
+      for (const statement of [
+        { sql: `UPDATE semantic.identity_scope_native_association SET scan_complete=false
+            WHERE partition_no=$1 AND source_key=$2 AND scope_id=$3 AND registration=$4
+            AND capture_id=$5 AND revision=$6 AND phase='capture'`,
+          values: [a.partition, a.source, a.scope, s.locator.registration, capture.capture_id, capture.revision] },
+        { sql: `UPDATE semantic.identity_epoch_native_commit SET purpose='identity-scope-enrollment'
+            WHERE partition_no=$1 AND transaction_id=$2`, values: [a.partition, capture.transaction_id] },
+      ]) {
+        const competing = await f.admin.connect();
+        try {
+          await competing.query('BEGIN');
+          await competing.query("SET LOCAL lock_timeout = '30ms'");
+          await expect(competing.query(statement.sql, statement.values)).rejects.toThrow();
+        } finally {
+          await competing.query('ROLLBACK');
+          competing.release();
+        }
+      }
+      expect(isHeldCommittedIdentityScopeReceipt(tx, held)).toBe(true);
+      return noEffect(null);
+    });
+  });
+}, 120000);
+
+test('native association package refuses an attributed command before an unpriced basis write', async () => {
+  const s = await fundedInitial();
+  const address = identityScopeAddress(s.key);
+  const actor = await f.actor();
+  const before = await associationsFor(s.locator);
+  let transactionId: string | undefined;
+  await frame(async (context) => {
+    const token = prepayIdentityScopeNativeAssociation(f.pool, context.deadline);
+    await expect(runCommand(f.pool, { partition: address.partition, deadline: token.deadline,
+      basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy } },
+    async (tx) => {
+      transactionId = currentCommand(tx).transactionId;
+      bindIdentityScopeNativeAssociation(tx, token);
+      throw new Error('Attributed association must refuse before the writer body');
+    })).rejects.toMatchObject({ code: 'dependency_unavailable' });
+  });
+  expect(transactionId).toBeDefined();
+  expect((await f.admin.query(`SELECT 1 FROM editorial.write_basis
+    WHERE partition_no=$1 AND transaction_id=$2`, [address.partition, transactionId])).rowCount).toBe(0);
+  expect(await associationsFor(s.locator)).toEqual(before);
+}, 120000);
