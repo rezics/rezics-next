@@ -1,5 +1,5 @@
 import { agentAdapter, isAgentCli } from './agents.ts';
-import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { AttemptRecord, Profile, Tokens } from './types.ts';
 import type { WorkerTasks } from './tasks.ts';
@@ -19,8 +19,62 @@ export type ImportOptions = {
   changedFiles?: string[];
   hostMs?: number;
 };
+export type StageImportLog = (source: string, destination: string) => void;
+
+function fail(operation: string, path: string, error: unknown): never {
+  throw new Error(`${operation} ${path}: ${error instanceof Error ? error.message : String(error)}`);
+}
+
+function readImportCapture(path: string): string {
+  try {
+    return readFileSync(path, 'utf8');
+  } catch (error) {
+    fail('failed to read import capture', path, error);
+  }
+}
+
+function readImportCaptureJson(path: string) {
+  try {
+    return JSON.parse(readImportCapture(path));
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('failed to read import capture ')) throw error;
+    fail('failed to read import capture', path, error);
+  }
+}
+
+/** Copy a capture into its durable run path through a sibling temp file, leaving the original in place. */
+export function stageImportLog(source: string, destination: string): void {
+  const temporary = `${destination}.${process.pid}.staging`;
+  try {
+    mkdirSync(dirname(destination), { recursive: true });
+    copyFileSync(source, temporary);
+    renameSync(temporary, destination);
+  } catch (error) {
+    rmSync(temporary, { force: true });
+    fail('failed to stage import log', destination, error);
+  }
+}
+
+function invokeStage(stageLog: StageImportLog, source: string, destination: string): void {
+  try {
+    stageLog(source, destination);
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('failed to stage import log ')) throw error;
+    fail('failed to stage import log', destination, error);
+  }
+}
+
+function importLogPath(stateDirectory: string, taskId: string, attempt: number): string {
+  return join(stateDirectory, 'runs', taskId, `${attempt}.jsonl`);
+}
+
 /** Import recorded work without launching a model or pretending it was routed by today's table. */
-export function importAttempt(tasks: WorkerTasks, log: string, options: ImportOptions): AttemptRecord {
+export function importAttempt(
+  tasks: WorkerTasks,
+  log: string,
+  options: ImportOptions,
+  stageLog: StageImportLog = stageImportLog,
+): AttemptRecord {
   const store = tasks.store,
     task = store.task(options.taskId);
   if (
@@ -28,7 +82,7 @@ export function importAttempt(tasks: WorkerTasks, log: string, options: ImportOp
     ['running', 'waiting'].includes(store.attempt({ taskId: task.id, attempt: task.currentAttempt }).state)
   )
     throw new Error('cannot import over a running or waiting attempt');
-  const measured = measureLog(readFileSync(log, 'utf8'), {
+  const measured = measureLog(readImportCapture(log), {
     adapter: agentAdapter(options.profile.cli),
     startedAt: options.startedAt,
     endedAt: options.endedAt,
@@ -39,6 +93,9 @@ export function importAttempt(tasks: WorkerTasks, log: string, options: ImportOp
   const previousConfigDirectory = previous
     ? tasks.settings.pools.find((pool) => pool.name === previous.pool)?.configDirectory
     : undefined;
+  const attemptNumber = task.currentAttempt + 1;
+  const logPath = importLogPath(tasks.settings.stateDirectory, task.id, attemptNumber);
+  invokeStage(stageLog, log, logPath);
   const attempt = store.nextAttempt(
     { taskId: task.id, attempt: task.currentAttempt },
     (n) => ({
@@ -54,7 +111,7 @@ export function importAttempt(tasks: WorkerTasks, log: string, options: ImportOp
       process: null,
       driver: null,
       auxiliaryProcesses: [],
-      logPath: join(tasks.settings.stateDirectory, 'runs', task.id, `${n}.jsonl`),
+      logPath,
       evidencePath: join(tasks.settings.stateDirectory, 'evidence', task.id, String(n)),
       session: measured.session,
       fixRound: 0,
@@ -71,8 +128,6 @@ export function importAttempt(tasks: WorkerTasks, log: string, options: ImportOp
     }),
     previousConfigDirectory,
   );
-  mkdirSync(dirname(attempt.logPath), { recursive: true });
-  copyFileSync(log, attempt.logPath);
   const record = makeRecord(task, attempt, measured, options.outcome ?? 'pending-gate');
   record.diffLines = options.diffLines ?? null;
   record.changedFiles = options.changedFiles ?? null;
@@ -86,9 +141,13 @@ export function importAttempt(tasks: WorkerTasks, log: string, options: ImportOp
 }
 
 /** Import a pre-control-plane capture without modifying its original checkout or requiring a local account mapping. */
-export function importRunDirectory(tasks: WorkerTasks, directory: string): AttemptRecord {
-  const start = JSON.parse(readFileSync(join(directory, 'meta.start.json'), 'utf8'));
-  const end = JSON.parse(readFileSync(join(directory, 'meta.end.json'), 'utf8'));
+export function importRunDirectory(
+  tasks: WorkerTasks,
+  directory: string,
+  stageLog: StageImportLog = stageImportLog,
+): AttemptRecord {
+  const start = readImportCaptureJson(join(directory, 'meta.start.json'));
+  const end = readImportCaptureJson(join(directory, 'meta.end.json'));
   if (
     !isAgentCli(start.cli) ||
     agentAdapter(start.cli).canImport === false ||
@@ -96,11 +155,18 @@ export function importRunDirectory(tasks: WorkerTasks, directory: string): Attem
     typeof start.pool !== 'string' ||
     typeof start.task !== 'string' ||
     typeof start.model !== 'string' ||
+    typeof start.start !== 'string' ||
+    typeof end.end !== 'string' ||
     !Number.isFinite(Date.parse(start.start)) ||
     !Number.isFinite(Date.parse(end.end)) ||
     Date.parse(end.end) < Date.parse(start.start)
   )
     throw new Error('invalid capture metadata');
+  const log = join(directory, 'events.jsonl');
+  readImportCapture(log);
+  const id = crypto.randomUUID();
+  const destination = importLogPath(tasks.settings.stateDirectory, id, 1);
+  invokeStage(stageLog, log, destination);
   const brief: import('./types.ts').Brief = {
     goal: start.task,
     manager: start.task,
@@ -125,16 +191,24 @@ export function importRunDirectory(tasks: WorkerTasks, directory: string): Attem
     brief,
     { briefPath, worktree: String(start.worktree ?? ''), branch: '', base: '' },
     'implementation',
+    id,
   );
-  const record = importAttempt(tasks, join(directory, 'events.jsonl'), {
-    taskId: task.id,
-    startedAt: start.start,
-    endedAt: end.end,
-    profile: { cli: start.cli, model: start.model, effort: start.effort, poolClass: start.cli },
-    pool: start.pool,
-    outcome: 'stopped',
-    tableVersion: 'pre-control-plane',
-  });
+  const record = importAttempt(
+    tasks,
+    log,
+    {
+      taskId: task.id,
+      startedAt: start.start,
+      endedAt: end.end,
+      profile: { cli: start.cli, model: start.model, effort: start.effort, poolClass: start.cli },
+      pool: start.pool,
+      outcome: 'stopped',
+      tableVersion: 'pre-control-plane',
+    },
+    (_source, dest) => {
+      if (dest !== destination) invokeStage(stageLog, log, dest);
+    },
+  );
   const percent =
     typeof start.poolReadingBefore === 'string' ? /(\d+(?:\.\d+)?)%\s+weekly/.exec(start.poolReadingBefore) : null;
   if (percent)
