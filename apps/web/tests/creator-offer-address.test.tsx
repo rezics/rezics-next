@@ -22,14 +22,24 @@ const render = (props: Parameters<typeof CreatorOfferAddressPage>[0]) =>
   renderToStaticMarkup(createElement(CreatorOfferAddressPage, props));
 
 test('repeated selectors never pick an edition or page, while valid aliases and opaque positions retain exact identity', () => {
-  for (const aliases of [{ editionId: [edition, edition] }, { contentEditionId: [edition, other] }, { editionId: edition, contentEditionId: [edition] }]) {
+  for (const aliases of [
+    { editionId: [edition, edition] },
+    { contentEditionId: [edition, other] },
+    { editionId: edition, contentEditionId: [edition] },
+  ]) {
     const search = creatorEditionSearch(aliases);
     expect(search.contentEditionId).toBeUndefined();
     expect(search.addressIssue?.requested).toContain(edition);
   }
-  expect(creatorEditionSearch({ editionId: edition.toUpperCase() })).toEqual({ contentEditionId: edition.toUpperCase() });
-  expect(creatorEditionSearch({ editionId: edition, contentEditionId: edition })).toEqual({ contentEditionId: edition });
-  expect(creatorOffersSearch({ cursor: ['signed', 'signed'] }).addressIssue?.requested).toContain('["signed","signed"]');
+  expect(creatorEditionSearch({ editionId: edition.toUpperCase() })).toEqual({
+    contentEditionId: edition.toUpperCase(),
+  });
+  expect(creatorEditionSearch({ editionId: edition, contentEditionId: edition })).toEqual({
+    contentEditionId: edition,
+  });
+  expect(creatorOffersSearch({ cursor: ['signed', 'signed'] }).addressIssue?.requested).toContain(
+    '["signed","signed"]',
+  );
   expect(creatorOffersSearch({ cursor: 'signed+/=%2F' })).toEqual({ cursor: 'signed+/=%2F' });
 });
 
@@ -40,7 +50,10 @@ test('served malformed addresses skip private loaders and expose deliberate loca
   try {
     const listSearch = creatorOffersSearch({ cursor: ['a', 'b'] });
     const editionSearch = creatorEditionSearch({ editionId: edition, contentEditionId: other });
-    for (const [route, search, kind] of [[list, listSearch, 'list'], [editor, editionSearch, 'editor']] as const) {
+    for (const [route, search, kind] of [
+      [list, listSearch, 'list'],
+      [editor, editionSearch, 'editor'],
+    ] as const) {
       const loader = route.options.loader as (context: unknown) => unknown;
       expect(await loader({ deps: search })).toBeNull();
       const html = render({ kind, locale: 'ja', issue: search.addressIssue });
@@ -59,19 +72,30 @@ test('served malformed addresses skip private loaders and expose deliberate loca
       }
     }
     expect(transport).not.toHaveBeenCalled();
-  } finally { transport.mockRestore(); }
+  } finally {
+    transport.mockRestore();
+  }
 });
 
 test('pending selectors are visible and escaped; a valid denied edition remains a read outcome', async () => {
   const { loadCreatorEditor } = await import('../src/checkout/creator-offers');
   const search = creatorEditionSearch({ editionId: edition });
   expect(search.addressIssue).toBeUndefined();
-  expect(await loadCreatorEditor({ readMetadata: async () => ({ state: 'refused' }) } as never, {} as never, 'Bearer current', search.contentEditionId)).toEqual({ kind: 'denied' });
+  expect(
+    await loadCreatorEditor(
+      { readMetadata: async () => ({ state: 'refused' }) } as never,
+      {} as never,
+      'Bearer current',
+      search.contentEditionId,
+    ),
+  ).toEqual({ kind: 'denied' });
   for (const kind of ['editor', 'list'] as const) {
     const html = render({ kind, locale: 'en', requested: edition });
     expect(html).toContain(edition);
     expect(html).toContain('role="status"');
     expect(html).not.toContain('<form');
   }
-  expect(renderToStaticMarkup(createElement(CreatorOfferRequested, { requested: '<script>bad</script>' }))).not.toContain('<script>');
+  expect(
+    renderToStaticMarkup(createElement(CreatorOfferRequested, { requested: '<script>bad</script>' })),
+  ).not.toContain('<script>');
 });

@@ -103,7 +103,12 @@ function Notice({
 /** Cache observation fences retained reads and commands before React commits a replacement. */
 function CreatorCurrent(props: Props) {
   const requested = props.address.kind === 'list' ? props.address.cursor : props.address.contentEditionId;
-  return <><CreatorOfferRequested requested={requested ?? undefined} /><CreatorCurrentContent {...props} /></>;
+  return (
+    <>
+      <CreatorOfferRequested requested={requested ?? undefined} />
+      <CreatorCurrentContent {...props} />
+    </>
+  );
 }
 
 function CreatorCurrentContent(props: Props) {
