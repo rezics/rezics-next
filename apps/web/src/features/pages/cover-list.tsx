@@ -7,13 +7,12 @@ import {
 } from '@rezics/ui/cover';
 import { MetaLine } from '@rezics/ui/meta-line';
 import { CoverCard, CoverGrid, CoverRow } from '@rezics/ui/cover-card';
-import { useContext } from 'react';
 import { coverSrc } from '../../media/cover-src';
 import { coverOf, coverSubject } from '../../media/summary';
 import { listKeyFacts } from '../../media/type-presentation';
 import type { Fact } from '../../search/results';
 import { relationTargetHref } from './edition-work';
-import { OverviewContext, type Item, type RowValue } from './overview';
+import type { Item, RowValue } from './overview';
 import { QualifiedCredit } from './qualified-credit';
 import { SpoilerGate } from './values';
 
@@ -119,11 +118,9 @@ export function CoverList({
   /** Already supplied current-page facts by member ID. No fact producer or per-member read is implied. */
   memberFacts?: Readonly<Record<string, Readonly<Record<string, readonly Fact[]>>>>;
 }) {
-  const page = useContext(OverviewContext);
-  const subject = value.subject === undefined ? page?.subject : value.subject;
   const context = value.context;
   const disclosure = [
-    subject,
+    value.subject,
     context?.id,
     context?.population.kind,
     context?.population.kind === 'realm' ? context.population.id : undefined,
