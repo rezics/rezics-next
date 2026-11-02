@@ -13,7 +13,7 @@ const globals = Object.assign(
       .split(' ')
       .map((key) => [key, dom[key as keyof typeof dom]]),
   ),
-  { window: dom, IS_REACT_ACT_ENVIRONMENT: true, fetch: globalThis.fetch },
+  { window: dom, scrollTo: dom.scrollTo.bind(dom), IS_REACT_ACT_ENVIRONMENT: true, fetch: globalThis.fetch },
 );
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
 for (const [key, value] of Object.entries(globals))

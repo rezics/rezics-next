@@ -137,6 +137,7 @@ export async function approveManagementOperation(
   if (!managementSessionMatches(current, snapshot)) return { kind: 'step-up' };
 
   const approved = await authPost('/account-operations/approve', snapshot);
+  if (!isCurrent()) return { kind: 'unavailable' };
   if (!approved.ok) return failure(approved);
   const approval = approved.body;
   if (

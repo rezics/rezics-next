@@ -9,6 +9,7 @@ import { m } from '../paraglide/messages.js';
 import { loadManagementSession, managementSessionMatches } from '../management-operations';
 import {
   managementOperationStepUpUrl,
+  pendingManagementOperationMatches,
   pendingManagementOperationStepUpState,
   storePendingManagementOperationStepUp,
 } from '../management-operation-step-up';
@@ -106,11 +107,12 @@ function OpeningReview({ isCurrent }: { isCurrent: () => boolean }) {
       if (
         state.kind === 'invalid' ||
         (state.kind === 'pending' &&
-          !isOpeningInput({
-            accountId: state.value.accountId,
-            operationKey: state.value.operationKey,
-            operation: state.value.operation,
-          }))
+          ((local && !pendingManagementOperationMatches(state.value, local)) ||
+            !isOpeningInput({
+              accountId: state.value.accountId,
+              operationKey: state.value.operationKey,
+              operation: state.value.operation,
+            })))
       ) {
         setStatus('refused');
         return;
