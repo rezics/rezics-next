@@ -18,6 +18,7 @@ import {
 } from './board-feed-data';
 
 const consumedContinuationStates = new WeakSet<object>();
+let lastObservedHistoryIndex: number | null = null;
 
 function ThreadCard({
   thread,
@@ -127,12 +128,21 @@ export function BoardFeed({
   const location = useLocation();
   const router = useRouter();
   useLayoutEffect(() => {
-    const state = location.state as Record<string, unknown>;
-    if (state.__boardNextPage !== true || router.history.action !== 'PUSH' || consumedContinuationStates.has(state))
+    const state = location.state;
+    const currentIndex = state.__TSR_index;
+    const previousIndex = lastObservedHistoryIndex;
+    lastObservedHistoryIndex = currentIndex;
+    if (
+      state.__boardNextPage !== true ||
+      previousIndex === null ||
+      currentIndex <= previousIndex ||
+      consumedContinuationStates.has(state)
+    )
       return;
     if (!heading.current) return;
     consumedContinuationStates.add(state);
     heading.current.focus();
+    router.history.replace(location.href, { ...state, __boardNextPage: false } as never);
   }, [location.state, router]);
   const refreshedAt =
     sort !== 'new' && page.rankRefreshedAt && !Number.isNaN(Date.parse(page.rankRefreshedAt))
@@ -186,7 +196,7 @@ export function BoardFeed({
             to="/boards/$id"
             params={{ id: boardId }}
             search={{ cursor: page.next, ...(sort === 'active' ? {} : { sort }) }}
-            state={{ __boardNextPage: true }}
+            state={{ __boardNextPage: true } as never}
             className={buttonVariants({
               variant: 'outline',
               size: 'lg',

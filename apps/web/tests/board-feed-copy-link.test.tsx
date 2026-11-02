@@ -160,7 +160,7 @@ test('a committed Next continuation focuses the empty-page boundary once without
   await replace({ page: { ...props.page, threads: [], next: 'signed:next/+opaque=' } });
   const boundary = host.querySelector<HTMLHeadingElement>('h2')!;
   expect(host.querySelector('nav a')?.textContent).toBe(m.threads_next_page());
-  await act(async () => router.navigate({ to: '/', state: { __boardNextPage: true } }));
+  await act(async () => router.navigate({ to: '/', state: { __boardNextPage: true } as never }));
   expect(document.activeElement).toBe(boundary);
   const sort = host.querySelector<HTMLAnchorElement>('nav a')!;
   sort.focus();
