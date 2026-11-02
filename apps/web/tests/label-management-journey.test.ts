@@ -151,7 +151,7 @@ test('Default private label management keeps filter rename delete undo and conti
   expect(retained.body.get('name')).toBe('My unfinished name');
   expect(retained.html).toContain('aria-invalid="true"');
   expect(retained.html).toContain('aria-describedby="rename-error-first"');
-  expect(retained.body.get('library_label_revision')).toBe('20');
+  expect(retained.body.get('library_label_revision')).toBe('10');
   expect(fake.labels[0]?.name).toBe('Changed elsewhere');
   expect(fake.calls.filter((call) => call.method === 'PATCH')).toHaveLength(2);
   expect(fake.calls.filter((call) => call.method === 'PATCH')[1]).toMatchObject({

@@ -404,6 +404,16 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
       await settleWrite(2, { ok: false, reason: 'conflict' });
       expect(pendingReads[1]!.data).toEqual({ cursor: search.cursor, query: search.q });
       await settleRead(1, response('B', search, 24));
+      expect(
+        (document.querySelector('[role="dialog"] input[name="library_label_revision"]') as HTMLInputElement).value,
+      ).toBe('7');
+      await act(async () => {
+        const cancel = [...document.querySelectorAll('[role="dialog"] button')].find(
+          (button) => button.textContent === m.action_cancel(),
+        )!;
+        (cancel as HTMLButtonElement).click();
+      });
+      await act(async () => select('rename')());
       await changeName('Changed B draft');
       await submit('rename');
       expect(writes[3]!.data.name).toBe('Changed B draft');

@@ -70,9 +70,35 @@ type LabelAction = {
 function failedAction(page: LabelsPage): LabelAction | null {
   const feedback = page.feedback;
   const label = page.labels.find((label) => label.id === feedback?.id);
-  return feedback && !feedback.ok && label && (feedback.operation === 'rename' || feedback.operation === 'delete')
-    ? { operation: feedback.operation, label, name: feedback.name ?? label.name }
-    : null;
+  if (!feedback || feedback.ok || (feedback.operation !== 'rename' && feedback.operation !== 'delete')) return null;
+  // A committed write can disappear from the refreshed prefix page before its reply arrives.
+  // Keep its recovery form separate from the current catalogue, without inventing a live row.
+  const captured = feedback.retry;
+  const target =
+    label ??
+    (feedback.id && captured?.revision !== undefined
+      ? {
+          id: feedback.id,
+          name: feedback.name ?? '',
+          revision: captured.revision,
+          renameKey: captured.idempotencyKey,
+          deleteKey: captured.idempotencyKey,
+        }
+      : null);
+  if (!target) return null;
+  return {
+    operation: feedback.operation,
+    label: {
+      ...target,
+      ...(captured
+        ? {
+            revision: captured.revision ?? target.revision,
+            [feedback.operation === 'rename' ? 'renameKey' : 'deleteKey']: captured.idempotencyKey,
+          }
+        : {}),
+    },
+    name: feedback.name ?? target.name,
+  };
 }
 
 const alwaysCurrent = () => true;
@@ -141,22 +167,6 @@ export function LabelsPageView({
     for (const { input, unresolved } of attempts.current.values()) {
       if (!unresolved) continue;
       if (input.operation === 'create') next = { ...next, createKey: previous.createKey };
-      if (input.operation === 'rename' || input.operation === 'delete')
-        next = {
-          ...next,
-          labels: next.labels.map((label) => {
-            const old = previous.labels.find((item) => item.id === input.id);
-            return label.id === input.id && old
-              ? {
-                  ...label,
-                  ...(input.operation === 'delete' ? { name: old.name } : {}),
-                  revision: input.revision!,
-                  renameKey: old.renameKey,
-                  deleteKey: old.deleteKey,
-                }
-              : label;
-          }),
-        };
       if (input.operation === 'restore' && previous.feedback?.undo)
         next = { ...next, feedback: previous.feedback, undoKey: previous.undoKey };
     }
@@ -167,11 +177,8 @@ export function LabelsPageView({
     const next = preserveAttempts(initial, page);
     setSource(initial);
     setPage(next);
-    setAction((selected) => {
-      if (!selected) return failedAction(next);
-      const label = next.labels.find((item) => item.id === selected.label.id);
-      return label ? { ...selected, label } : null;
-    });
+    // An open confirmation owns the revision it showed, even after a newer read.
+    setAction((selected) => selected ?? failedAction(next));
   }
   latestPage.current = page;
   if (locked.current && !locked.current.current()) {
@@ -228,6 +235,14 @@ export function LabelsPageView({
       const feedback: LabelFeedback = {
         ...result,
         operation: input.operation,
+        ...(!result.ok
+          ? {
+              retry: {
+                idempotencyKey: input.idempotencyKey,
+                ...(input.revision === undefined ? {} : { revision: input.revision }),
+              },
+            }
+          : {}),
         ...(input.id !== undefined ? { id: input.id } : {}),
         ...(input.name !== undefined ? { name: input.name } : {}),
         ...(result.ok && input.operation === 'delete' && result.revision !== undefined
@@ -235,8 +250,12 @@ export function LabelsPageView({
           : {}),
       };
       const previousUndo = page.feedback?.undo;
+      const undoUnavailable =
+        input.operation === 'restore' &&
+        ['library_label_restore_stale', 'library_label_restore_expired', 'not_found'].includes(result.reason ?? '');
       const retained =
         feedback.undo ||
+        undoUnavailable ||
         (result.ok &&
           input.operation === 'restore' &&
           previousUndo?.id === input.id &&
@@ -272,16 +291,9 @@ export function LabelsPageView({
       current = preserveAttempts(current, latestPage.current);
       setPage({ ...current, feedback: retained, undoKey: retained.undoKey ?? current.undoKey });
       if (input.operation === 'rename' || input.operation === 'delete') {
-        const label = current.labels.find((item) => item.id === input.id);
-        setAction((selected) =>
-          !selected || selected.label.id !== input.id
-            ? selected
-            : result.ok
-              ? null
-              : { ...selected, label: label ?? selected.label },
-        );
+        setAction((selected) => (!selected || selected.label.id !== input.id ? selected : result.ok ? null : selected));
       }
-      if (result.ok && input.operation === 'restore') retireToast();
+      if ((result.ok && input.operation === 'restore') || undoUnavailable) retireToast();
       if (feedback.undo && admitted(input)) {
         const undo = feedback.undo;
         retireToast();
@@ -306,7 +318,16 @@ export function LabelsPageView({
       if (!admitted(input)) return;
       setPage((current) => ({
         ...current,
-        feedback: { ...current.feedback, ...input, ok: false, reason: 'unavailable' },
+        feedback: {
+          ...current.feedback,
+          ...input,
+          ok: false,
+          reason: 'unavailable',
+          retry: {
+            idempotencyKey: input.idempotencyKey,
+            ...(input.revision === undefined ? {} : { revision: input.revision }),
+          },
+        },
       }));
     } finally {
       if (alive() && (!originating || originating.isCurrent(operationOf(input))) && locked.current === lock) {
@@ -362,7 +383,10 @@ export function LabelsPageView({
     </p>
   );
   function actionForm(selected: LabelAction, fallback = false) {
-    const { label, operation } = selected;
+    const { operation } = selected;
+    const failed = fallback ? failedAction(page) : null;
+    const label =
+      failed?.operation === operation && failed.label.id === selected.label.id ? failed.label : selected.label;
     const invalid = fieldError(operation, label.id);
     const errorId = `${operation}-error-${label.id}`;
     return (
@@ -572,6 +596,11 @@ export function LabelsPageView({
         </form>
       </LabelExposure>
       {undoForm}
+      {!hydrated && failedAction(page) && !page.labels.some((label) => label.id === feedback?.id) ? (
+        <LabelExposure page={page} operation={failedAction(page)!.operation}>
+          {actionForm(failedAction(page)!, true)}
+        </LabelExposure>
+      ) : null}
       {page.labels.length ? (
         <ul className="space-y-1">
           {page.labels.map((label) => {

@@ -143,6 +143,7 @@ route, or requested identity cannot expand that admission. A missing or foreign 
 owner-visible label fact.
 
 Rename and delete require the current label revision. Assignment removal requires its actual assignment ID and revision.
+Catalogue retries retain their original request key and revision; refreshing or resolving a conflict does not rebase an open edit, and reopening explicitly captures the current label.
 A stale ordinary revision returns `409 conflict` (restore uses its distinct codes) and changes no label, assignment,
 fact-index row, receipt outcome, or outbox effect; stale conflicts are not committed as command receipts. Assignment create is set-idempotent, including
 concurrent duplicate calls; competing mutations serialize under the transaction advisory subject guard. Receipt contents contain

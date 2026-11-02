@@ -212,6 +212,49 @@ test('a stale revision on rename or delete reloads the page and shows the curren
     expect(markup(page)).toContain('This label changed elsewhere.');
     expect(fake.labels[0]?.name).toBe('Changed elsewhere');
     expect(fake.calls.filter((call) => call.path === '/v1/libraryLabels' && call.method === 'GET')).toHaveLength(2);
+    const retry = form(markup(page), operation, 'label-0');
+    expect(retry.get('library_label_revision')).toBe(body.get('library_label_revision'));
+    expect(retry.get('idempotencyKey')).toBe(body.get('idempotencyKey'));
+    expect((await postForm(client, retry)).feedback?.reason).toBe('conflict');
+    expect(fake.labels[0]?.name).toBe('Changed elsewhere');
+  }
+});
+
+test('no-script catalogue retries recover a lost committed response without a new identity or revision', async () => {
+  for (const operation of ['create', 'rename', 'delete'] as const) {
+    const { fake } = setup();
+    let loseReply = true;
+    const client = createKernelClient('https://kernel.example.test', {
+      fetch: (async (input, init) => {
+        const response = await fake.fetch(input, init);
+        if (loseReply && new Request(input, init).method !== 'GET') {
+          loseReply = false;
+          throw new Error('Committed reply lost');
+        }
+        return response;
+      }) as typeof fetch,
+    });
+    const body = form(
+      markup(await loadLabelsPage(client, request(), env)),
+      operation,
+      operation === 'create' ? undefined : 'label-0',
+    );
+    if (operation !== 'delete') body.set('name', 'Recovered name');
+    const uncertain = await postForm(client, body);
+    expect(uncertain.feedback?.reason).toBe('unavailable');
+    const retry = form(markup(uncertain), operation, operation === 'create' ? undefined : 'label-0');
+    for (const field of ['idempotencyKey', 'library_label_revision', 'name'])
+      expect(retry.get(field)).toBe(body.get(field));
+    const recovered = await postForm(client, retry);
+    expect(recovered.feedback?.ok).toBe(true);
+    expect(fake.calls.filter((call) => call.method !== 'GET').map((call) => call.key)).toEqual([
+      body.get('idempotencyKey'),
+      body.get('idempotencyKey'),
+    ]);
+    expect(recovered.labels.filter((label) => label.name === 'Recovered name')).toHaveLength(
+      operation === 'delete' ? 0 : 1,
+    );
+    if (operation === 'delete') expect(recovered.feedback?.undo?.revision).toBe(73);
   }
 });
 
@@ -247,6 +290,7 @@ test("a restore refused as library_label_restore_stale, library_label_restore_ex
     expect(markup(page)).toContain(message);
     expect(page.labels.map((label) => label.id)).toEqual(fake.labels.map((label) => label.id));
     expect(page.labels).toHaveLength(2);
+    expect(markup(page).includes('value="restore"')).toBe(code === 'library_label_restore_occupied');
   }
 });
 

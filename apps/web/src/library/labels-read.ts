@@ -22,6 +22,7 @@ export type LabelFeedback = LabelResult & {
   name?: string;
   undo?: LibraryLabel;
   undoKey?: string;
+  retry?: { idempotencyKey: string; revision?: number };
 };
 export type LabelsPage = {
   signedIn: boolean;
@@ -91,6 +92,13 @@ function readFeedback(request: Request): LabelFeedback | undefined {
       if (feedback[key] !== undefined && typeof feedback[key] !== 'string') return undefined;
     }
     if (
+      feedback.retry &&
+      (!uuid.test(feedback.retry.idempotencyKey) ||
+        (feedback.retry.revision !== undefined &&
+          (!Number.isSafeInteger(feedback.retry.revision) || feedback.retry.revision < 1)))
+    )
+      return undefined;
+    if (
       feedback.undo &&
       (typeof feedback.undo.id !== 'string' ||
         typeof feedback.undo.name !== 'string' ||
@@ -132,6 +140,8 @@ export async function loadLabelsPage(
     const feedback = readFeedback(request);
     if (feedback) {
       page.feedback = feedback;
+      if (!feedback.ok && feedback.operation === 'create' && feedback.retry)
+        page.createKey = feedback.retry.idempotencyKey;
       if (feedback.undoKey) page.undoKey = feedback.undoKey;
     }
     const exposure = await client.platform.exposure.get({ headers: { authorization } });
@@ -223,6 +233,14 @@ export function labelFeedback(input: LabelInput, result: LabelResult): LabelFeed
   return {
     ...result,
     operation: input.operation,
+    ...(!result.ok
+      ? {
+          retry: {
+            idempotencyKey: input.idempotencyKey,
+            ...(input.revision === undefined ? {} : { revision: input.revision }),
+          },
+        }
+      : {}),
     ...(result.ok && input.operation === 'delete' ? { undoKey: crypto.randomUUID() } : {}),
     ...(input.id === undefined ? {} : { id: input.id }),
     ...(input.name === undefined ? {} : { name: input.name }),
@@ -267,7 +285,10 @@ export async function handleLabelForm(
           }
         : undefined;
     const previous = captured ?? readFeedback(request);
-    if (!feedback.ok && input.operation === 'restore')
+    const undoUnavailable =
+      input.operation === 'restore' &&
+      ['library_label_restore_stale', 'library_label_restore_expired', 'not_found'].includes(feedback.reason ?? '');
+    if (!feedback.ok && input.operation === 'restore' && !undoUnavailable)
       feedback = {
         ...feedback,
         undo: { id: input.id!, name: input.name ?? '', revision: input.revision! },
@@ -275,6 +296,7 @@ export async function handleLabelForm(
       };
     else if (
       !feedback.undo &&
+      !undoUnavailable &&
       previous?.undo &&
       !(
         feedback.ok &&
