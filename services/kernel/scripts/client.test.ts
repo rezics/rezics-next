@@ -3,7 +3,6 @@ import { resolve } from 'node:path';
 import { expect, expectTypeOf, test } from 'bun:test';
 import type { KernelClient } from '@rezics/client';
 import { clientDeclarationCacheDirectory, clientDeclarations, withOrderReconcileAuthorization } from './client.ts';
-import type { KernelClient } from '../../../packages/client/src/index.ts';
 
 const repository = resolve(import.meta.dir, '../../..');
 
