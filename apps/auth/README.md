@@ -39,6 +39,11 @@ replaced by a newer one is silent; any other failure shows the shared destructiv
 message for a refused passkey. Without WebAuthn the page shows no passkey control and the email field keeps
 `autocomplete="username"`.
 
+Password, explicit passkey and autofill completions belong only to the current login journey. Changing the
+URL, leaving the page or restoring a cached document discards old callbacks and private inputs. A password
+submission can replace a passkey ceremony; only its current completion may unlock the form or navigate.
+Replacement cancels the browser ceremony, without undoing a server sign-in or retrying an uncertain request.
+
 The submit button stays enabled until a request is pending. Submission validates the email and password, marks each
 invalid field with a linked error, and focuses the first invalid field. The password uses the shared in-field show and
 hide control. A refusal keeps the email, clears the password and focuses a destructive alert with an icon and title:

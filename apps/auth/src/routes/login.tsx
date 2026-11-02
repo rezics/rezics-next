@@ -1,8 +1,7 @@
-import { createFileRoute, useRouter } from '@tanstack/react-router';
+import { createFileRoute } from '@tanstack/react-router';
 import { AuthButton as Button } from '../button';
 import { Field, FieldError, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
-import { WebAuthnAbortService } from '@simplewebauthn/browser';
 import { KeyRound } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { PasswordInput } from '../password-input';
@@ -20,6 +19,7 @@ import { signIn, signInTarget } from '../sign-in';
 import { ErrorAlert } from '../alert';
 import { selectManagementOperationStepUp } from '../management-operation-step-up';
 import { confirmStepUp, confirmStepUpWithPasskey } from '../step-up';
+import { LoginAttempt, useLoginJourney } from '../login-attempt';
 
 const emailId = 'login-email';
 const emailErrorId = 'login-email-error';
@@ -32,9 +32,15 @@ export const Route = createFileRoute('/login')({
 });
 
 function LoginPage() {
-  // Router search serialization turns repeated parameters into a JSON array.
-  // Auth needs the original query, including its signature on the sign-up link.
-  const query = useRouter().history.location.search;
+  const journey = useLoginJourney();
+  return journey ? (
+    <LoginForm key={journey.key} query={journey.query} attempt={journey.attempt} />
+  ) : (
+    <AuthPage heading={m.auth_login_heading()} />
+  );
+}
+
+function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [pending, setPending] = useState(false);
@@ -45,7 +51,6 @@ function LoginPage() {
   // Passkey controls appear only after the browser reports WebAuthn, so the server render has none.
   const [passkeySupport, setPasskeySupport] = useState<'none' | 'prompt' | 'autofill'>('none');
   const [passkeyPending, setPasskeyPending] = useState(false);
-  const submitting = useRef(false);
   const alert = useRef<HTMLDivElement>(null);
   const emailInput = useRef<HTMLInputElement>(null);
 
@@ -82,11 +87,14 @@ function LoginPage() {
   useEffect(() => {
     if (passkeySupport !== 'autofill' || selectManagementOperationStepUp(query).kind !== 'ordinary') return;
     startAutofill();
-    return () => WebAuthnAbortService.cancelCeremony();
-  }, [passkeySupport, query]);
+  }, [passkeySupport, query, attempt]);
 
   function startAutofill() {
-    void signInWithPasskey({ autofill: true }).then(finishPasskey);
+    const completion = attempt.begin('autofill');
+    if (!completion) return;
+    void signInWithPasskey({ autofill: true, isCurrent: completion.isCurrent }).then((result) => {
+      if (completion.finish()) finishPasskey(result);
+    });
   }
 
   function finishPasskey(result: PasskeySignInResult) {
@@ -94,7 +102,6 @@ function LoginPage() {
       window.location.assign(signInTarget(query, window.location.origin));
       return;
     }
-    submitting.current = false;
     setPending(false);
     setPasskeyPending(false);
     if (result.reason === 'cancelled') return;
@@ -102,26 +109,27 @@ function LoginPage() {
   }
 
   async function submitPasskey() {
-    if (submitting.current || pending) return;
-    submitting.current = true;
+    const completion = attempt.begin('passkey');
+    if (!completion) return;
     setPending(true);
     setPasskeyPending(true);
     setMessage('');
     setEmailError('');
     setPasswordError('');
     if (selectManagementOperationStepUp(query).kind !== 'ordinary') {
-      const outcome = await confirmStepUpWithPasskey(query, window.location.origin);
+      const outcome = await confirmStepUpWithPasskey(query, window.location.origin, completion.isCurrent);
+      if (!completion.finish()) return;
       if (outcome.ok) {
         window.location.assign(outcome.target);
         return;
       }
-      submitting.current = false;
       setPending(false);
       setPasskeyPending(false);
       setMessage(outcome.message ?? '');
       return;
     }
-    const result = await signInWithPasskey();
+    const result = await signInWithPasskey({ isCurrent: completion.isCurrent });
+    if (!completion.finish()) return;
     finishPasskey(result);
     // Showing the prompt replaced the autofill ceremony, so offer autofill again if the person backed out.
     if (!result.ok && passkeySupport === 'autofill') startAutofill();
@@ -129,7 +137,7 @@ function LoginPage() {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (submitting.current || pending) return;
+    if (pending && !passkeyPending) return;
     const invalidEmail = !email.trim() || Boolean(emailInput.current?.validity.typeMismatch);
     const invalidPassword = !password;
     setEmailError(invalidEmail ? (email.trim() ? m.auth_form_email_invalid() : m.auth_form_required()) : '');
@@ -139,30 +147,32 @@ function LoginPage() {
       else document.getElementById(passwordId)?.focus();
       return;
     }
-    submitting.current = true;
+    const completion = attempt.begin('password');
+    if (!completion) return;
     setPending(true);
+    setPasskeyPending(false);
     setMessage('');
     setEmailError('');
     setPasswordError('');
     if (selectManagementOperationStepUp(query).kind !== 'ordinary') {
-      const outcome = await confirmStepUp(email, password, query, window.location.origin);
+      const outcome = await confirmStepUp(email, password, query, window.location.origin, completion.isCurrent);
+      if (!completion.finish()) return;
       setPassword('');
       if (outcome.ok) {
         window.location.assign(outcome.target);
         return;
       }
-      submitting.current = false;
       setPending(false);
       setMessage(outcome.message ?? '');
       return;
     }
     const result = await signIn(email, password);
+    if (!completion.finish()) return;
     setPassword('');
     if (result.ok) {
       window.location.assign(signInTarget(query, window.location.origin));
       return;
     }
-    submitting.current = false;
     setPending(false);
     setMessage(
       result.reason === 'credentials'
@@ -191,7 +201,7 @@ function LoginPage() {
             }}
             aria-invalid={emailError ? true : undefined}
             aria-describedby={emailError ? emailErrorId : undefined}
-            readOnly={pending}
+            readOnly={pending && !passkeyPending}
             required
           />
           {emailError ? <FieldError id={emailErrorId}>{emailError}</FieldError> : null}
@@ -202,7 +212,7 @@ function LoginPage() {
             name="password"
             autoComplete="current-password"
             required
-            readOnly={pending}
+            readOnly={pending && !passkeyPending}
             id={passwordId}
             value={password}
             onChange={(event) => {
@@ -219,7 +229,7 @@ function LoginPage() {
             {message}
           </ErrorAlert>
         ) : null}
-        <Button type="submit" disabled={pending} aria-busy={pending && !passkeyPending}>
+        <Button type="submit" disabled={pending && !passkeyPending} aria-busy={pending && !passkeyPending}>
           {m.auth_login_heading()}
         </Button>
         {passkeySupport === 'none' ? null : (

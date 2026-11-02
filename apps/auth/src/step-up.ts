@@ -12,9 +12,14 @@ import {
   type PendingManagementOperationStepUp,
 } from './management-operation-step-up';
 
-async function managementReturn(pending: PendingManagementOperationStepUp, origin: string): Promise<StepUpOutcome> {
+async function managementReturn(
+  pending: PendingManagementOperationStepUp,
+  origin: string,
+  isCurrent: () => boolean,
+): Promise<StepUpOutcome> {
   const session = await loadManagementSession();
   if (
+    !isCurrent() ||
     session.kind !== 'ready' ||
     !managementSessionMatches(session, pending) ||
     !markManagementOperationReturned(pending)
@@ -43,6 +48,7 @@ export async function confirmStepUp(
   password: string,
   query: string,
   origin: string,
+  isCurrent = () => true,
 ): Promise<StepUpOutcome> {
   const management = selectManagementOperationStepUp(query);
   if (management.kind === 'invalid') return { ok: false, message: m.auth_account_operation_failure() };
@@ -50,8 +56,9 @@ export async function confirmStepUp(
     const result = signInResult(
       await authPost('/signin', { email, password, ...managementOperationProfile(management.pending.kind) }),
     );
+    if (!isCurrent()) return { ok: false, message: null };
     if (!result.ok) return { ok: false, message: stepUpFailure(result) };
-    return managementReturn(management.pending, origin);
+    return managementReturn(management.pending, origin, isCurrent);
   }
   const selection = selectStepUp(query);
   if (selection.kind === 'invalid') return { ok: false, message: m.auth_account_operation_failure() };
@@ -78,22 +85,26 @@ export async function confirmStepUp(
   return { ok: true, target: signInTarget(query, origin) };
 }
 
-export async function confirmStepUpWithPasskey(query: string, origin: string): Promise<StepUpOutcome> {
+export async function confirmStepUpWithPasskey(
+  query: string,
+  origin: string,
+  isCurrent = () => true,
+): Promise<StepUpOutcome> {
   const management = selectManagementOperationStepUp(query);
   if (management.kind === 'invalid') return { ok: false, message: m.auth_account_operation_failure() };
   if (management.kind === 'management') {
-    const result = await signInWithPasskey({ management: management.pending.kind });
-    if (result.ok) return managementReturn(management.pending, origin);
+    const result = await signInWithPasskey({ management: management.pending.kind, isCurrent });
+    if (result.ok) return managementReturn(management.pending, origin, isCurrent);
     return { ok: false, message: result.reason === 'cancelled' ? null : passkeySignInFailure(result) };
   }
   const selection = selectStepUp(query);
   if (selection.kind === 'invalid') return { ok: false, message: m.auth_account_operation_failure() };
   const result = await signInWithPasskey(
     selection.kind === 'organization-delete'
-      ? { operation: 'delete' }
+      ? { operation: 'delete', isCurrent }
       : selection.kind === 'operation'
-        ? { operation: selection.pending.kind }
-        : undefined,
+        ? { operation: selection.pending.kind, isCurrent }
+        : { isCurrent },
   );
   if (result.ok) {
     if (selection.kind === 'operation' || selection.kind === 'organization-delete') {

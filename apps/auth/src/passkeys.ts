@@ -50,13 +50,16 @@ export async function signInWithPasskey({
   autofill = false,
   operation,
   management,
+  isCurrent = () => true,
 }: {
   autofill?: boolean;
   operation?: AccountOperationStepUpKind;
   management?: ManagementOperationKind;
+  isCurrent?: () => boolean;
 } = {}): Promise<PasskeySignInResult> {
   if (operation && management) return { ok: false, reason: 'unavailable' };
   const fetched = await signInOptions();
+  if (!isCurrent()) return { ok: false, reason: 'cancelled' };
   if (!fetched.ok) return signInResult(fetched);
 
   let response;
@@ -65,6 +68,7 @@ export async function signInWithPasskey({
   } catch (error) {
     return isCancellation(error) ? { ok: false, reason: 'cancelled' } : { ok: false, reason: 'unavailable' };
   }
+  if (!isCurrent()) return { ok: false, reason: 'cancelled' };
   // The challenge is spent once the response is sent.
   held = null;
   const profile = management
