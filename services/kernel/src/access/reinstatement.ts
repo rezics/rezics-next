@@ -34,13 +34,19 @@ function fenceCleared(result: unknown): boolean {
   return Array.isArray(result) ? result.length > 0 : result != null;
 }
 
-export const reinstatementDeclaration = Object.freeze({ action: 'account:reinstate', operationId: 'account.reinstate' } as const);
+export const reinstatementDeclaration = Object.freeze({
+  action: 'account:reinstate',
+  operationId: 'account.reinstate',
+} as const);
 
-export function reinstatementRequestDigest(actor: Extract<Actor, { kind: 'account' }>, input: ReinstatementInput): Buffer {
+export function reinstatementRequestDigest(
+  actor: Extract<Actor, { kind: 'account' }>,
+  input: ReinstatementInput,
+): Buffer {
   const basis = { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy };
-  return createHash('sha256').update(canonicalize([
-    routeOf(input.accountId), input.accountId, basis, input.reason ?? null,
-  ])!).digest();
+  return createHash('sha256')
+    .update(canonicalize([routeOf(input.accountId), input.accountId, basis, input.reason ?? null])!)
+    .digest();
 }
 
 /** Suspended accounts only. Authorization uses the Global Context, then releases

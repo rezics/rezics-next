@@ -46,7 +46,11 @@ import { RealmLastOwnerError } from './resource-access-errors.ts';
 import { readResourceGrants, type GrantReadPage } from './grant-read.ts';
 import type { ViewerActionResources } from './viewer-actions.ts';
 import { createRateTierCommands, RateTierNotAppliedError } from './rate-tier.ts';
-import { createReinstatementCommands, reinstatementDeclaration, ReinstatementNotAppliedError } from './reinstatement.ts';
+import {
+  createReinstatementCommands,
+  reinstatementDeclaration,
+  ReinstatementNotAppliedError,
+} from './reinstatement.ts';
 import { createSuspensionCommands, suspensionDeclaration } from './suspension.ts';
 import { readOrganizationSpeakers, type OrganizationSpeakersPage } from './organization-speakers.ts';
 import { readAccountRealms, type AccountRealmsPage } from './account-realms.ts';
@@ -1289,15 +1293,37 @@ export function accessRoutes(
       '/v1/accounts/:accountId/lifecycleReview',
       {
         params: strict(t.Object({ accountId: id }, closed)),
-        body: strict(t.Object({ operatorPageKey: t.Optional(t.String({ pattern: '^[0-9a-f]{64}$' })), original: t.Optional(t.Object({
-          operationId: t.Union([t.Literal(suspensionDeclaration.operationId), t.Literal(reinstatementDeclaration.operationId)]),
-          key: t.String({ minLength: 1, maxLength: 255 }),
-          reason: t.Optional(t.String({ minLength: 1, maxLength: 2000 })),
-        }, closed)) }, closed)),
-        response: { 200: lifecycleReviewSchema, ...failures, 404: problemSchema('not_found'),
-          503: problemSchema('dependency_unavailable', 'deadline_exceeded', 'partition_unavailable', 'overloaded') },
+        body: strict(
+          t.Object(
+            {
+              operatorPageKey: t.Optional(t.String({ pattern: '^[0-9a-f]{64}$' })),
+              original: t.Optional(
+                t.Object(
+                  {
+                    operationId: t.Union([
+                      t.Literal(suspensionDeclaration.operationId),
+                      t.Literal(reinstatementDeclaration.operationId),
+                    ]),
+                    key: t.String({ minLength: 1, maxLength: 255 }),
+                    reason: t.Optional(t.String({ minLength: 1, maxLength: 2000 })),
+                  },
+                  closed,
+                ),
+              ),
+            },
+            closed,
+          ),
+        ),
+        response: {
+          200: lifecycleReviewSchema,
+          ...failures,
+          404: problemSchema('not_found'),
+          503: problemSchema('dependency_unavailable', 'deadline_exceeded', 'partition_unavailable', 'overloaded'),
+        },
         detail: {
-          operationId: 'account.lifecycle_review', 'x-exposure': 'public', 'x-action': 'account:read',
+          operationId: 'account.lifecycle_review',
+          'x-exposure': 'public',
+          'x-action': 'account:read',
           security: [{ bearerAuth: [] }],
         },
       },
@@ -1306,8 +1332,13 @@ export function accessRoutes(
         set.headers['pragma'] = 'no-cache';
         set.headers['vary'] = 'Authorization';
         return admission.run('normal', job, () =>
-          readLifecycleReview({ pool: dependencies.pool, access: dependencies.access(), clock: dependencies.clock },
-            actor, { accountId: params.accountId, ...body }, { deadline: job.deadline }));
+          readLifecycleReview(
+            { pool: dependencies.pool, access: dependencies.access(), clock: dependencies.clock },
+            actor,
+            { accountId: params.accountId, ...body },
+            { deadline: job.deadline },
+          ),
+        );
       },
     )
     .post(

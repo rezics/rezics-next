@@ -28,15 +28,25 @@ export type SuspensionValue = {
   continuationOperationKey?: string;
 };
 
-export const suspensionDeclaration = Object.freeze({ action: 'account:suspend', operationId: 'account.suspend' } as const);
+export const suspensionDeclaration = Object.freeze({
+  action: 'account:suspend',
+  operationId: 'account.suspend',
+} as const);
 
 /** The private reader shares the complete native digest, including a supplied continuation binding. */
 export function suspensionRequestDigest(actor: Extract<Actor, { kind: 'account' }>, input: SuspensionInput): Buffer {
   const basis = { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy };
-  return createHash('sha256').update(canonicalize([
-    routeOf(input.accountId), input.accountId, basis, input.reason ?? null,
-    continuationCommandBinding(input.continuation),
-  ])!).digest();
+  return createHash('sha256')
+    .update(
+      canonicalize([
+        routeOf(input.accountId),
+        input.accountId,
+        basis,
+        input.reason ?? null,
+        continuationCommandBinding(input.continuation),
+      ])!,
+    )
+    .digest();
 }
 
 /** Active accounts only. A lifecycle coordination row, including an operator

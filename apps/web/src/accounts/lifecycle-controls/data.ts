@@ -2,7 +2,9 @@ import type { KernelClient } from '@rezics/client';
 import type { Identity } from '../management/data';
 import { routedId } from '../resource-access/data';
 
-type LifecycleReview = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['accounts']>['lifecycleReview']['post']>>['data']>;
+type LifecycleReview = NonNullable<
+  Awaited<ReturnType<ReturnType<KernelClient['accounts']>['lifecycleReview']['post']>>['data']
+>;
 type LifecycleOriginalResult = NonNullable<LifecycleReview['original']>;
 type LifecycleEffects = Extract<LifecycleOriginalResult, { status: 'recorded' }>['effects'];
 
@@ -10,7 +12,14 @@ export type Action = 'suspend' | 'reinstate';
 export type Intent = Readonly<{ accountId: string; action: Action; key: string; reason?: string }>;
 export type Failure = 'denied' | 'signed-out' | 'missing' | 'unavailable' | 'pending';
 export type Page =
-  | { status: 'ready'; account: Identity; offered: Action[]; currentState: 'unavailable' | LifecycleReview['current']['state']; native?: LifecycleReview['current']; original?: LifecycleOriginalResult }
+  | {
+      status: 'ready';
+      account: Identity;
+      offered: Action[];
+      currentState: 'unavailable' | LifecycleReview['current']['state'];
+      native?: LifecycleReview['current'];
+      original?: LifecycleOriginalResult;
+    }
   | { status: Failure };
 export type Outcome =
   | { status: 'recorded'; receiptId: string; current: Page; effects?: LifecycleEffects }
@@ -53,11 +62,23 @@ function failure(status: number): Failure {
 }
 
 /** Only this dedicated native port may advertise lifecycle commands. Public viewerActions is unrelated. */
-export async function loadLifecycle(client: KernelClient, authorization: string, accountId: string, intent?: Intent): Promise<Page> {
+export async function loadLifecycle(
+  client: KernelClient,
+  authorization: string,
+  accountId: string,
+  intent?: Intent,
+): Promise<Page> {
   if (!authorization.trim()) return { status: 'signed-out' };
   try {
-    const body = intent ? { original: { operationId: operations[intent.action], key: intent.key,
-      ...(intent.reason === undefined ? {} : { reason: intent.reason }) } } : {};
+    const body = intent
+      ? {
+          original: {
+            operationId: operations[intent.action],
+            key: intent.key,
+            ...(intent.reason === undefined ? {} : { reason: intent.reason }),
+          },
+        }
+      : {};
     const target = await client.accounts({ accountId }).lifecycleReview.post(body, {
       headers: { authorization, 'cache-control': 'no-store' },
     });
@@ -65,9 +86,20 @@ export async function loadLifecycle(client: KernelClient, authorization: string,
     if (target.data.account.id !== accountId) return { status: 'unavailable' };
     const offered: Action[] = [];
     for (const action of ['suspend', 'reinstate'] as const)
-      if (target.data.actions.some((entry) => entry.action === `account:${action}` && entry.operationId === operations[action])) offered.push(action);
-    return { status: 'ready', account: target.data.account, offered, currentState: target.data.current.state,
-      native: target.data.current, ...(target.data.original ? { original: target.data.original } : {}) };
+      if (
+        target.data.actions.some(
+          (entry) => entry.action === `account:${action}` && entry.operationId === operations[action],
+        )
+      )
+        offered.push(action);
+    return {
+      status: 'ready',
+      account: target.data.account,
+      offered,
+      currentState: target.data.current.state,
+      native: target.data.current,
+      ...(target.data.original ? { original: target.data.original } : {}),
+    };
   } catch {
     return { status: 'unavailable' };
   }
@@ -92,7 +124,12 @@ export async function commandLifecycle(client: KernelClient, authorization: stri
     // One real current read, never a scan or an unbounded poll. It cannot yet prove lifecycle completion.
     const readback = await loadLifecycle(client, authorization, intent.accountId, intent);
     if (readback.status === 'ready' && readback.original?.status === 'recorded')
-      return { status: 'recorded', receiptId: readback.original.receiptId, effects: readback.original.effects, current: readback };
+      return {
+        status: 'recorded',
+        receiptId: readback.original.receiptId,
+        effects: readback.original.effects,
+        current: readback,
+      };
     if (result.error || !result.data) {
       const problem: unknown = result.error?.value;
       // Only native explicit not_applied allows a fresh intent. An HTTP status alone proves no such thing.
@@ -121,7 +158,12 @@ export async function commandLifecycle(client: KernelClient, authorization: stri
   } catch {
     const readback = await loadLifecycle(client, authorization, intent.accountId, intent);
     if (readback.status === 'ready' && readback.original?.status === 'recorded')
-      return { status: 'recorded', receiptId: readback.original.receiptId, effects: readback.original.effects, current: readback };
+      return {
+        status: 'recorded',
+        receiptId: readback.original.receiptId,
+        effects: readback.original.effects,
+        current: readback,
+      };
     return { status: 'uncertain', current: readback };
   }
 }
