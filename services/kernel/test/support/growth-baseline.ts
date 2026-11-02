@@ -127,7 +127,8 @@ function maskNonCode(source: string): { code: string; literals: readonly Literal
   const characters = source.split('');
   const literals: Literal[] = [];
   const blank = (start: number, end: number) => {
-    for (let index = start; index < end; index++) if (source[index] !== '\n' && source[index] !== '\r') characters[index] = ' ';
+    for (let index = start; index < end; index++)
+      if (source[index] !== '\n' && source[index] !== '\r') characters[index] = ' ';
   };
   const skipQuoted = (start: number, quote: string): number => {
     let index = start + 1;
@@ -171,7 +172,7 @@ function maskNonCode(source: string): { code: string; literals: readonly Literal
     return source.length;
   };
 
-  for (let index = 0; index < source.length; ) {
+  for (let index = 0; index < source.length;) {
     if (source.startsWith('//', index)) {
       let end = source.indexOf('\n', index + 2);
       if (end < 0) end = source.length;
@@ -247,7 +248,7 @@ function topLevelEnd(code: string, start: number, end: number): number {
 function findNameValue(code: string, open: number, close: number): { start: number; end: number } | undefined {
   const stack: string[] = [];
   const pairs: Record<string, string> = { '(': ')', '[': ']', '{': '}' };
-  for (let index = open + 1; index < close; ) {
+  for (let index = open + 1; index < close;) {
     if (stack.length === 0 && /[A-Za-z_$]/.test(code[index]!)) {
       const start = index++;
       while (index < close && /[\w$]/.test(code[index]!)) index++;
@@ -325,7 +326,8 @@ function loopChoices(
     } else {
       const semicolon = code.indexOf(';', body);
       const newline = code.indexOf('\n', body);
-      bodyEnd = semicolon < 0 ? (newline < 0 ? code.length : newline) : newline < 0 ? semicolon : Math.min(semicolon, newline);
+      bodyEnd =
+        semicolon < 0 ? (newline < 0 ? code.length : newline) : newline < 0 ? semicolon : Math.min(semicolon, newline);
     }
     if (callStart < body || callStart > bodyEnd) continue;
     return quotedArrayChoices(source, code, literals, axisOpen, axisClose);
@@ -354,9 +356,7 @@ function templateMatches(
     pattern += escapePattern(template.slice(previous, interpolation.index));
     const expression = interpolation[1]!.trim();
     let choices: string[] | undefined;
-    const conditional = expression.match(
-      /^[A-Za-z_$][\w$]*\s*\?\s*('[^'\\]*'|"[^"\\]*")\s*:\s*('[^'\\]*'|"[^"\\]*")$/,
-    );
+    const conditional = expression.match(/^[A-Za-z_$][\w$]*\s*\?\s*('[^'\\]*'|"[^"\\]*")\s*:\s*('[^'\\]*'|"[^"\\]*")$/);
     if (conditional) choices = [conditional[1]!.slice(1, -1), conditional[2]!.slice(1, -1)];
     else if (/^[A-Za-z_$][\w$]*$/.test(expression))
       choices = loopChoices(source, code, literals, expression, callStart);
@@ -395,7 +395,8 @@ function containsCheckName(source: string, name: string): boolean {
     const literal = literalAt.get(value.start);
     if (!literal || literal.end > value.end) continue;
     if (literal.kind === 'string' && literalText(source, literal) === name) return true;
-    if (literal.kind === 'template' && templateMatches(source, literal, name, code, literals, match.index!)) return true;
+    if (literal.kind === 'template' && templateMatches(source, literal, name, code, literals, match.index!))
+      return true;
   }
   return false;
 }
