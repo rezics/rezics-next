@@ -27,7 +27,8 @@ function RouterBlocker({ state }: { state: State }) {
   latest.current = state;
   useBlocker({
     shouldBlockFn: ({ current, next }) => {
-      if (current.href === next.href) return false;
+      if (current.pathname === next.pathname && JSON.stringify(current.search) === JSON.stringify(next.search))
+        return false;
       const currentState = latest.current;
       if (!currentState.authorized || (!currentState.dirty && !currentState.locked)) return false;
       return currentState.requestNavigation();
