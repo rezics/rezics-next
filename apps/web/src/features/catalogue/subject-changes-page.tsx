@@ -358,10 +358,13 @@ function SubjectChangesReader({
   const active = () => mounted.current && work.active();
   useLayoutEffect(() => {
     if (!focusResult || !active()) return;
-    const kind = state.failure
-      ? 'failure'
-      : focusResult.kind === 'detail' && state.detail && state.detail.kind !== 'ready'
-        ? 'detail-failure'
+    const kind =
+      focusResult.kind === 'detail'
+        ? !state.page
+          ? 'failure'
+          : state.detail && state.detail.kind !== 'ready'
+            ? 'detail-failure'
+            : 'detail'
         : focusResult.kind;
     const boundary = focusRoot.current?.querySelector<HTMLElement>(`[data-changes-focus="${kind}"]`);
     (boundary?.querySelector<HTMLButtonElement>('button:not(:disabled)') ?? boundary)?.focus();

@@ -378,35 +378,47 @@ test('the complete Subject history family keeps independent headings, bounded su
     const initial = await second.transport.list();
     if (initial.kind !== 'ready') throw new Error('Expected list');
     let edgeReads = 0;
-    let edgeFailure = false;
+    let edgeFailure: 'detail' | 'subject' | undefined;
     const edgeTransport: ChangesTransport = {
       list: async () =>
         edgeReads++ === 0
           ? initial
-          : {
-              kind: 'ready',
-              page: { ...initial.page, revisions: [], next: null },
-            },
+          : edgeReads === 2
+            ? { kind: 'unavailable' }
+            : {
+                kind: 'ready',
+                page: { ...initial.page, revisions: [], next: null },
+              },
       detail: async (revision) =>
-        edgeFailure
+        edgeFailure === 'subject'
           ? { kind: 'missing', scope: 'subject' }
-          : {
-              kind: 'ready',
-              detail: { id: initial.page.id, revision, summary: { kind: 'limited' } },
-            },
+          : edgeFailure === 'detail'
+            ? { kind: 'unavailable' }
+            : {
+                kind: 'ready',
+                detail: { id: initial.page.id, revision, summary: { kind: 'limited' } },
+              },
     };
     outside.focus();
     await render(<SubjectChanges key="empty-final" locale="en" transport={edgeTransport} />);
     expect(document.activeElement).toBe(outside);
     await click(host, m.changes_more());
+    expect(document.activeElement).toBe(button(host, m.changes_retry()));
+    await click(host, selectFive);
+    expect(document.activeElement).toBe(explanation(histories()[0]!).querySelector('h2'));
+    edgeFailure = 'detail';
+    await click(host, selectFive);
+    expect(document.activeElement).toBe(button(host, m.changes_retry_detail()));
+    await click(host, m.changes_retry());
     expect(document.activeElement?.textContent).toBe(
       m.subject_relation_completed_end({ label: m.changes_revisions(), count: '0' }),
     );
     expect(host.querySelectorAll('ol li')).toHaveLength(initial.page.revisions.length);
-    await click(host, selectFive);
+    edgeFailure = undefined;
+    await click(host, m.changes_retry_detail());
     expect(document.activeElement).toBe(explanation(histories()[0]!).querySelector('h2'));
     expect(host.textContent).toContain(m.changes_limited());
-    edgeFailure = true;
+    edgeFailure = 'subject';
     await click(host, selectFive);
     expect(document.activeElement?.textContent).toBe(m.changes_missing());
     expect(host.querySelector('section[aria-labelledby]')).toBeNull();
