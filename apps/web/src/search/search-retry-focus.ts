@@ -3,13 +3,13 @@ import { useEffect, useLayoutEffect as useBrowserLayoutEffect, useRef } from 're
 const useFocusLayoutEffect = typeof document === 'undefined' ? useEffect : useBrowserLayoutEffect;
 
 export type SearchRetryOwner = {
-  query: string;
+  scope: string;
   locale: string;
   session: string | null;
 };
 
 export function searchRetryOwnerCurrent(pending: SearchRetryOwner, current: SearchRetryOwner): boolean {
-  return pending.query === current.query && pending.locale === current.locale && pending.session === current.session;
+  return pending.scope === current.scope && pending.locale === current.locale && pending.session === current.session;
 }
 
 type PendingRetryFocus = {
@@ -78,7 +78,7 @@ export function useSearchRetryFocus(current: SearchRetryOwner, settled: boolean)
     });
     clear();
     target?.focus();
-  }, [current.query, current.locale, current.session, settled]);
+  }, [current.scope, current.locale, current.session, settled]);
 
   return {
     regionRef,
@@ -88,7 +88,7 @@ export function useSearchRetryFocus(current: SearchRetryOwner, settled: boolean)
       clear();
       const document = source.ownerDocument;
       const request = {
-        owner: { query: current.query, locale: current.locale, session: current.session },
+        owner: { scope: current.scope, locale: current.locale, session: current.session },
         source,
         moved: false,
         document,

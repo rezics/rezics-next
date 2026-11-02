@@ -169,7 +169,7 @@ test('a settled retry restores only the same owner while the reader stayed', () 
   const retryButton = document.createElement('button');
   const results = document.createElement('section');
   document.body.append(source, retryButton, results);
-  const owner = { query: 'Mira', locale: 'en', session: 'one' };
+  const owner = { scope: JSON.stringify({ query: 'Mira', facets: {} }), locale: 'en', session: 'one' };
   const pending = { owner, source, moved: false };
   const args = { pending, current: owner, settled: true, active: source, retry: retryButton, region: results };
   expect(searchRetryFocusTarget(args)).toBe(retryButton);

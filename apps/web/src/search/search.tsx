@@ -599,7 +599,7 @@ export function SearchPage({
   );
   useRegisterHeaderSearchFilters(hasFilterPanel, filterRegion);
   const revertStatus = useRef<HTMLParagraphElement>(null);
-  const retryFocus = useSearchRetryFocus({ query, locale, session }, data?.recovery?.status !== 'loading');
+  const retryFocus = useSearchRetryFocus({ scope: stateKey, locale, session }, data?.recovery?.status !== 'loading');
   const results = renderResults(
     query,
     result,
