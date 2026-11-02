@@ -36,10 +36,7 @@ function hrefInHtml(href: string) {
   return href.replaceAll('&', '&amp;');
 }
 
-function renderList(
-  body: unknown,
-  options: { limit: number; full?: boolean; target: TypeListTarget; read?: unknown },
-) {
+function renderList(body: unknown, options: { limit: number; full?: boolean; target: TypeListTarget; read?: unknown }) {
   const value = {
     locale: 'en',
     subject: null,
