@@ -54,13 +54,13 @@ test('Screen refresh keeps corrections and exact uncertain requests; recovery re
   const host = window.document.createElement('main') as HTMLElement;
   window.document.body.append(host);
   const root = createRoot(host);
-  const button = (name: string) =>
-    [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+  const button = (name: string, region: Element = host) =>
+    [...region.querySelectorAll<HTMLButtonElement>('button')].find(
       (node) => node.textContent === name && !node.disabled,
     )!;
-  const click = async (name: string) =>
+  const click = async (name: string, region: Element = host) =>
     act(async () => {
-      await user.click(button(name));
+      await user.click(button(name, region));
       await new Promise((resolve) => setTimeout(resolve, 20));
     });
   const reading = () => host.querySelector('section[aria-label]')!;
@@ -94,7 +94,8 @@ test('Screen refresh keeps corrections and exact uncertain requests; recovery re
     expect(reading().querySelectorAll('a[href="https://source.test/citation"]')).toHaveLength(1);
     expect(reading().textContent).toContain(`${m.correction_references()} 2`);
     expect(host.querySelector('a[href$="/authored"]')).not.toBeNull();
-    await click(m.facts_edit_field());
+    const date = admitted.release.properties['schema:datePublished']!.labels.en;
+    await click(m.facts_edit_field(), host.querySelector(`section[aria-label="${date}"]`)!);
     const year = host.querySelector<HTMLInputElement>(`input[aria-label="${m.correction_year()}"]`)!;
     await act(async () => {
       await user.clear(year);
