@@ -110,8 +110,10 @@ export function CurrentLabelShelf({
 }) {
   const search = useLocation({ select: (location) => location.search });
   const source = sourceAt(search);
-  const { origin, value, hydrated } = usePrivateReportOrigin(addressOf(source, locale), locale, (href) =>
-    addressAt(href, locale),
+  const { origin, value, hydrated } = usePrivateReportOrigin(
+    addressOf(source, locale),
+    locale,
+    (href) => addressAt(href, locale),
     false,
   );
   // Accepted payloads survive healthy credential/admission refreshes without manufacturing new native intents.

@@ -11,7 +11,11 @@ mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
 afterAll(() => mock.restore());
 const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
-const viewer = (subject: string, csrfToken: string | null = `csrf-${subject}`) => ({ state: 'signed-in', subject, csrfToken });
+const viewer = (subject: string, csrfToken: string | null = `csrf-${subject}`) => ({
+  state: 'signed-in',
+  subject,
+  csrfToken,
+});
 const groups = [
   'personal_library',
   'reading_progress',
@@ -366,7 +370,11 @@ test('A signed-in Shelf keeps authorized reads and label search available withou
     await ui.settle(ui.continues.at(-1)!, {
       sessionSubject: 'A',
       requested: page.requested,
-      result: { state: 'loaded', entries: [{ subjectId: id(4), label: 'Continue A', summary: null, progress: null }], next: null },
+      result: {
+        state: 'loaded',
+        entries: [{ subjectId: id(4), label: 'Continue A', summary: null, progress: null }],
+        next: null,
+      },
     } as never);
     expect(await recovered).toMatchObject({ state: 'loaded', entries: [{ label: 'Continue A' }] });
 
