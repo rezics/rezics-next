@@ -348,11 +348,78 @@ function LiteraryProfileLive({
   const refreshSequence = useRef(0);
   const [refresh, setRefresh] = useState({ key: readingKey, sequence: 0, pending: false });
   const readingRefresh = refresh.key === readingKey ? refresh : { key: readingKey, sequence: 0, pending: false };
+  const [creationRetry, setCreationRetry] = useState<'pending' | 'settled'>();
+  const creationHeading = useRef<HTMLHeadingElement>(null);
+  const creationOpener = useRef<HTMLButtonElement>(null);
+  const creationAttempt = useRef<
+    | {
+        pending: boolean;
+        keyboard: boolean;
+        completed: boolean;
+        session: string;
+        release: () => void;
+      }
+    | undefined
+  >(undefined);
+  const creationSession = useRef(session);
+  creationSession.current = session;
+  if (creationAttempt.current && creationAttempt.current.session !== session) creationAttempt.current.keyboard = false;
+  useLayoutEffect(() => () => creationAttempt.current?.release(), []);
+  const creationPending = query.isPending || query.isFetching || creationRetry === 'pending';
   const creationMetadata = useRef<{ id: string | undefined; locale: string; value: Ready } | undefined>(undefined);
-  if (!id && !query.isError && query.data?.ok) creationMetadata.current = { id, locale, value: query.data };
+  if (!id && creationRetry !== 'pending' && !query.isError && query.data?.ok)
+    creationMetadata.current = { id, locale, value: query.data };
   // A failed metadata refresh must not unmount the entered terms, facts or sealed create command.
   const previous = creationMetadata.current;
   const read = !id && previous?.locale === locale ? previous.value : undefined;
+  const creationRecoverable = useRef(false);
+  creationRecoverable.current = !id && !read && !creationPending;
+  const retryCreation = (opener: HTMLButtonElement, detail: number) => {
+    if (!lifetime.active() || !creationRecoverable.current || creationAttempt.current?.pending) return;
+    const document = opener.ownerDocument;
+    const attempt = {
+      pending: true,
+      keyboard: detail === 0 && document.activeElement === opener,
+      completed: false,
+      session,
+      release: () => {
+        document.removeEventListener('focusin', moved);
+        document.removeEventListener('pointerdown', pointed, true);
+      },
+    };
+    const moved = (event: FocusEvent) => {
+      if (event.target !== opener) attempt.keyboard = false;
+    };
+    const pointed = () => {
+      attempt.keyboard = false;
+    };
+    creationAttempt.current = attempt;
+    document.addEventListener('focusin', moved);
+    document.addEventListener('pointerdown', pointed, true);
+    const settle = () => {
+      if (!lifetime.active() || creationAttempt.current !== attempt) {
+        attempt.release();
+        return;
+      }
+      attempt.keyboard &&= document.activeElement === opener && creationSession.current === session;
+      attempt.pending = false;
+      attempt.completed = true;
+      setCreationRetry('settled');
+    };
+    flushSync(() => setCreationRetry('pending'));
+    try {
+      void query.refetch({ cancelRefetch: false }).then(settle, settle);
+    } catch {
+      settle();
+    }
+  };
+  useLayoutEffect(() => {
+    const attempt = creationAttempt.current;
+    if (!attempt?.completed || creationPending) return;
+    attempt.completed = false;
+    attempt.release();
+    if (attempt.keyboard && lifetime.active()) (read ? creationHeading.current : creationOpener.current)?.focus();
+  });
   const [drafts, setDrafts] = useState<Record<string, InitialRow[]>>({});
   // Keep independently entered facts when switching Types; only the currently chosen Type is submitted.
   const latest = useRef(drafts);
@@ -360,7 +427,12 @@ function LiteraryProfileLive({
   latest.current = drafts;
   const heading = (
     <header className="space-y-3">
-      <ViewHeading label={m.literary_title({}, o)} headingClassName="font-sans" />
+      <ViewHeading
+        label={m.literary_title({}, o)}
+        headingClassName={!id ? `font-sans ${keyboardFocus}` : 'font-sans'}
+        headingRef={!id ? creationHeading : undefined}
+        headingTabIndex={!id ? -1 : undefined}
+      />
       {!id && (
         <>
           <p className="text-muted-foreground">{m.literary_intro({}, o)}</p>
@@ -373,15 +445,24 @@ function LiteraryProfileLive({
     return (
       <article className="mx-auto max-w-4xl space-y-5 py-6">
         {heading}
-        {query.isPending ? (
+        {creationPending ? (
           <p role="status">{m.candidate_loading({}, o)}</p>
         ) : (
-          <>
-            <EditorFailure locale={locale} reason={query.data && !query.data.ok ? query.data.reason : 'unavailable'} />
-            <Button variant="outline" className={coarseTarget} onClick={() => void query.refetch()}>
-              {m.correction_retry({}, o)}
-            </Button>
-          </>
+          <EditorFailure locale={locale} reason={query.data && !query.data.ok ? query.data.reason : 'unavailable'} />
+        )}
+        {(!query.isPending || creationRetry) && (
+          <Button
+            ref={creationOpener}
+            variant="outline"
+            className={coarseTarget}
+            aria-disabled={creationPending}
+            onBlur={() => {
+              if (creationAttempt.current) creationAttempt.current.keyboard = false;
+            }}
+            onClick={(event) => retryCreation(event.currentTarget, event.detail)}
+          >
+            {m.correction_retry({}, o)}
+          </Button>
         )}
       </article>
     );

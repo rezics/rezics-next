@@ -477,6 +477,8 @@ metadata while retaining the draft; uncertain delivery retains the exact command
 is reread before offering its canonical current-reader link. A created identity with an unavailable reader is
 shown as created, with a separate read retry.
 
+Initial Literary metadata retry admits one read, retains its recovery action while pending, and moves focus to the creation heading only for still-current keyboard intent; failure retains the action and moved focus, pointer initiation or caller, locale or session retirement stays silent.
+
 The current work groups identity/original names, bibliography/declared quantities, creator/series/classification
 relations and admitted original text. Bibliography reuses the multi-field editor and its independent results and
 keys; relations reuse the native target picker and qualified-slot editor; original text reuses authored fields,

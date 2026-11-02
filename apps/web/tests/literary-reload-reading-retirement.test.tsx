@@ -9,6 +9,7 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 async function mounted(
   run: (ui: {
     host: HTMLElement;
+    client: QueryClient;
     render: (node: ReactNode) => Promise<void>;
     until: (check: () => boolean) => Promise<void>;
     click: (name: string, scope?: ParentNode) => Promise<void>;
@@ -52,6 +53,7 @@ async function mounted(
   try {
     await run({
       host,
+      client,
       render: async (node) => act(async () => root.render(h(QueryClientProvider, { client }, node))),
       click: async (name, scope = host) => act(async () => button(scope, name).click()),
       enter: async (input, value) =>
@@ -197,4 +199,103 @@ test('Literary reload retires the current observation through failures and equal
     expect(commands[1]).toBe(commands[0]);
     expect(commands[2]!.statement.property.id).toBe('schema:name');
   });
+});
+
+test('Literary creation metadata recovery admits one read and orients only current keyboard intent', async () => {
+  for (const outcome of [
+    'success',
+    'rejected',
+    'refused',
+    'pointer',
+    'moved',
+    'locale',
+    'session',
+    'caller',
+    'hydrated',
+    'initial',
+  ]) {
+    await mounted(async ({ host, client, render, until }) => {
+      const { LiteraryProfile } = await import('../src/features/catalogue/literary-profile-view');
+      const { literaryFixture } = await import('../src/kernel/fake/catalogue-literary-profile');
+      const { m } = await import('../src/paraglide/messages.js');
+      const fixture = literaryFixture();
+      const ready = await fixture.transport.load();
+      let loads = 0;
+      let resolve!: (read: LiteraryRead) => void;
+      let reject!: (error: Error) => void;
+      const pending = new Promise<LiteraryRead>((yes, no) => {
+        resolve = yes;
+        reject = no;
+      });
+      const props = {
+        locale: 'en',
+        session: 'signed-in' as const,
+        facts: fixture.facts,
+        review: fixture.review,
+        transport: {
+          ...fixture.transport,
+          load: () => {
+            loads++;
+            return loads === 1 && outcome !== 'initial'
+              ? Promise.resolve<LiteraryRead>({ ok: false, reason: 'unavailable' })
+              : pending;
+          },
+        },
+      };
+      const sentinel = host.ownerDocument.createElement('button');
+      host.ownerDocument.body.append(sentinel);
+      sentinel.focus();
+      try {
+        if (outcome === 'hydrated') client.setQueryDefaults(['literary-profile'], { initialData: ready });
+        await render(h(LiteraryProfile, props));
+        if (outcome === 'hydrated' || outcome === 'initial') {
+          if (outcome === 'initial') await act(async () => resolve(ready));
+          await until(() => !!host.querySelector('form'));
+          expect(host.ownerDocument.activeElement).toBe(sentinel);
+          expect(loads).toBe(outcome === 'hydrated' ? 0 : 1);
+          return;
+        }
+        await until(() => !!host.querySelector('[role="alert"]'));
+        const opener = button(host, m.correction_retry());
+        opener.focus();
+        const event = new host.ownerDocument.defaultView!.MouseEvent('click', {
+          bubbles: true,
+          detail: outcome === 'pointer' ? 1 : 0,
+        });
+        await act(async () => {
+          opener.dispatchEvent(event);
+          opener.click();
+          opener.click();
+        });
+        expect(loads).toBe(2);
+        expect(opener.getAttribute('aria-disabled')).toBe('true');
+        expect(host.querySelector('[role="status"]')?.textContent).toBe(m.candidate_loading());
+        expect(host.querySelector('[role="alert"]')).toBeNull();
+        expect(host.ownerDocument.activeElement).toBe(opener);
+        if (outcome === 'moved') {
+          sentinel.focus();
+          opener.focus();
+        }
+        if (outcome === 'locale') await render(h(LiteraryProfile, { ...props, locale: 'ja' }));
+        if (outcome === 'session') await render(h(LiteraryProfile, { ...props, session: 'signed-out' }));
+        if (outcome === 'caller') await render(h('button', { autoFocus: true }, 'New caller'));
+        await act(async () =>
+          outcome === 'rejected'
+            ? reject(new Error('metadata retry failed'))
+            : resolve(outcome === 'refused' ? { ok: false, reason: 'denied' } : ready),
+        );
+        if (outcome === 'refused' || outcome === 'rejected') {
+          await until(() => !!host.querySelector('[role="alert"]'));
+          expect(button(host, m.correction_retry())).toBe(opener);
+          expect(opener.getAttribute('aria-disabled')).toBe('false');
+          expect(host.ownerDocument.activeElement).toBe(opener);
+        } else if (outcome !== 'caller') {
+          await until(() => !!host.querySelector('form'));
+          expect(host.ownerDocument.activeElement === host.querySelector('h1')).toBe(outcome === 'success');
+        } else expect(host.ownerDocument.activeElement?.textContent).toBe('New caller');
+      } finally {
+        sentinel.remove();
+      }
+    });
+  }
 });
