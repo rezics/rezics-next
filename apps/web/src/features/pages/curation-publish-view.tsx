@@ -384,12 +384,13 @@ export function CurationPublicationRecovery({
       mounted.current = false;
     };
   }, [publication]);
-  const { intent, result, active, readFailure, busy, retryAt } = useSyncExternalStore(
+  const { intent, result, active, readFailure, busy, retryAt, readRetryAt } = useSyncExternalStore(
     publication.subscribe,
     publication.getSnapshot,
     publication.getSnapshot,
   );
   const waiting = useSearchRetryWait(result?.ok === false && result.reason === 'rate-limited' ? retryAt : undefined);
+  const inspectionWaiting = useSearchRetryWait(readRetryAt);
   if (!intent && !result) return null;
   const stale = result?.ok === false && result.reason === 'stale';
   const invalid = result?.ok === false && result.reason === 'invalid' && result.phase !== 'activate';
@@ -446,7 +447,7 @@ export function CurationPublicationRecovery({
           <p className="text-sm">{laterChanges ? m.curation_review_later() : m.curation_review_original_unchanged()}</p>
           <div className="space-y-2">
             <p className="text-sm">{m.curation_review_inspect_help()}</p>
-            <Button variant="outline" className={controlClass} disabled={busy} onClick={inspect}>
+            <Button variant="outline" className={controlClass} disabled={busy || inspectionWaiting} onClick={inspect}>
               {m.curation_reload_head()}
             </Button>
           </div>

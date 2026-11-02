@@ -1,6 +1,7 @@
 import { platformRegistry, profileDigest, validateProfile, type PresentationProfile } from '@rezics/composition';
 import type { CurationFailure, PublishInput, PublishResult } from './curate';
 import type { CurationAdmissionLease } from './curation-reader-admission';
+import { admitCurationInspection, curationInspectionRetryAt } from './curation-inspection-retry';
 import { admitPublicationRetry, publicationRetryAt } from './curation-retry-admission';
 
 export type ActiveCuration = { ok: true; reader: string; profile: PresentationProfile; digest: string; head: number };
@@ -18,6 +19,7 @@ export type PublicationState = {
   readFailure: Exclude<PublicationRead, { ok: true }> | null;
   busy: boolean;
   retryAt?: number | undefined;
+  readRetryAt?: number | undefined;
 };
 
 export type CurationPublicationVisit = {
@@ -94,7 +96,7 @@ export class CurationPublication {
       busy: false,
       active: null,
       readFailure: null,
-      ...(this.state.intent ? {} : { result: null, retryAt: undefined }),
+      ...(this.state.intent ? {} : { result: null, retryAt: undefined, readRetryAt: undefined }),
     });
     return visit;
   }
@@ -164,7 +166,7 @@ export class CurationPublication {
       expectedHead,
       keys: { publish: this.key(), activate: this.key() },
     });
-    this.update({ intent, result: null, active: null, readFailure: null, retryAt: undefined });
+    this.update({ intent, result: null, active: null, readFailure: null, retryAt: undefined, readRetryAt: undefined });
     return this.retry(expectedIncarnation);
   }
 
@@ -185,7 +187,7 @@ export class CurationPublication {
     const current = () => this.isCurrent(incarnation);
     const transport = this.transport;
     this.operation = 'publish';
-    this.update({ busy: true, readFailure: null });
+    this.update({ busy: true });
     let result: PublishResult;
     try {
       // Always cross the BFF, including after a previous receipt or permission denial.
@@ -201,15 +203,17 @@ export class CurationPublication {
     this.update({
       result,
       retryAt: !result.ok && result.reason === 'rate-limited' ? publicationRetryAt(result.retryAfter) : undefined,
+      ...(result.ok ? { intent: null, active: null, readFailure: null, readRetryAt: undefined } : {}),
     });
     if (!result.ok && result.reason === 'stale') await this.readActive(incarnation, transport);
     if (!current()) return null;
-    this.update({ busy: false, ...(result.ok ? { intent: null, active: null } : {}) });
+    this.update({ busy: false });
     return result.ok ? { intent, result } : null;
   }
 
   private async readActive(incarnation: number, transport: PublicationTransport) {
     const current = () => this.isCurrent(incarnation);
+    if (!current() || !admitCurationInspection(this.state.readRetryAt)) return;
     try {
       const read = await transport.read(this.reader);
       if (!current()) return;
@@ -217,15 +221,29 @@ export class CurationPublication {
         read.ok && read.reader !== this.reader
           ? { ok: false as const, reason: 'forbidden' as const, admissionChanged: true }
           : read;
-      this.update(result.ok ? { active: result, readFailure: null } : { active: null, readFailure: result });
+      this.update(
+        result.ok
+          ? { active: result, readFailure: null, readRetryAt: undefined }
+          : {
+              active: null,
+              readFailure: result,
+              readRetryAt:
+                result.reason === 'rate-limited' ? curationInspectionRetryAt(result.retryAfter) : undefined,
+            },
+      );
     } catch {
       if (!current()) return;
-      this.update({ active: null, readFailure: { ok: false, reason: 'unavailable' } });
+      this.update({ active: null, readFailure: { ok: false, reason: 'unavailable' }, readRetryAt: undefined });
     }
   }
 
   async inspect(expectedIncarnation = this.incarnation) {
-    if (!this.isCurrent(expectedIncarnation) || this.state.busy) return;
+    if (
+      !this.isCurrent(expectedIncarnation) ||
+      this.state.busy ||
+      !admitCurationInspection(this.state.readRetryAt)
+    )
+      return;
     const incarnation = expectedIncarnation;
     const current = () => this.isCurrent(incarnation);
     const transport = this.transport;
@@ -255,7 +273,14 @@ export class CurationPublication {
     )
       return null;
     const reviewed = { ...active, profile: choice === 'keep' ? profile : active.profile };
-    this.update({ intent: null, result: null, active: null, readFailure: null, retryAt: undefined });
+    this.update({
+      intent: null,
+      result: null,
+      active: null,
+      readFailure: null,
+      retryAt: undefined,
+      readRetryAt: undefined,
+    });
     return reviewed;
   }
 
@@ -272,7 +297,7 @@ export class CurationPublication {
     // Keep the original refusal and its profile until the revised draft is locally valid.
     if (validateProfile(platformRegistry, profile).length) return null;
     if (this.state.intent && profileDigest(profile) === profileDigest(this.state.intent.profile)) return null;
-    this.update({ intent: null, result: null, retryAt: undefined });
+    this.update({ intent: null, result: null, retryAt: undefined, readRetryAt: undefined });
     return this.start(profile, expectedHead, expectedIncarnation);
   }
 }
