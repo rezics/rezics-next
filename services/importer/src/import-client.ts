@@ -17,6 +17,7 @@ import {
 import { isDeepStrictEqual, types } from 'node:util';
 import { Check } from 'typebox/schema';
 import { checkBatch, checkRequest, checkResult } from './accepted-checks.ts';
+import { isImportSourceRecord, isImportSourceRecordMetadataResult } from './source-record-runtime.ts';
 import {
   createImportFetch,
   importRetryState,
@@ -25,8 +26,6 @@ import {
   type ImportRetryState,
 } from './import-fetch.ts';
 import {
-  isImportSourceRecord,
-  isImportSourceRecordMetadataResult,
   type ImportSourceRecordMetadataCommand,
   type ImportSourceRecordMetadataResult,
   type ImportSourceStatisticValue,

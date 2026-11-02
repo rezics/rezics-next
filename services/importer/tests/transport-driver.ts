@@ -1,8 +1,8 @@
 export { createImportTransport } from '../src/import-client.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { createImportTransport } from '../src/import-client.ts';
+import { isImportSourceRecord } from '../src/source-record-runtime.ts';
 import {
-  isImportSourceRecord,
   type ImportSourceRecordMetadataCommand,
   type ImportSourceRecordMetadataResult,
 } from '../src/import-contract.ts';

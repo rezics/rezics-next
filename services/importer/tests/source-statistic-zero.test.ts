@@ -1,6 +1,7 @@
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { SourceRecord } from '@rezics/conversion';
 import type { BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
@@ -67,8 +68,7 @@ test('only sanitized explicit VNDB zero produces removal without changing conver
 // Local protocol doubles: production adapter, transport, bounded coordinator and durable journal.
 // Native authorization, receipts and effects are covered by the adjacent kernel journey.
 async function fixture() {
-  await mkdir('.temp', { recursive: true });
-  const directory = await mkdtemp('.temp/source-zero-');
+  const directory = await mkdtemp(join(tmpdir(), 'source-zero-'));
   let failure: 'lost' | 'denied' | null = null;
   let fenced = false;
   const writes: { method: string; bytes: string; key: string | null }[] = [];

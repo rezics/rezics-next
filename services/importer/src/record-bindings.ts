@@ -10,9 +10,8 @@ import {
   type MediaImportStatus,
 } from '@rezics/definitions/media-import';
 import { checkBatch, checkRequest, checkResult } from './accepted-checks.ts';
+import { isImportSourceRecord, isImportSourceRecordMetadataResult } from './source-record-runtime.ts';
 import {
-  isImportSourceRecord,
-  isImportSourceRecordMetadataResult,
   type ImportSourceRecordMetadataCommand,
   type ImportSourceRecordMetadataResult,
 } from './import-contract.ts';
@@ -246,12 +245,13 @@ export class RecordBindings {
       if (existing) ensure(existing.bytes === bytes && existing.signature === signature);
       else
         this.run(
-          'INSERT INTO binding_metadata_journal VALUES(?,?,?,?,?,NULL)',
+          'INSERT INTO binding_metadata_journal (source,external_id,key,bytes,signature,acknowledgement) VALUES(?,?,?,?,?,?)',
           o.source,
           o.external_id,
           key,
           bytes,
           signature,
+          null,
         );
       this.run(
         `INSERT INTO binding_metadata_current VALUES(?,?,?) ON CONFLICT(source,external_id) DO UPDATE SET key=excluded.key`,

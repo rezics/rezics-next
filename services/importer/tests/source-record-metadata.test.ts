@@ -1,6 +1,8 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Importer } from '../src/importer.ts';
 import { createSourceRegistration } from '../src/source-registry.ts';
 import { ImportTransportError } from '../src/import-client.ts';
@@ -54,8 +56,7 @@ test('reviewed descriptors use canonical provider identity even under another pr
 });
 
 test('unchanged catch-up and changed descriptors use distinct durable metadata intents and actual CAS revisions', async () => {
-  await mkdir('.temp', { recursive: true });
-  const directory = await mkdtemp('.temp/source-record-metadata-');
+  const directory = await mkdtemp(join(tmpdir(), 'source-record-metadata-'));
   const f = fixture();
   let importer = new Importer({ path: `${directory}/state.sqlite`, transport: f.transport });
   const native = createSourceRegistration('bangumi', { source: 'reviewed-feed' });

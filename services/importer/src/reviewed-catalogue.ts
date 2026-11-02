@@ -18,7 +18,8 @@ import {
 } from './import-client.ts';
 import { ImportSession } from './import-session.ts';
 import type { ImportIdentifierLookup } from './importer.ts';
-import { isImportSourceRecord, type ImportSourceRecordMetadataCommand } from './import-contract.ts';
+import { isImportSourceRecord } from './source-record-runtime.ts';
+import type { ImportSourceRecordMetadataCommand } from './import-contract.ts';
 import type { Owner, RecordBindings } from './record-bindings.ts';
 import { RunStore, type Run } from './run-store.ts';
 

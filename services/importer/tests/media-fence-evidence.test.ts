@@ -32,7 +32,8 @@ test('real bound media resolver rejects contradictory open evidence before prepa
   const owner = { source: 'bangumi', external_id: '42' };
   const record = { id: 42, type: 1, name: 'Book', images: { large: 'https://lain.bgm.tv/pic/cover/l/42.jpg' } };
   const input = { external_id: '42', record_revision: '7', record };
-  const bootstrap = convertBangumi(input, { source: 'bangumi' }).proposals[0]!;
+  const proposedBootstrap = convertBangumi(input, { source: 'bangumi' }).proposals[0]!;
+  const bootstrap = { ...proposedBootstrap, key: `bangumi:42:${proposedBootstrap.key}` };
   const subject = '00000000-0000-4000-8000-000000000101';
   let posts = 0,
     polls = 0;

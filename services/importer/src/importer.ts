@@ -446,7 +446,7 @@ export class Importer {
     write: Write,
   ): Promise<void> {
     const bindings = this.session.bindings;
-    if (!descriptor || bindings.claim(owner)?.state !== 'bound') return;
+    if (!descriptor) return;
     const signature = hash(JSON.stringify(descriptor));
     let journal = bindings.metadata(owner);
     if (journal?.result && journal.signature === signature) return;
@@ -587,9 +587,10 @@ export class Importer {
     const store = this.session.store;
     const { row } = staged;
     const owner = { source: row.source, external_id: row.recordKey };
+    const claim = row.state === 'present' ? this.session.bindings.claim(owner) : null;
     // Metadata is independent of semantic no-change detection. Failure keeps this
     // record unclassified and the source baseline unchanged, with its own retry intent.
-    if (row.state === 'present') await this.metadata(owner, staged.projection.sourceRecordMetadata, signal, write);
+    if (claim?.state === 'bound') await this.metadata(owner, staged.projection.sourceRecordMetadata, signal, write);
     let omissions = await this.fences(owner, signal);
     const recordState = store.key(row.source, row.recordKey, run);
     const acknowledged = recordState.acknowledged;
@@ -621,7 +622,6 @@ export class Importer {
     if (row.state === 'present') {
       conversion = this.convert(registration, staged);
       observedConversion = conversion;
-      const claim = this.session.bindings.claim(owner);
       if (claim?.state === 'bound') subject = claim.subject;
       else if (
         !omissions.some((o) => o.field_group === 'facts') &&
@@ -629,7 +629,8 @@ export class Importer {
       ) {
         subject = await this.bootstrap(registration, staged, conversion, signal, write);
         if (!subject) return null;
-        await this.metadata(owner, staged.projection.sourceRecordMetadata, signal, write);
+        if (claim?.state !== 'bound')
+          await this.metadata(owner, staged.projection.sourceRecordMetadata, signal, write);
       }
       if (subject) {
         omissions = await this.fences(owner, signal);
