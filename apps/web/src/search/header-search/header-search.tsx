@@ -45,6 +45,7 @@ import { useSearchRetryWait } from '../search-recovery-retry';
 const controlFocus =
   'focus-visible:ring-0 focus-visible:border-foreground focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-2';
 const compactSearch = '(max-width: 1023px)';
+const retryableSuggestions = ['error', 'unavailable', 'preparing', 'restart'];
 
 type HeaderSuggestionOwner = {
   sessionKey: string | null;
@@ -110,7 +111,7 @@ type ViewProps = Pick<
   onSuggestion?(href: string): void;
   canSelectSuggestion?(): boolean;
   onActive?(index: number): void;
-  onRetry?(): void;
+  onRetry?(activation?: { keyboard: boolean }): void;
   onRecent?(entry: RecentEntry): void;
   onQuery?(query: string): void;
   queryLimitError?: boolean;
@@ -149,7 +150,7 @@ export function HeaderSearchView({
   keyboardShortcut = false,
 }: ViewProps) {
   const { expanded, phoneSheet, scope, query, suggestions, result, activeIndex } = state;
-  const retryable = onRetry !== undefined && ['error', 'unavailable', 'preparing', 'restart'].includes(suggestions);
+  const retryable = onRetry !== undefined && retryableSuggestions.includes(suggestions);
   const retryWaiting = useSearchRetryWait(retryable ? state.retryAt : undefined);
   const action = headerSearchAction(locale, scope);
   const messageOptions = { locale: locale as never };
@@ -376,7 +377,19 @@ export function HeaderSearchView({
               </p>
             )}
             {retryable && (
-              <Button type="button" variant="outline" className="mx-4 w-fit" onClick={onRetry} disabled={retryWaiting}>
+              <Button
+                type="button"
+                variant="outline"
+                className="mx-4 w-fit"
+                disabled={retryWaiting}
+                onClick={(event) => {
+                  if (retryWaiting) return;
+                  onRetry({
+                    keyboard:
+                      event.detail === 0 && event.currentTarget.ownerDocument.activeElement === event.currentTarget,
+                  });
+                }}
+              >
                 {m.search_facet_retry({}, messageOptions)}
               </Button>
             )}
@@ -507,6 +520,7 @@ function HeaderSearchController({
   const trigger = useRef<HTMLButtonElement>(null);
   const returningFocus = useRef(false);
   const pendingFocus = useRef<'input' | 'return' | null>(null);
+  const pendingRetryEntry = useRef(false);
   const priorFocus = useRef<HTMLElement | null>(null);
   const request = useRef<(() => void) | null>(null);
   const sessionKey = headerSearchSessionKey(session);
@@ -555,10 +569,18 @@ function HeaderSearchController({
   const [composing, setComposing] = useState(false);
   const [queryLimitError, setQueryLimitError] = useState(false);
   const region = useHeaderSearchFilterRegion();
+  const retireRetryEntry = () => {
+    pendingRetryEntry.current = false;
+  };
+  const requestRetry = (activation?: { keyboard: boolean }) => {
+    if (activation?.keyboard) pendingRetryEntry.current = true;
+    retry();
+  };
   useLayoutEffect(
     () =>
       subscribeSession?.(() => {
         requestGeneration.current += 1;
+        retireRetryEntry();
         resultsRetired.current = true;
         suggestionsOwner.current = null;
         resultOwner.current = null;
@@ -578,6 +600,7 @@ function HeaderSearchController({
     if (sameHeaderSuggestionOwner(committedOwner.current, owner)) return;
     committedOwner.current = owner;
     requestGeneration.current += 1;
+    retireRetryEntry();
     resultsRetired.current = true;
     suggestionsOwner.current = null;
     resultOwner.current = null;
@@ -587,6 +610,7 @@ function HeaderSearchController({
   }, [owner.sessionKey, owner.locale, owner.query, owner.scopeKey, owner.loader]);
   useLayoutEffect(() => {
     requestGeneration.current += 1;
+    retireRetryEntry();
     resultsRetired.current = true;
     suggestionsOwner.current = null;
     resultOwner.current = null;
@@ -595,6 +619,7 @@ function HeaderSearchController({
     dispatch({ type: 'invalidate' });
     observeSession(sessionKey);
   }, [sessionKey]);
+  useLayoutEffect(() => retireRetryEntry, []);
   useEffect(() => {
     dispatch({ type: 'sync-query', query: initialQuery });
   }, [initialQuery]);
@@ -666,6 +691,7 @@ function HeaderSearchController({
     // A new opening reads current native data; no result survives dismissal or account navigation.
     dispatch({ type: 'invalidate' });
     pendingFocus.current = restore ? 'return' : null;
+    pendingRetryEntry.current = false;
     if (!restore) priorFocus.current = null;
   };
   const open = () => {
@@ -703,6 +729,24 @@ function HeaderSearchController({
     }
     returningFocus.current = false;
   }, [state.expanded, state.phoneSheet, presentation]);
+  useLayoutEffect(() => {
+    if (!pendingRetryEntry.current) return;
+    if (!visibleState.expanded) {
+      pendingRetryEntry.current = false;
+      return;
+    }
+    if (retryableSuggestions.includes(visibleState.suggestions)) return;
+    pendingRetryEntry.current = false;
+    const document = input.current?.ownerDocument;
+    const active = document?.activeElement;
+    if (
+      !input.current ||
+      !document ||
+      (active && active !== document.body && active !== document.documentElement && form.current?.contains(active))
+    )
+      return;
+    input.current.focus();
+  }, [visibleState.suggestions, visibleState.expanded, visibleState.phoneSheet]);
   useEffect(() => {
     if (!keyboardShortcut) return;
     const document = input.current?.ownerDocument;
@@ -839,7 +883,7 @@ function HeaderSearchController({
       onActive={(index) => {
         if (canSelectSuggestion()) dispatch({ type: 'active', index });
       }}
-      onRetry={retry}
+      onRetry={requestRetry}
       onFilters={() => {
         close('outside');
         region?.open();
