@@ -8,9 +8,18 @@ const deletion = v.object({
   revision: v.pipe(v.number(), v.safeInteger(), v.minValue(1)),
   restoreUntil: v.string(),
 });
-const evidence = v.object({ deletion: v.nullish(deletion, null) });
+const memberDeletion = v.object({
+  deletionId: v.pipe(v.string(), v.minLength(1), v.maxLength(128)),
+  revision: v.pipe(v.number(), v.safeInteger(), v.minValue(1)),
+  purgeAfter: v.string(),
+});
+const evidence = v.object({
+  deletion: v.nullish(deletion, null),
+  memberDeletion: v.nullish(memberDeletion, null),
+});
 export type BulkUndoOutcome = BulkOutcomes['outcomes'][number] & {
   deletion: v.InferOutput<typeof deletion> | null;
+  memberDeletion: v.InferOutput<typeof memberDeletion> | null;
 };
 export type BulkUndoRead =
   | Exclude<BulkRead, { state: 'ready' }>
@@ -28,7 +37,11 @@ export function receiveUndoEvidence(result: BulkRead): BulkUndoRead {
       ...result.page,
       outcomes: result.page.outcomes.map((outcome) => {
         const parsed = v.safeParse(evidence, outcome);
-        return { ...outcome, deletion: parsed.success ? parsed.output.deletion : null };
+        return {
+          ...outcome,
+          deletion: parsed.success ? parsed.output.deletion : null,
+          memberDeletion: parsed.success ? parsed.output.memberDeletion : null,
+        };
       }),
     },
   };

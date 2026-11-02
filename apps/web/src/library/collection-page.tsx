@@ -82,6 +82,17 @@ import { FollowTargetControl } from './follow-target-control';
 import { collectionPublicItemList } from './collection-public-document';
 import { CollectionExport } from './collection-export';
 import {
+  BulkOccurrenceRemoveJourney,
+  bulkOccurrenceRemoveRestoreAvailable,
+  bulkOccurrenceRemoveUndoReceipt,
+  captureBulkOccurrenceRemove,
+  createBulkOccurrenceRemoveManifest,
+} from './bulk-occurrence-remove';
+import { BulkOccurrenceRemoveJourneyControls, BulkOccurrenceRemoveReview } from './bulk-occurrence-remove-review';
+import { bulkStatusSender } from './bulk-status';
+import { readBulkOperation } from './bulk-operation-recovery-server';
+import { receiveUndoEvidence } from './bulk-operation-undo-evidence';
+import {
   CollectionMemberList,
   CollectionMetadataEditor,
   fieldClass,
@@ -271,6 +282,8 @@ type CollectionPageProps = {
   isCurrent?: () => boolean;
 };
 
+type CollectionRestoreOffer = CollectionMemberUndo & { key: string; purgeAfter?: string; uncertain?: boolean };
+
 export function CollectionPage(props: CollectionPageProps) {
   useSession();
   const { page } = props;
@@ -344,6 +357,10 @@ function CollectionPageLifetime({
   const [removalConfirmation, setRemovalConfirmation] = useState(false);
   const [batchRemovalIds, setBatchRemovalIds] = useState<ReadonlySet<string>>(new Set());
   const [editorMembers, setEditorMembers] = useState<CollectionMember[] | null>(null);
+  const [bulkOccurrenceRemove, setBulkOccurrenceRemove] = useState<BulkOccurrenceRemoveJourney | null>(null);
+  const [bulkOccurrenceRemoveRevision, setBulkOccurrenceRemoveRevision] = useState(0);
+  const bulkOccurrenceRemoveRef = useRef<BulkOccurrenceRemoveJourney | null>(null);
+  const nativeUndoKeys = useRef(new Map<string, string>());
   // The edit session owns its read revision, even if a background read replaces the reader page.
   const editorPage = useRef<EditableCollectionPage | null>(null);
   const draftPage = editorPage.current ?? page;
@@ -352,7 +369,7 @@ function CollectionPageLifetime({
   const storedKind = draftPage.presentationKindSource === 'owner' ? (draftPage.presentationKind ?? null) : null;
   const [kind, setKind] = useState(storedKind);
   const [coverMediaId, setCoverMediaId] = useState(page.coverMediaId ?? null);
-  const [undo, setUndo] = useState<(CollectionMemberUndo & { key: string })[]>([]);
+  const [undo, setUndo] = useState<CollectionRestoreOffer[]>([]);
   const [description, setDescription] = useState(page.description ?? '');
   const [visibility, setVisibility] = useState<CollectionVisibility>(page.visibility ?? 'private');
   const [conflict, setConflict] = useState(false);
@@ -388,6 +405,82 @@ function CollectionPageLifetime({
   function isCurrent(operation: CollectionOperation = 'collection.get') {
     return mounted.current && current(operation);
   }
+
+  useEffect(
+    () => () => {
+      bulkOccurrenceRemoveRef.current?.retire();
+    },
+    [],
+  );
+  useEffect(() => {
+    const journey = bulkOccurrenceRemoveRef.current;
+    if (!journey?.retireIfStale()) return;
+    bulkOccurrenceRemoveRef.current = null;
+    setBulkOccurrenceRemove((currentJourney) => (currentJourney === journey ? null : currentJourney));
+  }, [current]);
+
+  useEffect(() => {
+    const journey = bulkOccurrenceRemoveRef.current;
+    const capture = journey?.capture;
+    const result = journey?.state.read;
+    if (
+      !journey ||
+      journey !== bulkOccurrenceRemove ||
+      !capture ||
+      result?.state !== 'ready' ||
+      result.operation.action !== 'remove_from_collection' ||
+      result.operation.selectionKind !== 'occurrences' ||
+      result.operation.collectionId !== capture.source.id
+    )
+      return;
+
+    const removeIds = new Set<string>();
+    const offers: CollectionRestoreOffer[] = [];
+    for (const outcome of result.page.outcomes) {
+      if (outcome.state !== 'applied' || !outcome.memberId) continue;
+      const target = capture.targets.find(
+        (selected) => selected.memberId === outcome.memberId && selected.subjectId === outcome.subjectId,
+      );
+      if (!target) continue;
+      removeIds.add(target.memberId);
+      const receipt = bulkOccurrenceRemoveUndoReceipt(capture, result.operation, outcome);
+      if (!receipt) continue;
+      let key = nativeUndoKeys.current.get(receipt.deletionId);
+      if (!key) {
+        key = crypto.randomUUID();
+        nativeUndoKeys.current.set(receipt.deletionId, key);
+      }
+      offers.push({ ...receipt, key });
+    }
+    if (offers.length) {
+      setUndo((current) => {
+        const known = new Set(current.map((item) => item.deletionId));
+        const added = offers.filter((item) => !known.has(item.deletionId));
+        return added.length ? [...current, ...added] : current;
+      });
+    }
+    if (removeIds.size) {
+      setMembers((current) => {
+        const next = current.filter((member) => !removeIds.has(member.id));
+        return next.length === current.length ? current : next;
+      });
+      setEditorMembers((current) => {
+        if (!current) return current;
+        const next = current.filter((member) => !removeIds.has(member.id));
+        return next.length === current.length ? current : next;
+      });
+      if (editorPage.current) {
+        editorPage.current = {
+          ...editorPage.current,
+          members: editorPage.current.members.filter((member) => !removeIds.has(member.id)),
+        };
+      }
+      setSelectedIds((current) => {
+        const next = new Set([...current].filter((id) => !removeIds.has(id)));
+        return next.size === current.size ? current : next;
+      });
+    }
+  }, [bulkOccurrenceRemove, bulkOccurrenceRemoveRevision, page.id]);
   function headers(operation: CollectionOperation, credential = admission.csrf(operation)) {
     if (!isCurrent(operation)) throw new Error('Collection authority retired');
     if (!credential) throw new Error('Collection mutation credential unavailable');
@@ -914,24 +1007,85 @@ function CollectionPageLifetime({
     }
   }
 
-  async function undoRemoval(episode: CollectionMemberUndo & { key: string }) {
+  function previewSelectedOccurrenceRemoval() {
+    if (
+      !isCurrent('collection_member.batch_remove') ||
+      pending ||
+      draftFrozen ||
+      conflict ||
+      bulkUnavailable ||
+      memberDraftChanged ||
+      transfer !== null ||
+      selectedIds.size === 0 ||
+      bulkOccurrenceRemoveRef.current
+    )
+      return;
+    const viewer = session.state === 'signed-in' ? session.subject : null;
+    if (!viewer) return;
+    const source = editorPage.current ?? page;
+    const captured = captureBulkOccurrenceRemove(
+      { id: source.id, title: source.title },
+      source.members,
+      selectedIds,
+    );
+    if (!captured.ok) {
+      setFailure(m.library_collection_batch_unavailable());
+      return;
+    }
+    const requestHeaders = Object.fromEntries(new Headers(headers('collection_member.batch_remove')).entries());
+    const manifest = createBulkOccurrenceRemoveManifest(captured, requestHeaders, bulkStatusSender);
+    const journey = new BulkOccurrenceRemoveJourney(
+      captured,
+      manifest,
+      viewer,
+      {
+        context: () => admission.retained() && admission.observed() && current(),
+        read: () => isCurrent(),
+        write: () => isCurrent('collection_member.batch_remove'),
+      },
+      async (address) => receiveUndoEvidence(await readBulkOperation({ data: address })),
+      () => setBulkOccurrenceRemoveRevision((revision) => revision + 1),
+    );
+    bulkOccurrenceRemoveRef.current?.retire();
+    bulkOccurrenceRemoveRef.current = journey;
+    setBulkOccurrenceRemove(journey);
+    setFailure('');
+    void journey.preview();
+  }
+
+  async function undoRemoval(episode: CollectionRestoreOffer) {
     if (!isCurrent('collection_member.restore') || pending || !owner) return;
+    if (!bulkOccurrenceRemoveRestoreAvailable(episode.purgeAfter, true, Date.now(), episode.uncertain)) {
+      setUndo((current) => current.filter((item) => item.deletionId !== episode.deletionId));
+      return;
+    }
     const request = startRequest();
     if (!request) return;
     setFailure('');
     try {
-      const { key, ...deletion } = episode;
+      const { collectionId, memberId, deletionId, revision, key } = episode;
       const result = await restoreCollectionMember({
-        data: { ...deletion, idempotencyKey: key },
+        data: { collectionId, memberId, deletionId, revision, idempotencyKey: key },
         headers: commandHeaders('collection_member.restore', key),
       });
       if (!isCurrent()) return;
       if (result.ok || (!result.ok && result.reason === 'expired'))
         setUndo((current) => current.filter((item) => item.deletionId !== episode.deletionId));
+      else
+        setUndo((current) =>
+          current.map((item) =>
+            item.deletionId === episode.deletionId ? { ...item, uncertain: result.reason === 'unavailable' } : item,
+          ),
+        );
       if (result.ok) await reloadCollection();
       else setFailure(result.reason === 'expired' ? m.library_restore_expired() : writeMessage(result));
     } catch {
-      if (isCurrent()) setFailure(m.error_message());
+      if (isCurrent()) {
+        setUndo((current) =>
+          current.map((item) => (item.deletionId === episode.deletionId ? { ...item, uncertain: true } : item)),
+        );
+        setFailure(m.error_message());
+      }
     } finally {
       finishRequest(request);
     }
@@ -987,6 +1141,11 @@ function CollectionPageLifetime({
   }
 
   const visibleVisibility = page.visibility ?? page.disclosedVisibility;
+  const bulkOccurrenceCapture = bulkOccurrenceRemove?.capture;
+  const currentRestore = isCurrent('collection_member.restore');
+  const visibleUndo = undo.filter((episode) =>
+    bulkOccurrenceRemoveRestoreAvailable(episode.purgeAfter, currentRestore, Date.now(), episode.uncertain),
+  );
   const memberDraftChanged =
     editing &&
     buildCollectionMemberEditPlan(
@@ -1164,14 +1323,14 @@ function CollectionPageLifetime({
           onConfirm={() => void save(undefined, true)}
         />
 
-        {owner && undo.length ? (
+        {owner && visibleUndo.length ? (
           <div
             role="status"
             className="flex flex-wrap items-center gap-2 rounded-xl bg-muted/40 p-3"
             data-collection-undo
           >
             <p className="basis-full text-sm">{m.library_collection_undo_note()}</p>
-            {undo.map((episode, index) => (
+            {visibleUndo.map((episode, index) => (
               <Button
                 key={episode.deletionId}
                 variant="outline"
@@ -1179,7 +1338,10 @@ function CollectionPageLifetime({
                 disabled={pending || editing}
                 onClick={() => void undoRemoval(episode)}
               >
-                {m.editor_undo()} {undo.length > 1 ? index + 1 : ''}
+                {episode.uncertain
+                  ? m.library_bulk_occurrence_remove_retry_restore()
+                  : m.editor_undo()}{' '}
+                {visibleUndo.length > 1 ? index + 1 : ''}
               </Button>
             ))}
           </div>
@@ -1347,7 +1509,9 @@ function CollectionPageLifetime({
               {draftChanged ? <p role="status">{m.library_collection_move_save_first()}</p> : null}
             </div>
           ) : null}
-          {editing && owner && (selectedIds.size > 0 || batchRemovalIds.size > 0 || transfer !== null) ? (
+          {editing &&
+          owner &&
+          (selectedIds.size > 0 || batchRemovalIds.size > 0 || transfer !== null || !!bulkOccurrenceCapture) ? (
             <div className="mb-3 flex flex-wrap items-end gap-2 rounded-xl bg-muted/40 p-3" data-collection-selection>
               <p className="me-auto self-center text-sm text-muted-foreground">
                 {m.library_collection_selection_count({ count: selectedIds.size })}
@@ -1365,6 +1529,24 @@ function CollectionPageLifetime({
                 }}
               >
                 {m.library_collection_remove_selected()}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={
+                  pending ||
+                  draftFrozen ||
+                  conflict ||
+                  bulkUnavailable ||
+                  memberDraftChanged ||
+                  transfer !== null ||
+                  selectedIds.size === 0 ||
+                  !isCurrent('collection_member.batch_remove') ||
+                  !!bulkOccurrenceRemove
+                }
+                onClick={previewSelectedOccurrenceRemoval}
+              >
+                {m.library_bulk_occurrence_remove_preview()}
               </Button>
               <CollectionMoveChooser
                 sourceId={page.id}
@@ -1416,6 +1598,29 @@ function CollectionPageLifetime({
               ) : null}
               {bulkUnavailable ? (
                 <p className="basis-full text-sm text-muted-foreground">{m.library_collection_batch_unavailable()}</p>
+              ) : null}
+              {bulkOccurrenceCapture && bulkOccurrenceRemove && isCurrent() ? (
+                <div className="basis-full space-y-3">
+                  <BulkOccurrenceRemoveReview capture={bulkOccurrenceCapture} />
+                  <BulkOccurrenceRemoveJourneyControls
+                    state={bulkOccurrenceRemove.state}
+                    canWrite={isCurrent('collection_member.batch_remove')}
+                    onPreview={() => void bulkOccurrenceRemove.preview()}
+                    onRetryPreview={() => void bulkOccurrenceRemove.preview(true)}
+                    onConfirm={() =>
+                      void bulkOccurrenceRemove.confirm().then((confirmed) => {
+                        if (confirmed) void bulkOccurrenceRemove.read();
+                      })
+                    }
+                    onRetryConfirm={() =>
+                      void bulkOccurrenceRemove.confirm(true).then((confirmed) => {
+                        if (confirmed) void bulkOccurrenceRemove.read();
+                      })
+                    }
+                    onRead={() => void bulkOccurrenceRemove.read()}
+                    onReadMore={(cursor) => void bulkOccurrenceRemove.read(cursor)}
+                  />
+                </div>
               ) : null}
             </div>
           ) : null}
