@@ -41,10 +41,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import { subjectHref } from '../subject/subject-href';
 import { PageHeading } from '../shell/page-heading';
 import { csrfHeaders } from '../threads/composer';
-import {
-  AuthoringDepartureBoundary,
-  useAuthoringDeparture,
-} from '../threads/authoring-departure';
+import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../threads/authoring-departure';
 import type { ProgressFinishInput, ProgressIndex, ProgressMode, ProgressStartInput } from './progress-reads';
 import { progressFailureMessage, progressView } from './progress-label';
 import type { ProgressChoices } from './progress-profile';

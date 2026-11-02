@@ -25,7 +25,10 @@ test('Progress setup compares its selected fields and exact total text with the 
 test('Progress departure context notices pagination but ignores search key ordering', () => {
   const base = { pathname: '/library/progress', search: { subjectId: 'subject-a', cursor: 'next' } };
   expect(progressStartDraftNavigationContext(base)).toBe(
-    progressStartDraftNavigationContext({ pathname: base.pathname, search: { cursor: 'next', subjectId: 'subject-a' } }),
+    progressStartDraftNavigationContext({
+      pathname: base.pathname,
+      search: { cursor: 'next', subjectId: 'subject-a' },
+    }),
   );
   expect(progressStartDraftNavigationContext(base)).not.toBe(
     progressStartDraftNavigationContext({ pathname: base.pathname, search: { subjectId: 'subject-a' } }),
