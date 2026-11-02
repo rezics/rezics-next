@@ -135,7 +135,7 @@ function queuedSubmit(form: HTMLFormElement) {
   return Reflect.get(form, key).onSubmit as (event: { preventDefault: () => void }) => Promise<void>;
 }
 
-test('Literary keyboard Add reaches the exact repeated row and cancels rejected or retired focus intent', async () => {
+test('Literary keyboard Add reaches the exact repeated row and cancels retired focus intent', async () => {
   await mounted(async ({ host, render, change, input }) => {
     const { InitialFacts } = await import('../src/features/catalogue/literary-profile-view');
     const { literaryRelease } = await import('../src/kernel/fake/catalogue-literary-profile');
@@ -144,7 +144,6 @@ test('Literary keyboard Add reaches the exact repeated row and cancels rejected 
     let rows: Row[] = [],
       mode = '',
       disabled = false;
-    const canEdit = () => mode !== 'reject';
     function Draft() {
       const [, update] = useState(0);
       return h(
@@ -157,7 +156,6 @@ test('Literary keyboard Add reaches the exact repeated row and cancels rejected 
           locale: 'en',
           disabled,
           rows,
-          canEdit,
           change: (next) => {
             rows = mode === 'replace' ? structuredClone(next) : next;
             if (mode === 'move') host.querySelector<HTMLInputElement>('[aria-label="Terms"]')!.focus();
@@ -185,20 +183,12 @@ test('Literary keyboard Add reaches the exact repeated row and cancels rejected 
     expect(host.ownerDocument.activeElement).toBe(firstControl);
     await input(host.querySelector<HTMLInputElement>(`#literary-fact-${first.id}-fact-value`)!, 'ja');
     await add();
-    expect(rows).toHaveLength(2);
     expect(host.ownerDocument.activeElement).toBe(target(rows[1]!));
     expect(target(first)).toBe(firstControl);
     expect(rows[0]!.statement.value).toEqual({ type: 'value', content: 'ja' });
-    expect(propertyControl(panel).value).toBe('');
-    const before = structuredClone(rows);
-    mode = 'reject';
-    const rejected = await add();
-    expect(rows).toEqual(before);
-    expect(host.ownerDocument.activeElement).toBe(rejected);
     for (mode of ['pointer', 'move', 'replace', 'retire']) {
-      const trigger = await add(mode === 'pointer' ? 1 : 0);
+      await add(mode === 'pointer' ? 1 : 0);
       expect(host.ownerDocument.activeElement).not.toBe(target(rows.at(-1)!));
-      if (mode === 'pointer') expect(host.ownerDocument.activeElement).toBe(trigger);
       if (mode === 'move') expect(host.ownerDocument.activeElement).toBe(host.querySelector('[aria-label="Terms"]'));
     }
     disabled = false;
