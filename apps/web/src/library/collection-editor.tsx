@@ -6,7 +6,7 @@ import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { ArrowDownIcon, ArrowUpIcon, EllipsisIcon, GripVerticalIcon, Trash2Icon } from 'lucide-react';
-import type { DragEvent, ReactNode } from 'react';
+import type { DragEvent, FormEvent, ReactNode } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { subjectHref } from '../subject/subject-href';
@@ -18,6 +18,65 @@ import { SubjectCover } from './subject-row';
 import { collectionMemberRatio } from './collection-presentation';
 import type { CollectionListPresentations, CollectionTypeOption } from './collection-presentation';
 import type { CollectionMember, LibrarySubject } from './reads';
+
+export const fieldClass =
+  'mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-primary';
+
+/** Metadata stays in the owning local draft; presentation and visibility keep their existing controls. */
+export function CollectionMetadataEditor({
+  title,
+  description,
+  disabled,
+  onTitleChange,
+  onDescriptionChange,
+  onSubmit,
+  children,
+}: {
+  title: string;
+  description: string;
+  disabled: boolean;
+  onTitleChange: (value: string) => void;
+  onDescriptionChange: (value: string) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  children: ReactNode;
+}) {
+  return (
+    <form
+      id="collection-edit-form"
+      className="min-w-0 rounded-2xl border border-border bg-card p-4 sm:p-6"
+      onSubmit={onSubmit}
+    >
+      <details data-collection-details open>
+        <summary className="min-h-11 cursor-pointer py-2 font-medium">{m.library_collection_details()}</summary>
+        <div className="space-y-5 pt-3">
+          <label className="block max-w-3xl">
+            {m.library_collection_title()}
+            <input
+              disabled={disabled}
+              className={fieldClass}
+              onChange={(event) => onTitleChange(event.target.value)}
+              required
+              maxLength={512}
+              value={title}
+            />
+          </label>
+          <label className="block max-w-3xl">
+            {m.library_collection_description()}
+            <textarea
+              disabled={disabled}
+              maxLength={20_000}
+              className={fieldClass}
+              onChange={(event) => onDescriptionChange(event.target.value)}
+              rows={4}
+              value={description}
+            />
+          </label>
+          {children}
+        </div>
+      </details>
+    </form>
+  );
+}
 
 const dragType = 'application/x-rezics-collection-member';
 

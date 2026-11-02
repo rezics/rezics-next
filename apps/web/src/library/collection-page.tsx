@@ -79,6 +79,8 @@ import { collectionPublicItemList } from './collection-public-document';
 import { CollectionExport } from './collection-export';
 import {
   CollectionMemberList,
+  CollectionMetadataEditor,
+  fieldClass,
   CollectionPresentationFields,
   applyCollectionMemberEditPlan,
   buildCollectionMemberEditPlan,
@@ -171,8 +173,7 @@ export function collectionPageHead(
 }
 
 const visibilities = ['private', 'unlisted', 'public'] as const;
-export const fieldClass =
-  'mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-primary';
+export { fieldClass } from './collection-editor';
 export const buttonClass =
   'inline-flex min-h-10 items-center rounded-lg border border-border px-3 text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60';
 
@@ -335,19 +336,22 @@ function CollectionPageLifetime({
   const [bulkUnavailable, setBulkUnavailable] = useState(false);
   const [batchRemovalIds, setBatchRemovalIds] = useState<ReadonlySet<string>>(new Set());
   const [editorMembers, setEditorMembers] = useState<CollectionMember[] | null>(null);
+  // The edit session owns its read revision, even if a background read replaces the reader page.
+  const editorPage = useRef<EditableCollectionPage | null>(null);
+  const draftPage = editorPage.current ?? page;
   const [title, setTitle] = useState(page.title);
-  const storedKind = page.presentationKindSource === 'owner' ? (page.presentationKind ?? null) : null;
+  const storedKind = draftPage.presentationKindSource === 'owner' ? (draftPage.presentationKind ?? null) : null;
   const [kind, setKind] = useState(storedKind);
   const [coverMediaId, setCoverMediaId] = useState(page.coverMediaId ?? null);
   const [undo, setUndo] = useState<(CollectionMemberUndo & { key: string })[]>([]);
   const [description, setDescription] = useState(page.description ?? '');
-  const [visibility, setVisibility] = useState<CollectionVisibility>(page.visibility ?? 'public');
+  const [visibility, setVisibility] = useState<CollectionVisibility>(page.visibility ?? 'private');
   const [conflict, setConflict] = useState(false);
   const [failure, setFailure] = useState('');
   const [writing, setPending] = useState(false);
   const [boundary, setBoundary] = useState<BoundaryMove | null>(null);
   const captureSave = () => ({
-    page,
+    page: draftPage,
     members,
     editorMembers,
     transfer,
@@ -458,23 +462,19 @@ function CollectionPageLifetime({
       setConflict(true);
       return;
     }
-    setMembers(page.members);
-    setTitle(page.title);
-    setKind(storedKind);
-    setCoverMediaId(page.coverMediaId ?? null);
-    setDescription(page.description ?? '');
-    setVisibility(page.visibility ?? 'public');
-    setSelectedIds(new Set());
-    setConflict(false);
+    resetEditor(page);
   }, [snapshot]);
 
-  async function reloadCollection() {
+  async function reloadCollection(requireReady = false) {
     if (!isCurrent()) return;
     const refreshed = await refreshPage();
     if (!isCurrent()) return;
+    if (refreshed.id !== page.id || (requireReady && (refreshed.memberState ?? 'ready') !== 'ready'))
+      throw new Error('Collection page is not ready');
     queryClient.setQueryData(queryKey, refreshed);
     if (!isCurrent()) return;
     await router.invalidate();
+    return isCurrent() ? refreshed : undefined;
   }
 
   async function reloadFromControl() {
@@ -483,6 +483,22 @@ function CollectionPageLifetime({
     if (!request) return;
     try {
       await reloadCollection();
+    } catch {
+      if (isCurrent()) setFailure(m.error_message());
+    } finally {
+      finishRequest(request);
+    }
+  }
+
+  async function reloadEditor() {
+    if (!isCurrent()) return;
+    const request = startRequest();
+    if (!request) return;
+    setFailure('');
+    try {
+      // Do not discard notes, metadata or uncertain operation identities until the read succeeds.
+      const refreshed = await reloadCollection(true);
+      if (refreshed) resetEditor(refreshed);
     } catch {
       if (isCurrent()) setFailure(m.error_message());
     } finally {
@@ -604,7 +620,7 @@ function CollectionPageLifetime({
   }
 
   async function beginEditing() {
-    if (!isCurrent('collection.update') || pending || !owner) return;
+    if (!isCurrent('collection.update') || pending || editing || !owner) return;
     const request = startRequest();
     if (!request) return;
     setFailure('');
@@ -616,8 +632,14 @@ function CollectionPageLifetime({
         setConflict(true);
         return;
       }
-      if ((editable.memberState ?? 'ready') !== 'ready' || editable.filterStatus)
+      if (
+        editable.visibility === null ||
+        !admitsCollectionOperation(editable.viewerActions, 'collection:update', 'collection.update') ||
+        (editable.memberState ?? 'ready') !== 'ready' ||
+        editable.filterStatus
+      )
         throw new Error('Collection members are not ready');
+      editorPage.current = editable;
       writeKeys.current.clear();
       setConflict(false);
       setEditorMembers(editable.members);
@@ -626,7 +648,7 @@ function CollectionPageLifetime({
       setKind(editable.presentationKindSource === 'owner' ? (editable.presentationKind ?? null) : null);
       setCoverMediaId(editable.coverMediaId ?? null);
       setDescription(editable.description ?? '');
-      setVisibility(editable.visibility ?? 'public');
+      setVisibility(editable.visibility);
       setSelectedIds(new Set());
       setBatchRemovalIds(new Set());
       setTransfer(null);
@@ -640,29 +662,35 @@ function CollectionPageLifetime({
     }
   }
 
-  function cancelEditing() {
-    if (!isCurrent() || pending || (saveIntent.current !== null && !conflict)) return;
+  function resetEditor(source: EditableCollectionPage) {
+    editorPage.current = null;
     saveIntent.current = null;
+    writeKeys.current.clear();
     setBatchRemovalIds(new Set());
     setTransfer(null);
     setDestinationId('');
     setBulkUnavailable(false);
-    setMembers(page.members);
+    setMembers(source.members);
     setEditorMembers(null);
-    setTitle(page.title);
-    setKind(storedKind);
-    setCoverMediaId(page.coverMediaId ?? null);
-    setDescription(page.description ?? '');
-    setVisibility(page.visibility ?? 'public');
+    setTitle(source.title);
+    setKind(source.presentationKindSource === 'owner' ? (source.presentationKind ?? null) : null);
+    setCoverMediaId(source.coverMediaId ?? null);
+    setDescription(source.description ?? '');
+    setVisibility(source.visibility ?? 'private');
     setSelectedIds(new Set());
     setConflict(false);
     setFailure('');
     setEditing(false);
   }
 
+  function cancelEditing() {
+    if (!isCurrent() || pending || (saveIntent.current !== null && !conflict)) return;
+    resetEditor(page);
+  }
+
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!isCurrent('collection.update') || !hydrated || pending || conflict || !owner) return;
+    if (!isCurrent('collection.update') || !hydrated || pending || conflict || !editing || !owner) return;
     const request = startRequest();
     if (!request) return;
     setFailure('');
@@ -844,13 +872,8 @@ function CollectionPageLifetime({
         else setFailure(m.error_message());
         return;
       }
-      await reloadCollection();
-      if (!isCurrent()) return;
-      saveIntent.current = null;
-      setEditing(false);
-      setConflict(false);
-      setSelectedIds(new Set());
-      setFailure('');
+      const refreshed = await reloadCollection(true);
+      if (refreshed) resetEditor(refreshed);
     } catch {
       if (!isCurrent()) return;
       if (committed > 0) {
@@ -919,7 +942,7 @@ function CollectionPageLifetime({
 
   function setMemberOrder(memberId: string, after: string | null) {
     if (!isCurrent('collection_member.move') || inFlight.current || saveIntent.current !== null) return;
-    setMembers((current) => reorderCollectionMembers(current, memberId, after, page.firstPage));
+    setMembers((current) => reorderCollectionMembers(current, memberId, after, draftPage.firstPage));
   }
 
   async function copyLink(href: string) {
@@ -938,19 +961,19 @@ function CollectionPageLifetime({
   const memberDraftChanged =
     editing &&
     buildCollectionMemberEditPlan(
-      (editorMembers ?? page.members).filter((member) => !transfer?.memberIds.includes(member.id)),
+      (editorMembers ?? draftPage.members).filter((member) => !transfer?.memberIds.includes(member.id)),
       members,
-      page.firstPage,
+      draftPage.firstPage,
     ).length > 0;
   const draftChanged =
     editing &&
     (memberDraftChanged ||
       transfer !== null ||
-      title !== page.title ||
-      description !== (page.description ?? '') ||
-      visibility !== page.visibility ||
+      title !== draftPage.title ||
+      description !== (draftPage.description ?? '') ||
+      visibility !== draftPage.visibility ||
       kind !== storedKind ||
-      coverMediaId !== (page.coverMediaId ?? null));
+      coverMediaId !== (draftPage.coverMediaId ?? null));
   return (
     <div className="w-full min-w-0 text-foreground">
       <article className="w-full min-w-0 space-y-4 sm:space-y-5">
@@ -1167,11 +1190,7 @@ function CollectionPageLifetime({
               className="text-primary underline"
               type="button"
               disabled={pending}
-              onClick={() => {
-                if (!isCurrent()) return;
-                cancelEditing();
-                void reloadFromControl();
-              }}
+              onClick={() => void reloadEditor()}
             >
               {m.library_collection_reload()}
             </button>
@@ -1183,76 +1202,52 @@ function CollectionPageLifetime({
             key={page.id}
             collectionId={page.id}
             isCurrent={() => isCurrent('collection_member.create')}
-            onAdded={reloadCollection}
+            onAdded={async () => {
+              await reloadCollection();
+            }}
             onClose={() => {
               if (isCurrent()) setAdding(false);
             }}
           />
         ) : null}
         {editing && owner ? (
-          <form
-            id="collection-edit-form"
-            className="min-w-0 rounded-2xl border border-border bg-card p-4 sm:p-6"
+          <CollectionMetadataEditor
+            title={title}
+            description={description}
+            disabled={pending || draftFrozen}
             onSubmit={(event) => void save(event)}
+            onTitleChange={(value) => {
+              if (isCurrent('collection.update') && !inFlight.current && saveIntent.current === null) setTitle(value);
+            }}
+            onDescriptionChange={(value) => {
+              if (isCurrent('collection.update') && !inFlight.current && saveIntent.current === null)
+                setDescription(value);
+            }}
           >
-            <details data-collection-details>
-              <summary className="min-h-11 cursor-pointer py-2 font-medium">{m.library_collection_details()}</summary>
-              <div className="space-y-5 pt-3">
-                <label className="block max-w-3xl">
-                  {m.library_collection_title()}
-                  <input
-                    disabled={pending || draftFrozen}
-                    className={fieldClass}
-                    onChange={(event) => {
-                      if (isCurrent('collection.update') && !inFlight.current && saveIntent.current === null)
-                        setTitle(event.target.value);
-                    }}
-                    required
-                    maxLength={512}
-                    value={title}
-                  />
-                </label>
-                <label className="block max-w-3xl">
-                  {m.library_collection_description()}
-                  <textarea
-                    disabled={pending || draftFrozen}
-                    maxLength={20_000}
-                    className={fieldClass}
-                    onChange={(event) => {
-                      if (isCurrent('collection.update') && !inFlight.current && saveIntent.current === null)
-                        setDescription(event.target.value);
-                    }}
-                    rows={4}
-                    value={description}
-                  />
-                </label>
-                <CollectionPresentationFields
-                  types={page.presentationTypes}
-                  kind={kind}
-                  onKindChange={(value) => {
-                    if (isCurrent('collection.update') && !inFlight.current && saveIntent.current === null)
-                      setKind(value);
-                  }}
-                  coverMediaId={coverMediaId}
-                  onCoverChange={(value) => {
-                    if (isCurrent('collection.update') && !inFlight.current && saveIntent.current === null)
-                      setCoverMediaId(value);
-                  }}
-                  members={page.members}
-                  disabled={pending || draftFrozen}
-                />
-                <VisibilityField
-                  onChange={(value) => {
-                    if (isCurrent('collection.update') && !inFlight.current && saveIntent.current === null)
-                      setVisibility(value);
-                  }}
-                  value={visibility}
-                  disabled={pending || draftFrozen}
-                />
-                <p className="text-sm text-muted-foreground">{m.library_collection_independent_writes()}</p>
-              </div>
-            </details>
-          </form>
+            <CollectionPresentationFields
+              types={page.presentationTypes}
+              kind={kind}
+              onKindChange={(value) => {
+                if (isCurrent('collection.update') && !inFlight.current && saveIntent.current === null) setKind(value);
+              }}
+              coverMediaId={coverMediaId}
+              onCoverChange={(value) => {
+                if (isCurrent('collection.update') && !inFlight.current && saveIntent.current === null)
+                  setCoverMediaId(value);
+              }}
+              members={page.members}
+              disabled={pending || draftFrozen}
+            />
+            <VisibilityField
+              onChange={(value) => {
+                if (isCurrent('collection.update') && !inFlight.current && saveIntent.current === null)
+                  setVisibility(value);
+              }}
+              value={visibility}
+              disabled={pending || draftFrozen}
+            />
+            <p className="text-sm text-muted-foreground">{m.library_collection_independent_writes()}</p>
+          </CollectionMetadataEditor>
         ) : null}
 
         {!editing ? (
@@ -1487,7 +1482,12 @@ function CollectionPageLifetime({
             <Button type="submit" form="collection-edit-form" disabled={!hydrated || pending || conflict}>
               {writing ? m.library_collection_save_pending() : m.library_collection_save()}
             </Button>
-            <Button type="button" variant="outline" disabled={pending || draftFrozen} onClick={cancelEditing}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={pending || (draftFrozen && !conflict)}
+              onClick={cancelEditing}
+            >
               {m.library_collection_cancel()}
             </Button>
             {memberDraftChanged || transfer ? (
