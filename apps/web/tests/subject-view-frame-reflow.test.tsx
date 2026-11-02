@@ -14,7 +14,7 @@ import { m } from '../src/paraglide/messages.js';
 mock.module('@tanstack/react-start', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { SubjectFrame, SubjectViewPage, subjectFrame } = await import('../src/features/pages/subject-frame');
-const { StreamHeading, StreamHeadingLevelContext, ViewHeading } = await import('../src/features/pages/view-heading');
+const { StreamHeading, PageStreamHeadingContext, ViewHeading } = await import('../src/features/pages/view-heading');
 const { SubjectPage } = await import('../src/features/pages/subject');
 const { SubjectCommunityRegion } = await import('../src/features/pages/subject-community-view');
 const { SubjectLibraryLeaf } = await import('../src/features/pages/subject-library-leaf');
@@ -55,6 +55,7 @@ async function mount({
   session = 'signed-out',
   embedded = false,
   streamTitle,
+  withPreview = false,
 }: {
   streams?: 'none' | 'one' | 'many';
   realm?: string;
@@ -62,8 +63,13 @@ async function mount({
   session?: 'signed-out' | 'unavailable';
   embedded?: boolean;
   streamTitle?: string;
+  withPreview?: boolean;
 } = {}) {
   const input = supplied(streams, realm);
+  if (withPreview) {
+    const threadPreview = recording.document.content.find((node) => node.type === 'ThreadList')!;
+    input.page.document.content.push(structuredClone(threadPreview));
+  }
   if (streamTitle)
     input.page.document.content = input.page.document.content.map((node) =>
       node.type === 'Credits' ? { ...node, props: { ...node.props, title: { de: streamTitle } } } : node,
@@ -223,6 +229,15 @@ describe('Companion Subject views retain the complete supplied title, original t
     );
   });
 
+  test('the selected page stream has one h1 while a real embedded community preview retains h2', async () => {
+    const { html } = await mount({ streams: 'one', withPreview: true });
+    expect(html.match(/<h1\b/g)).toHaveLength(1);
+    expect(html.match(/<h1[^>]*>Cast<\/h1>/g)).toHaveLength(1);
+    expect(html).toContain(`${escaped(m.subject_discussion())}</h2>`);
+    expect(html).not.toContain('data-slot="next-page"');
+    expect(html.match(/data-slot="continue-group"/g)).toHaveLength(1);
+  });
+
   test('the shared rank option preserves embedded community headings and a direct host can override the inherited rank', () => {
     for (const kind of ['review', 'discussion'] as const) {
       const label = kind === 'review' ? m.subject_reviews() : m.subject_discussion();
@@ -242,17 +257,17 @@ describe('Companion Subject views retain the complete supplied title, original t
       const embedded = renderToStaticMarkup(region);
       expect(embedded).not.toContain('<h1');
       expect(embedded).toContain(`${escaped(label)}</h2>`);
-      const fullPage = renderToStaticMarkup(<StreamHeadingLevelContext value={1}>{region}</StreamHeadingLevelContext>);
+      const fullPage = renderToStaticMarkup(<PageStreamHeadingContext value={kind}>{region}</PageStreamHeadingContext>);
       expect(fullPage.match(/<h1\b/g)).toHaveLength(1);
       expect(fullPage).toContain(`${escaped(label)}</h1>`);
       expect(fullPage).toContain(`aria-labelledby="${kind}-title"`);
     }
     const explicit = renderToStaticMarkup(
-      <StreamHeadingLevelContext value={1}>
-        <StreamHeading level={2} lang="de">
+      <PageStreamHeadingContext value="embedded">
+        <StreamHeading node="embedded" level={2} lang="de">
           {heading}
         </StreamHeading>
-      </StreamHeadingLevelContext>,
+      </PageStreamHeadingContext>,
     );
     expect(explicit).toMatch(/<h2[^>]*lang="de"/);
     expect(explicit).toContain(`${escaped(heading)}</h2>`);

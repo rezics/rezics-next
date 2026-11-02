@@ -70,7 +70,7 @@ export function SubjectCommunityRegion({
       className="min-w-0 space-y-4"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <StreamHeading id={`${id}-title`} className={headingClass}>
+        <StreamHeading node={paged ? id : undefined} id={`${id}-title`} className={headingClass}>
           {title}
         </StreamHeading>
         {!paged && region.state === 'ready' && (

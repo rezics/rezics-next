@@ -3,16 +3,17 @@ import { cn } from '@rezics/ui/utils';
 
 export type StreamHeadingLevel = 1 | 2;
 
-/** A full-page host can promote its sole stream; embedded streams retain h2 by default. */
-export const StreamHeadingLevelContext = createContext<StreamHeadingLevel>(2);
+/** The full-page host names its sole stream; every other embedded heading retains h2. */
+export const PageStreamHeadingContext = createContext<string | undefined>(undefined);
 
 export function StreamHeading({
   level,
+  node,
   className,
   ...props
-}: ComponentProps<'h2'> & { level?: StreamHeadingLevel | undefined }) {
-  const inheritedLevel = useContext(StreamHeadingLevelContext);
-  const Heading = (level ?? inheritedLevel) === 1 ? 'h1' : 'h2';
+}: ComponentProps<'h2'> & { level?: StreamHeadingLevel | undefined; node?: string | undefined }) {
+  const pageStream = useContext(PageStreamHeadingContext);
+  const Heading = (level ?? (node !== undefined && pageStream === node ? 1 : 2)) === 1 ? 'h1' : 'h2';
   return <Heading {...props} className={cn('min-w-0 max-w-full wrap-anywhere', className)} />;
 }
 

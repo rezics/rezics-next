@@ -525,6 +525,7 @@ function StreamState({
     >
       <StreamHeading
         level={headingLevel}
+        node={node}
         id={`${node}-title`}
         lang={titleLang}
         className="text-2xl font-semibold tracking-tight"
