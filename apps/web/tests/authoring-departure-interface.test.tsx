@@ -139,7 +139,9 @@ test('real authoring departure preserves drafts and focus, confirms only the cho
     let arrivals = 0;
     let successes = 0;
     let resolve!: (result: { ok: false; reason: 'unavailable' }) => void;
-    const outcome = new Promise<{ ok: false; reason: 'unavailable' }>((yes) => { resolve = yes; });
+    const outcome = new Promise<{ ok: false; reason: 'unavailable' }>((yes) => {
+      resolve = yes;
+    });
     const submit = async (command: unknown) => {
       commands.push(structuredClone(command));
       return hold ? outcome : { ok: false as const, reason: 'unavailable' as const };
@@ -154,7 +156,9 @@ test('real authoring departure preserves drafts and focus, confirms only the cho
               {kind === 'edit' ? (
                 [0, 1].map((index) => (
                   <section key={index} data-editor={index}>
-                    {closed.includes(index) ? <p>Editor closed</p> : (
+                    {closed.includes(index) ? (
+                      <p>Editor closed</p>
+                    ) : (
                       <InlinePostEditor
                         initialBody={fromPlainText(longBody, 'blocks')}
                         revisionId="revision-1"
@@ -165,7 +169,9 @@ test('real authoring departure preserves drafts and focus, confirms only the cho
                           cancels.push(index);
                           setClosed((current) => [...current, index]);
                         }}
-                        onSuccess={() => { successes++; }}
+                        onSuccess={() => {
+                          successes++;
+                        }}
                       />
                     )}
                   </section>
@@ -181,7 +187,9 @@ test('real authoring departure preserves drafts and focus, confirms only the cho
                   onPendingChange={() => undefined}
                   onCancel={() => undefined}
                   onSubmit={submit}
-                  onSuccess={() => { successes++; }}
+                  onSuccess={() => {
+                    successes++;
+                  }}
                 />
               ) : (
                 <PostComposer
@@ -190,19 +198,31 @@ test('real authoring departure preserves drafts and focus, confirms only the cho
                   titleRequired
                   boardId={id(2)}
                   onSubmit={submit}
-                  onSuccess={() => { successes++; }}
+                  onSuccess={() => {
+                    successes++;
+                  }}
                 />
               )}
-              <button type="button" onClick={() => void router.navigate({ href: '/inbox' })}>Leave conversation</button>
-              <form method="post" action="/auth/sign-out"><button type="submit">Sign out</button></form>
+              <button type="button" onClick={() => void router.navigate({ href: '/inbox' })}>
+                Leave conversation
+              </button>
+              <form method="post" action="/auth/sign-out">
+                <button type="submit">Sign out</button>
+              </form>
             </AuthoringDepartureProvider>
-          ) : <p>Authoring unmounted</p>}
-          <button type="button" onClick={() => setShown(false)}>Hide authoring page</button>
+          ) : (
+            <p>Authoring unmounted</p>
+          )}
+          <button type="button" onClick={() => setShown(false)}>
+            Hide authoring page
+          </button>
         </>
       );
     }
     function Destination() {
-      useEffect(() => { arrivals++; }, []);
+      useEffect(() => {
+        arrivals++;
+      }, []);
       return <h1>Inbox destination</h1>;
     }
     const parent = createRootRoute({ component: Outlet });
@@ -214,20 +234,28 @@ test('real authoring departure preserves drafts and focus, confirms only the cho
       history: createMemoryHistory({ initialEntries: ['/compose'] }),
     });
     await router.load();
-    await act(async () => root.render(
-      <QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>,
-    ));
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={client}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>,
+      ),
+    );
     await settle(() => !!host.querySelector('.ProseMirror'));
     expect(blocked()).toBe(false);
     if (kind === 'opening') {
       await act(async () => user.type(host.querySelector('#thread-title')!, localTitle));
     } else {
       const panels = kind === 'edit' ? [...host.querySelectorAll<HTMLElement>('[data-editor]')] : [host];
-      for (const panel of panels) await editText(panel, kind === 'edit' ? m.thread_reply_body_label() : m.thread_reply_label());
+      for (const panel of panels)
+        await editText(panel, kind === 'edit' ? m.thread_reply_body_label() : m.thread_reply_label());
     }
     expect(blocked()).toBe(true);
     return {
-      router, commands, cancels, resolve,
+      router,
+      commands,
+      cancels,
+      resolve,
       origin: button(host, 'Leave conversation'),
       counts: () => ({ arrivals, successes }),
     };
@@ -320,7 +348,10 @@ test('real authoring departure preserves drafts and focus, confirms only the cho
     const uncertainEdit = await mount('edit');
     const currentPanel = host.querySelector<HTMLElement>('[data-editor="0"]')!;
     await click(button(currentPanel, m.thread_edit_save()));
-    await settle(() => uncertainEdit.commands.length === 1 && currentPanel.textContent?.includes(m.thread_edit_unavailable()) === true);
+    await settle(
+      () =>
+        uncertainEdit.commands.length === 1 && currentPanel.textContent?.includes(m.thread_edit_unavailable()) === true,
+    );
     const editCancel = button(currentPanel, m.thread_edit_cancel());
     const editPrompt = await openDialog(editCancel, m.thread_authoring_discard_pending(), true);
     await stayAndRestore(editPrompt.stay, editCancel);
@@ -370,8 +401,11 @@ test('real authoring departure preserves drafts and focus, confirms only the cho
     expect(unmounted.counts()).toEqual({ arrivals: 0, successes: 0 });
     expect(unmounted.commands).toEqual([]);
     const signingOut = await mount('opening');
-    await act(async () => host.querySelector('form[action="/auth/sign-out"]')!
-      .dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })));
+    await act(async () =>
+      host
+        .querySelector('form[action="/auth/sign-out"]')!
+        .dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })),
+    );
     expect(blocked()).toBe(false);
     expect(dialog()).toBeNull();
     expect(signingOut.counts()).toEqual({ arrivals: 0, successes: 0 });

@@ -93,7 +93,9 @@ function DepartureExample({
           <Button
             type="button"
             variant="outline"
-            onClick={() => client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null })}
+            onClick={() =>
+              client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null })
+            }
           >
             Expire session
           </Button>
@@ -227,7 +229,9 @@ export const UnsavedDeparture: Story = {
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
     await waitFor(() => expect(origin).toHaveFocus());
     await expect(input).toHaveValue(title);
-    await expect(editor).toHaveTextContent('It continues in another paragraph to show the writing surface at a useful height.');
+    await expect(editor).toHaveTextContent(
+      'It continues in another paragraph to show the writing surface at a useful height.',
+    );
     await expect(write).toHaveBeenCalledTimes(0);
     await userEvent.keyboard('{Enter}');
     const { stay } = await observeDialog(false, m.thread_authoring_leave_unsaved());
@@ -291,7 +295,9 @@ export const ExplicitDiscard: Story = {
     const second = await observeDialog(true, m.thread_authoring_discard_unsaved(), 1);
     if (args.enlargedText && getLocale() === 'de' && window.innerWidth <= 390) {
       const label = second.leave.querySelector('span')!;
-      await expect(label.getBoundingClientRect().height).toBeGreaterThan(parseFloat(getComputedStyle(label).lineHeight));
+      await expect(label.getBoundingClientRect().height).toBeGreaterThan(
+        parseFloat(getComputedStyle(label).lineHeight),
+      );
     }
   },
 };
