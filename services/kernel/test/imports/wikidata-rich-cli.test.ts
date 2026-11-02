@@ -1,11 +1,12 @@
 import { expect, test } from 'bun:test';
+import { converter_revision } from '../../../../packages/conversion/src/wikidata.ts';
 import { runWikidataRichCliJourney } from './wikidata-rich-cli-fixture.ts';
 
 test('Wikidata rich cited proposal CLI refresh', async () => {
   const r = await runWikidataRichCliJourney();
   try {
     expect(r.initial.code).toBe(0);
-    expect(r.converterRevision).toBe('wikidata-4');
+    expect(r.converterRevision).toBe(converter_revision);
     expect(r.richCitedCandidates.length).toBeGreaterThan(0);
     for (const candidate of r.richCitedCandidates) expect(candidate.references.length).toBeGreaterThan(0);
     expect(r.selectedSupportedValues).toEqual(r.nativeSupportedValues);

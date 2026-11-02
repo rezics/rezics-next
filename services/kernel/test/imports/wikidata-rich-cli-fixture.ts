@@ -7,6 +7,7 @@ import { decodeJwt, exportJWK, generateKeyPair } from 'jose';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import type { BatchCommand, BatchStatement, BatchWriteResult, Source } from '@rezics/definitions/bulk';
 import entity from '../../../../specs/fixtures/imports/wikidata/entity.json';
+import { converter_revision } from '../../../../packages/conversion/src/wikidata.ts';
 import { sourceDigest } from '../../../../packages/conversion/src/support.ts';
 import { runImportCli } from '../../../importer/src/cli.ts';
 import { IMPORTER_SCOPES } from '../../../importer/src/credentials.ts';
@@ -385,7 +386,7 @@ export async function runWikidataRichCliJourney() {
         source: 'wikidata',
         external_id: input.id,
         record_revision: String(input.lastrevid),
-        converter_revision: 'wikidata-4',
+        converter_revision,
         field_group: 'facts',
       });
       expect(candidate.source.digest).toBe(initialState.baseline!.digest);
@@ -509,7 +510,7 @@ export async function runWikidataRichCliJourney() {
     }
     expect(authPaths).toContain('/signin/key');
     expect(authPaths).toContain('/token');
-    expect(new Set(revisions)).toEqual(new Set(['wikidata-4']));
+    expect(new Set(revisions)).toEqual(new Set([converter_revision]));
     for (const exchange of exchanges.filter((e) => e.path === '/v1/subjects:batchWrite')) {
       expect(exchange.status).toBe(200);
       for (const result of (JSON.parse(exchange.response) as BatchWriteResult).results)
