@@ -2,6 +2,7 @@ import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { hasDocumentContent } from '@rezics/document';
 import { useQuery } from '@tanstack/react-query';
 import { pickText } from '@rezics/composition';
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { RichTextEditor } from '@rezics/ui/rich-text-editor';
 import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
@@ -28,8 +29,20 @@ import { EditorFailure, ScalarControl } from './statement-editor-view';
 
 type Ready = Extract<RecipeRead, { ok: true }>;
 const recipeActionClassName =
-  'h-auto min-h-8 min-w-11 max-w-full whitespace-normal break-words py-1.5 max-md:min-h-11 pointer-coarse:min-h-11';
-const recipeInputClassName = 'min-w-0 max-md:min-h-11 pointer-coarse:min-h-11';
+  'relative z-10 h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const recipeInputClassName = 'relative z-10 min-h-11 min-w-0 max-w-full';
+// Raise native targets individually; supplied reading text keeps the shared frame's normal flow.
+const recipePanelClassName =
+  'min-w-0 space-y-4 p-4 [overflow-wrap:anywhere] sm:p-6 ' +
+  '[&_label]:relative [&_label]:z-10 [&_label]:min-w-0 [&_label]:max-w-full [&_label]:flex-wrap ' +
+  '[&_input]:relative [&_input]:z-10 [&_input]:min-h-11 [&_input]:min-w-0 ' +
+  '[&_select]:relative [&_select]:z-10 [&_select]:min-h-11 [&_select]:min-w-11 ' +
+  '[&_textarea]:relative [&_textarea]:z-10 [&_textarea]:min-h-11 [&_textarea]:min-w-0 ' +
+  '[&_a]:relative [&_a]:z-10 [&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:items-center ' +
+  '[&_button]:relative [&_button]:z-10 [&_button]:min-h-11 [&_button]:min-w-11 [&_button]:max-w-full [&_button]:whitespace-normal [&_button]:break-words ' +
+  '[&_:is(a,button,input,select,textarea):focus-visible]:outline-2 ' +
+  '[&_:is(a,button,input,select,textarea):focus-visible]:outline-offset-2 ' +
+  '[&_:is(a,button,input,select,textarea):focus-visible]:outline-ring';
 type Row = {
   id: string;
   statement: StatementInput;
@@ -141,7 +154,7 @@ function RecipeEditorLive({
     : undefined;
   const Workspace = id ? 'div' : 'form';
   return (
-    <article className="mx-auto w-full max-w-3xl space-y-6 px-4 py-8 sm:px-6">
+    <article className="mx-auto min-w-0 w-full max-w-3xl space-y-6 px-4 py-8 [overflow-wrap:anywhere] sm:px-6 [&_label]:min-w-0 [&_label]:max-w-full [&_label]:flex-wrap">
       <PageHeading>{id ? m.recipe_edit({}, o) : m.recipe_title({}, o)}</PageHeading>
       {!id && (
         <a
@@ -225,7 +238,10 @@ function RecipeEditorLive({
             }}
           >
             {currentHref && (
-              <a className="underline" href={currentHref}>
+              <a
+                className={`${recipeActionClassName} inline-flex items-center self-start underline underline-offset-4`}
+                href={currentHref}
+              >
                 {m.candidate_view_public({}, o)}
               </a>
             )}
@@ -250,6 +266,7 @@ function RecipeEditorLive({
                         {field === 'aliases' ? (
                           <Textarea
                             id={`${termsId}-${field}-${term.id}`}
+                            className={recipeInputClassName}
                             value={term[field]}
                             onChange={(event) =>
                               setTerms((previous) =>
@@ -262,6 +279,7 @@ function RecipeEditorLive({
                         ) : (
                           <Input
                             id={`${termsId}-${field}-${term.id}`}
+                            className={recipeInputClassName}
                             value={term[field]}
                             onChange={(event) =>
                               setTerms((previous) =>
@@ -291,7 +309,7 @@ function RecipeEditorLive({
                 ))}
                 <Button
                   id={`${termsId}-add`}
-                  className="h-auto min-h-11 max-w-full whitespace-normal"
+                  className={recipeActionClassName}
                   type="button"
                   variant="outline"
                   disabled={locked || session !== 'signed-in'}
@@ -312,26 +330,31 @@ function RecipeEditorLive({
             {id &&
               read.public &&
               read.fields.map((field) => (
-                <section key={field} className="space-y-3">
-                  <h2 className="font-semibold">{name(field)}</h2>
-                  {(read.public!.subject.statements[field] ?? []).map((source) => (
-                    <div key={source.id} className="flex min-w-0 flex-col items-start gap-3 md:flex-row">
-                      <div className="min-w-0 break-words md:flex-1">
-                        <CandidateValue snak={source} related={read.public!.related} locale={locale} />
+                <section key={field} className="min-w-0">
+                  <ContentItemFrame as="div" className={recipePanelClassName}>
+                    <ContentItemHeading id={`${termsId}-current-${field}`} className="font-semibold">
+                      {name(field)}
+                    </ContentItemHeading>
+                    {(read.public!.subject.statements[field] ?? []).map((source) => (
+                      <div key={source.id} className="flex min-w-0 flex-col items-start gap-3 sm:flex-row">
+                        <div data-content-item-slot="preview" className="min-w-0 break-words sm:flex-1">
+                          <CandidateValue snak={source} related={read.public!.related} locale={locale} />
+                        </div>
+                        <Button
+                          data-content-item-slot="actions"
+                          type="button"
+                          variant="outline"
+                          className={recipeActionClassName}
+                          disabled={rows.some((row) => row.source?.id === source.id)}
+                          onClick={() =>
+                            setRows([...rows, { id: crypto.randomUUID(), source, statement: statementInput(source) }])
+                          }
+                        >
+                          {m.recipe_correct({}, o)}
+                        </Button>
                       </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-auto min-h-11 max-w-full whitespace-normal"
-                        disabled={rows.some((row) => row.source?.id === source.id)}
-                        onClick={() =>
-                          setRows([...rows, { id: crypto.randomUUID(), source, statement: statementInput(source) }])
-                        }
-                      >
-                        {m.recipe_correct({}, o)}
-                      </Button>
-                    </div>
-                  ))}
+                    ))}
+                  </ContentItemFrame>
                 </section>
               ))}
             {rows.map((row) => (
@@ -357,10 +380,10 @@ function RecipeEditorLive({
             ))}
             <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end">
               <Field className="w-full min-w-0 sm:flex-1">
-                <FieldLabel htmlFor="recipe-field">{m.character_add_fact({}, o)}</FieldLabel>
+                <FieldLabel htmlFor={`${termsId}-recipe-field`}>{m.character_add_fact({}, o)}</FieldLabel>
                 <NativeSelect
-                  id="recipe-field"
-                  className="w-full [&>select]:min-h-11"
+                  id={`${termsId}-recipe-field`}
+                  className="w-full min-w-0 [&>select]:relative [&>select]:z-10 [&>select]:min-h-11 [&>select]:min-w-11 [&>select:focus-visible]:outline-2 [&>select:focus-visible]:outline-offset-2 [&>select:focus-visible]:outline-ring"
                   disabled={locked}
                   value={property}
                   onChange={(event) => setProperty(event.target.value)}
@@ -381,7 +404,7 @@ function RecipeEditorLive({
               </Field>
               <Button
                 type="button"
-                className="h-auto min-h-11 max-w-full whitespace-normal"
+                className={recipeActionClassName}
                 variant="outline"
                 disabled={locked || session !== 'signed-in' || !property}
                 onClick={() => {
@@ -431,7 +454,7 @@ function RecipeEditorLive({
                 )}
                 <Button
                   type="submit"
-                  className="h-auto min-h-11 max-w-full self-start whitespace-normal"
+                  className={`${recipeActionClassName} self-start`}
                   disabled={busy || session !== 'signed-in' || failure?.reason === 'conflict'}
                 >
                   {busy
@@ -476,6 +499,7 @@ function RecipeFieldLive({
 }) {
   const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
+  const fieldId = useId();
   const property = row.statement.property.id;
   const definition = read.release.properties[property]!;
   const label = pickText(definition.labels, locale).text;
@@ -524,196 +548,207 @@ function RecipeFieldLive({
     }
   }
   return (
-    <section className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6">
-      <h2 className="font-semibold">{label}</h2>
-      <fieldset disabled={frozen} className="min-w-0 space-y-4">
-        {definition.datatype === 'document' ? (
-          <>
-            {!authored ? (
+    <section className="min-w-0">
+      <ContentItemFrame as="div" className={recipePanelClassName}>
+        <ContentItemHeading id={`${fieldId}-heading`} className="font-semibold">
+          {label}
+        </ContentItemHeading>
+        <fieldset data-content-item-slot="preview" disabled={frozen} className="min-w-0 space-y-4">
+          {definition.datatype === 'document' ? (
+            <>
+              {!authored ? (
+                <Button
+                  className={recipeActionClassName}
+                  type="button"
+                  variant="outline"
+                  onClick={() => updateAuthored(newAuthoredField())}
+                >
+                  {m.recipe_replace_method({}, o)}
+                </Button>
+              ) : (
+                <>
+                  <p className="text-sm text-muted-foreground">{m.recipe_method_help({}, o)}</p>
+                  <Field>
+                    <FieldLabel htmlFor={`${fieldId}-language`}>{m.catalogue_create_language({}, o)}</FieldLabel>
+                    <Input
+                      className={recipeInputClassName}
+                      id={`${fieldId}-language`}
+                      aria-label={m.catalogue_create_language({}, o)}
+                      value={authored.language}
+                      onChange={(event) => updateAuthored({ ...authored, language: event.target.value })}
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor={`${fieldId}-licence`}>{m.subject_source_licence({}, o)}</FieldLabel>
+                    <Input
+                      className={recipeInputClassName}
+                      id={`${fieldId}-licence`}
+                      aria-label={m.subject_source_licence({}, o)}
+                      value={authored.licence}
+                      onChange={(event) => updateAuthored({ ...authored, licence: event.target.value })}
+                    />
+                  </Field>
+                  <RichTextEditor
+                    label={label}
+                    labels={editorLabels()}
+                    value={authored.document}
+                    lang={authored.language}
+                    disabled={frozen}
+                    onChange={(document) => updateAuthored({ ...authored, document })}
+                  />
+                  <Field orientation="horizontal">
+                    <Checkbox
+                      id={`original-${row.id}`}
+                      className="size-11 after:inset-0"
+                      checked={row.original ?? false}
+                      onCheckedChange={(checked) => onOriginal(checked === true)}
+                    />
+                    <FieldLabel className="min-h-11 items-center" htmlFor={`original-${row.id}`}>
+                      {m.recipe_original({}, o)}
+                    </FieldLabel>
+                  </Field>
+                </>
+              )}
+            </>
+          ) : definition.datatype === 'wikibase-item' ? (
+            <EntityPicker
+              disabled={frozen}
+              label={label}
+              value={
+                picked.length
+                  ? picked
+                  : row.statement.value.type === 'value' &&
+                      typeof row.statement.value.content === 'string' &&
+                      row.statement.value.content
+                    ? [
+                        {
+                          id: row.statement.value.content,
+                          title:
+                            pickText(read.public?.related[row.statement.value.content]?.labels ?? {}, locale).text ||
+                            m.subject_value_unlabelled({}, o),
+                          types: [],
+                          typeLabel: '',
+                          cover: null,
+                        },
+                      ]
+                    : []
+              }
+              search={async (text, signal) =>
+                (await search(text, signal)).filter((entry) =>
+                  entry.types.some((type) => recipeTarget(read.release, property, type)),
+                )
+              }
+              src={coverSrc}
+              onValueChange={(items) => {
+                setPicked(items);
+                onChange({ ...row.statement, value: { type: 'value', content: items[0]?.id ?? '' } });
+              }}
+            />
+          ) : (
+            <ScalarControl
+              part={row.statement}
+              definition={definition}
+              read={{ release: read.release, public: { related: read.public?.related ?? {} } }}
+              locale={locale}
+              onChange={(value) => onChange({ ...row.statement, value })}
+            />
+          )}
+          <Field>
+            <FieldLabel htmlFor={`citation-${row.id}`}>{m.relation_citation({}, o)}</FieldLabel>
+            <Input
+              className={recipeInputClassName}
+              id={`citation-${row.id}`}
+              type="url"
+              value={citation}
+              onChange={(event) => {
+                const url = event.target.value;
+                setCitation(url);
+                onChange({
+                  ...row.statement,
+                  references: [
+                    ...structuredClone(row.source?.references ?? []).map((reference) => ({
+                      parts: reference.parts.map((part) => ({ property: { id: part.property.id }, value: part.value })),
+                    })),
+                    ...(url.trim()
+                      ? [
+                          {
+                            parts: [
+                              { property: { id: 'schema:url' }, value: { type: 'value' as const, content: url.trim() } },
+                            ],
+                          },
+                        ]
+                      : []),
+                  ],
+                });
+              }}
+            />
+          </Field>
+          <div data-content-item-slot="actions" className="flex min-w-0 flex-wrap gap-3">
+            <Button className={recipeActionClassName} type="button" variant="ghost" onClick={onRemove}>
+              {m.recipe_remove_field({}, o)}
+            </Button>
+          </div>
+        </fieldset>
+        {result && !result.ok && <EditorFailure reason={result.reason} locale={locale} />}
+        {result?.ok ? (
+          <div className="space-y-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-3">
+              <p data-content-item-slot="state" role="status">
+                {m.correction_proposed({}, o)}
+              </p>
+              {review && (
+                <Button className={recipeActionClassName} type="button" onClick={() => setReviewing(true)}>
+                  {m.correction_review({}, o)}
+                </Button>
+              )}
+            </div>
+            {reviewing && review && read.public && (
+              <CandidateReview
+                id={read.public.subject.id}
+                locale={locale}
+                initialProperty={property}
+                exactCandidate={result.candidate}
+                slot={slot}
+                transport={review(property, slot, result.session)}
+              />
+            )}
+          </div>
+        ) : (
+          <div data-content-item-slot="actions" className="flex min-w-0 flex-wrap gap-3">
+            {result &&
+              !result.ok &&
+              (result.reason === 'stale' || result.reason === 'invalid' || result.reason === 'denied') && (
+                <Button
+                  className={recipeActionClassName}
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    command.current = null;
+                    setResult(undefined);
+                  }}
+                >
+                  {m.catalogue_create_review_new({}, o)}
+                </Button>
+              )}
+            {read.public && (
               <Button
                 className={recipeActionClassName}
                 type="button"
-                variant="outline"
-                onClick={() => updateAuthored(newAuthoredField())}
+                disabled={
+                  disabled ||
+                  busy ||
+                  (definition.datatype === 'document' &&
+                    (!authored || !row.original || !hasDocumentContent(authored.document))) ||
+                  (result && !result.ok && result.reason === 'stale')
+                }
+                onClick={() => void submit()}
               >
-                {m.recipe_replace_method({}, o)}
-              </Button>
-            ) : (
-              <>
-                <p className="text-sm text-muted-foreground">{m.recipe_method_help({}, o)}</p>
-                <Field>
-                  <FieldLabel>{m.catalogue_create_language({}, o)}</FieldLabel>
-                  <Input
-                    className={recipeInputClassName}
-                    aria-label={m.catalogue_create_language({}, o)}
-                    value={authored.language}
-                    onChange={(event) => updateAuthored({ ...authored, language: event.target.value })}
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel>{m.subject_source_licence({}, o)}</FieldLabel>
-                  <Input
-                    className={recipeInputClassName}
-                    aria-label={m.subject_source_licence({}, o)}
-                    value={authored.licence}
-                    onChange={(event) => updateAuthored({ ...authored, licence: event.target.value })}
-                  />
-                </Field>
-                <RichTextEditor
-                  label={label}
-                  labels={editorLabels()}
-                  value={authored.document}
-                  lang={authored.language}
-                  disabled={frozen}
-                  onChange={(document) => updateAuthored({ ...authored, document })}
-                />
-                <Field orientation="horizontal">
-                  <Checkbox
-                    id={`original-${row.id}`}
-                    checked={row.original ?? false}
-                    onCheckedChange={(checked) => onOriginal(checked === true)}
-                  />
-                  <FieldLabel htmlFor={`original-${row.id}`}>{m.recipe_original({}, o)}</FieldLabel>
-                </Field>
-              </>
-            )}
-          </>
-        ) : definition.datatype === 'wikibase-item' ? (
-          <EntityPicker
-            disabled={frozen}
-            label={label}
-            value={
-              picked.length
-                ? picked
-                : row.statement.value.type === 'value' &&
-                    typeof row.statement.value.content === 'string' &&
-                    row.statement.value.content
-                  ? [
-                      {
-                        id: row.statement.value.content,
-                        title:
-                          pickText(read.public?.related[row.statement.value.content]?.labels ?? {}, locale).text ||
-                          m.subject_value_unlabelled({}, o),
-                        types: [],
-                        typeLabel: '',
-                        cover: null,
-                      },
-                    ]
-                  : []
-            }
-            search={async (text, signal) =>
-              (await search(text, signal)).filter((entry) =>
-                entry.types.some((type) => recipeTarget(read.release, property, type)),
-              )
-            }
-            src={coverSrc}
-            onValueChange={(items) => {
-              setPicked(items);
-              onChange({ ...row.statement, value: { type: 'value', content: items[0]?.id ?? '' } });
-            }}
-          />
-        ) : (
-          <ScalarControl
-            part={row.statement}
-            definition={definition}
-            read={{ release: read.release, public: { related: read.public?.related ?? {} } }}
-            locale={locale}
-            onChange={(value) => onChange({ ...row.statement, value })}
-          />
-        )}
-        <Field>
-          <FieldLabel htmlFor={`citation-${row.id}`}>{m.relation_citation({}, o)}</FieldLabel>
-          <Input
-            className={recipeInputClassName}
-            id={`citation-${row.id}`}
-            type="url"
-            value={citation}
-            onChange={(event) => {
-              const url = event.target.value;
-              setCitation(url);
-              onChange({
-                ...row.statement,
-                references: [
-                  ...structuredClone(row.source?.references ?? []).map((reference) => ({
-                    parts: reference.parts.map((part) => ({ property: { id: part.property.id }, value: part.value })),
-                  })),
-                  ...(url.trim()
-                    ? [
-                        {
-                          parts: [
-                            { property: { id: 'schema:url' }, value: { type: 'value' as const, content: url.trim() } },
-                          ],
-                        },
-                      ]
-                    : []),
-                ],
-              });
-            }}
-          />
-        </Field>
-        <div className="flex min-w-0 flex-wrap gap-3">
-          <Button className={recipeActionClassName} type="button" variant="ghost" onClick={onRemove}>
-            {m.recipe_remove_field({}, o)}
-          </Button>
-        </div>
-      </fieldset>
-      {result && !result.ok && <EditorFailure reason={result.reason} locale={locale} />}
-      {result?.ok ? (
-        <div className="space-y-3">
-          <div className="flex min-w-0 flex-wrap items-center gap-3">
-            <p role="status">{m.correction_proposed({}, o)}</p>
-            {review && (
-              <Button className={recipeActionClassName} type="button" onClick={() => setReviewing(true)}>
-                {m.correction_review({}, o)}
+                {command.current ? m.correction_retry({}, o) : m.correction_submit({}, o)}
               </Button>
             )}
           </div>
-          {reviewing && review && read.public && (
-            <CandidateReview
-              id={read.public.subject.id}
-              locale={locale}
-              initialProperty={property}
-              exactCandidate={result.candidate}
-              slot={slot}
-              transport={review(property, slot, result.session)}
-            />
-          )}
-        </div>
-      ) : (
-        <div className="flex min-w-0 flex-wrap gap-3">
-          {result &&
-            !result.ok &&
-            (result.reason === 'stale' || result.reason === 'invalid' || result.reason === 'denied') && (
-              <Button
-                className={recipeActionClassName}
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  command.current = null;
-                  setResult(undefined);
-                }}
-              >
-                {m.catalogue_create_review_new({}, o)}
-              </Button>
-            )}
-          {read.public && (
-            <Button
-              className={recipeActionClassName}
-              type="button"
-              disabled={
-                disabled ||
-                busy ||
-                (definition.datatype === 'document' &&
-                  (!authored || !row.original || !hasDocumentContent(authored.document))) ||
-                (result && !result.ok && result.reason === 'stale')
-              }
-              onClick={() => void submit()}
-            >
-              {command.current ? m.correction_retry({}, o) : m.correction_submit({}, o)}
-            </Button>
-          )}
-        </div>
-      )}
+        )}
+      </ContentItemFrame>
     </section>
   );
 }

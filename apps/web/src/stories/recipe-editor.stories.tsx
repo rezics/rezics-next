@@ -443,3 +443,187 @@ export const Proposed: Story = {
     await expect(field.getByText(m.correction_proposed())).toBeVisible();
   },
 };
+
+// Authored UNRUN: connected supplied-data examples, not native or geometry proof.
+const familyValue = `200 g lentils — ${'carefully sorted whole lentils, 水と野菜 '.repeat(12)}`;
+const familyCitation = `https://cook.example/original/${'long-supplied-citation-'.repeat(10)}?language=ja#method`;
+function recipeFamilyFixture(locale: string) {
+  const fixture = recipeFixture('ready', locale);
+  // Explicit illustrative supplied labels, preserving each original localized name.
+  for (const property of Object.values(fixture.release.properties)) {
+    const original = pickText(property.labels, locale).text;
+    property.labels[locale] = `${original} — ${'Complete supplied field name 材料と作り方 '.repeat(4)}`;
+  }
+  return fixture;
+}
+function RecipeFamilyStory({ onFixture, rtl = false }: { onFixture?: ObserveRecipeFamily | undefined; rtl?: boolean }) {
+  const locale = getLocale();
+  const creation = useMemo(() => recipeFamilyFixture(locale), [locale]);
+  const correction = useMemo(() => recipeFamilyFixture(locale), [locale]);
+  const transport = useMemo(
+    () => ({
+      ...correction.corrections,
+      load: async () => {
+        const item = recipeExample();
+        item.statements['schema:recipeIngredient']![0]!.value = {
+          type: 'value', content: { language: 'en', text: familyValue },
+        };
+        item.statements['schema:recipeIngredient']![0]!.references[0]!.parts[0]!.value = {
+          type: 'value', content: familyCitation,
+        };
+        await correction.transport.create({ item, key: crypto.randomUUID() });
+        return correction.corrections.load();
+      },
+    }),
+    [correction],
+  );
+  useEffect(() => onFixture?.(correction), [correction, onFixture]);
+  return (
+    <PatternStory path="/catalogue/recipe" visitor="Signed In">
+      <AppShell>
+        <div dir={rtl ? 'rtl' : 'ltr'}>
+          <div data-recipe-family="create">
+            <RecipeEditor locale={locale} session="signed-in" transport={creation.transport} search={async () => []} />
+          </div>
+          <div data-recipe-family="correct">
+            <RecipeEditor id={recipeId} locale={locale} session="signed-in" transport={transport}
+              review={(property) => correction.review(property)} search={async () => []} />
+          </div>
+        </div>
+      </AppShell>
+    </PatternStory>
+  );
+}
+type ObserveRecipeFamily = (fixture: ReturnType<typeof recipeFixture>) => void;
+const familyDescription = {
+  docs: { description: { story: 'Authored UNRUN. Two independent actual editors with long supplied localized fields, exact values and citations. Browser, native and visual acceptance remains deferred.' } },
+};
+const exerciseRecipeFamily: NonNullable<Story['play']> = async ({ canvasElement, args }) => {
+  const createRegion = canvasElement.querySelector<HTMLElement>('[data-recipe-family="create"]')!;
+  const correctRegion = canvasElement.querySelector<HTMLElement>('[data-recipe-family="correct"]')!;
+  const creation = within(createRegion);
+  const correction = within(correctRegion);
+  const observer = args.onFixture as ReturnType<typeof observeRecipe>;
+  await waitFor(() => expect(observer).toHaveBeenCalled());
+  const fixture = observer.mock.calls.at(-1)![0];
+  const property = 'schema:recipeIngredient';
+  await expect(await correction.findByText(familyValue)).toBeVisible();
+  const calls = fixture.calls.length;
+  const ownAdd = creation.getByRole('combobox', { name: m.character_add_fact() });
+  const otherAdd = correction.getByRole('combobox', { name: m.character_add_fact() });
+  await expect(ownAdd.tagName).toBe('SELECT');
+  await expect(otherAdd.tagName).toBe('SELECT');
+  const ids = () => [...canvasElement.querySelectorAll('[id]')].map((node) => node.id);
+  const assertAssociations = async () => {
+    await expect(new Set(ids()).size).toBe(ids().length);
+    for (const scope of [createRegion, correctRegion]) {
+      for (const label of scope.querySelectorAll<HTMLLabelElement>('label[for]')) {
+        const target = canvasElement.ownerDocument.getElementById(label.htmlFor);
+        await expect(target).not.toBeNull();
+        await expect(scope.contains(target)).toBe(true);
+      }
+    }
+  };
+  const target = async (node: HTMLElement, scope: HTMLElement) => {
+    const rect = node.getBoundingClientRect();
+    const bounds = scope.getBoundingClientRect();
+    await expect(node).toBeVisible();
+    await expect(rect.width).toBeGreaterThanOrEqual(44);
+    await expect(rect.height).toBeGreaterThanOrEqual(44);
+    await expect(rect.left).toBeGreaterThanOrEqual(bounds.left - 1);
+    await expect(rect.right).toBeLessThanOrEqual(bounds.right + 1);
+    // Native text inputs keep their own horizontal editing; their exact values are asserted below.
+    if (!node.matches('input, select, textarea'))
+      await expect(node.scrollWidth).toBeLessThanOrEqual(node.clientWidth + 1);
+  };
+  for (const [region, select] of [[createRegion, ownAdd], [correctRegion, otherAdd]] as const) {
+    const label = region.querySelector<HTMLLabelElement>(`label[for="${select.id}"]`)!;
+    await userEvent.click(label);
+    await expect(select).toHaveFocus();
+    await target(select, region);
+  }
+  await userEvent.selectOptions(ownAdd, property);
+  await expect(otherAdd).toHaveValue('');
+  await userEvent.tab();
+  const add = creation.getByRole('button', { name: m.correction_add() });
+  await expect(add).toHaveFocus();
+  await userEvent.keyboard('{Enter}');
+  const ownField = createRegion.querySelector('section')!;
+  const suppliedLabel = pickText(fixture.release.properties[property]!.labels, getLocale()).text;
+  const heading = correction.getAllByRole('heading', { name: suppliedLabel, level: 2 })[0]!;
+  const current = heading.closest('section')!;
+  const frame = heading.parentElement!;
+  await expect(frame.classList.contains('isolate')).toBe(true);
+  await expect(frame.querySelector('[data-content-item-slot="preview"]')?.textContent).toContain(familyValue);
+  await expect(frame.querySelector('[data-slot="list-row-link"]')).toBeNull();
+  const correct = within(current).getByRole('button', { name: m.recipe_correct() });
+  await target(correct, current);
+  await userEvent.click(correct);
+  const replacement = correction.getAllByRole('heading', { name: suppliedLabel, level: 2 }).at(-1)!.closest('section')!;
+  const field = within(replacement);
+  const value = field.getByRole('textbox', { name: m.correction_value() });
+  await expect(value).toHaveValue(familyValue);
+  await expect(within(ownField).getByRole('textbox', { name: m.correction_value() })).toHaveValue('');
+  const citation = field.getByRole('textbox', { name: m.relation_citation() });
+  await userEvent.type(citation, familyCitation);
+  const remove = field.getByRole('button', { name: m.recipe_remove_field() });
+  const submit = field.getByRole('button', { name: m.correction_submit() });
+  for (const node of [value, citation, remove, submit]) await target(node, replacement);
+  citation.focus();
+  await userEvent.tab();
+  await expect(remove).toHaveFocus();
+  await userEvent.tab();
+  await expect(submit).toHaveFocus();
+  const style = getComputedStyle(submit);
+  await expect(style.outlineStyle !== 'none' || style.boxShadow !== 'none').toBe(true);
+  await expect(fixture.calls).toHaveLength(calls); // Drafts, focus and association add zero reads.
+  const publicLink = correction.getByRole('link', { name: m.candidate_view_public() });
+  await expect(publicLink).toHaveAttribute('href', `/${getLocale()}/subjects/${recipeId}/lentil-soup`);
+  await target(publicLink, correctRegion);
+  await expect(publicLink.querySelector('button, input, select, a')).toBeNull();
+  for (const region of [createRegion, correctRegion]) {
+    const canvasBounds = region.getBoundingClientRect();
+    await expect(region.scrollWidth).toBeLessThanOrEqual(region.clientWidth + 1);
+    for (const title of region.querySelectorAll('h2')) {
+      await expect(title.textContent).toContain('Complete supplied field name');
+      await expect(title.scrollWidth).toBeLessThanOrEqual(title.clientWidth + 1);
+      await expect(title.getBoundingClientRect().right).toBeLessThanOrEqual(canvasBounds.right + 1);
+    }
+  }
+  // Both method panels retain their own explicit native label associations and rich-text role.
+  for (const [region, select] of [[createRegion, ownAdd], [correctRegion, otherAdd]] as const) {
+    await userEvent.selectOptions(select, 'schema:recipeInstructions');
+    await userEvent.click(within(region).getByRole('button', { name: m.correction_add() }));
+    const method = [...region.querySelectorAll('section')].at(-1)!;
+    const methodCanvas = within(method);
+    await userEvent.click(methodCanvas.getByRole('button', { name: m.recipe_replace_method() }));
+    for (const name of [m.catalogue_create_language(), m.subject_source_licence()]) {
+      const input = methodCanvas.getByRole('textbox', { name });
+      const label = method.querySelector<HTMLLabelElement>(`label[for="${input.id}"]`)!;
+      await expect(label.textContent).toBe(name);
+      await userEvent.click(label);
+      await expect(input).toHaveFocus();
+      await target(input, method);
+    }
+    await target(methodCanvas.getByRole('checkbox', { name: m.recipe_original() }), method);
+    await expect(method.querySelector('[contenteditable="true"][role="textbox"]')).not.toBeNull();
+  }
+  await assertAssociations();
+};
+export const IndependentFamilyPhone: Story = {
+  args: { onFixture: observeRecipe() },
+  render: (args) => <RecipeFamilyStory onFixture={args.onFixture} />,
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  parameters: familyDescription,
+  play: exerciseRecipeFamily,
+};
+export const IndependentFamilyDesktop: Story = {
+  ...IndependentFamilyPhone,
+  args: { onFixture: observeRecipe() },
+  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+};
+export const IndependentFamilyRtl: Story = {
+  ...IndependentFamilyPhone,
+  args: { onFixture: observeRecipe() },
+  render: (args) => <RecipeFamilyStory onFixture={args.onFixture} rtl />,
+};
