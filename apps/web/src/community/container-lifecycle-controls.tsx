@@ -121,8 +121,7 @@ function LifecycleControlsView({
     state.read.snapshot.state === 'active' &&
     state.read.snapshot.actions.includes('remove');
   const changedReason = state.reason !== reasonBaseline.current.value;
-  const reasonDraft =
-    changedReason && (state.read.kind !== 'ready' || reasonCanBeSubmitted);
+  const reasonDraft = changedReason && (state.read.kind !== 'ready' || reasonCanBeSubmitted);
   const reviewedConfirmation =
     confirmation !== null &&
     state.read.kind === 'ready' &&
@@ -132,8 +131,7 @@ function LifecycleControlsView({
   const acknowledgement = state.outcome === 'confirmed' ? (state.intent?.idempotencyKey ?? '') : '';
   const departureActive = caller.ready && caller.lifetime.current();
   useAuthoringDeparture(
-    departureActive &&
-      (reasonDraft || reviewedConfirmation || unresolvedIntent),
+    departureActive && (reasonDraft || reviewedConfirmation || unresolvedIntent),
     departureActive && unresolvedIntent,
     JSON.stringify([target.kind, target.id, caller.lifetime.id, acknowledgement]),
     undefined,
@@ -312,7 +310,11 @@ function InjectedLifecycleControls(props: ContainerLifecycleControlsProps & { ad
 export function ContainerLifecycleControls(props: ContainerLifecycleControlsProps) {
   return (
     <AuthoringDepartureBoundary sessionBound={false}>
-      {props.adapter ? <InjectedLifecycleControls {...props} adapter={props.adapter} /> : <DefaultLifecycleControls {...props} />}
+      {props.adapter ? (
+        <InjectedLifecycleControls {...props} adapter={props.adapter} />
+      ) : (
+        <DefaultLifecycleControls {...props} />
+      )}
     </AuthoringDepartureBoundary>
   );
 }

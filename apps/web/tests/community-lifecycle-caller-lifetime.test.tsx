@@ -49,7 +49,9 @@ mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('@tanstack/react-router', () => ({
-  useBlocker: ({ shouldBlockFn }: { shouldBlockFn: Blocker }) => { departureBlockers.push(shouldBlockFn); },
+  useBlocker: ({ shouldBlockFn }: { shouldBlockFn: Blocker }) => {
+    departureBlockers.push(shouldBlockFn);
+  },
   useRouter: () => ({}),
 }));
 mock.module('../src/community/space-actions', () => ({
@@ -386,7 +388,13 @@ test('StrictMode replay and healthy rerender keep one caller usable; uncertain r
 });
 
 for (const scenario of [
-  { name: 'Realm removal', target: realmTarget, state: 'active' as const, action: 'remove' as const, reason: 'Reviewed reason' },
+  {
+    name: 'Realm removal',
+    target: realmTarget,
+    state: 'active' as const,
+    action: 'remove' as const,
+    reason: 'Reviewed reason',
+  },
   { name: 'Space restoration', target: spaceTarget, state: 'removed' as const, action: 'restore' as const, reason: '' },
 ]) {
   test(`${scenario.name} shares Stay and Leave protection with lifecycle controls`, async () => {
@@ -397,9 +405,10 @@ for (const scenario of [
     const actionLabel = scenario.action === 'remove' ? m.container_lifecycle_remove() : m.container_lifecycle_restore();
     if (scenario.reason) await fillReason(scenario.reason);
     await click(actionLabel);
-    const confirmation = scenario.action === 'remove'
-      ? m.container_lifecycle_confirm_remove({ title })
-      : m.container_lifecycle_confirm_restore({ title });
+    const confirmation =
+      scenario.action === 'remove'
+        ? m.container_lifecycle_confirm_remove({ title })
+        : m.container_lifecycle_confirm_restore({ title });
     const reviewed = await requestDeparture();
     expect(host.textContent).toContain(m.container_lifecycle_leave_title());
     expect(host.textContent).toContain(m.container_lifecycle_leave_unsaved());
@@ -409,7 +418,14 @@ for (const scenario of [
     if (scenario.reason) expect(host.querySelector('textarea')?.value).toBe(scenario.reason);
     await click(m.container_lifecycle_confirm());
     const intent = changes[0]!.data;
-    expect(intent).toMatchObject({ target, action: scenario.action, expectedHead: head, expectedVersion: '7', reason: scenario.reason, contextId });
+    expect(intent).toMatchObject({
+      target,
+      action: scenario.action,
+      expectedHead: head,
+      expectedVersion: '7',
+      reason: scenario.reason,
+      contextId,
+    });
     let pending = await requestDeparture();
     expect(host.textContent).toContain(m.container_lifecycle_leave_pending());
     await click(m.thread_authoring_stay());
@@ -442,8 +458,17 @@ for (const scenario of [
 }
 
 test('shared Leave retires lifecycle callers even when another draft opens the prompt', async () => {
-  const owner = new AuthoringDepartureState(); let retired = false;
-  owner.register({ kind: 'container-lifecycle', needsDecision: () => false, unresolved: () => false, discard: () => {}, leave: () => { retired = true; } });
+  const owner = new AuthoringDepartureState();
+  let retired = false;
+  owner.register({
+    kind: 'container-lifecycle',
+    needsDecision: () => false,
+    unresolved: () => false,
+    discard: () => {},
+    leave: () => {
+      retired = true;
+    },
+  });
   owner.register({ needsDecision: () => true, unresolved: () => false, discard: () => {} });
   const blocked = owner.block('/space', '/other', null);
   owner.leave();
