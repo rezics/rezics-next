@@ -18,11 +18,7 @@ import { readPublicRealms } from './read';
 export type AccountView = View | 'realms';
 
 /** A different account view starts a different list; other query selections keep their original bytes. */
-function overviewFallback(
-  locale: string,
-  handle: string,
-  search = '',
-): string {
+function overviewFallback(locale: string, handle: string, search = ''): string {
   const href = agentPath(locale, handle);
   if (!search) return href;
   const fragmentAt = search.indexOf('#');
