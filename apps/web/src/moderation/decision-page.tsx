@@ -10,8 +10,9 @@ import { createPrivateReaderLifetime, type PrivateReaderNavigation } from './pri
 import { getLocale, localizeHref } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { csrfHeaders } from '../threads/composer';
+import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../threads/authoring-departure';
 import { appealDecision, type AppealSubmission } from './appeal';
-import { createModerationIntent } from './command-intent';
+import { createDecisionAppealIntent } from './command-intent';
 import { useSession } from '../session/query';
 import {
   decisionReadFailure,
@@ -110,7 +111,22 @@ export function DecisionReadStatus({
 
 /** Existing explicitly injected fixture pairs do not acquire browser production authority. */
 export function DecisionPageView(props: DecisionPageProps) {
-  return props.onAppeal && props.onRefresh ? <DecisionFixture {...props} /> : <DecisionSessionPage {...props} />;
+  return (
+    <AuthoringDepartureBoundary
+      sessionBound={false}
+      navigationMessages={{
+        title: m.decision_appeal_leave_title(),
+        unsaved: m.decision_appeal_leave_unsaved(),
+        pending: m.decision_appeal_leave_pending(),
+        discardTitle: m.decision_appeal_discard_title(),
+        discardUnsaved: m.decision_appeal_discard_unsaved(),
+        discardPending: m.decision_appeal_discard_pending(),
+        discardAction: m.decision_appeal_discard(),
+      }}
+    >
+      {props.onAppeal && props.onRefresh ? <DecisionFixture {...props} /> : <DecisionSessionPage {...props} />}
+    </AuthoringDepartureBoundary>
+  );
 }
 
 function DecisionFixture(props: DecisionPageProps) {
@@ -179,7 +195,9 @@ function DecisionBoundPage(props: DecisionPageProps) {
         key={page.readGeneration ?? 'presenter'}
         {...original}
         page={page}
-        {...(owner ? { isCurrent: owner.isCurrent, canCommand: owner.canCommand, accepts: owner.accepts } : {})}
+        {...(owner
+          ? { isCurrent: owner.isCurrent, canCommand: owner.canCommand, accepts: owner.accepts, retire: owner.retire }
+          : {})}
       />
     </div>
   );
@@ -240,25 +258,57 @@ function DecisionVisit({
   isCurrent = () => true,
   canCommand = () => true,
   accepts,
-}: DecisionPageProps) {
+  retire,
+}: DecisionPageProps & { retire?: () => void }) {
   const [current, setCurrent] = useState<DecisionPage | null>(page);
   const [readState, setReadState] = useState<DecisionReadState>('unavailable');
-  const [text, setText] = useState('');
+  const [composition] = useState(createDecisionAppealIntent);
+  const [, redraw] = useState(0);
+  const text = composition.text;
   const [feedback, setFeedback] = useState<Feedback | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [commandIntent] = useState(createModerationIntent);
+  const [sending, setSending] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const busy = sending || refreshing;
   const pending = useRef(false);
-  const lastCommand = useRef<Parameters<DecisionAppealAction>[0] | null>(null);
-  const lifetime = useRef({ active: true, serial: 0 });
+  const reading = useRef(false);
+  const lifetime = useRef({ active: true, retired: false, serial: 0, readSerial: 0 });
+  function leave() {
+    lifetime.current.retired = true;
+    lifetime.current.active = false;
+    lifetime.current.serial++;
+    lifetime.current.readSerial++;
+    composition.discard();
+    retire?.();
+  }
+  function discard() {
+    // Forget local recovery without claiming that the native request was cancelled.
+    lifetime.current.serial++;
+    pending.current = false;
+    composition.discard();
+    setSending(false);
+    setFeedback(null);
+    redraw((value) => value + 1);
+  }
+  const active = () => lifetime.current.active && !lifetime.current.retired && isCurrent();
+  const departure = useAuthoringDeparture(
+    () => active() && composition.needsDecision,
+    () => active() && composition.unresolved,
+    JSON.stringify([decisionIdentity(page), text, sending, composition.unresolved]),
+    discard,
+    leave,
+  );
   useEffect(() => {
-    lifetime.current.active = true;
+    lifetime.current.active = !lifetime.current.retired;
     return () => {
       lifetime.current.active = false;
       lifetime.current.serial++;
-      lastCommand.current = null;
-      commandIntent.changed();
+      lifetime.current.readSerial++;
+      // StrictMode may reconnect synchronously; async work is fenced immediately.
+      queueMicrotask(() => {
+        if (!lifetime.current.active) composition.discard();
+      });
     };
-  }, [commandIntent]);
+  }, [composition]);
   const displayed = current ?? page;
   const { decision } = displayed;
   const target = displayed.target?.id === decision.targetId ? displayed.target : null;
@@ -291,56 +341,54 @@ function DecisionVisit({
             : m.decision_appeal_refused();
 
   async function submit(retry = false) {
-    if (
-      !isCurrent() ||
-      !canCommand() ||
-      pending.current ||
-      (!retry && (locked || !allowed || count < 1 || count > 2000))
-    )
+    if (!active() || !canCommand() || pending.current || (!retry && (locked || !allowed || count < 1 || count > 2000)))
       return;
-    if (retry && (feedback !== 'uncertain' || !lastCommand.current)) return;
+    if (retry && (feedback !== 'uncertain' || !composition.unresolved)) return;
     const token = ++lifetime.current.serial;
-    const intent = { id: decision.id, statement: text };
-    const command = retry ? lastCommand.current! : { ...intent, idempotencyKey: commandIntent.keyFor(intent) };
-    lastCommand.current = command;
+    const command = retry ? composition.retry()! : composition.freeze(decision.id);
     pending.current = true;
-    setBusy(true);
+    setSending(true);
     setFeedback(null);
     // A previous target snapshot is no longer a current link after a write attempt.
     setCurrent((value) => (value ? { ...value, target: null } : null));
     try {
-      if (!isCurrent() || !canCommand()) return;
+      if (!active() || !canCommand()) return;
       const result = await onAppeal(command);
-      if (!isCurrent() || !lifetime.current.active || lifetime.current.serial !== token) return;
+      if (!active() || lifetime.current.serial !== token) return;
+      // A concurrent admitted read may already have confirmed this request.
+      if (composition.retry() !== command) return;
       if (result.state === 'pending' || result.state === 'updated') {
         if (!sameDecision(result.decision, decision) || (result.state === 'pending' && !result.decision.appeal)) {
           setFeedback('uncertain');
           return;
         }
+        composition.settle(Boolean(result.decision.appeal));
         setCurrent((value) => (value ? { ...value, decision: result.decision, target: null } : null));
         setFeedback(result.state === 'updated' ? 'conflict' : null);
-      } else if (result.state === 'invalid') setFeedback('invalid');
-      else setFeedback(result.state === 'failed' ? 'uncertain' : result.state);
+      } else {
+        if (result.state !== 'failed') composition.settle();
+        setFeedback(result.state === 'failed' ? 'uncertain' : result.state);
+      }
     } catch {
-      if (isCurrent() && lifetime.current.active && lifetime.current.serial === token) setFeedback('uncertain');
+      if (active() && lifetime.current.serial === token) setFeedback('uncertain');
     } finally {
-      if (isCurrent() && lifetime.current.active && lifetime.current.serial === token) {
+      if (active() && lifetime.current.serial === token) {
         pending.current = false;
-        setBusy(false);
+        setSending(false);
       }
     }
   }
 
   async function refresh() {
-    if (!isCurrent() || pending.current) return;
-    const token = ++lifetime.current.serial;
-    pending.current = true;
-    setBusy(true);
+    if (!active() || reading.current) return;
+    const token = ++lifetime.current.readSerial;
+    reading.current = true;
+    setRefreshing(true);
     if (!current) setReadState('loading');
     setCurrent((value) => (value ? { ...value, target: null } : null));
     try {
       const next = await onRefresh(decision.id);
-      if (!isCurrent() || !lifetime.current.active || lifetime.current.serial !== token) return;
+      if (!active() || lifetime.current.readSerial !== token) return;
       if (
         !sameDecision(next.decision, page.decision) ||
         next.viewerId !== page.viewerId ||
@@ -348,35 +396,32 @@ function DecisionVisit({
       ) {
         setCurrent(null);
         setReadState('closed');
-        setText('');
-        lastCommand.current = null;
-        commandIntent.changed();
+        discard();
         return;
       }
-      if (!isCurrent() || !lifetime.current.active || lifetime.current.serial !== token) return;
-      setCurrent(next);
+      if (!active() || lifetime.current.readSerial !== token) return;
+      // An overlapping target read cannot roll back an acknowledged appeal receipt.
+      setCurrent((value) =>
+        value?.decision.appeal && !next.decision.appeal ? { ...next, decision: value.decision } : next,
+      );
       // A successful read without an appeal cannot settle a lost command response.
-      if (feedback !== 'uncertain' || next.decision.appeal) {
+      if (!composition.unresolved || next.decision.appeal) {
+        composition.settle(Boolean(next.decision.appeal));
         setFeedback(null);
-        lastCommand.current = null;
-        commandIntent.changed();
       }
     } catch (error) {
-      if (isCurrent() && lifetime.current.active && lifetime.current.serial === token) {
+      if (active() && lifetime.current.readSerial === token) {
         const state = decisionReadFailure(error);
         setCurrent(null);
         setReadState(state);
         if (state !== 'unavailable') {
-          setText('');
-          setFeedback(null);
-          lastCommand.current = null;
-          commandIntent.changed();
+          discard();
         }
       }
     } finally {
-      if (isCurrent() && lifetime.current.active && lifetime.current.serial === token) {
-        pending.current = false;
-        setBusy(false);
+      if (active() && lifetime.current.readSerial === token) {
+        reading.current = false;
+        setRefreshing(false);
       }
     }
   }
@@ -464,8 +509,8 @@ function DecisionVisit({
               <Withheld shape="passage" labels={{ withheld: m.moderation_target_unavailable() }} />
             )}
             <p className="mt-3 text-xs leading-6 text-muted-foreground">{m.decision_target_independent()}</p>
-            <Button className="mt-4 min-h-11" variant="outline" disabled={busy} onClick={() => void refresh()}>
-              {busy ? m.decision_refreshing() : m.decision_refresh()}
+            <Button className="mt-4 min-h-11" variant="outline" disabled={refreshing} onClick={() => void refresh()}>
+              {refreshing ? m.decision_refreshing() : m.decision_refresh()}
             </Button>
           </ContentItemFrame>
         </section>
@@ -518,11 +563,11 @@ function DecisionVisit({
                 name="statement"
                 value={text}
                 onChange={(event) => {
-                  commandIntent.changed();
-                  setText(event.target.value);
+                  composition.change(event.target.value);
+                  redraw((value) => value + 1);
                   setFeedback(null);
                 }}
-                disabled={busy || locked}
+                disabled={sending || locked}
                 rows={5}
                 className="min-h-36"
                 aria-describedby="appeal-count appeal-hint"
@@ -565,6 +610,16 @@ function DecisionVisit({
               ) : null}
             </ContentItemFrame>
           ) : null}
+          {composition.needsDecision ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-4 min-h-11"
+              onClick={() => departure.requestDiscard()}
+            >
+              {m.decision_appeal_discard()}
+            </Button>
+          ) : null}
         </ContentItemFrame>
       </section>
       <details className="border-t border-border pt-3">
@@ -592,4 +647,8 @@ function DecisionVisit({
       </details>
     </article>
   );
+}
+
+function decisionIdentity(page: DecisionPage) {
+  return [page.decision.id, page.decision.targetKind, page.decision.targetId];
 }

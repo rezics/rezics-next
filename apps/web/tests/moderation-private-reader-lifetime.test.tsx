@@ -1092,3 +1092,186 @@ for (const kind of ['appeals', 'reporter'] as const) {
     }
   });
 }
+
+async function mountDecisionDeparture(onAppeal?: import('../src/moderation/decision-page').DecisionAppealAction) {
+  const { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } =
+    await import('@tanstack/react-router');
+  const readers = await import('../src/moderation/private-reader-lifetime');
+  const { spyOn } = await import('bun:test');
+  const factory = readers.createPrivateReaderLifetime;
+  let original!: ReturnType<typeof factory>;
+  const spy = spyOn(readers, 'createPrivateReaderLifetime').mockImplementation((...args) => {
+    original = factory(...args);
+    return original;
+  });
+  const page = (await load('decision')) as DecisionPage;
+  const destination = deferred<void>();
+  let arrivals = 0;
+  const parent = createRootRoute({ component: Outlet });
+  const router = createRouter({
+    defaultPendingMs: Infinity,
+    routeTree: parent.addChildren([
+      createRoute({
+        getParentRoute: () => parent,
+        path: '/decision',
+        component: () => (
+          <>
+            <DecisionPageView page={page} navigation={navigation} now={Date.parse('2026-11-01')} onAppeal={onAppeal} />
+            <button onClick={() => void router.navigate({ to: '/replacement' })}>Depart decision</button>
+          </>
+        ),
+      }),
+      createRoute({
+        getParentRoute: () => parent,
+        path: '/replacement',
+        loader: () => {
+          // This runs before unmount: confirmed departure must already have retired the original reader.
+          expect(original.isCurrent()).toBe(false);
+          arrivals++;
+          return destination.promise;
+        },
+        component: () => <p>Replacement visit</p>,
+      }),
+    ]),
+    history: createMemoryHistory({ initialEntries: ['/decision'] }),
+  });
+  await router.load();
+  await act(async () =>
+    root.render(
+      <QueryClientProvider client={cache}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    ),
+  );
+  const blocked = () => {
+    const event = new window.Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  };
+  const dialogButton = (label: string) =>
+    [...document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button')].find(
+      (node) => node.textContent?.trim() === label,
+    )!;
+  const decide = async (label: string) =>
+    act(async () => {
+      dialogButton(label).click();
+      await tick();
+    });
+  const depart = async () => {
+    button('Depart decision').focus();
+    await click('Depart decision');
+    expect(document.querySelectorAll('[role="alertdialog"]')).toHaveLength(1);
+    expect(arrivals).toBe(0);
+  };
+  return {
+    blocked,
+    depart,
+    decide,
+    dialogButton,
+    destination,
+    arrivals: () => arrivals,
+    restore: () => spy.mockRestore(),
+  };
+}
+
+test('Decision draft, uncertain recovery, shared discard and Stay preserve the exact command until synchronous Leave', async () => {
+  const visit = await mountDecisionDeparture();
+  try {
+    expect(visit.blocked()).toBe(false);
+    await type('PRIVATE exact appeal composition');
+    expect(visit.blocked()).toBe(true);
+    await click(m.decision_appeal_discard());
+    expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain(m.decision_appeal_discard_unsaved());
+    await visit.decide(m.thread_authoring_stay());
+    expect(host.querySelector('textarea')?.value).toBe('PRIVATE exact appeal composition');
+    await click(m.decision_appeal_submit());
+    const first = nativeWrites[0]!;
+    const body = await first.clone().text();
+    const key = first.headers.get('idempotency-key');
+    responseStatus = 503;
+    await click(m.decision_refresh());
+    expect(host.querySelector('textarea')).toBeNull();
+    await visit.depart();
+    await visit.decide(m.thread_authoring_stay());
+    responseStatus = 200;
+    await click(m.moderation_decision_read_retry());
+    expect(host.querySelector('textarea')?.value).toBe('PRIVATE exact appeal composition');
+    expect(host.textContent).toContain(m.decision_appeal_uncertain());
+    const counts = [nativeReads.length, nativeWrites.length];
+    await visit.depart();
+    await act(async () => {
+      await new Promise((resolve) => window.requestAnimationFrame(resolve));
+    });
+    expect(document.activeElement).toBe(visit.dialogButton(m.thread_authoring_stay()));
+    await visit.decide(m.thread_authoring_stay());
+    expect(document.activeElement).toBe(button('Depart decision'));
+    expect([nativeReads.length, nativeWrites.length]).toEqual(counts);
+    await click(m.decision_retry_same());
+    expect(nativeWrites).toHaveLength(2);
+    expect(await nativeWrites[1]!.clone().text()).toBe(body);
+    expect(nativeWrites[1]!.headers.get('idempotency-key')).toBe(key);
+    await click(m.decision_appeal_discard());
+    expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain(m.decision_appeal_discard_pending());
+    await visit.decide(m.thread_authoring_discard());
+    expect(visit.blocked()).toBe(false);
+    await type('A subsequent unsaved statement');
+    await visit.depart();
+    await visit.decide(m.thread_authoring_leave());
+    expect(visit.arrivals()).toBe(1);
+    visit.destination.resolve();
+    await act(tick);
+    expect(host.textContent).toBe('Replacement visit');
+  } finally {
+    visit.restore();
+  }
+});
+
+for (const receipt of [false, true])
+  test(`Decision ${receipt ? 'receipt releases protection during target refresh' : 'sending Leave fences late appeal and target results'}`, async () => {
+    const command = deferred<import('../src/moderation/appeal').AppealSubmission>();
+    const visit = await mountDecisionDeparture(() => command.promise);
+    try {
+      await type('Submitted statement');
+      await click(m.decision_appeal_submit());
+      nativeGate = deferred<void>();
+      await click(m.decision_refresh());
+      const reads = nativeReads.length;
+      await visit.depart();
+      expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain(m.decision_appeal_leave_pending());
+      await visit.decide(m.thread_authoring_stay());
+      const pending = {
+        ...decision,
+        appeal: { id: id(99), outcome: null, statement: 'Submitted statement', resolvedAt: null },
+      };
+      if (receipt) {
+        await act(async () => {
+          command.resolve({ state: 'pending', decision: pending });
+          await tick();
+        });
+        expect(visit.blocked()).toBe(false);
+        expect(host.textContent).toContain(m.decision_appeal_pending());
+        expect(nativeReads).toHaveLength(reads);
+        nativeGate.resolve();
+        await act(tick);
+        expect(host.textContent).toContain(m.decision_appeal_pending());
+        expect(visit.blocked()).toBe(false);
+        return;
+      }
+      await visit.depart();
+      await visit.decide(m.thread_authoring_leave());
+      expect(visit.arrivals()).toBe(1);
+      await act(async () => {
+        command.resolve({ state: 'pending', decision: pending });
+        nativeGate!.resolve();
+        await tick();
+      });
+      expect(host.textContent).not.toContain('Submitted statement');
+      expect(host.textContent).not.toContain(m.decision_appeal_pending());
+      visit.destination.resolve();
+      await act(tick);
+      expect(host.textContent).toBe('Replacement visit');
+      expect(nativeWrites).toHaveLength(0);
+    } finally {
+      visit.restore();
+    }
+  });

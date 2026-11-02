@@ -36,7 +36,15 @@ type Decision = { kind: 'navigation'; resolve: (stay: boolean) => void } | { kin
 
 export type AuthoringLocation = { pathname: string; search: Record<string, unknown> };
 type NavigationContext = (location: AuthoringLocation) => string;
-type NavigationMessages = { title: string; unsaved: string; pending: string };
+type NavigationMessages = {
+  title: string;
+  unsaved: string;
+  pending: string;
+  discardTitle?: string;
+  discardUnsaved?: string;
+  discardPending?: string;
+  discardAction?: string;
+};
 const pathnameContext: NavigationContext = (location) => location.pathname;
 
 /** A page-local registry keeps editors' state in their owners while presenting one shared decision. */
@@ -88,6 +96,10 @@ export class AuthoringDepartureState {
     const decision = this.decision;
     if (decision?.kind !== 'navigation') return;
     this.decision = null;
+    if (!stay) {
+      for (const draft of [...this.drafts.values()]) draft.leave?.();
+      this.onNavigationLeave();
+    }
     this.leaving = !stay;
     this.notify();
     decision.resolve(stay);
@@ -153,9 +165,6 @@ export class AuthoringDepartureState {
     const decision = this.decision;
     if (!decision) return;
     if (decision.kind === 'navigation') {
-      for (const draft of [...this.drafts.values()])
-        if (draft.kind === 'realm-claim' || draft.needsDecision()) draft.leave?.();
-      this.onNavigationLeave();
       this.settleNavigation(false);
     } else {
       this.decision = null;
@@ -324,7 +333,7 @@ function DepartureDialog({
       <AlertDialogHeader className="min-w-0 grid-cols-[minmax(0,1fr)] place-items-stretch gap-3 text-start sm:group-data-[size=default]/alert-dialog-content:place-items-stretch sm:group-data-[size=default]/alert-dialog-content:text-start">
         <AlertDialogTitle className="min-w-0 text-xl leading-snug [overflow-wrap:anywhere]">
           {discard
-            ? m.thread_authoring_discard_title()
+            ? (messages?.discardTitle ?? m.thread_authoring_discard_title())
             : claim
               ? m.realm_claim_leave_title()
               : (messages?.title ?? m.thread_authoring_leave_title())}
@@ -336,8 +345,8 @@ function DepartureDialog({
               : m.realm_claim_leave_confirmation()
             : discard
               ? recovery
-                ? m.thread_authoring_discard_pending()
-                : m.thread_authoring_discard_unsaved()
+                ? (messages?.discardPending ?? m.thread_authoring_discard_pending())
+                : (messages?.discardUnsaved ?? m.thread_authoring_discard_unsaved())
               : recovery
                 ? (messages?.pending ?? m.thread_authoring_leave_pending())
                 : (messages?.unsaved ?? m.thread_authoring_leave_unsaved())}
@@ -355,7 +364,9 @@ function DepartureDialog({
           className="h-auto min-h-11 min-w-11 max-w-full shrink px-4 py-3 text-center leading-snug whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring"
           onClick={navigation.leave}
         >
-          <span className="min-w-0">{discard ? m.thread_authoring_discard() : m.thread_authoring_leave()}</span>
+          <span className="min-w-0">
+            {discard ? (messages?.discardAction ?? m.thread_authoring_discard()) : m.thread_authoring_leave()}
+          </span>
         </AlertDialogAction>
       </AlertDialogFooter>
     </AlertDialogContent>
@@ -366,14 +377,18 @@ function DepartureDialog({
 export function AuthoringDepartureBoundary({
   children,
   sessionBound = true,
+  navigationMessages,
 }: {
   children: ReactNode;
   sessionBound?: boolean;
+  navigationMessages?: NavigationMessages;
 }) {
   return useContext(DepartureContext) ? (
     children
   ) : (
-    <AuthoringDepartureProvider sessionBound={sessionBound}>{children}</AuthoringDepartureProvider>
+    <AuthoringDepartureProvider sessionBound={sessionBound} navigationMessages={navigationMessages}>
+      {children}
+    </AuthoringDepartureProvider>
   );
 }
 

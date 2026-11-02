@@ -46,6 +46,17 @@ Decision retains its immutable uncertain appeal retry and drafts through current
 copies only the original reader's own report reference and checks its original connection at copy and settlement.
 Definitive refusals require fresh reads. Retirement never turns known native success into uncertainty.
 
+Decision appeal composition registers with the shared authoring departure owner, including standalone presenters.
+Nonempty changed statements and immutable sending or uncertain commands require its accessible Stay/Leave decision.
+Stay preserves the exact statement, decision and command key through unavailable refreshes and reads without an appeal.
+Only an admitted appeal receipt acknowledges the submitted snapshot; subsequent unsaved writing remains protected.
+Command and explicit target refresh continuations are independent, so a receipt releases command protection even while
+a target read is pending, and a late read without an appeal cannot roll back that receipt. Confirmed Leave synchronously
+retires the original private reader and fences both continuations before replacement reads. Existing origin, session,
+cache and query admission remain authoritative; standalone injected fixtures acquire no production authority.
+Decision: confirmed draft discard forgets only local writing and retry recovery, keeps the current reader, and never
+claims to cancel or undo a native request.
+
 Native limits remain 20 Reports/Appeals plus existing distinct-target/revision/author/media enrichment. Subscriptions
 are fixed per cache/owner and rendering is O(returned evidence); no history or per-row identity scan is added.
 
