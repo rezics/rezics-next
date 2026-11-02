@@ -62,17 +62,18 @@ export function OrderPage(props: OrderPageProps) {
     budget = { polls: { current: 0 }, accepted: false };
     budgets.current.set(props.order.id, budget);
   }
-  return <OrderReceipt key={props.order.id} {...props} session={session} benefit={benefit} budget={budget} />;
+  return <OrderReceipt key={props.order.id} {...props} locale={locale} session={session} benefit={benefit} budget={budget} />;
 }
 
 function OrderReceipt(
   props: OrderPageProps & {
+    locale: string;
     session: ReturnType<typeof useBuyerCurrentOrigin>;
     benefit: ReturnType<typeof useBuyerCurrentOrigin>;
     budget: { polls: { current: number }; accepted: boolean };
   },
 ) {
-  const { session, benefit, budget } = props;
+  const { locale, session, benefit, budget } = props;
   const [loaded, setLoaded] = useState(props.order);
   const [order, setOrder] = useState(props.order);
   if (loaded !== props.order) {
@@ -277,7 +278,6 @@ function OrderLifetime({
   const pending = openSettlement.has(order.settlement);
   const canceled = checkout === 'canceled' && order.settlement !== 'paid';
   const confirming = pending && !canceled;
-  const locale = getLocale();
   const money = order.money;
   const charge = order.settlement === 'paid' ? money?.recordedCharge : null;
   const presentment = order.settlement === 'paid' ? money?.recordedPresentment : null;
