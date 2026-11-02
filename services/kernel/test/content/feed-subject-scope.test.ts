@@ -49,15 +49,10 @@ test('native Space Subject scope retains complete publication membership and rej
     expect(next.subjects.map((row) => row.subjectId)).toEqual(expected.slice(1));
     expect(next.exhausted).toBe(true);
     expect(next.examined).toBe(1);
-    await world.command(
-      'POST',
-      `/v1/realms/${selected.realmId}/publications/${world.conceptId}:withdraw`,
-      undefined,
-      {
-        headers: { 'if-match': JSON.stringify(first.publication.publicationId) },
-        expectedStatus: 200,
-      },
-    );
+    await world.command('POST', `/v1/realms/${selected.realmId}/publications/${world.conceptId}:withdraw`, undefined, {
+      headers: { 'if-match': JSON.stringify(first.publication.publicationId) },
+      expectedStatus: 200,
+    });
     await expect(scope.finish()).rejects.toMatchObject({ code: 'stale_cursor' });
     await expect(scope.prefix(1, prefix.coveredThrough)).rejects.toMatchObject({ code: 'stale_cursor' });
     await expect(open(spaceId, scope.observation)).rejects.toMatchObject({ code: 'stale_cursor' });
