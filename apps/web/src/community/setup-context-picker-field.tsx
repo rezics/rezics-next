@@ -231,7 +231,7 @@ export function SetupContextPickerField({ picker, disabled }: { picker: SetupCon
                   className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
                   disabled={disabled}
                   onClick={(event) =>
-                    pageAction(event.detail, page.next, () =>
+                    pageAction(event.detail, page.next!, () =>
                       picker.next({
                         query: state.query,
                         ...(page.cursor === undefined ? {} : { cursor: page.cursor }),
