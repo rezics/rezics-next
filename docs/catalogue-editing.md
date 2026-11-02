@@ -508,6 +508,8 @@ reuse its native value controls and validation. Only explicitly entered facts en
 selected at creation. The returned ID is read through the ordinary reader. An uncertain request freezes both
 terms and facts with the original key; confirmed creation with an unavailable reader retains its ID and retries
 only that read. Drafts survive Type switches and stale-metadata rejection, including fields no longer admitted.
+An explicit retry keeps Retry focusable with `aria-disabled` while pending, then returns focus to Retry on failure
+or moves it to the profile/form heading on success.
 
 Corrections reuse the integrated multi-field editor's selected values, qualifiers, references, independent keys,
 partial results and exact-candidate review. Submission proposes an alternative; acceptance and selection remain
