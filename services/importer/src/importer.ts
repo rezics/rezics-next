@@ -629,8 +629,7 @@ export class Importer {
       ) {
         subject = await this.bootstrap(registration, staged, conversion, signal, write);
         if (!subject) return null;
-        if (claim?.state !== 'bound')
-          await this.metadata(owner, staged.projection.sourceRecordMetadata, signal, write);
+        await this.metadata(owner, staged.projection.sourceRecordMetadata, signal, write);
       }
       if (subject) {
         omissions = await this.fences(owner, signal);
