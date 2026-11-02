@@ -79,6 +79,9 @@ first: line counts are a measure, never a goal ([efficiency](efficiency.md)).
 - Read your brief and continuation once per session. Keep the continuation under 8,000 characters and replace it
   rather than append to it.
 - Act on every stopped task within an hour: retry with a rewritten brief, split it or cancel it.
+- A shared environment problem goes to the supermanager as one `blocker` with the exact error line when its fix needs the
+  main checkout or the live control plane, or when its owner has not fixed it within 15 minutes. Owners fix or escalate;
+  they do not forward an environment problem to another manager.
 
 ## Supermanager and subagents
 
