@@ -45,21 +45,26 @@ test('cost and diagnostics reject cyclic and malformed plan children with their 
 test('plan traversal enforces documented depth and node limits', () => {
   expect(() => statementOccurrences(capture(chain(MAX_PLAN_DEPTH + 1)))).toThrow(/maximum depth 256/);
   expect(() =>
-    costOf(capture(node({}, Array.from({ length: MAX_PLAN_NODES }, () => node())))),
+    costOf(
+      capture(
+        node(
+          {},
+          Array.from({ length: MAX_PLAN_NODES }, () => node()),
+        ),
+      ),
+    ),
   ).toThrow(/maximum node count 10000/);
 });
 
 test('valid plan costs and statement diagnostics retain their measured descendants', () => {
   const plan = node({}, [
-    node(
-      {
-        'Node Type': 'Seq Scan',
-        Schema: 'app',
-        'Relation Name': 'items',
-        'Actual Rows': 3,
-        'Shared Hit Blocks': 3,
-      },
-    ),
+    node({
+      'Node Type': 'Seq Scan',
+      Schema: 'app',
+      'Relation Name': 'items',
+      'Actual Rows': 3,
+      'Shared Hit Blocks': 3,
+    }),
   ]);
   const sample = capture(plan);
 

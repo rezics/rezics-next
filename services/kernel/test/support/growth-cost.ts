@@ -174,7 +174,9 @@ function classifyCatalogStatements(capture: Capture, planCollection = 'plans'): 
       const plans = plansByStatement.get(index);
       const key = catalogKey(backendAware, backend, text);
       const catalogOnly =
-        plans !== undefined && plans.length > 0 && plans.every(({ plan, location }) => isCatalogOnlyPlan(plan, location));
+        plans !== undefined &&
+        plans.length > 0 &&
+        plans.every(({ plan, location }) => isCatalogOnlyPlan(plan, location));
       catalogOnlyByText.set(text, (catalogOnlyByText.get(text) ?? true) && catalogOnly);
       catalogOnlyByKey.set(key, (catalogOnlyByKey.get(key) ?? true) && catalogOnly);
       textByKey.set(key, text);
@@ -582,10 +584,13 @@ function costOfAt(capture: Capture, planCollection: string): Cost {
         !hasMatchingStatement(backgroundStatementKeys, true, entry.queryText, backend)
       );
       const key = entry.queryText ?? '<unknown background statement>';
-      const planCost = costOfAt({
-        statements: [],
-        plans: [[{ Plan: entry.plan, ...(entry.queryText === undefined ? {} : { 'Query Text': entry.queryText }) }]],
-      }, `backgroundPlans[${index}]`);
+      const planCost = costOfAt(
+        {
+          statements: [],
+          plans: [[{ Plan: entry.plan, ...(entry.queryText === undefined ? {} : { 'Query Text': entry.queryText }) }]],
+        },
+        `backgroundPlans[${index}]`,
+      );
       if (!included) continue;
       backgroundRows = checkedAdd(backgroundRows, planCost.rows, 'Total background examined rows');
       backgroundBlocks = checkedAdd(backgroundBlocks, planCost.blocks, 'Total background blocks');
