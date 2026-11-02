@@ -1516,7 +1516,8 @@ export async function settle(
   }
   if (
     options.operationBackends !== undefined &&
-    (typeof options.operationBackends.has !== 'function' || typeof options.operationBackends[Symbol.iterator] !== 'function')
+    (typeof options.operationBackends.has !== 'function' ||
+      typeof options.operationBackends[Symbol.iterator] !== 'function')
   )
     throw new TypeError('Settle operationBackends must be a set');
 
@@ -1535,20 +1536,20 @@ export async function settle(
     await disableAutovacuumOn(metadata, lease, deadline);
     const names = options.relations ?? metadata.map(({ schema, name }) => `${schema}.${name}`);
     for (const relation of names) {
-        const sql = [
-          'VACUUM (INDEX_CLEANUP ON',
-          options.analyze ? ', ANALYZE' : '',
-          ') ',
-          qualifiedIdentifier(relation),
-        ].join('');
-        try {
-          await querySettleClient(lease, deadline, sql, undefined, `VACUUM relation ${relation}`);
-        } catch (error) {
-          throw new GrowthSettleInfrastructureError(
-            `Could not settle database ${physicalName} relation ${relation}: ${error instanceof Error ? error.message : String(error)}`,
-            { cause: error },
-          );
-        }
+      const sql = [
+        'VACUUM (INDEX_CLEANUP ON',
+        options.analyze ? ', ANALYZE' : '',
+        ') ',
+        qualifiedIdentifier(relation),
+      ].join('');
+      try {
+        await querySettleClient(lease, deadline, sql, undefined, `VACUUM relation ${relation}`);
+      } catch (error) {
+        throw new GrowthSettleInfrastructureError(
+          `Could not settle database ${physicalName} relation ${relation}: ${error instanceof Error ? error.message : String(error)}`,
+          { cause: error },
+        );
+      }
     }
   } catch (error) {
     primary = error;

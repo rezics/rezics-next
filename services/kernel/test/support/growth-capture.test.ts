@@ -1105,7 +1105,10 @@ test('times out a starved checkout and retires a client that arrives later', asy
   });
   const database = fakeSettleDatabase(() => checkout);
   let released!: (destroy: boolean | undefined) => void;
-  const lateClient = fakeSettleClient(async () => ({ rows: [] }), (destroy) => released(destroy));
+  const lateClient = fakeSettleClient(
+    async () => ({ rows: [] }),
+    (destroy) => released(destroy),
+  );
   const releaseSeen = new Promise<boolean | undefined>((resolve) => {
     released = resolve;
   });
