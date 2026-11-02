@@ -2,7 +2,14 @@ import { createHash } from 'node:crypto';
 import { lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AttemptRef } from './contracts.ts';
-import { BRIEF_KINDS, devProductBrief, parseBrief, pathsOverlap, readRiskOwnership, type RiskOwnership } from './briefs.ts';
+import {
+  BRIEF_KINDS,
+  devProductBrief,
+  parseBrief,
+  pathsOverlap,
+  readRiskOwnership,
+  type RiskOwnership,
+} from './briefs.ts';
 import { classifyTask } from './routing.ts';
 import type { WorkerStore } from './store.ts';
 import type { Settings, Task } from './types.ts';
