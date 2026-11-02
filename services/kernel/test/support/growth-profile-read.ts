@@ -9,6 +9,9 @@ export const GROWTH_PROFILE_METRICS = ['rows', 'blocks', 'statements'] as const;
 export const GROWTH_MEASUREMENT_IDENTITY_VERSION = 1 as const;
 export type GrowthProfileMetric = (typeof GROWTH_PROFILE_METRICS)[number];
 export type GrowthProfileOutcome = 'compatible' | 'violation' | 'inconclusive';
+export type GrowthProfileEligibility =
+  | { readonly status: 'eligible' }
+  | { readonly status: 'ineligible'; readonly reason: string };
 
 export type GrowthProfileRunSource = Readonly<{ name: string; text: string }>;
 export type GrowthProfileRepetition = Readonly<Record<GrowthProfileMetric, number>>;
@@ -31,6 +34,7 @@ export type GrowthProfileEntry = Readonly<{
   bounds: GrowthProfileBounds;
   measurement: GrowthMeasurementIdentity | null;
   shadow: Readonly<Record<GrowthProfileMetric, GrowthProfileOutcome>>;
+  eligibility: GrowthProfileEligibility;
 }>;
 
 export type OmittedGrowthProfileCheck = Readonly<{
@@ -44,6 +48,7 @@ export type OmittedGrowthProfileCheck = Readonly<{
     run: string;
     measurement: GrowthMeasurementIdentity | null;
   }>[];
+  ineligibleRuns?: readonly Readonly<{ run: string; reason: string }>[];
 }>;
 
 export type NonGrowingRelation = Readonly<{
@@ -214,7 +219,31 @@ function parseProfile(value: unknown, run: string, occurrence: number, descripti
     shadow[metric] = outcome;
   }
 
-  return { run, file, check, occurrence, scales, repetitions, relationSizes, bounds, measurement, shadow };
+  return {
+    run,
+    file,
+    check,
+    occurrence,
+    scales,
+    repetitions,
+    relationSizes,
+    bounds,
+    measurement,
+    shadow,
+    eligibility: parseEligibility(source.eligibility, `${description}.eligibility`),
+  };
+}
+
+function parseEligibility(value: unknown, description: string): GrowthProfileEligibility {
+  if (value === undefined) return { status: 'eligible' };
+  const source = record(value, description);
+  if (source.status === 'eligible') return { status: 'eligible' };
+  if (source.status === 'ineligible') {
+    if (typeof source.reason !== 'string' || source.reason.length === 0)
+      throw new TypeError(`${description}.reason must be a non-empty string`);
+    return { status: 'ineligible', reason: source.reason };
+  }
+  throw new TypeError(`${description}.status is unknown`);
 }
 
 function identity(file: string, check: string): string {
@@ -318,7 +347,16 @@ export function readGrowthProfiles(sources: readonly GrowthProfileRunSource[]): 
         ({ measurement }) =>
           isIdentifiedGrowthMeasurement(measurement) && sameIdentifiedMeasurement(measurement, referenceMeasurement),
       );
-    if (byRun.size === sources.length && scalesMatch && boundsMatch && measurementsMatch) {
+    const ineligibleRuns = group.flatMap((entry) =>
+      entry.eligibility.status === 'ineligible' ? [{ run: entry.run, reason: entry.eligibility.reason }] : [],
+    );
+    if (
+      byRun.size === sources.length &&
+      scalesMatch &&
+      boundsMatch &&
+      measurementsMatch &&
+      ineligibleRuns.length === 0
+    ) {
       complete.push(
         sources.map(({ name }) => byRun.get(name)!).filter((entry): entry is GrowthProfileEntry => entry !== undefined),
       );
@@ -340,6 +378,7 @@ export function readGrowthProfiles(sources: readonly GrowthProfileRunSource[]): 
       ...(measurementsMatch
         ? {}
         : { incompatibleMeasurementsByRun: group.map(({ run, measurement }) => ({ run, measurement })) }),
+      ...(ineligibleRuns.length === 0 ? {} : { ineligibleRuns }),
     });
   }
 

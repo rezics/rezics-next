@@ -1,10 +1,12 @@
 import { expect, test } from 'bun:test';
 import { growthCalibrationReport } from '../../scripts/growth-calibrate.ts';
+import { growthRunEligibility, type GrowthCheck, type ReportSample } from './growth.ts';
 import {
   growthMeasurementIdentity,
   growthProfileCheckId,
   readGrowthProfiles,
   type GrowthMeasurementIdentity,
+  type GrowthProfileEligibility,
 } from './growth-profile-read.ts';
 
 const TEST_SOURCE = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -22,6 +24,7 @@ type LineOptions = Readonly<{
     'compatible' | 'violation' | 'inconclusive',
     'compatible' | 'violation' | 'inconclusive',
   ];
+  eligibility?: GrowthProfileEligibility;
 }>;
 
 function profileLine({
@@ -32,6 +35,7 @@ function profileLine({
   relationLast = 100,
   measurement = TEST_MEASUREMENT,
   outcomes = ['compatible', 'compatible', 'compatible'],
+  eligibility,
 }: LineOptions): string {
   const relationSize = (reltuples: number) => ({ reltuples, relpages: reltuples > 0 ? Math.ceil(reltuples / 10) : 0 });
   const relationSizes = scales.map((_, index) => ({
@@ -56,6 +60,7 @@ function profileLine({
     shadow: Object.fromEntries(
       (['rows', 'blocks', 'statements'] as const).map((metric, index) => [metric, { outcome: outcomes[index] }]),
     ),
+    ...(eligibility === undefined ? {} : { eligibility }),
   });
 }
 
@@ -222,6 +227,128 @@ test('different declared bounds omit a check and identify each run declaration',
 
 test('invalid profile lines identify the run and line', () => {
   expect(() => readGrowthProfiles([{ name: 'bad-run', text: '{not json}\n' }])).toThrow('bad-run:1 is not valid JSON');
+  const broken = JSON.parse(profileLine({ check: 'broken' })) as { eligibility?: { status: string } };
+  broken.eligibility = { status: 'maybe' };
+  expect(() => readGrowthProfiles([{ name: 'bad-eligibility', text: JSON.stringify(broken) }])).toThrow(
+    'bad-eligibility:1.eligibility.status is unknown',
+  );
+});
+
+test('ineligible runs are omitted from calibration with their reason', () => {
+  const reason = 'counted unit slots at scale 8: value 5 exceeds limit 1';
+  const sources = [
+    {
+      name: 'run-1',
+      text: [
+        profileLine({ check: 'guarded check', eligibility: { status: 'eligible' } }),
+        profileLine({ check: 'legacy check' }),
+      ].join('\n'),
+    },
+    {
+      name: 'run-2',
+      text: [
+        profileLine({
+          check: 'guarded check',
+          offset: 1,
+          eligibility: { status: 'ineligible', reason },
+        }),
+        profileLine({ check: 'legacy check', offset: 1 }),
+      ].join('\n'),
+    },
+  ];
+  const read = readGrowthProfiles(sources);
+
+  expect(read.series.rows.map(({ check }) => check)).toEqual([
+    growthProfileCheckId('test/search/growth-example.test.ts', 'legacy check'),
+  ]);
+  expect(read.omitted).toEqual([
+    {
+      file: 'test/search/growth-example.test.ts',
+      check: 'guarded check',
+      occurrence: 1,
+      missingRuns: [],
+      scalesByRun: [
+        { run: 'run-1', scales: [1, 4, 16] },
+        { run: 'run-2', scales: [1, 4, 16] },
+      ],
+      ineligibleRuns: [{ run: 'run-2', reason }],
+    },
+  ]);
+  expect(
+    growthCalibrationReport(sources, { name: 'coverage', text: profileLine({ check: 'legacy check' }) }),
+  ).toContain(`run-2: ${reason}`);
+});
+
+const eligibilityCheck = (overrides: Partial<GrowthCheck> = {}): GrowthCheck => ({
+  name: 'eligibility fixture',
+  bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
+  grow: async () => {},
+  operation: async () => {},
+  ...overrides,
+});
+
+test('harness eligibility follows background, attempt-ledger and counted-unit guards', () => {
+  const scales = [1, 8, 64];
+  expect(
+    growthRunEligibility(
+      eligibilityCheck(),
+      scales.map((scale) => ({ scale, cost: {} }) as unknown as ReportSample),
+    ),
+  ).toEqual({ status: 'eligible' });
+
+  const background = 'SELECT id FROM records';
+  expect(
+    growthRunEligibility(
+      eligibilityCheck({ name: 'poller' }),
+      [
+        { scale: 1, cost: { backgroundCosts: { [background]: { rows: 10, blocks: 0, bounded: true } } } },
+        { scale: 8, cost: { backgroundCosts: { [background]: { rows: 100, blocks: 0, bounded: true } } } },
+        { scale: 64, cost: { backgroundCosts: { [background]: { rows: 10, blocks: 0, bounded: true } } } },
+      ] as unknown as ReportSample[],
+    ),
+  ).toEqual({
+    status: 'ineligible',
+    reason: `poller: background statement with largest rows ${JSON.stringify(background)}; rows per statement grows from 10 to 100 at scale 8, beyond default slack 2`,
+  });
+
+  const ledger = (statements: number) => ({
+    commands: 1,
+    byOutcome: { committed: 1 },
+    attemptsPerCommand: 1,
+    repetitions: [
+      {
+        byOutcome: { committed: 1 },
+        attemptsPerCommand: 1,
+        ledger: [{ backend: 1, outcome: 'committed', statements, occurrences: [] }],
+      },
+    ],
+  });
+  expect(
+    growthRunEligibility(
+      eligibilityCheck({ attempts: { commands: 1 } }),
+      scales.map((scale, index) => ({
+        scale,
+        attempts: ledger(index === 1 ? 2 : 1),
+        occurrenceRepetitions: [{ statements: [], backgroundStatements: [] }],
+      })) as unknown as ReportSample[],
+    ),
+  ).toMatchObject({
+    status: 'ineligible',
+    reason: expect.stringMatching(/committed attempt.*statement counts differ/),
+  });
+
+  expect(
+    growthRunEligibility(
+      eligibilityCheck({ counted: { read: () => ({ slots: 0 }), limits: { slots: 1 } } }),
+      scales.map((scale) => ({
+        scale,
+        counted: { slots: { value: scale === 8 ? 5 : 1, repetitions: [scale === 8 ? 5 : 1] } },
+      })) as unknown as ReportSample[],
+    ),
+  ).toEqual({
+    status: 'ineligible',
+    reason: 'counted unit slots at scale 8 repetition 1: value 5 exceeds limit 1',
+  });
 });
 
 test('incompatible indexProbes, source revisions and unidentified legacy lines are omitted with per-run diagnostics', () => {

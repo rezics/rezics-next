@@ -503,7 +503,7 @@ of the median), blocks max(9, 3%), and statements are exact. `slack` applies onl
 their existing slack handling.
 
 When any metric lacks complete unchanged-code calibration checks, `scripts/growth-calibrate.ts` prints named omitted checks,
-missing runs, mismatched scales and unidentified or incompatible measurement identities to stderr, then exits nonzero without reporting fitted uncertainty, coverage or classifications.
+missing runs, mismatched scales, unidentified or incompatible measurement identities and ineligible evidence to stderr, then exits nonzero without reporting fitted uncertainty, coverage or classifications.
 
 For a logarithmic or linear blocks bound, `indexProbes` may declare the positive number of index descents one run
 makes into growing relations. The blocks series may then include a non-decreasing staircase from zero, gaining at
@@ -604,7 +604,10 @@ Measured-run write discovery uses those same admitted EXPLAIN document envelopes
 ModifyTable without Relation Name fails at that node path, a missing Schema defaults to public, and malformed
 documents fail at their location instead of omitting writes.
 The line also carries every repetition, relation sizes, the selected-rule `verdicts`, a shadow whole-series verdict and
-any `settleFailures` recorded on samples. For a step check, the shadow verdicts are diagnostic; for a baseline check,
+any `settleFailures` recorded on samples. It records terminal `eligibility` after background-growth, attempt-ledger and
+counted-unit guards: `{ "status": "eligible" }`, or `{ "status": "ineligible", "reason" }` with that guard's message.
+Inclusive growth-bound failures remain eligible. A missing field is eligible, so older profiles stay in calibration.
+For a step check, the shadow verdicts are diagnostic; for a baseline check,
 all three passing requires deleting its entry.
 Each report sample also carries `repetitions`, the cost of every measured run in order, and `relationSizes`, the
 `reltuples` and `relpages` of every relation the measured plans read at that scale.
@@ -731,6 +734,7 @@ budget and change errors use line 1 of the run basename because loading does not
 Calibration combines a file/check/occurrence only when every run is identified v1 with the same source revision,
 indexProbes, growth bounds and scales. Unidentified legacy lines and mismatched identities are omitted with per-run
 diagnostics and keep their raw shadow and relation records.
+Ineligible runs are also omitted and report each run and its reason.
 
 Each measured repetition starts from a settled state. Warm-ups and repetitions may write rows, including through
 triggers; the harness settles every relation written by the previous run before measuring the next one. An operation

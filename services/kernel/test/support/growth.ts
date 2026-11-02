@@ -57,7 +57,7 @@ import {
 } from './growth-report.ts';
 import { appendGrowthProfile, growthProfileExportMode, type GrowthProfileExportMode } from './growth-profile-output.ts';
 import { admitGrowthCheck, COLD_BACKEND_DISCARD_LIMIT, type AdmittedGrowthCheck } from './growth-config.ts';
-import { growthMeasurementIdentity } from './growth-profile-read.ts';
+import { growthMeasurementIdentity, type GrowthProfileEligibility } from './growth-profile-read.ts';
 import {
   countedSample,
   countedViolations,
@@ -65,6 +65,7 @@ import {
   validateCountedRun,
   type CountedCheck,
   type CountedSample,
+  type CountedViolation,
 } from './growth-counters.ts';
 import { indexRetryRun, isSuccessfulIndexed, retryAffectsIndexed } from './growth-attempt-index.ts';
 import { retainIndependentRetryViolation, successfulMetricEvidence } from './growth-retry-verdict.ts';
@@ -244,15 +245,19 @@ function summarizeAttempts(commands: number, runs: readonly AttemptRecord[][]): 
   };
 }
 
-export function validateAttemptSamples(check: GrowthCheck, samples: readonly ReportSample[]): void {
-  if (!check.attempts) return;
+function attemptLedgerFailure(
+  check: GrowthCheck,
+  samples: readonly ReportSample[],
+  onRetryReview?: (payload: Readonly<Record<string, unknown>>) => void,
+): Error | undefined {
+  if (!check.attempts) return undefined;
   const ledgerText = samples
     .map(({ scale, attempts }) => `scale ${scale}: ${JSON.stringify(attempts?.repetitions)}`)
     .join('\n');
-  const fail = (message: string): never => {
+  const boundFailure = (message: string): GrowthBoundError => {
     const error = new GrowthBoundError([], samples);
     error.message = `${check.name}: ${message}\nper-scale attempt ledger:\n${ledgerText}`;
-    throw error;
+    return error;
   };
   const indexedSamples = samples.map((sample) => {
     if (!sample.attempts) throw new TypeError(`${check.name}: missing attempt ledger at scale ${sample.scale}`);
@@ -270,7 +275,7 @@ export function validateAttemptSamples(check: GrowthCheck, samples: readonly Rep
     for (const [repetition, run] of attempts.repetitions.entries()) {
       const committed = run.ledger.filter(({ outcome }) => outcome === 'committed');
       if (committed.length !== check.attempts.commands)
-        fail(
+        return boundFailure(
           `attempts declared ${check.attempts.commands} commands at scale ${scale}, repetition ${repetition}, but observed ${committed.length} committed attempts`,
         );
       const occurrenceIndex = runs[repetition]?.byIndex;
@@ -284,7 +289,7 @@ export function validateAttemptSamples(check: GrowthCheck, samples: readonly Rep
           committedStatements = statements;
         }
         if (attempt.statements !== committedCount) {
-          fail(
+          return boundFailure(
             `committed attempt ${index} on backend ${attempt.backend} at scale ${scale}, repetition ${repetition}: statement counts differ; expected ${committedCount}, got ${attempt.statements}; statements: ${statements.join('; ')}; reference committed statements: ${committedStatements.join('; ')}`,
           );
         }
@@ -295,7 +300,7 @@ export function validateAttemptSamples(check: GrowthCheck, samples: readonly Rep
     for (const [repetition, run] of attempts.repetitions.entries())
       for (const [index, attempt] of run.ledger.entries())
         if (attempt.outcome !== 'committed' && attempt.statements > committedCount!)
-          fail(
+          return boundFailure(
             `aborted attempt ${index} (${attempt.outcome}) at scale ${scale}, repetition ${repetition} ran ${attempt.statements} statements, exceeding committed attempt count ${committedCount}`,
           );
   const fingerprints = new Set<string>();
@@ -333,47 +338,49 @@ export function validateAttemptSamples(check: GrowthCheck, samples: readonly Rep
       const retryAffectsStatement = indexedSamples.some(({ runs }) =>
         runs.some((run) => (run.byStatement.get(fingerprint) ?? []).some((item) => retryAffectsIndexed(item, run))),
       );
-      if (!retryAffectsStatement) {
-        fail(`statement ${fingerprint} ${metric} violates ${check.bounds[metric]} growth bound across attempts`);
-        continue;
-      }
+      if (!retryAffectsStatement)
+        return boundFailure(
+          `statement ${fingerprint} ${metric} violates ${check.bounds[metric]} growth bound across attempts`,
+        );
 
       if (successfulPoints.length >= 3) {
         const successfulVerdict = classifySeries(successfulPoints, check.bounds[metric], indexProbes);
         if (successfulVerdict.outcome === 'violation')
-          fail(
+          return boundFailure(
             `statement ${fingerprint} ${metric} violates ${check.bounds[metric]} growth bound in successful foreground work`,
           );
-        else {
-          const explanation = `statement ${fingerprint} ${metric} violates ${check.bounds[metric]} only when retry-affected occurrences are included; successful committed or autocommit occurrences do not independently establish the violation`;
-          process.stderr.write(
-            `GROWTH_REVIEW ${JSON.stringify({
-              file: relative(process.cwd(), Bun.main),
-              check: check.name,
-              metric,
-              bound: check.bounds[metric],
-              reason: 'retries',
-              statement: fingerprint,
-              explanation,
-            })}\n`,
-          );
-        }
+        const explanation = `statement ${fingerprint} ${metric} violates ${check.bounds[metric]} only when retry-affected occurrences are included; successful committed or autocommit occurrences do not independently establish the violation`;
+        onRetryReview?.({
+          file: relative(process.cwd(), Bun.main),
+          check: check.name,
+          metric,
+          bound: check.bounds[metric],
+          reason: 'retries',
+          statement: fingerprint,
+          explanation,
+        });
       } else {
         const explanation = `statement ${fingerprint} ${metric} has fewer than three scales of successful foreground evidence after retry-affected occurrences are excluded`;
-        process.stderr.write(
-          `GROWTH_REVIEW ${JSON.stringify({
-            file: relative(process.cwd(), Bun.main),
-            check: check.name,
-            metric,
-            bound: check.bounds[metric],
-            reason: 'retries',
-            statement: fingerprint,
-            explanation,
-          })}\n`,
-        );
+        onRetryReview?.({
+          file: relative(process.cwd(), Bun.main),
+          check: check.name,
+          metric,
+          bound: check.bounds[metric],
+          reason: 'retries',
+          statement: fingerprint,
+          explanation,
+        });
       }
     }
   }
+  return undefined;
+}
+
+export function validateAttemptSamples(check: GrowthCheck, samples: readonly ReportSample[]): void {
+  const error = attemptLedgerFailure(check, samples, (payload) => {
+    process.stderr.write(`GROWTH_REVIEW ${JSON.stringify(payload)}\n`);
+  });
+  if (error) throw error;
 }
 
 export type StatementAttribution = {
@@ -633,8 +640,42 @@ function growthMeasurementSource(): string | undefined {
   return measurementSource;
 }
 
+function countedFailureDetail(failure: CountedViolation): string {
+  return failure.kind === 'limit'
+    ? `counted unit ${failure.unit} at scale ${failure.scale} repetition ${failure.repetition}: value ${failure.value} exceeds limit ${failure.limit}`
+    : `counted unit ${failure.unit} at scale ${failure.scale}: value ${failure.value} violates ${failure.limit} growth bound`;
+}
+
+function ineligibilityReason(error: Error): string {
+  return error.message.split('\n')[0]!;
+}
+
+/** Terminal eligibility after background-growth, attempt-ledger and counted-unit guards. Inclusive bound failures stay eligible. */
+export function growthRunEligibility(
+  check: GrowthCheck,
+  samples: readonly ReportSample[],
+): GrowthProfileEligibility {
+  const background = backgroundBoundFailure(check.name, samples);
+  if (background) return { status: 'ineligible', reason: background };
+  const attempts = attemptLedgerFailure(check, samples);
+  if (attempts) return { status: 'ineligible', reason: ineligibilityReason(attempts) };
+  if (!check.counted) return { status: 'eligible' };
+  const countedFailures = countedViolations(
+    check.counted,
+    samples.map(({ scale, counted }) => ({ scale, counted: counted ?? {} })),
+  );
+  const first = countedFailures[0];
+  if (!first) return { status: 'eligible' };
+  return { status: 'ineligible', reason: countedFailureDetail(first) };
+}
+
 /** Appends one JSONL record to GROWTH_PROFILE; best-effort warns once per destination, required mode throws. */
-function appendProfile(report: GrowthReport, check: GrowthCheck, mode: GrowthProfileExportMode): void {
+function appendProfile(
+  report: GrowthReport,
+  check: GrowthCheck,
+  mode: GrowthProfileExportMode,
+  eligibility: GrowthProfileEligibility,
+): void {
   const destination = process.env.GROWTH_PROFILE;
   if (!destination) return;
   const file = relative(process.cwd(), Bun.main);
@@ -646,6 +687,7 @@ function appendProfile(report: GrowthReport, check: GrowthCheck, mode: GrowthPro
       file,
       check: name,
       measurement: growthMeasurementIdentity(check.indexProbes, growthMeasurementSource()),
+      eligibility,
       scales: samples.map(({ scale }) => scale),
       seeding: samples.map(({ seeding }) => seeding),
       bounds,
@@ -716,7 +758,7 @@ function assertCatalogBound(
   throw error;
 }
 
-export function assertBackgroundBound(name: string, samples: readonly ReportSample[]): void {
+function backgroundBoundFailure(name: string, samples: readonly ReportSample[]): string | undefined {
   const statements = new Set(
     samples.flatMap(({ cost }) =>
       Object.entries(cost.backgroundCosts ?? {})
@@ -758,11 +800,17 @@ export function assertBackgroundBound(name: string, samples: readonly ReportSamp
         });
     }
   }
-  if (failures.length === 0) return;
+  if (failures.length === 0) return undefined;
   failures.sort((left, right) => right.rows - left.rows);
   const largest = failures[0]!;
+  return `${name}: background statement with largest rows ${JSON.stringify(largest.statement)}; ${largest.metric} per statement grows from ${largest.baseline} to ${largest.value} at scale ${largest.scale}, beyond default slack ${largest.allowed}`;
+}
+
+export function assertBackgroundBound(name: string, samples: readonly ReportSample[]): void {
+  const message = backgroundBoundFailure(name, samples);
+  if (!message) return;
   const error = new GrowthBoundError([], samples);
-  error.message = `${name}: background statement with largest rows ${JSON.stringify(largest.statement)}; ${largest.metric} per statement grows from ${largest.baseline} to ${largest.value} at scale ${largest.scale}, beyond default slack ${largest.allowed}`;
+  error.message = message;
   throw error;
 }
 
@@ -1205,7 +1253,13 @@ async function runGrowthCheck(
           ),
         }),
   };
-  appendProfile(report, check, profileMode);
+  const countedFailures = check.counted
+    ? countedViolations(
+        check.counted,
+        samples.map(({ scale, counted }) => ({ scale, counted: counted ?? {} })),
+      )
+    : [];
+  appendProfile(report, check, profileMode, growthRunEligibility(check, samples));
   if (
     listed &&
     growthRule !== 'series' &&
@@ -1230,12 +1284,6 @@ async function runGrowthCheck(
   assertBackgroundBound(check.name, samples);
   validateAttemptSamples(check, samples);
 
-  const countedFailures = check.counted
-    ? countedViolations(
-        check.counted,
-        samples.map(({ scale, counted }) => ({ scale, counted: counted ?? {} })),
-      )
-    : [];
   const violations =
     rule === 'step' ? stepViolations.filter(({ metric }) => report.verdicts[metric]?.outcome === 'violation') : [];
   const established = (Object.entries(report.verdicts) as [GrowthMetric, GrowthVerdict | undefined][])
@@ -1256,11 +1304,7 @@ async function runGrowthCheck(
           })
         : [];
     const attributions = established.length > 0 ? formatStatementAttribution(samples, established) : '';
-    const countDetails = countedFailures.map((failure) =>
-      failure.kind === 'limit'
-        ? `counted unit ${failure.unit} at scale ${failure.scale} repetition ${failure.repetition}: value ${failure.value} exceeds limit ${failure.limit}`
-        : `counted unit ${failure.unit} at scale ${failure.scale}: value ${failure.value} violates ${failure.limit} growth bound`,
-    );
+    const countDetails = countedFailures.map(countedFailureDetail);
     error.message = `${check.name}: ${[error.message, ...details, attributions, ...countDetails]
       .filter(Boolean)
       .join('\n')}`;

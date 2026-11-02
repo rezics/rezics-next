@@ -377,12 +377,17 @@ function measurementProblem(
   return 'incompatible measurement';
 }
 
+function ineligibleRunsCell(runs: readonly Readonly<{ run: string; reason: string }>[] | undefined): string {
+  if (!runs?.length) return '—';
+  return runs.map(({ run, reason }) => `${markdownCell(run)}: ${markdownCell(reason)}`).join('; ');
+}
+
 function omittedTable(read: GrowthProfileRead): string[] {
   const rows = [
-    '| File | Check | Missing runs | Scales by run | Measurement by run |',
-    '| --- | --- | --- | --- | --- |',
+    '| File | Check | Missing runs | Scales by run | Measurement by run | Ineligible runs |',
+    '| --- | --- | --- | --- | --- | --- |',
   ];
-  if (read.omitted.length === 0) rows.push('| — | — | None | — | — |');
+  if (read.omitted.length === 0) rows.push('| — | — | None | — | — | — |');
   else {
     for (const item of read.omitted) {
       const scales = item.scalesByRun.map(({ run, scales: values }) => `${run}: ${values.join(', ')}`).join('; ');
@@ -392,7 +397,7 @@ function omittedTable(read: GrowthProfileRead): string[] {
             .join('; ')
         : '—';
       rows.push(
-        `| ${markdownCell(item.file)} | ${markdownCell(checkLabel(item.check, item.occurrence))} | ${item.missingRuns.length ? item.missingRuns.map(markdownCell).join(', ') : '—'} | ${markdownCell(scales)} | ${markdownCell(measurements)} |`,
+        `| ${markdownCell(item.file)} | ${markdownCell(checkLabel(item.check, item.occurrence))} | ${item.missingRuns.length ? item.missingRuns.map(markdownCell).join(', ') : '—'} | ${markdownCell(scales)} | ${markdownCell(measurements)} | ${ineligibleRunsCell(item.ineligibleRuns)} |`,
       );
     }
   }
@@ -411,6 +416,9 @@ function incompleteCalibrationError(read: GrowthProfileRead, metrics: readonly G
       ...(scaleSets.size > 1 ? ['mismatched scales'] : []),
       ...(item.incompatibleBoundsByRun ? ['incompatible bounds'] : []),
       ...(item.incompatibleMeasurementsByRun ? [measurementProblem(item.incompatibleMeasurementsByRun)] : []),
+      ...(item.ineligibleRuns?.length
+        ? [`ineligible evidence (${item.ineligibleRuns.map(({ run, reason }) => `${run}: ${reason}`).join('; ')})`]
+        : []),
     ].join(', ');
     rows.push(
       `| ${markdownCell(item.file)} | ${markdownCell(checkLabel(item.check, item.occurrence))} | ${problems} | ${item.missingRuns.length ? item.missingRuns.map(markdownCell).join(', ') : '—'} | ${markdownCell(item.scalesByRun.map(({ run, scales }) => `${run}: ${scales.join(', ')}`).join('; '))} | ${markdownCell(item.incompatibleMeasurementsByRun?.map(({ run, measurement }) => `${run}: ${formatMeasurement(measurement)}`).join('; ') ?? '—')} |`,
@@ -447,7 +455,7 @@ function methodTable(
     '| Held-out | Leave out each check run, refit E from indexed per-run medians and spreads, and measure covered points. |',
     `| Admission | At most ${GROWTH_CALIBRATION_LIMITS.checks} checks, ${GROWTH_CALIBRATION_LIMITS.runsPerCheck} runs per check, ${GROWTH_CALIBRATION_LIMITS.repetitions} repetitions per point, ${GROWTH_CALIBRATION_LIMITS.points} points and ${GROWTH_CALIBRATION_LIMITS.heldOutRuns} leave-one-run-out folds; excess input is refused with the supported capacity. |`,
     '| Coverage run | Classify each coverage profile separately under both calibrated E values. |',
-    '| Comparable checks | Same file, check, occurrence, scales, bounds, and identified v1 measurement identity (indexProbes and local git source revision). Unidentified legacy lines and mismatched identities are omitted with per-run diagnostics. |',
+    '| Comparable checks | Same file, check, occurrence, scales, bounds, identified v1 measurement identity (indexProbes and local git source revision), and eligible terminal status. Unidentified legacy lines, mismatched identities and ineligible runs are omitted with per-run diagnostics. |',
   ];
 }
 
