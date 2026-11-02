@@ -1,19 +1,7 @@
-import {
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
-import { Alert, AlertDescription, AlertTitle } from "@rezics/ui/shadcn/alert";
-import { Button } from "@rezics/ui/shadcn/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@rezics/ui/shadcn/card";
+import { useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
+import { Button } from '@rezics/ui/shadcn/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import {
   Field,
   FieldContent,
@@ -23,22 +11,14 @@ import {
   FieldTitle,
   FieldSet,
   FieldLegend,
-} from "@rezics/ui/shadcn/field";
-import { RadioGroup, RadioGroupItem } from "@rezics/ui/shadcn/radio-group";
-import { Switch } from "@rezics/ui/shadcn/switch";
-import { m } from "../paraglide/messages.js";
-import { readSettingsPage, savePreferences } from "./actions";
-import type {
-  NativePreferenceFailure,
-  PreferenceChange,
-  ReadingPreferences,
-  SpoilerLevel,
-} from "./preferences";
-import { usePreferenceRetry } from "./preference-failure-retry";
-import {
-  readingNeedsNavigationDecision,
-  useSettingsNavigationDraft,
-} from "./reading-navigation";
+} from '@rezics/ui/shadcn/field';
+import { RadioGroup, RadioGroupItem } from '@rezics/ui/shadcn/radio-group';
+import { Switch } from '@rezics/ui/shadcn/switch';
+import { m } from '../paraglide/messages.js';
+import { readSettingsPage, savePreferences } from './actions';
+import type { NativePreferenceFailure, PreferenceChange, ReadingPreferences, SpoilerLevel } from './preferences';
+import { usePreferenceRetry } from './preference-failure-retry';
+import { readingNeedsNavigationDecision, useSettingsNavigationDraft } from './reading-navigation';
 import {
   readingMutation,
   readReading,
@@ -46,14 +26,10 @@ import {
   sendReading,
   type ReadingIO,
   type ReadingValues,
-} from "./reading-preferences";
-import {
-  useSettingsCurrent,
-  useSettingsReadCurrent,
-} from "./settings-session-owner";
+} from './reading-preferences';
+import { useSettingsCurrent, useSettingsReadCurrent } from './settings-session-owner';
 
-const preferenceActionClassName =
-  "h-auto min-h-11 min-w-11 max-w-full py-2 whitespace-normal wrap-anywhere";
+const preferenceActionClassName = 'h-auto min-h-11 min-w-11 max-w-full py-2 whitespace-normal wrap-anywhere';
 
 const levels: {
   value: SpoilerLevel;
@@ -81,17 +57,9 @@ type ReadingState = {
   known: ReadingPreferences;
   draft: ReadingValues;
   pending: Readonly<PreferenceChange> | null;
-  phase:
-    | "idle"
-    | "saving"
-    | "saved"
-    | "uncertain"
-    | "conflict"
-    | "reloading"
-    | "review"
-    | "failed";
+  phase: 'idle' | 'saving' | 'saved' | 'uncertain' | 'conflict' | 'reloading' | 'review' | 'failed';
   knownCurrent: boolean;
-  failureOrigin?: "read" | undefined;
+  failureOrigin?: 'read' | undefined;
   reason?: string | undefined;
   failure?: NativePreferenceFailure | undefined;
 };
@@ -114,7 +82,7 @@ export class ReadingDraftRecovery {
       known: initial,
       draft: initial,
       pending: null,
-      phase: "idle",
+      phase: 'idle',
       knownCurrent: true,
     };
   }
@@ -133,58 +101,41 @@ export class ReadingDraftRecovery {
     const input = this.state.pending;
     if (!input || !this.owner.canWrite()) return;
     this.update({
-      phase: "saving",
+      phase: 'saving',
       reason: undefined,
       failure: undefined,
       failureOrigin: undefined,
       knownCurrent: false,
     });
-    const result = await sendReading(this.io, input, recovering, () =>
-      this.owner.version(),
-    );
+    const result = await sendReading(this.io, input, recovering, () => this.owner.version());
     if (!this.owner.canWrite()) return;
-    if (result.kind !== "confirmed") {
+    if (result.kind !== 'confirmed') {
       this.update({
-        pending: result.kind === "uncertain" ? input : null,
-        phase:
-          result.kind === "uncertain"
-            ? "uncertain"
-            : result.reason === "conflict"
-              ? "conflict"
-              : "failed",
+        pending: result.kind === 'uncertain' ? input : null,
+        phase: result.kind === 'uncertain' ? 'uncertain' : result.reason === 'conflict' ? 'conflict' : 'failed',
         reason: result.reason,
         failure: result.failure,
-        failureOrigin:
-          result.kind === "uncertain" ? result.operation : undefined,
+        failureOrigin: result.kind === 'uncertain' ? result.operation : undefined,
       });
       return;
     }
     const { preferences, receipt } = result;
     // Controls always keep the latest draft, including edits made while saving or resolving a response.
-    const matches =
-      sameReading(this.state.draft, preferences) &&
-      preferences.version === receipt.version;
+    const matches = sameReading(this.state.draft, preferences) && preferences.version === receipt.version;
     this.update({
       known: preferences,
       knownCurrent: true,
       pending: null,
-      phase: matches ? "saved" : "review",
+      phase: matches ? 'saved' : 'review',
       failure: undefined,
     });
-    this.owner.onVersionChange(
-      Math.max(this.owner.version(), preferences.version),
-    );
+    this.owner.onVersionChange(Math.max(this.owner.version(), preferences.version));
   }
   async submit() {
-    if (
-      !this.owner.canWrite() ||
-      this.state.pending ||
-      this.state.phase === "reloading"
-    )
-      return;
+    if (!this.owner.canWrite() || this.state.pending || this.state.phase === 'reloading') return;
     if (this.owner.version() > this.state.known.version) {
       this.update({
-        phase: "conflict",
+        phase: 'conflict',
         knownCurrent: false,
         failureOrigin: undefined,
         reason: undefined,
@@ -194,7 +145,7 @@ export class ReadingDraftRecovery {
     }
     const input = readingMutation(this.state.known, this.state.draft);
     if (!input) {
-      this.update({ phase: "idle" });
+      this.update({ phase: 'idle' });
       return;
     }
     this.update({ pending: input });
@@ -202,36 +153,27 @@ export class ReadingDraftRecovery {
   }
   async edit(next: Partial<ReadingValues>) {
     if (!this.owner.canWrite()) return;
-    const autosave =
-      this.state.phase === "idle" || this.state.phase === "saved";
+    const autosave = this.state.phase === 'idle' || this.state.phase === 'saved';
     this.update({ draft: { ...this.state.draft, ...next } });
     if (autosave && !this.state.pending) await this.submit();
   }
   async reload(waiting = false) {
-    if (
-      !this.owner.canRead() ||
-      waiting ||
-      this.state.phase === "saving" ||
-      this.state.phase === "reloading"
-    )
-      return;
+    if (!this.owner.canRead() || waiting || this.state.phase === 'saving' || this.state.phase === 'reloading') return;
     this.update({
-      phase: "reloading",
+      phase: 'reloading',
       knownCurrent: false,
       reason: undefined,
       failure: undefined,
       failureOrigin: undefined,
     });
-    const result = await readReading(this.io, () =>
-      Math.max(this.state.known.version, this.owner.version()),
-    );
+    const result = await readReading(this.io, () => Math.max(this.state.known.version, this.owner.version()));
     if (!this.owner.canRead()) return;
     if (!result.ok) {
       this.update({
-        phase: this.state.pending ? "uncertain" : "failed",
+        phase: this.state.pending ? 'uncertain' : 'failed',
         reason: result.reason,
         failure: result.failure,
-        failureOrigin: "read",
+        failureOrigin: 'read',
       });
       return;
     }
@@ -240,35 +182,27 @@ export class ReadingDraftRecovery {
     this.update({
       known: result.preferences,
       knownCurrent: true,
-      phase: this.state.pending ? "uncertain" : "review",
+      phase: this.state.pending ? 'uncertain' : 'review',
       reason: undefined,
       failure: undefined,
       failureOrigin: undefined,
     });
-    this.owner.onVersionChange(
-      Math.max(this.owner.version(), result.preferences.version),
-    );
+    this.owner.onVersionChange(Math.max(this.owner.version(), result.preferences.version));
   }
   useCurrent() {
-    if (
-      !this.owner.canRead() ||
-      this.state.pending ||
-      this.state.phase !== "review" ||
-      !this.state.knownCurrent
-    )
+    if (!this.owner.canRead() || this.state.pending || this.state.phase !== 'review' || !this.state.knownCurrent)
       return;
     // Discard is deliberate and local; it cannot settle an unresolved original or submit a write.
     this.update({
       draft: this.state.known,
-      phase: "idle",
+      phase: 'idle',
       failure: undefined,
       reason: undefined,
       failureOrigin: undefined,
     });
   }
   async retry(waiting = false) {
-    if (waiting || !this.owner.canWrite() || this.state.phase !== "uncertain")
-      return;
+    if (waiting || !this.owner.canWrite() || this.state.phase !== 'uncertain') return;
     await this.send(true);
   }
 }
@@ -303,29 +237,23 @@ export function ReadingCard({
     };
   }, []);
   const sharedVersion = useRef(version);
-  sharedVersion.current = Math.max(
-    sharedVersion.current,
-    version,
-    initial.version,
-  );
+  sharedVersion.current = Math.max(sharedVersion.current, version, initial.version);
   const source = io ?? {
-    save: (data: Readonly<PreferenceChange>) =>
-      savePreferences({ data, headers: { "X-CSRF-Token": csrfToken ?? "" } }),
+    save: (data: Readonly<PreferenceChange>) => savePreferences({ data, headers: { 'X-CSRF-Token': csrfToken ?? '' } }),
     read: () => readSettingsPage(),
   };
   // sendReading can perform a second recovery GET internally; guard that boundary as well.
   const transport: ReadingIO = {
     save: async (input) => {
-      if (!csrfToken || !isCurrent())
-        throw new Error("Settings viewer unavailable");
+      if (!csrfToken || !isCurrent()) throw new Error('Settings viewer unavailable');
       const result = await source.save(input);
-      if (!isCurrent()) throw new Error("Settings viewer changed");
+      if (!isCurrent()) throw new Error('Settings viewer changed');
       return result;
     },
     read: async () => {
-      if (!readCurrent()) throw new Error("Settings viewer unavailable");
+      if (!readCurrent()) throw new Error('Settings viewer unavailable');
       const result = await source.read();
-      if (!readCurrent()) throw new Error("Settings viewer changed");
+      if (!readCurrent()) throw new Error('Settings viewer changed');
       return result;
     },
   };
@@ -353,45 +281,35 @@ export function ReadingCard({
           read: () => latest.current.transport.read(),
         },
         {
-          canWrite: () =>
-            mounted() && latest.current.writable && latest.current.isCurrent(),
+          canWrite: () => mounted() && latest.current.writable && latest.current.isCurrent(),
           canRead: () => mounted() && latest.current.readCurrent(),
           version: () => sharedVersion.current,
           onVersionChange: (next) => latest.current.onVersionChange(next),
         },
       ),
   );
-  const state = useSyncExternalStore(
-    editor.subscribe,
-    editor.snapshot,
-    editor.snapshot,
-  );
+  const state = useSyncExternalStore(editor.subscribe, editor.snapshot, editor.snapshot);
   useSettingsNavigationDraft(
-    "reading",
+    'reading',
     readingNeedsNavigationDecision(state),
-    () =>
-      mounted() &&
-      isCurrent() &&
-      readingNeedsNavigationDecision(editor.snapshot()),
+    () => mounted() && isCurrent() && readingNeedsNavigationDecision(editor.snapshot()),
   );
   const waiting = usePreferenceRetry(state.failure);
-  const busy = state.phase === "saving" || state.phase === "reloading";
-  const uncertain = state.pending !== null && state.phase !== "saving";
-  const readLoading = state.phase === "reloading";
-  const readFailed = state.failureOrigin === "read";
-  const recovery =
-    uncertain ||
-    ["conflict", "review", "failed", "reloading"].includes(state.phase);
+  const busy = state.phase === 'saving' || state.phase === 'reloading';
+  const uncertain = state.pending !== null && state.phase !== 'saving';
+  const readLoading = state.phase === 'reloading';
+  const readFailed = state.failureOrigin === 'read';
+  const recovery = uncertain || ['conflict', 'review', 'failed', 'reloading'].includes(state.phase);
   const readTitle =
-    state.reason === "closed"
+    state.reason === 'closed'
       ? m.settings_reading_read_closed_title()
-      : state.reason === "forbidden"
+      : state.reason === 'forbidden'
         ? m.settings_reading_read_denied_title()
         : m.settings_reading_read_unavailable_title();
   const readText =
-    state.reason === "closed"
+    state.reason === 'closed'
       ? m.settings_reading_read_closed_text()
-      : state.reason === "forbidden"
+      : state.reason === 'forbidden'
         ? m.settings_reading_read_denied_text()
         : m.settings_reading_read_unavailable_text();
   const title = readLoading
@@ -400,15 +318,15 @@ export function ReadingCard({
       ? readTitle
       : uncertain
         ? m.settings_reading_uncertain_title()
-        : state.phase === "review"
+        : state.phase === 'review'
           ? m.settings_reading_review_title()
-          : state.reason === "closed"
+          : state.reason === 'closed'
             ? m.settings_closed_title()
-            : state.reason === "preparing"
+            : state.reason === 'preparing'
               ? m.settings_preparing_title()
-              : state.reason === "unavailable"
+              : state.reason === 'unavailable'
                 ? m.settings_unavailable_title()
-                : state.phase === "failed"
+                : state.phase === 'failed'
                   ? m.settings_failed_title()
                   : m.settings_conflict_title();
   return (
@@ -423,9 +341,7 @@ export function ReadingCard({
       <CardContent className="flex min-w-0 flex-col gap-4">
         <FieldGroup>
           <FieldSet>
-            <FieldLegend id={`${ids}-spoilers`}>
-              {m.settings_spoiler_legend()}
-            </FieldLegend>
+            <FieldLegend id={`${ids}-spoilers`}>{m.settings_spoiler_legend()}</FieldLegend>
             <FieldDescription>{m.settings_spoiler_text()}</FieldDescription>
             <RadioGroup
               value={String(state.draft.spoilerLevel)}
@@ -438,18 +354,11 @@ export function ReadingCard({
               aria-labelledby={`${ids}-spoilers`}
             >
               {levels.map((level) => (
-                <FieldLabel
-                  key={level.value}
-                  htmlFor={`${ids}-level-${level.value}`}
-                >
+                <FieldLabel key={level.value} htmlFor={`${ids}-level-${level.value}`}>
                   <Field orientation="horizontal">
                     <FieldContent>
-                      <FieldTitle id={`${ids}-level-${level.value}-title`}>
-                        {level.title()}
-                      </FieldTitle>
-                      <FieldDescription id={`${ids}-level-${level.value}-text`}>
-                        {level.text()}
-                      </FieldDescription>
+                      <FieldTitle id={`${ids}-level-${level.value}-title`}>{level.title()}</FieldTitle>
+                      <FieldDescription id={`${ids}-level-${level.value}-text`}>{level.text()}</FieldDescription>
                     </FieldContent>
                     <RadioGroupItem
                       id={`${ids}-level-${level.value}`}
@@ -465,38 +374,29 @@ export function ReadingCard({
           <FieldLabel htmlFor={`${ids}-suitability`}>
             <Field orientation="horizontal">
               <FieldContent>
-                <FieldTitle id={`${ids}-suitability-title`}>
-                  {m.settings_suitability_title()}
-                </FieldTitle>
-                <FieldDescription id={`${ids}-suitability-text`}>
-                  {m.settings_suitability_text()}
-                </FieldDescription>
+                <FieldTitle id={`${ids}-suitability-title`}>{m.settings_suitability_title()}</FieldTitle>
+                <FieldDescription id={`${ids}-suitability-text`}>{m.settings_suitability_text()}</FieldDescription>
               </FieldContent>
               <Switch
                 id={`${ids}-suitability`}
-                checked={state.draft.suitability === "show"}
+                checked={state.draft.suitability === 'show'}
                 disabled={!hydrated || !csrfToken}
-                onCheckedChange={(checked) =>
-                  void editor.edit({ suitability: checked ? "show" : "blur" })
-                }
+                onCheckedChange={(checked) => void editor.edit({ suitability: checked ? 'show' : 'blur' })}
                 aria-labelledby={`${ids}-suitability-title`}
                 aria-describedby={`${ids}-suitability-text`}
               />
             </Field>
           </FieldLabel>
         </FieldGroup>
-        <div
-          aria-live="polite"
-          className="min-h-5 text-sm text-muted-foreground"
-        >
-          {state.phase === "saving" ? m.settings_saving() : null}
-          {state.phase === "saved" ? m.settings_saved() : null}
+        <div aria-live="polite" className="min-h-5 text-sm text-muted-foreground">
+          {state.phase === 'saving' ? m.settings_saving() : null}
+          {state.phase === 'saved' ? m.settings_saved() : null}
         </div>
         {recovery ? (
           <Alert
-            role={readLoading ? "status" : "alert"}
-            data-response-status={state.failure?.status ?? ""}
-            data-response-code={state.failure?.code ?? ""}
+            role={readLoading ? 'status' : 'alert'}
+            data-response-status={state.failure?.status ?? ''}
+            data-response-code={state.failure?.code ?? ''}
             data-retry-after={state.failure?.retryAfter}
           >
             <AlertTitle>{title}</AlertTitle>
@@ -508,40 +408,29 @@ export function ReadingCard({
                     ? readText
                     : uncertain
                       ? m.settings_reading_uncertain_text()
-                      : state.phase === "review"
+                      : state.phase === 'review'
                         ? m.settings_reading_review_text()
-                        : state.reason === "closed"
+                        : state.reason === 'closed'
                           ? m.settings_closed_text()
-                          : state.reason === "preparing"
+                          : state.reason === 'preparing'
                             ? m.settings_preparing_text()
-                            : state.reason === "unavailable"
+                            : state.reason === 'unavailable'
                               ? m.settings_unavailable_text()
-                              : state.phase === "failed"
+                              : state.phase === 'failed'
                                 ? m.settings_failed_text()
                                 : m.settings_conflict_text()}
               </p>
-              {uncertain && (readLoading || readFailed) ? (
-                <p>{m.settings_reading_uncertain_text()}</p>
-              ) : null}
-              {uncertain && !readFailed && state.reason === "closed" ? (
-                <p>{m.settings_closed_text()}</p>
-              ) : null}
-              {uncertain && !readFailed && state.reason === "preparing" ? (
-                <p>{m.settings_preparing_text()}</p>
-              ) : null}
-              {uncertain && !readFailed && state.reason === "unavailable" ? (
+              {uncertain && (readLoading || readFailed) ? <p>{m.settings_reading_uncertain_text()}</p> : null}
+              {uncertain && !readFailed && state.reason === 'closed' ? <p>{m.settings_closed_text()}</p> : null}
+              {uncertain && !readFailed && state.reason === 'preparing' ? <p>{m.settings_preparing_text()}</p> : null}
+              {uncertain && !readFailed && state.reason === 'unavailable' ? (
                 <p>{m.settings_unavailable_text()}</p>
               ) : null}
               {waiting ? <p>{m.settings_retry_wait()}</p> : null}
               <p>
-                {(state.knownCurrent
-                  ? m.settings_reading_current
-                  : m.settings_reading_known)({
+                {(state.knownCurrent ? m.settings_reading_current : m.settings_reading_known)({
                   spoilers: levels[state.known.spoilerLevel]!.title(),
-                  images:
-                    state.known.suitability === "blur"
-                      ? m.settings_reading_blur()
-                      : m.settings_reading_show(),
+                  images: state.known.suitability === 'blur' ? m.settings_reading_blur() : m.settings_reading_show(),
                 })}
               </p>
               <div className="flex min-w-0 flex-wrap gap-2">
@@ -565,14 +454,12 @@ export function ReadingCard({
                 >
                   {m.settings_reload()}
                 </Button>
-                {state.phase === "review" ? (
+                {state.phase === 'review' ? (
                   <>
                     <Button
                       className={preferenceActionClassName}
                       type="button"
-                      disabled={
-                        !csrfToken || sameReading(state.known, state.draft)
-                      }
+                      disabled={!csrfToken || sameReading(state.known, state.draft)}
                       onClick={() => void editor.submit()}
                     >
                       {m.settings_reading_save_draft()}

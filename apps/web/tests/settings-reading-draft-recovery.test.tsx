@@ -1,9 +1,9 @@
-import { expect, mock, test } from "bun:test";
-import { readingFixture } from "../src/kernel/fake/settings-preferences-reading";
-import { readingNeedsNavigationDecision } from "../src/settings/reading-navigation";
+import { expect, mock, test } from 'bun:test';
+import { readingFixture } from '../src/kernel/fake/settings-preferences-reading';
+import { readingNeedsNavigationDecision } from '../src/settings/reading-navigation';
 
-mock.module("cloudflare:workers", () => ({ env: {} }));
-const { ReadingDraftRecovery } = await import("../src/settings/reading-card");
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { ReadingDraftRecovery } = await import('../src/settings/reading-card');
 const owner = () => ({
   canRead: () => true,
   canWrite: () => true,
@@ -11,8 +11,8 @@ const owner = () => ({
   onVersionChange: () => {},
 });
 
-test("rejected choices survive failed and successful reads until explicit save or discard", async () => {
-  for (const scenario of ["conflict", "denied", "closed"] as const) {
+test('rejected choices survive failed and successful reads until explicit save or discard', async () => {
+  for (const scenario of ['conflict', 'denied', 'closed'] as const) {
     const fixture = readingFixture(scenario);
     let readFails = true;
     const editor = new ReadingDraftRecovery(
@@ -20,7 +20,7 @@ test("rejected choices survive failed and successful reads until explicit save o
       {
         ...fixture.io,
         read: async () => {
-          if (readFails) throw new Error("Read unavailable");
+          if (readFails) throw new Error('Read unavailable');
           return {
             signedIn: true,
             preferences: fixture.current(),
@@ -31,35 +31,33 @@ test("rejected choices survive failed and successful reads until explicit save o
       owner(),
     );
     await editor.edit({ spoilerLevel: 1 });
-    await editor.edit({ suitability: "show" });
+    await editor.edit({ suitability: 'show' });
     const draft = editor.snapshot().draft;
     await editor.reload();
     expect(editor.snapshot()).toMatchObject({
-      phase: "failed",
-      failureOrigin: "read",
+      phase: 'failed',
+      failureOrigin: 'read',
       knownCurrent: false,
     });
     expect(editor.snapshot().draft).toBe(draft);
     readFails = false;
     await editor.reload();
     expect(editor.snapshot()).toMatchObject({
-      phase: "review",
+      phase: 'review',
       known: fixture.current(),
       pending: null,
     });
     expect(editor.snapshot().draft).toBe(draft);
     expect(readingNeedsNavigationDecision(editor.snapshot())).toBe(true);
     expect(fixture.calls).toHaveLength(1);
-    if (scenario === "conflict") {
+    if (scenario === 'conflict') {
       await editor.submit();
       expect(fixture.calls[1]).toMatchObject({
         expectedVersion: 1,
         spoilerLevel: 1,
       });
-      expect(fixture.calls[1]!.idempotencyKey).not.toBe(
-        fixture.calls[0]!.idempotencyKey,
-      );
-      expect(editor.snapshot().phase).toBe("saved");
+      expect(fixture.calls[1]!.idempotencyKey).not.toBe(fixture.calls[0]!.idempotencyKey);
+      expect(editor.snapshot().phase).toBe('saved');
       expect(fixture.current().notifications).toEqual({
         reply: false,
         mention: true,
@@ -74,15 +72,15 @@ test("rejected choices survive failed and successful reads until explicit save o
   }
 });
 
-test("loading current values retains the exact uncertain original and later edits through independent recovery", async () => {
-  const fixture = readingFixture("lost");
+test('loading current values retains the exact uncertain original and later edits through independent recovery', async () => {
+  const fixture = readingFixture('lost');
   const editor = new ReadingDraftRecovery(fixture.initial, fixture.io, owner());
   await editor.edit({ spoilerLevel: 1 });
   const original = editor.snapshot().pending;
-  await editor.edit({ suitability: "show" });
+  await editor.edit({ suitability: 'show' });
   const finish = fixture.holdNextRead({
     signedIn: true,
-    state: "unavailable",
+    state: 'unavailable',
     failure: { status: 503 },
     securityHref: null,
   });
@@ -92,8 +90,8 @@ test("loading current values retains the exact uncertain original and later edit
   finish();
   await loading;
   expect(editor.snapshot()).toMatchObject({
-    phase: "uncertain",
-    failureOrigin: "read",
+    phase: 'uncertain',
+    failureOrigin: 'read',
     pending: original,
   });
   await editor.reload();
@@ -101,22 +99,22 @@ test("loading current values retains the exact uncertain original and later edit
   expect(editor.snapshot().pending).toBe(original);
   expect(editor.snapshot().draft).toEqual({
     spoilerLevel: 2,
-    suitability: "show",
+    suitability: 'show',
   });
   expect(fixture.calls).toHaveLength(1);
   await editor.retry();
   expect(fixture.calls[1]).toBe(original);
   expect(editor.snapshot()).toMatchObject({
-    phase: "review",
+    phase: 'review',
     pending: null,
-    draft: { spoilerLevel: 2, suitability: "show" },
+    draft: { spoilerLevel: 2, suitability: 'show' },
   });
   await editor.submit();
   expect(fixture.calls[2]).toMatchObject({
     expectedVersion: 1,
     spoilerLevel: 2,
-    suitability: "show",
+    suitability: 'show',
   });
-  expect(editor.snapshot().phase).toBe("saved");
+  expect(editor.snapshot().phase).toBe('saved');
   expect(readingNeedsNavigationDecision(editor.snapshot())).toBe(false);
 });
