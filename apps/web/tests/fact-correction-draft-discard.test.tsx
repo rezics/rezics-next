@@ -57,7 +57,10 @@ test('Generic, Manga, Game and People discard retains siblings, withdrawn holder
     [...scope.querySelectorAll<HTMLInputElement>('input')].map((input) => input.value);
   const scalarDelivery = (row: HTMLElement) => {
     const input = row.querySelector('input')!;
-    const props = Reflect.get(input, Object.keys(input).find((key) => key.startsWith('__reactProps$'))!);
+    const props = Reflect.get(
+      input,
+      Object.keys(input).find((key) => key.startsWith('__reactProps$'))!,
+    );
     return () => props.onChange({ target: { value: '+999' } });
   };
   try {
