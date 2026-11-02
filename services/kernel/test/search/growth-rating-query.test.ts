@@ -4,6 +4,7 @@ import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { bulkLines, documentActions } from '../../src/search/document.ts';
 import { createSubjectIndex, subjectAlias, subjectIndexName } from '../../src/search/indices.ts';
 import { createOpenSearch, type OpenSearch } from '../../src/search/opensearch.ts';
+import { measurePublicFilterIteratorSteps } from '../../src/search/public-filter-consumer.ts';
 import { installTemplates, SEARCH_TEMPLATE, searchSubjects, type SearchResult } from '../../src/search/query.ts';
 import type { IndexedSubject } from '../../src/search/source.ts';
 
@@ -32,6 +33,7 @@ type Capture = {
   options: unknown;
   hits: RawHit[];
   total: unknown;
+  iteratorSteps: number;
 };
 const phases: Capture[] = [];
 const other: { method: string; path: string }[] = [];
@@ -42,16 +44,19 @@ const transport: OpenSearch = {
     body?: unknown,
     options?: Parameters<OpenSearch['request']>[3],
   ) {
-    // PASS THROUGH: record the request and the actual engine response without changing either.
-    const response = await native.request<T>(method, path, body, options);
-    if (/\/_search(?:\/template)?$/.test(path)) {
+    // Record the actual engine response. Profile is added only so iterator steps can be counted.
+    const profiled = /\/_search(?:\/template)?$/.test(path);
+    const requestOptions = profiled ? { ...options, query: { ...options?.query, profile: true } } : options;
+    const response = await native.request<T>(method, path, body, requestOptions);
+    if (profiled) {
       const raw = response.body as { hits: { hits: RawHit[]; total: unknown } };
       phases.push({
         path,
         body: structuredClone(body),
-        options: structuredClone(options),
+        options: structuredClone(requestOptions),
         hits: structuredClone(raw.hits.hits),
         total: raw.hits.total,
+        iteratorSteps: measurePublicFilterIteratorSteps(response.body),
       });
     } else other.push({ method, path });
     return response;
@@ -200,7 +205,8 @@ test('native rating candidate delivery remains within shared phase quotas as the
       const scored = rows.filter(isScored);
       const run = async () => {
         let delivered = 0;
-        const records: { requests: Capture[]; discovery: typeof other; quota: number }[] = [];
+        let iteratorSteps = 0;
+        const records: { requests: Capture[]; discovery: typeof other; quota: number; iteratorSteps: number }[] = [];
         async function call(size: number, after?: Tuple, ratingPhase?: Phase): Promise<RatingResult> {
           phases.length = 0;
           other.length = 0;
@@ -250,7 +256,15 @@ test('native rating candidate delivery remains within shared phase quotas as the
             });
           }
           delivered += raw.length;
-          records.push({ requests: structuredClone(phases), discovery: structuredClone(other), quota: size });
+          const steps = phases.reduce((total, request) => total + request.iteratorSteps, 0);
+          expect(steps).toBeGreaterThan(0);
+          iteratorSteps += steps;
+          records.push({
+            requests: structuredClone(phases),
+            discovery: structuredClone(other),
+            quota: size,
+            iteratorSteps: steps,
+          });
           return result;
         }
         // Full A, including zero and ICU ties. A complete quota cannot establish exhaustion.
@@ -273,7 +287,25 @@ test('native rating candidate delivery remains within shared phase quotas as the
           rows.slice(scored.length + 1, scored.length + 201).map((row) => id(row.ordinal)),
         );
         expect(delivered).toBeLessThanOrEqual(600);
-        return { delivered, records };
+        phases.length = 0;
+        other.length = 0;
+        const empty = await searchRatingSubjects(
+          transport,
+          prefix,
+          {
+            query: { match: { search_text: { query: 'NoSuchRatingToken', operator: 'and' } } },
+            size: 1,
+            rating,
+            generation,
+          },
+          SEARCH_TEMPLATE,
+        );
+        expect(empty.hits).toHaveLength(0);
+        expect(phases.length).toBeGreaterThan(0);
+        expect(phases.length).toBeLessThanOrEqual(2);
+        const emptySteps = phases.reduce((total, request) => total + request.iteratorSteps, 0);
+        iteratorSteps += emptySteps;
+        return { delivered, records, iteratorSteps, emptySteps };
       };
       // Shared growth conventions: one warmup then five repetitions. Native request/cardinality evidence only;
       // PostgreSQL capture/vacuum/classifiers do not apply. Engine sorting/counting remains match-dependent.

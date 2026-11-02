@@ -1117,7 +1117,10 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
   failure rejects the operation. Chunking creates neither a privacy/absence certificate nor a cross-chunk
   transaction. Per hit, one scan of its statements.
 - Growth check: [test/search/growth-facets.test.ts](../../test/search/growth-facets.test.ts): “Search hit facts stay
-  within their bound as N grows” at scale units `[1, 4, 16]`.
+  within their bound as N grows” at scale units `[1, 4, 16]`. Native `next_doc_count+advance_count` is summed from the
+  actual template-search profile; unrelated Recipe engine documents grow with N while the Book neighbourhood stays
+  fixed; admitted, denied, empty and deep continuation share that capture, and neighbourhood history is grown on a
+  separate axis.
 
 ### Facet counts
 
@@ -1173,9 +1176,10 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
   no SQL, latency or O(1) engine-work claim follows from these request bounds.
 - Growth check: [test/search/growth-rating-query.test.ts](../../test/search/growth-rating-query.test.ts): “native rating
   candidate delivery remains within shared phase quotas as the real indexed matching population grows”. The test is
-  present; its runtime pass status is unverified here. Its native phase request and returned-key quotas do not prove
-  default worker/native vote composition, the current disclosed total, PIT/live top-N behavior, or constant engine
-  postings, sort or latency work.
+  present; its runtime pass status is unverified here. It records whole-tree `next_doc_count+advance_count` at 64/512/4096
+  without converting match-dependent engine sort/count into a constant bound. Its native phase request and returned-key
+  quotas do not prove default worker/native vote composition, the current disclosed total, PIT/live top-N behavior, or
+  constant engine postings, sort or latency work.
 
 ### Ordinary native hit receipt admission
 
@@ -1437,8 +1441,10 @@ source key equality, copy completeness, late-write pruning or erasure. No name/U
   128 total output slots). Each page/step supplies the internal cost object and harness evidence specified by
   [Filtered lists](../../../../docs/filtered-lists.md#cost). Otherwise use admitted bounded preparation or reject
   before enumeration. No raw candidate256 or fixed-home sweep requirement is carried forward.
-- Growth check: real same-service native API/default composition at three scales, first/deep/sparse results,
-  two-release pins, epoch pending/restart, current foreign disclosure, interruption/replay and finite useful pages.
+- Growth check: [growth-query](../../test/search/growth-query.test.ts), [growth-indexing](../../test/search/growth-indexing.test.ts),
+  [growth-facets](../../test/search/growth-facets.test.ts) and [growth-rating-query](../../test/search/growth-rating-query.test.ts)
+  record the Cost counters at three scales. Filter+source+order pages measure native iterator steps on the existing
+  template-search path; matching-population rating iterator steps are recorded without a constant engine-work class.
   Existing Scope admission/reservation tests describe superseded scaffolding and do not prove native execution.
 
 ### Hit label choice

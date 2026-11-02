@@ -166,7 +166,7 @@ afterAll(async () => {
 test('Reconcile stays within its bound as P grows', async () => {
   const database = db!;
   const population = reconcilePopulation;
-  await checkGrowth(database, {
+  const report = await checkGrowth(database, {
     name: 'Reconcile',
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     grow: async (growthDb, scale, previous) => {
@@ -183,12 +183,24 @@ test('Reconcile stays within its bound as P grows', async () => {
       return rows;
     },
   });
+  for (const sample of report.samples) {
+    console.info(
+      JSON.stringify({
+        evidence: 'search-growth-reconcile',
+        scale: sample.scale,
+        population: sample.scale * rowsPerScale,
+        rows: sample.cost.rows,
+        blocks: sample.cost.blocks,
+        statements: sample.cost.statements,
+      }),
+    );
+  }
 }, 90_000);
 
 test('Retire stays within its bound as P grows', async () => {
   const database = db!;
   const population = checkpointGrowth('search-growth-retire', retireAnchor, retireOthers, retireAnchorOthers);
-  await checkGrowth(database, {
+  const report = await checkGrowth(database, {
     name: 'Retire',
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     grow: async (growthDb, scale, previous) => {
@@ -213,4 +225,16 @@ test('Retire stays within its bound as P grows', async () => {
       if (result.rows[0]?.count !== 0) throw new Error('Retire left checkpoints for the retired consumer');
     },
   });
+  for (const sample of report.samples) {
+    console.info(
+      JSON.stringify({
+        evidence: 'search-growth-retire',
+        scale: sample.scale,
+        population: sample.scale * rowsPerScale,
+        rows: sample.cost.rows,
+        blocks: sample.cost.blocks,
+        statements: sample.cost.statements,
+      }),
+    );
+  }
 }, 90_000);
