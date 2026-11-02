@@ -297,6 +297,8 @@ export function GameInitialFacts({
     !!holder.current?.isConnected &&
     !holder.current.closest('fieldset:disabled') &&
     (!row || current.current.statements.includes(row));
+  const additionAdmission = useRef({ type, release, editable });
+  additionAdmission.current = { type, release, editable };
   const publish = (next: typeof statements) => {
     current.current.statements = next;
     current.current.change(next);
@@ -320,11 +322,12 @@ export function GameInitialFacts({
         selectClassName={gamePropertySelectClass}
         buttonClassName={gameActionClass}
         add={(property) => {
-          if (!editable()) return;
+          if (!editable() || current.current.statements.length >= 32) return false;
+          const key = crypto.randomUUID();
           publish([
             ...current.current.statements,
             {
-              key: crypto.randomUUID(),
+              key,
               statement: {
                 property: { id: property },
                 value: { type: 'value', content: '' },
@@ -334,6 +337,14 @@ export function GameInitialFacts({
               },
             },
           ]);
+          return {
+            targetId: `game-initial-${key}-fact`,
+            current: () =>
+              additionAdmission.current.type === type &&
+              additionAdmission.current.release === release &&
+              additionAdmission.current.editable() &&
+              current.current.statements.some((row) => row.key === key),
+          };
         }}
       />
       {statements.map((row) => {

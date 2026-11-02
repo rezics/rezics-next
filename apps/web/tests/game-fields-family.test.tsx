@@ -139,6 +139,7 @@ function deferred<T>() {
 test('Game and Addon complete fields family preserves independent labels, native drafts, bounded controls, outcomes and retired sessions', async () => {
   await mounted(async ({ host, render, user, within, waitFor }) => {
     const { GameInitialFacts, GameClassifications } = await import('../src/features/catalogue/game-profile-fields');
+    const { InitialFieldChoice } = await import('../src/features/catalogue/initial-field-choice');
     const { GameProfile } = await import('../src/features/catalogue/game-profile-view');
     const { AddonProfileCreate } = await import('../src/features/catalogue/addon-profile-create');
     const { gameProfileFixture, gameId, gamePlatformId, gameCreatorId } =
@@ -185,6 +186,7 @@ test('Game and Addon complete fields family preserves independent labels, native
             search={search}
             statements={statements}
             disabled={disabled}
+            editAllowed={() => true}
             change={(next) => {
               changes[index]!.push(next);
               setStatements(next);
@@ -231,6 +233,9 @@ test('Game and Addon complete fields family preserves independent labels, native
     expect(changes[0]!.at(-1)).toHaveLength(2);
     expect(changes[1]).toEqual([]);
     const allocated = changes[0]!.at(-1)![1]!;
+    expect(
+      host.querySelector(`[id="game-initial-${allocated.key}-fact"]`)!.contains(host.ownerDocument.activeElement),
+    ).toBe(true);
     expect(allocated.key).toMatch(/^[0-9a-f-]{36}$/);
     expect(allocated.statement).toEqual({
       property: { id: 'schema:url' },
@@ -243,7 +248,12 @@ test('Game and Addon complete fields family preserves independent labels, native
     expect([...selectors[0]!.options].some((option) => option.value === 'schema:url')).toBe(false);
     expect([...selectors[0]!.options].some((option) => option.value === 'schema:inLanguage')).toBe(true);
     await act(async () => user.selectOptions(selectors[0]!, 'schema:inLanguage'));
-    await act(async () => user.click(add));
+    add.focus();
+    await act(async () => user.keyboard('{Enter}'));
+    const repeated = changes[0]!.at(-1)!.at(-1)!;
+    expect(
+      host.querySelector(`[id="game-initial-${repeated.key}-fact"]`)!.contains(host.ownerDocument.activeElement),
+    ).toBe(true);
     expect(changes[0]!.at(-1)!.filter((row) => row.statement.property.id === 'schema:inLanguage')).toHaveLength(2);
     await act(async () => user.click(within(mounts[0]!).getAllByRole('button', { name: m.recipe_remove_field() })[1]!));
     expect(changes[0]!.at(-1)).toHaveLength(2);
@@ -271,6 +281,52 @@ test('Game and Addon complete fields family preserves independent labels, native
     expect(host.querySelector('fieldset')?.disabled).toBe(true);
     expect(searches).toBe(0);
     expect(fixture.calls).toEqual([]);
+
+    let refused = true,
+      admitted = true,
+      targetVisible = false;
+    const choice = () => (
+      <>
+        <InitialFieldChoice
+          groups={[{ properties: ['schema:inLanguage'] }]}
+          release={release}
+          occupied={[]}
+          locale="en"
+          disabled={false}
+          fieldClassName=""
+          labelClassName=""
+          selectClassName=""
+          buttonClassName=""
+          add={() => (refused ? false : { targetId: 'new-assertion', current: () => admitted })}
+        />
+        <button>Elsewhere</button>
+        {targetVisible && <input id="new-assertion" aria-label="New assertion" />}
+      </>
+    );
+    await render(choice());
+    const choose = async () => {
+      await act(async () => user.selectOptions(within(host).getByRole('combobox'), 'schema:inLanguage'));
+      within(host).getByRole('button', { name: m.correction_add() }).focus();
+      await act(async () => user.keyboard('{Enter}'));
+    };
+    await choose();
+    const chooserAdd = within(host).getByRole('button', { name: m.correction_add() });
+    expect(host.ownerDocument.activeElement).toBe(chooserAdd);
+    expect((within(host).getByRole('combobox') as HTMLSelectElement).value).toBe('schema:inLanguage');
+    refused = false;
+    await choose();
+    within(host).getByRole('button', { name: 'Elsewhere' }).focus();
+    chooserAdd.focus();
+    targetVisible = true;
+    await render(choice());
+    expect(host.ownerDocument.activeElement).toBe(chooserAdd);
+    targetVisible = false;
+    await render(choice());
+    await choose();
+    admitted = false;
+    targetVisible = true;
+    await render(choice());
+    expect(host.ownerDocument.activeElement).toBe(chooserAdd);
 
     const creation = gameProfileFixture();
     const gameCreations: Parameters<typeof creation.transport.create>[0][] = [];

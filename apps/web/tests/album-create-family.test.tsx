@@ -89,8 +89,11 @@ test('Album creation composes complete terms and initial facts while preserving 
   const writes = (fixture: Fixture) => fixture.calls.filter((call) => call.method === 'POST');
   const add = async (scope: HTMLElement, property: string) => {
     await select(scope, m.character_add_fact(), property);
-    await click(scope, m.correction_add());
-    return [...scope.querySelectorAll<HTMLElement>('fieldset[id^="album-row-"]')].at(-1)!;
+    within(scope).getByRole('button', { name: m.correction_add() }).focus();
+    await act(async () => user.keyboard('{Enter}'));
+    const row = [...scope.querySelectorAll<HTMLElement>('fieldset[id^="album-row-"]')].at(-1)!;
+    expect(row.contains(window.document.activeElement as unknown as Node)).toBe(true);
+    return row;
   };
   const searches: string[] = [];
   const search = (fixture: Fixture) => async (text: string) => {

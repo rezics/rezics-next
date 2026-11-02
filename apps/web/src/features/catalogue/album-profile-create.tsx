@@ -407,12 +407,12 @@ function AlbumProfileCreateLive({
             selectClassName="w-full [&>select]:min-h-11"
             buttonClassName="h-auto min-h-11 max-w-full whitespace-normal"
             add={(property) => {
-              if (!lifetime.active() || locked || running.current || pending.current || !metadataCurrent(release))
-                return;
+              if (!editable()) return false;
+              const id = crypto.randomUUID();
               replaceRows([
                 ...currentRows.current,
                 {
-                  id: crypto.randomUUID(),
+                  id,
                   statement: {
                     property: { id: property },
                     value: { type: 'value', content: '' },
@@ -422,6 +422,10 @@ function AlbumProfileCreateLive({
                   },
                 },
               ]);
+              return {
+                targetId: `album-row-${id}-value`,
+                current: () => editable() && currentRows.current.some((row) => row.id === id),
+              };
             }}
           />
         </fieldset>
