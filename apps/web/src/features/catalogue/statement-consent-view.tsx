@@ -225,11 +225,7 @@ function StatementConsentPageLive({
     setConfirmation(action);
     setOwn(false);
   }
-  function acknowledgeOwnership(
-    action: ConsentConfirmation | undefined,
-    expectedEpoch: number,
-    checked: boolean,
-  ) {
+  function acknowledgeOwnership(action: ConsentConfirmation | undefined, expectedEpoch: number, checked: boolean) {
     if (
       !lifetime.active() ||
       !isCurrentConfirmation(action, expectedEpoch) ||
@@ -249,12 +245,7 @@ function StatementConsentPageLive({
     expectedEpoch: number,
     event: MouseEvent<HTMLButtonElement>,
   ) {
-    if (
-      !lifetime.active() ||
-      !isCurrentConfirmation(action, expectedEpoch) ||
-      running.current ||
-      request.current
-    )
+    if (!lifetime.active() || !isCurrentConfirmation(action, expectedEpoch) || running.current || request.current)
       return;
     const origin = confirmationOrigin.current;
     orient(
@@ -327,11 +318,7 @@ function StatementConsentPageLive({
     if (running.current || !current) return;
     if (
       !request.current &&
-      (!isCurrentConfirmation(action, expectedEpoch) ||
-        !ownRef.current ||
-        !attempt ||
-        !assertion?.identified ||
-        reload)
+      (!isCurrentConfirmation(action, expectedEpoch) || !ownRef.current || !attempt || !assertion?.identified || reload)
     )
       return;
     if (isCurrentConfirmation(action, expectedEpoch)) {
@@ -632,9 +619,7 @@ function StatementConsentPageLive({
                                 variant="outline"
                                 className="min-h-11 min-w-11 h-auto max-w-full py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                                 disabled={busy}
-                                onClick={(event) =>
-                                  cancelConfirmation(confirmation, actionEpochAtRender, event)
-                                }
+                                onClick={(event) => cancelConfirmation(confirmation, actionEpochAtRender, event)}
                               >
                                 {m.candidate_cancel({}, options)}
                               </Button>
