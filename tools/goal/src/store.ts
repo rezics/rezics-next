@@ -1106,7 +1106,16 @@ export class WorkerStore implements AttemptFence {
     )
       throw new Error('a current prepared or reserved proof source may never be replaced');
   }
-  recordExplicitRetry(ref: AttemptRef, update: (task: Task) => void, options: RetryIntent['options']): void {
+  /**
+   * Record an explicit retry. With amendPending, a retry already waiting to start keeps its place and options, adding
+   * the explicit ones, and starts the task as this update leaves it.
+   */
+  recordExplicitRetry(
+    ref: AttemptRef,
+    update: (task: Task) => void,
+    options: RetryIntent['options'],
+    { amendPending = false }: { amendPending?: boolean } = {},
+  ): void {
     this.db
       .transaction(() => {
         const task = this.task(ref.taskId);
@@ -1123,7 +1132,14 @@ export class WorkerStore implements AttemptFence {
           throw new Error('task identity cannot be updated');
         this.saveTask(task);
         const existing = this.retryIntent(ref);
-        if (existing?.status === 'pending') throw new Error('a retry is already pending');
+        if (existing?.status === 'pending') {
+          if (!amendPending) throw new Error('a retry is already pending');
+          existing.options = { ...existing.options, ...options };
+          this.db
+            .query('UPDATE worker_retry_intents SET body=? WHERE task_id=? AND attempt=?')
+            .run(JSON.stringify(existing), ref.taskId, ref.attempt);
+          return;
+        }
         const intent: RetryIntent = { ...ref, options, status: 'pending' };
         this.db
           .query('INSERT OR REPLACE INTO worker_retry_intents VALUES (?,?,?)')
@@ -1494,6 +1510,7 @@ export class WorkerStore implements AttemptFence {
           record.criticalPath = previous.criticalPath;
           record.diffLines = previous.diffLines;
           record.changedFiles = previous.changedFiles;
+          if (previous.outsidePaths) record.outsidePaths = previous.outsidePaths;
           record.hostMs = previous.hostMs;
           record.earlyStop = previous.earlyStop;
         }

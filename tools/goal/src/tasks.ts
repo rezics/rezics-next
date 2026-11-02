@@ -16,7 +16,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve, relative, isAbsolute } from 'node:path';
-import { parseBrief, readRiskOwnership, withStabilizeTarget } from './briefs.ts';
+import { devProductBrief, parseBrief, readRiskOwnership, withStabilizeTarget } from './briefs.ts';
 import { StaleAttemptError } from './contracts.ts';
 import { acquireDirectoryLease, acquireDirectoryLeaseWaiting, LeaseHeldError } from './lease.ts';
 import { classifyTask, readRouting, retryFallbacks, routeTask } from './routing.ts';
@@ -875,6 +875,15 @@ export class WorkerTasks {
       lease.release();
     }
   }
+  /** Whether retrying this task, with an optional replacement brief, is product work on the integration branch. */
+  devProductRetry(taskId: string, briefFile?: string): boolean {
+    const current = this.store.task(taskId).brief;
+    const next =
+      briefFile === undefined
+        ? current
+        : parseBrief(readFileSync(briefFile, 'utf8'), readRiskOwnership(this.settings.riskAreasFile));
+    return devProductBrief(current) && devProductBrief(next);
+  }
   /** Persist an explicit retry for the host to start on its next recovery sweep. */
   queueRetry(
     taskId: string,
@@ -893,10 +902,13 @@ export class WorkerTasks {
     const task = this.store.task(taskId);
     if (task.currentAttempt !== options.expectedAttempt)
       throw new StaleAttemptError({ taskId, attempt: options.expectedAttempt! }, task.currentAttempt);
-    if (!task.currentAttempt) throw new Error('cannot queue a retry before the first attempt; use queueProofStart');
     if (!['ready', 'running', 'landing', 'stopped', 'held'].includes(task.state))
       throw new Error(`cannot retry ${task.state} task`);
     const nextBrief = options.brief === undefined ? task.brief : this.validateBrief(options.brief, taskId, actor).brief;
+    // Product work on the integration branch retries at any generation, including one that never started.
+    const devProduct = devProductBrief(task.brief) && devProductBrief(nextBrief);
+    if (!task.currentAttempt && !devProduct)
+      throw new Error('cannot queue a retry before the first attempt; use queueProofStart');
     if (task.brief.kind === 'verification' && nextBrief.kind !== 'verification')
       throw new Error('registered proof contracts cannot become product retries');
     let authorization: ProofAuthorization | undefined;
@@ -918,7 +930,9 @@ export class WorkerTasks {
     const ref = { taskId, attempt: task.currentAttempt };
     // A held task's brief can change while its retry waits for dependencies: refusing it made managers cancel held
     // tasks and lose their branches. The pending retry then starts the amended brief.
-    if (task.state !== 'held' && this.store.retryIntent(ref)?.status === 'pending')
+    // A product retry still waiting to start takes an amended brief; the pending retry then starts that brief.
+    const amendPending = devProduct && options.brief !== undefined;
+    if (task.state !== 'held' && !amendPending && this.store.retryIntent(ref)?.status === 'pending')
       throw new Error('a retry is already pending');
     if (task.state === 'held') {
       const reshaped = options.brief === undefined ? undefined : this.validateBrief(options.brief, taskId, actor);
@@ -1015,6 +1029,7 @@ export class WorkerTasks {
           } else if (current.state === 'stopped') current.state = 'ready';
         },
         retryOptions,
+        { amendPending },
       );
     } catch (error) {
       if (briefPath) rmSync(briefPath, { force: true });

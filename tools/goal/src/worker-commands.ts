@@ -200,7 +200,11 @@ export async function runWorkerCommand(
         if (expectedAttempt === undefined || proofStart || brief || removeAfter.length)
           throw new Error('--release-proof requires only --expected-attempt <current-generation>');
         print(JSON.stringify(tasks.releaseProof(arg, expectedAttempt, priorityActor)));
-      } else if (proofStart || expectedAttempt === 0) {
+      } else if (
+        proofStart ||
+        // Generation zero of product work on the integration branch is an ordinary retry, not a proof start.
+        (expectedAttempt === 0 && (removeAfter.length > 0 || !tasks.devProductRetry(arg, brief)))
+      ) {
         if (expectedAttempt === undefined) throw new Error('--proof-start requires --expected-attempt');
         print(
           JSON.stringify(

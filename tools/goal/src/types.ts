@@ -409,6 +409,8 @@ export type AttemptRecord = AttemptRef & {
   fixRound: number;
   diffLines: number | null;
   changedFiles: string[] | null;
+  /** Changed files outside the brief's declared paths; absent when there were none and on older records. */
+  outsidePaths?: string[];
   hostMs: number | null;
   classifierVersion: string;
   stepClasses: Record<StepClass, number>;

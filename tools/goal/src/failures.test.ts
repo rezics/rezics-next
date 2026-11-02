@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { GateOutcome, ManagerEvent } from './contracts.ts';
 import { WorkerJob } from './job.ts';
-import { harness } from './test-support.ts';
+import { harness, markdown } from './test-support.ts';
 import { launchCommand, workerEnvironment } from './launch.ts';
 import { fixturePool } from './test-support.ts';
 
@@ -12,6 +12,8 @@ const noCommit = `#!/usr/bin/env bun
 console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'BLOCKER: fixing the declared assertion'}}));
 console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_tokens:2}}));
 `;
+const controlPlanePath = 'tools/goal/src/result.ts';
+const outsideFiles = Array.from({ length: 9 }, (_, index) => `outside-${index}.ts`);
 const cases: {
   name: string;
   expected: string;
@@ -19,6 +21,9 @@ const cases: {
   change?: Partial<GateOutcome>;
   prepare?: 'repeated' | 'round' | 'stall' | 'consulted' | 'early';
   manager?: boolean;
+  /** Control-plane work keeps the lifecycle limits that product work on dev no longer has. */
+  controlPlane?: boolean;
+  outsidePaths?: string[];
 }[] = [
   { name: 'setup failure', expected: 'environment', change: { stage: 'setup' } },
   { name: 'test also fails on main', expected: 'environment', change: { failsOnMain: true } },
@@ -27,12 +32,45 @@ const cases: {
   { name: 'same first assertion', expected: 'repeated-assertion', prepare: 'repeated' },
   { name: 'specification conflict', expected: 'spec-conflict', fact: 'spec-conflict', manager: true },
   { name: 'scope stage', expected: 'scope-growth', change: { stage: 'scope' }, manager: true },
-  { name: 'undeclared file', expected: 'scope-growth', change: { changedFiles: ['outside.ts'] }, manager: true },
+  {
+    name: 'undeclared file on dev is recorded and retried',
+    expected: 'new-failure',
+    change: { changedFiles: ['outside.ts'] },
+    outsidePaths: ['outside.ts'],
+  },
+  {
+    name: 'undeclared files on dev do not count toward the file estimate',
+    expected: 'new-failure',
+    change: { changedFiles: ['result.txt', ...outsideFiles] },
+    outsidePaths: outsideFiles,
+  },
+  {
+    name: 'undeclared control-plane file',
+    expected: 'scope-growth',
+    change: { changedFiles: ['outside.ts'] },
+    manager: true,
+    controlPlane: true,
+    outsidePaths: ['outside.ts'],
+  },
   { name: 'estimate exceeded twice over', expected: 'scope-growth', change: { diffLines: 201 }, manager: true },
   { name: 'estimate exceeded within tolerance', expected: 'new-failure', change: { diffLines: 200 } },
   { name: 'no commit before class limit', expected: 'stalled', prepare: 'stall', manager: true },
-  { name: 'two fix rounds', expected: 'round-limit', prepare: 'round', manager: true },
-  { name: 'failure after consultation', expected: 'failed-after-consult', prepare: 'consulted', manager: true },
+  { name: 'two fix rounds on dev continue', expected: 'new-failure', prepare: 'round' },
+  {
+    name: 'two control-plane fix rounds',
+    expected: 'round-limit',
+    prepare: 'round',
+    manager: true,
+    controlPlane: true,
+  },
+  { name: 'failure after consultation on dev continues', expected: 'new-failure', prepare: 'consulted' },
+  {
+    name: 'control-plane failure after consultation',
+    expected: 'failed-after-consult',
+    prepare: 'consulted',
+    manager: true,
+    controlPlane: true,
+  },
   { name: 'success claimed before failed gate', expected: 'early-stop', prepare: 'early' },
 ];
 for (const item of cases)
@@ -41,6 +79,13 @@ for (const item of cases)
       inbox: ManagerEvent[] = [],
       consultations: string[] = [];
     try {
+      if (item.controlPlane)
+        writeFileSync(
+          h.briefFile,
+          markdown
+            .replace('goal: fixture', 'goal: control-plane')
+            .replace('paths: [result.txt]', `paths: [${controlPlanePath}]`),
+        );
       const task = h.tasks.dispatch(h.briefFile);
       const job = new WorkerJob(
         h.tasks,
@@ -88,7 +133,7 @@ for (const item of cases)
         firstFailure: { fingerprint: 'assertion', assertion: 'value equals expected', excerpt: 'actual differs' },
         logPath: 'fixture',
         hostMs: 25,
-        changedFiles: ['result.txt'],
+        changedFiles: [item.controlPlane ? controlPlanePath : 'result.txt'],
         diffLines: 1,
         ...item.change,
       };
@@ -96,6 +141,7 @@ for (const item of cases)
       await job.drain();
       const record = h.store.record(ref)!;
       expect(record.escalation).toBe(item.expected);
+      expect(record.outsidePaths).toEqual(item.outsidePaths);
       expect(record.firstFailure).toBe(outcome.firstFailure!.fingerprint);
       expect(record.hostMs).toBe(25);
       const directory = h.store.attempt(ref).evidencePath;
@@ -112,7 +158,8 @@ for (const item of cases)
         const next = h.store.attempt({ taskId: task.id, attempt: 2 });
         expect(next.profile).toEqual(h.store.attempt(ref).profile);
         expect(next.pool).toBe('fixture');
-        expect(next.fixRound).toBe(item.expected === 'environment' ? 0 : item.prepare === 'repeated' ? 2 : 1);
+        const previousRound = item.prepare === 'repeated' ? 1 : item.prepare === 'round' ? 2 : 0;
+        expect(next.fixRound).toBe(previousRound + (item.expected === 'environment' ? 0 : 1));
       }
       expect(consultations.length).toBe(item.expected === 'repeated-assertion' ? 1 : 0);
       // Replayed gate notifications do not launch another attempt or wake another manager.
@@ -124,6 +171,67 @@ for (const item of cases)
       h.dispose();
     }
   });
+const sessionWorker = `#!/usr/bin/env bun
+import { appendFileSync, mkdirSync } from 'node:fs';
+mkdirSync('.temp', { recursive: true });
+appendFileSync('.temp/worker-argv.jsonl', JSON.stringify(process.argv.slice(2)) + '\\n');
+console.log(JSON.stringify({type:'thread.started',thread_id:'dev-session'}));
+console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'BLOCKER: fixing the declared assertion'}}));
+console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_tokens:2}}));
+`;
+test('product retries on dev continue past the round limit and consultation in the same session and branch', async () => {
+  const h = harness(sessionWorker),
+    inbox: ManagerEvent[] = [];
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    const job = new WorkerJob(
+      h.tasks,
+      { enqueue() {} },
+      { deliver: (event) => inbox.push(event) },
+      async () => 'Use the minimal correction.',
+    );
+    await job.start(task.id);
+    const failure = (attempt: number, fingerprint: string): GateOutcome => ({
+      taskId: task.id,
+      attempt,
+      passed: false,
+      stage: 'gate',
+      firstFailure: { fingerprint, assertion: 'value equals expected', excerpt: 'actual differs' },
+      logPath: 'fixture',
+      hostMs: 1,
+      changedFiles: ['result.txt'],
+      diffLines: 1,
+    });
+    h.store.updateAttempt({ taskId: task.id, attempt: 1 }, (attempt) => {
+      attempt.fixRound = 2;
+      attempt.consulted = true;
+    });
+    // Past the round limit, then the same assertion again after a consultation: both retry without a manager.
+    for (const attempt of [1, 2]) {
+      job.onGateOutcome(failure(attempt, 'same'));
+      await job.drain();
+    }
+    expect(inbox).toEqual([]);
+    expect(h.store.task(task.id)).toMatchObject({ currentAttempt: 3, branch: task.branch });
+    expect(h.store.task(task.id).state).not.toBe('stopped');
+    expect(h.store.attempts(task.id).map((attempt) => attempt.fixRound)).toEqual([2, 3, 4]);
+    expect([1, 2].map((attempt) => h.store.record({ taskId: task.id, attempt })?.escalation)).toEqual([
+      'new-failure',
+      'repeated-assertion',
+    ]);
+    const launches = readFileSync(join(task.worktree, '.temp/worker-argv.jsonl'), 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as string[]);
+    expect(launches).toHaveLength(3);
+    for (const argv of launches.slice(1))
+      expect(argv.slice(argv.indexOf('resume'), argv.indexOf('resume') + 2)).toEqual(['resume', 'dev-session']);
+  } finally {
+    const current = h.store.tasks()[0];
+    if (current?.state === 'running') await h.tasks.stop(current.id);
+    h.dispose();
+  }
+}, 60_000);
 test('pool exhaustion retries on another locally allowed pool without changing model or consuming a fix round', async () => {
   const h = harness(noCommit);
   try {

@@ -30,6 +30,7 @@ import { recordFlow } from './flow.ts';
 import { launchWorkerProcess } from './worker-slice.ts';
 import { agentAdapter, cleanAgentEnvironment } from './agents.ts';
 import { renderLaunchContext, type LaunchContext } from './launch-context.ts';
+import { devProductBrief } from './briefs.ts';
 
 export type LaunchOptions = {
   profile: Profile;
@@ -266,7 +267,11 @@ export function workerPrompt(
     `Work only in ${task.worktree}, on branch ${task.branch}. The AGENTS.md that applies is already in your instructions; follow it.`,
     `The main checkout ${mainCheckout} is read-only: never write there. Write files only by paths inside ${task.worktree}${task.brief.kind === 'research' ? `, except the reference clones this research task keeps under ${mainCheckout}/.reference/` : ''}.`,
     'Work until every acceptance condition holds. Do not send progress reports. Commit your changes on this branch before you start a check and again after each fix: a commit does not claim that checks pass, and an attempt that ends without a commit counts as stalled.',
-    'Do not rebase or merge. Write every acceptance test the contract names that does not exist yet; never weaken or edit an existing acceptance test or a frozen file. A check that waits for a test slot is queued, not stuck: let it run.',
+    `${
+      devProductBrief(task.brief) && !task.workspace
+        ? `Do not rebase. Merge or cherry-pick only a branch or commit the contract names explicitly for this task: bring exactly that into ${task.branch} with git merge or git cherry-pick, resolve its conflicts, and name it in your summary. Merge nothing else.`
+        : 'Do not rebase or merge.'
+    } Write every acceptance test the contract names that does not exist yet; never weaken or edit an existing acceptance test or a frozen file. A check that waits for a test slot is queued, not stuck: let it run.`,
     launchContext
       ? 'The full canonical contract below, including its current acceptance command, execution policy, and supported placement, is authoritative at this launch boundary. It supersedes conflicting saved-session instructions before you choose another command.'
       : '',

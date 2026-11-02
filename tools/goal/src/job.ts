@@ -1686,6 +1686,10 @@ export class WorkerJob implements GateOutcomeSink {
       store.event(outcome, 'gate-outcome', outcome);
       record.diffLines = outcome.diffLines;
       record.changedFiles = [...outcome.changedFiles];
+      // Declared paths say where the work is expected, not a fence: the record keeps every file changed outside them.
+      const outsidePaths = outcome.changedFiles.filter((path) => !matchesPath(path, task.brief.paths));
+      if (outsidePaths.length) record.outsidePaths = outsidePaths;
+      else delete record.outsidePaths;
       record.hostMs = (record.hostMs ?? 0) + outcome.hostMs;
       record.firstFailure = outcome.firstFailure?.fingerprint ?? null;
       record.outcome = outcome.passed ? 'passed' : 'gate-failed';

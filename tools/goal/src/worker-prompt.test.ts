@@ -36,6 +36,37 @@ test('the worker prompt says failures outside the declared paths are reported, n
   expect(prompt).toContain('A test that passes on your base and fails after your change is yours');
 });
 
+test('a dev product worker may merge or cherry-pick only what its contract names; other workers may not merge', () => {
+  const task = (brief: Record<string, unknown>, workspace?: Task['workspace']) =>
+    ({
+      worktree: '/work/trees/t1',
+      branch: 'worker/t1',
+      ...(workspace ? { workspace } : {}),
+      brief: {
+        markdown: 'Merge branch worker/donor first.',
+        kind: 'implementation',
+        goal: 'web',
+        paths: ['src/a.ts'],
+        acceptance: { command: ['bun', 'test'], tests: ['x'] },
+        ...brief,
+      },
+    }) as unknown as Task;
+  const product = workerPrompt(task({}), undefined, undefined, [], '/repo/main');
+  expect(product).toContain(
+    'Do not rebase. Merge or cherry-pick only a branch or commit the contract names explicitly for this task: bring exactly that into worker/t1 with git merge or git cherry-pick, resolve its conflicts, and name it in your summary. Merge nothing else.',
+  );
+  expect(product).not.toContain('Do not rebase or merge.');
+  for (const fenced of [
+    task({ goal: 'control-plane', paths: ['tools/goal/src/a.ts'] }),
+    task({ target: 'stabilize' }),
+    task({}, { module: 'apps/web', taskName: 'shared' }),
+  ]) {
+    const prompt = workerPrompt(fenced, undefined, undefined, [], '/repo/main');
+    expect(prompt).toContain('Do not rebase or merge. Write every acceptance test');
+    expect(prompt).not.toContain('git cherry-pick');
+  }
+});
+
 test('an implementation worker is told the applicable AGENTS.md is already loaded and to keep recursive searches in scope', () => {
   const task = {
     worktree: '/work/trees/t1',

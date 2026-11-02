@@ -24,7 +24,9 @@ bun tools/goal/src/cli.ts attempts --json
 ```
 
 Run dispatch from a checkout of this repository after configuring local pools and writing a brief. The main checkout
-must have main checked out. Workers commit on their assigned branches and do not rebase, merge or change acceptance tests.
+must have main checked out. Workers commit on their assigned branches and do not rebase or change acceptance tests.
+They do not merge either, except that a product worker integrating into dev in its own worktree merges or
+cherry-picks a branch or commit its contract names explicitly.
 The controller rebases detached candidates onto the integration branch (by default `dev`), checks scope and
 fast-forwards that branch without running a gate. Promotion to `main` is a separate step. A passing attempt record is
 finalized through the real integration outcome sink.
@@ -854,6 +856,15 @@ exhaustion chooses another allowed pool. Repeating the same first assertion afte
 the original profile receives its answer in a fresh session. Scope growth, stalls, failure after consultation and the
 two-fix-round limit reach the owning manager. An early success claim followed by a failed gate is recorded and continued.
 Generated files marked `linguist-generated=true` are excluded from estimate totals, while every changed file remains subject to declared-path checks.
+
+Product work integrating into dev (not control-plane, stabilize-target or verification work) has no retry limit and
+needs no approval to retry: the two-fix-round limit and a failure after consultation do not stop it, and each retry
+continues on the task's branch, in its session when the pool and model are unchanged. A changed file outside its
+declared paths does not stop it either: the attempt record lists such files in `outsidePaths`, and they do not count
+toward the file estimate. A scope-stage refusal for an undeclared risk area, a line estimate exceeded twice over, a
+specification conflict and a stall still reach the owning manager. Control-plane, stabilize-target and verification
+work keep every limit above.
+
 Rebase-stage conflicts with the integration branch receive same-profile resolution attempts after the control plane
 starts that rebase in the task worktree. Controller-only rebase commits do not count as worker progress. The bounded
 guard sends one specification-conflict notice only after the same source worker commit, effective target commit and
@@ -1224,6 +1235,10 @@ bun tools/goal/src/cli.ts inbox send <manager> <kind> <summary> [--task <task>] 
 
 `retry <task> [--brief <file>]` retries a task, optionally replacing its brief after checking that its Goal and manager stay the same. Brief comparison canonicalizes line endings to LF and ignores trailing end-of-file whitespace. If the supplied brief matches the current contract after that normalization, the command reports that the contract is unchanged and exits without starting another attempt. A changed brief records SHA-256 hashes of the previous and new contract on the new attempt; a stopped task can still be restarted with plain `retry <task>`.
 Explicit retries are recorded with their amended brief as pending host start intents and return without waiting for capacity. The host consumes pending intents on recovery ticks in their saved order, starting each once as capacity becomes available.
+Product work integrating into dev can be retried at any generation: `retry <task>`, with or without
+`--expected-attempt 0`, also starts a never-started task, and `--brief` also amends a retry that is still waiting to
+start, which keeps its place in that order and its options. Other work refuses a second retry while one is pending;
+before its first start it is amended with `amend` or, for verification, registered with the proof start below.
 `cancel <task>` stops a running task, marks it cancelled, and removes it from its Goal's completion scope. Tasks held
 after it remain held because cancellation does not satisfy `after`; each manager that owns those held tasks receives one
 instruction naming the held tasks and cancelled dependency. During host recovery, a held task with a cancelled
