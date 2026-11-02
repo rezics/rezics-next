@@ -74,7 +74,9 @@ first: line counts are a measure, never a goal ([efficiency](efficiency.md)).
 - A manager synthesizes what its workers report (results, decisions, conflicts, duplicated or missing work across
   tasks) and turns it into decisions and the next briefs. Workers do not read other workers' tasks; the manager reads
   them once for all.
-- Your outputs are ready briefs and decisions. Keep at least eight ready briefs in your Goal's backlog.
+- Your outputs are ready briefs and decisions. Keep at least eight ready briefs in your Goal's backlog while your road
+  has unowned approved outcomes; when it has none, finish what you own and never pad. Scope additions go to the
+  supermanager as candidates naming the scope line they extend.
 - Do not sleep or poll. End the turn; the controller wakes you on an inbox event.
 - Send only decisions, questions and handoffs: one message per decision, at most 60 words. Never send
   acknowledgements, receipts, status reports or lists of things you did not do.
