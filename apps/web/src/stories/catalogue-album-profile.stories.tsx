@@ -28,15 +28,37 @@ function AlbumStory({
   scenario = 'ready',
   correction = false,
   signedOut = false,
+  longIdentity = false,
   onCreate,
 }: {
   scenario?: AlbumScenario;
   correction?: boolean;
   signedOut?: boolean;
+  longIdentity?: boolean;
   onCreate?: ObserveCreate;
 }) {
   const locale = getLocale();
-  const fixture = useMemo(() => albumFixture(scenario, locale), [scenario, locale]);
+  const fixture = useMemo(() => {
+    const value = albumFixture(scenario, locale);
+    if (longIdentity) {
+      value.publicRead.subject.labels = {
+        en: 'Harbour sessions — the complete album work with an exceptionally long title ' + 'Harbour'.repeat(24),
+        ar: 'جلسات الميناء باسم طويل ومراجع كاملة',
+      };
+      value.publicRead.subject.descriptions = {
+        en: 'A complete illustrative album description. '.repeat(8),
+        fr: 'Description conservée sans nom français.',
+      };
+      value.publicRead.subject.aliases = {
+        en: ['The full alternative album name ' + 'Sessions'.repeat(24)],
+        ja: ['港の演奏の別名'],
+      };
+      value.release.types['schema:MusicAlbum']!.labels = {
+        en: 'A long released album kind label ' + 'Catalogue'.repeat(24),
+      };
+    }
+    return value;
+  }, [scenario, locale, longIdentity]);
   const transport = useMemo(
     () => ({
       ...fixture.transport,
@@ -348,3 +370,67 @@ export const CreditCorrection: Story = {
     await expect(await canvas.findByText(m.relation_proposed())).toBeVisible();
   },
 };
+
+// UNRUN: correction-only states extend the default production page, without claiming native evidence.
+export const CorrectionLongIdentity: Story = {
+  args: { correction: true, longIdentity: true },
+  play: ({ canvasElement }) => inspectCorrectionIdentity(canvasElement),
+};
+export const CorrectionSignedOut: Story = { args: { correction: true, signedOut: true } };
+export const CorrectionLoading: Story = { args: { correction: true, scenario: 'loading' } };
+export const CorrectionUnavailable: Story = { args: { correction: true, scenario: 'unavailable' } };
+async function correctionFailure(canvasElement: HTMLElement, message: string) {
+  const canvas = within(canvasElement);
+  const field = within(await canvas.findByRole('region', { name: fieldName('schema:datePublished') }));
+  await userEvent.click(field.getByRole('button', { name: m.facts_edit_field() }));
+  const year = field.getByRole('textbox', { name: m.correction_year() });
+  await userEvent.clear(year);
+  await userEvent.type(year, '2025');
+  await userEvent.click(canvas.getByRole('button', { name: m.facts_submit() }));
+  await expect(await field.findByText(message)).toBeVisible();
+  await expect(year).toHaveValue('2025');
+}
+export const CorrectionDenied: Story = {
+  args: { correction: true, scenario: 'denied' },
+  play: ({ canvasElement }) => correctionFailure(canvasElement, m.correction_denied()),
+};
+export const CorrectionUncertain: Story = {
+  args: { correction: true, scenario: 'uncertain' },
+  play: ({ canvasElement }) => correctionFailure(canvasElement, m.facts_uncertain()),
+};
+
+// UNRUN browser oracles for the ordinary phone390/desktop1280 and locale/theme globals.
+async function inspectCorrectionIdentity(canvasElement: HTMLElement) {
+  const canvas = within(canvasElement);
+  const scope = await canvas.findByText(m.specialist_identity_scope());
+  const identity = scope.parentElement!;
+  const heading = identity.querySelector('h2')!;
+  const reference = canvas.getByText(m.specialist_identity_reference(), { selector: 'summary' });
+  const details = reference.closest('details')!;
+  await expect(heading).toBeVisible();
+  await expect(heading.compareDocumentPosition(reference) & 4).toBeTruthy();
+  await expect(details).not.toHaveAttribute('open');
+  reference.focus();
+  await userEvent.tab();
+  await userEvent.tab({ shift: true });
+  await expect(reference).toHaveFocus();
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await userEvent.keyboard('{Enter}');
+    await expect(details).toHaveAttribute('open', '');
+    await expect(Array.from(details.querySelectorAll('code'), (code) => code.textContent)).toEqual([
+      albumId,
+      'schema:MusicAlbum',
+    ]);
+    for (const element of [identity, heading, reference, ...details.querySelectorAll<HTMLElement>('dd')]) {
+      await expect(element.scrollWidth).toBeLessThanOrEqual(element.clientWidth + 1);
+    }
+    await userEvent.keyboard('{Enter}');
+    await expect(details).not.toHaveAttribute('open');
+  }
+  const names = canvas.getByText(m.specialist_identity_names(), { selector: 'summary' });
+  await userEvent.click(names);
+  for (const text of names.closest('details')!.querySelectorAll<HTMLElement>('dd')) {
+    await expect(text.scrollWidth).toBeLessThanOrEqual(text.clientWidth + 1);
+    await expect(text.className).not.toMatch(/truncate|line-clamp/);
+  }
+}

@@ -4327,5 +4327,10 @@
   "fictional_work_choose_another": "Choose another work",
   "profile_work_reference_details": "Reference details",
   "profile_work_reference_subject": "Subject reference",
-  "profile_work_reference_type": "Type reference"
+  "profile_work_reference_type": "Type reference",
+  "specialist_identity_scope": "Correcting this subject",
+  "specialist_identity_reference": "Reference and technical details",
+  "specialist_identity_subject_id": "Subject ID",
+  "specialist_identity_type": "Technical type",
+  "specialist_identity_names": "Names, descriptions and aliases"
 }

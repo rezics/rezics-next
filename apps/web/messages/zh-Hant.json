@@ -4326,5 +4326,10 @@
   "fictional_work_choose_another": "選擇其他作品",
   "profile_work_reference_details": "參照詳情",
   "profile_work_reference_subject": "條目參照",
-  "profile_work_reference_type": "類型參照"
+  "profile_work_reference_type": "類型參照",
+  "specialist_identity_scope": "修正此條目",
+  "specialist_identity_reference": "參考資訊與技術詳細資料",
+  "specialist_identity_subject_id": "條目 ID",
+  "specialist_identity_type": "技術類型",
+  "specialist_identity_names": "名稱、描述與別名"
 }

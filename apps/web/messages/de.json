@@ -4326,5 +4326,10 @@
   "fictional_work_choose_another": "Anderes Werk auswählen",
   "profile_work_reference_details": "Referenzdetails",
   "profile_work_reference_subject": "Referenz des Eintrags",
-  "profile_work_reference_type": "Typreferenz"
+  "profile_work_reference_type": "Typreferenz",
+  "specialist_identity_scope": "Diesen Eintrag korrigieren",
+  "specialist_identity_reference": "Referenz und technische Details",
+  "specialist_identity_subject_id": "Eintrags-ID",
+  "specialist_identity_type": "Technischer Typ",
+  "specialist_identity_names": "Namen, Beschreibungen und Aliasnamen"
 }

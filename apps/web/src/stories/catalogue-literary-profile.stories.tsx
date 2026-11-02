@@ -20,14 +20,58 @@ function LiteraryStory({
   type = 'schema:Book',
   editing = false,
   signedOut = false,
+  longIdentity = false,
+  uncertainCorrection = false,
 }: {
   scenario?: LiteraryScenario;
   type?: LiteraryType;
   editing?: boolean;
   signedOut?: boolean;
+  longIdentity?: boolean;
+  uncertainCorrection?: boolean;
 }) {
   const locale = getLocale();
-  const fixture = useMemo(() => literaryFixture(scenario, locale, type, editing), [scenario, locale, type, editing]);
+  const fixture = useMemo(() => {
+    const value = literaryFixture(scenario, locale, type, editing);
+    // Only supplied fixture terms are changed. No title lookup or production behavior is added.
+    const current = value.publicRead();
+    if (longIdentity) {
+      current.subject.labels = {
+        en: 'An original literary work with a very long complete title ' + 'Bibliography'.repeat(24),
+        ar: 'عمل أدبي أصلي باسم طويل ومراجع كاملة',
+      };
+      current.subject.descriptions = {
+        en: 'A full illustrative bibliographic description. '.repeat(8),
+        fr: 'Description conservée même sans nom français.',
+      };
+      current.subject.aliases = {
+        ja: ['長い別名をすべて表示'],
+        en: ['An alternative complete work title ' + 'Original'.repeat(24)],
+      };
+      const load = value.transport.load;
+      value.transport.load = async () => {
+        const read = await load();
+        return read.ok
+          ? {
+              ...read,
+              release: {
+                ...read.release,
+                types: {
+                  ...read.release.types,
+                  [type]: {
+                    ...read.release.types[type]!,
+                    labels: { en: 'A long released literary kind ' + 'Bibliographic'.repeat(20) },
+                  },
+                },
+              },
+              current: read.current ? { ...read.current, public: current } : null,
+            }
+          : read;
+      };
+    }
+    if (uncertainCorrection) value.facts.propose = async () => ({ ok: false, reason: 'uncertain' });
+    return value;
+  }, [scenario, locale, type, editing, longIdentity, uncertainCorrection]);
   return (
     <PatternStory visitor={signedOut ? 'Signed Out' : 'Signed In'} path="/catalogue/literary">
       <AppShell>
@@ -251,3 +295,71 @@ export const Route: Story = {
     await expect(summary.closest('details')).toHaveAttribute('open', '');
   },
 };
+
+// UNRUN: constructed presentation fixtures, with ordinary native-shaped proposal failures.
+export const CorrectionLongIdentity: Story = {
+  args: { editing: true, longIdentity: true },
+  play: ({ canvasElement }) => inspectCorrectionIdentity(canvasElement),
+};
+export const CorrectionSignedOut: Story = { args: { editing: true, signedOut: true } };
+export const CorrectionLoading: Story = { args: { editing: true, scenario: 'loading' } };
+export const CorrectionUnavailable: Story = { args: { editing: true, scenario: 'metadata-unavailable' } };
+async function correctionFailure(canvasElement: HTMLElement, message: string) {
+  const canvas = within(canvasElement);
+  const field = within(
+    await canvas.findByRole('region', {
+      name: pickText(literaryRelease.properties['schema:wordCount']!.labels, getLocale()).text,
+    }),
+  );
+  await userEvent.click(field.getByRole('button', { name: m.facts_edit_field() }));
+  const amount = field.getByRole('textbox', { name: m.correction_amount() });
+  await userEvent.clear(amount);
+  await userEvent.type(amount, '+13000');
+  await userEvent.click(canvas.getByRole('button', { name: m.facts_submit() }));
+  await expect(await field.findByText(message)).toBeVisible();
+  await expect(amount).toHaveValue('+13000');
+}
+export const CorrectionDenied: Story = {
+  args: { editing: true, scenario: 'denied' },
+  play: ({ canvasElement }) => correctionFailure(canvasElement, m.correction_denied()),
+};
+export const CorrectionUncertain: Story = {
+  args: { editing: true, uncertainCorrection: true },
+  play: ({ canvasElement }) => correctionFailure(canvasElement, m.facts_uncertain()),
+};
+
+// UNRUN browser oracles for the ordinary phone390/desktop1280 and locale/theme globals.
+async function inspectCorrectionIdentity(canvasElement: HTMLElement) {
+  const canvas = within(canvasElement);
+  const scope = await canvas.findByText(m.specialist_identity_scope());
+  const identity = scope.parentElement!;
+  const heading = identity.querySelector('h2')!;
+  const reference = canvas.getByText(m.specialist_identity_reference(), { selector: 'summary' });
+  const details = reference.closest('details')!;
+  await expect(heading).toBeVisible();
+  await expect(heading.compareDocumentPosition(reference) & 4).toBeTruthy();
+  await expect(details).not.toHaveAttribute('open');
+  reference.focus();
+  await userEvent.tab();
+  await userEvent.tab({ shift: true });
+  await expect(reference).toHaveFocus();
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await userEvent.keyboard('{Enter}');
+    await expect(details).toHaveAttribute('open', '');
+    await expect(Array.from(details.querySelectorAll('code'), (code) => code.textContent)).toEqual([
+      literaryWorkId,
+      'schema:Book',
+    ]);
+    for (const element of [identity, heading, reference, ...details.querySelectorAll<HTMLElement>('dd')]) {
+      await expect(element.scrollWidth).toBeLessThanOrEqual(element.clientWidth + 1);
+    }
+    await userEvent.keyboard('{Enter}');
+    await expect(details).not.toHaveAttribute('open');
+  }
+  const names = canvas.getByText(m.specialist_identity_names(), { selector: 'summary' });
+  await userEvent.click(names);
+  for (const text of names.closest('details')!.querySelectorAll<HTMLElement>('dd')) {
+    await expect(text.scrollWidth).toBeLessThanOrEqual(text.clientWidth + 1);
+    await expect(text.className).not.toMatch(/truncate|line-clamp/);
+  }
+}

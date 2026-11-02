@@ -4327,5 +4327,10 @@
   "fictional_work_choose_another": "选择其他作品",
   "profile_work_reference_details": "引用详情",
   "profile_work_reference_subject": "条目引用",
-  "profile_work_reference_type": "类型引用"
+  "profile_work_reference_type": "类型引用",
+  "specialist_identity_scope": "修正此条目",
+  "specialist_identity_reference": "参考信息与技术详情",
+  "specialist_identity_subject_id": "条目 ID",
+  "specialist_identity_type": "技术类型",
+  "specialist_identity_names": "名称、描述与别名"
 }

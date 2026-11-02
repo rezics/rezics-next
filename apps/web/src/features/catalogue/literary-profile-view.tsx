@@ -227,8 +227,12 @@ function LiteraryProfileLive({
   const heading = (
     <header className="space-y-3">
       <ViewHeading label={m.literary_title({}, o)} headingClassName="font-sans" />
-      <p className="text-muted-foreground">{m.literary_intro({}, o)}</p>
-      <p className="text-sm text-muted-foreground">{m.literary_grain({}, o)}</p>
+      {!id && (
+        <>
+          <p className="text-muted-foreground">{m.literary_intro({}, o)}</p>
+          <p className="text-sm text-muted-foreground">{m.literary_grain({}, o)}</p>
+        </>
+      )}
     </header>
   );
   if (!read)
@@ -323,53 +327,106 @@ function LiteraryProfileLive({
   const fields = literaryFields(read.release, subject.type, locale);
   const href = subjectHref({ id: subject.id, label: title.text }, locale).href;
   return (
-    <article className="mx-auto max-w-4xl space-y-6 py-6">
+    <article className="mx-auto min-w-0 w-full max-w-4xl space-y-6 py-6">
       {heading}
       <section
         aria-label={m.literary_identity({}, o)}
         className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6"
       >
-        <h2 className="break-words text-xl font-semibold [overflow-wrap:anywhere]">{m.literary_identity({}, o)}</h2>
-        <p className="min-w-0 break-words [overflow-wrap:anywhere]">
+        <h2 className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] font-sans text-2xl font-semibold">
           <a
             lang={title.lang ?? undefined}
             href={href}
-            className={`inline-flex min-h-8 min-w-0 items-center font-sans text-xl underline ${wrappingLink} ${keyboardFocus} [overflow-wrap:anywhere]`}
+            className={`inline-flex min-h-8 min-w-0 items-center underline ${wrappingLink} ${keyboardFocus} [overflow-wrap:anywhere]`}
           >
             {title.text || m.subject_value_unlabelled({}, o)}
-          </a>{' '}
-          · <span lang={typeName.lang ?? undefined}>{typeName.text}</span>
+          </a>
+        </h2>
+        <p
+          className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]"
+          lang={typeName.lang ?? undefined}
+        >
+          {typeName.text || m.guide_missing({}, o)}
         </p>
-        <p className="min-w-0 break-all text-sm text-muted-foreground">
-          {subject.id} · {subject.type}
-        </p>
-        {Object.entries(subject.labels).map(([language, label]) => (
-          <div key={language} className="min-w-0 space-y-1">
-            <p lang={language} className="break-words [overflow-wrap:anywhere]">
-              {label} <span className="text-sm text-muted-foreground">({language})</span>
-            </p>
-            {subject.descriptions[language] && (
-              <p lang={language} className="break-words [overflow-wrap:anywhere]">
-                {subject.descriptions[language]}
-              </p>
-            )}
-            {!!subject.aliases[language]?.length && (
-              <p lang={language} className="break-words text-sm [overflow-wrap:anywhere]">
-                {subject.aliases[language]!.join(' · ')}
-              </p>
-            )}
-          </div>
-        ))}
+        <p className="text-sm font-medium">{m.specialist_identity_scope({}, o)}</p>
+        <p className="text-muted-foreground">{m.literary_intro({}, o)}</p>
+        <p className="text-sm text-muted-foreground">{m.literary_grain({}, o)}</p>
         <a
           href={`${href}/terms`}
           className={buttonVariants({ variant: 'outline', className: `${wrappingLink} ${keyboardFocus}` })}
         >
           {m.catalogue_terms_title({}, o)}
         </a>
-        <p className="break-words text-sm text-muted-foreground [overflow-wrap:anywhere]">
-          {m.literary_terms_help({}, o)}
-        </p>
       </section>
+      <nav className="flex min-w-0 flex-wrap gap-3">
+        <a className={buttonVariants({ variant: 'outline', className: wrappingLink })} href={href}>
+          {m.candidate_view_public({}, o)}
+        </a>
+        <a className={buttonVariants({ variant: 'outline', className: wrappingLink })} href={`${href}/changes`}>
+          {m.changes_title({}, o)}
+        </a>
+      </nav>
+      <details className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] space-y-3">
+        <summary className="min-h-8 cursor-pointer whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:min-h-11 pointer-coarse:min-h-11">
+          {m.specialist_identity_names({}, o)}
+        </summary>
+        <dl className="mt-3 min-w-0 space-y-3">
+          {Array.from(
+            new Set([
+              ...Object.keys(subject.labels),
+              ...Object.keys(subject.descriptions),
+              ...Object.keys(subject.aliases),
+            ]),
+          ).map((language) => (
+            <div key={language} className="min-w-0">
+              <dt className="text-sm text-muted-foreground">{language}</dt>
+              <dd lang={language} className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]">
+                {subject.labels[language]}
+              </dd>
+              {subject.descriptions[language] && (
+                <dd
+                  lang={language}
+                  className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] text-sm"
+                >
+                  {subject.descriptions[language]}
+                </dd>
+              )}
+              {!!subject.aliases[language]?.length && (
+                <dd
+                  lang={language}
+                  className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] text-sm text-muted-foreground"
+                >
+                  {subject.aliases[language]!.join(' · ')}
+                </dd>
+              )}
+            </div>
+          ))}
+        </dl>
+      </details>
+      <details className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] space-y-3 rounded-xl border border-border p-4">
+        <summary className="min-h-8 cursor-pointer whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:min-h-11 pointer-coarse:min-h-11">
+          {m.specialist_identity_reference({}, o)}
+        </summary>
+        <dl className="mt-3 min-w-0 space-y-3">
+          <div className="min-w-0">
+            <dt className="text-sm text-muted-foreground">{m.specialist_identity_subject_id({}, o)}</dt>
+            <dd className="min-w-0">
+              <code dir="ltr" className="select-text whitespace-normal break-words [overflow-wrap:anywhere]">
+                {subject.id}
+              </code>
+            </dd>
+          </div>
+          <div className="min-w-0">
+            <dt className="text-sm text-muted-foreground">{m.specialist_identity_type({}, o)}</dt>
+            <dd className="min-w-0">
+              <code dir="ltr" className="select-text whitespace-normal break-words [overflow-wrap:anywhere]">
+                {subject.type}
+              </code>
+            </dd>
+          </div>
+        </dl>
+        <p className="text-sm text-muted-foreground">{m.literary_terms_help({}, o)}</p>
+      </details>
       {session !== 'signed-in' ? (
         <EditorFailure locale={locale} reason={session === 'signed-out' ? 'denied' : 'unavailable'} />
       ) : (
@@ -408,14 +465,6 @@ function LiteraryProfileLive({
           )}
         </>
       )}
-      <nav className="flex min-w-0 flex-wrap gap-3">
-        <a className={buttonVariants({ variant: 'outline', className: wrappingLink })} href={href}>
-          {m.candidate_view_public({}, o)}
-        </a>
-        <a className={buttonVariants({ variant: 'outline', className: wrappingLink })} href={`${href}/changes`}>
-          {m.changes_title({}, o)}
-        </a>
-      </nav>
     </article>
   );
 }

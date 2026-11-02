@@ -70,8 +70,8 @@ function AlbumProfileLive({
     <article className="mx-auto w-full max-w-4xl space-y-6 px-4 py-8 sm:px-6">
       <header className="space-y-3">
         <PageHeading className="font-sans">{id ? m.album_edit({}, o) : m.album_title({}, o)}</PageHeading>
-        <p className="max-w-prose text-muted-foreground">{m.album_grain({}, o)}</p>
-        {read && (
+        {!id && <p className="max-w-prose text-muted-foreground">{m.album_grain({}, o)}</p>}
+        {read && !id && (
           <div className="flex flex-wrap items-center gap-3">
             <DefinitionMeaning values={read.release.types[albumType]?.labels} locale={locale} />
             <DefinitionGuideLink
@@ -87,7 +87,7 @@ function AlbumProfileLive({
           </div>
         )}
       </header>
-      <p className="text-sm text-muted-foreground">{m.album_scope({}, o)}</p>
+      {!id && <p className="text-sm text-muted-foreground">{m.album_scope({}, o)}</p>}
       {session !== 'signed-in' && (
         <p role="status">
           {session === 'signed-out'
@@ -206,49 +206,93 @@ function AlbumCorrections({
   return (
     <div className="space-y-8" aria-busy={busy}>
       {loadFailure && <EditorFailure reason={loadFailure} locale={locale} />}
-      <section className="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-5">
-        <h2 className="text-xl font-semibold">{m.album_identity({}, o)}</h2>
-        <p className="text-lg font-semibold">
-          <span lang={pickText(label ?? {}, locale).lang ?? undefined}>
-            {title || m.subject_value_unlabelled({}, o)}
-          </span>
+      <section
+        aria-label={m.album_identity({}, o)}
+        className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] space-y-4 rounded-xl border border-border bg-card p-4 sm:p-5"
+      >
+        <h2
+          className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] font-sans text-2xl font-semibold"
+          lang={pickText(label ?? {}, locale).lang ?? undefined}
+        >
+          {title || m.subject_value_unlabelled({}, o)}
+        </h2>
+        <p className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]">
+          <DefinitionMeaning values={current.release.types[subject!.type]?.labels} locale={locale} />
         </p>
-        <code className="block break-all text-xs text-muted-foreground">
-          {subject!.id} · {subject!.type}
-        </code>
-        <dl className="space-y-3">
-          {Array.from(
-            new Set([
-              ...Object.keys(subject!.labels),
-              ...Object.keys(subject!.descriptions),
-              ...Object.keys(subject!.aliases),
-            ]),
-          ).map((language) => (
-            <div key={language}>
-              <dt className="text-sm text-muted-foreground">{language}</dt>
-              <dd lang={language} className="break-words">
-                {subject!.labels[language]}
-              </dd>
-              {subject!.descriptions[language] && (
-                <dd lang={language} className="text-sm">
-                  {subject!.descriptions[language]}
-                </dd>
-              )}
-              {!!subject!.aliases[language]?.length && (
-                <dd lang={language} className="text-sm text-muted-foreground">
-                  {subject!.aliases[language]!.join(' · ')}
-                </dd>
-              )}
-            </div>
-          ))}
-        </dl>
-        <div className="flex flex-wrap gap-3">
+        <p className="text-sm font-medium">{m.specialist_identity_scope({}, o)}</p>
+        <p className="text-muted-foreground">{m.album_grain({}, o)}</p>
+        <p className="text-sm text-muted-foreground">{m.album_scope({}, o)}</p>
+        <div className="flex min-w-0 flex-wrap gap-3 [&>a]:h-auto [&>a]:max-w-full [&>a]:whitespace-normal [&>a]:break-words [&>a]:[overflow-wrap:anywhere]">
           <a className={buttonVariants({ variant: 'outline' })} href={href}>
             {m.candidate_view_public({}, o)}
           </a>
           <SubjectTermsEntry id={subject!.id} label={title} locale={locale} />
+          <DefinitionGuideLink locale={locale} address={{ type: subject!.type, returnTo: `${href}/album` }} />
         </div>
-        <p className="text-sm text-muted-foreground">{m.album_terms_help({}, o)}</p>
+        <details className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] space-y-3">
+          <summary className="min-h-8 cursor-pointer whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:min-h-11 pointer-coarse:min-h-11">
+            {m.specialist_identity_names({}, o)}
+          </summary>
+          <dl className="mt-3 min-w-0 space-y-3">
+            {Array.from(
+              new Set([
+                ...Object.keys(subject!.labels),
+                ...Object.keys(subject!.descriptions),
+                ...Object.keys(subject!.aliases),
+              ]),
+            ).map((language) => (
+              <div key={language} className="min-w-0">
+                <dt className="text-sm text-muted-foreground">{language}</dt>
+                <dd
+                  lang={language}
+                  className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]"
+                >
+                  {subject!.labels[language]}
+                </dd>
+                {subject!.descriptions[language] && (
+                  <dd
+                    lang={language}
+                    className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] text-sm"
+                  >
+                    {subject!.descriptions[language]}
+                  </dd>
+                )}
+                {!!subject!.aliases[language]?.length && (
+                  <dd
+                    lang={language}
+                    className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] text-sm text-muted-foreground"
+                  >
+                    {subject!.aliases[language]!.join(' · ')}
+                  </dd>
+                )}
+              </div>
+            ))}
+          </dl>
+        </details>
+        <details className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] space-y-3 rounded-xl border border-border p-4">
+          <summary className="min-h-8 cursor-pointer whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:min-h-11 pointer-coarse:min-h-11">
+            {m.specialist_identity_reference({}, o)}
+          </summary>
+          <dl className="mt-3 min-w-0 space-y-3">
+            <div className="min-w-0">
+              <dt className="text-sm text-muted-foreground">{m.specialist_identity_subject_id({}, o)}</dt>
+              <dd className="min-w-0">
+                <code dir="ltr" className="select-text whitespace-normal break-words [overflow-wrap:anywhere]">
+                  {subject!.id}
+                </code>
+              </dd>
+            </div>
+            <div className="min-w-0">
+              <dt className="text-sm text-muted-foreground">{m.specialist_identity_type({}, o)}</dt>
+              <dd className="min-w-0">
+                <code dir="ltr" className="select-text whitespace-normal break-words [overflow-wrap:anywhere]">
+                  {subject!.type}
+                </code>
+              </dd>
+            </div>
+          </dl>
+          <p className="text-sm text-muted-foreground">{m.album_terms_help({}, o)}</p>
+        </details>
       </section>
       <form
         className="space-y-5"

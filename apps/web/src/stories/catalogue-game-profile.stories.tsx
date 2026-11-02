@@ -22,17 +22,38 @@ function GameStory({
   correction = false,
   type = 'schema:VideoGame',
   signedOut = false,
+  longIdentity = false,
 }: {
   scenario?: GameScenario;
   correction?: boolean;
   type?: string;
   signedOut?: boolean;
+  longIdentity?: boolean;
 }) {
   const locale = getLocale();
-  const fixture = useMemo(
-    () => gameProfileFixture(scenario, locale, correction, type),
-    [scenario, locale, correction, type],
-  );
+  const fixture = useMemo(() => {
+    const value = gameProfileFixture(scenario, locale, correction, type);
+    if (longIdentity) {
+      value.publicRead.subject.labels = {
+        en:
+          'The Lantern Game — an extensively documented original work with a very long unbroken title ' +
+          'Lantern'.repeat(24),
+        ar: 'لعبة الفانوس ذات الاسم الطويل والمراجع الكاملة',
+      };
+      value.publicRead.subject.descriptions = {
+        en: 'A constructed long description for wrapping and complete term disclosure. '.repeat(5),
+        fr: 'Description sans nom français, conservée intégralement.',
+      };
+      value.publicRead.subject.aliases = {
+        en: ['The complete alternative title ' + 'Lantern'.repeat(20)],
+        ja: ['灯りのゲームの別名'],
+      };
+      value.release.types[type]!.labels = {
+        en: 'An unusually long released game kind label ' + 'Catalogue'.repeat(24),
+      };
+    }
+    return value;
+  }, [scenario, locale, correction, type, longIdentity]);
   const [href, setHref] = useState('');
   return (
     <PatternStory
@@ -242,3 +263,72 @@ export const Stale: Story = {
     await expect(await platform.findByText(m.correction_stale())).toBeVisible();
   },
 };
+
+// UNRUN illustrative correction states; these use the default production composition and existing request seam.
+export const CorrectionLongIdentity: Story = {
+  args: { correction: true, longIdentity: true },
+  play: ({ canvasElement }) => inspectCorrectionIdentity(canvasElement),
+};
+export const CorrectionSignedOut: Story = { args: { correction: true, signedOut: true } };
+export const CorrectionLoading: Story = { args: { correction: true, scenario: 'loading' } };
+export const CorrectionUnavailable: Story = { args: { correction: true, scenario: 'unavailable' } };
+async function correctionFailure(canvasElement: HTMLElement, message: string) {
+  const canvas = within(canvasElement);
+  const [summary] = await canvas.findAllByText(m.game_profile_classification(), { selector: 'summary' });
+  await userEvent.click(summary!);
+  const region = within(summary!.closest('details')!);
+  const platformLabel = pickText(definitions.release.properties['schema:gamePlatform'].labels, getLocale()).text;
+  const field = within(region.getByRole('heading', { name: platformLabel }).closest('section')!);
+  await userEvent.click(field.getByRole('button', { name: m.facts_edit_field() }));
+  const value = field.getByRole('textbox', { name: m.correction_value() });
+  await userEvent.clear(value);
+  await userEvent.type(value, 'fr');
+  await userEvent.click(region.getByRole('button', { name: m.facts_submit() }));
+  await expect(await field.findByText(message)).toBeVisible();
+  await expect(value).toHaveValue('fr');
+}
+export const CorrectionDenied: Story = {
+  args: { correction: true, scenario: 'denied' },
+  play: ({ canvasElement }) => correctionFailure(canvasElement, m.correction_denied()),
+};
+export const CorrectionUncertain: Story = {
+  args: { correction: true, scenario: 'uncertain' },
+  // The existing classification editor presents a lost response with its generic failure message.
+  play: ({ canvasElement }) => correctionFailure(canvasElement, m.correction_unavailable()),
+};
+
+// UNRUN browser oracles for the ordinary phone390/desktop1280 and locale/theme globals.
+async function inspectCorrectionIdentity(canvasElement: HTMLElement) {
+  const canvas = within(canvasElement);
+  const scope = await canvas.findByText(m.specialist_identity_scope());
+  const identity = scope.parentElement!;
+  const heading = identity.querySelector('h2')!;
+  const reference = canvas.getByText(m.specialist_identity_reference(), { selector: 'summary' });
+  const details = reference.closest('details')!;
+  await expect(heading).toBeVisible();
+  await expect(heading.compareDocumentPosition(reference) & 4).toBeTruthy();
+  await expect(details).not.toHaveAttribute('open');
+  reference.focus();
+  await userEvent.tab();
+  await userEvent.tab({ shift: true });
+  await expect(reference).toHaveFocus();
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await userEvent.keyboard('{Enter}');
+    await expect(details).toHaveAttribute('open', '');
+    await expect(Array.from(details.querySelectorAll('code'), (code) => code.textContent)).toEqual([
+      gameId,
+      'schema:VideoGame',
+    ]);
+    for (const element of [identity, heading, reference, ...details.querySelectorAll<HTMLElement>('dd')]) {
+      await expect(element.scrollWidth).toBeLessThanOrEqual(element.clientWidth + 1);
+    }
+    await userEvent.keyboard('{Enter}');
+    await expect(details).not.toHaveAttribute('open');
+  }
+  const names = canvas.getByText(m.specialist_identity_names(), { selector: 'summary' });
+  await userEvent.click(names);
+  for (const text of names.closest('details')!.querySelectorAll<HTMLElement>('dd')) {
+    await expect(text.scrollWidth).toBeLessThanOrEqual(text.clientWidth + 1);
+    await expect(text.className).not.toMatch(/truncate|line-clamp/);
+  }
+}

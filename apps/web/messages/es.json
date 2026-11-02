@@ -4326,5 +4326,10 @@
   "fictional_work_choose_another": "Elegir otra obra",
   "profile_work_reference_details": "Detalles de referencia",
   "profile_work_reference_subject": "Referencia de la entidad",
-  "profile_work_reference_type": "Referencia del tipo"
+  "profile_work_reference_type": "Referencia del tipo",
+  "specialist_identity_scope": "Corregir esta ficha",
+  "specialist_identity_reference": "Referencia y detalles técnicos",
+  "specialist_identity_subject_id": "ID de la ficha",
+  "specialist_identity_type": "Tipo técnico",
+  "specialist_identity_names": "Nombres, descripciones y alias"
 }

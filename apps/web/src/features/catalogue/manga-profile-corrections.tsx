@@ -91,17 +91,26 @@ export function MangaCorrections({
     <div className="space-y-6">
       {subject && current && groups && (
         <>
-          <header className="space-y-3 rounded-xl border bg-card p-5">
-            <h2 className="font-sans text-2xl font-semibold" lang={label?.lang ?? undefined}>
-              <a className="underline" href={href}>
+          <header className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] space-y-3 rounded-xl border bg-card p-5">
+            <h2
+              className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] font-sans text-2xl font-semibold"
+              lang={label?.lang ?? undefined}
+            >
+              <a
+                className="underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                href={href}
+              >
                 {label?.text || m.subject_value_unlabelled({}, o)}
               </a>
             </h2>
-            <p lang={pickText(read!.release.types[subject.type]?.labels ?? {}, locale).lang ?? undefined}>
-              {pickText(read!.release.types[subject.type]?.labels ?? {}, locale).text || subject.type}
+            <p
+              className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]"
+              lang={pickText(read!.release.types[subject.type]?.labels ?? {}, locale).lang ?? undefined}
+            >
+              {pickText(read!.release.types[subject.type]?.labels ?? {}, locale).text || m.guide_missing({}, o)}
             </p>
-            <p className="break-all font-mono text-sm text-muted-foreground">{subject.id}</p>
-            <div className="flex flex-wrap gap-3">
+            <p className="text-sm font-medium">{m.specialist_identity_scope({}, o)}</p>
+            <div className="flex min-w-0 flex-wrap gap-3 [&>a]:h-auto [&>a]:max-w-full [&>a]:whitespace-normal [&>a]:break-words [&>a]:[overflow-wrap:anywhere]">
               <a className={buttonVariants({ variant: 'outline' })} href={`${href}/terms`}>
                 {m.catalogue_terms_title({}, o)}
               </a>
@@ -110,7 +119,70 @@ export function MangaCorrections({
               </a>
               <DefinitionGuideLink locale={locale} address={{ type: subject.type }} />
             </div>
-            <p className="text-sm text-muted-foreground">{m.manga_terms_help({}, o)}</p>
+            <details className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] space-y-3">
+              <summary className="min-h-8 cursor-pointer whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:min-h-11 pointer-coarse:min-h-11">
+                {m.specialist_identity_names({}, o)}
+              </summary>
+              <dl className="mt-3 min-w-0 space-y-3">
+                {Array.from(
+                  new Set([
+                    ...Object.keys(subject.labels),
+                    ...Object.keys(subject.descriptions),
+                    ...Object.keys(subject.aliases),
+                  ]),
+                ).map((language) => (
+                  <div key={language} className="min-w-0">
+                    <dt className="text-sm text-muted-foreground">{language}</dt>
+                    <dd
+                      lang={language}
+                      className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]"
+                    >
+                      {subject.labels[language]}
+                    </dd>
+                    {subject.descriptions[language] && (
+                      <dd
+                        lang={language}
+                        className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] text-sm"
+                      >
+                        {subject.descriptions[language]}
+                      </dd>
+                    )}
+                    {!!subject.aliases[language]?.length && (
+                      <dd
+                        lang={language}
+                        className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] text-sm text-muted-foreground"
+                      >
+                        {subject.aliases[language]!.join(' · ')}
+                      </dd>
+                    )}
+                  </div>
+                ))}
+              </dl>
+            </details>
+            <details className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] space-y-3 rounded-xl border border-border p-4">
+              <summary className="min-h-8 cursor-pointer whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:min-h-11 pointer-coarse:min-h-11">
+                {m.specialist_identity_reference({}, o)}
+              </summary>
+              <dl className="mt-3 min-w-0 space-y-3">
+                <div className="min-w-0">
+                  <dt className="text-sm text-muted-foreground">{m.specialist_identity_subject_id({}, o)}</dt>
+                  <dd className="min-w-0">
+                    <code dir="ltr" className="select-text whitespace-normal break-words [overflow-wrap:anywhere]">
+                      {subject.id}
+                    </code>
+                  </dd>
+                </div>
+                <div className="min-w-0">
+                  <dt className="text-sm text-muted-foreground">{m.specialist_identity_type({}, o)}</dt>
+                  <dd className="min-w-0">
+                    <code dir="ltr" className="select-text whitespace-normal break-words [overflow-wrap:anywhere]">
+                      {subject.type}
+                    </code>
+                  </dd>
+                </div>
+              </dl>
+              <p className="text-sm text-muted-foreground">{m.manga_terms_help({}, o)}</p>
+            </details>
           </header>
           <p className="text-muted-foreground">{m.facts_separate_results({}, o)}</p>
           {Object.entries(groups)

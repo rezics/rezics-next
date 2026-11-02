@@ -25,6 +25,7 @@ function MangaStory({
   correction?: boolean;
   volume?: boolean;
   signedOut?: boolean;
+  longIdentity?: boolean;
 }) {
   const locale = getLocale();
   const item = mangaExample(volume);
@@ -58,7 +59,28 @@ const meta = {
     },
   },
   beforeEach: ({ args }) => {
-    selectMangaStory(args.scenario ?? 'ready', getLocale());
+    const fixture = selectMangaStory(args.scenario ?? 'ready', getLocale());
+    if (args.longIdentity) {
+      for (const read of fixture.reads.values()) {
+        read.subject.labels = {
+          en:
+            'The Paper Observatory — a fully identified manga subject with a very long title ' +
+            'Observatory'.repeat(24),
+          ar: 'المرصد الورقي باسم طويل ومراجع كاملة',
+        };
+        read.subject.descriptions = {
+          en: 'A full illustrative manga description. '.repeat(8),
+          fr: 'Description conservée sans nom français.',
+        };
+        read.subject.aliases = {
+          en: ['The full alternative manga title ' + 'Paper'.repeat(24)],
+          ja: ['紙の天文台の別名'],
+        };
+        fixture.release.types[read.subject.type]!.labels = {
+          en: 'A long released manga kind label ' + 'Catalogue'.repeat(24),
+        };
+      }
+    }
     // The page uses the ordinary target picker; only its declared BFF response is supplied here.
     const original = globalThis.fetch;
     globalThis.fetch = (async (input, init) => {
@@ -362,3 +384,67 @@ export const Loading: Story = { args: { scenario: 'loading' } };
 export const Unavailable: Story = { args: { scenario: 'unavailable' } };
 export const Empty: Story = { args: { scenario: 'empty' } };
 export const SignedOut: Story = { args: { signedOut: true } };
+
+// UNRUN: real route composition, extended only through the existing declared response fixture.
+export const CorrectionLongIdentity: Story = {
+  args: { correction: true, volume: true, longIdentity: true },
+  play: ({ canvasElement }) => inspectCorrectionIdentity(canvasElement),
+};
+export const CorrectionSignedOut: Story = { args: { correction: true, signedOut: true } };
+export const CorrectionLoading: Story = { args: { correction: true, scenario: 'loading' } };
+export const CorrectionUnavailable: Story = { args: { correction: true, scenario: 'unavailable' } };
+async function correctionFailure(canvasElement: HTMLElement, message: string) {
+  const canvas = within(canvasElement);
+  const field = within(await canvas.findByRole('region', { name: fieldName('schema:numberOfPages') }));
+  await userEvent.click(await enabled(field.getByRole('button', { name: m.facts_edit_field() })));
+  const amount = await enabled(field.getByRole('textbox', { name: m.correction_amount() }));
+  await userEvent.clear(amount);
+  await userEvent.type(amount, '+196');
+  await userEvent.click(await enabled(canvas.getByRole('button', { name: m.facts_submit() })));
+  await expect(await field.findByText(message)).toBeVisible();
+  await expect(amount).toHaveValue('+196');
+}
+export const CorrectionDenied: Story = {
+  args: { correction: true, volume: true, scenario: 'denied' },
+  play: ({ canvasElement }) => correctionFailure(canvasElement, m.correction_denied()),
+};
+export const CorrectionUncertain: Story = {
+  args: { correction: true, volume: true, scenario: 'uncertain' },
+  play: ({ canvasElement }) => correctionFailure(canvasElement, m.facts_uncertain()),
+};
+
+// UNRUN browser oracles for the ordinary phone390/desktop1280 and locale/theme globals.
+async function inspectCorrectionIdentity(canvasElement: HTMLElement) {
+  const canvas = within(canvasElement);
+  const scope = await canvas.findByText(m.specialist_identity_scope());
+  const identity = scope.parentElement!;
+  const heading = identity.querySelector('h2')!;
+  const reference = canvas.getByText(m.specialist_identity_reference(), { selector: 'summary' });
+  const details = reference.closest('details')!;
+  await expect(heading).toBeVisible();
+  await expect(heading.compareDocumentPosition(reference) & 4).toBeTruthy();
+  await expect(details).not.toHaveAttribute('open');
+  reference.focus();
+  await userEvent.tab();
+  await userEvent.tab({ shift: true });
+  await expect(reference).toHaveFocus();
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await userEvent.keyboard('{Enter}');
+    await expect(details).toHaveAttribute('open', '');
+    await expect(Array.from(details.querySelectorAll('code'), (code) => code.textContent)).toEqual([
+      mangaVolumeId,
+      'schema:PublicationVolume',
+    ]);
+    for (const element of [identity, heading, reference, ...details.querySelectorAll<HTMLElement>('dd')]) {
+      await expect(element.scrollWidth).toBeLessThanOrEqual(element.clientWidth + 1);
+    }
+    await userEvent.keyboard('{Enter}');
+    await expect(details).not.toHaveAttribute('open');
+  }
+  const names = canvas.getByText(m.specialist_identity_names(), { selector: 'summary' });
+  await userEvent.click(names);
+  for (const text of names.closest('details')!.querySelectorAll<HTMLElement>('dd')) {
+    await expect(text.scrollWidth).toBeLessThanOrEqual(text.clientWidth + 1);
+    await expect(text.className).not.toMatch(/truncate|line-clamp/);
+  }
+}

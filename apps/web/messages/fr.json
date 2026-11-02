@@ -4326,5 +4326,10 @@
   "fictional_work_choose_another": "Choisir une autre œuvre",
   "profile_work_reference_details": "Détails des références",
   "profile_work_reference_subject": "Référence de l’entité",
-  "profile_work_reference_type": "Référence du type"
+  "profile_work_reference_type": "Référence du type",
+  "specialist_identity_scope": "Correction de cette fiche",
+  "specialist_identity_reference": "Référence et détails techniques",
+  "specialist_identity_subject_id": "Identifiant de la fiche",
+  "specialist_identity_type": "Type technique",
+  "specialist_identity_names": "Noms, descriptions et alias"
 }
