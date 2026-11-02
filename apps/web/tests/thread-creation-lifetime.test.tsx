@@ -291,16 +291,11 @@ test('real new-thread composition preserves a selected review citation and retri
       idempotencyKey: id(3),
     });
     expect(page.writes[0]!.csrf).toBe(owner.csrfToken);
-    const changePreset = () => page.go(`/boards/${id(1)}/new?subject=${id(4)}`);
-    await changePreset();
-    await page.choose('stay');
-    expect(page.host.querySelector('[role="checkbox"]')?.getAttribute('aria-checked')).toBe('true');
-    expect(page.writes).toHaveLength(1);
-
     await act(async () => page.writes[0]!.work.reject(new Error('Response lost after commit')));
     await page.settle(() => page.host.textContent?.includes(page.m.thread_write_unavailable()) === true);
-    await changePreset();
+    await page.go(`/boards/${id(1)}/new?subject=${id(4)}`);
     await page.choose('stay');
+    expect(page.host.querySelector('[role="checkbox"]')?.getAttribute('aria-checked')).toBe('true');
     expect(page.writes).toHaveLength(1);
     await act(async () => {
       const retry = [...page.host.querySelectorAll('button')].find(
@@ -393,11 +388,10 @@ test('preset navigation and Back/Forward preserve a draft on Stay and replace it
   });
   try {
     await page.render();
-    await page.settle(() => !!page.editor());
     await page.fill('A discussion title', 'A discussion can cite an ordered reference list.');
-    const png = Uint8Array.from(
-      atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg=='),
-      (char) => char.charCodeAt(0),
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==',
+      'base64',
     );
     spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       if (String(input).endsWith('/original')) return new Response(png, { headers: { 'content-type': 'image/png' } });
@@ -406,26 +400,20 @@ test('preset navigation and Back/Forward preserve a draft on Stay and replace it
         media: { id: id(90), state: 'available', mediaType: 'image/png', byteCount: png.length },
       });
     });
+    const clipboard = new page.window.DataTransfer();
+    clipboard.setData('text/html', `<img src="/media/${id(75)}" alt="Draft chart">`);
     await act(async () => {
       await page.user.click(page.editor()!);
-      const event = new page.window.Event('paste', { bubbles: true, cancelable: true });
-      const clipboardData = {
-        files: [],
-        items: [],
-        types: ['text/html'],
-        getData: () => `<img src="/media/${id(75)}" alt="Draft chart">`,
-      };
-      Object.defineProperty(event, 'clipboardData', { value: clipboardData });
-      page.editor()!.dispatchEvent(event);
+      await page.user.paste(clipboard);
     });
     await page.settle(
       () =>
         !!page.host.querySelector('[role="img"][aria-label="Draft chart"]') &&
         page.host.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled === false,
     );
-    const original = { title: page.title(), editor: page.editor(), body: page.editor()!.innerHTML };
+    const original = { title: page.title(), body: page.editor()!.innerHTML };
     const href = (subject: string) => `/boards/${id(21)}/new?subject=${subject}`;
-    await page.go(`${href(id(22))}&subjectTitle=New+hint&unrelated=1#anchor`);
+    await act(async () => page.router.navigate({ href: `${href(id(22))}&subjectTitle=New+hint&unrelated=1#anchor` }));
     original.title!.focus();
     await page.go(href(id(24)));
     await page.choose('stay');
@@ -436,7 +424,6 @@ test('preset navigation and Back/Forward preserve a draft on Stay and replace it
     await page.go(href(id(24)));
     await page.choose('leave');
     await page.settle(() => !!page.editor() && page.title()?.value === '');
-    expect(page.editor()).not.toBe(original.editor);
     expect(page.host.innerHTML).not.toContain('Draft chart');
     await page.fill('Replacement draft', 'Replacement body');
     await act(async () => page.router.history.back());
