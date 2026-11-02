@@ -83,6 +83,8 @@ type CaptureState = {
 const states = new WeakMap<GrowthDatabase, CaptureState>();
 const databasesByAdmin = new WeakMap<pg.Pool, GrowthDatabase>();
 const growing = new AsyncLocalStorage<Attribution | pg.Pool>();
+const liveCaptures = new Set<ActiveCapture>();
+const workflowAttributions = new Map<string, Attribution>();
 type BackendSet = Set<number> & { readonly transactions: Map<GrowthDatabase, Map<number, number>> };
 type RunCapture = Map<GrowthDatabase, Set<string>> & {
   readonly databases: Set<GrowthDatabase>;
@@ -94,7 +96,6 @@ const clientWireQueue = new WeakMap<PoolClient, WireStatementQueue>();
 const clientWireStatement = new WeakMap<PoolClient, WireStatement | undefined>();
 const clientExecutingStatement = new WeakMap<PoolClient, WireStatement | undefined>();
 const clientRowDescription = new WeakMap<PoolClient, readonly { readonly dataTypeID: number }[]>();
-const scheduledWorkflowID = /^sched-.+-\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z(?:-\d+)*$/;
 const nativePlanCommands = new Set(['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'MERGE']);
 
 function isAttribution(value: Attribution | pg.Pool | undefined): value is Attribution {
@@ -104,14 +105,115 @@ function isAttribution(value: Attribution | pg.Pool | undefined): value is Attri
 function currentAttribution(state: CaptureState): Attribution | undefined {
   for (let current = growing.getStore(); isAttribution(current); current = current.parent)
     if (current.capture === state.active) return current;
-  // DBOS executes queued workflows in its runner's async context, after the initiating operation has returned
-  // control to the queue. Scheduled workflow IDs use `sched-${scheduleName}-${date.toISOString()}`; `startWorkflow`
-  // derives child IDs by appending their function ID, so the same format identifies every scheduled descendant.
-  // The SDK singleton is shared by kernel and auth workspaces in this test process.
-  if (state.active && DBOS.workflowID !== undefined)
-    return { capture: state.active, background: scheduledWorkflowID.test(DBOS.workflowID) };
+  const workflowID = DBOS.workflowID;
+  if (state.active && workflowID !== undefined) {
+    const associated = workflowAttribution(workflowID);
+    for (let current = associated; current; current = current.parent)
+      if (current.capture === state.active) return current;
+    return { capture: state.active, background: true };
+  }
   return undefined;
 }
+
+function hasLiveCapture(attribution: Attribution): boolean {
+  for (let current: Attribution | undefined = attribution; current; current = current.parent)
+    if (liveCaptures.has(current.capture)) return true;
+  return false;
+}
+
+function workflowAttribution(workflowID: string): Attribution | undefined {
+  const attribution = workflowAttributions.get(workflowID);
+  if (attribution && !hasLiveCapture(attribution)) workflowAttributions.delete(workflowID);
+  return attribution && hasLiveCapture(attribution) ? attribution : undefined;
+}
+
+function pruneWorkflowAttributions(): void {
+  for (const [workflowID, attribution] of workflowAttributions)
+    if (!hasLiveCapture(attribution)) workflowAttributions.delete(workflowID);
+}
+
+function currentWorkflowAttribution(): Attribution | undefined {
+  const current = growing.getStore();
+  if (isAttribution(current) && hasLiveCapture(current)) return current;
+  const workflowID = DBOS.workflowID;
+  return workflowID === undefined ? undefined : workflowAttribution(workflowID);
+}
+
+function instrumentWorkflowInvocation(
+  invocation: Function,
+  workflowID: string | undefined,
+): Function {
+  return new Proxy(invocation, {
+    apply(target, thisArg, args: unknown[]) {
+      const attribution = currentWorkflowAttribution();
+      const previous = workflowID === undefined ? undefined : workflowAttributions.get(workflowID);
+      if (attribution && workflowID !== undefined) workflowAttributions.set(workflowID, attribution);
+
+      let result: unknown;
+      try {
+        result = Reflect.apply(target, thisArg, args);
+      } catch (error) {
+        if (workflowID !== undefined && workflowAttributions.get(workflowID) === attribution)
+          previous ? workflowAttributions.set(workflowID, previous) : workflowAttributions.delete(workflowID);
+        throw error;
+      }
+
+      if (!attribution) return result;
+      return Promise.resolve(result).then(
+        (handle: unknown) => {
+          const id =
+            typeof handle === 'object' && handle !== null && 'workflowID' in handle &&
+            typeof handle.workflowID === 'string'
+              ? handle.workflowID
+              : workflowID;
+          if (id !== undefined && hasLiveCapture(attribution)) workflowAttributions.set(id, attribution);
+          return handle;
+        },
+        (error: unknown) => {
+          if (workflowID !== undefined && workflowAttributions.get(workflowID) === attribution)
+            previous ? workflowAttributions.set(workflowID, previous) : workflowAttributions.delete(workflowID);
+          throw error;
+        },
+      );
+    },
+  });
+}
+
+function instrumentWorkflowLauncher(launcher: unknown, workflowID: string | undefined): unknown {
+  if (typeof launcher === 'function')
+    return new Proxy(launcher, {
+      apply(target, thisArg, args: unknown[]) {
+        return Reflect.apply(instrumentWorkflowInvocation(target, workflowID), thisArg, args);
+      },
+      get(target, property, receiver) {
+        const member = Reflect.get(target, property, receiver) as unknown;
+        return typeof member === 'function' ? instrumentWorkflowInvocation(member, workflowID) : member;
+      },
+    });
+  if (typeof launcher === 'object' && launcher !== null)
+    return new Proxy(launcher, {
+      get(target, property, receiver) {
+        const member = Reflect.get(target, property, receiver) as unknown;
+        return typeof member === 'function' ? instrumentWorkflowInvocation(member, workflowID) : member;
+      },
+    });
+  return launcher;
+}
+
+function installWorkflowAttribution(): void {
+  const original = DBOS.startWorkflow.bind(DBOS);
+  const wrapped = ((...args: unknown[]) => {
+    const params = args[1];
+    const workflowID =
+      typeof params === 'object' && params !== null && 'workflowID' in params && typeof params.workflowID === 'string'
+        ? params.workflowID
+        : undefined;
+    return instrumentWorkflowLauncher(Reflect.apply(original, DBOS, args), workflowID);
+  }) as typeof DBOS.startWorkflow;
+  (DBOS as unknown as { startWorkflow: typeof DBOS.startWorkflow }).startWorkflow = wrapped;
+}
+
+installWorkflowAttribution();
 
 // PostgreSQL 19 omits foreign-key existence probes; derivations account for their bounded unique-index lookups.
 // A connection starts with explaining off; it is switched on for the statements of a capture.
@@ -749,6 +851,7 @@ async function captureInternal<T>(
     pending: new Set(),
   };
   state.active = active;
+  liveCaptures.add(active);
   try {
     // Captures for separate databases can nest in one operation, such as Kernel calling Auth.
     const parent = growing.getStore();
@@ -838,6 +941,8 @@ async function captureInternal<T>(
     };
   } finally {
     state.active = parentActive;
+    liveCaptures.delete(active);
+    pruneWorkflowAttributions();
   }
 }
 
