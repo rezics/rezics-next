@@ -204,9 +204,7 @@ export function DiscoveryKinds({
           {recovery ? searchRecoveryMessage(recovery, locale) : discoveryMessage(status, locale)}
         </p>
       )}
-      {waiting && (
-        <p className="text-sm text-muted-foreground">{m.search_recovery_wait({}, options)}</p>
-      )}
+      {waiting && <p className="text-sm text-muted-foreground">{m.search_recovery_wait({}, options)}</p>}
       {restartable && (
         <>
           <p role="status" className="text-sm text-muted-foreground">

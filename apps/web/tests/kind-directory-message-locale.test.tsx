@@ -49,7 +49,10 @@ function props(locale: 'en' | 'zh-Hans', next: string | null, load: Props['load'
 
 function markup(locale: 'en' | 'zh-Hans', next: string | null) {
   return renderToStaticMarkup(
-    createElement(DiscoveryKinds, props(locale, next, async () => ({ status: 'ready', kinds: directory(null) }))),
+    createElement(
+      DiscoveryKinds,
+      props(locale, next, async () => ({ status: 'ready', kinds: directory(null) })),
+    ),
   );
 }
 
@@ -99,7 +102,10 @@ test('type directory chrome follows each reader locale and keeps authored type l
       createElement(
         'div',
         null,
-        createElement(DiscoveryKinds, props('en', null, async () => ({ status: 'ready', kinds: directory(null) }))),
+        createElement(
+          DiscoveryKinds,
+          props('en', null, async () => ({ status: 'ready', kinds: directory(null) })),
+        ),
         createElement(
           DiscoveryKinds,
           props('zh-Hans', null, async () => ({ status: 'ready', kinds: directory(null) })),
