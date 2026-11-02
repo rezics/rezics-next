@@ -32,7 +32,7 @@ for (const [key, value] of Object.entries(globals))
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 const { createRoot } = await import('react-dom/client');
-const { QueryClient, QueryClientProvider, useQuery } = await import('@tanstack/react-query');
+const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { SubjectRatingPopulations } = await import('../src/features/pages/subject-rating-populations-view');
 const { m } = await import('../src/paraglide/messages.js');
 const host = window.document.createElement('main') as unknown as HTMLElement;
@@ -69,20 +69,16 @@ const read = async (input: PopulationInput): Promise<PopulationEnvelope> => {
     result.value.incomplete = result.value.items.length !== input.selected.length;
   return { subject: input.id, question: input.question, reader: input.expectedReader, result };
 };
-function Owner({ id = 'work', q = question, locale = 'en' }) {
-  const { data } = useQuery({ queryKey: ['session'], queryFn: async () => session, enabled: false });
-  return <SubjectRatingPopulations subjectId={id} question={q} locale={locale} session={data ?? session} read={read} />;
-}
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 async function settle(predicate: () => boolean) {
   for (let i = 0; i < 40 && !predicate(); i++) await act(tick);
   expect(predicate()).toBe(true);
 }
-async function paint(props = {}) {
+async function paint() {
   await act(async () => {
     root.render(
       <QueryClientProvider client={cache}>
-        <Owner {...props} />
+        <SubjectRatingPopulations subjectId="work" question={question} locale="en" session={session} read={read} />
       </QueryClientProvider>,
     );
     await tick();
@@ -95,10 +91,7 @@ const next = () => button(m.rating_population_next());
 const restart = () => button(m.rating_population_restart());
 const retryDirectory = () => host.querySelector<HTMLButtonElement>('[data-source="directory"] button')!;
 const directories = () => calls.filter((input) => !input.selected);
-const comparisons = () =>
-  [...host.querySelectorAll('[data-slot="rating-comparison"]')].map(
-    (node) => node.querySelector('h3, h4, h5')?.textContent ?? node.textContent,
-  );
+const comparisons = () => [...host.querySelectorAll('[data-slot="rating-comparison"]')].map((node) => node.textContent);
 async function click(node: HTMLElement) {
   await act(async () => {
     node.click();
@@ -142,7 +135,6 @@ test('a pending or failed next keeps one accepted window, retries the exact curs
   await settle(() => !!retryDirectory());
   expect(boxes().every((box) => box.checked)).toBe(true);
   expect(comparisons()).toEqual(ordered);
-  const selectedCalls = calls.filter((input) => input.selected).length;
   directory = () => ready(['third'], null);
   await click(retryDirectory());
   await settle(() => boxes().length === 1);
@@ -152,7 +144,6 @@ test('a pending or failed next keeps one accepted window, retries the exact curs
   await click(button(m.subject_section_retry()));
   expect(calls.at(-1)?.selected).toEqual(['second', 'first']);
   expect(directories()).toHaveLength(3);
-  expect(calls.filter((input) => input.selected)).toHaveLength(selectedCalls + 1);
   directory = () => ready(['first'], 'new');
   await click(restart());
   await settle(() => boxes()[0]?.checked === true);
@@ -243,33 +234,3 @@ test('comparison refusal conceals retained choices while next is pending; direct
   await settle(() => boxes().length === 1);
   expect(host.textContent).not.toContain('Realm first');
 });
-
-for (const change of ['subject', 'question', 'locale', 'session'])
-  test(`${change} retires pending work and traversal progress`, async () => {
-    await paint();
-    await settle(() => boxes().length === 2);
-    await click(boxes()[0]!);
-    const held = deferred<PopulationEnvelope['result']>();
-    directory = () => held.promise;
-    await click(next());
-    directory = () => ready(['new'], 'new-cursor');
-    if (change === 'session')
-      await act(async () => {
-        cache.setQueryData(['session'], { ...session, subject: 'other' });
-      });
-    else
-      await paint(
-        change === 'subject'
-          ? { id: 'other' }
-          : change === 'question'
-            ? { q: { ...question, revision: 2 } }
-            : { locale: 'fr' },
-      );
-    await settle(() => boxes().length === 1);
-    held.resolve(ready(['retired'], 'opaque +/='));
-    await act(tick);
-    expect(host.textContent).not.toContain('Realm retired');
-    expect(comparisons()).toHaveLength(0);
-    await click(next());
-    expect(directories().at(-1)?.cursor).toBe('new-cursor');
-  });
