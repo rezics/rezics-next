@@ -1,6 +1,7 @@
 import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { ContentItemFrame } from '@rezics/ui/content-item';
 import { EntityPicker, type EntityPickerSearch } from '@rezics/ui/entity-picker';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
@@ -58,6 +59,8 @@ function CharacterProfileLive({
 }: CharacterProfileProps) {
   const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
+  const createActionClass =
+    'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 md:pointer-fine:min-h-8';
   const [id, setId] = useState(initialId);
   const [work, setWork] = useState(initialWork);
   const [created, setCreated] = useState<Extract<CreateResult, { ok: true }>>();
@@ -85,7 +88,7 @@ function CharacterProfileLive({
     identifiers: m.character_identifiers({}, o),
   };
   return (
-    <article className="mx-auto w-full max-w-4xl space-y-8 px-4 py-8 sm:px-6">
+    <article className="mx-auto w-full min-w-0 max-w-4xl space-y-8 px-4 py-8 [overflow-wrap:anywhere] sm:px-6">
       <ViewHeadingActions
         label={m.character_title({}, o)}
         headingClassName="font-sans"
@@ -144,16 +147,20 @@ function CharacterProfileLive({
                 <p className="text-sm text-muted-foreground">{m.character_terms_help({}, o)}</p>
               </>
             ) : created ? (
-              <div className="space-y-3">
+              <ContentItemFrame
+                as="div"
+                data-slot="character-created"
+                className="min-w-0 space-y-3 py-3 [overflow-wrap:anywhere]"
+              >
                 <p role="status">{m.character_created({}, o)}</p>
                 <code className="break-all">{created.id}</code>
                 {created.reader.state === 'ready' ? (
                   <div className="flex flex-wrap gap-2">
-                    <a className={buttonVariants()} href={created.reader.href}>
+                    <a className={buttonVariants({ className: createActionClass })} href={created.reader.href}>
                       {m.candidate_view_public({}, o)}
                     </a>
                     <a
-                      className={buttonVariants({ variant: 'outline' })}
+                      className={buttonVariants({ variant: 'outline', className: createActionClass })}
                       href={`${created.reader.href}/character${work ? `?work=${encodeURIComponent(work)}` : ''}`}
                     >
                       {m.character_correct({}, o)}
@@ -167,6 +174,7 @@ function CharacterProfileLive({
                         : m.catalogue_create_reader_unavailable({}, o)}
                     </p>
                     <Button
+                      className={createActionClass}
                       disabled={reading}
                       onClick={async () => {
                         if (!lifetime.active()) return;
@@ -189,7 +197,7 @@ function CharacterProfileLive({
                     </Button>
                   </>
                 )}
-              </div>
+              </ContentItemFrame>
             ) : (
               <div hidden={session !== 'signed-in'}>
                 <EntityPicker
@@ -209,6 +217,7 @@ function CharacterProfileLive({
                   locale={locale}
                   transport={transport}
                   onCreated={setCreated}
+                  onRefreshDefinitions={() => query.refetch()}
                 />
               </div>
             )}
