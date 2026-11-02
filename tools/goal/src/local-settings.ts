@@ -82,11 +82,9 @@ function snapshotPath(identity: string, initialMain: string): string {
 function readSnapshot(path: string, identity: string): Snapshot | undefined {
   try {
     const snapshot = JSON.parse(readFileSync(path, 'utf8')) as Snapshot;
-    return (
-      typeof snapshot.file === 'string' &&
+    return typeof snapshot.file === 'string' &&
       snapshot.local !== undefined &&
       (snapshot.file === identity || canonicalFile(snapshot.file) === identity)
-    )
       ? snapshot
       : undefined;
   } catch {
