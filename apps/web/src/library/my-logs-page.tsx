@@ -163,7 +163,7 @@ export function MyLogsPageView({
 }) {
   const ratio = rowRatio(page.state === 'loaded' ? page.logs.map((log) => log.subject) : []);
   return (
-    <article className="min-w-0 max-w-4xl space-y-6 text-foreground">
+    <article className="min-w-0 max-w-4xl space-y-6 text-foreground [overflow-wrap:anywhere]">
       <header className="space-y-2">
         <PageHeading>{m.library_my_logs_heading()}</PageHeading>
         <p className="text-muted-foreground">{m.library_my_logs_description()}</p>
@@ -171,7 +171,7 @@ export function MyLogsPageView({
       {page.state === 'signed-out' ? (
         <a
           href={`/auth/sign-in?return_to=${encodeURIComponent(`/${getLocale()}/library/logs`)}`}
-          className="text-primary underline"
+          className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded px-3 py-2 text-start whitespace-normal text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
           {m.library_my_logs_sign_in()}
         </a>
@@ -185,7 +185,11 @@ export function MyLogsPageView({
                 : m.library_my_logs_unavailable()}
           </p>
           {onRetry ? (
-            <Button variant="outline" onClick={onRetry}>
+            <Button
+              variant="outline"
+              className="h-auto min-h-11 min-w-11 max-w-full px-3 py-2 text-start whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              onClick={onRetry}
+            >
               {m.library_my_logs_retry()}
             </Button>
           ) : null}
@@ -268,7 +272,11 @@ export function MyLogsPageView({
               {page.next || (cursor && !page.restarted) ? m.library_my_logs_no_visible() : m.library_logs_empty()}
             </p>
           )}
-          {page.next ? (
+        </>
+      )}
+      {(page.state === 'loaded' && (page.next || page.restarted)) || cursor ? (
+        <div className="flex min-w-0 flex-wrap items-start gap-3">
+          {page.state === 'loaded' && page.next ? (
             <Exposure operation="published_log.list">
               <Link
                 to="/library/logs"
@@ -276,25 +284,25 @@ export function MyLogsPageView({
                 onClick={(event) => {
                   if (origin && !origin.isCurrent()) event.preventDefault();
                 }}
-                className="inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary hover:bg-muted"
+                className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded-lg border border-border px-4 py-2 text-start whitespace-normal text-primary hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               >
                 {m.library_logs_more()}
               </Link>
             </Exposure>
           ) : null}
-        </>
-      )}
-      {cursor || (page.state === 'loaded' && page.restarted) ? (
-        <Link
-          to="/library/logs"
-          search={{}}
-          onClick={(event) => {
-            if (origin && !origin.isCurrent()) event.preventDefault();
-          }}
-          className="inline-flex min-h-10 items-center text-primary underline-offset-4 hover:underline"
-        >
-          {m.library_my_logs_newest()}
-        </Link>
+          {cursor || (page.state === 'loaded' && page.restarted) ? (
+            <Link
+              to="/library/logs"
+              search={{}}
+              onClick={(event) => {
+                if (origin && !origin.isCurrent()) event.preventDefault();
+              }}
+              className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded px-3 py-2 text-start whitespace-normal text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              {m.library_my_logs_newest()}
+            </Link>
+          ) : null}
+        </div>
       ) : null}
     </article>
   );
