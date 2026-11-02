@@ -200,11 +200,9 @@ export async function previewCollectionBulk(
   });
   const receiptPartitions = targets.map((target) => {
     const usesCollectionRoute =
-      target.kind === 'occurrence' ||
-      (input.request.action === 'add_to_collection' && target.kind === 'subject');
+      target.kind === 'occurrence' || (input.request.action === 'add_to_collection' && target.kind === 'subject');
     if (!usesCollectionRoute) return partitionOf(input.route);
-    const collectionRoute =
-      typeof target.collectionId === 'string' ? routeOf(target.collectionId) : null;
+    const collectionRoute = typeof target.collectionId === 'string' ? routeOf(target.collectionId) : null;
     if (collectionRoute === null) throw new TypeError('Target Collection must be captured');
     return partitionOf(collectionRoute);
   });

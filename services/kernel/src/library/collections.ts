@@ -321,8 +321,7 @@ export async function addCollectionMemberIfAbsentNative(
      WHERE route=$1 AND collection_id=$2 AND subject_id=$3 AND deletion_id IS NULL LIMIT 1`,
     [route, collectionId, subjectId],
   );
-  if (represented.rows.length > 0)
-    return { state: 'no_effect', reason: null, resultingMemberId: null, events: [] };
+  if (represented.rows.length > 0) return { state: 'no_effect', reason: null, resultingMemberId: null, events: [] };
   if (current.memberCount >= MAX_MEMBER_COUNT)
     return { state: 'failed', reason: 'collection_full', resultingMemberId: null, events: [] };
 
@@ -338,8 +337,7 @@ export async function addCollectionMemberIfAbsentNative(
   if (placed.respace.length > 0) {
     await tx.query('SET CONSTRAINTS library.collection_member_ordinal_key DEFERRED');
     const epoch = await respaceMembers(tx, route, collectionId, placed.respace, command);
-    if (epoch === null)
-      return { state: 'conflict', reason: 'revision_mismatch', resultingMemberId: null, events: [] };
+    if (epoch === null) return { state: 'conflict', reason: 'revision_mismatch', resultingMemberId: null, events: [] };
   }
   const value = await insertMember(
     tx,

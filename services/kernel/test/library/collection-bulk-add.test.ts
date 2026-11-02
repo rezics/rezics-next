@@ -209,10 +209,7 @@ test('captured add appends once with its event; replay is stable while explicit 
   if (memberId === null) throw new Error('Expected created member evidence');
   const replay = await executeCollectionAddTarget(prepared.dependencies, prepared.command);
   expect(replay).toEqual(added);
-  expect((await members(collection.value.id)).map(({ id }) => id)).toEqual([
-    first.value.id,
-    memberId,
-  ]);
+  expect((await members(collection.value.id)).map(({ id }) => id)).toEqual([first.value.id, memberId]);
   const outbox = await db.pool.query<{ type: string }>(
     'SELECT type FROM core.outbox WHERE partition_no=$1 AND transaction_id=$2',
     [partitionOf(route), added.evidence.transactionId],
@@ -228,9 +225,16 @@ test('captured add appends once with its event; replay is stable while explicit 
 });
 
 test('current subject denial, Collection capacity, and a changed absent generation stay per-target', async () => {
-  const collection = await collections.createCollection(owner, { title: 'Bulk outcomes', visibility: 'private' }, key());
+  const collection = await collections.createCollection(
+    owner,
+    { title: 'Bulk outcomes', visibility: 'private' },
+    key(),
+  );
   const subject = await makeSubject('Private to subject readers');
-  const limited = await authenticate(owner.accountId, scopes.filter((scope) => scope !== 'subject:read'));
+  const limited = await authenticate(
+    owner.accountId,
+    scopes.filter((scope) => scope !== 'subject:read'),
+  );
   const denied = await bulkCommand(collection.value.id, subject, { kind: 'absent', slotGeneration: '0' }, limited);
   const denial = await executeCollectionAddTarget(denied.dependencies, denied.command);
   expect(denial).toMatchObject({ kind: 'terminal', evidence: { outcome: 'denied', reason: 'target_denied' } });
@@ -246,8 +250,14 @@ test('current subject denial, Collection capacity, and a changed absent generati
   const conflict = await executeCollectionAddTarget(changed.dependencies, changed.command);
   expect(conflict).toMatchObject({ kind: 'terminal', evidence: { outcome: 'conflict', reason: 'revision_mismatch' } });
 
-  await db.pool.query('UPDATE library.collection SET member_count=1000 WHERE route=$1 AND collection_id=$2', [route, collection.value.id]);
-  const full = await bulkCommand(collection.value.id, await makeSubject('At capacity'), { kind: 'absent', slotGeneration: '0' });
+  await db.pool.query('UPDATE library.collection SET member_count=1000 WHERE route=$1 AND collection_id=$2', [
+    route,
+    collection.value.id,
+  ]);
+  const full = await bulkCommand(collection.value.id, await makeSubject('At capacity'), {
+    kind: 'absent',
+    slotGeneration: '0',
+  });
   const capacity = await executeCollectionAddTarget(full.dependencies, full.command);
   expect(capacity).toMatchObject({ kind: 'terminal', evidence: { outcome: 'failed', reason: 'collection_full' } });
   expect(await members(collection.value.id)).toEqual([]);

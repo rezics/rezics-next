@@ -128,7 +128,12 @@ async function verifyPersistedTarget(
       !sameJson(row.receipt, command.receipt)
     )
       throw new EvidenceMissingError();
-    return checkEntryExpectation(client, command.receipt.principalId, command.target.subjectId, command.target.expected);
+    return checkEntryExpectation(
+      client,
+      command.receipt.principalId,
+      command.target.subjectId,
+      command.target.expected,
+    );
   });
 }
 
@@ -205,7 +210,12 @@ export async function executeCollectionAddTarget(
       )
         throw new GrantDeniedError();
       const actor = await dependencies.initiators.restoreInitiator(
-        { operation: command.source, action: 'collection:update', anchor, context: { pool: dependencies.pool, deadline: command.deadline } },
+        {
+          operation: command.source,
+          action: 'collection:update',
+          anchor,
+          context: { pool: dependencies.pool, deadline: command.deadline },
+        },
         attempt.time,
       );
       if (
@@ -241,7 +251,8 @@ export async function executeCollectionAddTarget(
           : await withConnection(dependencies.pool, (client) =>
               checkEntryExpectation(client as CommandTransaction, accountId, target.subjectId, target.expected),
             );
-      if (collectionRoute !== sourceRoute) await verifyPersistedTarget(dependencies, command as TargetCommand & { target: SubjectTarget });
+      if (collectionRoute !== sourceRoute)
+        await verifyPersistedTarget(dependencies, command as TargetCommand & { target: SubjectTarget });
       prepared.set(attempt.time, { attempt, actor, subject, expectation, access: currentAccess, accessProof });
       return Object.freeze({});
     },
@@ -262,7 +273,11 @@ export async function executeCollectionAddTarget(
         partition: partitionOf(collectionRoute),
         deadline: command.deadline,
         clock: dependencies.clock,
-        receipt: { kind: command.receipt.commandKind, key: command.receipt.key, digest: Buffer.from(command.receipt.digest, 'hex') },
+        receipt: {
+          kind: command.receipt.commandKind,
+          key: command.receipt.key,
+          digest: Buffer.from(command.receipt.digest, 'hex'),
+        },
         authorization,
       },
       async (tx, context) => {
@@ -287,13 +302,10 @@ export async function executeCollectionAddTarget(
               : state.expectation;
           if (!expectation.matches)
             return { state: 'conflict', reason: expectation.reason, resultingMemberId: null, events: [] };
-          return addCollectionMemberIfAbsentNative(
-            tx,
-            state.actor,
-            collectionId,
-            target.subjectId,
-            { transactionId: context.transactionId, time: authoritativeTimeValue(context.time) },
-          );
+          return addCollectionMemberIfAbsentNative(tx, state.actor, collectionId, target.subjectId, {
+            transactionId: context.transactionId,
+            time: authoritativeTimeValue(context.time),
+          });
         };
 
         if (collectionRoute !== sourceRoute) {
@@ -333,11 +345,7 @@ export async function executeCollectionAddTarget(
             };
           },
         );
-        if (
-          !applied ||
-          (!invoked && applied.reason !== 'execution_expired')
-        )
-          throw new EvidenceMissingError();
+        if (!applied || (!invoked && applied.reason !== 'execution_expired')) throw new EvidenceMissingError();
         const value = evidence(command, context.transactionId, {
           state: applied.state,
           reason: applied.reason,
