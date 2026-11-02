@@ -1,4 +1,4 @@
-import { VIEWS, type PresentationProfile, type View } from '@rezics/composition';
+import type { PresentationProfile, View } from '@rezics/composition';
 import { useId, useState } from 'react';
 import {
   AlertDialog,
@@ -14,8 +14,18 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { m } from '../../paraglide/messages.js';
-import { viewOf, type CompanionViewSource, type Template } from './curate';
+import { overviewOf, type CompanionViewSource } from './curate';
 import type { ViewSelection } from './curate-view-editor-state';
+import {
+  admitCompanionAdd,
+  admitCompanionReset,
+  availableCompanionViews,
+  canResetCompanionView,
+  companionResetIntent,
+  emptyCompanionAdd,
+  type CompanionAddChoice,
+  type CompanionResetIntent,
+} from './curation-companion-state';
 
 const controlClass = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 
@@ -37,21 +47,17 @@ export function CurationCompanionViews({
   onReset,
 }: CompanionViewControlsProps) {
   const id = useId();
-  const [view, setView] = useState<View | ''>('');
-  const [source, setSource] = useState<CompanionViewSource | ''>('');
-  const [resetting, setResetting] = useState<View | null>(null);
-  const template: Template = selection.template;
-  const availableViews =
-    template.scope === 'route'
-      ? []
-      : VIEWS.filter((candidate) => candidate !== 'overview' && viewOf(profile, template, candidate) === undefined);
-  const hasOverview = viewOf(profile, template, 'overview') !== undefined;
-  const canReset =
-    template.scope !== 'route' &&
-    selection.view !== 'overview' &&
-    viewOf(profile, template, selection.view) !== undefined;
+  const [choice, setChoice] = useState<CompanionAddChoice>(emptyCompanionAdd);
+  const [resetting, setResetting] = useState<CompanionResetIntent | null>(null);
+  const template = selection.template;
+  const availableViews = availableCompanionViews(profile, template);
+  const hasOverview = overviewOf(profile, template) !== undefined;
+  const canReset = canResetCompanionView(profile, template, selection.view);
+  const admitted = admitCompanionAdd(choice, profile, template);
+  const admittedReset = admitCompanionReset(resetting, profile, template);
+  if (resetting !== admittedReset) setResetting(admittedReset);
 
-  if (template.scope === 'route' || (availableViews.length === 0 && !canReset)) return null;
+  if (template.scope === 'route' || (availableViews.length === 0 && !canReset && admittedReset === null)) return null;
 
   return (
     <section className="space-y-3 rounded-lg border border-border p-3" aria-label={m.curation_companion_views()}>
@@ -66,11 +72,11 @@ export function CurationCompanionViews({
             <NativeSelect
               id={`${id}-view`}
               className="w-full min-w-0 max-w-full"
-              value={view}
+              value={admitted.view}
               disabled={disabled}
               onChange={(event) => {
-                const candidate = availableViews.find((item) => item === event.target.value);
-                if (candidate) setView(candidate);
+                const view = availableViews.find((item) => item === event.target.value);
+                if (view) setChoice((current) => ({ ...current, view }));
               }}
             >
               <NativeSelectOption value="" disabled>
@@ -88,10 +94,11 @@ export function CurationCompanionViews({
             <NativeSelect
               id={`${id}-source`}
               className="w-full min-w-0 max-w-full"
-              value={source}
+              value={admitted.source}
               disabled={disabled}
               onChange={(event) => {
-                if (event.target.value === 'overview' || event.target.value === 'empty') setSource(event.target.value);
+                if (event.target.value === 'overview' || event.target.value === 'empty')
+                  setChoice((current) => ({ ...current, source: event.target.value }));
               }}
             >
               <NativeSelectOption value="" disabled>
@@ -107,12 +114,11 @@ export function CurationCompanionViews({
             className={controlClass}
             type="button"
             variant="outline"
-            disabled={disabled || !view || !source || (source === 'overview' && !hasOverview)}
+            disabled={disabled || admitted.view === '' || admitted.source === ''}
             onClick={() => {
-              if (!view || !source || (source === 'overview' && !hasOverview)) return;
-              onAdd(view, source);
-              setView('');
-              setSource('');
+              if (admitted.view === '' || admitted.source === '') return;
+              onAdd(admitted.view, admitted.source);
+              setChoice(emptyCompanionAdd);
             }}
           >
             {m.curation_companion_add()}
@@ -125,12 +131,12 @@ export function CurationCompanionViews({
           type="button"
           variant="outline"
           disabled={disabled}
-          onClick={() => setResetting(selection.view)}
+          onClick={() => setResetting(companionResetIntent(profile, template, selection.view))}
         >
           {m.curation_companion_reset()}
         </Button>
       )}
-      <AlertDialog open={resetting !== null} onOpenChange={(open) => !open && setResetting(null)}>
+      <AlertDialog open={admittedReset !== null} onOpenChange={(open) => !open && setResetting(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{m.curation_companion_reset_title()}</AlertDialogTitle>
@@ -141,13 +147,12 @@ export function CurationCompanionViews({
             <AlertDialogAction
               className={controlClass}
               variant="destructive"
-              disabled={disabled}
+              disabled={disabled || admittedReset === null}
               onClick={() => {
-                if (!resetting) return;
-                onReset(resetting);
+                if (!admittedReset) return;
+                onReset(admittedReset.view);
                 setResetting(null);
-                setView('');
-                setSource('');
+                setChoice(emptyCompanionAdd);
               }}
             >
               {m.curation_companion_reset_confirm()}

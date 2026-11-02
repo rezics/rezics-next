@@ -3281,7 +3281,7 @@ supplies the order; missing views are not materialized automatically, so native 
 fallback stays intact until a curator explicitly adds an override. Route templates retain their overview-only
 contract. Adding a type or route template starts with a copy
 of the current generic overview. No subject labels, private data or extra page reads populate these controls.
-Adding a companion view to a generic, base or type template explicitly offers only that template's local overview or an empty valid document as its source.
+Adding a companion view to a generic, base or type template explicitly offers only that template's local overview or an empty valid document as its source. Add stays callable only while that view is still missing and an overview-copy source still has a local overview; reset confirmation binds to the reviewed override document, so a sibling edit keeps it and a replaced or removed override retires it.
 
 Each template/view keeps both its composition and its raw Puck editing data in memory. Switching selections retains
 unfinished language fields, node IDs and uncommitted edits. The selected locale controls the preview; editing one
