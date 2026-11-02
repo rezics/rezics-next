@@ -1664,8 +1664,8 @@ async function invokeRecoveryRuntime(
     parentClosed,
     outputClosed,
     groupClosed,
-    timedOut: result.timedOut,
-    cancelled: result.cancelled,
+    timedOut: result.timedOut ?? false,
+    cancelled: result.cancelled ?? false,
     outputOverflow: result.outputOverflow,
   });
   if (!durableLifetime) helper.state = 'unknown';
