@@ -190,7 +190,12 @@ export function SubjectLibraryLeaf({
         locale={locale}
         data={current}
       />
-      {query.enabled && (isError || (data && (data.session !== 'signed-in' || !data.entryAvailable || (data.labels === null && observation.value.labelsAdmitted)))) ? (
+      {query.enabled &&
+      (isError ||
+        (data &&
+          (data.session !== 'signed-in' ||
+            !data.entryAvailable ||
+            (data.labels === null && observation.value.labelsAdmitted)))) ? (
         <button
           type="button"
           className="text-sm text-primary underline-offset-4 hover:underline disabled:opacity-50"

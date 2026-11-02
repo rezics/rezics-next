@@ -93,7 +93,6 @@ export function SubjectLibrarySlot(props: SubjectSlotProps) {
   const entryGet = useOperation('library_entry.get');
   const assignments = useOperation('library_label.assignment_list');
   const collectionList = useOperation('collection.list');
-  const memberCreate = useOperation('collection_member.create');
   const admissions = useRef<Partial<Record<'entry' | 'labels' | 'collections', SlotAdmission>>>({});
   const scope = JSON.stringify([
     props.subject.id,
