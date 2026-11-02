@@ -346,7 +346,7 @@ test('Mounted Subject ratings keep accessible disclosures and move revision meta
     expect(host.querySelector('[data-state="failed"] [role="status"]')?.textContent).toBe(
       m.subject_section_failed({}, { locale: 'de' }),
     );
-    expect(retry.getAttribute('href')).toBe('?');
+    expect(retry.getAttribute('href')).toBe('/de/subjects/subject%20%2F%20%E4%B8%AD%E6%96%87');
     expect(reviews.getAttribute('href')).toBe('/de/subjects/subject%20%2F%20%E4%B8%AD%E6%96%87/reviews');
     expect(host.querySelectorAll('a')).toHaveLength(2);
     for (const action of [retry, reviews]) {

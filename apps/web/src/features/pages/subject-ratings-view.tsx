@@ -20,6 +20,7 @@ import {
 } from './subject-ratings';
 import { PublicRatingFigure } from './public-rating-figure';
 import { RatingDistribution } from './rating-distribution';
+import { OverviewContext, viewHref } from './overview';
 
 const sectionClass = 'min-w-0 space-y-4 in-data-[density=compact]:space-y-3';
 const headingClass =
@@ -104,9 +105,23 @@ export const RatingControlContext = createContext<{
   failure?: boolean;
 } | null>(null);
 
+/** Only the admitted page identity supplies navigation; source retries keep their own callbacks. */
+function useRatingNavigation(subject: string, locale: string) {
+  const page = useContext(OverviewContext);
+  if (page) {
+    return {
+      reviewsHref: viewHref(page, 'reviews') ?? undefined,
+      retryHref: viewHref(page, page.pageTarget?.view ?? 'overview') ?? undefined,
+    };
+  }
+  // Standalone previews have no page address or selected Realm.
+  const base = `/${encodeURIComponent(locale)}/subjects/${encodeURIComponent(subject)}`;
+  return { reviewsHref: `${base}/reviews`, retryHref: base };
+}
+
 function RatingsFailure({ id, subject, locale }: { id: string; subject: string; locale: string }) {
   const options = { locale: locale as never };
-  const reviewsHref = `/${encodeURIComponent(locale)}/subjects/${encodeURIComponent(subject)}/reviews`;
+  const { reviewsHref, retryHref } = useRatingNavigation(subject, locale);
   return (
     <section data-slot="rating-summary" data-state="failed" aria-labelledby={`${id}-title`} className={sectionClass}>
       <h2 id={`${id}-title`} className={headingClass}>
@@ -116,7 +131,7 @@ function RatingsFailure({ id, subject, locale }: { id: string; subject: string; 
         {m.subject_section_failed({}, options)}
       </p>
       <div className="flex flex-wrap gap-x-4 gap-y-2">
-        <a data-slot="retry" href="?" className={linkClass}>
+        <a data-slot="retry" href={retryHref} className={linkClass}>
           {m.subject_section_retry({}, options)}
         </a>
         <a data-slot="see-reviews" href={reviewsHref} className={linkClass}>
@@ -156,7 +171,7 @@ export function RatingsView({
   const recovery = useContext(RatingsRecoveryContext);
   const populations = useContext(RatingPopulationsContext);
   const title = m.subject_ratings({}, options);
-  const reviewsHref = `/${encodeURIComponent(locale)}/subjects/${encodeURIComponent(subject)}/reviews`;
+  const { reviewsHref } = useRatingNavigation(subject, locale);
   if (!data) return <RatingsFailure id={id} subject={subject} locale={locale} />;
   const supplied = 'figures' in data ? data : undefined;
   const sources = 'figures' in data ? suppliedRatingSources(data) : data;
