@@ -6,6 +6,7 @@ import {
   useState,
   useSyncExternalStore,
   type ComponentProps,
+  type MouseEvent as ReactMouseEvent,
   type RefObject,
 } from 'react';
 import { QueryClientContext } from '@tanstack/react-query';
@@ -54,6 +55,13 @@ type AppealsPageProps = {
   continuationFocus?: RefObject<AppealsContinuationFocus | null>;
   read?: (input: AppealReadInput) => Promise<PrivateAppealPage>;
 };
+type LocalAppealReadFocus = {
+  control: HTMLButtonElement;
+  readKey: string;
+  generation: string;
+  ticket?: number;
+  stop: () => void;
+};
 
 /** New native generations get new local state; old callbacks retain their original owner. */
 export function ModerationAppealsPage(props: AppealsPageProps) {
@@ -64,6 +72,8 @@ function AppealsVisit(props: AppealsPageProps) {
   const router = useRouter({ warn: false });
   const client = useContext(QueryClientContext);
   const queueBoundary = useRef<HTMLElement>(null);
+  const recoveryControl = useRef<HTMLButtonElement>(null);
+  const localReadFocus = useRef<LocalAppealReadFocus | null>(null);
   const [original] = useState(() => ({ ...props, input: Object.freeze({ ...props.input }) }));
   const [owner] = useState(() =>
     client && typeof window !== 'undefined'
@@ -75,6 +85,12 @@ function AppealsVisit(props: AppealsPageProps) {
   const unresolved = useRef(new Set<string>());
   const [refreshBlocked, setRefreshBlocked] = useState(false);
   const originalClient = useRef(client).current;
+  function clearLocalReadFocus(expected?: LocalAppealReadFocus) {
+    const intent = localReadFocus.current;
+    if (!intent || (expected && intent !== expected)) return;
+    localReadFocus.current = null;
+    intent.stop();
+  }
   if (
     props.active === false ||
     client !== originalClient ||
@@ -92,7 +108,8 @@ function AppealsVisit(props: AppealsPageProps) {
     else unresolved.current.delete(appealId);
     setRefreshBlocked(unresolved.current.size > 0);
   }
-  async function reload() {
+  async function reload(event?: ReactMouseEvent<HTMLButtonElement>) {
+    clearLocalReadFocus();
     if (
       !current() ||
       reading.current ||
@@ -100,6 +117,27 @@ function AppealsVisit(props: AppealsPageProps) {
       (data.state !== 'ready' && data.state !== 'unavailable')
     )
       return;
+    const control =
+      event?.detail === 0 && typeof document !== 'undefined' && event.currentTarget === document.activeElement
+        ? event.currentTarget
+        : null;
+    if (control) {
+      const intent: LocalAppealReadFocus = {
+        control,
+        readKey: appealReadKey(original.input),
+        generation: original.page.generation,
+        ...(owner ? { ticket: owner.ticket() } : {}),
+        stop: () => {},
+      };
+      const cancel = () => clearLocalReadFocus(intent);
+      document.addEventListener('pointerdown', cancel, true);
+      document.addEventListener('focusin', cancel, true);
+      intent.stop = () => {
+        document.removeEventListener('pointerdown', cancel, true);
+        document.removeEventListener('focusin', cancel, true);
+      };
+      localReadFocus.current = intent;
+    }
     reading.current = true;
     const ticket = owner?.ticket();
     setData({ ...data, appeals: [], targets: [], next: null, state: 'loading' });
@@ -165,6 +203,28 @@ function AppealsVisit(props: AppealsPageProps) {
     if (!matches || state !== 'ready' || router?.state.status === 'idle') focus();
     else return router?.subscribe('onResolved', focus);
   });
+  useEffect(() => {
+    const intent = localReadFocus.current;
+    if (!intent) return;
+    if (
+      !current() ||
+      props.active === false ||
+      props.page.generation !== intent.generation ||
+      appealReadKey(props.input) !== intent.readKey ||
+      appealReadKey(original.input) !== intent.readKey ||
+      !appealPageIsCurrent(props.page, props.input) ||
+      (owner && intent.ticket !== undefined && !owner.owns(intent.ticket)) ||
+      (document.activeElement !== intent.control && document.activeElement !== document.body)
+    ) {
+      clearLocalReadFocus(intent);
+      return;
+    }
+    if (data.state === 'loading') return;
+    clearLocalReadFocus(intent);
+    if (state === 'ready') queueBoundary.current?.focus();
+    else if (state === 'unavailable') recoveryControl.current?.focus();
+  });
+  useEffect(() => () => clearLocalReadFocus(), []);
   return (
     <AuthoringDepartureProvider
       sessionBound={false}
@@ -189,9 +249,10 @@ function AppealsVisit(props: AppealsPageProps) {
           {...(props.reportsSearch !== undefined ? { reportsSearch: props.reportsSearch } : {})}
           {...(commandCurrent ? { isCurrent: commandCurrent } : {})}
           refreshBlocked={refreshBlocked}
+          recoveryControl={recoveryControl}
           onResolutionPending={resolutionPending}
-          onRefresh={() => void reload()}
-          onRetry={() => void reload()}
+          onRefresh={(event) => void reload(event)}
+          onRetry={(event) => void reload(event)}
           onNext={(cursor) => leave(() => props.onNext?.(cursor))}
           onRestart={() => leave(props.onRestart)}
         />
@@ -258,12 +319,14 @@ function AppealsView({
   reportsSearch,
   isCurrent,
   queueBoundary,
+  recoveryControl,
 }: {
   queueBoundary?: RefObject<HTMLElement | null>;
+  recoveryControl?: RefObject<HTMLButtonElement | null>;
   isCurrent?: () => boolean;
   state?: AppealReadState;
-  onRetry?: () => void;
-  onRefresh?: () => void;
+  onRetry?: (event: ReactMouseEvent<HTMLButtonElement>) => void;
+  onRefresh?: (event: ReactMouseEvent<HTMLButtonElement>) => void;
   refreshBlocked?: boolean;
   onResolutionPending?: (appealId: string, pending: boolean) => void;
   onRestart?: () => void;
@@ -368,7 +431,7 @@ function AppealsView({
                   : m.moderation_appeals_read_closed()}
           </ContentItemHeading>
           {state === 'unavailable' && onRetry ? (
-            <Button variant="outline" onClick={onRetry}>
+            <Button ref={recoveryControl} variant="outline" onClick={onRetry}>
               {m.moderation_appeals_read_retry()}
             </Button>
           ) : null}
