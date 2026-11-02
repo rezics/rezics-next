@@ -570,6 +570,21 @@ The `rsync` line also includes the bytes sent from rsync statistics. If zstd is 
 uses rsync's default compression. Returned outputs add `rsync back`. Slot wait measures admission after upload; the
 `rsync` line measures upload separately.
 Rsync exit code 24 is accepted for uploads and returned outputs, with the number of vanished files logged.
+
+Uploads and returned-output copies have a 120-second no-progress limit by default, configured with
+`REMOTE_CHECK_TRANSFER_TIMEOUT_MS`. The watchdog reads `--info=progress2` records from rsync stdout; only a valid record whose transferred
+byte count exceeds the previous high-water mark restarts the limit. Repeated or decreasing counts, malformed records,
+and stderr diagnostics do not count as progress. Stdout progress and stderr diagnostics are forwarded as they arrive;
+only bounded line state is retained while the producer extracts rsync's sent-byte summary and vanished-file messages.
+On expiry, remote-check stops and reaps the original local rsync child and reports the host, transfer step, limit and
+last observed byte count, for example:
+
+```text
+remote-check: connection to check-small failed during workspace upload before a result; no-progress watchdog stopped and reaped the original local rsync child after 120000 ms without increasing transfer bytes (last observed byte count: 1048576)
+```
+
+An external rsync signal keeps its child exit status and is not described as a watchdog timeout. Caller cancellation
+stops and reaps that same local child without converting the cancellation into a transport retry.
 When cgroup counters are readable, the run also prints:
 
 ```text

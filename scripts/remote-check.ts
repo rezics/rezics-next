@@ -768,8 +768,11 @@ export class RemoteTransportError extends Error {
     readonly step: string,
     readonly code: number,
     readonly retryable = true,
+    detail?: string,
   ) {
-    super(`remote-check: connection to ${host} failed during ${step} before a result`);
+    super(
+      `remote-check: connection to ${host} failed during ${step} before a result${detail === undefined ? '' : `; ${detail}`}`,
+    );
     this.name = 'RemoteTransportError';
   }
 }
@@ -4428,6 +4431,17 @@ async function probeControl(host: Host, initialId: string, timeoutMs: number): P
   throw new RemoteTransportError(host.name, 'control probe', REMOTE_TRANSPORT_FAILURE);
 }
 
+type FinishedRsync = { code: number; bytesSent?: number; vanishedFiles: number };
+
+function rsyncProgressBytes(line: string): number | undefined {
+  const match = line.match(
+    /^\s*((?:\d+|\d{1,3}(?:,\d{3})+))\s+(100|[1-9]?\d)%(?:\s+(?:(?:\d+(?:\.\d+)?|--\.-)\s*[kMGT]?B\/s\s+\d{1,2}:\d{2}(?::\d{2})?(?:\s+\(xfr#\d+,\s+(?:to-chk|ir-chk)=\d+\/\d+\))?))?\s*$/,
+  );
+  if (!match) return undefined;
+  const bytes = Number(match[1]!.replaceAll(',', ''));
+  return Number.isSafeInteger(bytes) ? bytes : undefined;
+}
+
 async function finishedRsync(
   child: ReturnType<typeof Bun.spawn>,
   signal: AbortSignal,
@@ -4435,66 +4449,181 @@ async function finishedRsync(
   step: string,
   noProgressMs: number,
   retryable = true,
-): Promise<{ code: number; stderr: string }> {
-  const stderrStream = child.stderr;
-  let stderr = '';
-  let progress = 0;
-  let partial = '';
+): Promise<FinishedRsync> {
+  let progressHighWater = 0;
+  let lastObservedBytes: number | undefined;
+  let progressPartial = '';
+  let progressLineOverflow = false;
+  let diagnosticPartial = '';
+  let diagnosticLineOverflow = false;
+  let diagnosticMarkerTail = '';
+  let diagnosticLineVanished = false;
+  let vanishedFiles = 0;
+  let bytesSent: number | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let expire!: () => void;
-  const timedOut = new Promise<void>((resolve) => {
-    expire = resolve;
+  let timeoutExpired = false;
+  const timeoutSignal = new Promise<void>((resolve) => {
+    expire = () => {
+      timeoutExpired = true;
+      resolve();
+    };
   });
   const arm = () => {
     clearTimeout(timer);
-    timer = setTimeout(expire, noProgressMs);
+    if (!timeoutExpired) timer = setTimeout(expire, noProgressMs);
   };
-  const observe = (chunk: string) => {
-    partial += chunk;
-    const lines = partial.split(/[\r\n]/);
-    partial = lines.pop() ?? '';
-    for (const line of [...lines, partial]) {
-      const match = line.match(/^\s*([\d,]+)\s+\d{1,3}%/);
-      if (!match) continue;
-      const amount = Number(match[1]!.replaceAll(',', ''));
-      if (Number.isFinite(amount) && amount > progress) {
-        progress = amount;
-        arm();
+  const finishProgressLine = () => {
+    if (!progressLineOverflow) {
+      const amount = rsyncProgressBytes(progressPartial);
+      if (amount !== undefined) {
+        lastObservedBytes = amount;
+        if (amount > progressHighWater) {
+          progressHighWater = amount;
+          arm();
+        }
       }
     }
+    progressPartial = '';
+    progressLineOverflow = false;
   };
-  const forwardStderr = async (): Promise<void> => {
-    if (!(stderrStream instanceof ReadableStream)) return;
-    const reader = stderrStream.getReader();
+  const observeProgress = (text: string, final = false) => {
+    let start = 0;
+    for (let index = 0; index < text.length; index += 1) {
+      if (text[index] !== '\r' && text[index] !== '\n') continue;
+      const segment = text.slice(start, index);
+      if (!progressLineOverflow) {
+        if (progressPartial.length + segment.length > 1024) progressLineOverflow = true;
+        else progressPartial += segment;
+      }
+      finishProgressLine();
+      start = index + 1;
+    }
+    const segment = text.slice(start);
+    if (!progressLineOverflow) {
+      if (progressPartial.length + segment.length > 1024) progressLineOverflow = true;
+      else progressPartial += segment;
+    }
+    if (final && (progressPartial.length > 0 || progressLineOverflow)) finishProgressLine();
+  };
+
+  const finishDiagnosticLine = () => {
+    if (diagnosticLineVanished) vanishedFiles += 1;
+    if (bytesSent === undefined && !diagnosticLineOverflow) {
+      const match = diagnosticPartial.match(/^sent\s+([\d,]+)\s+bytes\b/);
+      if (match) {
+        const amount = Number(match[1]!.replaceAll(',', ''));
+        if (Number.isSafeInteger(amount)) bytesSent = amount;
+      }
+    }
+    diagnosticPartial = '';
+    diagnosticLineOverflow = false;
+    diagnosticMarkerTail = '';
+    diagnosticLineVanished = false;
+  };
+  const observeDiagnostics = (text: string, final = false) => {
+    const marker = 'file has vanished';
+    const append = (segment: string) => {
+      if (!diagnosticLineOverflow) {
+        if (diagnosticPartial.length + segment.length > 4096) diagnosticLineOverflow = true;
+        else diagnosticPartial += segment;
+      }
+      if ((diagnosticMarkerTail + segment).includes(marker)) diagnosticLineVanished = true;
+      diagnosticMarkerTail = (diagnosticMarkerTail + segment).slice(-(marker.length - 1));
+    };
+    let start = 0;
+    for (let index = 0; index < text.length; index += 1) {
+      if (text[index] !== '\r' && text[index] !== '\n') continue;
+      append(text.slice(start, index));
+      finishDiagnosticLine();
+      start = index + 1;
+    }
+    const segment = text.slice(start);
+    append(segment);
+    if (final && (diagnosticPartial.length > 0 || diagnosticLineOverflow || diagnosticLineVanished))
+      finishDiagnosticLine();
+  };
+
+  const forward = async (
+    stream: typeof child.stdout,
+    destination: NodeJS.WriteStream,
+    observe: (text: string, final?: boolean) => void,
+  ): Promise<void> => {
+    if (!(stream instanceof ReadableStream)) return;
+    const reader = stream.getReader();
     const decoder = new TextDecoder();
+    const write = async (value: Uint8Array) => {
+      if (destination.write(value)) return;
+      await new Promise<void>((resolve) => {
+        const drained = () => {
+          destination.removeListener('drain', drained);
+          resolve();
+        };
+        destination.once('drain', drained);
+        void child.exited.then(() => {
+          destination.removeListener('drain', drained);
+          resolve();
+        });
+      });
+    };
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      process.stderr.write(value);
-      const decoded = decoder.decode(value, { stream: true });
-      stderr += decoded;
-      observe(decoded);
+      observe(decoder.decode(value, { stream: true }));
+      await write(value);
     }
-    stderr += decoder.decode();
+    observe(decoder.decode(), true);
   };
+
+  let abort!: () => void;
+  const aborted = new Promise<void>((resolve) => {
+    abort = resolve;
+  });
+  signal.addEventListener('abort', abort, { once: true });
   arm();
-  const completion = Promise.all([finished(child, signal), forwardStderr()]).then(([code]) => code);
+  const completion = Promise.all([
+    child.exited,
+    forward(child.stdout, process.stdout, observeProgress),
+    forward(child.stderr, process.stderr, observeDiagnostics),
+  ]).then(([code]) => ({ code, bytesSent, vanishedFiles }));
   try {
-    const code = await Promise.race([completion, timedOut.then(() => null)]);
-    if (code === null) {
+    if (signal.aborted) abort();
+    const outcome = await Promise.race([
+      completion.then((result) => ({ kind: 'completed' as const, result })),
+      timeoutSignal.then(() => ({ kind: 'timeout' as const })),
+      aborted.then(() => ({ kind: 'aborted' as const })),
+    ]);
+    if (outcome.kind === 'completed') {
+      if (signal.aborted) throw new Aborted();
+      return outcome.result;
+    }
+    {
       await stopAndReap(child);
       await completion;
-      if (signal.aborted) throw new Aborted();
-      throw new RemoteTransportError(host.name, step, REMOTE_TRANSPORT_FAILURE, retryable);
+      if (signal.aborted || outcome.kind === 'aborted') throw new Aborted();
+      throw new RemoteTransportError(
+        host.name,
+        step,
+        REMOTE_TRANSPORT_FAILURE,
+        retryable,
+        `no-progress watchdog stopped and reaped the original local rsync child after ${noProgressMs} ms without increasing transfer bytes (last observed byte count: ${lastObservedBytes ?? 'none'})`,
+      );
     }
-    return { code, stderr };
+  } catch (error) {
+    if (signal.aborted) {
+      await stopAndReap(child);
+      await completion.catch(() => undefined);
+      throw new Aborted();
+    }
+    if (child.exitCode === null) {
+      await stopAndReap(child);
+      await completion.catch(() => undefined);
+    }
+    throw error;
   } finally {
     clearTimeout(timer);
+    signal.removeEventListener('abort', abort);
   }
-}
-
-function vanishedFileCount(stderr: string): number {
-  return stderr.split('\n').filter((line) => line.includes('file has vanished')).length;
 }
 
 function reportVanishedFiles(direction: 'to' | 'from', host: string, count: number): void {
@@ -4510,11 +4639,6 @@ function reportCancelledSlotWait(started: number): void {
   console.error(
     `remote-check: slot wait ${((performance.now() - started) / 1000).toFixed(3)} s (cancelled before a slot was acquired)`,
   );
-}
-
-function rsyncBytesSent(stderr: string): number | undefined {
-  const match = stderr.match(/^sent\s+([\d,]+)\s+bytes\b/m);
-  return match ? Number(match[1]!.replaceAll(',', '')) : undefined;
 }
 
 async function baseState(
@@ -4758,12 +4882,19 @@ async function copyReturns(
       `${host.address}:${directory}/`,
       `${resolve(options.workspace)}/`,
     ],
-    { stdin: new Blob([`${present.join('\0')}\0`]), stdout: 'inherit', stderr: 'pipe' },
+    { stdin: new Blob([`${present.join('\0')}\0`]), stdout: 'pipe', stderr: 'pipe' },
   );
-  const { code: synced, stderr } = await finishedRsync(sync, signal, host, 'returns copy', transferLimit, false);
+  const { code: synced, vanishedFiles } = await finishedRsync(
+    sync,
+    signal,
+    host,
+    'returns copy',
+    transferLimit,
+    false,
+  );
   reportDuration('rsync back', started, host.name);
   if (signal.aborted) throw new Aborted();
-  if (synced === 24) reportVanishedFiles('from', host.name, vanishedFileCount(stderr));
+  if (synced === 24) reportVanishedFiles('from', host.name, vanishedFiles);
   else if (synced !== 0) throw new RemoteTransportError(host.name, 'returns copy', synced, false);
   for (const item of manifest) {
     const destination = resolve(options.workspace, item.path);
@@ -4873,13 +5004,19 @@ async function uploadRun(
         `${resolve(options.workspace)}/`,
         `${host.address}:${directory}/`,
       ],
-      { stdin: new Blob([`${uploadFiles.join('\0')}\0`]), stdout: 'inherit', stderr: 'pipe' },
+      { stdin: new Blob([`${uploadFiles.join('\0')}\0`]), stdout: 'pipe', stderr: 'pipe' },
     );
-    const { code: synced, stderr } = await finishedRsync(sync, signal, host, 'workspace upload', transferLimit);
-    reportDuration('rsync', rsyncStarted, host.name, rsyncBytesSent(stderr));
+    const { code: synced, bytesSent, vanishedFiles } = await finishedRsync(
+      sync,
+      signal,
+      host,
+      'workspace upload',
+      transferLimit,
+    );
+    reportDuration('rsync', rsyncStarted, host.name, bytesSent);
     if (signal.aborted) throw new Aborted();
     if ([10, 12, 30, 35, 255].includes(synced)) throw new RemoteTransportError(host.name, 'workspace upload', synced);
-    if (synced === 24) reportVanishedFiles('to', host.name, vanishedFileCount(stderr));
+    if (synced === 24) reportVanishedFiles('to', host.name, vanishedFiles);
     else if (synced !== 0) throw new Error(`rsync to ${host.name} failed with exit code ${synced}`);
     return {
       host,
@@ -5453,6 +5590,7 @@ async function runLeased(
     try {
       returnManifest = await copyReturns(host, directory, connectionId, options, signal);
     } catch (error) {
+      assertExecutionAllowed(options, signal);
       const reason = error instanceof Error ? error.message.slice(0, 512) : 'unknown returns failure';
       returnManifest = { schema: 1, status: 'failed', entries: [], missing: [], failures: [reason] };
       primaryFailure ??= error;

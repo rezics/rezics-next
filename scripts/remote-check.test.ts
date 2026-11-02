@@ -280,6 +280,7 @@ test('a cached Bun whose revision does not match is not used, and the run downlo
 // A fake ssh answers each kind of remote script by what it contains, so the tests see which host was chosen, what ran
 // there and what was released, without a network.
 const fakeSsh = `#!/usr/bin/env bun
+import { createHash } from 'node:crypto';
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, watch, writeFileSync } from 'node:fs';
 const dir = process.env.FAKE_DIR!;
 const args = process.argv.slice(2);
@@ -695,6 +696,16 @@ if (script.includes('/proc/loadavg')) {
   }
   const present = new Set(config.present ?? []);
   for (const path of paths) console.log((present.has(path) ? 'PRESENT ' : 'ABSENT ') + path);
+  const contents = Buffer.from(config.returnedContent ?? 'fake returned artifact\\n');
+  const manifest = [...present]
+    .filter((path) => paths.some((declared) => path === declared || path.startsWith(declared + '/')))
+    .map((path) => ({
+      path,
+      size: contents.byteLength,
+      sha256: createHash('sha256').update(contents).digest('hex'),
+      kind: 'file',
+    }));
+  console.log('MANIFEST ' + Buffer.from(JSON.stringify(manifest)).toString('base64'));
 } else if (script.includes('REMOTE_CHECK_BASE_STATE')) {
   log({ kind: 'base', slotHeld: slotHeld() });
   console.log('BASE ' + (config.base ?? '-'));
@@ -760,7 +771,8 @@ if (script.includes('/proc/loadavg')) {
 `;
 
 const fakeRsync = `#!/usr/bin/env bun
-import { appendFileSync, readFileSync, readdirSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 const args = process.argv.slice(2);
 if (args.includes('--version')) {
   console.log('rsync version 3.3.0\\nCapabilities: zstd zlib');
@@ -785,6 +797,7 @@ const code = isBack
 appendFileSync(process.env.FAKE_DIR + '/log.jsonl', JSON.stringify({
   kind: 'rsync',
   step: isBack ? 'returns copy' : 'workspace upload',
+  pid: process.pid,
   args,
   destination: args.at(-1),
   rsh: rshIndex >= 0 ? args[rshIndex + 1] : undefined,
@@ -793,28 +806,68 @@ appendFileSync(process.env.FAKE_DIR + '/log.jsonl', JSON.stringify({
   slotHeld: readdirSync(process.env.FAKE_DIR!).some((name) => name.startsWith(hostKey + '.slot.')),
 }) + '\\n');
 const stalled = isBack ? config.stallReturnsCopy : config.stallUpload;
+const progressMode = isBack ? (config.returnsProgressMode ?? 'increasing') : (config.uploadProgressMode ?? 'increasing');
+const stopped = () => {
+  appendFileSync(process.env.FAKE_DIR + '/log.jsonl', JSON.stringify({
+    kind: 'rsync-stopped',
+    step: isBack ? 'returns copy' : 'workspace upload',
+    pid: process.pid,
+  }) + '\\n');
+  process.exit(143);
+};
+process.on('SIGTERM', stopped);
+const writeProgress = async (value, tick) => {
+  const record = String(value) + ' 10%';
+  if (progressMode === 'fragmented') {
+    process.stdout.write(record.slice(0, Math.min(2, record.length)));
+    await Bun.sleep(1);
+    process.stdout.write(record.slice(Math.min(2, record.length)) + (tick % 2 === 0 ? '\\r' : '\\n'));
+  } else if (progressMode === 'malformed') {
+    process.stdout.write('bytes=' + record + '\\r');
+  } else if (progressMode === 'diagnostic-only') {
+    process.stderr.write(record + '\\rdiagnostic heartbeat\\n');
+  } else {
+    process.stdout.write(record + (tick % 2 === 0 ? '\\r' : '\\n'));
+  }
+  if (progressMode !== 'diagnostic-only') {
+    appendFileSync(process.env.FAKE_DIR + '/log.jsonl', JSON.stringify({ kind: 'rsync-progress', step: isBack ? 'returns copy' : 'workspace upload', pid: process.pid, bytes: value, mode: progressMode }) + '\\n');
+  }
+};
+if (progressMode === 'progress-then-stall') {
+  await writeProgress(1_024, 0);
+  await new Promise<void>(() => setInterval(() => {}, 1000));
+}
 if (stalled) {
-  process.on('SIGTERM', () => {
-    appendFileSync(process.env.FAKE_DIR + '/log.jsonl', JSON.stringify({
-      kind: 'rsync-stopped',
-      step: isBack ? 'returns copy' : 'workspace upload',
-      pid: process.pid,
-    }) + '\\n');
-    process.exit(143);
-  });
   await new Promise<void>(() => setInterval(() => {}, 1000));
 }
 const slowFor = isBack ? (config.slowReturnsMs ?? 0) : (config.slowUploadMs ?? 0);
 const started = Date.now();
 let bytes = 0;
+let tick = 0;
 while (Date.now() - started < slowFor) {
+  tick += 1;
   bytes += 1024;
-  console.error(bytes + ' 10%');
-  await Bun.sleep(10);
+  const value = progressMode === 'repeated' ? 1_024 : progressMode === 'decreasing' ? (tick === 1 ? 2_048 : 1_024) : bytes;
+  await writeProgress(value, tick);
+  await Bun.sleep(config.rsyncProgressIntervalMs ?? 10);
 }
-console.error('10000 100%');
+if (progressMode === 'increasing' || progressMode === 'fragmented') {
+  await writeProgress(slowFor === 0 ? 10_000 : bytes + 1_024, tick + 1);
+} else if (slowFor === 0 && progressMode !== 'diagnostic-only' && progressMode !== 'malformed') {
+  await writeProgress(10_000, 0);
+}
 console.error('sent 1,234 bytes 10,000 bytes/sec');
 for (const file of config.vanishedFiles ?? []) console.error('rsync: [sender] file has vanished: ' + file);
+if (isBack) {
+  const contents = config.returnedContent ?? 'fake returned artifact\\n';
+  const present = new Set(config.present ?? []);
+  for (const file of input.split('\\0').filter(Boolean)) {
+    if (!present.has(file)) continue;
+    const target = join(args.at(-1), file);
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, contents);
+  }
+}
 process.exit(code);
 `;
 
@@ -882,6 +935,10 @@ type HostConfig = {
   rsyncBackExit?: number;
   slowUploadMs?: number;
   slowReturnsMs?: number;
+  uploadProgressMode?: 'increasing' | 'fragmented' | 'repeated' | 'decreasing' | 'malformed' | 'diagnostic-only' | 'progress-then-stall';
+  returnsProgressMode?: 'increasing' | 'fragmented' | 'repeated' | 'decreasing' | 'malformed' | 'diagnostic-only' | 'progress-then-stall';
+  rsyncProgressIntervalMs?: number;
+  returnedContent?: string;
   stallUpload?: boolean;
   stallReturnsCopy?: boolean;
   stallReturnsProbe?: boolean;
@@ -4740,6 +4797,157 @@ test('slow upload and slow returns run without a slot while the remote command o
       expect(releaseAt).toBeLessThan(returnProbeAt);
     }
     expect(slotMarkers(env, 'a'), item.name).toEqual([]);
+  }
+});
+
+test('transfer progress from rsync stdout keeps uploads and returns alive beyond the no-progress deadline', async () => {
+  const fixture = scenario({
+    a: {
+      available: 8e9,
+      slowUploadMs: 230,
+      slowReturnsMs: 230,
+      uploadProgressMode: 'fragmented',
+      returnsProgressMode: 'fragmented',
+      present: ['.temp/output'],
+    },
+  });
+  fixture.env.REMOTE_CHECK_TRANSFER_TIMEOUT_MS = '50';
+  const directory = workspace();
+  const result = await remote(fixture.env, directory, ['true'], ['--returns', '.temp/output']);
+
+  expect(result.code, result.stderr).toBe(0);
+  expect(result.stdout).toContain('10%');
+  expect(result.stderr).toContain('1234 bytes sent');
+  expect(result.stderr).not.toContain('retrying transport failure');
+  expect(readFileSync(join(directory, '.temp/output'), 'utf8')).toBe('fake returned artifact\n');
+
+  const seen = fixture.events();
+  const transfers = seen.filter((event) => event.kind === 'rsync');
+  expect(transfers.filter((event) => event.step === 'workspace upload')).toHaveLength(1);
+  expect(transfers.filter((event) => event.step === 'returns copy')).toHaveLength(1);
+  expect(transfers.every((event) => event.slotHeld === false)).toBe(true);
+  expect(seen.filter((event) => event.kind === 'rsync-stopped')).toHaveLength(0);
+  expect(seen.filter((event) => event.kind === 'rsync-progress').length).toBeGreaterThan(20);
+  expect(seen.filter((event) => event.kind === 'run')).toHaveLength(1);
+  expect(seen.filter((event) => event.kind === 'slot' && event.granted === true)).toHaveLength(1);
+  expect(slotMarkers(fixture.env, 'a')).toEqual([]);
+});
+
+test('repeated, decreasing, malformed and diagnostic-only rsync output cannot extend transfer progress deadlines', async () => {
+  for (const [mode, lastBytes] of [
+    ['repeated', '1024'],
+    ['decreasing', '1024'],
+    ['malformed', 'none'],
+    ['diagnostic-only', 'none'],
+  ] as const) {
+    const fixture = scenario({
+      a: { available: 8e9, slowUploadMs: 240, uploadProgressMode: mode },
+    });
+    fixture.env.REMOTE_CHECK_TRANSFER_TIMEOUT_MS = '50';
+    fixture.env.REMOTE_CHECK_RETRY_BACKOFF_MS = '1';
+    const result = await remote(fixture.env, workspace(), ['true']);
+
+    expect(result.code, mode).toBe(75);
+    expect(result.stderr, mode).toContain('no-progress watchdog stopped and reaped the original local rsync child');
+    expect(result.stderr, mode).toContain(`last observed byte count: ${lastBytes}`);
+    const seen = fixture.events();
+    const transfers = seen.filter((event) => event.kind === 'rsync');
+    const stopped = seen.filter((event) => event.kind === 'rsync-stopped');
+    expect(transfers).toHaveLength(3);
+    expect(stopped).toHaveLength(3);
+    expect(stopped.map((event) => event.pid)).toEqual(transfers.map((event) => event.pid));
+    expect(transfers.every((event) => event.slotHeld === false)).toBe(true);
+    expect(seen.filter((event) => event.kind === 'run')).toHaveLength(0);
+    expect(seen.filter((event) => event.kind === 'slot' && event.granted === true)).toHaveLength(0);
+    expect(slotMarkers(fixture.env, 'a')).toEqual([]);
+  }
+});
+
+test('a transfer that stalls after real progress reports its byte count and reaps the original rsync', async () => {
+  const upload = scenario({ a: { available: 8e9, uploadProgressMode: 'progress-then-stall' } });
+  upload.env.REMOTE_CHECK_TRANSFER_TIMEOUT_MS = '50';
+  upload.env.REMOTE_CHECK_RETRY_BACKOFF_MS = '1';
+  const uploadResult = await remote(upload.env, workspace(), ['true']);
+  expect(uploadResult.code).toBe(75);
+  expect(uploadResult.stderr).toContain('last observed byte count: 1024');
+  expect(upload.events().filter((event) => event.kind === 'rsync-stopped').map((event) => event.pid)).toEqual(
+    upload.events().filter((event) => event.kind === 'rsync').map((event) => event.pid),
+  );
+  expect(upload.events().filter((event) => event.kind === 'run')).toHaveLength(0);
+  expect(slotMarkers(upload.env, 'a')).toEqual([]);
+
+  const returns = scenario({
+    a: { available: 8e9, present: ['.temp/output'], returnsProgressMode: 'progress-then-stall' },
+  });
+  returns.env.REMOTE_CHECK_TRANSFER_TIMEOUT_MS = '50';
+  const returnsResult = await remote(returns.env, workspace(), ['true'], ['--returns', '.temp/output']);
+  expect(returnsResult.code).toBe(75);
+  expect(returnsResult.stderr).toContain('last observed byte count: 1024');
+  const seen = returns.events();
+  const returnTransfer = seen.find((event) => event.kind === 'rsync' && event.step === 'returns copy')!;
+  const returnStop = seen.find((event) => event.kind === 'rsync-stopped' && event.step === 'returns copy')!;
+  expect(returnStop.pid).toBe(returnTransfer.pid);
+  expect(seen.filter((event) => event.kind === 'rsync' && event.step === 'returns copy')).toHaveLength(1);
+  expect(seen.filter((event) => event.kind === 'run')).toHaveLength(1);
+  const releaseAt = seen.findIndex((event) => event.kind === 'release');
+  const returnsAt = seen.findIndex((event) => event.kind === 'returns');
+  expect(releaseAt).toBeGreaterThan(seen.findIndex((event) => event.kind === 'run'));
+  expect(releaseAt).toBeLessThan(returnsAt);
+  expect(seen.find((event) => event.kind === 'cleanup')?.slotHeld).toBe(false);
+  expect(slotMarkers(returns.env, 'a')).toEqual([]);
+});
+
+test('cancellation racing active rsync output and the transfer deadline reaps only that child', async () => {
+  for (const phase of ['upload', 'returns'] as const) {
+    const fixture = scenario({
+      a: {
+        available: 8e9,
+        present: ['.temp/output'],
+        ...(phase === 'upload'
+          ? { uploadProgressMode: 'progress-then-stall' as const }
+          : { returnsProgressMode: 'progress-then-stall' as const }),
+      },
+    });
+    fixture.env.REMOTE_CHECK_TRANSFER_TIMEOUT_MS = '100';
+    const cancellation = { file: join(fixture.env.FAKE_DIR!, `cancel-${phase}.json`), id: `cancel-${phase}` };
+    fixture.env.REMOTE_CHECK_CANCELLATION_FILE = cancellation.file;
+    fixture.env.REMOTE_CHECK_CANCELLATION_ID = cancellation.id;
+    const run = startRemote(
+      fixture.env,
+      workspace(),
+      ['true'],
+      phase === 'returns' ? ['--returns', '.temp/output'] : [],
+    );
+    await waitFor(() =>
+      fixture.events().some((event) => event.kind === 'rsync-progress' && event.step === (phase === 'upload' ? 'workspace upload' : 'returns copy')),
+    );
+    await Bun.sleep(85);
+    requestExecutionCancellation(cancellation);
+    expect(await run.child.exited, await run.stderr).toBe(143);
+    await run.stdout;
+
+    const seen = fixture.events();
+    const transfer = seen.find(
+      (event) => event.kind === 'rsync' && event.step === (phase === 'upload' ? 'workspace upload' : 'returns copy'),
+    )!;
+    const stopped = seen.find(
+      (event) => event.kind === 'rsync-stopped' && event.step === (phase === 'upload' ? 'workspace upload' : 'returns copy'),
+    )!;
+    expect(stopped.pid, phase).toBe(transfer.pid);
+    expect(seen.filter((event) => event.kind === 'rsync' && event.step === transfer.step)).toHaveLength(1);
+    expect(seen.filter((event) => event.kind === 'rsync-stopped' && event.step === transfer.step)).toHaveLength(1);
+    expect(slotMarkers(fixture.env, 'a')).toEqual([]);
+    if (phase === 'upload') {
+      expect(seen.filter((event) => event.kind === 'run')).toHaveLength(0);
+      expect(seen.filter((event) => event.kind === 'slot' && event.granted === true)).toHaveLength(0);
+    } else {
+      expect(seen.filter((event) => event.kind === 'run')).toHaveLength(1);
+      const releaseAt = seen.findIndex((event) => event.kind === 'release');
+      const returnsAt = seen.findIndex((event) => event.kind === 'returns');
+      expect(releaseAt).toBeGreaterThan(seen.findIndex((event) => event.kind === 'run'));
+      expect(releaseAt).toBeLessThan(returnsAt);
+      expect(seen.find((event) => event.kind === 'cleanup')?.slotHeld).toBe(false);
+    }
   }
 });
 
