@@ -145,7 +145,10 @@ test('keyboard navigation stays in the departure dialog and Escape stays on the 
   const leave = document.body.querySelector<HTMLButtonElement>('[data-leave]')!;
   const dialog = document.body.querySelector<HTMLElement>('[role="alertdialog"]')!;
   const input = ui.host.querySelector<HTMLInputElement>('#rename-handle')!;
-  for (const [edge, shiftKey] of [[leave, false], [stay, true]] as const) {
+  for (const [edge, shiftKey] of [
+    [leave, false],
+    [stay, true],
+  ] as const) {
     await flush(() => {
       edge.focus();
       edge.dispatchEvent(new dom.KeyboardEvent('keydown', { key: 'Tab', shiftKey, bubbles: true, cancelable: true }));

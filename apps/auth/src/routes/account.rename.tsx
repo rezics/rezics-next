@@ -325,11 +325,11 @@ function RenameReview({
 
   if (renamed)
     return (
-        <AuthPage returnToSecurity heading={m.auth_rename_heading()}>
-          <Alert role="status">
-            <AlertDescription>{m.auth_rename_success({ handle: renamed })}</AlertDescription>
-          </Alert>
-        </AuthPage>
+      <AuthPage returnToSecurity heading={m.auth_rename_heading()}>
+        <Alert role="status">
+          <AlertDescription>{m.auth_rename_success({ handle: renamed })}</AlertDescription>
+        </Alert>
+      </AuthPage>
     );
   return (
     <>
