@@ -19,6 +19,10 @@ function buttonMarkup(html: string, label: string) {
   return at === -1 ? '' : html.slice(html.lastIndexOf('<button', at), at);
 }
 
+function buttonDisabled(html: string, label: string) {
+  return /\sdisabled(?:\s|=|>|$)/.test(buttonMarkup(html, label));
+}
+
 test('a native Retry-After seconds hint becomes one absolute deadline that re-reads cannot shorten', () => {
   expect(publicationRetryAt(30, 1_000)).toBe(31_000);
   expect(publicationRetryAt(0, 1_000)).toBe(1_000);
@@ -120,6 +124,6 @@ test('a rate-limited retained publication cannot be resent before its native dea
     }),
   );
   expect(html).toContain(m.curation_retry_after({ seconds: 30 }));
-  expect(buttonMarkup(html, m.curation_retry_original())).toContain('disabled');
-  expect(buttonMarkup(html, m.curation_reload_head())).not.toContain('disabled');
+  expect(buttonDisabled(html, m.curation_retry_original())).toBe(true);
+  expect(buttonDisabled(html, m.curation_reload_head())).toBe(false);
 });
