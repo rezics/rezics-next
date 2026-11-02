@@ -121,7 +121,10 @@ test('complete Manga creation keeps series and volume drafts, independent contro
     return { promise, resolve };
   };
   const reactProps = (element: HTMLElement) =>
-    Reflect.get(element, Object.keys(element).find((key) => key.startsWith('__reactProps$'))!);
+    Reflect.get(
+      element,
+      Object.keys(element).find((key) => key.startsWith('__reactProps$'))!,
+    );
   const callback = (button: HTMLElement) => reactProps(button).onClick as () => void;
   const inputChange = (element: HTMLElement) =>
     reactProps(element).onChange as (event: { target: { value: string }; currentTarget: { value: string } }) => void;
@@ -276,7 +279,12 @@ test('complete Manga creation keeps series and volume drafts, independent contro
     expect(within(a).queryByRole('region', { name: title(series, 'schema:inLanguage') })).toBeNull();
     await select(a, m.manga_grain(), 'schema:ComicSeries');
     expect(input(row(a, title(series, 'schema:inLanguage')), m.correction_value()).value).toBe('ja');
-    const retiredLanguage = await add(a, m.manga_publication(), 'schema:inLanguage', title(series, 'schema:inLanguage'));
+    const retiredLanguage = await add(
+      a,
+      m.manga_publication(),
+      'schema:inLanguage',
+      title(series, 'schema:inLanguage'),
+    );
     const retiredEdit = inputChange(input(retiredLanguage, m.correction_value()));
     await click(retiredLanguage, m.recipe_remove_field());
     await select(a, m.manga_grain(), 'schema:PublicationVolume');

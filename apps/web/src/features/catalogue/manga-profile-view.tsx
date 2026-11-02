@@ -267,7 +267,11 @@ function MangaCreate({
   const currentLocked = useRef(locked);
   currentLocked.current = locked;
   const removalAllowed = () =>
-    lifetime.active() && epoch === removalEpoch.current && !currentLocked.current && !running.current && !request.current;
+    lifetime.active() &&
+    epoch === removalEpoch.current &&
+    !currentLocked.current &&
+    !running.current &&
+    !request.current;
   function editAllowed(expectedType: MangaType, activation: number) {
     return expectedType === currentType.current && activation === typeActivation.current && removalAllowed();
   }
