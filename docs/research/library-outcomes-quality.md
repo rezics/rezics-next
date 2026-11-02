@@ -51,7 +51,7 @@ one native journey with all four facts on one stored subject. Clear each indepen
 facts and Everything immediately, then remove the last qualifying fact and observe absence. Include retained
 profile meaning, reread history and sparse units. Run the unchanged Library, label, profile and shelf wrappers;
 repair only a demonstrated violation, without replacing them. Likely paths are
-`services/kernel/src/library/{entries,label-commands,copies,progress,owner-fact-source}.ts`, the existing native
+`services/kernel/src/library/{entries,label-commands,copies,progress}.ts`, the existing native
 adapters and their owner-query integration. This is one bounded union-preservation brief, not a new membership
 authority. Other/anonymous/suspended reads and writes must remain denied during the journey.
 
