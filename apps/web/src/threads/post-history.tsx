@@ -109,7 +109,7 @@ function HistoryDisclosure({
 }) {
   const regionId = `post-history-${useId().replaceAll(':', '')}`;
   const [continuationStatus, setContinuationStatus] = useState<string | null>(null);
-  const continuationBoundary = useRef<{ connection: number; revisionId: string | null }>();
+  const continuationBoundary = useRef<{ connection: number; revisionId: string | null } | undefined>(undefined);
   const {
     open,
     loading,
