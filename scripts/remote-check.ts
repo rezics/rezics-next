@@ -682,7 +682,8 @@ export function parseRunLifetimeFailure(output: string): RunLifetimeFailure | nu
 }
 const DEFAULT_LIVENESS_INTERVAL_MS = 60_000;
 export const DEFAULT_TRANSFER_TIMEOUT_MS = 120_000;
-export const DEFAULT_PREPARATION_TIMEOUT_MS = 180_000;
+// Base refresh and installs for dozens of concurrent checks exceeded three minutes on 2026-11-02.
+export const DEFAULT_PREPARATION_TIMEOUT_MS = 900_000;
 const DEFAULT_CONTROL_PROBE_TIMEOUT_MS = 5_000;
 const SLOT_REQUEST_TOO_LARGE = 64;
 const EXPRESS_SLOT_ESTIMATE_LIMIT_MS = 120_000;
