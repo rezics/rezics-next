@@ -201,7 +201,7 @@ function PeopleCreate({
   recovering: boolean;
   recovery: ReactNode;
   refresh: () => Promise<PeopleRead>;
-  work?: string;
+  work: string | undefined;
   locale: string;
   session: Session;
   transport: PeopleTransport;
