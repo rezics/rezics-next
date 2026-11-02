@@ -208,29 +208,78 @@ test('question closure requires a direct info or decision link; digest groups ac
 test('malformed optional metadata stays unavailable while shared inbox views retain messages and counts', () => {
   const s = setup();
   try {
-    const decision = { managerId: 'owner', from: 'worker', kind: 'decision' as const, summary: 'Decision', goalId: 'g',
-      taskId: 't', documentRefs: [{ path: 'docs/decision.md' }], escalation: { reason: 'Explicit context' } };
+    const decision = {
+      managerId: 'owner',
+      from: 'worker',
+      kind: 'decision' as const,
+      summary: 'Decision',
+      goalId: 'g',
+      taskId: 't',
+      documentRefs: [{ path: 'docs/decision.md' }],
+      escalation: { reason: 'Explicit context' },
+    };
     s.inbox.deliver(decision);
-    s.inbox.deliver({ managerId: 'owner', from: 'worker', kind: 'blocker', summary: 'Blocked', goalId: 'g', taskId: 't', replyToId: 1 });
+    s.inbox.deliver({
+      managerId: 'owner',
+      from: 'worker',
+      kind: 'blocker',
+      summary: 'Blocked',
+      goalId: 'g',
+      taskId: 't',
+      replyToId: 1,
+    });
     const malformed = { ...decision, documentRefs: { path: 'wrong shape' }, escalation: [] };
-    s.db.query('UPDATE manager_inbox SET event = ?, document_refs = ?, escalation = ? WHERE id = 1').run(
-      JSON.stringify(malformed), JSON.stringify({ path: 'wrong shape' }), JSON.stringify([]),
-    );
+    s.db
+      .query('UPDATE manager_inbox SET event = ?, document_refs = ?, escalation = ? WHERE id = 1')
+      .run(JSON.stringify(malformed), JSON.stringify({ path: 'wrong shape' }), JSON.stringify([]));
 
     const page = s.shared.log({ goal: 'g', limit: 1 });
     expect([page.entries[0]?.summary, page.hasMore, page.nextCursor]).toEqual(['Blocked', true, 2]);
     const decisionRow = s.shared.log({ goal: 'g', limit: 1, cursor: 2 }).entries[0]!;
-    expect(decisionRow).toMatchObject({ id: 1, from: 'worker', to: 'owner', goal: 'g', task: 't', kind: 'decision',
-      summary: 'Decision', replyToId: null, threadRootId: 1, event: malformed, documentRefs: null, escalation: null });
-    expect(s.shared.thread(1).entries.map(({ id, replyToId, threadRootId, documentRefs, escalation }) =>
-      [id, replyToId, threadRootId, documentRefs, escalation])).toEqual([[1, null, 1, null, null], [2, 1, 1, null, null]]);
+    expect(decisionRow).toMatchObject({
+      id: 1,
+      from: 'worker',
+      to: 'owner',
+      goal: 'g',
+      task: 't',
+      kind: 'decision',
+      summary: 'Decision',
+      replyToId: null,
+      threadRootId: 1,
+      event: malformed,
+      documentRefs: null,
+      escalation: null,
+    });
+    expect(
+      s.shared
+        .thread(1)
+        .entries.map(({ id, replyToId, threadRootId, documentRefs, escalation }) => [
+          id,
+          replyToId,
+          threadRootId,
+          documentRefs,
+          escalation,
+        ]),
+    ).toEqual([
+      [1, null, 1, null, null],
+      [2, 1, 1, null, null],
+    ]);
 
     const digest = s.shared.digest(s.now() - 1, { now: s.now(), limit: 1 });
-    expect(digest.totals).toEqual({ decisions: 1, blockers: 1, escalations: 0, overdueQuestions: 0, blockersOverOneHour: 0 });
-    expect([digest.details.entries[0]?.category, digest.details.entries[0]?.documentRefs,
-      digest.details.entries[0]?.escalation, digest.details.hasMore, digest.details.nextCursor]).toEqual([
-      'decision', null, null, true, 1,
-    ]);
+    expect(digest.totals).toEqual({
+      decisions: 1,
+      blockers: 1,
+      escalations: 0,
+      overdueQuestions: 0,
+      blockersOverOneHour: 0,
+    });
+    expect([
+      digest.details.entries[0]?.category,
+      digest.details.entries[0]?.documentRefs,
+      digest.details.entries[0]?.escalation,
+      digest.details.hasMore,
+      digest.details.nextCursor,
+    ]).toEqual(['decision', null, null, true, 1]);
   } finally {
     s.close();
   }
