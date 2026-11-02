@@ -264,13 +264,7 @@ function RenameReview({
         revoke?.();
         setMessage(m.auth_rename_denied());
       } else {
-        setMessage(
-          result.kind === 'unknown'
-            ? m.auth_rename_unknown()
-            : result.kind === 'denied'
-              ? m.auth_rename_denied()
-              : m.auth_rename_unavailable(),
-        );
+        setMessage(result.kind === 'unknown' ? m.auth_rename_unknown() : m.auth_rename_unavailable());
       }
     } catch {
       if (isCurrent()) {
