@@ -58,6 +58,9 @@ Coordinate `apps/web/src/features/pages/**` with web as a shared surface; sequen
 projections, definitions and Zone resources; content owns the safe public rating aggregate.
 When an open Subject cover changes incarnation, focus returns to its named cover group; ordinary dismissal returns to
 the opener. That group uses the displayed-locale catalogue label `subject_cover_group` for the current subject title.
+Explicit focused Close of a published preview restores the surviving Inspect control once it is enabled after commit;
+target, address and Realm edits, ordinary completion, a replaced read or locale, an unmount, and a reader who has
+moved elsewhere do not transfer focus.
 
 ## Dependencies
 

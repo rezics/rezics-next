@@ -10,6 +10,7 @@ import { FeatureSlotsProvider } from '../../shell/feature-slots';
 import { accountHref } from '../../subject/subject-href';
 import { dataComponents, PageData } from './data';
 import { layoutComponents, PageHost, PageRoot, pageDefinitions } from './layout';
+import { usePreviewCloseFocus } from './presentation-preview-focus';
 import type { PresentationPreview, PresentationPreviewInput } from './presentation-preview';
 import { CompositionRender } from './render';
 import { subjectPageMessages } from './route-support';
@@ -147,12 +148,18 @@ export function PresentationPreviewPanel({ locale, read, initial }: Presentation
       : { status: 'idle' as const };
   const busy = currentInspection.status === 'loading';
   const result = currentInspection.status === 'complete' ? currentInspection.result : null;
+  const closeFocus = usePreviewCloseFocus({ locale, read }, !busy);
   const o = { locale: locale as never };
 
   function clear() {
     if (!mounted.current) return;
     request.current += 1;
     setInspection({ status: 'idle' });
+  }
+
+  function closePreview(source: HTMLButtonElement) {
+    closeFocus.captureCloseFocus(source);
+    clear();
   }
 
   async function inspect(event: FormEvent) {
@@ -243,11 +250,11 @@ export function PresentationPreviewPanel({ locale, read, initial }: Presentation
               }}
             />
           </Field>
-          <Button type="submit" disabled={busy}>
+          <Button type="submit" disabled={busy} ref={closeFocus.inspectRef}>
             {busy ? m.presentation_preview_loading({}, o) : m.presentation_preview_inspect({}, o)}
           </Button>
           {busy && (
-            <Button type="button" variant="outline" onClick={clear}>
+            <Button type="button" variant="outline" onClick={(event) => closePreview(event.currentTarget)}>
               {m.presentation_preview_close({}, o)}
             </Button>
           )}
@@ -281,7 +288,7 @@ export function PresentationPreviewPanel({ locale, read, initial }: Presentation
         <div className="min-w-0 space-y-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h3 className="font-semibold wrap-anywhere">{m.presentation_editor_preview_current({}, o)}</h3>
-            <Button type="button" variant="outline" onClick={clear}>
+            <Button type="button" variant="outline" onClick={(event) => closePreview(event.currentTarget)}>
               {m.presentation_preview_close({}, o)}
             </Button>
           </div>
