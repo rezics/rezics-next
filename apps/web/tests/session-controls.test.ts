@@ -225,13 +225,20 @@ function ownResource<T extends object>(
 
 function browserForTest(): Promise<Browser> {
   if (teardownStarted) throw new Error('Session-controls browser acquisition began after suite teardown');
-  browserLease ??= ownResource('Session-controls browser', 'suite', () => chromium.launch(), (browser) => browser.close());
+  browserLease ??= ownResource(
+    'Session-controls browser',
+    'suite',
+    () => chromium.launch(),
+    (browser) => browser.close(),
+  );
   return browserLease.value;
 }
 
 function resourceCleanupActions(scope?: ResourceScope, after?: Set<OwnedResource>) {
   return [...resources]
-    .filter((resource) => (scope === undefined || resource.scope === scope) && (after === undefined || !after.has(resource)))
+    .filter(
+      (resource) => (scope === undefined || resource.scope === scope) && (after === undefined || !after.has(resource)),
+    )
     .map((resource) => ({ label: resource.label, run: resource.close, timeoutMs: 6000 }));
 }
 
@@ -287,18 +294,14 @@ function site(): Promise<string> {
           const response = await fetch(`${origin}/en`, { redirect: 'manual', signal: AbortSignal.timeout(60_000) });
           if (response.status < 500) return origin;
         } catch {}
-        if (Date.now() > deadline)
-          throw new Error(`dev server did not serve /en in time:\n${custody.diagnostics()}`);
+        if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${custody.diagnostics()}`);
         await Bun.sleep(500);
       }
     } catch (error) {
       if (!custody) throw error;
-      await withCleanup(
-        async () => {
-          throw error;
-        },
-        [{ label: 'Session-controls Vite startup', run: () => custody!.close(), timeoutMs: 7000 }],
-      );
+      await withCleanup(async () => {
+        throw error;
+      }, [{ label: 'Session-controls Vite startup', run: () => custody!.close(), timeoutMs: 7000 }]);
       throw error;
     }
   })();
@@ -325,18 +328,15 @@ async function open(path: string, options: BrowserContextOptions = {}): Promise<
     }
     return page;
   } catch (error) {
-    await withCleanup<Page>(
-      async () => {
-        throw error;
+    await withCleanup<Page>(async () => {
+      throw error;
+    }, [
+      {
+        label: 'Partial session-controls browser setup',
+        run: () => cleanupAll(resourceCleanupActions('test', existing)),
+        timeoutMs: 8000,
       },
-      [
-        {
-          label: 'Partial session-controls browser setup',
-          run: () => cleanupAll(resourceCleanupActions('test', existing)),
-          timeoutMs: 8000,
-        },
-      ],
-    );
+    ]);
     throw error;
   }
 }

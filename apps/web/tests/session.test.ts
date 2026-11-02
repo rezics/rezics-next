@@ -233,12 +233,9 @@ function site(): Promise<string> {
       }
     } catch (error) {
       if (!custody) throw error;
-      await withCleanup(
-        async () => {
-          throw error;
-        },
-        [{ label: 'Session Vite startup', run: () => custody!.close(), timeoutMs: 7000 }],
-      );
+      await withCleanup(async () => {
+        throw error;
+      }, [{ label: 'Session Vite startup', run: () => custody!.close(), timeoutMs: 7000 }]);
       throw error;
     }
   })();

@@ -166,13 +166,20 @@ function ownResource<T extends object>(
 
 function browserForTest(): Promise<Browser> {
   if (teardownStarted) throw new Error('Anonymous-reads browser acquisition began after suite teardown');
-  browserLease ??= ownResource('Anonymous-reads browser', 'suite', () => chromium.launch(), (browser) => browser.close());
+  browserLease ??= ownResource(
+    'Anonymous-reads browser',
+    'suite',
+    () => chromium.launch(),
+    (browser) => browser.close(),
+  );
   return browserLease.value;
 }
 
 function resourceCleanupActions(scope?: ResourceScope, after?: Set<OwnedResource>) {
   return [...resources]
-    .filter((resource) => (scope === undefined || resource.scope === scope) && (after === undefined || !after.has(resource)))
+    .filter(
+      (resource) => (scope === undefined || resource.scope === scope) && (after === undefined || !after.has(resource)),
+    )
     .map((resource) => ({ label: resource.label, run: resource.close, timeoutMs: 6000 }));
 }
 
@@ -224,7 +231,7 @@ function site(): Promise<string> {
       const credentialReadUrl = `${kernel.url.origin}/credential-read`;
       await Bun.write(
         config,
-      `
+        `
       import { resolveWebViteConfig } from ${JSON.stringify(pathToFileURL(join(app, 'tests/support/vite-config.ts')).href)};
       export default async (env) => {
         const config = await resolveWebViteConfig(env, ${JSON.stringify(app)});
@@ -283,29 +290,23 @@ function site(): Promise<string> {
       throw new Error(`dev server did not start:\n${siteCustody.diagnostics()}`);
     } catch (error) {
       if (siteCustody) {
-        await withCleanup(
-          async () => {
-            throw error;
-          },
-          [{ label: 'Anonymous-reads Vite startup', run: () => siteCustody!.close(), timeoutMs: 7000 }],
-        );
+        await withCleanup(async () => {
+          throw error;
+        }, [{ label: 'Anonymous-reads Vite startup', run: () => siteCustody!.close(), timeoutMs: 7000 }]);
       } else if (directory) {
         const partialDirectory = directory;
-        await withCleanup(
-          async () => {
-            throw error;
-          },
-          [
-            {
-              label: 'Partial anonymous-reads Vite fixture directory',
-              run: async () => {
-                await rm(partialDirectory, { recursive: true, force: true });
-                if (directory === partialDirectory) directory = undefined;
-              },
-              timeoutMs: 5000,
+        await withCleanup(async () => {
+          throw error;
+        }, [
+          {
+            label: 'Partial anonymous-reads Vite fixture directory',
+            run: async () => {
+              await rm(partialDirectory, { recursive: true, force: true });
+              if (directory === partialDirectory) directory = undefined;
             },
-          ],
-        );
+            timeoutMs: 5000,
+          },
+        ]);
       }
       throw error;
     }
@@ -316,7 +317,12 @@ async function signedInPage(origin: string): Promise<Page> {
   const existing = new Set(resources);
   try {
     const browser = await browserForTest();
-    const lease = ownResource('Anonymous-reads browser context', 'test', () => browser.newContext(), (context) => context.close());
+    const lease = ownResource(
+      'Anonymous-reads browser context',
+      'test',
+      () => browser.newContext(),
+      (context) => context.close(),
+    );
     const context = await lease.value;
     const cookieUrl = new URL(origin);
     cookieUrl.protocol = 'https:';
@@ -332,18 +338,15 @@ async function signedInPage(origin: string): Promise<Page> {
     );
     return page;
   } catch (error) {
-    await withCleanup<Page>(
-      async () => {
-        throw error;
+    await withCleanup<Page>(async () => {
+      throw error;
+    }, [
+      {
+        label: 'Partial anonymous-reads browser setup',
+        run: () => cleanupAll(resourceCleanupActions('test', existing)),
+        timeoutMs: 8000,
       },
-      [
-        {
-          label: 'Partial anonymous-reads browser setup',
-          run: () => cleanupAll(resourceCleanupActions('test', existing)),
-          timeoutMs: 8000,
-        },
-      ],
-    );
+    ]);
     throw error;
   }
 }

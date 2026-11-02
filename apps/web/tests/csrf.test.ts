@@ -239,7 +239,12 @@ function ownResource<T extends object>(
 
 function browserForTest(): Promise<Browser> {
   if (teardownStarted) throw new Error('CSRF browser acquisition began after suite teardown');
-  browserLease ??= ownResource('CSRF browser', 'suite', () => chromium.launch(), (browser) => browser.close());
+  browserLease ??= ownResource(
+    'CSRF browser',
+    'suite',
+    () => chromium.launch(),
+    (browser) => browser.close(),
+  );
   return browserLease.value;
 }
 
@@ -287,24 +292,20 @@ function site(configured = false): Promise<string> {
           const response = await fetch(`${origin}/en`, { redirect: 'manual', signal: AbortSignal.timeout(60_000) });
           if (response.status < 500) return origin;
         } catch {}
-        if (Date.now() > deadline)
-          throw new Error(`dev server did not serve /en in time:\n${custody.diagnostics()}`);
+        if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${custody.diagnostics()}`);
         await Bun.sleep(500);
       }
     } catch (error) {
       if (!custody) throw error;
-      await withCleanup(
-        async () => {
-          throw error;
+      await withCleanup(async () => {
+        throw error;
+      }, [
+        {
+          label: `CSRF ${configured ? 'configured' : 'default'} Vite startup`,
+          run: () => custody!.close(),
+          timeoutMs: 7000,
         },
-        [
-          {
-            label: `CSRF ${configured ? 'configured' : 'default'} Vite startup`,
-            run: () => custody!.close(),
-            timeoutMs: 7000,
-          },
-        ],
-      );
+      ]);
       throw error;
     }
   })();
@@ -374,26 +375,23 @@ async function pageOf(origin: string, value?: string) {
       }),
     (context) => context.close(),
   );
-  return await withCleanup(
-    async () => {
-      const context = await lease.value;
-      if (value)
-        await context.addCookies([
-          { name: session, value, domain: '127.0.0.1', path: '/', httpOnly: true, secure: true, sameSite: 'Lax' },
-        ]);
-      const page = await context.newPage();
-      const response = await page.goto(`${origin}/en`, { waitUntil: 'networkidle' });
-      expect(response?.status()).toBe(200);
-      const meta = page.locator('head meta[name="csrf-token"]');
-      const count = await meta.count();
-      return {
-        count,
-        token: value ? await readSessionToken(origin, `${session}=${value}`) : null,
-        cookies: (await response!.headersArray()).filter((header) => header.name.toLowerCase() === 'set-cookie'),
-      };
-    },
-    [{ label: 'CSRF browser context', run: lease.close, timeoutMs: 6000 }],
-  );
+  return await withCleanup(async () => {
+    const context = await lease.value;
+    if (value)
+      await context.addCookies([
+        { name: session, value, domain: '127.0.0.1', path: '/', httpOnly: true, secure: true, sameSite: 'Lax' },
+      ]);
+    const page = await context.newPage();
+    const response = await page.goto(`${origin}/en`, { waitUntil: 'networkidle' });
+    expect(response?.status()).toBe(200);
+    const meta = page.locator('head meta[name="csrf-token"]');
+    const count = await meta.count();
+    return {
+      count,
+      token: value ? await readSessionToken(origin, `${session}=${value}`) : null,
+      cookies: (await response!.headersArray()).filter((header) => header.name.toLowerCase() === 'set-cookie'),
+    };
+  }, [{ label: 'CSRF browser context', run: lease.close, timeoutMs: 6000 }]);
 }
 
 async function upload(origin: string, headers: Record<string, string>, method = 'PUT') {

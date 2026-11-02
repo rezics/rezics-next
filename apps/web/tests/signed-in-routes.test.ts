@@ -111,13 +111,20 @@ function ownResource<T extends object>(
 
 function browserForTest(): Promise<Browser> {
   if (teardownStarted) throw new Error('Signed-in-routes browser acquisition began after suite teardown');
-  browserLease ??= ownResource('Signed-in-routes browser', 'suite', () => chromium.launch(), (browser) => browser.close());
+  browserLease ??= ownResource(
+    'Signed-in-routes browser',
+    'suite',
+    () => chromium.launch(),
+    (browser) => browser.close(),
+  );
   return browserLease.value;
 }
 
 function resourceCleanupActions(scope?: ResourceScope, after?: Set<OwnedResource>) {
   return [...resources]
-    .filter((resource) => (scope === undefined || resource.scope === scope) && (after === undefined || !after.has(resource)))
+    .filter(
+      (resource) => (scope === undefined || resource.scope === scope) && (after === undefined || !after.has(resource)),
+    )
     .map((resource) => ({ label: resource.label, run: resource.close, timeoutMs: 6000 }));
 }
 
@@ -139,7 +146,12 @@ function lifetimeTest(name: string, operation: () => void | Promise<void>, timeo
 function pageForTest(): Promise<Page> {
   if (teardownStarted) throw new Error('Signed-in-routes page acquisition began after suite teardown');
   return browserForTest().then((browser) => {
-    const lease = ownResource('Signed-in-routes browser page', 'test', () => browser.newPage(), (page) => page.close());
+    const lease = ownResource(
+      'Signed-in-routes browser page',
+      'test',
+      () => browser.newPage(),
+      (page) => page.close(),
+    );
     return lease.value;
   });
 }
@@ -160,7 +172,7 @@ function site() {
       // Substitute only the session store boundary. Routing, queries and loaders remain real.
       await Bun.write(
         config,
-      `
+        `
       import { resolveWebViteConfig } from ${JSON.stringify(pathToFileURL(join(app, 'tests/support/vite-config.ts')).href)};
       export default async (env) => {
         const config = await resolveWebViteConfig(env, ${JSON.stringify(app)});
@@ -211,29 +223,23 @@ function site() {
       throw new Error(`dev server did not serve /en in time:\n${siteCustody.diagnostics()}`);
     } catch (error) {
       if (siteCustody) {
-        await withCleanup(
-          async () => {
-            throw error;
-          },
-          [{ label: 'Signed-in-routes Vite startup', run: () => siteCustody!.close(), timeoutMs: 7000 }],
-        );
+        await withCleanup(async () => {
+          throw error;
+        }, [{ label: 'Signed-in-routes Vite startup', run: () => siteCustody!.close(), timeoutMs: 7000 }]);
       } else if (directory) {
         const partialDirectory = directory;
-        await withCleanup(
-          async () => {
-            throw error;
-          },
-          [
-            {
-              label: 'Partial signed-in-routes Vite fixture directory',
-              run: async () => {
-                await rm(partialDirectory, { recursive: true, force: true });
-                if (directory === partialDirectory) directory = undefined;
-              },
-              timeoutMs: 5000,
+        await withCleanup(async () => {
+          throw error;
+        }, [
+          {
+            label: 'Partial signed-in-routes Vite fixture directory',
+            run: async () => {
+              await rm(partialDirectory, { recursive: true, force: true });
+              if (directory === partialDirectory) directory = undefined;
             },
-          ],
-        );
+            timeoutMs: 5000,
+          },
+        ]);
       }
       throw error;
     }
@@ -268,31 +274,34 @@ afterAll(async () => {
   );
 });
 
-lifetimeTest('every signed-in route guards beforeLoad and every private or offer head uses pageHead noindex, nofollow', async () => {
-  for (const [file] of routes) {
-    const source = await Bun.file(join(app, 'src/routes', file)).text();
-    if (file === 'library/progress.index.tsx' || file === 'library/progress.$id.tsx') {
-      expect(source, file).toMatch(
-        /beforeLoad:\s*async\s*\(args\)\s*=>\s*\{\s*await requireSignedIn\(args\);\s*await prepareExposure\(args\.context\.queryClient\);\s*\}/,
-      );
-    } else {
-      expect(source, file).toMatch(/beforeLoad:\s*requireSignedIn/);
+lifetimeTest(
+  'every signed-in route guards beforeLoad and every private or offer head uses pageHead noindex, nofollow',
+  async () => {
+    for (const [file] of routes) {
+      const source = await Bun.file(join(app, 'src/routes', file)).text();
+      if (file === 'library/progress.index.tsx' || file === 'library/progress.$id.tsx') {
+        expect(source, file).toMatch(
+          /beforeLoad:\s*async\s*\(args\)\s*=>\s*\{\s*await requireSignedIn\(args\);\s*await prepareExposure\(args\.context\.queryClient\);\s*\}/,
+        );
+      } else {
+        expect(source, file).toMatch(/beforeLoad:\s*requireSignedIn/);
+      }
+      expect(source, file).toMatch(/pageHead\(/);
+      expect(source, file).toContain("robots: 'noindex, nofollow'");
+      expect(source, file).not.toMatch(/session\s*===|session\s*!==|SignInPrompt/);
     }
-    expect(source, file).toMatch(/pageHead\(/);
-    expect(source, file).toContain("robots: 'noindex, nofollow'");
-    expect(source, file).not.toMatch(/session\s*===|session\s*!==|SignInPrompt/);
-  }
-  const offer = await Bun.file(join(app, 'src/routes/offers/$id.tsx')).text();
-  expect(offer).toMatch(/pageHead\(/);
-  expect(offer).toContain("robots: 'noindex, nofollow'");
-  expect(offer).not.toContain('requireSignedIn');
-  for (const file of components) {
-    const source = await Bun.file(join(app, 'src', file)).text();
-    expect(source, file).not.toMatch(
-      /SignInPrompt|(?:if\s*\([^\n]*|\{!?)(?:page|progress)\.signedIn|current\.reason === 'signed-out'/,
-    );
-  }
-});
+    const offer = await Bun.file(join(app, 'src/routes/offers/$id.tsx')).text();
+    expect(offer).toMatch(/pageHead\(/);
+    expect(offer).toContain("robots: 'noindex, nofollow'");
+    expect(offer).not.toContain('requireSignedIn');
+    for (const file of components) {
+      const source = await Bun.file(join(app, 'src', file)).text();
+      expect(source, file).not.toMatch(
+        /SignInPrompt|(?:if\s*\([^\n]*|\{!?)(?:page|progress)\.signedIn|current\.reason === 'signed-out'/,
+      );
+    }
+  },
+);
 
 lifetimeTest(
   'private pages, My Realms and the public offer produce noindex, nofollow metadata through their route heads',
