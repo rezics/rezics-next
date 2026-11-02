@@ -120,7 +120,9 @@ test('baseline validation refuses byte, aggregate, lexical-work, and template-de
         reason: 'verification run',
       };
     });
-    expect(() => validateGrowthBaseline(aggregateEntries)).toThrow(/cannot inspect .*aggregate source byte limit exceeded/);
+    expect(() => validateGrowthBaseline(aggregateEntries)).toThrow(
+      /cannot inspect .*aggregate source byte limit exceeded/,
+    );
 
     const nested = `\`${'${`'.repeat(140)}leaf\`${'}\`'.repeat(140)}`;
     const nestedFile = join(absolute, 'nested.test.ts');
@@ -137,7 +139,9 @@ test('baseline validation refuses byte, aggregate, lexical-work, and template-de
     const lexicalFile = `${relative}/lexical.test.ts`;
     expect(() =>
       validateGrowthBaseline([{ name: 'x'.repeat(128), file: lexicalFile, reason: 'verification run' }]),
-    ).toThrow(`Growth baseline entry ${'x'.repeat(128)} cannot inspect ${lexicalFile}: lexical inspection work limit exceeded`);
+    ).toThrow(
+      `Growth baseline entry ${'x'.repeat(128)} cannot inspect ${lexicalFile}: lexical inspection work limit exceeded`,
+    );
   });
 });
 

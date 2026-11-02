@@ -155,7 +155,8 @@ function readBoundedSource(path: string, admittedBytes: number): { source: strin
       length += read;
     }
     if (length > limit) {
-      const cause = admittedBytes < MAX_SOURCE_BYTES ? 'aggregate source byte limit exceeded' : 'source byte limit exceeded';
+      const cause =
+        admittedBytes < MAX_SOURCE_BYTES ? 'aggregate source byte limit exceeded' : 'source byte limit exceeded';
       throw new BaselineScanLimitError(cause);
     }
     return { source: bytes.toString('utf8', 0, length), bytes: length };
@@ -166,7 +167,10 @@ function readBoundedSource(path: string, admittedBytes: number): { source: strin
 
 type Literal = Readonly<{ start: number; end: number; kind: 'string' | 'template' }>;
 
-function maskNonCode(source: string, budget: ScanBudget): { code: string; literals: readonly Literal[]; literalAt: ReadonlyMap<number, Literal> } {
+function maskNonCode(
+  source: string,
+  budget: ScanBudget,
+): { code: string; literals: readonly Literal[]; literalAt: ReadonlyMap<number, Literal> } {
   charge(budget, source.length);
   const characters = source.split('');
   const literals: Literal[] = [];
@@ -269,7 +273,12 @@ function skipSpace(code: string, index: number, end: number, budget: ScanBudget)
   return index;
 }
 
-function splitArguments(code: string, open: number, close: number, budget: ScanBudget): { start: number; end: number }[] {
+function splitArguments(
+  code: string,
+  open: number,
+  close: number,
+  budget: ScanBudget,
+): { start: number; end: number }[] {
   charge(budget, close - open);
   const arguments_: { start: number; end: number }[] = [];
   const stack: string[] = [];
@@ -495,10 +504,7 @@ function containsCheckName(
     const literal = literalAt.get(value.start);
     if (!literal || literal.end > value.end) continue;
     if (literal.kind === 'string' && literalText(source, literal, budget) === name) return true;
-    if (
-      literal.kind === 'template' &&
-      templateMatches(source, literal, name, code, literalAt, match.index!, budget)
-    )
+    if (literal.kind === 'template' && templateMatches(source, literal, name, code, literalAt, match.index!, budget))
       return true;
   }
   return false;
@@ -527,15 +533,26 @@ export function validateGrowthBaseline(entries: readonly GrowthBaselineEntry[] =
       throw new TypeError(`Growth baseline entry name exceeds ${MAX_BASELINE_NAME_LENGTH} characters`);
     if (!entry.name.trim()) throw new TypeError('Growth baseline name must not be empty');
     if (entry.reason.length > MAX_BASELINE_REASON_LENGTH)
-      throw new TypeError(`Growth baseline entry ${entry.name} reason exceeds ${MAX_BASELINE_REASON_LENGTH} characters`);
+      throw new TypeError(
+        `Growth baseline entry ${entry.name} reason exceeds ${MAX_BASELINE_REASON_LENGTH} characters`,
+      );
     if (!entry.reason.trim()) throw new TypeError(`Growth baseline entry ${entry.name} must have a reason`);
     if (entry.file.length > MAX_BASELINE_FILE_LENGTH)
-      throw new TypeError(`Growth baseline entry ${entry.name} file path exceeds ${MAX_BASELINE_FILE_LENGTH} characters`);
+      throw new TypeError(
+        `Growth baseline entry ${entry.name} file path exceeds ${MAX_BASELINE_FILE_LENGTH} characters`,
+      );
     if (!/^services\/(?:kernel|auth)\/test\/.+\.test\.ts$/.test(entry.file) || entry.file.split('/').includes('..'))
       throw new TypeError(`Growth baseline entry ${entry.name} must name a kernel or auth test file`);
     const group = files.get(entry.file);
     if (group) group.entries.push(entry);
-    else files.set(entry.file, { file: entry.file, firstEntry: entry, entries: [entry], path: resolve(repositoryRoot, entry.file), size: 0 });
+    else
+      files.set(entry.file, {
+        file: entry.file,
+        firstEntry: entry,
+        entries: [entry],
+        path: resolve(repositoryRoot, entry.file),
+        size: 0,
+      });
   }
 
   let admittedBytes = 0;
@@ -592,8 +609,7 @@ export function validateGrowthBaseline(entries: readonly GrowthBaselineEntry[] =
         throw new TypeError(`Growth baseline entry ${entry.name} cannot inspect ${entry.file}: ${error.message}`);
       throw error;
     }
-    if (!present)
-      throw new TypeError(`Growth baseline entry ${entry.name} is not present in ${entry.file}`);
+    if (!present) throw new TypeError(`Growth baseline entry ${entry.name} is not present in ${entry.file}`);
   }
 }
 
