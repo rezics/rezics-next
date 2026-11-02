@@ -48,25 +48,34 @@ export function ReportsBulkControls({
     if (snapshot.phase === 'complete') results.current?.focus();
   }, [snapshot.phase]);
   return (
-    <ContentItemFrame as="article" aria-labelledby={`${id}-title`} className="space-y-4 p-4 sm:p-6">
+    <ContentItemFrame
+      as="article"
+      aria-labelledby={`${id}-title`}
+      className="min-w-0 max-w-full space-y-4 p-4 text-start leading-relaxed [overflow-wrap:anywhere] sm:p-6"
+    >
       <ContentItemHeading id={`${id}-title`} level={2} className="text-lg font-semibold">
         {m.moderation_bulk_title()}
       </ContentItemHeading>
-      <div className="flex flex-col gap-3">
+      <div className="flex min-w-0 flex-col gap-3">
         <p className="text-sm text-muted-foreground">{m.moderation_bulk_bound()}</p>
         {snapshot.phase === 'selecting' ? (
           <>
             <p aria-live="polite" className="text-sm">
               {m.moderation_bulk_selected({ count: snapshot.selected.length })}
             </p>
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" className="min-h-11" onClick={controller.selectLoaded}>
+            <div className="flex min-w-0 flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring"
+                onClick={controller.selectLoaded}
+              >
                 {m.moderation_bulk_select_loaded()}
               </Button>
               <Button
                 type="button"
                 variant="outline"
-                className="min-h-11"
+                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring"
                 disabled={!snapshot.selected.length}
                 onClick={controller.clear}
               >
@@ -75,7 +84,7 @@ export function ReportsBulkControls({
               <Button
                 ref={trigger}
                 type="button"
-                className="min-h-11"
+                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring"
                 disabled={!snapshot.selected.length}
                 onClick={controller.review}
               >
@@ -89,19 +98,23 @@ export function ReportsBulkControls({
             tabIndex={-1}
             role="group"
             aria-labelledby={`${id}-review`}
-            className="flex flex-col gap-3 rounded-lg focus-visible:outline focus-visible:outline-ring"
+            className="flex min-w-0 flex-col gap-3 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring"
           >
             <ContentItemHeading id={`${id}-review`} level={3} className="text-base font-medium">
               {m.moderation_bulk_confirmation({ count: snapshot.selected.length })}
             </ContentItemHeading>
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" className="min-h-11" onClick={() => void controller.confirm(onAction, onRefresh)}>
+            <div className="flex min-w-0 flex-wrap gap-2">
+              <Button
+                type="button"
+                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring"
+                onClick={() => void controller.confirm(onAction, onRefresh)}
+              >
                 {m.moderation_bulk_confirm({ count: snapshot.selected.length })}
               </Button>
               <Button
                 type="button"
                 variant="outline"
-                className="min-h-11"
+                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring"
                 onClick={() => {
                   controller.cancel();
                   queueMicrotask(() => trigger.current?.focus());
@@ -116,22 +129,22 @@ export function ReportsBulkControls({
             ref={results}
             tabIndex={-1}
             aria-labelledby={`${id}-results`}
-            className="flex flex-col gap-3 rounded-lg focus-visible:outline focus-visible:outline-ring"
+            className="flex min-w-0 flex-col gap-3 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring"
           >
             <ContentItemHeading id={`${id}-results`} level={3} role="status" className="text-base font-medium">
               {snapshot.phase === 'running' ? m.moderation_bulk_running() : m.moderation_bulk_results()}
             </ContentItemHeading>
-            <ol aria-live="polite" className="flex flex-col gap-2">
+            <ol aria-live="polite" className="flex min-w-0 flex-col gap-3">
               {snapshot.items.map((item) => (
-                <li key={item.reportId} className="flex flex-wrap items-center gap-2 text-sm">
-                  <span>
+                <li key={item.reportId} className="flex min-w-0 flex-wrap items-start gap-2 text-sm leading-relaxed">
+                  <span className="min-w-0 max-w-full whitespace-pre-wrap">
                     {m.moderation_bulk_item({ number: item.position })} {outcome(item.state)}
                   </span>
                   {item.state === 'uncertain' ? (
                     <Button
                       type="button"
                       variant="outline"
-                      className="min-h-11"
+                      className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring"
                       disabled={snapshot.phase === 'running'}
                       onClick={() => void controller.retry(item.reportId, onAction, onRefresh)}
                     >
@@ -150,7 +163,7 @@ export function ReportsBulkControls({
               <Button
                 type="button"
                 variant="outline"
-                className="min-h-11 self-start"
+                className="h-auto min-h-11 min-w-11 max-w-full self-start whitespace-normal py-2 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring"
                 onClick={() => void controller.refresh(onRefresh)}
               >
                 {m.moderation_bulk_refresh()}
@@ -167,13 +180,18 @@ export function ReportsBulkControls({
 export function ReportsBulkRefreshFailure({ items }: { items: readonly import('./reports-bulk-action').BulkItem[] }) {
   const id = useId();
   return (
-    <ContentItemFrame as="article" role="alert" aria-labelledby={`${id}-title`} className="space-y-3 p-4 sm:p-6">
+    <ContentItemFrame
+      as="article"
+      role="alert"
+      aria-labelledby={`${id}-title`}
+      className="min-w-0 max-w-full space-y-3 p-4 text-start leading-relaxed [overflow-wrap:anywhere] sm:p-6"
+    >
       <ContentItemHeading id={`${id}-title`} level={2} className="text-base font-semibold">
         {m.moderation_bulk_stale()}
       </ContentItemHeading>
-      <ol className="flex flex-col gap-2 text-sm">
+      <ol className="flex min-w-0 flex-col gap-3 text-sm leading-relaxed">
         {items.map((item) => (
-          <li key={item.reportId}>
+          <li key={item.reportId} className="min-w-0 whitespace-pre-wrap">
             {m.moderation_bulk_item({ number: item.position })} {outcome(item.state)}
           </li>
         ))}
