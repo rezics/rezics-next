@@ -38,7 +38,8 @@ function deferred<T>() {
 function clickHandler(element: Element): ((event: { preventDefault(): void }) => void) | undefined {
   const key = Object.keys(element).find((name) => name.startsWith('__reactProps$'));
   if (!key) return;
-  return (element as unknown as Record<string, { onClick?: (event: { preventDefault(): void }) => void }>)[key]?.onClick;
+  return (element as unknown as Record<string, { onClick?: (event: { preventDefault(): void }) => void }>)[key]
+    ?.onClick;
 }
 
 function invoke(element: Element) {
