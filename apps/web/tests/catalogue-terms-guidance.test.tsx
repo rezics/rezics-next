@@ -103,16 +103,24 @@ test('Multilingual terms show actionable field-specific corrections without chan
       );
       const control = (part: string) => {
         const field = part.replace(/^terms-/, '').replace(/-mode$/, '');
-        const label = field === 'language' ? m.catalogue_create_language({}, options)
-          : field === 'new-language' ? m.catalogue_terms_new_language({}, options)
-          : field === 'labels' ? m.catalogue_create_label({}, options)
-          : field === 'descriptions' ? m.catalogue_create_description({}, options)
-          : m.catalogue_create_aliases({}, options);
+        const label =
+          field === 'language'
+            ? m.catalogue_create_language({}, options)
+            : field === 'new-language'
+              ? m.catalogue_terms_new_language({}, options)
+              : field === 'labels'
+                ? m.catalogue_create_label({}, options)
+                : field === 'descriptions'
+                  ? m.catalogue_create_description({}, options)
+                  : m.catalogue_create_aliases({}, options);
         const scope = ['labels', 'descriptions', 'aliases'].includes(field)
-          ? [...host.querySelectorAll('fieldset')].find((fieldset) => fieldset.querySelector('legend')?.textContent === label)!
+          ? [...host.querySelectorAll('fieldset')].find(
+              (fieldset) => fieldset.querySelector('legend')?.textContent === label,
+            )!
           : host;
-        const associated = [...scope.querySelectorAll('label')].find((element) =>
-          element.textContent === (part.endsWith('-mode') ? m.catalogue_terms_action({}, options) : label));
+        const associated = [...scope.querySelectorAll('label')].find(
+          (element) => element.textContent === (part.endsWith('-mode') ? m.catalogue_terms_action({}, options) : label),
+        );
         return window.document.getElementById(associated?.htmlFor ?? '') as unknown as HTMLInputElement;
       };
       const button = (text: string) =>

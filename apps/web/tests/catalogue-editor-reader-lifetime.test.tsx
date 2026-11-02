@@ -361,10 +361,13 @@ test('catalogue editors retain only their original live reader, exact address an
     });
   };
   const termsControl = (part: 'labels' | 'labels-mode') => {
-    const fieldset = [...ui.host.querySelectorAll('fieldset')].find((element) =>
-      element.querySelector('legend')?.textContent === m.catalogue_create_label());
-    const label = [...(fieldset?.querySelectorAll('label') ?? [])].find((element) =>
-      element.textContent === (part === 'labels-mode' ? m.catalogue_terms_action() : m.catalogue_create_label()));
+    const fieldset = [...ui.host.querySelectorAll('fieldset')].find(
+      (element) => element.querySelector('legend')?.textContent === m.catalogue_create_label(),
+    );
+    const label = [...(fieldset?.querySelectorAll('label') ?? [])].find(
+      (element) =>
+        element.textContent === (part === 'labels-mode' ? m.catalogue_terms_action() : m.catalogue_create_label()),
+    );
     return ui.window.document.getElementById(label?.htmlFor ?? '');
   };
   const termsSelector = (part: 'labels' | 'labels-mode') => `[id="${termsControl(part)!.id}"]`;

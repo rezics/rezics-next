@@ -50,16 +50,24 @@ test('A contributor retries only the failed reading after a confirmed save', asy
   };
   const termsControl = (part: string) => {
     const field = part.replace(/^terms-/, '').replace(/-mode$/, '');
-    const label = field === 'language' ? m.catalogue_create_language()
-      : field === 'new-language' ? m.catalogue_terms_new_language()
-      : field === 'labels' ? m.catalogue_create_label()
-      : field === 'descriptions' ? m.catalogue_create_description()
-      : m.catalogue_create_aliases();
+    const label =
+      field === 'language'
+        ? m.catalogue_create_language()
+        : field === 'new-language'
+          ? m.catalogue_terms_new_language()
+          : field === 'labels'
+            ? m.catalogue_create_label()
+            : field === 'descriptions'
+              ? m.catalogue_create_description()
+              : m.catalogue_create_aliases();
     const scope = ['labels', 'descriptions', 'aliases'].includes(field)
-      ? [...host.querySelectorAll('fieldset')].find((fieldset) => fieldset.querySelector('legend')?.textContent === label)!
+      ? [...host.querySelectorAll('fieldset')].find(
+          (fieldset) => fieldset.querySelector('legend')?.textContent === label,
+        )!
       : host;
-    const associated = [...scope.querySelectorAll('label')].find((element) =>
-      element.textContent === (part.endsWith('-mode') ? m.catalogue_terms_action() : label))!;
+    const associated = [...scope.querySelectorAll('label')].find(
+      (element) => element.textContent === (part.endsWith('-mode') ? m.catalogue_terms_action() : label),
+    )!;
     return window.document.getElementById(associated.htmlFor)!;
   };
   const input = async (id: string, value: string) => {
