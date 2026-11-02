@@ -10,15 +10,18 @@ function value(input: unknown): string | undefined {
 }
 export function progressIndexAddress(input: unknown): ProgressIndexAddress {
   const source = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
-  return { subjectId: value(source.subjectId), cursor: value(source.cursor) };
+  return {
+    ...(source.subjectId === undefined ? {} : { subjectId: value(source.subjectId)! }),
+    ...(source.cursor === undefined ? {} : { cursor: value(source.cursor)! }),
+  };
 }
 export function progressSessionAddress(input: unknown): ProgressSessionAddress {
   const source = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
   return {
     id: value(source.id) ?? '',
-    changes: value(source.changes),
-    units: value(source.units),
-    logs: value(source.logs),
+    ...(source.changes === undefined ? {} : { changes: value(source.changes)! }),
+    ...(source.units === undefined ? {} : { units: value(source.units)! }),
+    ...(source.logs === undefined ? {} : { logs: value(source.logs)! }),
   };
 }
 export function progressAddressIssue(

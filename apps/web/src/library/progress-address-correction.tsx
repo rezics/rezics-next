@@ -16,7 +16,7 @@ export function ProgressAddressCorrection({
   pending = false,
 }: {
   address: ProgressIndexAddress | ProgressSessionAddress;
-  issue?: ProgressAddressField;
+  issue?: ProgressAddressField | undefined;
   pending?: boolean;
 }) {
   const router = useRouter();
@@ -74,7 +74,7 @@ function AddressField({
   invalid: boolean;
   pending: boolean;
   onApply: (value: string) => void;
-  onReset?: () => void;
+  onReset?: (() => void) | undefined;
 }) {
   const id = useId();
   const [draft, setDraft] = useState(value.startsWith('\0') ? value.slice(1) : value);
