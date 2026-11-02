@@ -121,7 +121,7 @@ export function publicationResponse(status: number, body: unknown, input: Public
     !isRecord(body.collection) ||
     !isRecord(body.publication) ||
     body.collection.id !== input.collectionId ||
-    !revision(body.collection.revision) ||
+    body.collection.revision !== input.revision + 1 ||
     body.publication.state !== 'complete' ||
     !identifier(body.publication.generation) ||
     body.publication.itemCount !== input.subjectIds.length

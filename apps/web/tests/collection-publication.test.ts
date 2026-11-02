@@ -196,6 +196,10 @@ test('only the exact native complete response establishes publication; pending, 
     { ...complete, publication: { ...complete.publication, state: 'pending' } },
     { ...complete, publication: { ...complete.publication, itemCount: 1 } },
     { ...complete, collection: { ...complete.collection, id: 'other-destination' } },
+    ...[input.revision, input.revision + 2, '8'].map((revision) => ({
+      ...complete,
+      collection: { ...complete.collection, revision },
+    })),
     { ...complete, publication: { ...complete.publication, generation: '' } },
   ])
     expect(publicationResponse(200, body, input)).toEqual({ ok: false, reason: 'unknown' });

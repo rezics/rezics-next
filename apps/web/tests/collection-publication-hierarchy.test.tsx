@@ -211,6 +211,7 @@ test('Unknown original-intent recovery remains local and retries exact revision 
     const { m } = h;
     await h.click(h.selection()[0]!);
     await h.click(h.confirmation());
+    const review = h.host.querySelector('[data-publication-review]')!.textContent;
     await h.click(h.button(m.library_publication_publish()));
     const original = structuredClone(h.calls[0]!.input);
     await h.settle(0, { ok: false, reason: 'unknown' });
@@ -220,6 +221,7 @@ test('Unknown original-intent recovery remains local and retries exact revision 
     expect(h.output()).toBeNull();
     await h.render({ ...h.page, source: { state: 'unavailable' } });
     expect(h.host.textContent).toContain(m.library_publication_unknown());
+    expect(h.host.querySelector('[data-publication-review]')!.textContent).toBe(review);
     await h.click(h.button(m.library_collection_reload()));
     expect(h.reloads()).toBe(1);
     await h.render({
@@ -236,17 +238,27 @@ test('Unknown original-intent recovery remains local and retries exact revision 
     expect(h.calls[1]!.input).toEqual(original);
     expect(h.decision().textContent).toContain(m.library_publication_unknown());
     expect(h.decision().textContent).toContain(m.library_publication_pending());
-    await h.settle(1, { ok: false, reason: 'denied' });
-    expect(h.decision().querySelector('[role="alert"]')!.textContent).toBe(m.library_publication_denied());
-    expect(h.button(m.library_publication_publish()).disabled).toBe(true);
-    expect(h.confirmation().disabled).toBe(true);
-    expect(h.output()).toBeNull();
-    await h.click(h.button(m.library_publication_publish()));
-    expect(h.calls).toHaveLength(2);
-    await h.click(h.button(m.library_collection_reload()));
-    expect(h.confirmation().disabled).toBe(false);
+    for (const reason of ['denied', 'stale', 'unavailable', 'closed'] as const) {
+      await h.settle(h.calls.length - 1, { ok: false, reason });
+      expect(h.decision().querySelector('[role="alert"]')!.textContent).toBe(m.library_publication_unknown());
+      expect(h.confirmation().disabled).toBe(true);
+      expect(h.output()).toBeNull();
+      expect(h.host.querySelector('[data-publication-review]')!.textContent).toBe(review);
+      await h.render({ ...h.page, source: { state: 'unavailable' } });
+      await h.click(h.button(m.library_collection_reload()));
+      await h.render({ ...h.page, source: { ...h.source, revision: 20, page: { ...h.source.page, members: [] } } });
+      expect(h.confirmation().checked).toBe(true);
+      await h.click(h.button(m.library_publication_retry()));
+      expect(h.calls.at(-1)!.input).toEqual(original);
+    }
+    await h.settle(h.calls.length - 1, {
+      ok: true,
+      collection: { id: original.collectionId, revision: original.revision + 1 },
+      publication: { generation: 'recovered', state: 'complete', itemCount: original.subjectIds.length },
+    });
     expect(h.confirmation().checked).toBe(false);
-    expect(h.decision().textContent).toContain(m.library_publication_confirm_empty());
+    expect(h.host.textContent).not.toContain(m.library_publication_unknown());
+    expect(h.output()).not.toBeNull();
   } finally {
     await h.close();
   }

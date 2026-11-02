@@ -11,6 +11,11 @@ import { CollectionMemberDetails } from './collection-member-row';
 import { SubjectCover, rowRatio } from './subject-row';
 import { displayLibraryTitle } from './title';
 import {
+  CollectionPublicationReview,
+  publicationReview,
+  type PublicationReview,
+} from './collection-publication-review';
+import {
   collectionPublicationQuery,
   publicationCandidates,
   publishSelectedCollection,
@@ -69,7 +74,7 @@ type IntentState = {
   sourceKey: string | null;
   selected: string[];
   confirmed: boolean;
-  attempt: { input: PublicationInput; sourceKey: string | null } | null;
+  attempt: { input: PublicationInput; sourceKey: string | null; review: PublicationReview; uncertain: boolean } | null;
   result: PublicationResult | null;
   complete: PublicationComplete | null;
   busy: boolean;
@@ -87,7 +92,14 @@ function PublicationIntentView({
   const source = page.source;
   const ready = source.state === 'ready';
   const candidates = ready ? publicationCandidates(source.page) : [];
-  const sourceKey = ready ? JSON.stringify([source.revision, candidates.map((member) => member.subject!.id)]) : null;
+  const sourceKey = ready
+    ? JSON.stringify([
+        source.revision,
+        source.page.title,
+        source.page.description,
+        candidates.map((member) => member.subject!.id),
+      ])
+    : null;
   const [state, setState] = useState<IntentState>({
     sourceKey,
     selected: [],
@@ -122,14 +134,16 @@ function PublicationIntentView({
   }, [sourceKey]);
   const { selected, confirmed, result, complete, busy } = state;
   const ratio = rowRatio(candidates.map((member) => member.subject));
-  const unknown = result?.ok === false && result.reason === 'unknown';
+  // A refusal on a later retry proves nothing about the original dispatch's commit.
+  const unknown = state.attempt?.uncertain === true;
   const refused = result?.ok === false && !unknown;
   const locked = busy || unknown || refused;
   const base = `/${getLocale()}/collections/${encodeURIComponent(page.address.id)}`;
+  const review = state.attempt?.review ?? (ready ? publicationReview(source.page, source.revision, selected) : null);
 
   async function publish() {
     const origin = current.current;
-    const uncertain = origin.result?.ok === false && origin.result.reason === 'unknown';
+    const uncertain = origin.attempt?.uncertain === true;
     if (
       !active.current ||
       !isCurrent() ||
@@ -153,7 +167,12 @@ function PublicationIntentView({
     update((previous) => ({
       ...previous,
       busy: true,
-      attempt: previous.attempt ?? { input, sourceKey: origin.sourceKey },
+      attempt: previous.attempt ?? {
+        input,
+        sourceKey: origin.sourceKey,
+        review: publicationReview(source.page, input.revision, origin.selected),
+        uncertain: false,
+      },
     }));
     let outcome: PublicationResult;
     try {
@@ -168,6 +187,10 @@ function PublicationIntentView({
         ...previous,
         result: outcome,
         busy: false,
+        attempt: previous.attempt && {
+          ...previous.attempt,
+          uncertain: previous.attempt.uncertain || (!outcome.ok && outcome.reason === 'unknown'),
+        },
         ...(outcome.ok
           ? {
               complete: outcome,
@@ -185,14 +208,14 @@ function PublicationIntentView({
     const previous = current.current;
     if (!active.current || !isCurrent() || previous.busy) return;
     // Recover an unavailable read without turning an uncertain write into a fresh selection.
-    if (!(previous.result?.ok === false && previous.result.reason === 'unknown'))
+    if (!previous.attempt?.uncertain)
       update((value) => ({ ...value, selected: [], confirmed: false, attempt: null, result: null }));
     onReload?.();
   }
 
   const feedback = (
     <>
-      {result?.ok === false ? <p role="alert">{resultText(result.reason)}</p> : null}
+      {result?.ok === false ? <p role="alert">{resultText(unknown ? 'unknown' : result.reason)}</p> : null}
       {busy ? <p role="status">{m.library_publication_pending()}</p> : null}
     </>
   );
@@ -218,6 +241,7 @@ function PublicationIntentView({
                   : m.library_publication_unavailable()}
           </p>
           <p className="max-w-prose text-sm text-muted-foreground">{m.library_publication_previous()}</p>
+          {unknown && review ? <CollectionPublicationReview review={review} /> : null}
           {feedback}
           <Button type="button" disabled>
             {m.library_publication_publish()}
@@ -299,6 +323,7 @@ function PublicationIntentView({
               <p id="publication-replacement" className="max-w-prose text-sm">
                 {m.library_publication_previous()}
               </p>
+              {review ? <CollectionPublicationReview review={review} /> : null}
               <label className="flex min-h-11 items-start gap-3 py-2">
                 <input
                   type="checkbox"

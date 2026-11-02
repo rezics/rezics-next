@@ -168,6 +168,18 @@ All curated editing preserves occurrence IDs, notes, added times and duplicates,
 parent CAS, replay and current grants. Consume the sole actual member lifecycle implementation once it lands;
 its selected parent revision/deletion headers and exact Undo are not evidence of current delivery.
 
+### Selected-publication recovery
+
+After an uncertain selected-publication response, retain the exact request, source revision and review selection
+until verified completion; a refused retry or source reload cannot authorize a replacement intent.
+The review retains the dispatched title, description and unique canonical subject labels, in the native
+selected-set producer's lexical ID order. It is private review context, never evidence of the active public
+generation. Curated occurrences and notes require their own snapshot integration; they cannot use selected-set
+publication, whose contract deliberately excludes them. A verified completion must return the requested
+Collection with exactly the source revision plus one, COMPLETE generation and exact selected count.
+Review is local to the current owner/address lifetime. It performs no additional native reads or writes and
+retains at most 100 selected summaries from one loaded page, independently of account/history growth.
+
 ### Batch removal and cross-Collection move
 
 `memberIds` is a distinct array of 1–100 occurrence IDs for both new batch commands. Batch remove uses current
