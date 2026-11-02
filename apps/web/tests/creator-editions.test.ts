@@ -1,5 +1,11 @@
 import { expect, mock, test } from 'bun:test';
-import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from '@tanstack/react-router';
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  RouterProvider,
+} from '@tanstack/react-router';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { SessionEnv } from '../src/session/client';
@@ -108,12 +114,20 @@ test('route transport errors retain the current continuation for retry alongside
   const { Route } = await import('../src/routes/editions/index');
   const root = createRootRoute();
   const route = createRoute({
-    getParentRoute: () => root, path: '/editions/', validateSearch: creatorEditionsSearch,
-    loader: () => { throw new Error('Transport failed'); }, errorComponent: Route.options.errorComponent,
+    getParentRoute: () => root,
+    path: '/editions/',
+    validateSearch: creatorEditionsSearch,
+    loader: () => {
+      throw new Error('Transport failed');
+    },
+    errorComponent: Route.options.errorComponent,
   });
-  const router = createRouter({ routeTree: root.addChildren([route]), history: createMemoryHistory({
-    initialEntries: ['/editions/?cursor=opaque%2F%2B%3D'],
-  }) });
+  const router = createRouter({
+    routeTree: root.addChildren([route]),
+    history: createMemoryHistory({
+      initialEntries: ['/editions/?cursor=opaque%2F%2B%3D'],
+    }),
+  });
   await router.load();
   const html = renderToStaticMarkup(createElement(RouterProvider, { router }));
   expect(html).toContain(`href="${creatorEditionsHref('opaque/+=')}"`);
