@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -42,6 +42,28 @@ function hasAuthoredFactContent(statement: StatementInput): boolean {
   );
 }
 
+/** A property leaving the release removes admission, while its private work keeps its keyed holder. */
+export function CharacterClassifications({
+  properties,
+  ...props
+}: Omit<Parameters<typeof CharacterClassification>[0], 'property' | 'onHold'> & {
+  properties: string[];
+}) {
+  const [held, setHeld] = useState<string[]>([]);
+  const onHold = useCallback((property: string, holding: boolean) => {
+    setHeld((previous) =>
+      previous.includes(property) === holding
+        ? previous
+        : holding
+          ? [...previous, property]
+          : previous.filter((item) => item !== property),
+    );
+  }, []);
+  return [...new Set([...properties, ...held])].map((property) => (
+    <CharacterClassification key={property} {...props} property={property} onHold={onHold} />
+  ));
+}
+
 /** Classification uses field-wide native review, with the same sealed per-field command and reference controls. */
 export function CharacterClassification({
   property,
@@ -50,7 +72,9 @@ export function CharacterClassification({
   search,
   transport,
   review,
+  onHold,
 }: {
+  onHold?: (property: string, holding: boolean) => void;
   property: string;
   read: FactsCurrent;
   locale: string;
@@ -62,7 +86,18 @@ export function CharacterClassification({
   const visible = useCurrentReadingVisible();
   const selectedValueId = useId();
   const o = { locale: locale as never };
-  const definition = read.release.properties[property]!;
+  const definition = read.release.properties[property];
+  const admitted =
+    !!definition &&
+    definition.datatype === 'wikibase-item' &&
+    definition.relation?.group === 'classification' &&
+    !!read.release.types[read.public.subject.type]?.properties.includes(property);
+  // A successful new release fences old controls even when the outer reading stays visible.
+  const observation = useMemo(() => ({}), [read.release, admitted]);
+  const latestObservation = useRef(observation);
+  latestObservation.current = observation;
+  const rememberedLabel = useRef<ReturnType<typeof pageText> | undefined>(undefined);
+  if (admitted) rememberedLabel.current = pageText(definition.labels, locale);
   const selected = read.public.subject.statements[property] ?? [];
   const [source, setSource] = useState(selected.length === 1 ? selected[0]!.id : '');
   const [draft, setDraft] = useState<FactDraft>();
@@ -72,19 +107,18 @@ export function CharacterClassification({
   const [confirmation, setConfirmation] = useState<{ draft: FactDraft; active: () => boolean }>();
   const running = useRef(false);
   const retired = useRef(false);
-  const usable = () => !retired.current && active();
+  const usable = () => !retired.current && active() && latestObservation.current === observation;
   const wasVisible = useRef(visible);
-  if (wasVisible.current !== visible) {
+  const previousObservation = useRef(observation);
+  if (wasVisible.current !== visible || previousObservation.current !== observation) {
     wasVisible.current = visible;
+    previousObservation.current = observation;
     running.current = false;
     setBusy(false);
-    if (!visible) {
-      setConfirmation(undefined);
-    }
-    if (!visible)
-      setDraft((previous) =>
-        previous?.command && !previous.result ? { ...previous, result: { ok: false, reason: 'uncertain' } } : previous,
-      );
+    setConfirmation(undefined);
+    setDraft((previous) =>
+      previous?.command && !previous.result ? { ...previous, result: { ok: false, reason: 'uncertain' } } : previous,
+    );
   }
   const chooser = useRef<HTMLDivElement>(null);
   const discardTrigger = useRef<HTMLButtonElement>(null);
@@ -106,6 +140,8 @@ export function CharacterClassification({
     !!value &&
     !value.result?.ok &&
     ((factChanged(value) && (value.baseline !== null || hasAuthoredFactContent(value.statement))) || unresolved(value));
+  const holding = !!draft && (!!draft.command || needsDeparture(draft));
+  useEffect(() => onHold?.(property, holding), [onHold, property, holding]);
   useAuthoringDeparture(
     () => !retired.current && needsDeparture(draft),
     () => !retired.current && unresolved(draft),
@@ -131,7 +167,8 @@ export function CharacterClassification({
     active() &&
     !busy &&
     !running.current &&
-    !factLocked(draft);
+    !factLocked(draft) &&
+    (admitted || !draft.command);
   const discardTitle = m.candidate_confirm_title({ action: m.curation_view_discard({}, o) }, o);
   useLayoutEffect(() => {
     if (confirming) cancelConfirmation.current?.focus();
@@ -145,10 +182,12 @@ export function CharacterClassification({
     () => review(property, result?.ok ? result.session : undefined),
     [review, property, result],
   );
-  const label = pageText(definition.labels, locale);
+  const label = admitted
+    ? pageText(definition.labels, locale)
+    : (rememberedLabel.current ?? { text: property, lang: undefined });
   const current = selected.find((statement) => statement.id === draft?.source);
   const stage = (id: string | null) => {
-    if (!usable()) return;
+    if (!usable() || !admitted) return;
     if (running.current || (draft && factLocked(draft))) return;
     const source = selected.find((statement) => statement.id === id);
     if (id && !source) return;
@@ -180,6 +219,7 @@ export function CharacterClassification({
       latest.busy ||
       running.current ||
       factLocked(original) ||
+      (!admitted && !!original.command) ||
       (pending &&
         (latest.confirmation !== pending || pending.draft !== original || !pending.active() || !latest.active()))
     )
@@ -192,7 +232,7 @@ export function CharacterClassification({
     setSource(selected.length === 1 ? selected[0]!.id : '');
   };
   const discard = () => {
-    if (!usable() || !draft || running.current || busy || factLocked(draft)) return;
+    if (!usable() || !draft || running.current || busy || factLocked(draft) || (!admitted && draft.command)) return;
     if (factChanged(draft) && (draft.baseline !== null || hasAuthoredFactContent(draft.statement))) {
       setConfirmation({ draft, active: usable });
       return;
@@ -213,14 +253,14 @@ export function CharacterClassification({
   };
   const confirmDiscard = (pending: { draft: FactDraft; active: () => boolean }) => closeDraft(pending.draft, pending);
   const change = (statement: StatementInput) => {
-    if (!usable()) return;
+    if (!usable() || !admitted) return;
     if (!draft || running.current || factLocked(draft)) return;
     setDraft({ ...draft, statement, command: undefined, result: undefined });
   };
   async function submit() {
     if (!usable()) return;
-    if (!draft || running.current) return;
-    const [sealed] = sealFacts(read.public.subject.id, read.release, [draft]);
+    if (!draft || running.current || (!admitted && !draft.command)) return;
+    const sealed = draft.command ? draft : sealFacts(read.public.subject.id, read.release, [draft])[0];
     if (!sealed) return;
     setDraft(sealed);
     running.current = true;
@@ -237,7 +277,7 @@ export function CharacterClassification({
   }
   const value = draft?.statement.value;
   const target = value?.type === 'value' && typeof value.content === 'string' ? value.content : '';
-  if (!visible) return null;
+  if (!visible || (!admitted && !holding)) return null;
   return (
     <section className="min-w-0">
       <ContentItemFrame as="div" className="min-w-0 space-y-4 rounded-xl bg-card p-4 [overflow-wrap:anywhere] sm:p-6">
@@ -249,7 +289,7 @@ export function CharacterClassification({
         >
           {label.text}
         </ContentItemHeading>
-        {!draft ? (
+        {!draft && admitted ? (
           <div ref={chooser} className="flex flex-wrap items-end gap-3">
             {!!selected.length && (
               <Field className="min-w-0 flex-1 basis-full sm:basis-56">
@@ -282,16 +322,21 @@ export function CharacterClassification({
             >
               {m.facts_edit_field({}, o)}
             </Button>
-            {definition.multivalued && !!selected.length && (
+            {definition?.multivalued && !!selected.length && (
               <Button className={actionClassName} variant="outline" onClick={() => stage(null)}>
                 {m.facts_add_value({}, o)}
               </Button>
             )}
           </div>
-        ) : (
+        ) : draft ? (
           <>
             <p className="min-w-0 text-sm leading-relaxed text-muted-foreground">{m.facts_private({}, o)}</p>
-            {!result?.ok && (
+            {!admitted && (
+              <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words text-sm">
+                {JSON.stringify(draft.statement, null, 2)}
+              </pre>
+            )}
+            {admitted && !result?.ok && (
               <fieldset disabled={busy || factLocked(draft)} className="min-w-0 space-y-4">
                 <EntityPicker
                   label={label.text}
@@ -317,7 +362,7 @@ export function CharacterClassification({
                   search={async (text, signal) =>
                     (await search(text, signal)).filter((entry) =>
                       entry.types.some((type) =>
-                        definition.targets?.some(
+                        definition?.targets?.some(
                           (base) => type === base || read.release.types[type]?.bases.includes(base),
                         ),
                       ),
@@ -372,7 +417,7 @@ export function CharacterClassification({
               <div className="flex flex-wrap gap-3">
                 <Button
                   className={actionClassName}
-                  disabled={busy || !factChanged(draft)}
+                  disabled={busy || !factChanged(draft) || (!admitted && !draft.command)}
                   onClick={() => void submit()}
                 >
                   {draft.command ? m.correction_retry({}, o) : m.correction_submit({}, o)}
@@ -404,7 +449,7 @@ export function CharacterClassification({
                         className={actionClassName}
                         type="button"
                         variant="destructive"
-                        disabled={busy || running.current || factLocked(draft)}
+                        disabled={busy || running.current || factLocked(draft) || (!admitted && !!draft.command)}
                         onClick={() => confirmDiscard(confirmation)}
                       >
                         {m.curation_view_discard({}, o)}
@@ -416,7 +461,7 @@ export function CharacterClassification({
                     ref={discardTrigger}
                     className={actionClassName}
                     variant="outline"
-                    disabled={busy || factLocked(draft)}
+                    disabled={busy || factLocked(draft) || (!admitted && !!draft.command)}
                     onClick={discard}
                   >
                     {m.curation_view_discard({}, o)}
@@ -425,7 +470,7 @@ export function CharacterClassification({
               </div>
             )}
           </>
-        )}
+        ) : null}
       </ContentItemFrame>
     </section>
   );

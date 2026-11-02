@@ -22,7 +22,7 @@ import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../../threads
 import { CatalogueCurrentReading } from './editor-lifetime';
 import type { CreateResult } from './create-subject';
 import { CharacterProfileCreate } from './character-profile-create';
-import { CharacterClassification } from './character-profile-classification';
+import { CharacterClassifications } from './character-profile-classification';
 import { DefinitionMeaning } from './definition-meaning';
 import {
   characterFacts,
@@ -427,23 +427,24 @@ function CharacterProfileLive({
                   revision={`${id}:${work ?? ''}:${query.dataUpdatedAt}:${query.fetchStatus}`}
                 >
                   <AuthoringDepartureBoundary>
-                    {groups.traits
-                      .filter(
+                    <CharacterClassifications
+                      key={character.subject.id}
+                      properties={groups.traits.filter(
                         (property) =>
                           current.release.properties[property]?.datatype === 'wikibase-item' &&
                           current.release.properties[property]?.relation?.group === 'classification',
-                      )
-                      .map((property) => (
-                        <CharacterClassification
-                          key={`${character.subject.id}:${property}`}
-                          property={property}
-                          read={{ ok: true, release: current.release, public: character, source: null }}
-                          locale={locale}
-                          search={search}
-                          transport={facts(character.subject.id)}
-                          review={(field, token) => review(character.subject.id, field, token)}
-                        />
-                      ))}
+                      )}
+                      read={{
+                        ok: true,
+                        release: current.release,
+                        public: character,
+                        source: null,
+                      }}
+                      locale={locale}
+                      search={search}
+                      transport={facts(character.subject.id)}
+                      review={(field, token) => review(character.subject.id, field, token)}
+                    />
                   </AuthoringDepartureBoundary>
                 </CatalogueCurrentReading>
               </div>

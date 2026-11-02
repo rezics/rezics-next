@@ -613,3 +613,165 @@ test('supplied selected-value growth at 1/8/32 renders only bounded rows and per
     }
   });
 });
+
+for (const family of ['Character', 'StoryArc'] as const) {
+  test(`${family} successful classification withdrawal preserves private recovery and exact unresolved intent`, async () => {
+    await mounted(async ({ host, render, enter }) => {
+      const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+      const { CharacterProfile } = await import('../src/features/catalogue/character-profile-view');
+      const { StoryArcProfile } = await import('../src/features/catalogue/story-arc-profile-view');
+      const { storyArcProfileFixture } = await import('../src/kernel/fake/catalogue-story-arc-profile');
+      const { m } = await import('../src/paraglide/messages.js');
+      const setup = await supplied();
+      const arc = storyArcProfileFixture();
+      arc.arc.subject.statements[property] = structuredClone(setup.read.public.subject.statements[property]!);
+      const subject = family === 'Character' ? setup.read.public : arc.arc;
+      const original = family === 'Character' ? setup.read.release : arc.release;
+      let release = original;
+      const withdrawn = structuredClone(original);
+      withdrawn.types[subject.subject.type]!.properties = withdrawn.types[subject.subject.type]!.properties.filter(
+        (field) => field !== property,
+      );
+      delete withdrawn.properties[property];
+      const commands: FactCommand[] = [];
+      let finish!: (result: Awaited<ReturnType<typeof setup.transport.propose>>) => void;
+      const transport = {
+        ...setup.transport,
+        propose: async (command: FactCommand) => {
+          commands.push(command);
+          return commands.length === 1
+            ? new Promise<Awaited<ReturnType<typeof setup.transport.propose>>>((resolve) => {
+                finish = resolve;
+              })
+            : { ok: false as const, reason: 'uncertain' as const };
+        },
+      };
+      const client = new QueryClient({
+        defaultOptions: { queries: { retry: false, gcTime: 0 } },
+      });
+      const settle = (action: () => void) =>
+        act(async () => {
+          action();
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        });
+      const reload = (next: typeof release) =>
+        settle(() => {
+          release = next;
+          button(host, m.correction_reload()).click();
+        });
+      const label = original.properties[property]!.labels.en;
+      const field = () =>
+        [...host.querySelectorAll('h3')].find((heading) => heading.textContent === label)?.closest('section');
+      const beforeUnload = () => {
+        const event = new host.ownerDocument.defaultView!.Event('beforeunload', { cancelable: true });
+        host.ownerDocument.defaultView!.dispatchEvent(event);
+        return event.defaultPrevented;
+      };
+      const capture = (node: HTMLElement) =>
+        Reflect.get(
+          node,
+          Object.keys(node).find((key) => key.startsWith('__reactProps'))!,
+        ).onClick as () => void;
+      try {
+        await render(
+          <QueryClientProvider client={client}>
+            {family === 'Character' ? (
+              <CharacterProfile
+                {...setup.fixture.props}
+                id={subject.subject.id}
+                locale="en"
+                facts={() => transport}
+                transport={{
+                  ...setup.fixture.transport,
+                  load: async () => ({
+                    ok: true,
+                    release,
+                    character: subject,
+                    work: null,
+                  }),
+                }}
+              />
+            ) : (
+              <StoryArcProfile
+                {...arc.props}
+                id={subject.subject.id}
+                locale="en"
+                facts={() => transport}
+                transport={{
+                  ...arc.transport,
+                  load: async () => ({
+                    ok: true,
+                    release,
+                    arc: subject,
+                    work: null,
+                  }),
+                }}
+              />
+            )}
+          </QueryClientProvider>,
+        );
+        await settle(() => {});
+        const holder = field()!;
+        await settle(() => button(holder, m.facts_edit_field()).click());
+        await enter(holder.querySelector<HTMLInputElement>('input[type="url"]')!, 'https://private.test/authored');
+        const oldSubmit = capture(button(holder, m.correction_submit()));
+        await reload(withdrawn);
+        expect(field()).toBe(holder);
+        expect(holder.querySelector('input')).toBeNull();
+        expect(holder.querySelector('pre')!.textContent).toContain('https://private.test/authored');
+        expect(holder.querySelector('pre')!.textContent).toContain(concept);
+        expect(beforeUnload()).toBe(true);
+        expect(button(holder, m.correction_submit()).disabled).toBe(true);
+        await settle(oldSubmit);
+        expect(commands).toHaveLength(0);
+        await settle(() => button(holder, m.curation_view_discard()).click());
+        await settle(() => button(holder, m.candidate_cancel()).click());
+        expect(holder.querySelector('pre')).not.toBeNull();
+        await reload(original);
+        expect(field()).toBe(holder);
+        expect(holder.querySelector<HTMLInputElement>('input[type="url"]')!.value).toBe(
+          'https://private.test/authored',
+        );
+        await reload(withdrawn);
+        await settle(() => button(holder, m.curation_view_discard()).click());
+        await settle(() => button(holder, m.curation_view_discard()).click());
+        expect(field()).toBeUndefined();
+        expect(beforeUnload()).toBe(false);
+
+        await reload(original);
+        const sealedHolder = field()!;
+        await settle(() => button(sealedHolder, m.facts_edit_field()).click());
+        await enter(sealedHolder.querySelector<HTMLInputElement>('input[type="url"]')!, 'https://private.test/sealed');
+        await settle(() => button(sealedHolder, m.correction_submit()).click());
+        expect(commands).toHaveLength(1);
+        const exact = structuredClone(commands[0]);
+        await reload(withdrawn);
+        await settle(() =>
+          finish({
+            ok: true,
+            kind: 'proposed-awaiting-review',
+            candidate: 'late-withdrawn',
+            revision: 1,
+          }),
+        );
+        expect(field()).toBe(sealedHolder);
+        expect(sealedHolder.textContent).not.toContain(m.correction_proposed());
+        expect(beforeUnload()).toBe(true);
+        expect(button(sealedHolder, m.curation_view_discard()).disabled).toBe(true);
+        await settle(() => button(sealedHolder, m.correction_retry()).click());
+        expect(commands).toHaveLength(2);
+        expect(commands[1]).toBe(commands[0]);
+        expect(commands[1]).toEqual(exact);
+        await reload(original);
+        expect(field()).toBe(sealedHolder);
+        expect(sealedHolder.querySelector<HTMLInputElement>('input[type="url"]')!.value).toBe(
+          'https://private.test/sealed',
+        );
+        expect(sealedHolder.querySelector('fieldset')!.disabled).toBe(true);
+      } finally {
+        await render(null);
+        client.clear();
+      }
+    });
+  });
+}

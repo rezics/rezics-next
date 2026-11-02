@@ -20,7 +20,7 @@ import { CreateSubjectForm } from './create-subject-form';
 import type { CreateResult } from './create-subject';
 import { EditorFailure } from './statement-editor-view';
 import { SubjectFacts } from './subject-facts-view';
-import { CharacterClassification } from './character-profile-classification';
+import { CharacterClassifications } from './character-profile-classification';
 import type { FactsTransport } from './subject-facts';
 import { RelationEditor } from './relation-editor';
 import { FictionalReferenceDetails, FictionalWorkReference } from './fictional-work-reference';
@@ -395,19 +395,22 @@ function StoryArcProfileLive({
                 transport={facts(privateRead.arc.subject.id)}
                 review={(property, token) => review(privateRead.arc!.subject.id, property, token)}
               />
-              {privateRead.release.types[storyArcType]!.properties.filter(
-                (property) => privateRead.release.properties[property]?.relation?.group === 'classification',
-              ).map((property) => (
-                <CharacterClassification
-                  key={`${privateRead.arc!.subject.id}:${property}`}
-                  property={property}
-                  read={{ ok: true, release: privateRead.release, public: privateRead.arc!, source: null }}
-                  locale={locale}
-                  search={search}
-                  transport={facts(privateRead.arc!.subject.id)}
-                  review={(field, token) => review(privateRead.arc!.subject.id, field, token)}
-                />
-              ))}
+              <CharacterClassifications
+                key={privateRead.arc.subject.id}
+                properties={privateRead.release.types[storyArcType]!.properties.filter(
+                  (property) => privateRead.release.properties[property]?.relation?.group === 'classification',
+                )}
+                read={{
+                  ok: true,
+                  release: privateRead.release,
+                  public: privateRead.arc,
+                  source: null,
+                }}
+                locale={locale}
+                search={search}
+                transport={facts(privateRead.arc.subject.id)}
+                review={(field, token) => review(privateRead.arc!.subject.id, field, token)}
+              />
               {editable && (
                 <section className="space-y-4">
                   <h2 className="text-xl font-semibold">{m.story_arc_relations({}, o)}</h2>
