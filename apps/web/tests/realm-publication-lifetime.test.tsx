@@ -80,7 +80,7 @@ let latestControl: ReturnType<typeof import('../src/community/publication-contro
 let rerenderMarker = 0;
 let shelfSubjects = subjects();
 
-function HookHarness() {
+function HookHarness({ showControls = false }: { showControls?: boolean } = {}) {
   const send = useCallback(
     (input: Write['input']) => {
       const call = { ...deferred<PublicationOutcome>(), input: structuredClone(input), credential: activeCredential };
@@ -98,7 +98,12 @@ function HookHarness() {
     reader,
   );
   latestControl = control;
-  return <output data-marker={rerenderMarker}>{control.target?.title ?? 'No target'}</output>;
+  return (
+    <>
+      <output data-marker={rerenderMarker}>{control.target?.title ?? 'No target'}</output>
+      {showControls ? <PublicationControls control={control} refresh={async () => undefined} /> : null}
+    </>
+  );
 }
 
 const host = window.document.createElement('main') as unknown as HTMLElement;
@@ -119,7 +124,7 @@ mock.module('../src/community/space-actions', () => ({
 const { createRoot } = await import('react-dom/client');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { sessionQuery } = await import('../src/session/query');
-const { usePublicationControls } = await import('../src/community/publication-controls-view');
+const { PublicationControls, usePublicationControls } = await import('../src/community/publication-controls-view');
 const { publicationSubjectSearch } = await import('../src/community/publication-subject-picker');
 const { RealmShelf } = await import('../src/community/space-page');
 const { m } = await import('../src/paraglide/messages.js');
@@ -214,6 +219,120 @@ afterAll(async () => {
 });
 
 describe('Complete Realm publication original caller lifetime', () => {
+  test('publication departure keeps selection and exact recovery on Stay, then retires before destination reads on Leave', async () => {
+    await close();
+    writes.length = 0;
+    saved.length = 0;
+    activeCredential = 'csrf-one';
+    shelfSubjects = subjects();
+    client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(sessionQuery.queryKey, viewer());
+    const nextRead = deferred<void>();
+    let readStarted = false;
+    const { AuthoringDepartureProvider } = await import('../src/threads/authoring-departure');
+    const { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider, useRouter } =
+      await import('@tanstack/react-router');
+    function RealmRoute() {
+      const router = useRouter();
+      return (
+        <AuthoringDepartureProvider>
+          <HookHarness showControls />
+          <button type="button" onClick={() => void router.navigate({ href: '/next' })}>Leave Realm</button>
+        </AuthoringDepartureProvider>
+      );
+    }
+    const rootRoute = createRootRoute({ component: Outlet });
+    const realmRoute = createRoute({ getParentRoute: () => rootRoute, path: '/realm', component: RealmRoute });
+    const nextRoute = createRoute({
+      getParentRoute: () => rootRoute,
+      path: '/next',
+      loader: async () => {
+        readStarted = true;
+        await nextRead.promise;
+      },
+      component: () => <p>Next destination</p>,
+    });
+    const router = createRouter({
+      routeTree: rootRoute.addChildren([realmRoute, nextRoute]),
+      history: createMemoryHistory({ initialEntries: ['/realm'] }),
+    });
+    const testRoot = (root = createRoot(host));
+    await router.load();
+    await act(async () => {
+      testRoot.render(tree(<RouterProvider router={router} />));
+      await tick();
+    });
+    const waitFor = async (ready: () => boolean) => {
+      for (let count = 0; count < 180 && !ready(); count++) await act(async () => tick());
+      expect(ready()).toBe(true);
+    };
+    const click = async (label: string) => {
+      const button = [...window.document.querySelectorAll('button')].find((item) => item.textContent?.trim() === label);
+      expect(button).toBeDefined();
+      await act(async () => button!.click());
+    };
+    const dialog = () => window.document.querySelector('[role="alertdialog"]');
+    const beforeUnload = () => {
+      const event = new window.Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    const selected = target();
+    expect(beforeUnload()).toBe(false);
+    await act(async () => latestControl.choose(selected));
+    await waitFor(() => beforeUnload());
+    await click('Leave Realm');
+    await waitFor(() => dialog() !== null);
+    expect(dialog()?.textContent).toContain(m.thread_authoring_leave_unsaved());
+    await click(m.thread_authoring_stay());
+    await waitFor(() => dialog() === null);
+    expect(latestControl.target).toEqual(selected);
+    await act(async () => void latestControl.change('publish', selected));
+    await settle(0, { kind: 'saved', head: nextHead });
+    expect(beforeUnload()).toBe(false);
+
+    await act(async () => {
+      latestControl.choose(null);
+      latestControl.choose(selected);
+      void latestControl.change('publish', selected);
+    });
+    const exact = structuredClone(writes[1]!.input);
+    await settle(1, { kind: 'unavailable' });
+    await click(m.realm_publication_curate());
+    await click(m.realm_publication_curate());
+    await click(m.realm_publication_curate());
+    await act(async () => {
+      void latestControl.retry();
+      await tick();
+    });
+    expect(writes[2]!.input).toEqual(exact);
+    await settle(2, { kind: 'unavailable' });
+    await click('Leave Realm');
+    await waitFor(() => dialog() !== null);
+    expect(dialog()?.textContent).toContain(m.thread_authoring_leave_pending());
+    await click(m.thread_authoring_stay());
+    await waitFor(() => dialog() === null);
+    expect(latestControl.target).toEqual(selected);
+    expect(latestControl.action).toBe('publish');
+    expect(latestControl.outcome).toEqual({ kind: 'unavailable' });
+    await act(async () => {
+      void latestControl.retry();
+      await tick();
+    });
+    expect(writes[3]!.input).toEqual(exact);
+
+    await click('Leave Realm');
+    await waitFor(() => dialog() !== null);
+    await click(m.thread_authoring_leave());
+    await waitFor(() => readStarted);
+    expect(latestControl.target).toBeNull();
+    const writeCount = writes.length;
+    await act(async () => void latestControl.retry());
+    expect(writes).toHaveLength(writeCount);
+    nextRead.resolve();
+    await waitFor(() => router.state.location.pathname === '/next');
+  });
+
   test('healthy renders keep the draft and read the current authoritative shelf head', async () => {
     await mountHook();
     await act(async () => latestControl.choose(target()));

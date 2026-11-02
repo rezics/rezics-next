@@ -29,6 +29,7 @@ type Draft = {
   needsDecision: () => boolean;
   unresolved: () => boolean;
   discard: () => void;
+  leave?: () => void;
 };
 type Decision = { kind: 'navigation'; resolve: (stay: boolean) => void } | { kind: 'discard'; draftId: number };
 
@@ -149,6 +150,7 @@ export class AuthoringDepartureState {
     const decision = this.decision;
     if (!decision) return;
     if (decision.kind === 'navigation') {
+      for (const draft of this.drafts.values()) if (draft.needsDecision()) draft.leave?.();
       this.onNavigationLeave();
       this.settleNavigation(false);
     } else {
@@ -354,14 +356,16 @@ export function useAuthoringDeparture(
   unresolved: boolean,
   signature: string,
   onDiscard?: () => void,
+  onLeave?: () => void,
 ) {
   const navigation = useContext(DepartureContext);
-  const latest = useRef({ needsDecision, unresolved, signature, onDiscard, released: false });
+  const latest = useRef({ needsDecision, unresolved, signature, onDiscard, onLeave, released: false });
   if (latest.current.signature !== signature) latest.current.released = false;
   latest.current.needsDecision = needsDecision;
   latest.current.unresolved = unresolved;
   latest.current.signature = signature;
   latest.current.onDiscard = onDiscard;
+  latest.current.onLeave = onLeave;
   const registration = useRef<{ owner: AuthoringDepartureState; id: number; remove: () => void } | null>(null);
 
   useLayoutEffect(() => {
@@ -370,6 +374,7 @@ export function useAuthoringDeparture(
       needsDecision: () => !latest.current.released && latest.current.needsDecision,
       unresolved: () => latest.current.unresolved,
       discard: () => latest.current.onDiscard?.(),
+      leave: () => latest.current.onLeave?.(),
     });
     registration.current = { owner: navigation, ...registered };
     return () => {

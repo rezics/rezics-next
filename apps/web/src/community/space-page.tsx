@@ -40,6 +40,7 @@ import {
 import { RealmHomeHeader } from './realm-home-header';
 import { Button } from '@rezics/ui/shadcn/button';
 import { CommunityManagementContext, type CommunityManagementOperation } from './community-management';
+import { AuthoringDepartureBoundary } from '../threads/authoring-departure';
 
 function subjectTitle(subject: PublishedSubject, locale: string): string {
   return (
@@ -286,12 +287,14 @@ export function SpacePage(props: {
   const viewer = state === 'signed-in' && subject ? subject : null;
   const lifetime = useSpacePageLifetime();
   return (
-    <SpaceHome
-      key={`${props.page.space.id}:${props.page.realm?.id ?? ''}:${viewer ?? state}:${lifetime?.scopeKey ?? 'standalone'}`}
-      {...props}
-      viewer={viewer}
-      signedOut={state === 'signed-out'}
-    />
+    <AuthoringDepartureBoundary>
+      <SpaceHome
+        key={`${props.page.space.id}:${props.page.realm?.id ?? ''}:${viewer ?? state}:${lifetime?.scopeKey ?? 'standalone'}`}
+        {...props}
+        viewer={viewer}
+        signedOut={state === 'signed-out'}
+      />
+    </AuthoringDepartureBoundary>
   );
 }
 

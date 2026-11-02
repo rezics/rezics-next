@@ -12,6 +12,8 @@ baseline. Changed titles, structured bodies, review or discussion selections, up
 unresolved outcomes register with the page's authoring-departure owner. The owner shows one accessible Stay/Leave
 decision for router navigation and coordinates an explicit discard decision for changed inline edits. Editors retain
 their own draft and command state; the navigation owner keeps only live predicates and never copies a command.
+Registered drafts may supply a Leave callback so the owner can retire local continuations synchronously before router
+navigation resumes; this does not cancel a command already sent to the native authority.
 
 New-thread navigation compares the pathname and validated preset subject, including browser Back/Forward. Stay keeps
 the mounted draft, references, media and focus; Leave retires it and mounts the selected board/subject context with

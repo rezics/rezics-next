@@ -13,3 +13,5 @@ while incrementing its connection ticket so callbacks and replies from the disco
 
 The session cache is only a caller-lifetime signal. Realm publication permission and subject readability remain the
 native command's authority.
+
+Decision: selected Subjects, in-flight commands and unavailable outcomes register with the shared departure owner; Stay retains the exact draft and retry, confirmed Leave retires only local continuations before destination reads without cancelling the native command, closing the panel preserves an uncertain retry, success or explicit clear releases protection, and untouched controls do not warn.

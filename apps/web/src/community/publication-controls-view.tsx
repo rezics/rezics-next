@@ -17,6 +17,7 @@ import {
 import type { PublicationChange } from './publication-controls';
 import type { PublishedSubject } from './space';
 import { sessionQuery, useSession } from '../session/query';
+import { useAuthoringDeparture } from '../threads/authoring-departure';
 
 export type { PublicationSend, PublicationTarget } from './publication-subject-picker';
 
@@ -165,6 +166,14 @@ export function usePublicationControls(
   }, [draft]);
   const state = useSyncExternalStore(draft.subscribe, draft.getSnapshot, draft.getSnapshot);
   const actions = draft.bind();
+  const unresolved = state.busy || state.outcome?.kind === 'unavailable';
+  useAuthoringDeparture(
+    unresolved || (!!state.target && state.outcome?.kind !== 'saved'),
+    unresolved,
+    JSON.stringify([realmId, reader, locale, draft.id, state.target?.id, state.action, state.outcome?.kind, state.busy]),
+    undefined,
+    draft.retire,
+  );
   return {
     ...state,
     locked: !enabled || !draft.current() || state.busy || state.outcome?.kind === 'unavailable',
