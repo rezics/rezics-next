@@ -9,7 +9,7 @@ import {
   OPERATIONAL_WORK_OWNER, insertOperationalWorkInventory, operationalWorkSource,
   type OperationalWorkSource, type CommittedOperationalWork,
 } from './operational-work.ts';
-import { OperationalWorkUnavailable, consumeOperationalWorkTransfer,
+import { OperationalWorkUnavailable, consumeOperationalWorkTransfer, operationalWorkDeadlineClient,
   type OperationalWorkTransfer } from './operational-work-budget.ts';
 
 export async function lockOperationalSDKInventory(
@@ -65,7 +65,8 @@ export async function receiveOperationalWorkDestination(
 ): Promise<'registered-pending-position' | 'uncaptured'> {
   const source = operationalWorkSource(pool, origin);
   const { deadline } = consumeOperationalWorkTransfer(pool, transfer, 'receive', source.custodyId);
-  return withConnection(pool, async tx => {
+  return withConnection(pool, async client => {
+    const tx = operationalWorkDeadlineClient(client, deadline);
     await tx.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
     try {
       await tx.query("SELECT set_config('statement_timeout',$1,true),set_config('lock_timeout','200ms',true)",
@@ -97,7 +98,7 @@ export async function receiveOperationalWorkDestination(
       if (Date.now() >= deadline) throw new OperationalWorkUnavailable('operational-work-deadline');
       await tx.query('COMMIT');
       return source.creationCaptured ? 'registered-pending-position' : 'uncaptured';
-    } catch (error) { await tx.query('ROLLBACK'); throw error; }
+    } catch (error) { await client.query('ROLLBACK'); throw error; }
   });
 }
 
@@ -112,7 +113,8 @@ async function checkMappedOperationalWork(
   const { deadline } = consumeOperationalWorkTransfer(pool, transfer, phase, source.custodyId);
   if (custodyId !== undefined && custodyId !== source.custodyId)
     throw new TypeError('Foreign operational History retirement locator');
-  return withConnection(pool, async tx => {
+  return withConnection(pool, async client => {
+    const tx = operationalWorkDeadlineClient(client, deadline);
     await tx.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
     try {
       await tx.query("SELECT set_config('statement_timeout',$1,true),set_config('lock_timeout','200ms',true)",
@@ -139,7 +141,7 @@ async function checkMappedOperationalWork(
       if (Date.now() >= deadline) throw new OperationalWorkUnavailable('operational-work-deadline');
       await tx.query('COMMIT');
       return source.creationCaptured ? source.gap : 'operational-work-uncaptured-older-execution';
-    } catch (error) { await tx.query('ROLLBACK'); throw error; }
+    } catch (error) { await client.query('ROLLBACK'); throw error; }
   });
 }
 

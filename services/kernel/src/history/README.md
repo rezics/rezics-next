@@ -147,6 +147,8 @@ existence probes, SDK projection/callback reads, bounded serialization, receivin
 The executor prepays attempt controls before its first I/O; registration prepays its body before its first read;
 private child reservations subtract their complete body before checkout. One actual Pool, absolute deadline and
 cumulative balance cover all attempts; spent allowances do not refill. This is only the opt-in producer's local
+declaration. Receiving and resolution check that same deadline before each SQL dispatch, including after checkout
+or a previous lock wait; raw-client rollback remains available after expiry. This is only the opt-in producer's local
 declaration. Commerce's reservation/association, Access preparation and final Source/Library/physical-owner bodies
 require their own actual prices and private original composition. This local declaration grants none of those
 allowances and does not consume the selected preference-History or identity-only allocation.

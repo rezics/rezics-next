@@ -1,4 +1,4 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { currentOperationalResources, type OperationalTransaction } from '../command/operational.ts';
 
 /** The eight native axes. This allocation belongs only to the operational History producer. */
@@ -89,6 +89,16 @@ export const OPERATIONAL_WORK_LOCAL_DECLARATION = sumOperationalWork(
 
 export class OperationalWorkUnavailable extends Error {
   constructor(readonly gap: string) { super(gap); }
+}
+/** Query adapter over the SAME checked-out client. A wait for a connection/lock never
+ * extends the original deadline. Cleanup uses the raw client so expiry cannot prevent rollback. */
+export function operationalWorkDeadlineClient(client: PoolClient, deadline: number): Pick<PoolClient, 'query'> {
+  return { query: new Proxy(client.query, {
+    apply(target, _receiver, args) {
+      if (Date.now() >= deadline) throw new OperationalWorkUnavailable('operational-work-deadline');
+      return Reflect.apply(target, client, args);
+    },
+  }) };
 }
 export type OperationalWorkOriginal = Readonly<{ pool: Pool; deadline: number }>;
 type Balance = { remaining: OperationalWorkCost; attempts: number };

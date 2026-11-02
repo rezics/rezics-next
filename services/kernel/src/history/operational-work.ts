@@ -12,7 +12,7 @@ import { commandHistoryIdentityAccounts, unionHistoryScope } from './record.ts';
 import {
   debitOperationalWork, issueOperationalWorkTransfer, consumeOperationalWorkTransfer,
   finishOperationalWorkTransfers, OPERATIONAL_WORK_REGISTRATION, OperationalWorkUnavailable,
-  attachOperationalWorkOriginal,
+  attachOperationalWorkOriginal, operationalWorkDeadlineClient,
   type OperationalWorkOriginal, type OperationalWorkPhase, type OperationalWorkTransfer,
 } from './operational-work-budget.ts';
 
@@ -305,7 +305,8 @@ export async function resolveCommittedOperationalWork(
   if (!Number.isInteger(locator.partition) || locator.partition < 0 || locator.partition > 4095 ||
     !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(locator.custodyId))
     throw new TypeError('Invalid operational History locator');
-  const source = await withConnection(pool, async tx => {
+  const source = await withConnection(pool, async client => {
+    const tx = operationalWorkDeadlineClient(client, deadline);
     await tx.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     try {
       await tx.query("SELECT set_config('statement_timeout',$1,true)", [String(Math.max(1, deadline - Date.now()))]);
@@ -333,7 +334,7 @@ export async function resolveCommittedOperationalWork(
       if (Date.now() >= deadline) throw new OperationalWorkUnavailable('operational-work-deadline');
       await tx.query('COMMIT');
       return value;
-    } catch (error) { await tx.query('ROLLBACK'); throw error; }
+    } catch (error) { await client.query('ROLLBACK'); throw error; }
   });
   if (!source) return null;
   const origin = Object.freeze({}) as CommittedOperationalWork;
