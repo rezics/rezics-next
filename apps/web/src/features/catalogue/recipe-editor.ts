@@ -15,6 +15,7 @@ import { proposeStatement, type ProposalCommand, type ProposalResult, type State
 
 export type RecipeItem = InitialSubject & { statements: Record<string, StatementInput[]> };
 export type RecipeCommand = { item: RecipeItem; key: string };
+export type RecipeProperty = NonNullable<Release['properties'][string]>;
 export type RecipeRead =
   | { ok: false; reason: 'concealed' | 'invalid' | 'unavailable' }
   | { ok: true; release: Release; public: SubjectRead | null; fields: string[] };
@@ -53,6 +54,16 @@ export function recipeTarget(release: Release, property: string, type: string): 
       (base) => type === base || release.types[type]?.bases.includes(base),
     ) === true
   );
+}
+/** Incompatible retained fields stay visible; contributors remove them before adding a current definition. */
+export function recipePropertyCompatible(previous: RecipeProperty, current: RecipeProperty | undefined): boolean {
+  if (!current) return false;
+  const meaning = (property: RecipeProperty) => {
+    const value = structuredClone(property) as unknown as Record<string, unknown>;
+    delete value.labels;
+    return JSON.stringify(value);
+  };
+  return meaning(previous) === meaning(current);
 }
 export async function readRecipeEditor(client: KernelClient, locale: string, id?: string): Promise<RecipeRead> {
   if (id !== undefined && !recipeUuid.test(id)) return { ok: false, reason: 'concealed' };
@@ -117,8 +128,10 @@ export async function proposeRecipe(
 ): Promise<ProposalResult> {
   const read = await readRecipeEditor(client, locale, command.id);
   if (!read.ok) return { ok: false, reason: read.reason === 'invalid' ? 'invalid' : 'unavailable' };
-  if (!read.fields.includes(command.statement.property.id)) return { ok: false, reason: 'invalid' };
+  if (!read.fields.includes(command.statement.property.id))
+    return { ok: false, reason: 'invalid', refreshDefinitions: true };
   const errors = checkStatementInput(command.statement, read.release, { authoredDocuments: true }).violations;
-  if (errors.length) return { ok: false, reason: 'invalid', errors };
-  return proposeStatement(client, authorization, command);
+  if (errors.length) return { ok: false, reason: 'invalid', errors, refreshDefinitions: true };
+  const result = await proposeStatement(client, authorization, command);
+  return !result.ok && result.reason === 'invalid' ? { ...result, refreshDefinitions: true } : result;
 }

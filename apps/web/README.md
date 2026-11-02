@@ -3141,3 +3141,9 @@ their original acceptance contract for the later integration gate; no harness or
 Cost: changing a selection or field makes no request. Local draft conversion/validation is bounded by the existing
 composition/profile limits. Reload uses the existing active/profile reads; explicit publication uses the existing
 immutable profile POST and activation POST. There are no new descriptors, grants, private reads or background walks.
+
+## Recipe release recovery
+
+After a definite released-definition refusal, the Recipe editor requires an explicit current-definition read before retry;
+compatible draft values remain intact, while changed or removed fields stay visible and read-only until removed, and
+uncertain commands retain their original payload and key.

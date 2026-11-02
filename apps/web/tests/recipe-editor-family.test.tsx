@@ -147,6 +147,29 @@ test('Recipe creation and current correction share complete frames with independ
   try {
     const creation = recipeFixture('uncertain');
     const correction = recipeFixture();
+    const loadCreation = creation.transport.load;
+    const createCreation = creation.transport.create;
+    const creationCommands: Parameters<typeof creation.transport.create>[0][] = [];
+    let refuseCreation = true;
+    let failCreationRead = false;
+    const currentIngredientLabel = 'Ingredient after rereading the current release';
+    creation.transport.load = async () => {
+      if (failCreationRead) {
+        failCreationRead = false;
+        return { ok: false, reason: 'unavailable' };
+      }
+      return loadCreation();
+    };
+    creation.transport.create = async (command) => {
+      creationCommands.push(structuredClone(command));
+      if (refuseCreation) {
+        refuseCreation = false;
+        failCreationRead = true;
+        creation.release.properties['schema:recipeIngredient']!.labels.en = currentIngredientLabel;
+        return { ok: false, reason: 'invalid', refreshDefinitions: true };
+      }
+      return createCreation(command);
+    };
     const item = recipeExample();
     item.statements['schema:recipeIngredient']![0]!.value = {
       type: 'value',
@@ -157,6 +180,15 @@ test('Recipe creation and current correction share complete frames with independ
       content: longCitation,
     };
     expect((await correction.transport.create({ item, key: crypto.randomUUID() })).ok).toBe(true);
+    const loadCorrection = correction.transport.load;
+    let failCorrectionRead = false;
+    correction.transport.load = async () => {
+      if (failCorrectionRead) {
+        failCorrectionRead = false;
+        return { ok: false, reason: 'unavailable' };
+      }
+      return loadCorrection();
+    };
     const ingredient = 'schema:recipeIngredient';
     const longLabel = `ingredient — ${'Full supplied localized field 材料 '.repeat(5)}`;
     correction.release.properties[ingredient]!.labels.en = longLabel;
@@ -234,51 +266,99 @@ test('Recipe creation and current correction share complete frames with independ
     await act(async () => user.tab());
     expect(window.document.activeElement).toBe(within(draft).getByRole('button', { name: m.correction_submit() }));
     expect(correction.calls).toEqual(baseline);
+
+    const cookTime = 'schema:cookTime';
+    const cookTimeLabel = correction.release.properties[cookTime]!.labels.en!;
+    await click(section(b, cookTimeLabel), m.recipe_correct());
+    const independentDraft = section(b, cookTimeLabel, true);
+    correction.setScenario('uncertain');
+    await click(independentDraft, m.correction_submit());
+    await until(() => independentDraft.textContent!.includes(m.correction_unavailable()));
+    const independentFirst = posts(correction, '/candidates').find(
+      (call) => (call.body as { statement: { property: { id: string } } }).statement.property.id === cookTime,
+    )!;
+
     correction.setScenario('conflict');
     await act(async () => user.keyboard('{Enter}'));
     await until(() => draft.textContent!.includes(m.correction_stale()));
-    const stale = posts(correction, '/candidates')[0]!;
+    const stale = posts(correction, '/candidates').find(
+      (call) => (call.body as { statement: { property: { id: string } } }).statement.property.id === ingredient,
+    )!;
     expect((within(draft).getByRole('button', { name: m.correction_retry() }) as HTMLButtonElement).disabled).toBe(
       true,
     );
     expect(input(draft, m.correction_value()).closest('fieldset')!.disabled).toBe(true);
+    const currentIngredientLabel = `${longLabel} after reread`;
+    correction.release.properties[ingredient]!.labels.en = currentIngredientLabel;
+    failCorrectionRead = true;
+    const postedBeforeRead = posts(correction, '/candidates').length;
     await click(draft, m.catalogue_create_review_new());
-    expect(input(draft, m.correction_value()).value).toBe(longValue);
-    expect(citation.value).toBe(longCitation);
-    correction.setScenario('uncertain');
-    await click(draft, m.correction_submit());
-    await until(() => draft.textContent!.includes(m.correction_unavailable()));
-    const retry = within(draft).getByRole('button', { name: m.correction_retry() });
-    await act(async () => {
-      retry.focus();
-      await user.keyboard('{Enter}');
-    });
-    await until(() => draft.textContent!.includes(m.correction_proposed()));
+    await until(() => !!within(b).queryByRole('button', { name: m.correction_retry() }));
+    expect(posts(correction, '/candidates')).toHaveLength(postedBeforeRead);
+    correction.setScenario('ready');
+    await click(b, m.correction_retry());
+    await until(() => b.textContent!.includes(currentIngredientLabel));
+    const independentAfterRead = section(b, cookTimeLabel, true);
+    await click(independentAfterRead, m.correction_retry());
+    await until(() => independentAfterRead.textContent!.includes(m.correction_proposed()));
+    const independentWrites = posts(correction, '/candidates').filter(
+      (call) => (call.body as { statement: { property: { id: string } } }).statement.property.id === cookTime,
+    );
+    expect(independentWrites).toHaveLength(2);
+    expect(independentWrites[1]).toEqual(independentFirst);
+
+    const rereadDraft = section(b, currentIngredientLabel, true);
+    expect(input(rereadDraft, m.correction_value()).value).toBe(longValue);
+    expect(input(rereadDraft, m.relation_citation()).value).toBe(longCitation);
+    await click(rereadDraft, m.correction_submit());
+    await until(() => rereadDraft.textContent!.includes(m.correction_proposed()));
     const writes = posts(correction, '/candidates');
-    expect(writes).toHaveLength(3);
-    expect(writes[1]!.key).not.toBe(stale.key);
-    expect(writes[2]).toEqual(writes[1]);
-    expect(writes[1]!.authorization).toBe('Bearer fixture');
+    const ingredientWrites = writes.filter(
+      (call) => (call.body as { statement: { property: { id: string } } }).statement.property.id === ingredient,
+    );
+    expect(ingredientWrites).toHaveLength(2);
+    expect(ingredientWrites[0]).toEqual(stale);
+    expect(ingredientWrites[1]!.key).not.toBe(stale.key);
+    expect(ingredientWrites[1]!.authorization).toBe('Bearer fixture');
     const expected = statementInput(original);
     expected.references.push({
       parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: longCitation } }],
     });
-    expect(writes[1]!.body).toEqual({ statement: expected });
+    expect(ingredientWrites[1]!.body).toEqual({ statement: expected });
     expect(correction.publicRead.subject.statements[ingredient]![0]).toEqual(original);
-    expect(draft.querySelector('[data-content-item-slot="state"]')!.textContent).toBe(m.correction_proposed());
-    await click(draft, m.correction_review());
-    await until(() => !!within(draft).queryByRole('button', { name: m.candidate_accept() }));
-    const exact = [...correction.candidates.keys()][0]!;
-    await click(draft, m.candidate_accept());
-    const confirmation = within(draft).getByRole('region', {
+    expect(rereadDraft.querySelector('[data-content-item-slot="state"]')!.textContent).toBe(m.correction_proposed());
+    await click(rereadDraft, m.correction_review());
+    await until(() => !!within(rereadDraft).queryByRole('button', { name: m.candidate_accept() }));
+    const exact = [...correction.candidates.values()].find((candidate) => candidate.statement.property.id === ingredient)!.id;
+    await click(rereadDraft, m.candidate_accept());
+    const confirmation = within(rereadDraft).getByRole('region', {
       name: m.candidate_confirm_title({ action: m.candidate_accept() }),
     });
     await click(confirmation, m.candidate_accept());
-    await until(() => draft.textContent!.includes(m.candidate_accepted()));
+    await until(() => rereadDraft.textContent!.includes(m.candidate_accepted()));
     expect(posts(correction, ':accept')).toHaveLength(1);
     expect(posts(correction, ':accept')[0]!.path).toBe(`/v1/subjects/${recipeId}/candidates/${exact}:accept`);
     expect(posts(correction, ':adopt')).toHaveLength(0);
     expect(correction.publicRead.subject.statements[ingredient]![0]).toEqual(original);
+
+    const material = 'wdt:P186';
+    const materialLabel = correction.release.properties[material]!.labels.en!;
+    await click(section(b, materialLabel), m.recipe_correct());
+    const incompatibleDraft = section(b, materialLabel, true);
+    correction.setScenario('conflict');
+    await click(incompatibleDraft, m.correction_submit());
+    await until(() => incompatibleDraft.textContent!.includes(m.correction_stale()));
+    const beforeIncompatibleRefresh = posts(correction, '/candidates').length;
+    Object.assign(correction.release.properties[material]!, { datatype: 'string' });
+    await click(incompatibleDraft, m.catalogue_create_review_new());
+    await until(() => b.textContent!.includes(m.catalogue_create_invalid_field()));
+    const retainedIncompatible = section(b, materialLabel, true);
+    expect(retainedIncompatible.querySelector('fieldset')!.disabled).toBe(true);
+    expect((within(retainedIncompatible).getByRole('button', { name: m.correction_submit() }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    expect(within(retainedIncompatible).queryByRole('button', { name: m.recipe_remove_field() })).not.toBeNull();
+    expect(posts(correction, '/candidates')).toHaveLength(beforeIncompatibleRefresh + 1);
 
     // Two authored method editors have their own labels, consent and documents.
     const methodA = await add(a, 'schema:recipeInstructions');
@@ -299,7 +379,34 @@ test('Recipe creation and current correction share complete frames with independ
     await act(async () => user.click(within(methodA).getByRole('checkbox', { name: m.recipe_original() })));
     await replace(input(methodA, m.relation_citation()), longCitation);
     await click(a, m.recipe_title());
+    await until(() => !!within(a).queryByRole('button', { name: m.catalogue_create_review_new() }));
+    expect(posts(creation, '/subjects')).toHaveLength(0);
+    await click(a, m.catalogue_create_review_new());
     await until(() => !!within(a).queryByRole('button', { name: m.correction_retry() }));
+    expect(posts(creation, '/subjects')).toHaveLength(0);
+    await click(a, m.correction_retry());
+    await until(() => a.querySelector('form') !== null && a.textContent!.includes(currentIngredientLabel));
+    const retainedIngredient = section(a, currentIngredientLabel, true);
+    expect(input(retainedIngredient, m.correction_value()).value).toBe('400 ml water');
+    expect(input(retainedIngredient, m.relation_citation()).value).toBe(longCitation);
+    expect(input(a, m.catalogue_create_label()).value).toBe('My lentil soup');
+    const instructionLabel = creation.release.properties['schema:recipeInstructions']!.labels.en!;
+    const retainedMethod = section(a, instructionLabel, true);
+    expect(input(retainedMethod, m.catalogue_create_language()).value).toBe('en');
+    expect(input(retainedMethod, m.subject_source_licence()).value).toBe('CC-BY-4.0');
+    expect(input(retainedMethod, m.relation_citation()).value).toBe(longCitation);
+    expect((within(retainedMethod).getByRole('checkbox', { name: m.recipe_original() }) as HTMLInputElement).checked).toBe(
+      true,
+    );
+    expect(retainedMethod.querySelector('[contenteditable]')!.textContent).toContain(
+      'My original preparation, never copied from a recipe site.',
+    );
+    expect(creationCommands).toHaveLength(1);
+    await click(a, m.recipe_title());
+    await until(() => !!within(a).queryByRole('button', { name: m.correction_retry() }));
+    expect(creationCommands).toHaveLength(2);
+    expect(creationCommands[0]!.key).not.toBe(creationCommands[1]!.key);
+    expect(creationCommands[0]!.item).toEqual(creationCommands[1]!.item);
     const createWrite = structuredClone(posts(creation, '/subjects')[0]!);
     expect(createWrite.authorization).toBe('Bearer fixture');
     expect(createWrite.body).toMatchObject({
@@ -332,7 +439,7 @@ test('Recipe creation and current correction share complete frames with independ
     });
     await click(methodB, m.recipe_remove_field());
     expect(host.contains(methodB)).toBe(false);
-    expect(draft.textContent).toContain(m.correction_proposed());
+    expect(rereadDraft.textContent).toContain(m.correction_proposed());
 
     // Supplied-data growth only: the native multivalued ingredient schema admits 1/8/64.
     // No backend population/cost claim follows from these fixture/DOM witnesses.

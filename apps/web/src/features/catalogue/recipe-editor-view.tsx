@@ -23,7 +23,15 @@ import { subjectHref } from '../../subject/subject-href';
 import { CandidateValue } from '../pages/data';
 import { newAuthoredField, authoredFieldValue, type AuthoredField } from './authored-field';
 import type { CreateFailure, CreateResult } from './create-subject';
-import { recipeDraft, recipeTarget, type RecipeCommand, type RecipeTransport, type RecipeRead } from './recipe-editor';
+import {
+  recipeDraft,
+  recipePropertyCompatible,
+  recipeTarget,
+  type RecipeCommand,
+  type RecipeProperty,
+  type RecipeTransport,
+  type RecipeRead,
+} from './recipe-editor';
 import { statementInput, type ProposalCommand, type ProposalResult, type StatementInput } from './statement-editor';
 import { EditorFailure, ScalarControl } from './statement-editor-view';
 
@@ -46,11 +54,18 @@ const recipePanelClassName =
 type Row = {
   id: string;
   statement: StatementInput;
+  definition: RecipeProperty;
   original?: boolean;
+  authored?: AuthoredField;
+  picked?: EntityPickerSubject[];
+  command?: ProposalCommand;
+  result?: ProposalResult;
+  uncertain?: boolean;
   source?: NonNullable<Ready['public']>['subject']['statements'][string][number];
 };
-const newRow = (property: string): Row => ({
+const newRow = (property: string, definition: RecipeProperty): Row => ({
   id: crypto.randomUUID(),
+  definition: structuredClone(definition),
   statement: {
     property: { id: property },
     value: { type: 'value', content: '' },
@@ -59,6 +74,11 @@ const newRow = (property: string): Row => ({
     rank: 'normal',
   },
 });
+
+function rowMatchesCurrentDefinition(row: Row, read: Ready): boolean {
+  const property = row.statement.property.id;
+  return read.fields.includes(property) && recipePropertyCompatible(row.definition, read.release.properties[property]);
+}
 
 export const RecipeEditor = catalogueEditor(RecipeEditorLive);
 
@@ -98,12 +118,80 @@ function RecipeEditorLive({
   const [created, setCreated] = useState<Extract<CreateResult, { ok: true }>>();
   const [busy, setBusy] = useState(false);
   const pending = useRef<RecipeCommand | null>(null);
+  const pendingUncertain = useRef(false);
   const running = useRef(false);
-  const locked = busy || !!pending.current;
-  const name = (id: string) => pickText(read?.release.properties[id]?.labels ?? {}, locale).text;
+  const locked = busy || !!pending.current || failure?.refreshDefinitions === true;
+  const name = (id: string) => pickText(read?.release.properties[id]?.labels ?? {}, locale).text || id;
+  const currentFields = read?.public
+    ? [
+        ...new Set([
+          ...read.fields,
+          ...Object.entries(read.public.subject.statements)
+            .filter(([, statements]) => statements.length > 0)
+            .map(([field]) => field),
+        ]),
+      ]
+    : (read?.fields ?? []);
+  async function refreshCurrentDefinitions(): Promise<boolean> {
+    try {
+      const refreshed = await query.refetch();
+      return !refreshed.isError && refreshed.data?.ok === true;
+    } catch {
+      return false;
+    }
+  }
+  async function retryRead() {
+    if (!lifetime.active() || running.current) return;
+    running.current = true;
+    setBusy(true);
+    try {
+      const refreshed = await refreshCurrentDefinitions();
+      if (!lifetime.active()) return;
+      if (refreshed) {
+        if (failure?.refreshDefinitions) setFailure(undefined);
+        setRows((previous) =>
+          previous.map((row) =>
+            !row.uncertain &&
+            row.result &&
+            !row.result.ok &&
+            (row.result.reason === 'stale' || row.result.refreshDefinitions)
+              ? { ...row, command: undefined, result: undefined, uncertain: false }
+              : row,
+          ),
+        );
+      }
+    } finally {
+      if (!lifetime.active()) return;
+      setBusy(false);
+      running.current = false;
+    }
+  }
+  async function reviewCurrentDefinitions() {
+    if (!lifetime.active() || running.current) return;
+    running.current = true;
+    setBusy(true);
+    try {
+      if (await refreshCurrentDefinitions()) {
+        if (!lifetime.active()) return;
+        setFailure(undefined);
+      }
+    } finally {
+      if (!lifetime.active()) return;
+      setBusy(false);
+      running.current = false;
+    }
+  }
   async function create() {
     if (!lifetime.active()) return;
-    if (running.current || !read || created || session !== 'signed-in' || failure?.reason === 'conflict') return;
+    if (
+      running.current ||
+      !read ||
+      created ||
+      session !== 'signed-in' ||
+      failure?.reason === 'conflict' ||
+      failure?.refreshDefinitions
+    )
+      return;
     if (!pending.current) {
       const draft = recipeDraft(
         read.release,
@@ -121,12 +209,20 @@ function RecipeEditorLive({
         )
       )
         draft.errors.push({ pointer: '/statements/schema:recipeInstructions', code: 'required' });
+      for (const row of rows) {
+        const pointer = `/statements/${row.statement.property.id}`;
+        if (!rowMatchesCurrentDefinition(row, read) && !draft.errors.some((error) => error.pointer === pointer))
+          draft.errors.push({ pointer, code: 'unsupported' });
+      }
       if (draft.errors.length) {
         setFailure({ ok: false, reason: 'invalid', errors: draft.errors });
         return;
       }
       pending.current = { item: draft.item, key: crypto.randomUUID() };
+      pendingUncertain.current = false;
     }
+    const wasUncertain = pendingUncertain.current;
+    pendingUncertain.current = true;
     running.current = true;
     setBusy(true);
     setFailure(undefined);
@@ -136,12 +232,16 @@ function RecipeEditorLive({
       if (result.ok) {
         setCreated(result);
         pending.current = null;
+        pendingUncertain.current = false;
       } else {
         setFailure(result);
-        if (result.reason !== 'unavailable' && result.reason !== 'conflict') pending.current = null;
+        const possiblyCommitted = wasUncertain || result.reason === 'unavailable';
+        pendingUncertain.current = possiblyCommitted;
+        if (result.reason !== 'conflict' && !possiblyCommitted) pending.current = null;
       }
     } catch {
       if (!lifetime.active()) return;
+      pendingUncertain.current = true;
       setFailure({ ok: false, reason: 'unavailable' });
     } finally {
       if (!lifetime.active()) return;
@@ -177,7 +277,7 @@ function RecipeEditorLive({
           ) : (
             <EditorFailure locale={locale} reason="unavailable" />
           )}
-          <Button className={recipeActionClassName} type="button" onClick={() => void query.refetch()}>
+          <Button className={recipeActionClassName} type="button" disabled={busy} onClick={() => void retryRead()}>
             {m.correction_retry({}, o)}
           </Button>
         </div>
@@ -227,7 +327,7 @@ function RecipeEditorLive({
         </section>
       ) : (
         read &&
-        read.fields.length > 0 && (
+        (!id || read.fields.length > 0 || rows.length > 0) && (
           <Workspace
             className="flex min-w-0 flex-col gap-6"
             noValidate={!id}
@@ -329,7 +429,7 @@ function RecipeEditorLive({
             <p className="text-sm text-muted-foreground">{m.recipe_ingredients_help({}, o)}</p>
             {id &&
               read.public &&
-              read.fields.map((field) => (
+              currentFields.map((field) => (
                 <section key={field} className="min-w-0">
                   <ContentItemFrame as="div" className={recipePanelClassName}>
                     <ContentItemHeading id={`${termsId}-current-${field}`} className="font-semibold">
@@ -340,18 +440,30 @@ function RecipeEditorLive({
                         <div data-content-item-slot="preview" className="min-w-0 break-words sm:flex-1">
                           <CandidateValue snak={source} related={read.public!.related} locale={locale} />
                         </div>
-                        <Button
-                          data-content-item-slot="actions"
-                          type="button"
-                          variant="outline"
-                          className={recipeActionClassName}
-                          disabled={rows.some((row) => row.source?.id === source.id)}
-                          onClick={() =>
-                            setRows([...rows, { id: crypto.randomUUID(), source, statement: statementInput(source) }])
-                          }
-                        >
-                          {m.recipe_correct({}, o)}
-                        </Button>
+                        {read.fields.includes(field) && (
+                          <Button
+                            data-content-item-slot="actions"
+                            type="button"
+                            variant="outline"
+                            className={recipeActionClassName}
+                            disabled={rows.some((row) => row.source?.id === source.id)}
+                            onClick={() => {
+                              const definition = read.release.properties[field];
+                              if (!definition) return;
+                              setRows([
+                                ...rows,
+                                {
+                                  id: crypto.randomUUID(),
+                                  source,
+                                  definition: structuredClone(definition),
+                                  statement: statementInput(source),
+                                },
+                              ]);
+                            }}
+                          >
+                            {m.recipe_correct({}, o)}
+                          </Button>
+                        )}
                       </div>
                     ))}
                   </ContentItemFrame>
@@ -366,10 +478,16 @@ function RecipeEditorLive({
                 search={search}
                 disabled={locked || session !== 'signed-in'}
                 transport={transport}
+                refreshDefinitions={refreshCurrentDefinitions}
+                onState={(patch) =>
+                  setRows((previous) => previous.map((entry) => (entry.id === row.id ? { ...entry, ...patch } : entry)))
+                }
                 {...(review ? { review } : {})}
-                onChange={(statement) =>
+                onChange={(statement, patch) =>
                   setRows((previous) =>
-                    previous.map((entry) => (entry.id === row.id ? { ...entry, statement } : entry)),
+                    previous.map((entry) =>
+                      entry.id === row.id ? { ...entry, ...(patch ?? {}), statement } : entry,
+                    ),
                   )
                 }
                 onOriginal={(original) =>
@@ -408,7 +526,9 @@ function RecipeEditorLive({
                 variant="outline"
                 disabled={locked || session !== 'signed-in' || !property}
                 onClick={() => {
-                  setRows([...rows, newRow(property)]);
+                  const definition = read.release.properties[property];
+                  if (!definition) return;
+                  setRows([...rows, newRow(property, definition)]);
                   setProperty('');
                 }}
               >
@@ -443,9 +563,19 @@ function RecipeEditorLive({
                         className={recipeActionClassName}
                         type="button"
                         onClick={() => {
-                          pending.current = null;
+                          if (!pendingUncertain.current) pending.current = null;
                           setFailure(undefined);
                         }}
+                      >
+                        {m.catalogue_create_review_new({}, o)}
+                      </Button>
+                    )}
+                    {failure.refreshDefinitions && (
+                      <Button
+                        className={recipeActionClassName}
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void reviewCurrentDefinitions()}
                       >
                         {m.catalogue_create_review_new({}, o)}
                       </Button>
@@ -455,7 +585,12 @@ function RecipeEditorLive({
                 <Button
                   type="submit"
                   className={`${recipeActionClassName} self-start`}
-                  disabled={busy || session !== 'signed-in' || failure?.reason === 'conflict'}
+                  disabled={
+                    busy ||
+                    session !== 'signed-in' ||
+                    failure?.reason === 'conflict' ||
+                    failure?.refreshDefinitions === true
+                  }
                 >
                   {busy
                     ? m.catalogue_create_saving({}, o)
@@ -481,7 +616,9 @@ function RecipeFieldLive({
   search,
   disabled,
   transport,
+  refreshDefinitions,
   review,
+  onState,
   onChange,
   onOriginal,
   onRemove,
@@ -492,8 +629,10 @@ function RecipeFieldLive({
   search: EntityPickerSearch;
   disabled: boolean;
   transport: RecipeTransport;
+  refreshDefinitions: () => Promise<boolean>;
   review?: (property: string, slot: CandidateSlot | undefined, session?: string) => CandidateTransport;
-  onChange: (statement: StatementInput) => void;
+  onState: (patch: Pick<Row, 'command' | 'result' | 'uncertain'>) => void;
+  onChange: (statement: StatementInput, patch?: Pick<Row, 'authored' | 'picked'>) => void;
   onRemove: () => void;
   onOriginal: (original: boolean) => void;
 }) {
@@ -501,20 +640,37 @@ function RecipeFieldLive({
   const o = { locale: locale as never };
   const fieldId = useId();
   const property = row.statement.property.id;
-  const definition = read.release.properties[property]!;
-  const label = pickText(definition.labels, locale).text;
-  const [authored, setAuthored] = useState<AuthoredField>();
-  const [picked, setPicked] = useState<EntityPickerSubject[]>([]);
-  const [citation, setCitation] = useState('');
+  const currentDefinition = read.release.properties[property];
+  const matchesCurrentDefinition = rowMatchesCurrentDefinition(row, read);
+  const currentSource =
+    !row.source ||
+    (read.public?.subject.statements[property] ?? []).some((statement) => statement.id === row.source!.id);
+  const reviewRequired = !matchesCurrentDefinition || !currentSource;
+  const definition = matchesCurrentDefinition ? currentDefinition! : row.definition;
+  const label = pickText(currentDefinition?.labels ?? row.definition.labels, locale).text || property;
+  const [authored, setAuthored] = useState<AuthoredField | undefined>(() => row.authored);
+  const [picked, setPicked] = useState<EntityPickerSubject[]>(() => row.picked ?? []);
+  const [citation, setCitation] = useState(() => {
+    let current = '';
+    for (const reference of row.statement.references)
+      for (const part of reference.parts)
+        if (
+          part.property.id === 'schema:url' &&
+          part.value.type === 'value' &&
+          typeof part.value.content === 'string'
+        )
+          current = part.value.content;
+    return current;
+  });
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<ProposalResult>();
+  const result = row.result;
   const [reviewing, setReviewing] = useState(false);
-  const command = useRef<ProposalCommand | null>(null);
   const running = useRef(false);
-  const frozen = disabled || busy || !!command.current || result?.ok === true;
+  const command = row.command;
+  const frozen = disabled || busy || !!command || result?.ok === true || reviewRequired;
   const updateAuthored = (next: AuthoredField) => {
     setAuthored(next);
-    onChange({ ...row.statement, value: authoredFieldValue(next) });
+    onChange({ ...row.statement, value: authoredFieldValue(next) }, { authored: next });
   };
   const slot =
     definition.relation &&
@@ -525,22 +681,47 @@ function RecipeFieldLive({
       : undefined;
   async function submit() {
     if (!lifetime.active()) return;
-    if (!read.public || running.current) return;
-    command.current ??= {
+    if (!read.public || running.current || reviewRequired) return;
+    const wasUncertain = row.uncertain === true;
+    const pending = command ?? {
       id: read.public.subject.id,
       statement: structuredClone(row.statement),
       key: crypto.randomUUID(),
     };
+    onState({ command: pending, result: undefined, uncertain: true });
     running.current = true;
     setBusy(true);
     try {
-      const next = await transport.propose(command.current);
+      const next = await transport.propose(pending);
       if (!lifetime.active()) return;
-      setResult(next);
-      if (next.ok) command.current = null;
+      onState({
+        command: next.ok ? undefined : pending,
+        result: next,
+        uncertain: next.ok ? false : wasUncertain || next.reason === 'unavailable',
+      });
     } catch {
       if (!lifetime.active()) return;
-      setResult({ ok: false, reason: 'unavailable' });
+      onState({ command: pending, result: { ok: false, reason: 'unavailable' }, uncertain: true });
+    } finally {
+      if (!lifetime.active()) return;
+      setBusy(false);
+      running.current = false;
+    }
+  }
+  async function reviewCurrentDefinitions() {
+    if (!lifetime.active() || running.current || !result || result.ok) return;
+    if (row.uncertain) return;
+    if (result.reason !== 'stale' && !result.refreshDefinitions) {
+      onState({ command: undefined, result: undefined, uncertain: false });
+      return;
+    }
+    running.current = true;
+    setBusy(true);
+    try {
+      if (await refreshDefinitions()) {
+        if (!lifetime.active()) return;
+        onState({ command: undefined, result: undefined, uncertain: false });
+      }
     } finally {
       if (!lifetime.active()) return;
       setBusy(false);
@@ -641,7 +822,10 @@ function RecipeFieldLive({
               src={coverSrc}
               onValueChange={(items) => {
                 setPicked(items);
-                onChange({ ...row.statement, value: { type: 'value', content: items[0]?.id ?? '' } });
+                onChange(
+                  { ...row.statement, value: { type: 'value', content: items[0]?.id ?? '' } },
+                  { picked: items },
+                );
               }}
             />
           ) : (
@@ -686,13 +870,24 @@ function RecipeFieldLive({
               }}
             />
           </Field>
-          <div data-content-item-slot="actions" className="flex min-w-0 flex-wrap gap-3">
-            <Button className={recipeActionClassName} type="button" variant="ghost" onClick={onRemove}>
-              {m.recipe_remove_field({}, o)}
-            </Button>
-          </div>
         </fieldset>
-        {result && !result.ok && <EditorFailure reason={result.reason} locale={locale} />}
+        {reviewRequired && <p role="alert">{m.catalogue_create_invalid_field({}, o)}</p>}
+        <div data-content-item-slot="actions" className="flex min-w-0 flex-wrap gap-3">
+          <Button
+            className={recipeActionClassName}
+            type="button"
+            variant="ghost"
+            disabled={disabled || busy || !!command || result?.ok === true}
+            onClick={onRemove}
+          >
+            {m.recipe_remove_field({}, o)}
+          </Button>
+        </div>
+        {row.uncertain && (!result || !result.ok) ? (
+          <EditorFailure reason="unavailable" locale={locale} />
+        ) : (
+          result && !result.ok && <EditorFailure reason={result.reason} locale={locale} />
+        )}
         {result?.ok ? (
           <div className="space-y-3">
             <div className="flex min-w-0 flex-wrap items-center gap-3">
@@ -720,15 +915,13 @@ function RecipeFieldLive({
           <div data-content-item-slot="actions" className="flex min-w-0 flex-wrap gap-3">
             {result &&
               !result.ok &&
+              !row.uncertain &&
               (result.reason === 'stale' || result.reason === 'invalid' || result.reason === 'denied') && (
                 <Button
                   className={recipeActionClassName}
                   type="button"
                   variant="outline"
-                  onClick={() => {
-                    command.current = null;
-                    setResult(undefined);
-                  }}
+                  onClick={() => void reviewCurrentDefinitions()}
                 >
                   {m.catalogue_create_review_new({}, o)}
                 </Button>
@@ -740,13 +933,15 @@ function RecipeFieldLive({
                 disabled={
                   disabled ||
                   busy ||
+                  reviewRequired ||
+                    (result && !result.ok && result.refreshDefinitions === true) ||
                   (definition.datatype === 'document' &&
                     (!authored || !row.original || !hasDocumentContent(authored.document))) ||
                   (result && !result.ok && result.reason === 'stale')
                 }
                 onClick={() => void submit()}
               >
-                {command.current ? m.correction_retry({}, o) : m.correction_submit({}, o)}
+                {command ? m.correction_retry({}, o) : m.correction_submit({}, o)}
               </Button>
             )}
           </div>

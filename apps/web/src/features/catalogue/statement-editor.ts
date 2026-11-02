@@ -39,7 +39,7 @@ export function proposalInput(value: unknown): ProposalCommand | { invalid: true
 }
 
 export type ProposalResult =
-  | (CandidateFailure & { errors?: Violation[] })
+  | (CandidateFailure & { errors?: Violation[]; refreshDefinitions?: boolean })
   | {
       ok: true;
       kind: 'proposed-awaiting-review';
