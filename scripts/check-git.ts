@@ -87,6 +87,7 @@ git -C "$stage" checkout-index --all --force
 test "$(git -C "$stage" rev-parse HEAD)" = ${shell(head)}
 test "$(git -C "$stage" write-tree)" = ${shell(indexTree)}
 ${dev ? `test "$(git -C "$stage" merge-base HEAD dev)" = ${shell(shallow)}` : ''}
+mkdir -p "$stage/.git/info"
 printf '%s\\n' '/.alive' '/.bun-install-complete' '/.remote-check-slot-count' '/bun-runtime-transpiler-cache/' '/command-phases.tsv' '/command-started' '/exit-status' >> "$stage/.git/info/exclude"
 mv -T -- "$stage" "$root"
 # Completed runs lose their pins; a seven-day grace period retains reusable objects between runs.
