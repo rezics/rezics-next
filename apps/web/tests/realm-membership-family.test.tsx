@@ -86,7 +86,7 @@ test('Complete Realm membership and leave recovery hierarchy', () => {
     expect(html).not.toContain('private-owner');
     expect(html).not.toContain('data-slot="badge"');
     expect(html).not.toContain(`>${m.realm_leave()}</button>`);
-    expect(html.includes(m.realm_membership_retry())).toBe(outcome === 'refused');
+    expect(html).toContain(m.realm_membership_retry());
     expect(membership({ state: 'pending', refresh: 'checking', problem })).toContain(m.realm_membership_loading());
     expect(membership({ state: 'pending', refresh: 'unavailable', problem })).toContain(
       m.realm_membership_current_pending(),

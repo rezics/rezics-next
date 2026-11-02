@@ -416,6 +416,59 @@ test('an uncertain leave check retires on transition, then exact retry and curre
   }
 });
 
+test('closed joins recover only through an explicit current admission check and a separate join', async () => {
+  resetFixtures();
+  readMembership = async () => viewer('none');
+  sendMembership = async () => ({ outcome: 'closed' });
+  const surface = await makeSurface();
+  try {
+    await surface.until(() => surface.hasText(m.realm_join()), 'initial join admission');
+    await click(surface, m.realm_join());
+    for (const failure of [null, new Error('Kernel Realm participation read failed')]) {
+      readMembership = async () => {
+        if (failure) throw failure;
+        return null;
+      };
+      await click(surface, m.realm_membership_retry());
+      await surface.until(() => surface.hasText(m.realm_membership_unavailable()), 'unavailable admission');
+      expect(surface.hasText(m.realm_change_closed())).toBe(true);
+      expect(surface.button(m.realm_membership_retry()).disabled).toBe(false);
+    }
+    const obsolete = deferred<RealmViewer | null>();
+    readMembership = () => obsolete.promise;
+    await act(async () => {
+      surface.button(m.realm_membership_retry()).click();
+      surface.button(m.realm_membership_retry()).click();
+    });
+    await surface.until(() => standingReads.length === 4, 'one explicit admission read');
+    expect(surface.button(m.realm_membership_retry()).disabled).toBe(true);
+    expect(membershipCommands).toHaveLength(1);
+    readMembership = async () => viewer('banned');
+    await surface.setSessions(signedIn(subject, 'csrf-rotated'));
+    await surface.until(() => standingReads.length === 5 && !surface.hasText(m.realm_membership_loading()), 'new caller');
+    obsolete.resolve(viewer('none', 'obsolete-key'));
+    await surface.settle();
+    expect(surface.hasText(m.realm_change_closed())).toBe(true);
+    expect(surface.hasText(m.realm_join())).toBe(false);
+    readMembership = async () => viewer('none', 'reopened-key');
+    await click(surface, m.realm_membership_retry());
+    await surface.until(() => surface.hasText(m.realm_join()), 'observed reopening');
+    expect(surface.hasText(m.realm_change_closed())).toBe(false);
+    expect(membershipCommands).toHaveLength(1);
+    readMembership = async () => viewer('member');
+    sendMembership = async () => ({ outcome: 'accepted', workflowId: 'reopened-join' });
+    await click(surface, m.realm_join());
+    await surface.until(() => surface.hasText(m.realm_leave()), 'current joined membership');
+    expect(membershipCommands).toHaveLength(2);
+    expect(membershipCommands[1]).toEqual({
+      data: { realmId, action: 'join', idempotencyKey: 'reopened-key' },
+      headers: { 'X-CSRF-Token': 'csrf-rotated' },
+    });
+  } finally {
+    await surface.dispose();
+  }
+});
+
 test('refused leave recovery requires a current standing check before it releases the original intent', async () => {
   resetFixtures();
   sendMembership = async () => ({ outcome: 'refused', effect: 'not-applied' });

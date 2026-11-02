@@ -446,6 +446,8 @@ membership changed. An unsettled or unavailable result keeps a pending state wit
 retry does not resend a command. A denied or hidden read is not an empty membership. Settlement invalidates
 My Realms and the carrying Space's independent follow read. No workflow-status endpoint is introduced.
 
+After a closed join, Check membership makes one current membership/admission read; only a successful read releases the closed intent, and joining still requires a separate click. Failed reads keep recovery retryable; current pending membership uses the existing bounded settlement cycle.
+
 The follow control uses only `GET/PUT/DELETE /v1/follows/{spaceId}` through the shared Library interface.
 Leave never unfollows, and an explicit unfollow remains authoritative when a later native join workflow applies
 its implied Space follow. There is no Realm follow. A native leave denial remains a denial; the interface does

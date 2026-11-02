@@ -75,6 +75,11 @@ export function RealmParticipationView({
               {m.realm_membership_unavailable()}
             </p>
           ) : null}
+          {problem?.outcome === 'closed' && refresh === 'unavailable' && state !== 'unavailable' ? (
+            <p role="status" className="text-sm leading-relaxed text-muted-foreground">
+              {m.realm_membership_unavailable()}
+            </p>
+          ) : null}
           {state === 'banned' && !problem ? (
             <p role="status" className="max-w-prose leading-relaxed">
               {m.realm_banned()}
@@ -128,12 +133,12 @@ export function RealmParticipationView({
               {m.realm_join()}
             </Button>
           ) : null}
-          {problem?.outcome === 'refused' || state === 'unavailable' || (pending && refresh !== 'checking') ? (
+          {problem || state === 'unavailable' || (pending && refresh !== 'checking') ? (
             <Button
               type="button"
               variant="outline"
               className="h-auto min-h-11 min-w-11 max-w-full bg-background py-2 text-start whitespace-normal text-foreground dark:bg-background"
-              disabled={busy || refresh === 'checking'}
+              disabled={busy || refresh === 'checking' || (problem?.outcome === 'closed' && !ready)}
               onClick={onRetry}
             >
               {m.realm_membership_retry()}

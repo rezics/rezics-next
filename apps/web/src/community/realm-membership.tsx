@@ -125,7 +125,7 @@ function PersonalMembership({
   const viewer = standingIsCurrent ? query.data : undefined;
   const currentPending = pending?.caller.isCurrent() ? pending : null;
   const currentBusy = busy?.caller.isCurrent() ? busy.value : false;
-  const currentProblem = viewer ? problem : null;
+  const currentProblem = viewer || problem?.outcome === 'closed' ? problem : null;
   const currentRecovery = viewer ? leaveRecovery : null;
   const currentRefresh = refresh?.caller.isCurrent() ? refresh.value : null;
   const currentLeaveCheck = leaveCheck?.caller.isCurrent() ? leaveCheck.value : null;
@@ -146,9 +146,15 @@ function PersonalMembership({
   useEffect(() => {
     const firstAuthority = initialAuthority.current;
     const isInitialAuthority = firstAuthority.store === caller.store && firstAuthority.revision === caller.revision;
-    if (viewer?.state === 'pending' && !currentRecovery && !currentPending && isInitialAuthority)
+    if (
+      viewer?.state === 'pending' &&
+      currentProblem?.outcome !== 'closed' &&
+      !currentRecovery &&
+      !currentPending &&
+      isInitialAuthority
+    )
       setPending({ cycle: 0, caller });
-  }, [viewer?.state, currentRecovery, currentPending, caller]);
+  }, [viewer?.state, currentProblem, currentRecovery, currentPending, caller]);
 
   useEffect(() => {
     if (!currentPending) return;
@@ -198,6 +204,45 @@ function PersonalMembership({
     if (inFlight.current === operation && operation.caller.isCurrent()) {
       inFlight.current = null;
       setBusy({ value: false, caller: operation.caller });
+    }
+  }
+
+  async function checkJoinAdmission() {
+    if (
+      !caller.isReady() ||
+      currentProblem?.outcome !== 'closed' ||
+      currentRecovery ||
+      currentPending ||
+      isLocked() ||
+      query.isFetching
+    )
+      return;
+    const operation = startOperation(caller, 'check');
+    const isCurrent = () => operation.caller.isCurrent() && inFlight.current === operation;
+    setRefresh({ value: 'checking', caller });
+    try {
+      // One explicit read checks native membership and participation without submitting a command.
+      const result = await query.refetch();
+      if (!isCurrent()) return;
+      if (result.isError || !result.data || !hasCurrentRealmMembership(client, realm.id, subject, caller)) {
+        setRefresh({ value: 'unavailable', caller });
+        return;
+      }
+      await client.invalidateQueries({ queryKey: ['my-realms'] });
+      if (!isCurrent()) return;
+      if (spaceId) await client.invalidateQueries({ queryKey: ['follow-state', spaceId] });
+      if (!isCurrent()) return;
+      // Refresh any page-supplied action admission before releasing the closed notice.
+      await router.invalidate();
+      if (!isCurrent()) return;
+      attempt.current = null;
+      setProblem(null);
+      setRefresh(null);
+      if (result.data.state === 'pending') setPending({ cycle: 0, caller });
+    } catch {
+      if (isCurrent()) setRefresh({ value: 'unavailable', caller });
+    } finally {
+      finishOperation(operation);
     }
   }
 
@@ -302,9 +347,11 @@ function PersonalMembership({
         onRetry={() =>
           currentRecovery
             ? void checkLeave()
-            : currentPending || currentProblem?.outcome === 'refused' || viewer?.state === 'pending'
-              ? setPending({ target: currentPending?.target, cycle: (currentPending?.cycle ?? -1) + 1, caller })
-              : void query.refetch()
+            : currentProblem?.outcome === 'closed'
+              ? void checkJoinAdmission()
+              : currentPending || currentProblem?.outcome === 'refused' || viewer?.state === 'pending'
+                ? setPending({ target: currentPending?.target, cycle: (currentPending?.cycle ?? -1) + 1, caller })
+                : void query.refetch()
         }
       />
       {currentRecovery ? (
