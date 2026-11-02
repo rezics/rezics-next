@@ -792,6 +792,7 @@ function RecipeFieldLive({
   const [reviewing, setReviewing] = useState(false);
   const running = useRef(false);
   const command = row.command;
+  const wasUncertain = !!command && row.uncertain === true;
   const frozen = disabled || busy || !!command || result?.ok === true || reviewRequired;
   const updateAuthored = (next: AuthoredField) => {
     clearCorrection(`${fieldId}-replace`);
@@ -807,7 +808,6 @@ function RecipeFieldLive({
       : undefined;
   async function submit() {
     if (!lifetime.active()) return;
-    const wasUncertain = !!command && row.uncertain === true;
     if (!read.public || running.current || (reviewRequired && !wasUncertain)) return;
     const pending = command ?? {
       id: read.public.subject.id,
