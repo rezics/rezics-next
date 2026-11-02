@@ -68,6 +68,9 @@ the opener. That group uses the displayed-locale catalogue label `subject_cover_
 Explicit focused Close of a published preview restores the surviving Inspect control once it is enabled after commit;
 target, address and Realm edits, ordinary completion, a replaced read or locale, an unmount, and a reader who has
 moved elsewhere do not transfer focus.
+Focused population directory Next, Restart and Retry keep one request-keyed keyboard intent until that page settles,
+including an empty terminal page and a later successful retry; directory source-status recovery does not retire it, a
+newer Restart or Retry replaces an older request, and any other focus movement, visit replacement or unmount does.
 
 ## Dependencies
 

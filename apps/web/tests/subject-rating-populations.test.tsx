@@ -517,7 +517,9 @@ test('Actual bounded population directory/selection/labels/aggregates and mounte
   expect(boxes()).toHaveLength(0);
   expect(paths('/ratings/populations')).toHaveLength(1);
   await act(async () => {
-    button(m.rating_population_next()).click();
+    const next = button(m.rating_population_next());
+    next.focus();
+    next.click();
     await tick();
   });
   await until(() => boxes().length === 20);
@@ -552,7 +554,9 @@ test('Actual bounded population directory/selection/labels/aggregates and mounte
   expect(paths('/ratings/populations')).toHaveLength(before);
   aggregateFailed = false;
   await act(async () => {
-    button(m.rating_population_restart()).click();
+    const restart = button(m.rating_population_restart());
+    restart.focus();
+    restart.click();
     await tick();
   });
   await until(() => boxes().length === 0);

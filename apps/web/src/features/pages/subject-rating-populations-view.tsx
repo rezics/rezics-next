@@ -16,6 +16,7 @@ import {
 } from './subject-rating-populations';
 import { displayRating, PUBLIC_RATING_SCALE, type RatingQuestion } from './subject-ratings';
 import { RatingSourceStatus } from './subject-ratings-view';
+import { usePopulationPageFocus } from './population-page-focus';
 import {
   acceptPopulationPage,
   nextPopulationPage,
@@ -283,7 +284,6 @@ function PopulationVisit({
   progress.current = pageState;
   const helpId = useId();
   const region = useRef<HTMLDivElement>(null);
-  const [focusPage, setFocusPage] = useState(false);
   const mounted = useRef(true);
   useLayoutEffect(() => {
     mounted.current = true;
@@ -428,22 +428,20 @@ function PopulationVisit({
     (selectedOutcome.kind !== 'ready' ||
       comparisons?.incomplete ||
       comparisons?.items.some((item) => item.figure.kind !== 'ready'));
-
-  useLayoutEffect(() => {
-    if (!focusPage || !page || pending || busy || !guard()) return;
-    region.current?.querySelector<HTMLElement>('input:not(:disabled), button:not(:disabled)')?.focus();
-    setFocusPage(false);
-  }, [
-    cursorKey,
-    acceptedKey,
-    acceptedDirectory.data,
-    focusPage,
-    pending,
-    busy,
-    pageVersion,
-    acceptedVersion,
-    selectionVersion,
-  ]);
+  const pageFocus = usePopulationPageFocus({
+    owner: {
+      subject: subjectId,
+      question: question.id,
+      locale,
+      read,
+      ...(lease?.key !== undefined ? { lease: lease.key } : {}),
+      reader,
+      isCurrent: current,
+    },
+    requestKey: cursorKey,
+    ready: Boolean(page && !pending && !busy && guard()),
+    region,
+  });
 
   const changeSelection = (next: string[]) => {
     if (!selectionGuard() || next.length > POPULATION_LIMIT) return;
@@ -451,18 +449,22 @@ function PopulationVisit({
     wanted.current = { ...wanted.current, selectedKey: JSON.stringify([revision, next]) };
     setSelection({ ids: next, revision });
   };
-  const move = (restart = false) => {
+  const move = (restart = false, source?: HTMLElement) => {
     if (!directoryGuard() || (!restart && (busy || pending))) return;
     const next = restart ? restartPopulationProgress(pageState) : nextPopulationPage(pageState, page?.next ?? null);
     if (next === pageState) return;
-    wanted.current = { ...wanted.current, cursorKey: populationRequestKey(next.request) };
+    const nextKey = populationRequestKey(next.request);
+    wanted.current = { ...wanted.current, cursorKey: nextKey };
+    if (source) pageFocus.capture(source, nextKey);
     setPageState(next);
-    setFocusPage(true);
   };
   const retry = (kind: 'directory' | 'selected') => {
     if (kind === 'directory' ? !directoryGuard() || busy || !!pageState.stopped : !selectionGuard()) return;
     // No mutation/invalidation of siblings, own votes, or drafts. Query finally is owned by TanStack.
-    if (kind === 'directory') setFocusPage(true);
+    if (kind === 'directory') {
+      const source = region.current?.ownerDocument.activeElement;
+      if (source instanceof HTMLElement) pageFocus.capture(source, cursorKey);
+    }
     void (kind === 'directory' ? directory.refetch() : comparison.refetch()).catch(() => {});
   };
   const clear = () => {
@@ -538,7 +540,7 @@ function PopulationVisit({
                 disabled={
                   !pageState.stopped && !pageState.unusableContinuation && request.cursor === undefined && !pending
                 }
-                onClick={() => move(true)}
+                onClick={(event) => move(true, event.currentTarget)}
               >
                 {m.rating_population_restart({}, options)}
               </Button>
@@ -549,7 +551,7 @@ function PopulationVisit({
                 disabled={
                   busy || pending || !!pageState.stopped || pageState.unusableContinuation || page.next === null
                 }
-                onClick={() => move()}
+                onClick={(event) => move(false, event.currentTarget)}
               >
                 {m.rating_population_next({}, options)}
               </Button>
@@ -557,7 +559,12 @@ function PopulationVisit({
           </>
         )}
         {!page && (request.cursor !== undefined || pageState.accepted || pageState.stopped) && (
-          <Button className={actionClass} type="button" variant="outline" onClick={() => move(true)}>
+          <Button
+            className={actionClass}
+            type="button"
+            variant="outline"
+            onClick={(event) => move(true, event.currentTarget)}
+          >
             {m.rating_population_restart({}, options)}
           </Button>
         )}
