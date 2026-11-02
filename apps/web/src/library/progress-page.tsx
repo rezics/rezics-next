@@ -15,7 +15,7 @@ import { ContentItem } from '@rezics/ui/content-item';
 import { ListRowControl } from '@rezics/ui/list-row';
 import { Menu } from '@rezics/ui/menu';
 import { Link, useRouter } from '@tanstack/react-router';
-import { useId, useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
+import { useId, useRef, useState, useSyncExternalStore, type FormEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import { CancelledError, useQuery, useQueryClient } from '@tanstack/react-query';
 import { personalRead } from '../kernel/query';
 import {
@@ -34,9 +34,20 @@ import { getLocale } from '../paraglide/runtime.js';
 import { subjectHref } from '../subject/subject-href';
 import { PageHeading } from '../shell/page-heading';
 import { csrfHeaders } from '../threads/composer';
+import {
+  AuthoringDepartureBoundary,
+  useAuthoringDeparture,
+} from '../threads/authoring-departure';
 import type { ProgressFinishInput, ProgressIndex, ProgressMode, ProgressStartInput } from './progress-reads';
 import { progressFailureMessage, progressView } from './progress-label';
 import type { ProgressChoices } from './progress-profile';
+import {
+  progressStartDraftChanged,
+  progressStartDraftFromPage,
+  progressStartDraftNavigationContext,
+  progressStartDraftNavigationMessages,
+  type ProgressStartDraft,
+} from './progress-start-draft-navigation';
 import {
   finishProgressSession,
   startProgressSession,
@@ -249,7 +260,22 @@ export function CurrentViewerProgressIndexPage({
   );
 }
 
-export function ProgressIndexPage({
+export function ProgressIndexPage(props: {
+  page: ProgressIndex;
+  cursor?: string | null;
+  authority?: ProgressAuthority;
+}) {
+  return (
+    <AuthoringDepartureBoundary
+      navigationContext={progressStartDraftNavigationContext}
+      navigationMessages={progressStartDraftNavigationMessages()}
+    >
+      <ProgressIndexPageContent {...props} />
+    </AuthoringDepartureBoundary>
+  );
+}
+
+function ProgressIndexPageContent({
   page,
   cursor,
   authority,
@@ -266,6 +292,11 @@ export function ProgressIndexPage({
   const episode = useProgressAction(authority, 'progress_session.create', creatable, identity);
   const current = () => episode.isCurrent() && admission.current;
   const intent = useRef<ProgressCommand<ProgressStartInput, typeof startProgressSession> | null>(null);
+  const initialDraft = useRef(progressStartDraftFromPage(page));
+  const completedStart = useRef(false);
+  const pendingNavigation = useRef<HTMLAnchorElement | null>(null);
+  const replayingNavigation = useRef<HTMLAnchorElement | null>(null);
+  const departureRef = useRef<{ release: () => void } | null>(null);
   const sessions = progressIndexSubjects(page.sessions);
   const [chosen, setChosen] = useState(() => {
     const subject = page.selectedSubject;
@@ -292,6 +323,8 @@ export function ProgressIndexPage({
 
   if (seenIdentity !== episode) {
     setSeenIdentity(episode);
+    initialDraft.current = progressStartDraftFromPage(page);
+    completedStart.current = false;
     if (!authority || (seenIdentity.identity !== episode.identity && seenIdentity.revoked)) intent.current = null;
     if (intent.current) {
       setAlert(m.library_progress_unavailable());
@@ -326,6 +359,64 @@ export function ProgressIndexPage({
     renderDraft((value) => value + 1);
     change();
   };
+
+  const startDraft: ProgressStartDraft = {
+    subjectId: subject,
+    versionSubjectId: version[0]?.id ?? '',
+    mode,
+    unit,
+    total,
+  };
+  const changed = progressStartDraftChanged(initialDraft.current, startDraft);
+  const needsDeparture = () => current() && !completedStart.current && (changed || pending || intent.current !== null);
+  const departure = useAuthoringDeparture(
+    needsDeparture,
+    () => pending || intent.current !== null,
+    JSON.stringify([episode.generation, startDraft, pending, intent.current !== null]),
+    () => {
+      departureRef.current?.release();
+      const link = pendingNavigation.current;
+      pendingNavigation.current = null;
+      if (link?.isConnected) {
+        replayingNavigation.current = link;
+        link.click();
+      }
+    },
+    undefined,
+    undefined,
+    progressStartDraftNavigationMessages(),
+    progressStartDraftNavigationContext,
+  );
+  departureRef.current = departure;
+
+  function protectNavigation(event: ReactMouseEvent<HTMLElement>) {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const link = target.closest('a');
+    if (!(link instanceof HTMLAnchorElement)) return;
+    if (replayingNavigation.current === link) {
+      replayingNavigation.current = null;
+      return;
+    }
+    if (
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey ||
+      link.target ||
+      link.hasAttribute('download') ||
+      link.origin !== window.location.origin ||
+      !departure.hasOwner ||
+      !needsDeparture()
+    )
+      return;
+    event.preventDefault();
+    event.stopPropagation();
+    pendingNavigation.current = link;
+    departure.requestDiscard();
+  }
 
   async function onStart(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -362,6 +453,8 @@ export function ProgressIndexPage({
         return;
       }
       intent.current = null;
+      completedStart.current = true;
+      departure.release();
       draftRef.current = { scope: draftScope, token: {} };
       setKey(crypto.randomUUID());
       if (!current()) return;
@@ -385,7 +478,7 @@ export function ProgressIndexPage({
     );
   const ratio = rowRatio(sessions.map((session) => session.subject));
   return (
-    <article className="max-w-4xl space-y-10 text-foreground">
+    <article className="max-w-4xl space-y-10 text-foreground" onClickCapture={protectNavigation}>
       <PageHeading>{m.library_progress_heading()}</PageHeading>
 
       <>

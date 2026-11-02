@@ -22,6 +22,7 @@ is background evidence, not implementation evidence.
 For one account and stored subject there is at most one explicit exclusive entry state, independent labels, progress
 sessions and copies (holdings). These are separate private native facts; ratings remain with ratings. Profiles in
 immutable definitions releases supply state sets, progress modes/units, copy kinds/statuses and import mappings.
+Progress setup treats the loaded subject and default mode/unit as its baseline; only subject, version, mode, unit or exact total-text changes need departure protection, and restoring those values clears it.
 Stored accepted pins retain their immutable meaning after release activation or retirement. Missing profiles block
 new profiled values, not historic reads, clearing or exact undo. Generic labels and curated occurrence edits need no
 profile binding or lookup, and never invent a default state.

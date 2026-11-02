@@ -209,6 +209,11 @@ async function mount(initial = page()) {
   const form = () => host.querySelector('form')!;
   const key = () => form().querySelector<HTMLInputElement>('[name="idempotencyKey"]')!.value;
   const total = () => body.getByRole('spinbutton', { name: m.library_progress_total() }) as HTMLInputElement;
+  const beforeUnload = () => {
+    const event = new window.Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  };
   const click = async (name: string) =>
     act(async () => {
       await user.click(body.getByRole('button', { name, exact: true }));
@@ -260,6 +265,7 @@ async function mount(initial = page()) {
     show,
     key,
     total,
+    beforeUnload,
     click,
     submit,
     start,
@@ -463,9 +469,38 @@ test('Current-page creation preserves native subject/version, modes, totals, ret
       expect(h.key()).not.toBe(initial.idempotencyKey);
       expect(h.redirects).toHaveLength(1);
       expect(h.redirects[0]).toContain(`/library/progress/${id(90)}`);
+      expect(h.beforeUnload()).toBe(false);
     } finally {
       await h.close();
     }
+  }
+});
+
+test('Progress setup protects changed values, keeps them on Stay and discards them without starting a session', async () => {
+  const h = await mount(page());
+  try {
+    expect(h.beforeUnload()).toBe(false); // Loaded subject and default mode/unit are the baseline.
+    await act(async () => h.user.type(h.total(), '1.2'));
+    expect(h.beforeUnload()).toBe(true); // Invalid step text is still an edit worth keeping.
+    await act(async () => h.user.clear(h.total()));
+    expect(h.beforeUnload()).toBe(false); // Reverting to the exact baseline leaves normally.
+
+    await h.pick(5, m.library_progress_version());
+    await act(async () => h.user.type(h.total(), '1.2'));
+    await act(async () => h.user.click(h.body.getByRole('link', { name: m.library_progress_more(), exact: true })));
+    expect(h.body.getByRole('alertdialog').textContent).toContain(m.library_progress_start_draft_navigation_title());
+    await h.click(m.thread_authoring_stay());
+    expect(h.total().value).toBe('1.2');
+    expect(h.host.textContent).toContain('Subject 5');
+    expect(h.beforeUnload()).toBe(true);
+
+    await act(async () => h.user.click(h.body.getByRole('link', { name: m.library_progress_more(), exact: true })));
+    await h.click(m.library_progress_start_draft_navigation_discard());
+    expect(h.body.queryByRole('alertdialog')).toBeNull();
+    expect(commands).toHaveLength(0); // Leaving a draft never creates, completes or abandons a session.
+    expect(h.beforeUnload()).toBe(false);
+  } finally {
+    await h.close();
   }
 });
 
