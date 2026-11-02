@@ -1655,7 +1655,9 @@ turn. That policy must survive thread resume and explicit inbox turns without ch
 thread or worker sessions; it must leave autonomous controller work running. Integration requires a provider API that
 acknowledges the policy and restores it after host recovery. Until that prerequisite is available, retain active Goals
 and the supported inbox wakeup path; do not send an invented configuration key or treat the opening prompt as scheduler
-control. The recovery test covers controller dispatch, not suppression of native provider turns. See the
+control. Resident startup and recovery send only those five `thread/goal/set` fields, keep the existing thread through
+resume, and parse 0.164.0's ANSI-colored `readyz:` line (`NO_COLOR=1` and CSI stripping) so the host can connect.
+The recovery test covers controller dispatch, not suppression of native provider turns. See the
 [official OpenAI Goal lifecycle documentation](https://developers.openai.com/cookbook/examples/codex/using_goals_in_codex)
 for the independent native continuation behavior.
 Managers receive only decisions requiring judgment; gates, merges and mechanical reruns do not wake them. Completion is

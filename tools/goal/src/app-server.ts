@@ -129,6 +129,11 @@ export class StdioAppServer implements AppServer {
 const APP_SERVER_DIAGNOSTICS_LIMIT = 256 * 1024;
 const APP_SERVER_READY = /readyz:\s*(https?:\/\/127\.0\.0\.1:\d+\/readyz)/;
 
+/** Installed `codex-cli 0.164.0` colors `readyz:` with CSI; strip it before matching. */
+function stripAnsi(text: string): string {
+  return text.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '');
+}
+
 function retainAppServerDiagnostics(current: string, chunk: string): string {
   const next = current + chunk;
   return next.length <= APP_SERVER_DIAGNOSTICS_LIMIT ? next : next.slice(-APP_SERVER_DIAGNOSTICS_LIMIT);
@@ -245,7 +250,14 @@ export async function connectPool(
   const executable = pool.executable ?? 'codex';
   // The overload exposes an isolated environment while keeping the transport entry signature stable.
   const parentEnvironment: NodeJS.ProcessEnv = arguments[2] === undefined ? process.env : arguments[2];
-  const env = { ...cleanManagedProviderEnvironment(parentEnvironment), CODEX_HOME: pool.codexHome };
+  const env = {
+    ...cleanManagedProviderEnvironment(parentEnvironment),
+    CODEX_HOME: pool.codexHome,
+    NO_COLOR: '1',
+    TERM: 'dumb',
+  };
+  delete env.FORCE_COLOR;
+  delete env.CLICOLOR_FORCE;
   const child = spawn(executable, ['app-server', '--listen', 'ws://127.0.0.1:0'], { env, stdio: 'pipe' });
   if (onStart) {
     const identity = child.pid ? readProcessIdentity(child.pid) : null;
@@ -276,7 +288,7 @@ export async function connectPool(
     child.stderr.on('data', (chunk) => {
       if (settled) return;
       stderr = retainAppServerDiagnostics(stderr, String(chunk));
-      const match = stderr.match(APP_SERVER_READY);
+      const match = stripAnsi(stderr).match(APP_SERVER_READY);
       if (match) finish(undefined, match[1]);
     });
     child.on('error', (error) => finish(error));

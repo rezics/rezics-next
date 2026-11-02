@@ -25,6 +25,17 @@ function codexTurnSettings(spec: Pick<ManagerSpec, 'effort'>) {
   return { model: CODEX_MANAGER_MODEL, effort: spec.effort };
 }
 
+/** `ThreadGoalSetParams` from installed `codex-cli 0.164.0`; no idle-continuation field is acknowledged. */
+function activeGoalSet(threadId: string, spec: Pick<ManagerSpec, 'objective' | 'budget'>) {
+  return {
+    threadId,
+    origin: 'user' as const,
+    objective: spec.objective,
+    status: 'active' as const,
+    tokenBudget: spec.budget,
+  };
+}
+
 export type ManagerLimits = { turns: number; turnsWithoutDecision: number; wallMs: number };
 export type ManagerSpec = {
   id: string;
@@ -633,13 +644,7 @@ export class ManagerSessions {
         });
         state.threadId = started.thread.id;
         this.save(state);
-        const goal = await client.request('thread/goal/set', {
-          threadId: state.threadId,
-          objective: spec.objective,
-          status: 'active',
-          tokenBudget: spec.budget,
-          origin: 'user',
-        });
+        const goal = await client.request('thread/goal/set', activeGoalSet(state.threadId, spec));
         state.goalState = goal.goal;
         state.status = 'running';
         this.save(state);

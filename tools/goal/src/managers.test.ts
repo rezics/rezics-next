@@ -120,8 +120,13 @@ test('manager startup follows installed protocol and two managers share one app-
       model: 'gpt-6.1-sol',
       config: { model_reasoning_effort: 'high', model_auto_compact_token_limit: 300000 },
     });
-    expect(requests[1].params.tokenBudget).toBe(40000);
-    expect(requests[1].params.status).toBe('active');
+    expect(requests[1].params).toEqual({
+      threadId: 'thread-1',
+      origin: 'user',
+      objective: s.spec.objective,
+      status: 'active',
+      tokenBudget: 40000,
+    });
     expect(first.threadId).toBe('thread-1');
     expect(first.activeTurnId).toBe('turn-1');
     expect(s.managers.get(s.spec.id).turns).toBe(1);
@@ -433,7 +438,7 @@ test('JSON-RPC errors propagate and an exiting app-server rejects pending reques
   }
 });
 
-test('an idle active Goal waits while the host starts another manager, then inbox wakes the same thread', async () => {
+test('An active resident manager waits without provider-generated idle turns while autonomous controller work continues.', async () => {
   const s = await setup();
   try {
     const manager = await s.managers.start(s.spec);
@@ -451,11 +456,19 @@ test('an idle active Goal waits while the host starts another manager, then inbo
       usage: { total: { totalTokens: 500 } },
       goalState: { status: 'active', objective: s.spec.objective, tokenBudget: s.spec.budget },
     });
+    expect(s.requests().find((r) => r.method === 'thread/goal/set')?.params).toEqual({
+      threadId: manager.threadId,
+      origin: 'user',
+      objective: s.spec.objective,
+      status: 'active',
+      tokenBudget: s.spec.budget,
+    });
     await s.managers.start({ ...s.spec, id: 'second' });
     expect(s.managers.get('second')).toMatchObject({ status: 'running', threadId: 'thread-2' });
     expect(
       s.requests().filter((r) => r.method === 'turn/start' && r.params.threadId === manager.threadId),
     ).toHaveLength(1);
+    expect(s.requests().filter((r) => r.method === 'turn/start')).toHaveLength(2);
     expect(
       s
         .requests()
@@ -480,7 +493,7 @@ test('an idle active Goal waits while the host starts another manager, then inbo
   }
 });
 
-test('controller inbox recovery wakes the same active Goal once without changing its lifecycle', async () => {
+test('Inbox decisions wake the existing thread once before and after host recovery, preserving Goal objective, budget, usage and worker sessions.', async () => {
   const s = await setup();
   let recovered: ManagerSessions | undefined;
   const closeTransport = s.client.close.bind(s.client);
