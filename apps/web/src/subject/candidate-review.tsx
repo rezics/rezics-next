@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState, type ComponentProps } from 'react';
 import { useCandidateWork, type CandidateWork } from './candidate-lifetime';
 import { ContextComparisonView } from '../features/catalogue/context-curation-view';
 import { Button } from '@rezics/ui/shadcn/button';
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
@@ -312,9 +313,9 @@ function CandidateReviewLive({
       aria-labelledby={confirmationTitle}
       className="flex flex-col gap-3 rounded-lg border border-border p-4"
     >
-      <h4 id={confirmationTitle} className="font-semibold">
+      <ContentItemHeading level={4} id={confirmationTitle} className="font-semibold">
         {m.candidate_confirm_title({ action }, options)}
-      </h4>
+      </ContentItemHeading>
       <p className="text-sm">
         {confirmation === 'accept'
           ? context
@@ -382,10 +383,12 @@ function CandidateReviewLive({
     <section
       id="candidate-review"
       aria-label={m.candidate_title({}, options)}
-      className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6"
+      className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 [overflow-wrap:anywhere] sm:p-6 [&_button]:h-auto [&_button]:max-w-full [&_button]:whitespace-normal [&_button]:text-start [&_select]:max-w-full max-md:[&_select]:min-h-11 pointer-coarse:[&_select]:min-h-11 pointer-coarse:[&_[role=checkbox]]:size-11 [&_a]:max-w-full [&_a]:whitespace-normal [&_a]:[overflow-wrap:anywhere] max-md:[&_a]:inline-flex max-md:[&_a]:min-h-11 max-md:[&_a]:min-w-11 max-md:[&_a]:items-center max-md:[&_a]:py-2 pointer-coarse:[&_a]:inline-flex pointer-coarse:[&_a]:min-h-11 pointer-coarse:[&_a]:min-w-11 pointer-coarse:[&_a]:items-center pointer-coarse:[&_a]:py-2 [&_a]:focus-visible:outline-2 [&_a]:focus-visible:outline-offset-2 [&_a]:focus-visible:outline-ring"
     >
       <div className="space-y-1">
-        <h2 className="text-xl font-semibold">{m.candidate_title({}, options)}</h2>
+        <ContentItemHeading level={2} className="text-xl font-semibold">
+          {m.candidate_title({}, options)}
+        </ContentItemHeading>
         <p className="text-sm text-muted-foreground">
           {context ? m.context_authority({}, options) : m.candidate_intro({}, options)}
         </p>
@@ -501,24 +504,26 @@ function CandidateReviewLive({
                         {current.page.candidates
                           .filter((item) => !exactCandidate || item.id === exactCandidate)
                           .map((item) => (
-                            <li key={item.id} className="space-y-3 rounded-lg border border-border p-3">
-                              <CandidateValue
-                                snak={item.statement}
-                                related={(current.contextReview?.reading ?? current.public).related}
-                                locale={locale}
-                                subject={id}
-                                documents={documents?.candidates}
-                              />
-                              <p className="text-sm text-muted-foreground">{state(item)}</p>
-                              <CandidateProvenance candidate={item} read={current} locale={locale} />
-                              <Button
-                                variant="outline"
-                                className="min-h-11"
-                                disabled={locked || item.retracted !== null}
-                                onClick={() => work.live() && setCandidate(item)}
-                              >
-                                {m.candidate_review({}, options)}
-                              </Button>
+                            <li key={item.id} className="min-w-0">
+                              <ContentItemFrame as="div" className="min-w-0 space-y-3 p-3 sm:p-4" data-candidate-item>
+                                <CandidateValue
+                                  snak={item.statement}
+                                  related={(current.contextReview?.reading ?? current.public).related}
+                                  locale={locale}
+                                  subject={id}
+                                  documents={documents?.candidates}
+                                />
+                                <p className="text-sm text-muted-foreground">{state(item)}</p>
+                                <CandidateProvenance candidate={item} read={current} locale={locale} />
+                                <Button
+                                  variant="outline"
+                                  className="min-h-11"
+                                  disabled={locked || item.retracted !== null}
+                                  onClick={() => work.live() && setCandidate(item)}
+                                >
+                                  {m.candidate_review({}, options)}
+                                </Button>
+                              </ContentItemFrame>
                             </li>
                           ))}
                       </ul>
@@ -536,12 +541,18 @@ function CandidateReviewLive({
                   </div>
                   {candidate && (
                     <div className="space-y-4">
-                      <h3 className="font-semibold">{current.fields.find((field) => field.id === property)?.label}</h3>
+                      <ContentItemHeading level={3} className="font-semibold">
+                        {current.fields.find((field) => field.id === property)?.label}
+                      </ContentItemHeading>
                       <div className="grid gap-4 sm:grid-cols-2">
-                        <div className="min-w-0 space-y-2 rounded-lg bg-muted/40 p-3">
-                          <h4 className="text-sm font-semibold">
+                        <ContentItemFrame
+                          as="div"
+                          className="min-w-0 space-y-2 rounded-lg bg-muted/40 p-3"
+                          data-candidate-panel="current"
+                        >
+                          <ContentItemHeading level={4} className="text-sm font-semibold">
                             {context ? m.context_selected_values({}, options) : m.candidate_current({}, options)}
-                          </h4>
+                          </ContentItemHeading>
                           {!publicRead ? (
                             <p>{m.candidate_public_unconfirmed({}, options)}</p>
                           ) : publicStatements.length ? (
@@ -559,9 +570,15 @@ function CandidateReviewLive({
                           ) : (
                             <p>{context ? m.context_no_values({}, options) : m.candidate_no_current({}, options)}</p>
                           )}
-                        </div>
-                        <div className="min-w-0 space-y-2 rounded-lg border border-primary/40 p-3">
-                          <h4 className="text-sm font-semibold">{m.candidate_proposed({}, options)}</h4>
+                        </ContentItemFrame>
+                        <ContentItemFrame
+                          as="div"
+                          className="min-w-0 space-y-2 rounded-lg border border-primary/40 p-3"
+                          data-candidate-panel="proposed"
+                        >
+                          <ContentItemHeading level={4} className="text-sm font-semibold">
+                            {m.candidate_proposed({}, options)}
+                          </ContentItemHeading>
                           <CandidateValue
                             snak={candidate.statement}
                             related={(current.contextReview?.reading ?? current.public).related}
@@ -585,7 +602,7 @@ function CandidateReviewLive({
                             </div>
                           ))}
                           <CandidateProvenance candidate={candidate} read={current} locale={locale} />
-                        </div>
+                        </ContentItemFrame>
                       </div>
                       <div className="flex flex-col gap-3">
                         <div className="flex flex-wrap gap-2">
@@ -625,115 +642,131 @@ function CandidateReviewLive({
                   {draft && (
                     <section
                       aria-label={context ? m.context_draft({}, options) : m.candidate_selection_draft({}, options)}
-                      className="flex flex-col gap-3 rounded-lg border border-border p-3"
+                      className="min-w-0"
                     >
-                      <h3 className="font-semibold">
-                        {context ? m.context_draft({}, options) : m.candidate_selection_draft({}, options)}
-                      </h3>
-                      {context && current.contextReview && (
-                        <Field>
-                          <FieldLabel htmlFor="context-mode">{m.context_mode({}, options)}</FieldLabel>
-                          <NativeSelect
-                            id="context-mode"
-                            value={mode}
-                            disabled={locked || requiresReload}
-                            onChange={(event) =>
-                              work.live() &&
-                              setModes((previous) => ({ ...previous, [property]: event.target.value as typeof mode }))
-                            }
-                          >
-                            <NativeSelectOption value="replace">{m.context_replace({}, options)}</NativeSelectOption>
-                            {current.contextReview.context.kind === 'community' && (
-                              <>
-                                <NativeSelectOption value="inherit">
-                                  {m.context_inherit({}, options)}
-                                </NativeSelectOption>
-                                <NativeSelectOption value="suppress">
-                                  {m.context_suppress({}, options)}
-                                </NativeSelectOption>
-                              </>
-                            )}
-                          </NativeSelect>
-                        </Field>
-                      )}
-                      <p className="text-sm text-muted-foreground">
-                        {context && mode !== 'replace'
-                          ? m.context_empty_selection({}, options)
-                          : context
-                            ? m.context_replace_hint({}, options)
-                            : m.candidate_replace_hint({}, options)}
-                      </p>
-                      <p className="text-sm">{m.candidate_selection_limit({ limit: String(maximum) }, options)}</p>
-                      {(!context || mode === 'replace') && (
-                        <ul className="space-y-3">
-                          {[...new Set([...choices.keys(), ...draft.selection.map((entry) => entry.candidate)])].map(
-                            (choice) => {
-                              const value = choices.get(choice);
-                              const entry = draft.selection.find((entry) => entry.candidate === choice);
-                              return (
-                                <li key={choice} className="space-y-2 rounded-lg bg-muted/30 p-3">
-                                  <Field orientation="horizontal">
-                                    <Checkbox
-                                      id={`include-${choice}`}
-                                      checked={!!entry}
-                                      disabled={
-                                        locked || (!entry && (!value?.eligible || draft.selection.length >= maximum))
-                                      }
-                                      onCheckedChange={(checked) => edit(choice, checked ? 'normal' : null)}
-                                    />
-                                    <FieldLabel htmlFor={`include-${choice}`} className="min-h-11 flex-wrap">
-                                      <span>{m.candidate_include({}, options)}</span>
-                                      {value ? (
-                                        <CandidateValue
-                                          snak={value.statement}
-                                          related={(current.contextReview?.reading ?? current.public).related}
-                                          locale={locale}
-                                          subject={id}
-                                          documents={documents?.candidates}
-                                        />
-                                      ) : (
-                                        <span>{m.candidate_choice_unresolved({}, options)}</span>
-                                      )}
-                                    </FieldLabel>
-                                  </Field>
-                                  {entry && (
-                                    <Field>
-                                      <FieldLabel htmlFor={`rank-${choice}`}>
-                                        {m.candidate_rank({}, options)}
-                                      </FieldLabel>
-                                      <NativeSelect
-                                        id={`rank-${choice}`}
-                                        className="min-h-11"
-                                        value={entry.rank}
-                                        disabled={locked || !value?.eligible}
-                                        onChange={(event) => edit(choice, event.target.value as 'normal' | 'preferred')}
-                                      >
-                                        <NativeSelectOption value="normal">
-                                          {m.candidate_rank_normal({}, options)}
-                                        </NativeSelectOption>
-                                        <NativeSelectOption value="preferred">
-                                          {m.candidate_rank_preferred({}, options)}
-                                        </NativeSelectOption>
-                                      </NativeSelect>
-                                    </Field>
-                                  )}
-                                </li>
-                              );
-                            },
-                          )}
-                        </ul>
-                      )}
-                      {!draft.selection.length && <p>{m.candidate_clear_selection({}, options)}</p>}
-                      {!valid && <p role="status">{m.candidate_selection_invalid({}, options)}</p>}
-                      <Button
-                        variant="outline"
-                        className="min-h-11 self-start"
-                        disabled={locked || requiresReload || !valid}
-                        onClick={(event) => openConfirmation('adopt', event.currentTarget)}
+                      <ContentItemFrame
+                        as="div"
+                        className="flex min-w-0 flex-col gap-3 p-3 sm:p-4"
+                        data-candidate-draft
                       >
-                        {context ? m.context_adopt({}, options) : m.candidate_adopt({}, options)}
-                      </Button>
-                      {confirmation === 'adopt' && confirmationContent}
+                        <ContentItemHeading level={3} className="font-semibold">
+                          {context ? m.context_draft({}, options) : m.candidate_selection_draft({}, options)}
+                        </ContentItemHeading>
+                        {context && current.contextReview && (
+                          <Field>
+                            <FieldLabel htmlFor="context-mode">{m.context_mode({}, options)}</FieldLabel>
+                            <NativeSelect
+                              id="context-mode"
+                              value={mode}
+                              disabled={locked || requiresReload}
+                              onChange={(event) =>
+                                work.live() &&
+                                setModes((previous) => ({ ...previous, [property]: event.target.value as typeof mode }))
+                              }
+                            >
+                              <NativeSelectOption value="replace">{m.context_replace({}, options)}</NativeSelectOption>
+                              {current.contextReview.context.kind === 'community' && (
+                                <>
+                                  <NativeSelectOption value="inherit">
+                                    {m.context_inherit({}, options)}
+                                  </NativeSelectOption>
+                                  <NativeSelectOption value="suppress">
+                                    {m.context_suppress({}, options)}
+                                  </NativeSelectOption>
+                                </>
+                              )}
+                            </NativeSelect>
+                          </Field>
+                        )}
+                        <p className="text-sm text-muted-foreground">
+                          {context && mode !== 'replace'
+                            ? m.context_empty_selection({}, options)
+                            : context
+                              ? m.context_replace_hint({}, options)
+                              : m.candidate_replace_hint({}, options)}
+                        </p>
+                        <p className="text-sm">{m.candidate_selection_limit({ limit: String(maximum) }, options)}</p>
+                        {(!context || mode === 'replace') && (
+                          <ul className="space-y-3">
+                            {[...new Set([...choices.keys(), ...draft.selection.map((entry) => entry.candidate)])].map(
+                              (choice) => {
+                                const value = choices.get(choice);
+                                const entry = draft.selection.find((entry) => entry.candidate === choice);
+                                return (
+                                  <li key={choice} className="min-w-0">
+                                    <ContentItemFrame
+                                      as="div"
+                                      className="min-w-0 space-y-2 rounded-lg bg-muted/30 p-3"
+                                      data-candidate-choice
+                                    >
+                                      <Field orientation="horizontal">
+                                        <Checkbox
+                                          id={`include-${choice}`}
+                                          className="shrink-0"
+                                          checked={!!entry}
+                                          disabled={
+                                            locked || (!entry && (!value?.eligible || draft.selection.length >= maximum))
+                                          }
+                                          onCheckedChange={(checked) => edit(choice, checked ? 'normal' : null)}
+                                        />
+                                        <FieldLabel
+                                          htmlFor={`include-${choice}`}
+                                          className="min-h-11 min-w-0 flex-wrap [overflow-wrap:anywhere]"
+                                        >
+                                          <span>{m.candidate_include({}, options)}</span>
+                                          {value ? (
+                                            <CandidateValue
+                                              snak={value.statement}
+                                              related={(current.contextReview?.reading ?? current.public).related}
+                                              locale={locale}
+                                              subject={id}
+                                              documents={documents?.candidates}
+                                            />
+                                          ) : (
+                                            <span>{m.candidate_choice_unresolved({}, options)}</span>
+                                          )}
+                                        </FieldLabel>
+                                      </Field>
+                                      {entry && (
+                                        <Field>
+                                          <FieldLabel htmlFor={`rank-${choice}`}>
+                                            {m.candidate_rank({}, options)}
+                                          </FieldLabel>
+                                          <NativeSelect
+                                            id={`rank-${choice}`}
+                                            className="min-h-11"
+                                            value={entry.rank}
+                                            disabled={locked || !value?.eligible}
+                                            onChange={(event) => edit(choice, event.target.value as 'normal' | 'preferred')}
+                                          >
+                                            <NativeSelectOption value="normal">
+                                              {m.candidate_rank_normal({}, options)}
+                                            </NativeSelectOption>
+                                            <NativeSelectOption value="preferred">
+                                              {m.candidate_rank_preferred({}, options)}
+                                            </NativeSelectOption>
+                                          </NativeSelect>
+                                        </Field>
+                                      )}
+                                    </ContentItemFrame>
+                                  </li>
+                                );
+                              },
+                            )}
+                          </ul>
+                        )}
+                        {!draft.selection.length && <p>{m.candidate_clear_selection({}, options)}</p>}
+                        {!valid && <p role="status">{m.candidate_selection_invalid({}, options)}</p>}
+                        <Button
+                          variant="outline"
+                          className="min-h-11 self-start"
+                          disabled={locked || requiresReload || !valid}
+                          onClick={(event) => openConfirmation('adopt', event.currentTarget)}
+                        >
+                          {context ? m.context_adopt({}, options) : m.candidate_adopt({}, options)}
+                        </Button>
+                        {confirmation === 'adopt' && confirmationContent}
+                      </ContentItemFrame>
                     </section>
                   )}
                 </>
@@ -781,23 +814,36 @@ function CandidateProvenance({
     wikidata: 'Wikidata',
   };
   return (
-    <div className="space-y-1 break-words text-sm text-muted-foreground">
+    <div className="min-w-0 space-y-1 break-words text-sm text-muted-foreground [overflow-wrap:anywhere]">
       <p>
         {m.candidate_source({}, options)}:{' '}
         {source && 'source' in source ? (names[source.source] ?? source.source) : m.candidate_editorial({}, options)}
       </p>
       {source && 'source' in source && (
         <details>
-          <summary className="cursor-pointer">{m.candidate_provenance({}, options)}</summary>
-          <p>
-            {m.candidate_record({}, options)}: {source.external_id}
-          </p>
-          <p>
-            {m.candidate_source_revision({}, options)}: {source.record_revision}
-          </p>
-          <p>
-            {m.candidate_converter({}, options)}: {source.converter_revision}
-          </p>
+          <summary className="min-h-8 cursor-pointer rounded-sm py-1 whitespace-normal [overflow-wrap:anywhere] max-md:min-h-11 max-md:py-2 pointer-coarse:min-h-11 pointer-coarse:py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+            {m.candidate_provenance({}, options)}
+          </summary>
+          <dl className="min-w-0 space-y-2 py-2">
+            <div>
+              <dt>{m.candidate_record({}, options)}</dt>
+              <dd className="select-text font-mono [overflow-wrap:anywhere]" dir="ltr">
+                {source.external_id}
+              </dd>
+            </div>
+            <div>
+              <dt>{m.candidate_source_revision({}, options)}</dt>
+              <dd className="select-text font-mono [overflow-wrap:anywhere]" dir="ltr">
+                {source.record_revision}
+              </dd>
+            </div>
+            <div>
+              <dt>{m.candidate_converter({}, options)}</dt>
+              <dd className="select-text font-mono [overflow-wrap:anywhere]" dir="ltr">
+                {source.converter_revision}
+              </dd>
+            </div>
+          </dl>
         </details>
       )}
       {candidate.statement.references.map((reference, index) => (
