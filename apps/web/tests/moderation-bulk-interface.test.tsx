@@ -403,6 +403,7 @@ test('Stay retains exact loaded selection and review; Cancel and Clear stay loca
       <BoardReportQueue
         {...moderationQueueFixture}
         reports={reports}
+        next="loaded-continuation"
         onNext={() => {
           nexts++;
         }}
