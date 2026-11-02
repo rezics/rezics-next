@@ -1,5 +1,5 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { createFileRoute, useBlocker, useRouter } from '@tanstack/react-router';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { Alert, AlertDescription } from '@rezics/ui/shadcn/alert';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -65,7 +65,45 @@ function statusMessage(kind: string) {
 export function OrganizationMembersPage({ organizationId }: { organizationId: string }) {
   return <MembershipReview key={organizationId} organizationId={organizationId} />;
 }
+// Keep the router adapter local; the review can also be mounted without a router.
+function MembershipNavigation({ choose }: { choose: () => Promise<boolean> }) {
+  useBlocker({ shouldBlockFn: async () => !(await choose()), enableBeforeUnload: false });
+  return null;
+}
+function DepartureChoice({ answer }: { answer: (leave: boolean) => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const stay = useRef<HTMLButtonElement>(null);
+  useLayoutEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    dialog.current?.showModal();
+    stay.current?.focus();
+    return () => previous?.focus();
+  }, []);
+  return (
+    <dialog
+      ref={dialog}
+      aria-labelledby="membership-departure"
+      onCancel={(event) => {
+        event.preventDefault();
+        answer(false);
+      }}
+      className="rounded-md border bg-background p-6 text-foreground"
+    >
+      <h2 id="membership-departure">{m.auth_members_departure()}</h2>
+      <p>{m.auth_account_operation_leave_notice()}</p>
+      <div className="mt-4 flex gap-2">
+        <Button ref={stay} type="button" onClick={() => answer(false)}>
+          {m.auth_members_stay()}
+        </Button>
+        <Button type="button" variant="outline" onClick={() => answer(true)}>
+          {m.auth_members_leave()}
+        </Button>
+      </div>
+    </dialog>
+  );
+}
 function MembershipReview({ organizationId }: { organizationId: string }) {
+  const router = useRouter({ warn: false });
   const [page, setPage] = useState<MembershipPage | null>(null);
   const [accountId, setAccountId] = useState('');
   const [command, setCommand] = useState<MembershipCommand | null>(null);
@@ -79,6 +117,12 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [observed, setObserved] = useState(false);
+  const [selecting, setSelecting] = useState(false);
+  const [departing, setDeparting] = useState(false);
+  const [revoked, setRevoked] = useState(false);
+  const lifetime = useRef(0);
+  const pendingDeparture = useRef<{ promise: Promise<boolean>; resolve: (leave: boolean) => void } | null>(null);
+  const work = useRef(false);
   const lock = useRef(false);
   const activity = useRef<() => boolean>(() => false);
   const feedback = useRef<HTMLDivElement>(null);
@@ -87,11 +131,11 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
   // Invalidate before another page can handle input. Each continuation captures
   // this particular lifetime, including across Strict Mode effect replay.
   useLayoutEffect(() => {
-    let active = true;
-    activity.current = () => active;
+    renewActivity();
     return () => {
-      active = false;
+      lifetime.current++;
       lock.current = false;
+      pendingDeparture.current?.resolve(false);
     };
   }, []);
   useEffect(() => {
@@ -104,6 +148,84 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
     if (command) confirmation.current?.focus();
   }, [command?.operationKey]);
 
+  work.current = !revoked && !observed && (!!member || role !== 'member' || !!command || selecting);
+  function renewActivity() {
+    const version = ++lifetime.current;
+    activity.current = () => version === lifetime.current;
+    lock.current = false;
+  }
+  function discard() {
+    renewActivity();
+    // Dispatch persists unresolved=true before execute. Only unsent work is discarded.
+    if (command && (!command.unresolved || observed)) clearMembershipCommand();
+    setMember('');
+    setRole('member');
+    setConfirmed(false);
+    setCommand(null);
+    setEmail('');
+    setPassword('');
+    setReauth(false);
+    setNotice('');
+    setObserved(false);
+    setBusy(false);
+    setSelecting(false);
+    work.current = false;
+  }
+  function installPage(result: MembershipPage) {
+    if (result.kind === 'denied' || result.kind === 'signed-out' || result.kind === 'missing') {
+      discard();
+      setRevoked(true);
+      pendingDeparture.current?.resolve(true);
+      pendingDeparture.current = null;
+      setDeparting(false);
+    }
+    if (result.kind === 'ready') setRevoked(false);
+    setPage(result);
+  }
+  const choose = useCallback((): Promise<boolean> => {
+    if (!work.current) return Promise.resolve(true);
+    if (pendingDeparture.current) return pendingDeparture.current.promise;
+    let resolve!: (leave: boolean) => void;
+    const promise = new Promise<boolean>((done) => {
+      resolve = done;
+    });
+    pendingDeparture.current = { promise, resolve };
+    setDeparting(true);
+    return promise;
+  }, []);
+  function answer(leave: boolean) {
+    if (leave) discard();
+    pendingDeparture.current?.resolve(leave);
+    pendingDeparture.current = null;
+    setDeparting(false);
+  }
+  useEffect(() => {
+    const unload = (event: BeforeUnloadEvent) => {
+      if (work.current) {
+        event.preventDefault();
+        event.returnValue = '';
+      }
+    };
+    const hide = () => discard();
+    const show = (event: PageTransitionEvent) => {
+      if (event.persisted) void reload();
+    };
+    window.addEventListener('beforeunload', unload);
+    window.addEventListener('pagehide', hide);
+    window.addEventListener('pageshow', show);
+    return () => {
+      window.removeEventListener('beforeunload', unload);
+      window.removeEventListener('pagehide', hide);
+      window.removeEventListener('pageshow', show);
+    };
+  });
+  async function browse(cursor?: string) {
+    if (await choose()) {
+      // A clean page also needs a fresh lifetime for its replacement read.
+      renewActivity();
+      await reload(cursor);
+    }
+  }
   async function reload(cursor?: string) {
     const isActive = activity.current;
     if (!isActive() || lock.current) return;
@@ -120,27 +242,27 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
         const session = await loadAccountSession();
         if (!isActive()) return;
         if (session.kind !== 'ready') {
-          setPage({ kind: session.kind === 'signed-out' ? 'signed-out' : 'unavailable' });
-          return;
-        }
-        const saved = readMembershipCommand();
-        if (
-          saved === 'invalid' ||
-          (saved && (saved.accountId !== session.accountId || saved.operation.organizationId !== organizationId))
-        ) {
-          setPage({ kind: 'unavailable' });
+          installPage({ kind: session.kind === 'signed-out' ? 'signed-out' : 'unavailable' });
           return;
         }
         initiatingAccount = session.accountId;
         setAccountId(initiatingAccount);
         setNeedsProfile(!membershipSessionMatches(session, initiatingAccount));
-        if (saved) {
-          setCommand(saved);
-          setNotice(saved.unresolved ? 'unknown' : 'step-up');
-        }
+      }
+      const saved = readMembershipCommand();
+      if (
+        saved === 'invalid' ||
+        (saved && (saved.accountId !== initiatingAccount || saved.operation.organizationId !== organizationId))
+      ) {
+        installPage({ kind: 'denied' });
+        return;
+      }
+      if (saved) {
+        setCommand(saved);
+        setNotice(saved.unresolved ? 'unknown' : 'step-up');
       }
       const result = await loadMembershipPage(organizationId, initiatingAccount, cursor);
-      if (isActive()) setPage(result);
+      if (isActive()) installPage(result);
     } finally {
       if (isActive()) {
         lock.current = false;
@@ -158,11 +280,13 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
     }
     lock.current = true;
     setBusy(true);
+    setSelecting(true);
     try {
       const current = await loadSelectedMembership(organizationId, memberAccountId);
       if (!isActive()) return;
       if (current.kind !== 'ready') {
-        setNotice(current.kind);
+        if (current.kind === 'denied' || current.kind === 'signed-out') installPage(current);
+        else setNotice(current.kind);
         return;
       }
       if (current.membership?.role === desired || (desired === null && current.membership === null)) {
@@ -188,6 +312,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
       if (isActive()) {
         lock.current = false;
         setBusy(false);
+        setSelecting(false);
       }
     }
   }
@@ -211,14 +336,22 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
       }
       const result: MembershipOutcome = await submitMembership(command, isActive);
       if (!isActive()) return;
+      if (result === 'denied') {
+        installPage({ kind: 'denied' });
+        return;
+      }
       setNotice(result);
       setConfirmed(false);
       if (result === 'step-up') setReauth(true);
       const current = await loadSelectedMembership(organizationId, command.operation.memberAccountId);
       if (!isActive()) return;
+      if (current.kind === 'denied' || current.kind === 'signed-out') {
+        installPage(current);
+        return;
+      }
       setObserved(result === 'acknowledged' && membershipReadback(command, current));
       const resultPage = await loadMembershipPage(organizationId, accountId);
-      if (isActive()) setPage(resultPage);
+      if (isActive()) installPage(resultPage);
     } finally {
       if (isActive()) {
         lock.current = false;
@@ -247,7 +380,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
       setNotice('step-up');
       setPage(null);
       const result = await loadMembershipPage(organizationId, accountId);
-      if (isActive()) setPage(result);
+      if (isActive()) installPage(result);
     } finally {
       if (isActive()) {
         setPassword('');
@@ -264,6 +397,8 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
       setNotice('unavailable');
       return;
     }
+    setMember('');
+    setRole('member');
     setCommand(null);
     setNotice('');
     setReauth(false);
@@ -278,6 +413,8 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
         : m.auth_members_member_effect();
   return (
     <AuthPage heading={m.auth_members_heading()}>
+      {router ? <MembershipNavigation choose={choose} /> : null}
+      {departing ? <DepartureChoice answer={answer} /> : null}
       <p>{m.auth_members_intro()}</p>
       <p className="break-all">{organizationId}</p>
       <div aria-busy={busy || page === null} className="space-y-5">
@@ -323,18 +460,18 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
             </ul>
             {!page.holders.length ? <p>{m.auth_members_empty_page()}</p> : null}
             <nav className="flex flex-wrap gap-2" aria-label={m.auth_members_holders()}>
-              <Button type="button" variant="outline" disabled={busy} onClick={() => void reload()}>
+              <Button type="button" variant="outline" disabled={busy} onClick={() => void browse()}>
                 {m.auth_inventory_reload()}
               </Button>
               {page.next ? (
-                <Button type="button" variant="outline" disabled={busy} onClick={() => void reload(page.next!)}>
+                <Button type="button" variant="outline" disabled={busy} onClick={() => void browse(page.next!)}>
                   {m.auth_inventory_next()}
                 </Button>
               ) : null}
             </nav>
           </>
         )}
-        {accountId && !command ? (
+        {accountId && !command && !revoked ? (
           <form
             className="space-y-4"
             onSubmit={(event) => {
@@ -418,7 +555,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
             </Button>
           </form>
         ) : null}
-        {command ? (
+        {command && !revoked ? (
           <section className="space-y-4" aria-labelledby="membership-confirmation">
             <h2 id="membership-confirmation" ref={confirmation} tabIndex={-1}>
               {m.auth_members_confirm_heading()}
@@ -464,7 +601,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
           </section>
         ) : null}
         {page && page.kind !== 'ready' ? (
-          <Button type="button" variant="outline" disabled={busy} onClick={() => void reload()}>
+          <Button type="button" variant="outline" disabled={busy} onClick={() => void browse()}>
             {m.auth_inventory_reload()}
           </Button>
         ) : null}

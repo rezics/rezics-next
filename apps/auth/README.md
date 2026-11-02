@@ -266,6 +266,8 @@ organizations ends pending browser continuations before they can install a revie
 An already dispatched change continues independently; its stored command, exact operands and original key remain
 available for explicit confirmation and native reconciliation. Failed identity confirmation keeps the current review usable.
 
+Decision: membership departure, paging and reload offer Stay/Leave for changed input or unresolved work; Stay preserves the exact review and focus, Leave discards unsent input while retaining dispatched command identity, and authority loss bypasses the choice. Browser reload/close warns only while this work exists; reauthentication remains in-page and secrets remain ephemeral.
+
 ## Operator transfer
 
 Operator-transfer read failures offer Retry within the same page view. A failed session read preserves the saved

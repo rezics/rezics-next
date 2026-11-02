@@ -116,7 +116,7 @@ afterAll(async () => {
   await dom.happyDOM.close();
 });
 
-test('unavailable session and list reads recover without losing the organization, account or editable selection', async () => {
+test('unavailable reads retain identity and Stay preserves an edited selection', async () => {
   await mount();
   await leave(false);
   reply = () => Response.json({}, { status: 503 });
@@ -127,6 +127,7 @@ test('unavailable session and list reads recover without losing the organization
   await click(m.auth_inventory_reload());
   await flush(() => input('membership-account', memberAccountId));
   await click(m.auth_inventory_reload());
+  await click(m.auth_members_stay());
   expect(list.mock.calls.at(-1)).toEqual([organizationId, accountId, undefined]);
   expect(host.querySelector<HTMLInputElement>('#membership-account')!.value).toBe(memberAccountId);
   expect(calls.filter(({ path }) => path === '/session')).toHaveLength(3);
