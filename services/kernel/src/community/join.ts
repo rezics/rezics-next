@@ -31,6 +31,7 @@ import {
 import readRealmSpace from './ban-realm.sql';
 import createOperation from './membership-operation-create.sql';
 import currentBan from './ban-current.sql';
+import { assertRealmBanTarget } from './ban-protection.ts';
 
 export const REALM_JOIN_WORKFLOW = 'community.join';
 export const REALM_LEAVE_WORKFLOW = 'community.leave';
@@ -188,6 +189,12 @@ async function acceptOperation(
       const at = authoritativeTimeValue(command.time);
       const realm = await readRealmSpace.run(tx, { route, realm_id: intent.realmId, at });
       if (!realm || realm.spaceId !== intent.spaceId) throw new GrantDeniedError();
+      if (kind === 'removal')
+        await assertRealmBanTarget(tx, {
+          resource: target,
+          accountId: intent.memberAccountId,
+          at: command.time,
+        });
       if (kind === 'leave') {
         const ownership = { resource: target, accountId: actor.accountId, at: command.time };
         // Admission authorizes the leave. Direct-role data only selects the invariant,

@@ -73,6 +73,7 @@ import readRoles from './membership-role.sql';
 import readRoleBatch from './membership-role-batch.sql';
 import readRealmHead from './realm-read.sql';
 import currentBan from './ban-current.sql';
+import { assertRealmBanTarget } from './ban-protection.ts';
 import readOperationRow from './membership-operation-read.sql';
 import readOperationReceipt from './membership-operation-receipt.sql';
 
@@ -727,13 +728,19 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
         const at = authoritativeTimeValue(command.time);
         const active = await readOne(realmActive.run(tx, { route, id: realmId, at }));
         denyUnless(text(active, 'realmId') === realmId);
+        if (role === null && operation?.kind === 'removal')
+          await assertRealmBanTarget(tx, {
+            resource: target,
+            accountId: input.memberAccountId,
+            at: command.time,
+          });
         if (
           role === null &&
           (operation ? operation.kind === 'leave' : request.actor.accountId === input.memberAccountId)
         ) {
           const ownership = { resource: target, accountId: input.memberAccountId, at: command.time };
           // Recheck current owners at actual publication, under restored admission.
-          // Moderator removal and account erasure have independent obligations.
+          // Ban removal has the stricter role guard above; erasure is independent.
           await lockRealmOwnership(tx, ownership);
           if (await resourceRoleHeld(tx, { ...ownership, role: REALM_OWNER_ROLE }))
             await assertRealmOwnerMayLeave(tx, ownership);

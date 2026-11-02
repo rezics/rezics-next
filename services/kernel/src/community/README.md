@@ -216,7 +216,9 @@ Authorization and the current-ban check still apply.
 `realm_ban` identity denials for `realm:join` and `realm:participate` at the command's T.
 `banAccount` requires `realm:ban` on that Realm. Owners and moderators carry that action.
 A target holding the Realm's owner or moderator resource role is refused with 409 and
-must have the role removed first. From T, a protected Realm's read eligibility checks
+must have the role removed first. Removal acceptance and delayed publication repeat this
+guard at their own authoritative T, so a role granted while removal is queued protects
+the current membership. From T, a protected Realm's read eligibility checks
 one indexed current-ban key for the actor and, when delegated, the principal, in one
 statement in its own partition, and refuses every grant if either account is banned.
 The Realm, carried Realm ID, boards, threads, posts and publications are hidden
