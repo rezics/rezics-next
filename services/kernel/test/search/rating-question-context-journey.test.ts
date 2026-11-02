@@ -63,9 +63,15 @@ test('exact question witnesses follow current published citations, disclosure an
     RangeError,
   );
 
+  const otherVote = await f.call('PUT', votePath, { bearer: f.other.bearer, body: { units: 10 } });
+  expect(otherVote.response.status, otherVote.text).toBe(200);
   const hidden = await f.call('POST', '/v1/threads', {
     bearer: f.other.bearer,
-    body: { ...reviewBody, visibility: 'draft', voteCitation: undefined },
+    body: {
+      ...reviewBody,
+      visibility: 'draft',
+      voteCitation: { questionId: STANDARD_QUESTION_ID, units: 10, revision: otherVote.value.revision },
+    },
   });
   expect(hidden.response.status, hidden.text).toBe(201);
   expect(await qualify([{ ...primary, threadId: hidden.value.thread.id }])).toEqual(['refused']);
@@ -77,8 +83,25 @@ test('exact question witnesses follow current published citations, disclosure an
   expect(reply.response.status, reply.text).toBe(201);
   const post: ReviewContextCandidate = { ...primary, kind: 'post', postId: reply.value.post.id };
   expect(await qualify([post, post])).toEqual(['current', 'current']);
-  // One post ID cannot borrow another thread's witness, even at the same route.
-  expect(await qualify([post, { ...post, threadId: hidden.value.thread.id }])).toEqual(['current', 'refused']);
+  // One post ID cannot borrow another readable thread's witness at the same route.
+  const anotherSubject = await f.subject('Another reviewed Subject');
+  const anotherVote = await f.call('PUT', `/v1/subjects/${anotherSubject}/ratings/${STANDARD_QUESTION_ID}/vote`, {
+    bearer: f.author.bearer,
+    body: { units: 7 },
+  });
+  expect(anotherVote.response.status, anotherVote.text).toBe(200);
+  const anotherReview = await f.call('POST', '/v1/threads', {
+    bearer: f.author.bearer,
+    body: {
+      ...reviewBody,
+      subjectIds: [anotherSubject],
+      voteCitation: { questionId: STANDARD_QUESTION_ID, units: 7, revision: anotherVote.value.revision },
+    },
+  });
+  expect(anotherReview.response.status, anotherReview.text).toBe(201);
+  expect(
+    await qualify([post, { ...post, subjectId: anotherSubject, threadId: anotherReview.value.thread.id }]),
+  ).toEqual(['current', 'refused']);
   const removedReply = await f.call('DELETE', `/v1/posts/${reply.value.post.id}`, { bearer: f.author.bearer });
   expect(removedReply.response.status, removedReply.text).toBe(200);
   expect(await qualify([primary, post])).toEqual(['current', 'refused']);
