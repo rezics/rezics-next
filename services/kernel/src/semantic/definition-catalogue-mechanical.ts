@@ -15,7 +15,8 @@ const fail = (): never => {
   throw new TypeError('Invalid catalogue mechanical representation');
 };
 function record(value: unknown, fields: readonly string[]): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype)
+  if (!value || typeof value !== 'object' || Array.isArray(value) ||
+    (Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null))
     return fail();
   const descriptors = Object.getOwnPropertyDescriptors(value);
   if (
