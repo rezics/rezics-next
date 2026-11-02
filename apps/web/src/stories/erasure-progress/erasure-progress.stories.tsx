@@ -197,8 +197,8 @@ function authorProgressStory(
     render: () => (
       <AuthorOperationProgressFixture
         initial={initial}
-        visitor={options.visitor}
-        holdRead={options.holdRead}
+        {...(options.visitor !== undefined ? { visitor: options.visitor } : {})}
+        {...(options.holdRead !== undefined ? { holdRead: options.holdRead } : {})}
       />
     ),
     parameters: {
