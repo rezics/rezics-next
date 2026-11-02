@@ -202,7 +202,15 @@ function HistoryDisclosure({
 
   return (
     <div className={className}>
-      <Button type="button" variant="ghost" size="sm" aria-expanded={open} aria-controls={regionId} onClick={toggle}>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+        aria-expanded={open}
+        aria-controls={regionId}
+        onClick={toggle}
+      >
         {open ? m.thread_history_hide() : m.thread_history_show()}
       </Button>
       <section
@@ -210,7 +218,7 @@ function HistoryDisclosure({
         hidden={!open}
         role="region"
         aria-label={m.thread_history_heading()}
-        className="order-last mt-3 min-w-0 basis-full space-y-4 rounded-xl border border-border/70 bg-card p-4 sm:p-5"
+        className="order-last mt-3 min-w-0 basis-full space-y-4 rounded-xl border border-border/70 bg-card p-4 [overflow-wrap:anywhere] sm:p-5"
       >
         <ContentItemHeading level={3} className="text-base font-semibold">
           {m.thread_history_heading()}
@@ -229,6 +237,7 @@ function HistoryDisclosure({
               type="button"
               variant="outline"
               size="sm"
+              className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
               disabled={loading}
               onClick={() => void load(failedCursor)}
             >
@@ -265,7 +274,14 @@ function HistoryDisclosure({
           </p>
         ) : null}
         {available && next ? (
-          <Button type="button" variant="outline" size="sm" disabled={loading} onClick={() => void load(next!)}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+            disabled={loading}
+            onClick={() => void load(next!)}
+          >
             {m.thread_history_more()}
           </Button>
         ) : null}
@@ -296,18 +312,19 @@ export function RevisionEntry({
   review: boolean;
 }) {
   const locale = getLocale();
+  const headingId = `revision-entry-${useId().replaceAll(':', '')}`;
   return (
     <li className="min-w-0 border-t border-border/60 pt-4 first:border-0 first:pt-0">
       <ContentItemFrame
         as="article"
         data-slot="content-item-frame"
-        aria-labelledby={`revision-entry-${revision.revisionId}`}
-        className="min-w-0 space-y-3 rounded-xl"
+        aria-labelledby={headingId}
+        className="min-w-0 space-y-3 rounded-xl [overflow-wrap:anywhere]"
       >
-        <ContentItemHeading level={4} id={`revision-entry-${revision.revisionId}`} className="font-semibold">
+        <ContentItemHeading level={4} id={headingId} className="font-semibold">
           <a
             href={exactRevisionHref({ postId: revision.id, revisionId: revision.revisionId }, locale)}
-            className="inline-flex min-h-11 items-center underline underline-offset-4"
+            className="inline-flex min-h-11 max-w-full items-center rounded-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             {m.thread_history_version({ number: String(number) })}
           </a>
@@ -317,9 +334,11 @@ export function RevisionEntry({
           createdAt={revision.revisedAt ?? revision.createdAt}
           now={now}
           showAuthor
+          className="[&_.truncate]:overflow-visible [&_.truncate]:text-clip [&_.truncate]:whitespace-normal"
         />
         {revision.availability === 'available' && revision.body ? (
           <DocumentBody
+            className="mx-0! w-full overflow-x-auto [overflow-wrap:anywhere]"
             document={revision.body}
             mentions={mentions}
             locale={locale}

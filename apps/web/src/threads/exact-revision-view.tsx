@@ -2,6 +2,7 @@ import { DocumentBody } from '../document-body';
 import { ContentItemFrame } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@rezics/ui/shadcn/collapsible';
+import { useId } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
@@ -23,6 +24,7 @@ export function ExactRevisionView({
   onRetry?: () => void;
 }) {
   const locale = getLocale();
+  const detailsId = `revision-details-${useId().replaceAll(':', '')}`;
   if (
     page.state === 'ready' &&
     (page.revision.id !== identity.postId || page.revision.revisionId !== identity.revisionId)
@@ -40,7 +42,7 @@ export function ExactRevisionView({
         {page.state === 'ready' ? (
           <a
             href={`${threadLocation(locale, page.thread)}#post-${encodeURIComponent(page.revision.id)}`}
-            className="inline-flex min-h-11 items-center text-sm underline underline-offset-4"
+            className="inline-flex min-h-11 max-w-full items-center rounded-sm text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             {m.exact_revision_back()}
           </a>
@@ -54,7 +56,12 @@ export function ExactRevisionView({
         <div className="space-y-3">
           <p role="alert">{m.exact_revision_problem()}</p>
           {onRetry ? (
-            <Button type="button" variant="outline" onClick={onRetry}>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+              onClick={onRetry}
+            >
               {m.exact_revision_retry()}
             </Button>
           ) : null}
@@ -69,6 +76,7 @@ export function ExactRevisionView({
             author={page.authors?.[page.revision.authorId]}
             createdAt={page.revision.revisedAt ?? page.revision.createdAt}
             now={page.now}
+            className="[&_.truncate]:overflow-visible [&_.truncate]:text-clip [&_.truncate]:whitespace-normal"
           />
           <DocumentBody
             className="mx-0! w-full overflow-x-auto [overflow-wrap:anywhere]"
@@ -88,20 +96,30 @@ export function ExactRevisionView({
               {m.thread_history_licence()}: {page.revision.licence}
             </p>
             <CollapsibleTrigger
-              aria-controls={`revision-details-${identity.revisionId}`}
-              render={<Button variant="ghost" size="sm" />}
+              aria-controls={detailsId}
+              render={
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+                />
+              }
             >
               {m.thread_provenance_heading()}
             </CollapsibleTrigger>
-            <CollapsibleContent id={`revision-details-${identity.revisionId}`} keepMounted className="space-y-4 pt-3">
+            <CollapsibleContent id={detailsId} keepMounted className="min-w-0 space-y-4 pt-3">
               <dl className="space-y-2 text-sm [overflow-wrap:anywhere]">
                 <div>
                   <dt className="font-medium">{m.exact_revision_post()}</dt>
-                  <dd>{identity.postId}</dd>
+                  <dd className="select-text">
+                    <bdi dir="ltr">{identity.postId}</bdi>
+                  </dd>
                 </div>
                 <div>
                   <dt className="font-medium">{m.exact_revision_id()}</dt>
-                  <dd>{identity.revisionId}</dd>
+                  <dd className="select-text">
+                    <bdi dir="ltr">{identity.revisionId}</bdi>
+                  </dd>
                 </div>
               </dl>
               <RevisionProvenance revision={page.revision} subjects={[]} showLicence={false} />
