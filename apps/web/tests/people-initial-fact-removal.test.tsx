@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
-import { act } from 'react';
+import { act, type ChangeEvent } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { CreateResult } from '../src/features/catalogue/create-subject';
 import type { PeopleCommand } from '../src/features/catalogue/people-profile';
@@ -86,6 +86,13 @@ test('People removal retains scalar, citation and sibling correction identities 
       await client.invalidateQueries({ queryKey: ['people-profile'] });
     });
   const submit = () => click(canvas().getByRole('button', { name: m.catalogue_create_submit() }));
+  // Retain the handlers actually delivered to mounted controls, including their captured row.
+  const props = (node: HTMLElement) =>
+    Reflect.get(node, Object.keys(node).find((key) => key.startsWith('__reactProps$'))!);
+  const retain = (input: HTMLInputElement) => {
+    const change = props(input).onChange as (event: ChangeEvent<HTMLInputElement>) => void;
+    return (value: string) => change({ target: { value } } as ChangeEvent<HTMLInputElement>);
+  };
   try {
     await act(async () =>
       root.render(
@@ -132,6 +139,7 @@ test('People removal retains scalar, citation and sibling correction identities 
     expect(correction()).not.toBeNull();
     const selected = row('schema:sameAs');
     const selectedInputs = [...selected.querySelectorAll<HTMLInputElement>('input')];
+    const retiredEdits = selectedInputs.map(retain);
     for (const cancel of ['button', 'escape']) {
       await click(remove('schema:sameAs'));
       const button = within(selected).getByRole('button', { name: m.candidate_cancel() });
@@ -152,6 +160,36 @@ test('People removal retains scalar, citation and sibling correction identities 
     expect(row('schema:sameAs')).toBeNull();
     expect(row('schema:url')).toBe(sibling);
     expect(sibling.contains(window.document.activeElement as Node)).toBe(true);
+    const deliverRetired = () => act(async () => retiredEdits.forEach((edit) => edit('https://retired.test/')));
+    await deliverRetired();
+    expect(row('schema:sameAs')).toBeNull();
+    expect(inputs[0]!.getAttribute('aria-invalid')).toBe('true');
+    await add('schema:sameAs');
+    const replacement = [...row('schema:sameAs').querySelectorAll<HTMLInputElement>('input')];
+    expect(replacement[0]!.id).not.toBe(selectedInputs[0]!.id);
+    await deliverRetired();
+    expect(replacement.map((input) => input.value)).toEqual(['', '']);
+    const [editValue, editCitation] = replacement.map(retain);
+    await act(async () => {
+      editValue!('https://current.test/');
+      editCitation!('https://current.test/source');
+    });
+    expect(replacement.map((input) => input.value)).toEqual(['https://current.test/', 'https://current.test/source']);
+    await act(async () =>
+      user.selectOptions(canvas().getByRole('combobox', { name: m.catalogue_create_type() }), 'schema:Organization'),
+    );
+    await act(async () => editValue!('https://wrong-type.test/'));
+    await act(async () =>
+      user.selectOptions(canvas().getByRole('combobox', { name: m.catalogue_create_type() }), 'schema:Person'),
+    );
+    expect([...row('schema:sameAs').querySelectorAll<HTMLInputElement>('input')].map((input) => input.value))
+      .toEqual(['https://current.test/', 'https://current.test/source']);
+    await act(async () => editCitation!('https://retired-type.test/'));
+    expect(within(row('schema:sameAs')).getByRole('textbox', { name: m.relation_citation() }).value)
+      .toBe('https://current.test/source');
+    await click(remove('schema:sameAs'));
+    await click(remove('schema:sameAs'));
+    expect(inputs.map((input) => [input.id, input.value])).toEqual(snapshot);
     await submit();
     expect(correction()).not.toBeNull();
     await click(correction());
@@ -196,17 +234,37 @@ test('People removal retains scalar, citation and sibling correction identities 
     });
     await click(remove('schema:url'));
     const sealed = row('schema:url');
+    const sealedInputs = [...sealed.querySelectorAll<HTMLInputElement>('input')];
+    const lockedEdits = sealedInputs.map(retain);
+    const sealedDraft = sealedInputs.map((input) => input.value);
+    const staleAdd = props(canvas().getByRole('button', {
+      name: m.people_profile_add_fact({ field: fixture.release.properties['schema:sameAs']!.labels.en! }),
+    })).onClick;
+    const deliverLocked = () => act(async () => {
+      lockedEdits.forEach((edit) => edit('https://locked.test/'));
+      staleAdd();
+    });
     pending = true;
     await submit();
+    const command = structuredClone(commands.at(-1));
+    await deliverLocked();
+    expect(sealedInputs.map((input) => input.value)).toEqual(sealedDraft);
+    expect(row('schema:sameAs')).toBeNull();
     expect(remove('schema:url').disabled).toBe(true);
     await act(async () => finish({ ok: false, reason: 'unavailable' }));
+    await deliverLocked();
+    expect(sealedInputs.map((input) => input.value)).toEqual(sealedDraft);
+    expect(row('schema:sameAs')).toBeNull();
     expect(remove('schema:url').disabled).toBe(true);
     await act(async () => remove('schema:url').dispatchEvent(new window.MouseEvent('click', { bubbles: true })));
     expect(row('schema:url')).toBe(sealed);
-    const command = structuredClone(commands.at(-1));
     await click(canvas().getByRole('button', { name: m.catalogue_create_retry() }));
     expect(commands.at(-1)).toEqual(command);
     await act(async () => finish({ ok: false, reason: 'unavailable' }));
+    await act(async () => root.render(null));
+    await deliverLocked();
+    expect(commands.at(-1)).toEqual(command);
+    expect(host.textContent).toBe('');
   } finally {
     await act(async () => root.unmount());
     client.clear();
