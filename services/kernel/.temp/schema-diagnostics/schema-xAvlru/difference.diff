@@ -1,0 +1,78 @@
+Checked source commit/tree: UNKNOWN (no retained source provenance at this boundary).
+--- db/schema.sql (expected)
++++ db/schema.sql (actual)
+Expected object: -- Name: history_auth_changed(); Type: FUNCTION; Schema: core; Owner: -
+Actual object: -- Name: guard_identity_history_allocation(); Type: FUNCTION; Schema: core; Owner: -
+@@ -629,3116 +629,3648 @@
+ 
+ 
+ --
+--- Name: history_auth_changed(); Type: FUNCTION; Schema: core; Owner: -
+---
+-
+-CREATE FUNCTION core.history_auth_changed() RETURNS trigger
+-    LANGUAGE plpgsql
+-    AS $$
+-BEGIN
+- IF NEW.phase='copies-erased' THEN PERFORM core.history_wake_account(NEW.route,NEW.account_id); END IF;
+- RETURN NEW;
+-END; $$;
+-
+-
+---
+--- Name: history_consumer_changed(); Type: FUNCTION; Schema: core; Owner: -
+---
+-
+... 3079 lines omitted ...
+-    WHERE partition_no=NEW.partition_no AND workflow_id=NEW.parent_workflow_id AND function_id=NEW.parent_function_id FOR SHARE;
+-  IF NOT FOUND OR parent.result->>'kind' IS DISTINCT FROM 'continue' OR
+-     parent.result->>'continuation' IS DISTINCT FROM NEW.workflow_id OR
+-     (parent.custody_id,parent.route,parent.owner_account_id,parent.collection_id,parent.episode_id) IS DISTINCT FROM
+-     (NEW.custody_id,NEW.route,NEW.owner_account_id,NEW.collection_id,NEW.episode_id) THEN
+-    RAISE EXCEPTION 'selected continuation lacks atomic parent result' USING ERRCODE='23514';
+-  END IF;
+-  RETURN NULL;
+-END; $$;
+-CREATE CONSTRAINT TRIGGER operational_work_selected_continuation_bound AFTER INSERT ON core.operational_work_selected_continuation
+-  DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION core.operational_work_selected_continuation_bound();
+-ALTER TABLE core.operational_work_selection ENABLE ALWAYS TRIGGER operational_work_selection_guard;
+-ALTER TABLE core.operational_work_selection ENABLE ALWAYS TRIGGER operational_work_selection_no_truncate;
+-ALTER TABLE core.operational_work_selected_continuation ENABLE ALWAYS TRIGGER operational_work_selected_continuation_guard;
+-ALTER TABLE core.operational_work_selected_continuation ENABLE ALWAYS TRIGGER operational_work_selected_continuation_no_truncate;
+-ALTER TABLE core.operational_work_selected_continuation ENABLE ALWAYS TRIGGER operational_work_selected_continuation_bound;
++-- Name: guard_identity_history_allocation(); Type: FUNCTION; Schema: core; Owner: -
++--
++
++CREATE FUNCTION core.guard_identity_history_allocation() RETURNS trigger
++    LANGUAGE plpgsql
++    AS $$
++DECLARE original core.identity_history_original;
++BEGIN
++ IF TG_OP='DELETE' THEN
++   RAISE EXCEPTION 'Original partitions cannot be discarded' USING ERRCODE='23514';
++ END IF;
++ IF TG_OP='INSERT' THEN
++   SELECT * INTO original FROM core.identity_history_original WHERE original_id=NEW.original_id FOR SHARE;
++   IF NOT FOUND OR original.allowance IS DISTINCT FROM NEW.parent_work OR
++      original.spent IS DISTINCT FROM NEW.parent_work OR NOT original.dispatched THEN
++     RAISE EXCEPTION 'Original partitions require committed prepaid admission' USING ERRCODE='23514';
+... 3611 lines omitted ...
++ALTER TABLE ONLY core.record_history_source_set
++    ADD CONSTRAINT record_history_source_set_source_partition_fkey FOREIGN KEY (source_partition) REFERENCES core.partition(partition_no);
++
++
++--
++-- Name: write_basis write_basis_partition_no_fkey; Type: FK CONSTRAINT; Schema: editorial; Owner: -
++--
++
++ALTER TABLE ONLY editorial.write_basis
++    ADD CONSTRAINT write_basis_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES core.partition(partition_no);
++
++
++--
++-- PostgreSQL database dump complete
++--
++
+ 
+ 
+Diff preview is bounded to 32 changed lines per side and 160 characters per line; full dumps are retained.
