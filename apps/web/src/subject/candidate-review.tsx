@@ -705,7 +705,8 @@ function CandidateReviewLive({
                                           className="shrink-0"
                                           checked={!!entry}
                                           disabled={
-                                            locked || (!entry && (!value?.eligible || draft.selection.length >= maximum))
+                                            locked ||
+                                            (!entry && (!value?.eligible || draft.selection.length >= maximum))
                                           }
                                           onCheckedChange={(checked) => edit(choice, checked ? 'normal' : null)}
                                         />
@@ -737,7 +738,9 @@ function CandidateReviewLive({
                                             className="min-h-11"
                                             value={entry.rank}
                                             disabled={locked || !value?.eligible}
-                                            onChange={(event) => edit(choice, event.target.value as 'normal' | 'preferred')}
+                                            onChange={(event) =>
+                                              edit(choice, event.target.value as 'normal' | 'preferred')
+                                            }
                                           >
                                             <NativeSelectOption value="normal">
                                               {m.candidate_rank_normal({}, options)}
