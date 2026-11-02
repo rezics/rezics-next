@@ -40,12 +40,17 @@ function inputSnapshot(input: ActivationInput): ActivationInput {
   if (
     value.format !== 'catalogue-mechanical-input/1' ||
     value.phase !== 'activation-step' ||
-    typeof value.root !== 'string' || value.root.length !== 71 ||
-    typeof value.episode !== 'string' || value.episode.length !== 36 ||
-    typeof value.activationId !== 'string' || value.activationId.length !== 36 ||
-    typeof value.position !== 'string' || value.position.length > 19 ||
+    typeof value.root !== 'string' ||
+    value.root.length !== 71 ||
+    typeof value.episode !== 'string' ||
+    value.episode.length !== 36 ||
+    typeof value.activationId !== 'string' ||
+    value.activationId.length !== 36 ||
+    typeof value.position !== 'string' ||
+    value.position.length > 19 ||
     typeof value.deadline !== 'number'
-  ) return refuse();
+  )
+    return refuse();
   return catalogueMechanicalSelection(value as ActivationInput).input as ActivationInput;
 }
 
@@ -57,7 +62,8 @@ function resultSnapshot(input: ActivationInput, result: ActivationResult): Activ
     progress.activationId !== input.activationId ||
     !['ready', 'closing', 'invalidating', 'active'].includes(progress.state as string) ||
     typeof progress.pending !== 'boolean'
-  ) return refuse();
+  )
+    return refuse();
   return { phase: 'activation-step', progress: progress as ActivationResult['progress'] };
 }
 
@@ -89,9 +95,11 @@ export function decodePublisherActivationResult(
   if (
     stored.originalKey !== selection.originalKey ||
     stored.inputDigest !== selection.inputDigest ||
-    !(stored.bytes instanceof Uint8Array) || types.isProxy(stored.bytes) ||
+    !(stored.bytes instanceof Uint8Array) ||
+    types.isProxy(stored.bytes) ||
     stored.bytes.byteLength > CATALOGUE_MECHANICAL_REPRESENTATION.resultBytes
-  ) return refuse();
+  )
+    return refuse();
   const bytes = Buffer.from(stored.bytes);
   if (`sha256:${createHash('sha256').update(bytes).digest('hex')}` !== stored.resultDigest) return refuse();
   return decodeCatalogueMechanicalResult(selected, bytes) as ActivationResult;
