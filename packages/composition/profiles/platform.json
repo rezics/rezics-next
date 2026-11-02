@@ -1430,7 +1430,7 @@
               "type": "AccountCollections",
               "props": {
                 "id": "account-collections",
-                "limit": 4
+                "limit": 3
               }
             },
             {
@@ -1941,7 +1941,7 @@
               "type": "AccountCollections",
               "props": {
                 "id": "account-collections",
-                "limit": 4
+                "limit": 3
               }
             },
             {

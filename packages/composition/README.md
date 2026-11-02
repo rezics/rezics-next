@@ -568,7 +568,9 @@ limit 12. `schema:Organization` lists `schema:publisher`, `schema:productionComp
 slot adds `AccountIdentity` beside `SubjectHeader` (each renders nothing when it has no read, and an account page shows the
 account's own presentation in place of the subject's header), and their overview previews the account's
 public activity after the relations: `AccountPosts` (limit 4), `AccountThreads` of reviews (limit 4) and
-`AccountCollections` (limit 4). The Person overview plans 15 reads of cost 128, the most the budget allows. Both
+`AccountCollections` (limit 3), keeping the Person overview inside its read ceiling with all sections intact. Its bound
+is 16 distinct reads and 128 rows: 1 subject, 55 person links, 48 relations, 11 account previews, 1 account identity,
+6 threads and 6 collections. Both
 define the `posts`, `reviews` and `collections` views with the same components, `paged` and at their largest limit
 (20, 20 and 24). Route `/` is the site home template: its `Heading`, then the `personal`
 slot, then one `TypeList` per vertical: Books (`schema:Book`), Anime (`schema:TVSeries` and

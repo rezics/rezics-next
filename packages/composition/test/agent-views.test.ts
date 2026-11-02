@@ -19,6 +19,11 @@ const entry = (type: string) => profile.types.find((candidate) => candidate.type
 
 test('the agent templates define the account views beside the graph views, in the documented order', () => {
   expect(validateProfile(platformRegistry, profile)).toEqual([]);
+  const person = templateViews(entry('schema:Person'));
+  expect(person.overview?.content.map((node) => node.props.id).join(',')).toBe(
+    'header,actions,summary,author,illustrator,director,music,voice-roles,side-stories,adaptations,versions,related,account-posts,account-reviews,account-collections,threads,lists,sources',
+  );
+  expect(person.details?.content.map((node) => node.type).join(',')).toBe('MoreStatements,Sources');
   expect(definedViews(profile, { type: 'schema:Person' })).toEqual([
     'overview',
     'characters',
@@ -56,7 +61,7 @@ test('each account view is one bounded page of its list, and the overview previe
     expect(preview).toContainEqual({ kind: 'account', handle: account.handle });
     expect(preview).toContainEqual({ kind: 'accountPosts', id: account.id, limit: 4 });
     expect(preview).toContainEqual({ kind: 'accountThreads', id: account.id, threadKind: 'review', limit: 4 });
-    expect(preview).toContainEqual({ kind: 'accountCollections', id: account.id, limit: 4 });
+    expect(preview).toContainEqual({ kind: 'accountCollections', id: account.id, limit: 3 });
     expect(preview.length).toBeLessThanOrEqual(16);
     expect(preview.map(readCost).reduce((sum, cost) => sum + cost, 0)).toBeLessThanOrEqual(128);
   }
