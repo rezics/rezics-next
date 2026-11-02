@@ -259,8 +259,11 @@ installed `withSelectedHistoryOriginalChild`. Its exact type is
 ```
 
 It runs **inside** the sole `withIdentityOriginalSourceTransfer` callback. It neither
-consumes the local original again nor enters another transfer. Producer operations
-validate the actual opaque grant, selected original, job, Pool, WorkClient, registry,
+consumes the local original again nor enters another transfer. The producer module is
+resolved at the prepaid operation boundary to avoid an eager Library/HTTP/command
+construction cycle. Its cached callable namespace is not funding or a cached receipt.
+Producer operations validate the actual opaque grant, selected original, job, Pool,
+WorkClient, registry,
 immutable position, native allocation, exact Library ledger and absolute deadline.
 The fixed runtime Source receiving operand is
 `withPrepaidIdentitySourceConsumerMaintenance(deps, parent, body)` in

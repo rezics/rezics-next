@@ -49,14 +49,10 @@ import type { HistoryArtifact, HistoryBarrier, HistoryReadiness } from './regist
 import type { AgentIdentityOriginal } from './agent-identity-inventory.ts';
 import { partitionOf } from '../route/route.ts';
 import sourceSelect from './agent-identity-retirement-source.sql';
-import {
-  currentIdentityOriginalTransfer,
-  identityOriginalLibraryWork,
-  identityOriginalRemainder,
-  IdentityOriginalUnavailable,
-  type HistoryOriginalDependencies,
-  type IdentityOriginalSourceContext,
-  type PrepaidAgentIdentityHistoryUnit,
+import type {
+  HistoryOriginalDependencies,
+  IdentityOriginalSourceContext,
+  PrepaidAgentIdentityHistoryUnit,
 } from '../access/identity-original-admission.ts';
 import type { IdentitySourceConsumerMaintenanceContext } from '../semantic/identity-source-consumer-maintenance.ts';
 
@@ -169,6 +165,17 @@ type IdentityUnit = {
   }>;
   failure?: Error;
 };
+// Resolve this owner only when the prepaid entry is actually invoked. Its Library
+// accounting dependency imports HTTP ProblemError, which itself constructs the
+// command/History graph. An eager edge from History would re-enter HTTP startup.
+// Cached operations convey no authority: every use authenticates the real grant.
+let originalOperations: typeof import('../access/identity-original-admission.ts') | undefined;
+function originalUnavailable(gap: string): Error {
+  if (originalOperations) return new originalOperations.IdentityOriginalUnavailable(gap);
+  const error = new IdentityHistoryWorkUnavailable();
+  error.message = gap;
+  return error;
+}
 const identityUnits = new AsyncLocalStorage<IdentityUnit>();
 const prepaidContexts = new WeakMap<HistoryReceivingContext, IdentityUnit>();
 export function currentAgentIdentityHistoryUnit(): Readonly<IdentityUnit> | undefined {
@@ -188,7 +195,7 @@ export function currentAgentIdentityHistoryUnit(): Readonly<IdentityUnit> | unde
         unit.context.deadline,
       ) !== unit.prepaid.parent.library
     )
-      throw new IdentityOriginalUnavailable('identity-history-prepaid-source-context-changed');
+      throw originalUnavailable('identity-history-prepaid-source-context-changed');
   }
   return unit;
 }
@@ -197,7 +204,7 @@ export function currentAgentIdentityHistoryUnit(): Readonly<IdentityUnit> | unde
 function refuseNestedUnit(): void {
   const enclosing = identityUnits.getStore();
   if (!enclosing) return;
-  const error = new IdentityOriginalUnavailable('identity-history-unit-reentered');
+  const error = originalUnavailable('identity-history-unit-reentered');
   enclosing.failure ??= error;
   throw error;
 }
@@ -206,10 +213,13 @@ function refuseNestedUnit(): void {
  * comparison with a later database head can reconstruct the original grant. */
 function assertPrepaidParent(deps: HistoryOriginalDependencies, parent: IdentityOriginalSourceContext): void {
   if (!parent || typeof parent !== 'object')
-    throw new IdentityOriginalUnavailable('identity-history-original-private-grant-unavailable');
+    throw originalUnavailable('identity-history-original-private-grant-unavailable');
+  if (!originalOperations) throw originalUnavailable('identity-history-original-owner-unavailable');
+  const { identityOriginalLibraryWork, currentIdentityOriginalTransfer, identityOriginalRemainder } =
+    originalOperations;
   const ledger = identityOriginalLibraryWork(deps, parent.original, parent.jobId);
   const root = currentIdentityOriginalTransfer(deps, parent.jobId);
-  if (!root) throw new IdentityOriginalUnavailable('identity-history-original-handle-unavailable');
+  if (!root) throw originalUnavailable('identity-history-original-handle-unavailable');
   const original = identityOriginalRemainder(deps, root, parent.jobId);
   if (
     parent.originalId !== original.originalId ||
@@ -220,7 +230,7 @@ function assertPrepaidParent(deps: HistoryOriginalDependencies, parent: Identity
     original.source === null ||
     original.library === null
   )
-    throw new IdentityOriginalUnavailable('identity-history-original-private-parent-changed');
+    throw originalUnavailable('identity-history-original-private-parent-changed');
 }
 
 /** Validate the exact callback context, actual Pool/client and original lifetime.
@@ -234,7 +244,7 @@ export function assertAgentIdentityHistoryUnit(
   currentAgentIdentityHistoryUnit();
   const unit = identityUnits.getStore();
   const bound = context && prepaidContexts.get(context);
-  if (bound && bound !== unit) throw new IdentityOriginalUnavailable('identity-history-prepaid-callback-ended');
+  if (bound && bound !== unit) throw originalUnavailable('identity-history-prepaid-callback-ended');
   if (!unit?.prepaid) return;
   if (
     pool !== unit.prepaid.deps.pool ||
@@ -244,7 +254,7 @@ export function assertAgentIdentityHistoryUnit(
         ('identityConsumerWork' in context && context !== unit.context))) ||
     !maintenanceCallbacks.has(unit.context)
   ) {
-    const error = new IdentityOriginalUnavailable('identity-history-prepaid-context-changed');
+    const error = originalUnavailable('identity-history-prepaid-context-changed');
     unit.failure ??= error;
     throw error;
   }
@@ -262,9 +272,9 @@ const enteredPrepaidParents = new WeakSet<IdentityOriginalSourceContext['origina
 
 export const withPrepaidAgentIdentityHistoryUnit: PrepaidAgentIdentityHistoryUnit = async (deps, parent, body) => {
   refuseNestedUnit();
+  originalOperations = await import('../access/identity-original-admission.ts');
   assertPrepaidParent(deps, parent);
-  if (enteredPrepaidParents.has(parent.original))
-    throw new IdentityOriginalUnavailable('identity-history-unit-already-entered');
+  if (enteredPrepaidParents.has(parent.original)) throw originalUnavailable('identity-history-unit-already-entered');
   // Failure, missing export and a rejected callback all consume this entry. Accounts'
   // producer already owns durable admission/transfer; never consume or transfer again.
   enteredPrepaidParents.add(parent.original);
@@ -274,7 +284,7 @@ export const withPrepaidAgentIdentityHistoryUnit: PrepaidAgentIdentityHistoryUni
   assertPrepaidParent(deps, parent);
   const descriptor = Object.getOwnPropertyDescriptor(producer, 'withPrepaidIdentitySourceConsumerMaintenance');
   if (!descriptor || !('value' in descriptor) || typeof descriptor.value !== 'function')
-    throw new IdentityOriginalUnavailable(IDENTITY_SOURCE_PREPAID_MAINTENANCE_UNAVAILABLE);
+    throw originalUnavailable(IDENTITY_SOURCE_PREPAID_MAINTENANCE_UNAVAILABLE);
   const enter = producer.withPrepaidIdentitySourceConsumerMaintenance!;
   let delivered = false;
   let completed = false;
@@ -291,7 +301,7 @@ export const withPrepaidAgentIdentityHistoryUnit: PrepaidAgentIdentityHistoryUni
         parent.library
     ) {
       callbackFailed = true;
-      callbackFailure = new IdentityOriginalUnavailable('identity-history-prepaid-source-context-changed');
+      callbackFailure = originalUnavailable('identity-history-prepaid-source-context-changed');
       throw callbackFailure;
     }
     delivered = true;
@@ -326,8 +336,7 @@ export const withPrepaidAgentIdentityHistoryUnit: PrepaidAgentIdentityHistoryUni
   });
   assertPrepaidParent(deps, parent);
   if (callbackFailed) throw callbackFailure;
-  if (!delivered || !completed)
-    throw new IdentityOriginalUnavailable('identity-history-prepaid-source-callback-missing');
+  if (!delivered || !completed) throw originalUnavailable('identity-history-prepaid-source-callback-missing');
   return answer;
 };
 
