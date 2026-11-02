@@ -164,7 +164,7 @@ export function ZoneConfigurationEditor({
       ...current,
       configuration: {
         ...current.configuration,
-        pages: current.configuration.pages.map((item) => (item.route === route ? { ...item, document } : item)),
+        pages: current.configuration.pages.map((item, index) => (index === selected ? { ...item, document } : item)),
       },
     });
   }
@@ -326,8 +326,8 @@ export function ZoneConfigurationEditor({
                   onCorrect={enabled ? correct : undefined}
                   issuePrefix="zone-local-error"
                 />
-                <TechnicalDetails issues={state.violations} locale={locale} />
               </AlertDescription>
+              <TechnicalDetails issues={state.violations} locale={locale} />
             </Alert>
           ) : null}
           <ZoneNameFields

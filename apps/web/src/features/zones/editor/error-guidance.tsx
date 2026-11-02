@@ -41,7 +41,8 @@ function propertyPath(value: unknown, schema: PropertySchema | undefined, parts:
       value = value[index];
       schema = schema?.items;
     } else {
-      const property = schema?.properties?.[part];
+      const property =
+        schema?.properties && Object.hasOwn(schema.properties, part) ? schema.properties[part] : undefined;
       if (!(object(value) && Object.hasOwn(value, part)) && !property) return false;
       value = object(value) && Object.hasOwn(value, part) ? value[part] : undefined;
       schema = property;
@@ -135,7 +136,7 @@ export function fieldGuidance(issue: FieldIssue, draft: ZoneConfigureInput | und
   }
   if (field === 'scope' && (parts.length === 1 || (parts.length === 2 && indexOf(token) !== undefined))) {
     const index = indexOf(token);
-    if (index !== undefined && !draft?.configuration.scope[index]) return generic;
+    if (index !== undefined && (!draft || index >= draft.configuration.scope.length)) return generic;
     return result(m.zone_editor_scopes({}, options), m.zone_recovery_scopes({}, options), { id: 'zone-scopes' });
   }
   if (
@@ -144,7 +145,7 @@ export function fieldGuidance(issue: FieldIssue, draft: ZoneConfigureInput | und
     (parts.length === 1 || (parts.length === 2 && indexOf(token) !== undefined))
   ) {
     const index = indexOf(token);
-    if (index !== undefined && !draft?.mounts[index]) return generic;
+    if (index !== undefined && (!draft || index >= draft.mounts.length)) return generic;
     return result(m.zone_editor_mounts({}, options), m.zone_recovery_mounts({}, options), { id: 'zone-mounts' });
   }
   if (!configuration && field === 'visibility' && parts.length === 1)
@@ -296,8 +297,8 @@ export function EditorFailure({
             issuePrefix={issuePrefix}
           />
         ) : null}
-        <TechnicalDetails failure={failure} locale={locale} />
       </AlertDescription>
+      <TechnicalDetails failure={failure} locale={locale} />
     </Alert>
   );
 }
