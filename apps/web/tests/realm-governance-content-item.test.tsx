@@ -105,7 +105,9 @@ test('Realm governance views compose shared rows and case frames without truncat
   );
   expect(review.match(/<h1\b/gu)).toHaveLength(1);
   expect(review).toMatch(/<ul\b[^>]*>[\s\S]*?<li\b[^>]*data-slot="list-row"/u);
-  expect(review).toMatch(/<h3\b[^>]*data-content-item-slot="title"[^>]*>[^<]*01a1a000-0000-7000-8000-000000000033/u);
+  expect(review.match(/<h3\b[^>]*data-content-item-slot="title"[^>]*>([^<]*)<\/h3>/u)?.[1]).toBe(
+    m.realm_review_details_request_heading(),
+  );
   expect(review).toContain(m.realm_review_claimant());
   expect(review).toContain(m.realm_review_pending());
   for (const value of [orphanedAt, claimRow.claimEligibleAt, requestedAt])
@@ -310,6 +312,11 @@ test('claim approval and ban target forms keep confirmation, uncertain retry and
     await click(m.realm_review_next());
     expect(reviewReads.slice(0, 2)).toEqual(['claim-page-1', 'claim-page-2']);
     expect(host.textContent).toContain(claimantId);
+    const claimantFact = [...host.querySelectorAll('ul > li dl > div')].find(
+      (candidate) => candidate.querySelector('dt')?.textContent === m.realm_review_claimant(),
+    );
+    expect(claimantFact?.querySelector('dd')?.textContent).toBe(claimantId);
+    expect(claimantFact?.closest('details')).toBeNull();
     await click(m.realm_review_review());
     expect(host.querySelector('section[aria-labelledby] h3')?.textContent).toBe(m.realm_review_confirm_heading());
     expect(button(m.realm_review_confirm())).toBeTruthy();
