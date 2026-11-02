@@ -77,7 +77,7 @@ test('retry evidence is a bounded manifest that names recoverable full evidence'
       .split('\n')
       .map((path) => JSON.parse(path) as string)
       .sort();
-    expect(retainedPaths).toEqual([changedName, 'new.ts', 'tracked.ts', untrackedName].sort());
+    expect(retainedPaths).toEqual([changedName, 'new.ts', 'runs/1.jsonl', 'tracked.ts', untrackedName].sort());
     expect(manifest).toContain('the async teardown is racing');
     expect(manifest).toContain('Failure also occurs on base: no');
     expect(manifest).toContain(logPath);
