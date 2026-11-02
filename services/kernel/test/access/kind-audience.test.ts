@@ -102,7 +102,7 @@ test('Kind original formula funds the complete native 1000-group inverse and bot
   try {
     const actions = new Map([['collection:read', { anonymous: true }]]);
     const access = createAccess({ actions, auth: fixture.runtime.identity.accessConfig.auth! });
-    const actor = await access.authenticate(fixture.owner.bearer, { pool, deadline, time });
+    const actor = await access.authenticate(fixture.owner.bearer, { pool, deadline });
     const plan = kindOriginalFormulaPlan(actor, { pool, deadline, time, work }, actions);
     if (!plan.access) throw new Error('The installed original formula has no native declaration');
     const inverse = accessNativeDeclaration('inverse', {}, { members: 1, groups: 1000 }).bound;

@@ -188,9 +188,10 @@ export async function resolveCollectionKindRawInput(
     return { status: 'unavailable', reason: 'Collection Kind raw predecessor/version is not adoptable' };
   const sequence = drivers(held.sourceIdentity.scope, metadata.builtinKind);
   const before: Progress = previousBody?.after ?? { driver: sequence[0]!, after: null };
-  if (before.driver === 'done') throw new ProblemError('dependency_unavailable');
+  const driver = before.driver;
+  if (driver === 'done') throw new ProblemError('dependency_unavailable');
   const page = await work.compose((allowance) => readNativeCollectionRawPage(held.pool, metadata, {
-    tx, allowance, deadline: held.deadline, driver: before.driver, after: before.after, limit: quantum,
+    tx, allowance, deadline: held.deadline, driver, after: before.after, limit: quantum,
   }), { ...sourcePlan, nativeRows: 32, nativePoints: 5, emptySeeks: 5, statements: 5, bytes: 32 * 1024 });
   current();
   const index = sequence.indexOf(before.driver);
