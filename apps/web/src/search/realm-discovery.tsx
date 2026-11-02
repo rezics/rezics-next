@@ -60,12 +60,7 @@ function SearchRealmDiscoveryPage({
   }, [client, initialState, locale, owner, read, sort]);
 
   return (
-    <div
-      ref={focus.rootRef}
-      className="space-y-3"
-      aria-busy={window.pending}
-      onClickCapture={focus.captureActivation}
-    >
+    <div ref={focus.rootRef} className="space-y-3" aria-busy={window.pending} onClickCapture={focus.captureActivation}>
       <RealmDiscoverySection
         sort={sort}
         state={window.state}
