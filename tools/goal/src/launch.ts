@@ -453,10 +453,10 @@ export type RunningWorker = {
   resuming?: boolean;
 };
 /**
- * A manager's tool sandbox kills the whole process tree of the command that launched a worker, and a new process
- * group does not leave that tree. The wrapper forks twice, so the worker is reparented away from its launcher, and
- * becomes a session leader. The intermediate process publishes the wrapper's pid before it exits. When the CLI ends,
- * the wrapper records its exit code or signal beside the run log.
+ * A user systemd scope is the worker's lifecycle boundary; detaching the worker from this process alone is not enough
+ * to survive a manager-host restart. Inside that scope, the wrapper forks twice, so the worker is reparented away from
+ * its launcher and becomes a session leader. The intermediate process publishes its pid before it exits. When the
+ * CLI ends, the wrapper records its exit code or signal beside the run log.
  */
 const WRAPPER = `import os,sys,json,signal,subprocess
 exit_path,pid_path=sys.argv[1:3]
@@ -796,13 +796,18 @@ export async function launch(
       );
       const pid = existsSync(pidPath) ? Number(readFileSync(pidPath, 'utf8')) : 0;
       const identity = processIdentity(pid);
+      // A systemd-run client may fail after the wrapper published its identity. Adopt that process instead of
+      // treating it as a pre-start failure and risking a second launch during recovery.
+      const wrapperStarted = Boolean(identity || existsSync(exitPath));
       if (identity && fixtureOwner) {
         unrecordedFixtureWorker = identity;
         recordFixtureOwnedProcess(attempt.logPath, 'worker', identity);
         unrecordedFixtureWorker = null;
       }
-      if (started.error) throw started.error;
-      if (started.status !== 0 || !identity) throw new Error(`Worker wrapper failed to start (exit ${started.status})`);
+      if (!wrapperStarted) {
+        if (started.error) throw started.error;
+        throw new Error(`Worker wrapper failed to start (exit ${started.status})`);
+      }
       store.updateAttempt(attempt, (current) => {
         current.driver = driver;
         current.process = identity;

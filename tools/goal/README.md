@@ -13,7 +13,9 @@ Each worker attempt runs its detached process tree in its own transient `rezics-
 systemd manager. The slice uses CPUWeight 50 and IOWeight 50 so workers yield processor time and disk to checks,
 managers and the control plane when the host is busy, without a hard quota on worker width. IOWeight affects only
 devices whose scheduler honours weights, such as the BFQ-scheduled SATA member on host c. When a user systemd manager
-is unavailable, workers start in the existing detached process group and the launch logs the fallback reason.
+cannot apply the slice's resource settings, Goal still attempts the protected scope with host defaults and logs the
+reason. If the manager cannot create that scope before the worker starts, launch fails with recovery guidance; Goal
+does not start an unprotected worker.
 
 ```sh
 bun install --cwd tools/goal --frozen-lockfile

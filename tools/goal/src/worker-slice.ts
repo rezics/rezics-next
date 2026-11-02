@@ -60,8 +60,9 @@ export class WorkerSlice {
       this.configured = true;
     }
     if (this.configurationError) {
-      report(`Worker systemd scope unavailable; starting without a scope: ${this.configurationError}`);
-      return this.run(command, args, options);
+      report(
+        `Worker systemd slice tuning unavailable; attempting a protected scope with host defaults: ${this.configurationError}`,
+      );
     }
 
     const scoped = this.run(
@@ -79,9 +80,22 @@ export class WorkerSlice {
       options,
     );
     const scopedError = failure(scoped);
-    if (!scopedError || hasStarted()) return scoped;
-    report(`Worker systemd scope unavailable; starting without a scope: systemd-run ${scopedError}`);
-    return this.run(command, args, options);
+    if (!scopedError) return scoped;
+    if (hasStarted()) {
+      report(
+        `Worker systemd scope client failed after worker start; retaining the published worker start: ${scopedError}`,
+      );
+      return scoped;
+    }
+    const detail = [
+      `systemd-run ${scopedError}`,
+      ...(this.configurationError ? [`slice tuning failed: ${this.configurationError}`] : []),
+    ].join('; ');
+    const launchError =
+      `Worker launch refused because a restart-safe user systemd scope could not be created before worker start (${detail}). ` +
+      'Restore the user systemd manager and cgroup access, then retry; no unprotected worker was started.';
+    report(launchError);
+    throw new Error(launchError);
   }
 
   private configure(options: SpawnSyncOptions): string | null {

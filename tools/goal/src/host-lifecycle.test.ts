@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { createInterface } from 'node:readline';
 import type { AppServer } from './app-server.ts';
@@ -9,7 +9,7 @@ import { openDb } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { ManagerSessions, type ManagerSpec } from './managers.ts';
 import { processIdentity, sameProcess, type ProcessIdentity } from './process.ts';
-import { temporaryDirectory } from './test-support.ts';
+import { harness, temporaryDirectory } from './test-support.ts';
 import { hostRequest } from './integration-cli.ts';
 
 const runtime = join(import.meta.dir, 'fixtures/cli-runtime.ts');
@@ -212,6 +212,137 @@ test('a host that finds a recorded app-server of a dead host stops it before res
     f.close();
   }
 }, 15_000);
+
+test('a replacement host adopts a worker launched after slice tuning fails and can stop that same attempt', async () => {
+  const h = harness(`#!/usr/bin/env bun
+console.log(JSON.stringify({type:'thread.started',thread_id:'restart-survivor'}));
+setInterval(() => {}, 1000);
+`);
+  const task = h.tasks.dispatch(h.briefFile);
+  const bin = join(h.root, '.temp/systemd/bin');
+  mkdirSync(bin, { recursive: true });
+  const scopeArgs = join(h.root, '.temp/systemd/scope.args');
+  writeFileSync(
+    join(bin, 'systemctl'),
+    '#!/bin/sh\nif [ "$1" = show ]; then printf "0\\n"; exit 0; fi\necho "slice tuning unavailable" >&2\nexit 1\n',
+  );
+  writeFileSync(
+    join(bin, 'systemd-run'),
+    `#!/bin/sh\nprintf '%s\\n' "$@" >> ${JSON.stringify(scopeArgs)}\nwhile [ "$#" -gt 0 ]; do\n  case "$1" in --user|--scope|--collect|--quiet|--slice=*|--unit=*) shift ;; *) break ;; esac\ndone\n"$@"\nexit 1\n`,
+  );
+  chmodSync(join(bin, 'systemctl'), 0o755);
+  chmodSync(join(bin, 'systemd-run'), 0o755);
+  const ready = join(h.root, '.temp/goal/host-ready.json');
+  const recovered = join(h.root, '.temp/goal/host-recovered.json');
+  const done = join(h.root, '.temp/goal/host-done');
+  const hostScript = join(h.root, '.temp/worker-host.ts');
+  const module = (name: string) => JSON.stringify(join(import.meta.dir, name));
+  writeFileSync(
+    hostScript,
+    `import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { loadSettings } from ${module('config.ts')};
+import { openDb } from ${module('db.ts')};
+import { WorkerJob } from ${module('job.ts')};
+import { WorkerStore } from ${module('store.ts')};
+import { WorkerTasks } from ${module('tasks.ts')};
+const [root, mode, taskId, readyPath, donePath] = process.argv.slice(2);
+const settings = loadSettings({ cwd: root!, env: {} });
+const store = new WorkerStore(openDb(join(settings.stateDirectory, 'goal.sqlite')));
+const tasks = new WorkerTasks(settings, store);
+const job = new WorkerJob(tasks, { enqueue() {} }, { deliver() {} });
+const current = () => { const task = store.task(taskId!); return store.attempt({ taskId: taskId!, attempt: task.currentAttempt }); };
+let attempt;
+if (mode === 'launch') {
+  const work = job.start(taskId!);
+  for (let n = 0; n < 1000; n++) {
+    const task = store.task(taskId!);
+    if (task.currentAttempt) {
+      const candidate = current();
+      if (candidate.process && candidate.state === 'running' && existsSync(candidate.logPath) && readFileSync(candidate.logPath, 'utf8').includes('restart-survivor')) { attempt = candidate; break; }
+    }
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+  if (!attempt) throw new Error('worker did not start');
+  writeFileSync(readyPath!, JSON.stringify({ hostPid: process.pid, attempt: attempt.attempt, process: attempt.process, logPath: attempt.logPath }));
+  await work;
+} else {
+  attempt = current();
+  const work = job.recover(taskId!);
+  writeFileSync(readyPath!, JSON.stringify({ hostPid: process.pid, attempt: attempt.attempt, process: attempt.process, logPath: attempt.logPath }));
+  await work;
+}
+writeFileSync(donePath!, 'settled');
+store.db.close();
+`,
+  );
+
+  const environment = { ...process.env, PATH: `${bin}:${process.env.PATH ?? ''}` };
+  const startHost = (mode: string, readyPath: string) =>
+    spawn(process.execPath, [hostScript, h.root, mode, task.id, readyPath, done], {
+      env: environment,
+      stdio: ['ignore', 'ignore', 'pipe'],
+    });
+  const readWhenReady = async (path: string, host: ChildProcess) => {
+    for (let n = 0; n < 1000; n++) {
+      if (existsSync(path)) return JSON.parse(readFileSync(path, 'utf8')) as {
+        hostPid: number;
+        attempt: number;
+        process: ProcessIdentity;
+        logPath: string;
+      };
+      if (host.exitCode !== null || host.signalCode !== null)
+        throw new Error(`worker host exited before readiness (${host.exitCode ?? host.signalCode})`);
+      await Bun.sleep(10);
+    }
+    throw new Error('timed out waiting for worker host readiness');
+  };
+  const waitForDone = async () => {
+    for (let n = 0; n < 1000; n++) {
+      if (existsSync(done)) return readFileSync(done, 'utf8');
+      await Bun.sleep(10);
+    }
+    throw new Error('timed out waiting for worker recovery to settle');
+  };
+  const stopHost = async (host?: ChildProcess) => {
+    if (!host || host.exitCode !== null || host.signalCode !== null) return;
+    const exited = new Promise<void>((resolve) => host.once('exit', () => resolve()));
+    host.kill('SIGKILL');
+    await exited;
+  };
+
+  let first: ChildProcess | undefined;
+  let replacement: ChildProcess | undefined;
+  try {
+    first = startHost('launch', ready);
+    const launched = await readWhenReady(ready, first);
+    expect(launched.attempt).toBe(1);
+    expect(readFileSync(scopeArgs, 'utf8').split('\n')).toContain('--scope');
+    expect(sameProcess(launched.process)).toBe(true);
+    expect(readFileSync(launched.logPath, 'utf8')).toContain('restart-survivor');
+
+    await stopHost(first);
+    expect(sameProcess(launched.process)).toBe(true);
+
+    replacement = startHost('recover', recovered);
+    const adopted = await readWhenReady(recovered, replacement);
+    expect(adopted.attempt).toBe(launched.attempt);
+    expect(adopted.process).toEqual(launched.process);
+    expect(sameProcess(adopted.process)).toBe(true);
+    expect(adopted.logPath).toBe(launched.logPath);
+    expect(readFileSync(adopted.logPath, 'utf8')).toContain('restart-survivor');
+    expect(readFileSync(scopeArgs, 'utf8').split('\n').filter((line) => line.startsWith('--unit='))).toHaveLength(1);
+
+    await h.tasks.stop(task.id);
+    expect(sameProcess(launched.process)).toBe(false);
+    expect(await waitForDone()).toBe('settled');
+    expect(h.store.task(task.id).state).toBe('stopped');
+  } finally {
+    await stopHost(replacement);
+    await stopHost(first);
+    await h.disposeAsync();
+  }
+}, 30_000);
 
 test('recovery reopens each codex viewer window on the current endpoint', async () => {
   const f = temporaryDirectory();
