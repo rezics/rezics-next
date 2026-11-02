@@ -32,6 +32,10 @@ export { ExistingReviewNotice, SignInPrompt } from './write-prompts';
 
 type WriteResult<T> = { ok: true; value: T } | WriteFailure;
 
+// Deliberate form actions only; the rich editor owns its formatting and image controls.
+const authoringActionClassName =
+  'h-auto min-h-11 min-w-11 max-w-full shrink px-4 py-2 leading-snug whitespace-normal [overflow-wrap:anywhere] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2';
+
 /** Cache notifications fence away/back changes even when React batches their renders. */
 function useComposerLifetime() {
   const client = useContext(QueryClientContext);
@@ -362,7 +366,7 @@ export function mediaIssueList(
   );
   if (issues.length === 0) return null;
   return (
-    <ul className="space-y-2" aria-label={m.thread_media_status()}>
+    <ul className="min-w-0 space-y-2 [overflow-wrap:anywhere]" aria-label={m.thread_media_status()}>
       {issues.map((item) => {
         const processing = item.state === 'reserved' || item.state === 'uploaded';
         const alt = imageAlt(snapshot, item.id);
@@ -380,20 +384,41 @@ export function mediaIssueList(
                   ? m.thread_media_erased()
                   : m.thread_media_missing();
         return (
-          <li key={item.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-border/70 p-3">
-            <span className="font-medium">{alt || m.editor_image()}</span>
-            {!processing && !used && !unknown ? <span>{m.thread_media_unusable()}</span> : null}
-            <span>{status}</span>
+          <li
+            key={item.id}
+            className="flex min-w-0 max-w-full flex-wrap items-center gap-2 rounded-lg border border-border/70 p-3 [overflow-wrap:anywhere]"
+          >
+            <span className="min-w-0 max-w-full font-medium [overflow-wrap:anywhere]">{alt || m.editor_image()}</span>
+            {!processing && !used && !unknown ? (
+              <span className="min-w-0 max-w-full">{m.thread_media_unusable()}</span>
+            ) : null}
+            <span className="min-w-0 max-w-full">{status}</span>
             {processing || unknown ? (
-              <Button type="button" variant="outline" disabled={checking} onClick={retry}>
+              <Button
+                type="button"
+                variant="outline"
+                className={authoringActionClassName}
+                disabled={checking}
+                onClick={retry}
+              >
                 {m.thread_media_check_again()}
               </Button>
             ) : used ? (
-              <Button type="button" variant="outline" onClick={() => uploadAgain(item.id)}>
+              <Button
+                type="button"
+                variant="outline"
+                className={authoringActionClassName}
+                onClick={() => uploadAgain(item.id)}
+              >
                 {m.thread_media_upload_again()}
               </Button>
             ) : null}
-            <Button type="button" variant="outline" onClick={() => remove(item.id)}>
+            <Button
+              type="button"
+              variant="outline"
+              className={authoringActionClassName}
+              onClick={() => remove(item.id)}
+            >
               {m.thread_media_remove()}
             </Button>
           </li>
@@ -861,21 +886,28 @@ function PostComposerContent<T, Context = undefined>({
     }
   }
 
-  if (!lifetime.current()) return <p role="alert">{m.thread_authoring_session_changed()}</p>;
+  if (!lifetime.current())
+    return (
+      <p className="min-w-0 [overflow-wrap:anywhere]" role="alert">
+        {m.thread_authoring_session_changed()}
+      </p>
+    );
 
   const bodyLabel = titleRequired ? m.thread_new_body_label() : m.thread_reply_label();
   const editorSize = titleRequired ? 'thread-opening-editor' : 'thread-reply-editor';
   const fallbackSize = titleRequired ? 'thread-opening-fallback' : 'thread-reply-fallback';
   return (
-    <div className="rounded-xl border border-border/70 bg-card p-5">
+    <div className="min-w-0 rounded-xl border border-border/70 bg-card p-5 [container-type:inline-size] [overflow-wrap:anywhere]">
       {replyContext}
-      <form id={formId} onSubmit={submit}>
+      <form id={formId} className="min-w-0 [overflow-wrap:anywhere]" onSubmit={submit}>
         {titleRequired ? (
-          <div className="mb-5 space-y-2">
-            <Label htmlFor="thread-title">{m.thread_title_label()}</Label>
+          <div className="mb-5 min-w-0 space-y-2 [overflow-wrap:anywhere]">
+            <Label htmlFor="thread-title" className="min-w-0 whitespace-normal [overflow-wrap:anywhere]">
+              {m.thread_title_label()}
+            </Label>
             <Input
               id="thread-title"
-              className="h-11 border-border bg-background px-3"
+              className="h-11 min-w-0 max-w-full border-border bg-background px-3"
               value={title}
               onChange={(event) => setTitle(event.currentTarget.value)}
               autoComplete="off"
@@ -884,16 +916,16 @@ function PostComposerContent<T, Context = undefined>({
         ) : null}
         <input type="hidden" name="idempotency_key" value={idempotencyKey} />
       </form>
-      <div className="space-y-2" onInputCapture={captureEditorInput}>
+      <div className="min-w-0 space-y-2 [overflow-wrap:anywhere]" onInputCapture={captureEditorInput}>
         <p className={titleRequired ? 'text-sm font-medium' : 'sr-only'}>{bodyLabel}</p>
-        <div ref={editorHost}>
+        <div ref={editorHost} className="min-w-0">
           {plainEditorVisible ? (
             <div
               aria-label={bodyLabel}
               aria-multiline="true"
               aria-placeholder={titleRequired ? undefined : m.thread_reply_placeholder()}
               data-placeholder={titleRequired ? undefined : m.thread_reply_placeholder()}
-              className={`${fallbackSize} rounded-2xl border border-border/60 bg-background px-4 py-3 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring empty:before:text-muted-foreground empty:before:content-[attr(data-placeholder)] sm:px-6`}
+              className={`${fallbackSize} min-w-0 max-w-full [overflow-wrap:anywhere] rounded-2xl border border-border/60 bg-background px-4 py-3 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring empty:before:text-muted-foreground empty:before:content-[attr(data-placeholder)] sm:px-6`}
               contentEditable={!submitting}
               role="textbox"
               suppressContentEditableWarning
@@ -913,7 +945,7 @@ function PostComposerContent<T, Context = undefined>({
               <Button
                 type="submit"
                 form={formId}
-                className="disabled:bg-primary disabled:text-primary-foreground disabled:opacity-100"
+                className={`${authoringActionClassName} max-w-[min(24rem,50cqi)] disabled:bg-primary disabled:text-primary-foreground disabled:opacity-100`}
                 disabled={!ready || submitting || pendingUploads > 0}
               >
                 {m.thread_write_send()}
@@ -924,12 +956,16 @@ function PostComposerContent<T, Context = undefined>({
         </div>
       </div>
       {foreignPendingRef.current > 0 ? (
-        <p className="text-sm text-muted-foreground" role="status" aria-label={m.editor_uploading()}>
+        <p
+          className="min-w-0 text-sm text-muted-foreground [overflow-wrap:anywhere]"
+          role="status"
+          aria-label={m.editor_uploading()}
+        >
           {m.editor_uploading()}
         </p>
       ) : null}
       {failure ? (
-        <div className="mt-5 space-y-3" role="alert">
+        <div className="mt-5 min-w-0 space-y-3 [overflow-wrap:anywhere]" role="alert">
           {failure.existingReviewId ? (
             <ExistingReviewNotice reviewId={failure.existingReviewId} />
           ) : (
@@ -939,6 +975,7 @@ function PostComposerContent<T, Context = undefined>({
                 <Button
                   type="button"
                   variant="outline"
+                  className={authoringActionClassName}
                   disabled={submitting || uncertainChanged}
                   onClick={() => void submit()}
                 >
@@ -951,12 +988,12 @@ function PostComposerContent<T, Context = undefined>({
         </div>
       ) : null}
       {uploadNotice ? (
-        <p className="mt-5" role="alert">
+        <p className="mt-5 min-w-0 [overflow-wrap:anywhere]" role="alert">
           {uploadNotice}
         </p>
       ) : null}
       {uncertainChanged ? (
-        <p className="mt-5" role="alert">
+        <p className="mt-5 min-w-0 [overflow-wrap:anywhere]" role="alert">
           {m.thread_write_uncertain_changed()}
         </p>
       ) : null}
@@ -1276,11 +1313,16 @@ function InlinePostEditorContent({
     if (state === 'failed') setUploadNotice(uploadRefusalText(refusalRef.current ?? new UploadRefusal('unavailable')));
   }
 
-  if (!lifetime.current()) return <p role="alert">{m.thread_authoring_session_changed()}</p>;
+  if (!lifetime.current())
+    return (
+      <p className="min-w-0 [overflow-wrap:anywhere]" role="alert">
+        {m.thread_authoring_session_changed()}
+      </p>
+    );
 
   return (
     <div
-      className="space-y-4 rounded-xl border border-border/70 bg-card p-5"
+      className="min-w-0 space-y-4 rounded-xl border border-border/70 bg-card p-5 [overflow-wrap:anywhere]"
       onInputCapture={captureEditorInput}
       onKeyDownCapture={(event) => {
         if (
@@ -1296,15 +1338,19 @@ function InlinePostEditorContent({
       }}
     >
       {foreignPendingRef.current > 0 ? (
-        <p className="text-sm text-muted-foreground" role="status" aria-label={m.editor_uploading()}>
+        <p
+          className="min-w-0 text-sm text-muted-foreground [overflow-wrap:anywhere]"
+          role="status"
+          aria-label={m.editor_uploading()}
+        >
           {m.editor_uploading()}
         </p>
       ) : null}
-      <form className="space-y-4" onSubmit={submit}>
+      <form className="min-w-0 space-y-4 [overflow-wrap:anywhere]" onSubmit={submit}>
         <p className="text-sm font-medium">{m.thread_reply_body_label()}</p>
         {submitting ? (
           <p
-            className="min-h-32 rounded-xl border border-border/60 bg-background px-4 py-3 text-sm text-muted-foreground"
+            className="min-w-0 min-h-32 [overflow-wrap:anywhere] rounded-xl border border-border/60 bg-background px-4 py-3 text-sm text-muted-foreground"
             role="status"
           >
             {m.thread_edit_saving()}
@@ -1322,7 +1368,7 @@ function InlinePostEditorContent({
           />
         )}
         {failure ? (
-          <div className="space-y-3" role="alert">
+          <div className="min-w-0 space-y-3 [overflow-wrap:anywhere]" role="alert">
             <p>{postEditFailureText(failure)}</p>
             {mediaIssueList(
               'media' in failure ? failure.media : undefined,
@@ -1333,26 +1379,40 @@ function InlinePostEditorContent({
               checking,
             )}
             {failure.reason === 'stale' && failure.currentPost ? (
-              <Button type="button" variant="outline" onClick={() => void loadCurrentVersion()}>
+              <Button
+                type="button"
+                variant="outline"
+                className={authoringActionClassName}
+                onClick={() => void loadCurrentVersion()}
+              >
                 {m.thread_edit_load_current()}
               </Button>
             ) : null}
           </div>
         ) : null}
         {uploadNotice ? (
-          <p className="text-sm" role="alert">
+          <p className="min-w-0 text-sm [overflow-wrap:anywhere]" role="alert">
             {uploadNotice}
           </p>
         ) : null}
-        {uncertainChanged ? <p role="alert">{m.thread_write_uncertain_changed()}</p> : null}
-        <div className="flex flex-wrap gap-2">
-          <Button type="submit" disabled={!ready || submitting || pendingUploads > 0}>
+        {uncertainChanged ? (
+          <p className="min-w-0 [overflow-wrap:anywhere]" role="alert">
+            {m.thread_write_uncertain_changed()}
+          </p>
+        ) : null}
+        <div className="flex min-w-0 flex-wrap gap-2 [overflow-wrap:anywhere]">
+          <Button
+            type="submit"
+            className={authoringActionClassName}
+            disabled={!ready || submitting || pendingUploads > 0}
+          >
             {submitting ? <Spinner aria-hidden="true" role="presentation" /> : null}
             {m.thread_edit_save()}
           </Button>
           <Button
             type="button"
             variant="outline"
+            className={authoringActionClassName}
             disabled={submitting}
             onClick={() => departure.requestDiscard(onCancel)}
           >
