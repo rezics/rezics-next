@@ -11,6 +11,10 @@ import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { readVotePopulations } from './voter-realms.ts';
 import { produceIdentityRatingVoteChange } from '../semantic/identity-rating-producer.ts';
+import {
+  admitIdentityRatingEffect,
+  IdentityRatingAdmissionPendingError,
+} from '../semantic/identity-rating-admission.ts';
 import questionRead from './question-read.sql';
 import voteInsert from './vote-insert.sql';
 import voteLock from './vote-lock.sql';
@@ -221,6 +225,13 @@ export function createVoteCommands(config: Dependencies) {
             (isAlreadyCurrent && previous?.units === input.units)
           )
             throw new VoteUnchanged(previous);
+
+          const admission = await admitIdentityRatingEffect(tx, {
+            requestedTargetId: input.targetId,
+            resolvedTargetId: resolved.subjectId,
+          });
+          if (admission.status === 'pending')
+            throw new IdentityRatingAdmissionPendingError(input.targetId, admission.reason);
 
           const time = authoritativeTimeValue(command.time);
           let nextRow: Awaited<ReturnType<typeof voteRead.run>>;
