@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { FactCommand, FactResult } from '../src/features/catalogue/subject-facts';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
-test('Game discards only the confirmed unsent classification and retires confirmations with drafts and authority', async () => {
+test('Game classification keyboard opening and discard preserve independent drafts and native retry identity', async () => {
   const require = createRequire(import.meta.url);
   const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
   const window = new Window({ url: 'https://site.test/en/catalogue/game' });
@@ -104,6 +104,43 @@ test('Game discards only the confirmed unsent classification and retires confirm
   const submit = () => click(within(host).getByRole('button', { name: m.facts_submit() }));
   try {
     await render();
+    await click(buttons(m.facts_edit_field(), 'schema:gamePlatform')[0]!);
+    const privateSibling = section('schema:gamePlatform').querySelector('fieldset')!;
+    expect(window.document.activeElement).not.toBe(privateSibling);
+    const siblingInputs = [...privateSibling.querySelectorAll('input')];
+    const siblingValues = siblingInputs.map((field) => field.value);
+    const openByKeyboard = async (opener: HTMLElement) => {
+      opener.focus();
+      await act(async () => user.keyboard('{Enter}'));
+      expect(window.document.activeElement).toBe(within(section()).getByRole('group', { name: /Private proposal draft/ }));
+      expect(section('schema:gamePlatform').querySelector('fieldset')).toBe(privateSibling);
+      expect(siblingInputs.map((field) => field.value)).toEqual(siblingValues);
+      expect(requests).toBe(0);
+      expect(read.public.subject.statements).toEqual(selected);
+    };
+    await openByKeyboard(buttons(m.facts_edit_field())[1]!);
+    expect(input().value).toBe('en');
+    input().focus();
+    await render();
+    expect(window.document.activeElement).toBe(input());
+    await click(discard());
+    await click(discard());
+    await openByKeyboard(buttons(m.facts_add_value())[0]!);
+    expect(input().value).toBe('');
+    await click(discard());
+    const opener = buttons(m.facts_edit_field())[0]!;
+    opener.focus();
+    await act(async () => {
+      opener.dispatchEvent(new window.MouseEvent('click', { bubbles: true, detail: 0 }));
+      discard('schema:gamePlatform').focus();
+    });
+    expect(section().querySelector('fieldset')).not.toBeNull();
+    expect(window.document.activeElement).toBe(discard('schema:gamePlatform'));
+    await render();
+    expect(window.document.activeElement).toBe(discard('schema:gamePlatform'));
+    expect(requests).toBe(0);
+    generation++;
+    await render();
     await edit();
     await act(async () => user.clear(input()));
     await click(buttons(m.facts_edit_field(), 'schema:gamePlatform')[0]!);
@@ -171,6 +208,11 @@ test('Game discards only the confirmed unsent classification and retires confirm
       expect((discard() as HTMLButtonElement).disabled).toBe(true);
       if (reason === 'uncertain') {
         expect(nativeCommands.at(-1)?.statement.value).toEqual({ type: 'value', content: 'fr' });
+        const siblingOpener = buttons(m.facts_edit_field(), 'schema:gamePlatform')[0]!;
+        siblingOpener.focus();
+        await act(async () => user.keyboard('{Enter}'));
+        expect(window.document.activeElement).toBe(section('schema:gamePlatform').querySelector('fieldset'));
+        expect(input().disabled).toBe(true);
         propose = async () => ({ ok: false, reason: 'uncertain' });
         await submit();
         expect(nativeCommands.at(-1)).toEqual(nativeCommands.at(-2));

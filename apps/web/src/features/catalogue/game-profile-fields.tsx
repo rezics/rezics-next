@@ -518,6 +518,12 @@ function GameClassificationsLive({
   const running = useRef(false);
   const holder = useRef<HTMLElement>(null);
   const focusAfterDiscard = useRef<FactDraft | null>(null);
+  const focusAfterOpen = useRef<{
+    draft: FactDraft;
+    active: () => boolean;
+    cancel: () => void;
+  } | null>(null);
+  useLayoutEffect(() => () => focusAfterOpen.current?.cancel(), []);
   const current = useRef({ drafts, busy, lifetime, fields, read });
   current.current = { drafts, busy, lifetime, fields, read };
   const canEdit = (draft: FactDraft, rows = current.current.drafts) => {
@@ -541,6 +547,18 @@ function GameClassificationsLive({
     current.current.drafts.includes(row) &&
     !row.command &&
     !factLocked(row);
+  useLayoutEffect(() => {
+    const intent = focusAfterOpen.current;
+    if (!intent) return;
+    focusAfterOpen.current = null;
+    const admitted = intent.active() && canEdit(intent.draft);
+    intent.cancel();
+    const section = [...(holder.current?.querySelectorAll<HTMLElement>('[data-classification-property]') ?? [])].find(
+      (node) => node.dataset.classificationProperty === intent.draft.property,
+    );
+    const target = section?.querySelector('fieldset');
+    if (admitted && target?.isConnected && !target.closest('[hidden]')) target.focus();
+  });
   useLayoutEffect(() => {
     const row = focusAfterDiscard.current;
     if (!row || !lifetime.active()) return;
@@ -608,14 +626,18 @@ function GameClassificationsLive({
           const label = definition ? pickText(definition.labels, locale) : { text: property, lang: undefined };
           const selected = admitted ? (read.public.subject.statements[property] ?? []) : [];
           const editorContext = editorRelease ? { ...context, release: editorRelease } : context;
-          const stage = (source: (typeof selected)[number] | null) => {
+          const stage = (source: (typeof selected)[number] | null, opener: HTMLElement, keyboard: boolean) => {
             const canStage = (rows = current.current.drafts) =>
               current.current.lifetime === lifetime &&
               current.current.lifetime.active() &&
               current.current.read === read &&
               current.current.fields.includes(property) &&
+              !running.current &&
+              !current.current.busy &&
               !rows.some((row) => row.property === property) &&
-              (source === null || selected.includes(source));
+              (source === null
+                ? !selected.length || read.release.properties[property]!.multivalued
+                : selected.includes(source));
             if (!canStage()) return;
             const baseline = source ? statementInput(source) : null;
             const draft: FactDraft = {
@@ -633,6 +655,28 @@ function GameClassificationsLive({
                     rank: 'normal',
                   },
             };
+            focusAfterOpen.current?.cancel();
+            focusAfterOpen.current = null;
+            const document = opener.ownerDocument;
+            if (keyboard && document.activeElement === opener) {
+              let moved = false;
+              const cancel = () => {
+                moved = true;
+                document.removeEventListener('focusin', cancel);
+              };
+              document.addEventListener('focusin', cancel);
+              focusAfterOpen.current = {
+                draft,
+                active: () =>
+                  !moved &&
+                  lifetime.active() &&
+                  current.current.lifetime === lifetime &&
+                  current.current.read === read &&
+                  (document.activeElement === opener ||
+                    (!opener.isConnected && document.activeElement === document.body)),
+                cancel,
+              };
+            }
             setDraftReleases((rows) => ({ ...rows, [property]: read.release }));
             setDrafts((rows) => (canStage(rows) ? [...rows, draft] : rows));
           };
@@ -673,7 +717,7 @@ function GameClassificationsLive({
                         variant="outline"
                         disabled={busy}
                         data-classification-source={statement.id}
-                        onClick={() => stage(statement)}
+                        onClick={(event) => stage(statement, event.currentTarget, event.detail === 0)}
                       >
                         {m.facts_edit_field({}, o)}
                       </Button>
@@ -687,7 +731,7 @@ function GameClassificationsLive({
                     variant="outline"
                     disabled={busy}
                     data-classification-source=""
-                    onClick={() => stage(null)}
+                    onClick={(event) => stage(null, event.currentTarget, event.detail === 0)}
                   >
                     {m.facts_add_value({}, o)}
                   </Button>
@@ -695,7 +739,9 @@ function GameClassificationsLive({
                 {draft && (
                   <>
                     <fieldset
-                      className="space-y-4"
+                      tabIndex={-1}
+                      aria-label={`${label.text}: ${m.facts_private({}, o)}`}
+                      className="space-y-4 focus:outline-2 focus:outline-offset-2 focus:outline-ring"
                       disabled={busy || !admitted || factLocked(draft) || !!draft.command}
                     >
                       <GameStatementFields
