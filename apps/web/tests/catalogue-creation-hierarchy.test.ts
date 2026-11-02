@@ -1,6 +1,10 @@
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, createElement } from 'react';
+import { act, createElement, useState } from 'react';
+import type { EntityPickerSubject } from '@rezics/ui/entity-picker';
+import type { CreateResult, CreateSubjectCommand, CreateTransport, InitialSubject } from '../src/features/catalogue/create-subject';
+import type { StatementInput } from '../src/features/catalogue/statement-editor';
+import type { ScreenRow } from '../src/features/catalogue/screen-profile-fields';
 
 // The production components and request-backed story fixtures run in a DOM, without native services or a browser.
 test('A contributor starts the actual creation task before alternative editors and completes a story arc without duplicate creation headings', async () => {
@@ -198,9 +202,47 @@ test('Creation corrections lead with current human fields, disclose exact failur
   const { within, waitFor } = await import(Bun.resolveSync('@testing-library/dom', storybook));
   const { default: userEvent } = await import(Bun.resolveSync('@testing-library/user-event', storybook));
   mock.module('cloudflare:workers', () => ({ env: {} }));
+  const pickerCallbacks = new Map<string, (items: EntityPickerSubject[]) => void>();
+  const partChoice: EntityPickerSubject = {
+    id: '00000000-0000-4000-8000-000000000391',
+    title: 'Season',
+    types: ['schema:TVSeason'],
+    typeLabel: 'TV season',
+    cover: null,
+  };
+  const creditChoice: EntityPickerSubject = {
+    id: '00000000-0000-4000-8000-000000000392',
+    title: 'Performer',
+    types: ['schema:Person'],
+    typeLabel: 'Person',
+    cover: null,
+  };
+  const retiredChoice: EntityPickerSubject = { ...creditChoice, id: '00000000-0000-4000-8000-000000000394' };
+  const lockedChoice: EntityPickerSubject = { ...creditChoice, id: '00000000-0000-4000-8000-000000000393' };
+  mock.module('@rezics/ui/entity-picker', () => ({
+    EntityPicker: (props: {
+      label: string;
+      disabled?: boolean;
+      value?: readonly EntityPickerSubject[];
+      onValueChange?: (items: EntityPickerSubject[]) => void;
+    }) => {
+      pickerCallbacks.set(props.label, props.onValueChange ?? (() => {}));
+      return createElement(
+        'button',
+        {
+          type: 'button',
+          disabled: props.disabled,
+          'data-selected': props.value?.[0]?.id ?? '',
+          onClick: () => props.onValueChange?.([partChoice]),
+        },
+        props.label,
+      );
+    },
+  }));
   const { CreateSubjectForm } = await import('../src/features/catalogue/create-subject-form');
   const { ScreenProfile } = await import('../src/features/catalogue/screen-profile-view');
-  const { screenFactId } = await import('../src/features/catalogue/screen-profile');
+  const { ScreenInitialFields } = await import('../src/features/catalogue/screen-profile-fields');
+  const { screenFactId, screenInitialFacts, screenName } = await import('../src/features/catalogue/screen-profile');
   const { screenProfileFixture } = await import('../src/kernel/fake/catalogue-screen-profile');
   const { catalogueCreateFixture } = await import('../src/kernel/fake/catalogue-create');
   const { m } = await import('../src/paraglide/messages.js');
@@ -421,6 +463,131 @@ test('Creation corrections lead with current human fields, disclose exact failur
       expect(formName.getAttribute('aria-invalid')).toBe('false');
       expect(formName.value).toBe('映画 — A film');
     }
+
+    const partLabel = screenName(read.release, 'schema:isPartOf', 'en').text;
+    const creditLabel = screenName(read.release, 'wdt:P725', 'en').text;
+    const initialRows: ScreenRow[] = [
+      {
+        key: 'part-row',
+        statement: {
+          property: { id: 'schema:isPartOf' },
+          value: { type: 'value', content: '00000000-0000-4000-8000-000000000301' },
+          qualifiers: [],
+          references: [],
+          rank: 'normal',
+        },
+      },
+      {
+        key: 'old-credit-row',
+        statement: {
+          property: { id: 'wdt:P725' },
+          value: { type: 'value', content: '' },
+          qualifiers: [],
+          references: [],
+          rank: 'normal',
+        },
+      },
+    ];
+    let currentRows = initialRows;
+    function ScreenFields({ disabled }: { disabled: boolean }) {
+      const [rows, setRows] = useState(initialRows);
+      currentRows = rows;
+      return createElement(ScreenInitialFields, {
+        type: 'schema:Episode',
+        rows,
+        change: (next) => setRows(next),
+        release: read.release,
+        locale: 'en',
+        search: async () => [],
+        disabled,
+      });
+    }
+    const screenCommands: CreateSubjectCommand[] = [];
+    let finishScreen!: (result: CreateResult) => void;
+    const screenTransport: CreateTransport = {
+      definitions: async () => ({
+        ok: true,
+        types: [{ id: 'schema:Episode', label: 'Episode', description: '' }],
+      }),
+      submit: async (command) => {
+        screenCommands.push(command);
+        return new Promise((resolve) => {
+          finishScreen = resolve;
+        });
+      },
+      read: async () => ({ state: 'unavailable' }),
+    };
+    await mount(
+      createElement(CreateSubjectForm, {
+        locale: 'en',
+        session: 'signed-in',
+        transport: screenTransport,
+        onNavigate() {},
+        profile: {
+          scope: 'screen-initial-fields-lifetime',
+          title: 'Create episode',
+          type: 'schema:Episode',
+          readOnlyType: true,
+          fields: (_type, disabled) => createElement(ScreenFields, { disabled }),
+          prepare: (item) => screenInitialFacts(read.release, item, currentRows.map((row) => row.statement)),
+        },
+      }),
+    );
+    const oldPart = pickerCallbacks.get(partLabel)!;
+    const oldCredit = pickerCallbacks.get(creditLabel)!;
+    const creditSection = Array.from(host.querySelectorAll('section')).find(
+      (section) => section.querySelector('h3')?.textContent === creditLabel,
+    )!;
+    await act(async () => {
+      await user.click(within(creditSection).getByRole('button', { name: m.relation_remove() }));
+      oldPart([partChoice]);
+    });
+    expect(currentRows.map((row) => row.statement.property.id)).toEqual(['schema:isPartOf']);
+    expect(currentRows[0]!.statement.value).toEqual({ type: 'value', content: partChoice.id });
+
+    await act(async () => {
+      await user.selectOptions(canvas.getByRole('combobox', { name: m.character_add_fact() }), 'wdt:P725');
+      await user.click(canvas.getByRole('button', { name: m.correction_add() }));
+      oldCredit([retiredChoice]);
+    });
+    const newCredit = currentRows.find((row) => row.statement.property.id === 'wdt:P725')!;
+    expect(newCredit.key).not.toBe('old-credit-row');
+    expect(newCredit.statement.value).toEqual({ type: 'value', content: '' });
+    expect(canvas.getByRole('button', { name: creditLabel }).getAttribute('data-selected')).toBe('');
+    const currentCredit = pickerCallbacks.get(creditLabel)!;
+    await act(async () => currentCredit([creditChoice]));
+    expect(currentRows.find((row) => row.key === newCredit.key)!.statement.value).toEqual({
+      type: 'value',
+      content: creditChoice.id,
+    });
+
+    await act(async () => {
+      await user.type(canvas.getByRole('textbox', { name: m.catalogue_create_label() }), 'A new episode');
+      await user.click(canvas.getByRole('button', { name: m.catalogue_create_submit() }));
+    });
+    const sealed = structuredClone(screenCommands[0]!);
+    const sealedStatements = (screenCommands[0]!.item as InitialSubject & { statements: Record<string, StatementInput[]> })
+      .statements;
+    expect(sealedStatements['schema:isPartOf']![0]!.value).toEqual({ type: 'value', content: partChoice.id });
+    expect(sealedStatements['wdt:P725']![0]!.value).toEqual({ type: 'value', content: creditChoice.id });
+    expect(canvas.getByRole('button', { name: creditLabel }).hasAttribute('disabled')).toBe(true);
+    await act(async () => currentCredit([lockedChoice]));
+    expect(screenCommands[0]).toEqual(sealed);
+    expect(currentRows.find((row) => row.key === newCredit.key)!.statement.value).toEqual({
+      type: 'value',
+      content: creditChoice.id,
+    });
+    expect(canvas.getByRole('button', { name: creditLabel }).getAttribute('data-selected')).toBe(creditChoice.id);
+
+    await act(async () => finishScreen({ ok: false, reason: 'invalid', errors: [], refreshDefinitions: true }));
+    await waitFor(() => expect(canvas.getByRole('button', { name: creditLabel }).hasAttribute('disabled')).toBe(false));
+    const recoveredCredit = pickerCallbacks.get(creditLabel)!;
+    await act(async () => recoveredCredit([lockedChoice]));
+    expect(currentRows.find((row) => row.key === newCredit.key)!.statement.value).toEqual({
+      type: 'value',
+      content: lockedChoice.id,
+    });
+    expect(screenCommands[0]).toEqual(sealed);
 
     const uncertain = catalogueCreateFixture('uncertain');
     await mount(

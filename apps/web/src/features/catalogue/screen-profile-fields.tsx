@@ -33,6 +33,11 @@ function partValue(part: SnakInput, value: SnakInput['value']): SnakInput {
   partKeys.set(next, partKey(part));
   return next;
 }
+type ScreenStatementEdit = (
+  update: (statement: StatementInput, release: Release) => StatementInput | undefined,
+  part?: SnakInput,
+  allowMissingPart?: () => boolean,
+) => boolean;
 
 /** Decode only addresses for controls this local creation editor supports. */
 export function screenCreationControl(pointer: string, rows: ScreenRow[], release: Release, locale: string) {
@@ -104,7 +109,7 @@ function InitialValue({
   locale: string;
   search: EntityPickerSearch;
   disabled: boolean;
-  change: (value: SnakInput['value']) => void;
+  change: (value: SnakInput['value']) => boolean;
 }) {
   const [picked, setPicked] = useState<EntityPickerSubject[]>([]);
   const definition = release.properties[part.property.id];
@@ -137,8 +142,7 @@ function InitialValue({
             )
           }
           onValueChange={(items) => {
-            setPicked(items);
-            change({ type: 'value', content: items[0]?.id ?? '' });
+            if (change({ type: 'value', content: items[0]?.id ?? '' })) setPicked(items);
           }}
         />
       </div>
@@ -172,7 +176,7 @@ function InitialStatement({
   locale: string;
   search: EntityPickerSearch;
   disabled: boolean;
-  change: (statement: StatementInput) => void;
+  change: ScreenStatementEdit;
 }) {
   const o = { locale: locale as never };
   const statement = row.statement;
@@ -191,7 +195,7 @@ function InitialStatement({
         locale={locale}
         search={search}
         disabled={disabled}
-        change={(value) => change({ ...statement, value })}
+        change={(value) => change((current) => ({ ...current, value }))}
       />
       {(statement.qualifiers ?? []).map((part, index) => (
         <div key={partKey(part)} data-screen-qualifier className="min-w-0 space-y-2 border-s-2 ps-3">
@@ -209,10 +213,15 @@ function InitialStatement({
             search={search}
             disabled={disabled}
             change={(value) =>
-              change({
-                ...statement,
-                qualifiers: statement.qualifiers!.map((item, at) => (at === index ? partValue(item, value) : item)),
-              })
+              change(
+                (current) => ({
+                  ...current,
+                  qualifiers: (current.qualifiers ?? []).map((item) =>
+                    partKey(item) === partKey(part) ? partValue(item, value) : item,
+                  ),
+                }),
+                part,
+              )
             }
           />
           <ScreenQualifierRemove
@@ -220,10 +229,13 @@ function InitialStatement({
             disabled={disabled}
             locale={locale}
             onRemove={() =>
-              change({
-                ...statement,
-                qualifiers: statement.qualifiers!.filter((item) => partKey(item) !== partKey(part)),
-              })
+              change(
+                (current) => ({
+                  ...current,
+                  qualifiers: (current.qualifiers ?? []).filter((item) => partKey(item) !== partKey(part)),
+                }),
+                part,
+              )
             }
           />
         </div>
@@ -238,14 +250,17 @@ function InitialStatement({
             id={`screen-qualifier-${row.key}`}
             value=""
             onChange={(event) => {
-              if (property.qualifiers.includes(event.target.value))
-                change({
-                  ...statement,
+              const qualifier = event.target.value;
+              change((current, currentRelease) => {
+                if (!currentRelease.properties[current.property.id]?.qualifiers.includes(qualifier)) return;
+                return {
+                  ...current,
                   qualifiers: [
-                    ...(statement.qualifiers ?? []),
-                    { property: { id: event.target.value }, value: { type: 'value', content: '' } },
+                    ...(current.qualifiers ?? []),
+                    { property: { id: qualifier }, value: { type: 'value', content: '' } },
                   ],
-                });
+                };
+              });
             }}
           >
             <NativeSelectOption value="">{m.correction_add_qualifier({}, o)}</NativeSelectOption>
@@ -262,6 +277,8 @@ function InitialStatement({
       {release.properties['schema:url']?.datatype === 'url' &&
         (citations.length ? citations : [{ part: emptyCitation.current, group: -1, index: -1 }]).map((citation) => {
           const id = controlId(`${screenRowId(row)}-${partKey(citation.part)}`, 'fact', 'value');
+          const key = partKey(citation.part);
+          const activePlaceholder = () => citation.group < 0 && key === partKey(emptyCitation.current);
           const value = citation.part.value;
           return (
             <Field key={partKey(citation.part)} data-screen-citation className="min-w-0">
@@ -275,27 +292,32 @@ function InitialStatement({
                 value={value?.type === 'value' && typeof value.content === 'string' ? value.content : ''}
                 onChange={(event) => {
                   const url = event.target.value.trim();
-                  change({
-                    ...statement,
-                    references:
-                      citation.group >= 0
-                        ? statement.references.map((reference, group) =>
-                            group !== citation.group
-                              ? reference
-                              : {
-                                  ...reference,
-                                  parts: reference.parts.map((part, index) =>
-                                    index !== citation.index ? part : partValue(part, { type: 'value', content: url }),
-                                  ),
-                                },
-                          )
-                        : url
-                          ? [
-                              ...statement.references,
-                              { parts: [partValue(citation.part, { type: 'value', content: url })] },
-                            ]
-                          : statement.references,
-                  });
+                  change(
+                    (current) => {
+                      let found = false;
+                      const references = current.references.map((reference) => ({
+                        ...reference,
+                        parts: reference.parts.map((part) => {
+                          if (partKey(part) !== key) return part;
+                          found = true;
+                          return partValue(part, { type: 'value', content: url });
+                        }),
+                      }));
+                      if (found) return { ...current, references };
+                      if (
+                        activePlaceholder() &&
+                        !current.references.some((reference) => reference.parts.some((part) => part.property.id === 'schema:url'))
+                      )
+                        return url
+                          ? {
+                              ...current,
+                              references: [...current.references, { parts: [partValue(citation.part, { type: 'value', content: url })] }],
+                            }
+                          : current;
+                    },
+                    citation.part,
+                    activePlaceholder,
+                  );
                 }}
               />
               <p className="min-w-0 max-w-full text-sm text-muted-foreground empty:hidden [overflow-wrap:anywhere]">
@@ -307,16 +329,18 @@ function InitialStatement({
                   disabled={disabled}
                   locale={locale}
                   onRemove={() => {
-                    const key = partKey(citation.part);
                     emptyCitation.current = { property: { id: 'schema:url' }, value: { type: 'value', content: '' } };
-                    change({
-                      ...statement,
-                      references: statement.references.flatMap((reference) => {
-                        if (!reference.parts.some((part) => partKey(part) === key)) return [reference];
-                        const parts = reference.parts.filter((part) => partKey(part) !== key);
-                        return parts.length ? [{ ...reference, parts }] : [];
+                    change(
+                      (current) => ({
+                        ...current,
+                        references: current.references.flatMap((reference) => {
+                          if (!reference.parts.some((part) => partKey(part) === key)) return [reference];
+                          const parts = reference.parts.filter((part) => partKey(part) !== key);
+                          return parts.length ? [{ ...reference, parts }] : [];
+                        }),
                       }),
-                    });
+                      citation.part,
+                    );
                   }}
                 />
               )}
@@ -710,6 +734,78 @@ export function ScreenInitialFields({
     .filter(([group]) => group !== 'authored')
     .flatMap(([, ids]) => ids)
     .filter((id) => release.properties[id]?.disclosure !== 'sourceOrConsent');
+  const current = useRef({ rows, disabled, change, release, fields, property });
+  current.current = { rows, disabled, change, release, fields, property };
+  const mounted = useRef(true);
+  useLayoutEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const edit = (
+    rowKey: string,
+    propertyId: string,
+    update: (statement: StatementInput, release: Release) => StatementInput | undefined,
+    part?: SnakInput,
+    allowMissingPart?: () => boolean,
+  ) => {
+    const state = current.current;
+    if (!mounted.current || state.disabled) return false;
+    const row = state.rows.find((item) => item.key === rowKey && item.statement.property.id === propertyId);
+    if (!row) return false;
+    if (part) {
+      const key = partKey(part);
+      const present =
+        row.statement.qualifiers?.some((item) => partKey(item) === key) ||
+        row.statement.references.some((reference) => reference.parts.some((item) => partKey(item) === key));
+      if (!present && !allowMissingPart?.()) return false;
+    }
+    const statement = update(row.statement, state.release);
+    if (!statement) return false;
+    if (statement !== row.statement) {
+      const next = state.rows.map((item) => (item.key === rowKey ? { ...item, statement } : item));
+      current.current = { ...state, rows: next };
+      state.change(next);
+    }
+    return true;
+  };
+  const removeRow = (rowKey: string, propertyId: string) => {
+    const state = current.current;
+    if (!mounted.current || state.disabled) return;
+    if (!state.rows.some((row) => row.key === rowKey && row.statement.property.id === propertyId)) return;
+    const next = state.rows.filter((row) => row.key !== rowKey);
+    current.current = { ...state, rows: next };
+    state.change(next);
+  };
+  const addRow = () => {
+    const state = current.current;
+    const definition = state.release.properties[state.property];
+    if (
+      !mounted.current ||
+      state.disabled ||
+      !state.fields.includes(state.property) ||
+      !definition ||
+      (!definition.multivalued && state.rows.some((row) => row.statement.property.id === state.property))
+    )
+      return;
+    const next = [
+      ...state.rows,
+      {
+        key: crypto.randomUUID(),
+        statement: {
+          property: { id: state.property },
+          value: { type: 'value' as const, content: '' },
+          qualifiers: [],
+          references: [],
+          rank: 'normal' as const,
+        },
+      },
+    ];
+    current.current = { ...state, rows: next };
+    state.change(next);
+    setProperty('');
+  };
   const name = (id: string) => screenName(release, id, locale);
   return (
     <fieldset disabled={disabled} className="min-w-0 space-y-5">
@@ -725,7 +821,12 @@ export function ScreenInitialFields({
           className={screenSelectClassName}
           id={propertySelectId}
           value={fields.includes(property) ? property : ''}
-          onChange={(event) => setProperty(event.target.value)}
+          onChange={(event) => {
+            const state = current.current;
+            const selected = event.target.value;
+            if (mounted.current && !state.disabled && (!selected || state.fields.includes(selected)))
+              setProperty(selected);
+          }}
         >
           <NativeSelectOption value="">{m.character_add_fact({}, o)}</NativeSelectOption>
           {Object.entries(groups)
@@ -755,22 +856,7 @@ export function ScreenInitialFields({
           !fields.includes(property) ||
           (!release.properties[property]?.multivalued && rows.some((row) => row.statement.property.id === property))
         }
-        onClick={() => {
-          change([
-            ...rows,
-            {
-              key: crypto.randomUUID(),
-              statement: {
-                property: { id: property },
-                value: { type: 'value', content: '' },
-                qualifiers: [],
-                references: [],
-                rank: 'normal',
-              },
-            },
-          ]);
-          setProperty('');
-        }}
+        onClick={addRow}
       >
         {m.correction_add({}, o)}
       </Button>
@@ -791,13 +877,15 @@ export function ScreenInitialFields({
               locale={locale}
               search={search}
               disabled={disabled}
-              change={(statement) => change(rows.map((item) => (item.key === row.key ? { ...item, statement } : item)))}
+              change={(update, part, allowMissingPart) =>
+                edit(row.key, row.statement.property.id, update, part, allowMissingPart)
+              }
             />
             <ScreenInitialRemove
               row={row}
               disabled={disabled}
               locale={locale}
-              onRemove={() => change(rows.filter((item) => item.key !== row.key))}
+              onRemove={() => removeRow(row.key, row.statement.property.id)}
             />
           </section>
         </ContentItemFrame>
