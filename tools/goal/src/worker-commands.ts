@@ -192,14 +192,47 @@ export async function runWorkerCommand(
         ),
       );
     } else if (parsedArguments.command === 'attempts') {
-      print(
-        parsedArguments.json
-          ? JSON.stringify(store.records(), null, 2)
-          : store
-              .attempts()
-              .map((a) => `${a.taskId} ${a.attempt} ${a.state} ${a.profile.model}/${a.profile.effort} ${a.pool}`)
-              .join('\n'),
-      );
+      const args = parsedArguments;
+      if (args.taskId) {
+        if (args.json) {
+          const page = store.recordsPage(args.taskId, { afterAttempt: args.afterAttempt, limit: args.limit });
+          print(
+            JSON.stringify(
+              {
+                records: page.items,
+                hasMore: page.hasMore,
+                ...(page.nextAfter !== undefined ? { nextAfter: page.nextAfter } : {}),
+              },
+              null,
+              2,
+            ),
+          );
+        } else {
+          const page = store.attemptsPage(args.taskId, { afterAttempt: args.afterAttempt, limit: args.limit });
+          const lines = page.items.map(
+            (attempt) =>
+              `${attempt.taskId} ${attempt.attempt} ${attempt.state} ${attempt.profile.model}/${attempt.profile.effort} ${attempt.pool}`,
+          );
+          if (!lines.length) lines.push('No attempts in this page.');
+          lines.push(
+            page.hasMore ? `More attempts remain; continue after attempt ${page.nextAfter}.` : 'No more attempts.',
+          );
+          print(lines.join('\n'));
+        }
+      } else {
+        // Keep --json as the original full export; --all makes that intent explicit for scripts.
+        print(
+          args.json
+            ? JSON.stringify(store.records(), null, 2)
+            : store
+                .attempts()
+                .map(
+                  (attempt) =>
+                    `${attempt.taskId} ${attempt.attempt} ${attempt.state} ${attempt.profile.model}/${attempt.profile.effort} ${attempt.pool}`,
+                )
+                .join('\n'),
+        );
+      }
     } else if (parsedArguments.command === 'report') {
       const { flow, since, json } = parsedArguments;
       if (flow) {

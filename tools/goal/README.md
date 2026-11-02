@@ -21,7 +21,16 @@ bun run --cwd tools/goal check
 bun tools/goal/src/cli.ts dispatch .temp/goal/brief.md
 bun tools/goal/src/cli.ts status
 bun tools/goal/src/cli.ts attempts --json
+bun tools/goal/src/cli.ts attempts --all --json
+bun tools/goal/src/cli.ts attempts --task <task> --json --limit 25
 ```
+
+`attempts --json` remains the complete record export; `--all --json` makes that choice explicit for scripts. To inspect
+one task, `attempts --task <task> [--after <attempt>] [--limit <count>] [--json]` returns at most 25 attempts by default
+(up to 100). Pages are ordered by attempt number. JSON pages keep each record's existing fields inside `records` and
+include `hasMore`; when more records remain, `nextAfter` is the attempt number to pass to the next `--after` request.
+The text form also prints whether more attempts remain and the continuation attempt number.
+Attempt inspection only retrieves the requested data; the manager host handles orphan recovery.
 
 Run dispatch from a checkout of this repository after configuring local pools and writing a brief. The main checkout
 must have main checked out. Workers commit source changes on their assigned branches, do not rebase and never edit frozen
@@ -1050,6 +1059,7 @@ the train.
 The CLI validates worker command arguments before runtime recovery or command recording. Invalid arguments return usage
 feedback without settling unrelated workers.
 The CLI and direct worker callers share the parsed argument contract; direct callers retain rejected usage errors.
+Task attempt selection and page bounds use that same parser before runtime creation.
 
 ### Roles and delegation
 

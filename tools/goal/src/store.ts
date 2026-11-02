@@ -124,6 +124,20 @@ CREATE INDEX dev_verifier_findings_created ON dev_verifier_findings(created_at);
 ] as const;
 type Body = { body: string };
 const decode = <T>(row: unknown): T | undefined => (row ? (JSON.parse((row as Body).body) as T) : undefined);
+export type AttemptPage<T> = { items: T[]; hasMore: boolean; nextAfter?: number };
+export type AttemptPageOptions = { afterAttempt?: number; limit: number };
+export const MAX_ATTEMPT_PAGE_SIZE = 100;
+
+function attemptPageOptions(taskId: string, options: AttemptPageOptions): Required<AttemptPageOptions> {
+  const afterAttempt = options.afterAttempt ?? 0;
+  if (!taskId) throw new Error('task id is required');
+  if (!Number.isSafeInteger(afterAttempt) || afterAttempt < 0)
+    throw new Error('after attempt must be a non-negative integer');
+  if (!Number.isSafeInteger(options.limit) || options.limit < 1 || options.limit > MAX_ATTEMPT_PAGE_SIZE)
+    throw new Error(`limit must be between 1 and ${MAX_ATTEMPT_PAGE_SIZE}`);
+  return { afterAttempt, limit: options.limit };
+}
+
 export class WorkerStore implements AttemptFence {
   readonly checkResults: CheckResults;
   private readVersion = -1;
@@ -329,6 +343,29 @@ export class WorkerStore implements AttemptFence {
       this.attemptSnapshot.set(key, attempt);
       return structuredClone(attempt);
     });
+  }
+  /** Read one task's attempts in ascending order without decoding any other task's history. */
+  attemptsPage(taskId: string, options: AttemptPageOptions): AttemptPage<Attempt> {
+    const { afterAttempt, limit } = attemptPageOptions(taskId, options);
+    this.refreshSnapshot();
+    const rows = this.db
+      .query('SELECT task_id, attempt, body FROM worker_attempts WHERE task_id=? AND attempt>? ORDER BY attempt LIMIT ?')
+      .all(taskId, afterAttempt, limit + 1) as { task_id: string; attempt: number; body: string }[];
+    const pageRows = rows.slice(0, limit);
+    const hasMore = rows.length > limit;
+    const items = pageRows.map((value) => {
+      const key = `${value.task_id}:${value.attempt}`;
+      const cached = this.attemptSnapshot.get(key);
+      if (cached) return structuredClone(cached);
+      const attempt = this.attemptBody(value)!;
+      this.attemptSnapshot.set(key, attempt);
+      return structuredClone(attempt);
+    });
+    return {
+      items,
+      hasMore,
+      ...(hasMore && pageRows.length ? { nextAfter: pageRows[pageRows.length - 1]!.attempt } : {}),
+    };
   }
   /** Pending, running, waiting and exited attempts are the only attempts needed for host recovery. */
   activeAttempts(): Attempt[] {
@@ -721,6 +758,20 @@ export class WorkerStore implements AttemptFence {
       .query('SELECT body FROM worker_records ORDER BY task_id, attempt')
       .all()
       .map((row) => decode<AttemptRecord>(row)!);
+  }
+  /** Read a bounded page of one task's records without decoding unrelated task histories. */
+  recordsPage(taskId: string, options: AttemptPageOptions): AttemptPage<AttemptRecord> {
+    const { afterAttempt, limit } = attemptPageOptions(taskId, options);
+    const rows = this.db
+      .query('SELECT attempt, body FROM worker_records WHERE task_id=? AND attempt>? ORDER BY attempt LIMIT ?')
+      .all(taskId, afterAttempt, limit + 1) as { attempt: number; body: string }[];
+    const pageRows = rows.slice(0, limit);
+    const hasMore = rows.length > limit;
+    return {
+      items: pageRows.map((row) => decode<AttemptRecord>(row)!),
+      hasMore,
+      ...(hasMore && pageRows.length ? { nextAfter: pageRows[pageRows.length - 1]!.attempt } : {}),
+    };
   }
   record(ref: AttemptRef): AttemptRecord | undefined {
     return decode<AttemptRecord>(

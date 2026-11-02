@@ -1,7 +1,11 @@
 import { expect, test } from 'bun:test';
+import { mkdirSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { runWorkerCommand } from './worker-commands.ts';
+import { openDb } from './db.ts';
 import type { Runtime } from './config.ts';
 import { run } from './cli.ts';
-import type { WorkerStore } from './store.ts';
+import { WorkerStore } from './store.ts';
 import type { Settings, Task } from './types.ts';
 import { WorkerTasks } from './tasks.ts';
 import { temporaryDirectory } from './test-support.ts';
@@ -104,4 +108,73 @@ test('diagnostics are read-only, tolerate unknown dependencies and use controlle
   for (const malformed of status.tasks.slice(2))
     expect(malformed.dependencies).toMatchObject([{ state: 'unknown', ready: false }]);
   expect(mutations).toBe(0);
+});
+
+test('attempts selects a bounded task page and keeps the complete JSON export available', async () => {
+  const root = join(process.cwd(), '.temp', `worker-command-attempts-${crypto.randomUUID()}`);
+  const db = openDb(':memory:');
+  mkdirSync(root, { recursive: true });
+  try {
+    const store = new WorkerStore(db);
+    const insertTask = db.query('INSERT INTO worker_tasks(id, sequence, current_attempt, body) VALUES (?, ?, ?, ?)');
+    insertTask.run('target', 1, 2, JSON.stringify({ id: 'target', state: 'running' }));
+    insertTask.run('other', 2, 1, JSON.stringify({ id: 'other', state: 'running' }));
+    const insertAttempt = db.query('INSERT INTO worker_attempts(task_id, attempt, body) VALUES (?, ?, ?)');
+    for (const [taskId, attempt] of [['target', 1], ['target', 2], ['other', 1]] as const)
+      insertAttempt.run(taskId, attempt, JSON.stringify({
+        taskId,
+        attempt,
+        state: 'running',
+        profile: { model: 'model', effort: 'high' },
+        pool: 'default',
+      }));
+    const insertRecord = db.query('INSERT INTO worker_records(task_id, attempt, body) VALUES (?, ?, ?)');
+    const records = [
+      { taskId: 'target', attempt: 1, pool: 'default', outcome: 'passed', legacyField: 'kept' },
+      { taskId: 'target', attempt: 2, pool: 'default', outcome: 'stopped' },
+      { taskId: 'other', attempt: 1, pool: 'default', outcome: 'passed' },
+    ];
+    for (const record of records) insertRecord.run(record.taskId, record.attempt, JSON.stringify(record));
+
+    const settings = { stateDirectory: root } as unknown as Settings;
+    const tasks = { settings, store } as unknown as WorkerTasks;
+    const invoke = async (argv: string[]) => {
+      const output: string[] = [];
+      const code = await runWorkerCommand('attempts', argv, {
+        settings,
+        tasks,
+        store,
+        env: {},
+        print: (value) => output.push(value),
+      });
+      expect(code).toBe(0);
+      return output[0];
+    };
+
+    expect(JSON.parse((await invoke(['--task', 'target', '--json', '--limit', '1']))!)).toEqual({
+      records: [records[0]],
+      hasMore: true,
+      nextAfter: 1,
+    });
+    expect(await invoke(['--task', 'target', '--limit', '1'])).toContain(
+      'More attempts remain; continue after attempt 1.',
+    );
+    const completeExport = [records[2], records[0], records[1]];
+    expect(JSON.parse((await invoke(['--all', '--json']))!)).toEqual(completeExport);
+    expect(JSON.parse((await invoke(['--json']))!)).toEqual(completeExport);
+    expect(JSON.parse((await invoke(['--task', 'target', '--json', '--after', '2']))!)).toEqual({
+      records: [],
+      hasMore: false,
+    });
+    for (const argv of [
+      ['--limit', '1'],
+      ['--task', 'target', '--limit', '101'],
+      ['--task', 'target', '--after', '-1'],
+      ['--all', '--task', 'target', '--json'],
+    ])
+      await expect(invoke(argv)).rejects.toThrow('usage: attempts');
+  } finally {
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  }
 });

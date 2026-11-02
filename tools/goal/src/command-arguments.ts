@@ -1,4 +1,5 @@
 import { statSync } from 'node:fs';
+import { MAX_ATTEMPT_PAGE_SIZE } from './store.ts';
 import type { AttemptRecord, Tokens } from './types.ts';
 
 export type ImportAttemptFlags = {
@@ -18,7 +19,7 @@ export type ParsedWorkerCommandArguments =
   | { command: 'dispatch'; brief: string }
   | { command: 'amend'; taskId: string; expectedAttempt: 0; brief: string }
   | { command: 'status'; taskId?: string }
-  | { command: 'attempts'; json: boolean }
+  | ({ command: 'attempts' } & AttemptsArguments)
   | { command: 'report'; flow: boolean; json: boolean; since?: string }
   | {
       command: 'retry';
@@ -38,6 +39,51 @@ export type ParsedWorkerCommandArguments =
   | { command: 'event'; taskId: string; attempt: number; kind: string; body: unknown }
   | { command: 'import-attempt'; path: string; captureDirectory: true }
   | { command: 'import-attempt'; path: string; captureDirectory: false; flags: ImportAttemptFlags };
+
+const ATTEMPTS_PAGE_SIZE = 25;
+const ATTEMPTS_USAGE =
+  'usage: attempts [--json] [--all] | attempts --task <task> [--after <attempt>] [--limit <count>] [--json]';
+type AttemptsArguments = {
+  json: boolean;
+  taskId?: string;
+  afterAttempt: number;
+  limit: number;
+};
+
+function parseAttemptsArguments(argv: string[]): AttemptsArguments {
+  let json = false;
+  let all = false;
+  let taskId: string | undefined;
+  let afterAttempt = 0;
+  let limit = ATTEMPTS_PAGE_SIZE;
+  let hasAfter = false;
+  let hasLimit = false;
+  for (let index = 0; index < argv.length; index++) {
+    const flag = argv[index];
+    if (flag === '--json' && !json) json = true;
+    else if (flag === '--all' && !all) all = true;
+    else if (flag === '--task' && taskId === undefined) {
+      const value = argv[++index];
+      if (!value || value.startsWith('--')) throw new Error(ATTEMPTS_USAGE);
+      taskId = value;
+    } else if (flag === '--after' && !hasAfter) {
+      const value = argv[++index];
+      if (!value || !/^\d+$/.test(value)) throw new Error(ATTEMPTS_USAGE);
+      afterAttempt = Number(value);
+      if (!Number.isSafeInteger(afterAttempt)) throw new Error(ATTEMPTS_USAGE);
+      hasAfter = true;
+    } else if (flag === '--limit' && !hasLimit) {
+      const value = argv[++index];
+      if (!value || !/^\d+$/.test(value)) throw new Error(ATTEMPTS_USAGE);
+      limit = Number(value);
+      if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_ATTEMPT_PAGE_SIZE) throw new Error(ATTEMPTS_USAGE);
+      hasLimit = true;
+    } else throw new Error(ATTEMPTS_USAGE);
+  }
+  if ((all && (!json || taskId !== undefined || hasAfter || hasLimit)) || (!taskId && (hasAfter || hasLimit)))
+    throw new Error(ATTEMPTS_USAGE);
+  return { json, ...(taskId ? { taskId } : {}), afterAttempt, limit };
+}
 
 /** Parse supported worker arguments once so the CLI can validate before runtime recovery. */
 export function parseWorkerCommandArguments(command: string, argv: string[]): ParsedWorkerCommandArguments {
@@ -64,8 +110,7 @@ export function parseWorkerCommandArguments(command: string, argv: string[]): Pa
       if (argv.length > 1) throw new Error('usage: status [task]');
       return { command, ...(arg ? { taskId: arg } : {}) };
     case 'attempts':
-      if (argv.some((value) => value !== '--json')) throw new Error('usage: attempts [--json]');
-      return { command, json: argv.includes('--json') };
+      return { command, ...parseAttemptsArguments(argv) };
     case 'report': {
       let since: string | undefined;
       const accepted = new Set(['--json', '--flow', '--since']);

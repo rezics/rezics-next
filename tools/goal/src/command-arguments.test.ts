@@ -16,6 +16,10 @@ test('Reject invalid worker commands before recovery', async () => {
     { argv: ['consult', 'task-1', 'extra'], usage: 'Error: usage: consult <task>' },
     { argv: ['retarget', 'task-1'], usage: 'Error: usage: retarget <task> stabilize' },
     { argv: ['event', 'task-1', 'bad', 'done'], usage: 'Error: usage: event <task> <attempt> <kind> [json]' },
+    {
+      argv: ['attempts', '--task', 'task-1', '--limit', '101'],
+      usage: 'Error: usage: attempts [--json] [--all] | attempts --task <task> [--after <attempt>] [--limit <count>] [--json]',
+    },
   ];
   const originalError = console.error;
   try {
