@@ -4553,5 +4553,13 @@
   "library_copies_address_cursor_restarted": "此分頁位置已失效。目前顯示同一副本檢視的第一頁。",
   "access_leave_title": "離開存取權限變更？",
   "access_leave_unsaved": "存取權限變更尚未儲存。留下可繼續編輯，離開將捨棄變更。",
-  "access_leave_pending": "存取權限變更的結果尚未確認。留下可重試原操作。離開不會取消或重複伺服器操作。"
+  "access_leave_pending": "存取權限變更的結果尚未確認。留下可重試原操作。離開不會取消或重複伺服器操作。",
+  "library_labels_address_prefix_title": "修正此標籤前綴",
+  "library_labels_address_prefix_description": "儲存的標籤前綴過長或無效。編輯前綴即可開始新的搜尋，也可以清除搜尋。",
+  "library_labels_address_prefix_label": "標籤前綴",
+  "library_labels_address_cursor_title": "修正此儲存位置",
+  "library_labels_address_cursor_description": "儲存的位置過長或無效。編輯後可使用完全相同的前綴繼續，也可以清除搜尋。",
+  "library_labels_address_cursor_label": "儲存位置",
+  "library_labels_address_continue": "繼續",
+  "library_labels_address_clear": "清除搜尋"
 }

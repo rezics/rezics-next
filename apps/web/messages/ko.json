@@ -4553,5 +4553,13 @@
   "library_copies_address_cursor_restarted": "이 페이지 위치는 더 이상 유효하지 않습니다. 같은 사본 보기의 첫 페이지를 표시합니다.",
   "access_leave_title": "접근 권한 변경을 떠나시겠어요?",
   "access_leave_unsaved": "접근 권한 변경 사항이 저장되지 않았습니다. 계속 수정하려면 머무르고, 변경 사항을 버리려면 떠나세요.",
-  "access_leave_pending": "접근 권한 변경 결과를 아직 확인하지 못했습니다. 머무르면 동일한 작업을 재시도할 수 있습니다. 떠나도 서버 작업은 취소되거나 반복되지 않습니다."
+  "access_leave_pending": "접근 권한 변경 결과를 아직 확인하지 못했습니다. 머무르면 동일한 작업을 재시도할 수 있습니다. 떠나도 서버 작업은 취소되거나 반복되지 않습니다.",
+  "library_labels_address_prefix_title": "이 레이블 접두사 수정",
+  "library_labels_address_prefix_description": "저장된 레이블 접두사가 너무 길거나 올바르지 않습니다. 편집하면 새 검색이 시작됩니다. 검색을 지울 수도 있습니다.",
+  "library_labels_address_prefix_label": "레이블 접두사",
+  "library_labels_address_cursor_title": "저장된 페이지 위치 수정",
+  "library_labels_address_cursor_description": "저장된 페이지 위치가 너무 길거나 올바르지 않습니다. 편집하면 같은 접두사로 계속할 수 있습니다. 검색을 지울 수도 있습니다.",
+  "library_labels_address_cursor_label": "저장된 페이지 위치",
+  "library_labels_address_continue": "계속",
+  "library_labels_address_clear": "검색 지우기"
 }

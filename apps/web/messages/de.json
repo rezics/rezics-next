@@ -4553,5 +4553,13 @@
   "library_copies_address_cursor_restarted": "Diese Seitenposition ist nicht mehr gültig. Die erste Seite derselben Exemplaransicht wird angezeigt.",
   "access_leave_title": "Zugriffsänderungen verlassen?",
   "access_leave_unsaved": "Deine Zugriffsänderungen wurden noch nicht gespeichert. Bleibe, um weiterzubearbeiten, oder verlasse die Seite, um sie zu verwerfen.",
-  "access_leave_pending": "Eine Zugriffsänderung wurde noch nicht abgeglichen. Bleibe, um denselben Vorgang erneut versuchen zu können. Beim Verlassen wird der Servervorgang weder abgebrochen noch wiederholt."
+  "access_leave_pending": "Eine Zugriffsänderung wurde noch nicht abgeglichen. Bleibe, um denselben Vorgang erneut versuchen zu können. Beim Verlassen wird der Servervorgang weder abgebrochen noch wiederholt.",
+  "library_labels_address_prefix_title": "Dieses Label-Präfix korrigieren",
+  "library_labels_address_prefix_description": "Das gespeicherte Label-Präfix ist zu lang oder ungültig. Bearbeite es, um eine neue Suche zu starten, oder lösche die Suche.",
+  "library_labels_address_prefix_label": "Label-Präfix",
+  "library_labels_address_cursor_title": "Diese gespeicherte Seitenposition korrigieren",
+  "library_labels_address_cursor_description": "Die gespeicherte Seitenposition ist zu lang oder ungültig. Bearbeite sie, um mit genau demselben Präfix fortzufahren, oder lösche die Suche.",
+  "library_labels_address_cursor_label": "Gespeicherte Seitenposition",
+  "library_labels_address_continue": "Fortfahren",
+  "library_labels_address_clear": "Suche löschen"
 }

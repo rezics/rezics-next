@@ -4553,5 +4553,13 @@
   "library_copies_address_cursor_restarted": "このページ位置は無効になりました。同じコピー一覧の最初のページを表示しています。",
   "access_leave_title": "アクセスの変更を破棄して移動しますか？",
   "access_leave_unsaved": "アクセスの変更は保存されていません。このページに残ると編集を続けられます。移動すると変更は失われます。",
-  "access_leave_pending": "アクセスの変更結果をまだ確認できていません。このページに残ると同じ操作を再試行できます。移動してもサーバーの操作は取り消されず、繰り返されることもありません。"
+  "access_leave_pending": "アクセスの変更結果をまだ確認できていません。このページに残ると同じ操作を再試行できます。移動してもサーバーの操作は取り消されず、繰り返されることもありません。",
+  "library_labels_address_prefix_title": "ラベルの接頭辞を修正",
+  "library_labels_address_prefix_description": "保存されたラベルの接頭辞が長すぎるか無効です。編集すると新しい検索を開始できます。検索をクリアすることもできます。",
+  "library_labels_address_prefix_label": "ラベルの接頭辞",
+  "library_labels_address_cursor_title": "保存されたページ位置を修正",
+  "library_labels_address_cursor_description": "保存されたページ位置が長すぎるか無効です。編集すると同じ接頭辞で続行できます。検索をクリアすることもできます。",
+  "library_labels_address_cursor_label": "保存されたページ位置",
+  "library_labels_address_continue": "続行",
+  "library_labels_address_clear": "検索をクリア"
 }

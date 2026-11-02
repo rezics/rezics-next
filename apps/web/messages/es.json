@@ -4553,5 +4553,13 @@
   "library_copies_address_cursor_restarted": "Esta posición de página ya no es válida. Se muestra la primera página de la misma vista de ejemplares.",
   "access_leave_title": "¿Salir de los cambios de acceso?",
   "access_leave_unsaved": "Tus cambios de acceso no se han guardado. Quédate para seguir editando o sal para descartarlos.",
-  "access_leave_pending": "Un cambio de acceso aún no se ha conciliado. Quédate para poder reintentar la misma operación. Salir no cancela ni repite la operación del servidor."
+  "access_leave_pending": "Un cambio de acceso aún no se ha conciliado. Quédate para poder reintentar la misma operación. Salir no cancela ni repite la operación del servidor.",
+  "library_labels_address_prefix_title": "Corrige este prefijo de etiqueta",
+  "library_labels_address_prefix_description": "El prefijo de etiqueta guardado es demasiado largo o no es válido. Edítalo para iniciar una búsqueda nueva o borra la búsqueda.",
+  "library_labels_address_prefix_label": "Prefijo de etiqueta",
+  "library_labels_address_cursor_title": "Corrige esta posición de página guardada",
+  "library_labels_address_cursor_description": "La posición de página guardada es demasiado larga o no es válida. Edítala para continuar con el mismo prefijo exacto o borra la búsqueda.",
+  "library_labels_address_cursor_label": "Posición de página guardada",
+  "library_labels_address_continue": "Continuar",
+  "library_labels_address_clear": "Borrar búsqueda"
 }

@@ -4588,5 +4588,13 @@
   "library_copies_address_cursor_restarted": "This page position is no longer valid. The first page of the same Copies view is shown.",
   "access_leave_title": "Leave access changes?",
   "access_leave_unsaved": "Your access changes have not been saved. Stay to keep editing, or leave to discard them.",
-  "access_leave_pending": "An access change has not been reconciled. Stay to keep its exact retry. Leaving does not cancel or repeat the server operation."
+  "access_leave_pending": "An access change has not been reconciled. Stay to keep its exact retry. Leaving does not cancel or repeat the server operation.",
+  "library_labels_address_prefix_title": "Correct this label prefix",
+  "library_labels_address_prefix_description": "The saved label prefix is too long or malformed. Edit it to start a new search, or clear the search.",
+  "library_labels_address_prefix_label": "Label prefix",
+  "library_labels_address_cursor_title": "Correct this saved page position",
+  "library_labels_address_cursor_description": "The saved page position is too long or malformed. Edit it to continue with the exact same prefix, or clear the search.",
+  "library_labels_address_cursor_label": "Saved page position",
+  "library_labels_address_continue": "Continue",
+  "library_labels_address_clear": "Clear search"
 }

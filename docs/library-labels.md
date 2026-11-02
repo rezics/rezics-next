@@ -93,6 +93,8 @@ scopes. They add no resource type or scope and change no Collection action. The 
 - `GET /v1/libraryLabelAssignments`: exactly one of `labelId` or `subjectId`, optional `cursor`, `limit`, `view`;
   returns `200 {assignments:[{id,labelId,subjectId,revision}],next}` in default `BASIC` view. Row `id` is `assignmentId`.
 
+**WEB ADDRESS DECISION:** Labels preserves `q` exactly up to 100 Unicode scalar values; correcting a prefix starts at page one, while correcting a cursor carries the unchanged valid prefix.
+
 Both lists use signed, authenticated/encrypted cursors and `limit` 1..100, default 20. Assignments by label are ordered
 by subject ID; assignments by subject are ordered by label ID and also require subject-read admission. Reads contain
 only effective assignments with live same-owner parents. Duplicate assignment returns the unchanged ID/revision.

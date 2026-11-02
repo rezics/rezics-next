@@ -5,6 +5,7 @@ import { kernelClient, requestLocale } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import { requestCsrfToken, sessionSubject, viewerCredential } from '../session/request';
 import { clearLabelFeedback, loadLabelsPage, type LabelsPage } from './labels-read';
+import { parseLabelsAddress } from './labels-address';
 
 export type LabelsAddress = { cursor: string | null; query: string | null; locale: string };
 export type LabelsCurrentRead = {
@@ -14,14 +15,11 @@ export type LabelsCurrentRead = {
 };
 function validate(value: unknown): { cursor?: string; query?: string } {
   if (!value || typeof value !== 'object') throw new Error('Invalid label query');
-  const input = value as Record<string, unknown>;
-  if (input.cursor !== undefined && (typeof input.cursor !== 'string' || input.cursor.length > 4096))
-    throw new Error('Invalid label cursor');
-  if (input.query !== undefined && (typeof input.query !== 'string' || input.query.length > 4096))
-    throw new Error('Invalid label prefix');
+  const address = parseLabelsAddress(value);
+  if (!address.valid) throw new Error(address.issue === 'cursor' ? 'Invalid label cursor' : 'Invalid label prefix');
   return {
-    ...(typeof input.cursor === 'string' ? { cursor: input.cursor } : {}),
-    ...(typeof input.query === 'string' ? { query: input.query } : {}),
+    ...(address.cursor === null ? {} : { cursor: address.cursor }),
+    ...(address.query === null ? {} : { query: address.query }),
   };
 }
 async function read(data: ReturnType<typeof validate>): Promise<LabelsCurrentRead> {

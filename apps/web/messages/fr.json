@@ -4553,5 +4553,13 @@
   "library_copies_address_cursor_restarted": "Cette position de page n’est plus valide. La première page de la même vue des exemplaires est affichée.",
   "access_leave_title": "Quitter les modifications d’accès ?",
   "access_leave_unsaved": "Vos modifications d’accès ne sont pas enregistrées. Restez pour continuer ou quittez pour les abandonner.",
-  "access_leave_pending": "Une modification d’accès n’a pas encore été vérifiée. Restez pour pouvoir réessayer la même opération. Quitter n’annule ni ne répète l’opération du serveur."
+  "access_leave_pending": "Une modification d’accès n’a pas encore été vérifiée. Restez pour pouvoir réessayer la même opération. Quitter n’annule ni ne répète l’opération du serveur.",
+  "library_labels_address_prefix_title": "Corriger ce préfixe de libellé",
+  "library_labels_address_prefix_description": "Le préfixe de libellé enregistré est trop long ou invalide. Modifiez-le pour lancer une nouvelle recherche, ou effacez la recherche.",
+  "library_labels_address_prefix_label": "Préfixe du libellé",
+  "library_labels_address_cursor_title": "Corriger cette position de page enregistrée",
+  "library_labels_address_cursor_description": "La position de page enregistrée est trop longue ou invalide. Modifiez-la pour continuer avec exactement le même préfixe, ou effacez la recherche.",
+  "library_labels_address_cursor_label": "Position de page enregistrée",
+  "library_labels_address_continue": "Continuer",
+  "library_labels_address_clear": "Effacer la recherche"
 }
