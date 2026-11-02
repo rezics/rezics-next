@@ -103,6 +103,7 @@ export type RealmAppearanceState = Readonly<{
   notice: 'none' | 'unavailable' | 'denied' | 'invalid';
   reviewed: boolean;
   busy: boolean;
+  uploadSlot: RealmImageSlot | null;
   pendingUpload: { slot: RealmImageSlot; mediaId: string } | null;
 }>;
 
@@ -125,6 +126,7 @@ export function createRealmAppearance(
     notice: 'none',
     reviewed: false,
     busy: false,
+    uploadSlot: null,
     pendingUpload: null,
   };
   const hiddenState: RealmAppearanceState = {
@@ -135,6 +137,7 @@ export function createRealmAppearance(
     notice: 'none',
     reviewed: false,
     busy: false,
+    uploadSlot: null,
     pendingUpload: null,
   };
   let uploadAbort: AbortController | null = null;
@@ -209,6 +212,7 @@ export function createRealmAppearance(
     operationGeneration++;
     uploadAbort?.abort();
     uploadAbort = null;
+    state = { ...state, uploadSlot: null };
   }
   function cancelUpload() {
     if (!active() || (!uploadAbort && !state.pendingUpload && state.phase !== 'uploading')) return;
@@ -362,9 +366,14 @@ export function createRealmAppearance(
         update({ busy: false, phase: 'uncertain' });
         return;
       }
-      // Receipt replay can confirm an older write without making its snapshot current again.
-      if (attempt.head !== ticket.head && snapshot.head !== ticket.head) {
-        update({ busy: false, phase: 'conflict', reviewed: true });
+      // A replay can settle the original intent without replacing the current source disclosure.
+      if (attempt.head !== ticket.head) {
+        const current = state.read.snapshot;
+        update(
+          snapshot.head === current.head && sameRealmPresentation(current.presentation, attempt.presentation)
+            ? { draft: current, attempt: null, phase: 'saved', busy: false }
+            : { phase: 'conflict', reviewed: true, busy: false },
+        );
         return;
       }
       update({ read: { kind: 'ready', snapshot }, draft: snapshot, attempt: null, phase: 'saved', busy: false });
@@ -412,7 +421,7 @@ export function createRealmAppearance(
     if (!ticket) return;
     const abort = new AbortController();
     uploadAbort = abort;
-    update({ busy: true, phase: 'uploading', notice: 'none' });
+    update({ busy: true, phase: 'uploading', notice: 'none', uploadSlot });
     let mediaId = pending?.mediaId;
     try {
       if (!owns(ticket) || abort.signal.aborted) return;
@@ -455,7 +464,10 @@ export function createRealmAppearance(
         pendingUpload: mediaId ? { slot: uploadSlot, mediaId } : null,
       });
     } finally {
-      if (uploadAbort === abort) uploadAbort = null;
+      if (uploadAbort === abort) {
+        uploadAbort = null;
+        update({ uploadSlot: null });
+      }
     }
   }
   if (lifetime) {
@@ -511,6 +523,7 @@ export function createRealmAppearance(
       state = {
         ...state,
         busy: false,
+        uploadSlot: null,
         phase: state.attempt ? 'uncertain' : 'idle',
       };
     }

@@ -2783,6 +2783,8 @@ matching-purpose uploader reservation can be staged as a reference, with an expl
 preview-after-save notice. It supplies no invented dimensions or derivative. The ordinary native PATCH permanently
 claims that reference; only its subsequent current community read supplies an available preview. Canceling a chooser
 or upload changes no setting.
+Replacing or clearing an upload retires its pending selection; replaying an uncertain save after a newer head
+preserves the current read and requires explicit conflict review when the replay describes an older revision.
 Clear asks for confirmation and clears only the selected reference on save, without deleting the source.
 
 Rules select an exact published native post and immutable revision, with a readable producer-supplied summary and a

@@ -380,7 +380,7 @@ export function RealmAppearanceSettings({
                     !selectable ||
                     (draft.presentation[slot === 'avatar' ? 'avatarMediaId' : 'bannerMediaId'] === null &&
                       state.pendingUpload?.slot !== slot &&
-                      state.phase !== 'uploading')
+                      state.uploadSlot !== slot)
                   }
                   onClick={() => setClear(slot)}
                 >
