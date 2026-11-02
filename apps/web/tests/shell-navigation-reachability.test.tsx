@@ -44,6 +44,12 @@ const targets = [
 ];
 const creationPaths = targets.slice(4);
 const privatePaths = ['/my/contexts', '/my/zones', '/my/contexts/new', '/my/zones/new'];
+const gates = {
+  'provider_review.list': '/imports/review',
+  'subject.create': '/catalogue/new',
+  'realm.create': '/realms/new',
+  collections: '/collections/new',
+};
 
 test('root composes every journey owner once, with unique ids and destinations', async () => {
   const root = await Bun.file(new URL('../src/routes/__root.tsx', import.meta.url)).text();
@@ -92,31 +98,17 @@ test('desktop and phone offer the same admitted creation journeys; public boards
     for (const session of ['unknown', 'signed-out', 'unavailable'] as const) assert(session, ['/boards']);
     admitted = undefined;
     assert('signed-in', ['/boards', ...privatePaths]);
-    for (admitted of [
-      [],
-      ['provider_review.list'],
-      ['subject.create'],
-      ['realm.create'],
-      ['collections'],
-      ['provider_review.list', 'subject.create', 'realm.create', 'collections'],
-    ]) {
-      const expected = targets.filter(
-        (path) =>
-          path === '/boards' ||
-          privatePaths.includes(path) ||
-          admitted!.includes(
-            (
-              {
-                '/imports/review': 'provider_review.list',
-                '/catalogue/new': 'subject.create',
-                '/realms/new': 'realm.create',
-                '/collections/new': 'collections',
-              } as Record<string, string>
-            )[path]!,
-          ),
+    admitted = [];
+    assert('signed-in', ['/boards', ...privatePaths]);
+    for (const [id, destination] of Object.entries(gates)) {
+      admitted = [id];
+      assert(
+        'signed-in',
+        targets.filter((path) => path === '/boards' || privatePaths.includes(path) || path === destination),
       );
-      assert('signed-in', expected);
     }
+    admitted = Object.keys(gates);
+    assert('signed-in', targets);
   } finally {
     hydration.mockRestore();
     operation.mockRestore();
