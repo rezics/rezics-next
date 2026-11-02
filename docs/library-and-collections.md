@@ -56,6 +56,7 @@ complete selective observations and finite repair. It is discovery data, never p
 no per-built-in membership caches or copied exact-fact-witness stores. That plan preserves the full required union.
 Every qualifying producer must cover insertion; incomplete coverage returns preparing/readiness, never false empty.
 Native current membership and disclosure reject stale positives immediately, including deleted label parents.
+Web Shelf cursor values are opaque and limited to 2,048 characters; invalid selections require an explicit field correction, and clearing a stale cursor preserves remaining filters and display choices.
 Bounded durable maintenance may prepare indexes. Logical Library/Collection list and detail reads stay pure;
 they never repair indexes or create headers or grants. The personal native chronological shelf adapter may, after
 current owner admission and an indexed missing/uninitialized-gate probe, run the existing guarded owner initialization

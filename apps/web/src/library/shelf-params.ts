@@ -48,7 +48,56 @@ export function shelfSort(search: Pick<ShelfSearch, 'state' | 'orderBy' | 'direc
 
 const defaultLayout: ShelfLayout = 'grid';
 const defaultSize: ShelfSize = 'm';
-const routeId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const routeId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$(?![\s\S])/i;
+export const SHELF_CURSOR_MAX_LENGTH = 2048;
+
+export type ShelfAddressField = 'type' | 'state' | 'label' | 'cursor';
+
+export function shelfCursor(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 && value.length <= SHELF_CURSOR_MAX_LENGTH ? value : undefined;
+}
+
+/** Keep unsupported nonempty selectors visible to the route so it can ask for an explicit correction. */
+export function shelfAddressIssues(search: Record<string, unknown>): ShelfAddressField[] {
+  const issues: ShelfAddressField[] = [];
+  const supplied = (field: ShelfAddressField) =>
+    search[field] !== undefined && search[field] !== null && search[field] !== '';
+  if (supplied('type') && !libraryShelfType(search.type)) issues.push('type');
+  if (supplied('state') && !libraryEntryStateWrite(typeof search.state === 'string' ? search.state : undefined))
+    issues.push('state');
+  if (supplied('label') && !(typeof search.label === 'string' && routeId.test(search.label)))
+    issues.push('label');
+  if (supplied('cursor') && !shelfCursor(search.cursor)) issues.push('cursor');
+  return issues;
+}
+
+const shelfAddressKeys = [
+  'type',
+  'state',
+  'label',
+  'orderBy',
+  'direction',
+  'layout',
+  'size',
+  'columns',
+  'cursor',
+] as const;
+
+/** Remove only the chosen address field; keep the remaining raw selections and display choices intact. */
+export function shelfAddressCorrectionHref(
+  locale: string,
+  search: Record<string, unknown>,
+  clear: ShelfAddressField,
+): string {
+  const params = new URLSearchParams();
+  for (const key of shelfAddressKeys) {
+    if (key === clear) continue;
+    const value = search[key];
+    if (typeof value === 'string') params.set(key, value);
+  }
+  const query = params.toString();
+  return query ? `/${locale}/library?${query}` : `/${locale}/library`;
+}
 
 /** What the shelf's address says. A value that is not one of the documented ones is absent. */
 export type ShelfSearch = {
@@ -74,7 +123,7 @@ export function validateShelfSearch(search: Record<string, unknown>): ShelfSearc
   const layout = oneOf(shelfLayouts, search.layout);
   const size = oneOf(shelfSizes, search.size);
   const columns = shelfColumns(search.columns);
-  const cursor = typeof search.cursor === 'string' && search.cursor ? search.cursor : undefined;
+  const cursor = shelfCursor(search.cursor);
   const label = typeof search.label === 'string' && routeId.test(search.label) ? search.label : undefined;
   const type = !label ? libraryShelfType(search.type) : undefined;
   return {

@@ -12,12 +12,17 @@ import { PersonalLibraryCurrent } from '../../library/personal-library-current';
 import { CurrentLabelShelf } from '../../library/label-shelf-current';
 import { loadCurrentLabelShelfPage, type CurrentLabelShelfData } from '../../library/label-shelf-read';
 import { submitSubjectLabelForm } from '../../library/subject-slot-form-action';
+import {
+  ShelfAddressRecovery,
+  ShelfStaleCursorRecovery,
+  shelfPageResetCursor,
+} from '../../library/shelf-address-recovery';
 import type { SessionEnv } from '../../session/client';
-import { shelfDisplay, validateShelfSearch } from '../../library/shelf-params';
+import { shelfAddressIssues, shelfCursor, shelfDisplay, validateShelfSearch } from '../../library/shelf-params';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 
-const routeId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const routeId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$(?![\s\S])/i;
 const readLabelShelf = createServerFn({ method: 'GET' })
   .validator((input: unknown) => {
     if (
@@ -29,7 +34,8 @@ const readLabelShelf = createServerFn({ method: 'GET' })
     )
       throw notFound();
     const value = input as Record<string, unknown>;
-    const cursor = typeof value.cursor === 'string' && value.cursor.length > 0 ? value.cursor : undefined;
+    const cursor = shelfCursor(value.cursor);
+    if (value.cursor !== undefined && value.cursor !== '' && !cursor) throw notFound();
     const undo =
       typeof value.undoSubjectId === 'string' &&
       typeof value.undoAssignmentId === 'string' &&
@@ -127,6 +133,7 @@ export const Route = createFileRoute('/library/')({
   loaderDeps: ({ search }) => {
     const { state, cursor, label, orderBy, direction, type } = validateShelfSearch(search);
     return {
+      addressIssues: shelfAddressIssues(search),
       state,
       type,
       cursor,
@@ -146,6 +153,7 @@ export const Route = createFileRoute('/library/')({
     };
   },
   loader: async ({ deps }) => {
+    if (deps.addressIssues.length) return { addressRecovery: deps.addressIssues };
     if (deps.label)
       return readLabelShelf({
         data: {
@@ -181,11 +189,27 @@ export const Route = createFileRoute('/library/')({
 });
 
 function LibraryRoute() {
-  const search = validateShelfSearch(Route.useSearch());
+  const rawSearch = Route.useSearch();
+  const search = validateShelfSearch(rawSearch);
   const data = Route.useLoaderData();
+  const locale = getLocale();
+  if ('addressRecovery' in data)
+    return <ShelfAddressRecovery locale={locale} search={rawSearch} issues={data.addressRecovery} />;
   if (!('page' in data))
     return (
-      <CurrentLabelShelf initial={data} locale={getLocale()} display={shelfDisplay(search)} read={readLabelShelf} />
+      <>
+        {search.cursor && shelfPageResetCursor(data) ? (
+          <ShelfStaleCursorRecovery locale={locale} search={rawSearch} />
+        ) : null}
+        <CurrentLabelShelf initial={data} locale={locale} display={shelfDisplay(search)} read={readLabelShelf} />
+      </>
     );
-  return <PersonalLibraryCurrent initial={data} search={search} locale={getLocale()} display={shelfDisplay(search)} />;
+  return (
+    <>
+      {search.cursor && shelfPageResetCursor(data) ? (
+        <ShelfStaleCursorRecovery locale={locale} search={rawSearch} />
+      ) : null}
+      <PersonalLibraryCurrent initial={data} search={search} locale={locale} display={shelfDisplay(search)} />
+    </>
+  );
 }

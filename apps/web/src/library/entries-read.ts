@@ -1,8 +1,10 @@
 import {
   libraryEntryStateWrite,
   libraryShelfType,
+  shelfAddressIssues,
   shelfSort,
   type LibraryEntryStateWrite,
+  type ShelfAddressField,
   type ShelfSort,
 } from './shelf-params';
 export { libraryEntryStateWrite, type LibraryEntryStateWrite } from './shelf-params';
@@ -59,6 +61,7 @@ export type PersonalLibraryView =
       sort?: ShelfSort;
       sortExplicit?: boolean;
       cursorReset?: boolean;
+      addressIssues?: ShelfAddressField[];
       readState?: 'closed' | 'denied' | 'preparing' | 'unavailable';
       entries: PersonalLibraryEntry[];
       next: string | null;
@@ -162,6 +165,12 @@ class ShelfPageUnavailableError extends Error {
   }
 }
 
+export class InvalidShelfAddressError extends Error {
+  constructor(readonly fields: ShelfAddressField[]) {
+    super('Invalid library shelf address');
+  }
+}
+
 /** One FULL bounded page. Omitting sort retains the historical update-order query for other callers. */
 export async function readEntryPage(
   client: KernelClient,
@@ -172,6 +181,8 @@ export async function readEntryPage(
   sort?: ShelfSort,
   type?: string,
 ) {
+  const addressIssues = shelfAddressIssues({ type, state, cursor });
+  if (addressIssues.length) throw new InvalidShelfAddressError(addressIssues);
   const result = await client.libraryEntries.get({
     query: { ...libraryListQuery(cursor, limit), ...(state ? { state } : {}), ...sort, ...(type ? { type } : {}) },
     headers: { authorization },
@@ -224,7 +235,7 @@ export function presentLibraryStateLabels(
 
 /**
  * One session read and one bounded page of tracked entries, optionally filtered by an exact state. A cursor the
- * kernel no longer accepts restarts the selected view at its first page.
+ * kernel no longer accepts restarts the selected view at its first page and marks that recovery for the route.
  */
 export async function loadPersonalLibrary(
   client: KernelClient,
@@ -241,6 +252,7 @@ export async function loadPersonalLibrary(
   if (await prepareSession(request, sessionEnv)) return { signedIn: false };
   const authorization = viewerCredential(request);
   if (!authorization) return { signedIn: false };
+  const addressIssues = shelfAddressIssues(input);
   const state = libraryEntryStateWrite(input.state);
   const type = libraryShelfType(input.type);
   const sort = shelfSort({
@@ -249,6 +261,18 @@ export async function loadPersonalLibrary(
     ...(input.direction ? { direction: input.direction } : {}),
   });
   const sortExplicit = input.orderBy !== undefined || input.direction !== undefined;
+  if (addressIssues.length) {
+    return {
+      signedIn: true,
+      ...(type ? { type } : {}),
+      ...(state ? { state } : {}),
+      sort,
+      sortExplicit,
+      addressIssues,
+      entries: [],
+      next: null,
+    };
+  }
   let cursorReset = false;
   let page: Awaited<ReturnType<typeof readEntryPage>>;
   try {
