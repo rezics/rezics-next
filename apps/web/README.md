@@ -1715,6 +1715,10 @@ Explicit empty or non-string Progress address operands are invalid; correcting o
 
 ### Published logs
 
+The Progress correction editor and a non-whitespace publication note share one page-level departure choice. Stay
+preserves the local drafts; when no command is unresolved, Discard clears them without submitting. A confirmed
+publication follows its Read log destination without a stale draft warning.
+
 - **Touches:** A public log page reads one `GET /v1/publishedLogs/<id>?view=FULL`. The owner's progress page reads one
   `GET /v1/publishedLogs?accountId=…&view=FULL&limit=100` page. Publishing and deleting each use one idempotent kernel
   write after the session credential read.

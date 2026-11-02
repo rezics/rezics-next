@@ -6,6 +6,7 @@ import { useReadingAuthority } from './reading-detail-current-origin';
 import type { GatedOperation } from '../kernel/exposure';
 import type { ProgressDetail, ProgressDetailAddress } from './progress-detail-server';
 import { ProgressLogs } from './logs-progress';
+import { PublicationNoteDraftNavigation, usePublicationNoteDraftNavigation } from './publication-note-draft-navigation';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import type { ReactNode } from 'react';
@@ -501,9 +502,11 @@ export function ProgressSessionPage({
 }) {
   if (!page.signedIn) return null;
   return (
-    <SessionEditor page={page} logsCursor={logsCursor} originating={originating}>
-      {children}
-    </SessionEditor>
+    <PublicationNoteDraftNavigation>
+      <SessionEditor page={page} logsCursor={logsCursor} originating={originating}>
+        {children}
+      </SessionEditor>
+    </PublicationNoteDraftNavigation>
   );
 }
 
@@ -641,6 +644,44 @@ function SessionEditor({
       (originating ? originating.isCurrent() : origin.page === page)
     );
   }
+
+  const progressDraftDirty = () =>
+    (draftOpened &&
+      (amount !== (session.amount ?? '') ||
+        locator !== (session.locator ?? '') ||
+        position !== (session.position ?? ''))) ||
+    addText.length > 0 ||
+    removeText.length > 0 ||
+    review !== null ||
+    confirming !== null;
+  const progressCommandLocked = () => !!(lifetime.current?.custody.flight || lifetime.current?.custody.retry);
+  usePublicationNoteDraftNavigation({
+    identity: lifetime.current!,
+    state: {
+      active: isCurrent(lifetime.current),
+      dirty: progressDraftDirty(),
+      locked: progressCommandLocked(),
+    },
+    getState: () => ({
+      active: isCurrent(lifetime.current),
+      dirty: progressDraftDirty(),
+      locked: progressCommandLocked(),
+    }),
+    discard: () => {
+      const origin = lifetime.current;
+      if (!isCurrent(origin) || origin.custody.flight || origin.custody.retry) return;
+      setAmount(session.amount ?? '');
+      setLocator(session.locator ?? '');
+      setPosition(session.position ?? '');
+      setAddText('');
+      setRemoveText('');
+      setDraftOpened(false);
+      setEditing(false);
+      setReview(null);
+      setConfirming(null);
+      setAlert(null);
+    },
+  });
 
   function explain(reason: ProgressFailure['reason'], recording = false) {
     setAlert(progressFailureMessage(reason));

@@ -15,6 +15,7 @@ import {
   settlePublication,
   type PublicationDraft,
 } from './logs-publication';
+import { hasMeaningfulPublicationNote, usePublicationNoteDraftNavigation } from './publication-note-draft-navigation';
 import type { ProgressSessionPage } from './progress-reads';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -81,6 +82,24 @@ function PublishLog({
     (guard ? guard.isCurrent() : originating ? originating.isCurrent(true) : owner.current.page === page);
   currentView.current = { token: renderToken, current: isCurrent };
   const canHandle = () => currentView.current?.token === renderToken && isCurrent();
+  usePublicationNoteDraftNavigation({
+    identity: lifetime,
+    state: {
+      active: isCurrent(),
+      dirty: hasMeaningfulPublicationNote(lifetime.note) && !lifetime.publishedId,
+      locked: !!(lifetime.intent || lifetime.flight),
+    },
+    getState: () => ({
+      active: isCurrent(),
+      dirty: hasMeaningfulPublicationNote(lifetime.note) && !lifetime.publishedId,
+      locked: !!(lifetime.intent || lifetime.flight),
+    }),
+    subscribe: (listener) => {
+      lifetime.listeners.add(listener);
+      return () => lifetime.listeners.delete(listener);
+    },
+    discard: () => editPublication(lifetime, ''),
+  });
 
   useLayoutEffect(() => {
     mounted.current++;

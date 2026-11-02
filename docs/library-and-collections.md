@@ -212,6 +212,9 @@ published-log history without a CSRF token. Corrections, publication and withdra
 credential; an uncertain command retains its original credential, sender, request key and operands. Public log reads
 keep their existing public access rules.
 
+Decision: On a Progress detail page, non-whitespace publication notes and changed correction input share one
+Stay/Discard departure choice; only explicit Publish sends a public log command.
+
 Continue uses active-session or profile-active-state eligibility, ranked by session activity through a bounded native
 read. It never loads the whole library for browser sorting. Until the dynamic runtime exists, an entry-only page is
 named **tracked entries**, never Everything.
