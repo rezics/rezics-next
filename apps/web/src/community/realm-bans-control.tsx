@@ -247,7 +247,7 @@ function RealmBansVisit({
   const renderGeneration = generation.current;
   const pageReady = useRef(initial?.state === 'ready');
   // Retain only this visit's last bounded page input, including a failed continuation.
-  const pageRead = useRef<{ cursor?: string; focus: boolean }>({ focus: false });
+  const pageRead = useRef<{ cursor?: string | undefined; focus: boolean }>({ focus: false });
   const pageHeading = useRef<HTMLHeadingElement>(null);
   const restartAction = useRef<HTMLButtonElement>(null);
   const retryReadAction = useRef<HTMLButtonElement>(null);

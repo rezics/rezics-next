@@ -498,7 +498,9 @@ test('Default Realm ban management retains original reader and command lifetime 
   expect(host.textContent).toContain(m.realm_bans_cursor_invalid());
   expect(lists).toHaveLength(recoveryReads + 3);
   expect(window.document.activeElement).toBe(button(m.realm_bans_restart()));
-  expect([...host.querySelectorAll('button')].some((node) => node.textContent === m.realm_bans_read_retry())).toBe(false);
+  expect(
+    [...host.querySelectorAll('button')].some((node) => node.textContent === m.realm_bans_read_retry()),
+  ).toBe(false);
   await click(m.realm_bans_restart());
   expect(lists).toHaveLength(recoveryReads + 4);
   expect(new URL(lists.at(-1)!.request.url).searchParams.has('cursor')).toBe(false);
