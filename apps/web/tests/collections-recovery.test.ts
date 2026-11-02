@@ -3,6 +3,8 @@ import { dirname } from 'node:path';
 import { act, createElement } from 'react';
 import { createKernelClient } from '@rezics/client';
 import * as start from '../.storybook/react-start';
+import type { MineCollectionsViewerPage } from '../src/library/mine-collections-route';
+import type { MineCollectionsSearch } from '../src/library/mine-collections-address';
 
 test('The ordinary Collections page offers one honest next step for signed-out empty preparing denied and failed reads and recovers without misrepresenting pins or losing the requested view', async () => {
   const { Window } = await import(
@@ -35,6 +37,7 @@ test('The ordinary Collections page offers one honest next step for signed-out e
   let transportFails = false;
   let failPins = false;
   const collectionReads: URL[] = [];
+  const pinsReads: URL[] = [];
   const client = createKernelClient('https://kernel.test', {
     fetch: (async (input, init) => {
       const request = new Request(input, init);
@@ -43,6 +46,7 @@ test('The ordinary Collections page offers one honest next step for signed-out e
       if (url.pathname === '/v1/openapi.json')
         return Response.json({ paths: { '/v1/libraryPins': { get: { operationId: 'library_pin.list' } } } });
       if (url.pathname === '/v1/libraryPins') {
+        pinsReads.push(url);
         expect(url.searchParams.get('limit')).toBe('100');
         return failPins
           ? Response.json({ code: 'unavailable' }, { status: 503 })
@@ -110,10 +114,8 @@ test('The ordinary Collections page offers one honest next step for signed-out e
 
   // Use the default route's loader, including its real server adapters and native result mapping.
   // The isolated leaf host also exercises the defensive signed-out result; the production guard stays installed.
-  const load = Route.options.loader as (context: { deps: { layout: 'previews'; cursor?: string } }) => Promise<{
-    page: Parameters<typeof MineCollectionsPageView>[0]['page'];
-    pins: Parameters<typeof MineCollectionsPageView>[0]['pins'];
-  }>;
+  const load = Route.options.loader as (context: { deps: MineCollectionsSearch }) =>
+    Promise<MineCollectionsViewerPage>;
   const route = createRootRoute({
     loader: async ({ location }) => {
       const url = new URL(location.href, 'https://site.test');
@@ -148,6 +150,23 @@ test('The ordinary Collections page offers one honest next step for signed-out e
       await router.navigate({ href: url.pathname + url.search });
     });
   try {
+    const oversizedCursor = 'x'.repeat(4097);
+    const validateSearch = Route.options.validateSearch as
+      | ((search: Record<string, unknown>) => {
+          cursor?: string;
+          layout: 'rows' | 'previews';
+          addressError?: { cursor?: string };
+        })
+      | undefined;
+    const rejectedAddress = validateSearch!({ cursor: oversizedCursor, layout: 'previews' });
+    expect(rejectedAddress?.cursor).toBeUndefined();
+    expect(rejectedAddress?.addressError?.cursor).toHaveLength(160);
+    const rejected = await load({ deps: rejectedAddress! });
+    expect(rejected.requested).toEqual({ ...rejectedAddress, cursor: null });
+    expect(rejected.page.invalidAddress).toEqual(rejectedAddress?.addressError);
+    expect(collectionReads).toHaveLength(0);
+    expect(pinsReads).toHaveLength(0);
+
     await router.load();
     await act(async () =>
       root.render(
@@ -226,6 +245,17 @@ test('The ordinary Collections page offers one honest next step for signed-out e
     expect(collectionReads.at(-1)!.searchParams.has('cursor')).toBe(false);
     expect(occurrences(m.library_collections_cursor_reset())).toBe(1);
     expect(action(m.library_collections_retry()).getAttribute('href')).toBe('/fr/library/collections?layout=previews');
+
+    const beforeRejectedAddress = collectionReads.length;
+    const beforeRejectedPins = pinsReads.length;
+    const invalidPath = `/fr/library/collections?layout=previews&cursor=${'x'.repeat(4097)}`;
+    await act(async () => router.navigate({ href: invalidPath }));
+    expect(host.querySelector('[data-collections-state="invalid-address"]')).not.toBeNull();
+    expect(action(m.library_owned_collections_address_restart()).getAttribute('href')).toBe(
+      '/fr/library/collections?layout=previews',
+    );
+    expect(collectionReads).toHaveLength(beforeRejectedAddress);
+    expect(pinsReads).toHaveLength(beforeRejectedPins);
 
     signedIn = false;
     await act(async () => {

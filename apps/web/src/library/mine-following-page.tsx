@@ -21,6 +21,7 @@ import {
   type HistoryOrigin,
 } from './history-current-origin';
 import { readMineFollowingForViewer, type MineFollowingRead } from './mine-following-actions';
+import { PERSONAL_DIRECTORY_CURSOR_LIMITS, personalDirectoryAddress } from './personal-directory-address';
 
 const retiredPage: MineFollowingPage = { signedIn: false, follows: [], next: null };
 
@@ -56,22 +57,33 @@ export const mineFollowingQuery = (
   });
 
 function matches(read: MineFollowingRead, subject: string, cursor: string | null, locale: string): boolean {
-  return read.page.signedIn && read.subject === subject && read.cursor === cursor && read.locale === locale;
+  return (
+    read.page.signedIn &&
+    !read.page.addressInvalid &&
+    read.subject === subject &&
+    read.cursor === cursor &&
+    read.locale === locale
+  );
 }
 
 /** Retained router data is a candidate, never authority for the browser's current viewer. */
 export function CurrentViewerMineFollowingPage({
   initial,
   cursor,
+  invalidAddress = false,
 }: {
   initial: MineFollowingRead;
   cursor?: string | undefined;
+  invalidAddress?: boolean;
 }) {
   useOperation('follow.list');
   const locale = getLocale();
-  const address = useHistoryAddress('/library/following', cursor, locale);
+  const requestedAddress = personalDirectoryAddress(cursor, PERSONAL_DIRECTORY_CURSOR_LIMITS.following);
+  const addressInvalid = invalidAddress || !requestedAddress.valid;
+  const address = useHistoryAddress('/library/following', requestedAddress.cursor ?? undefined, locale);
+  const originAddress = addressInvalid ? `${address.key}:invalid` : address.key;
   const origin = useHistoryCurrentOrigin(
-    address.key,
+    originAddress,
     followingOperations,
     initial.page.signedIn ? initial.subject : null,
   );
@@ -86,11 +98,12 @@ export function CurrentViewerMineFollowingPage({
       ...options,
       enabled:
         personalRead.enabled &&
+        !addressInvalid &&
         origin.hydrated &&
         !!origin.subject &&
         origin.allowed[0] === true &&
         address.isCurrent(),
-      ...(origin.seed && origin.subject && matches(initial, origin.subject, address.cursor, locale)
+      ...(!addressInvalid && origin.seed && origin.subject && matches(initial, origin.subject, address.cursor, locale)
         ? { initialData: initial }
         : {}),
     },
@@ -109,6 +122,7 @@ export function CurrentViewerMineFollowingPage({
     if (current()) void read.refetch();
   }, [initial, read.refetch, origin.lifetime(0)]);
   const page =
+    !addressInvalid &&
     read.data &&
     origin.subject &&
     origin.retained[0] === true &&
@@ -122,6 +136,7 @@ export function CurrentViewerMineFollowingPage({
   };
   const retryState = origin.client.getQueryState(options.queryKey);
   const status =
+    !addressInvalid &&
     origin.subject && origin.allowed[0] === true && (read.isError || !page.signedIn)
       ? read.isError || read.data
         ? 'unavailable'
@@ -132,6 +147,7 @@ export function CurrentViewerMineFollowingPage({
       <MineFollowingPageView
         page={page}
         cursor={address.cursor}
+        invalidAddress={addressInvalid}
         origin={rowOrigin}
         status={status}
         onRetry={
@@ -149,17 +165,21 @@ export function CurrentViewerMineFollowingPage({
 export function MineFollowingPageView({
   page,
   cursor,
+  invalidAddress = false,
   origin,
   status,
   onRetry,
 }: {
   page: MineFollowingPage;
   cursor?: string | null | undefined;
+  invalidAddress?: boolean;
   origin?: HistoryOrigin;
   status?: 'unavailable' | 'preparing' | undefined;
   onRetry?: (() => void) | undefined;
 }) {
-  const requestedCursor = cursor && cursor.length <= 2048 ? cursor : null;
+  const requestedAddress = personalDirectoryAddress(cursor, PERSONAL_DIRECTORY_CURSOR_LIMITS.following);
+  const addressRejected = invalidAddress || page.addressInvalid || !requestedAddress.valid;
+  const requestedCursor = requestedAddress.cursor;
   // A meaningful row/page replacement retires local removal callbacks during render. Equivalent
   // refetches (including freshly issued keys) preserve the native control's uncertain intent.
   const lifetime = JSON.stringify({
@@ -194,6 +214,7 @@ export function MineFollowingPageView({
       key={row.id}
       page={page}
       cursor={requestedCursor}
+      addressRejected={addressRejected}
       origin={originating}
       status={status}
       onRetry={onRetry}
@@ -204,12 +225,14 @@ export function MineFollowingPageView({
 function MineFollowingPageState({
   page,
   cursor,
+  addressRejected,
   origin,
   status,
   onRetry,
 }: {
   page: MineFollowingPage;
   cursor: string | null;
+  addressRejected: boolean;
   origin: HistoryOrigin;
   status?: 'unavailable' | 'preparing' | undefined;
   onRetry?: (() => void) | undefined;
@@ -220,7 +243,7 @@ function MineFollowingPageState({
   const [removed, setRemoved] = useState(false);
 
   const active = page.signedIn ? follows.filter((follow) => follow.state === 'following') : [];
-  const restart = !!cursor || !!page.cursorReset || removed;
+  const restart = !addressRejected && (!!cursor || !!page.cursorReset || removed);
   const firstPageEmpty = !restart && !page.next;
   const groups = [
     { type: 'subject' as const, label: m.library_following_subjects() },
@@ -233,7 +256,7 @@ function MineFollowingPageState({
       <header>
         <PageHeading>{m.library_following_heading()}</PageHeading>
       </header>
-      {status ? (
+      {!addressRejected && status ? (
         <div className="space-y-3">
           <p role="status">{status === 'preparing' ? m.library_follow_loading() : m.library_follow_unavailable()}</p>
           {onRetry ? (
@@ -243,9 +266,19 @@ function MineFollowingPageState({
           ) : null}
         </div>
       ) : null}
-      {page.signedIn && page.cursorReset ? <p role="status">{m.library_collections_cursor_reset()}</p> : null}
-      {page.signedIn && removed ? <p role="status">{m.library_follow_removed()}</p> : null}
-      {active.length ? (
+      {addressRejected ? (
+        <div className="space-y-3">
+          <p role="alert">{m.library_directory_address_invalid()}</p>
+          <a href={`/${getLocale()}/library/following`} className={buttonVariants({ variant: 'outline' })}>
+            {m.library_directory_address_first_page()}
+          </a>
+        </div>
+      ) : null}
+      {!addressRejected && page.signedIn && page.cursorReset ? (
+        <p role="status">{m.library_collections_cursor_reset()}</p>
+      ) : null}
+      {!addressRejected && page.signedIn && removed ? <p role="status">{m.library_follow_removed()}</p> : null}
+      {!addressRejected && active.length ? (
         <div className="space-y-8">
           {groups.map(({ type, label }) => {
             const items = active.filter((follow) => follow.targetType === type);
@@ -317,7 +350,7 @@ function MineFollowingPageState({
             );
           })}
         </div>
-      ) : page.signedIn ? (
+      ) : !addressRejected && page.signedIn ? (
         <Empty>
           <EmptyHeader>
             <EmptyDescription>
@@ -331,7 +364,7 @@ function MineFollowingPageState({
           </EmptyContent>
         </Empty>
       ) : null}
-      {page.signedIn && (page.next || restart) ? (
+      {!addressRejected && page.signedIn && (page.next || restart) ? (
         <Exposure operation="follow.list">
           <nav aria-label={m.library_following_heading()} className="flex flex-wrap items-center gap-3">
             {page.next ? (

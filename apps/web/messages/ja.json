@@ -39,6 +39,8 @@
   "library_collections_start": "コレクションを作成して、まとめておきたい項目を集めましょう。",
   "library_collections_start_unavailable": "現在、コレクションは作成できません。引き続きコンテンツを探すことはできます。",
   "library_collections_first_page": "最初のページ",
+  "library_directory_address_invalid": "保存されたページのアドレスが無効または長すぎます。最初のページから再開できます。",
+  "library_directory_address_first_page": "最初のページへ",
   "content_edition_creator_unknown": "作者情報を取得できません",
   "content_edition_not_published": "この版は未公開のため、読むことができません。",
   "content_edition_purchases": "購入履歴に戻る",

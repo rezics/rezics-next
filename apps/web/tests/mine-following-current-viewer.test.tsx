@@ -86,7 +86,7 @@ test('the actual Following server exports refuse stale preparation without priva
     });
     expect(await actions.readMineFollowingForViewer({ data: { cursor: '' } })).toEqual({
       subject: null,
-      cursor: null,
+      cursor: '',
       locale: 'en',
       page,
     });
@@ -152,7 +152,7 @@ test('the actual envelope names returned targets and carries the reader-prepared
       true,
     );
     expect(calls.every((call) => call.cache === 'no-store' && call.redirect === 'manual')).toBe(true);
-    const compatible = await actions.readMineFollowingPage({ data: { cursor: '' } });
+    const compatible = await actions.readMineFollowingPage({ data: {} });
     expect(Object.keys(compatible).sort()).toEqual(['follows', 'next', 'signedIn']);
     expect(compatible.follows[0]!.target?.typeLabel).toBe('Released book label');
   } finally {
@@ -477,11 +477,14 @@ test('the actual Following reset envelope preserves the originating prepared vie
     expect(responseHeaders.get('cache-control')).toBe('private, no-store');
     const normal = await actions.readMineFollowingForViewer({ data: { cursor: '' } });
     expect(normal.cursor).toBeNull();
-    expect(normal.page.cursorReset).toBeUndefined();
+    expect(normal.page.addressInvalid).toBe(true);
     expect(calls).toHaveLength(3);
-    expect(() => actions.readMineFollowingForViewer({ data: { cursor: 'x'.repeat(2049) } })).toThrow(
-      'Invalid follows cursor',
-    );
+    const invalid = await actions.readMineFollowingForViewer({ data: { cursor: 'x'.repeat(2049) } });
+    expect(invalid).toMatchObject({
+      subject: 'reset-owner',
+      cursor: null,
+      page: { addressInvalid: true },
+    });
     expect(calls).toHaveLength(3);
   } finally {
     transport.mockRestore();

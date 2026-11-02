@@ -40,8 +40,8 @@ test('router and both server reads admit the same address and malformed input ne
     const cursor = 'opaque+/page==&return_to=https://example.test';
     expect(validate({ cursor, layout: 'previews' })).toEqual({ cursor, layout: 'previews' });
     expect(admit({ cursor: 'x'.repeat(4096) }).cursor).toHaveLength(4096);
-    expect(admit({ cursor: '' })).toEqual({ layout: 'rows' });
     for (const input of [
+      { cursor: '' },
       { cursor: 7, layout: 'previews' },
       { cursor: null },
       { cursor: ['page'] },

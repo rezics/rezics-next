@@ -7,28 +7,29 @@ import { isPlatformClosedError } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
 import { sessionSubject } from '../session/request';
 import { loadMineFollowingPage, type MineFollowingPage, unfollowFollow } from './mine-following';
+import { PERSONAL_DIRECTORY_CURSOR_LIMITS, personalDirectoryAddress } from './personal-directory-address';
 
-function validateInput(input: unknown): { cursor?: string } {
-  if (
-    !input ||
-    typeof input !== 'object' ||
-    ('cursor' in input &&
-      input.cursor !== undefined &&
-      (typeof input.cursor !== 'string' || input.cursor.length > 2048))
-  )
-    throw new Error('Invalid follows cursor');
-  return 'cursor' in input && typeof input.cursor === 'string' && input.cursor ? { cursor: input.cursor } : {};
+type MineFollowingInput = { cursor?: string; invalidAddress?: true };
+
+function validateInput(input: unknown): MineFollowingInput {
+  if (!input || typeof input !== 'object') throw new Error('Invalid follows cursor');
+  const address = personalDirectoryAddress('cursor' in input ? input.cursor : undefined, PERSONAL_DIRECTORY_CURSOR_LIMITS.following);
+  return address.valid
+    ? address.cursor
+      ? { cursor: address.cursor }
+      : {}
+    : { ...(typeof address.cursor === 'string' ? { cursor: address.cursor } : {}), invalidAddress: true };
 }
 
 export type MineFollowingRead = {
   subject: string | null;
-  /** The normalized requested address, even when the reader retries a stale cursor at the first page. */
+  /** The original requested cursor, even when the reader retries a stale cursor at the first page. */
   cursor: string | null;
   locale: string;
   page: MineFollowingPage;
 };
 
-async function readFollowingRequest(data: { cursor?: string }): Promise<MineFollowingRead> {
+async function readFollowingRequest(data: MineFollowingInput): Promise<MineFollowingRead> {
   setResponseHeader('cache-control', 'private, no-store');
   const request = getRequest();
   const loaded = await loadMineFollowingPage(kernelClient(), request, env as Partial<SessionEnv>, data);
@@ -36,7 +37,8 @@ async function readFollowingRequest(data: { cursor?: string }): Promise<MineFoll
   // preparation can leave older WeakMap entries behind, so never stamp those around a signed-out page.
   const subject = loaded.signedIn ? (sessionSubject(request) ?? null) : null;
   const page = subject ? loaded : { signedIn: false, follows: [], next: null };
-  await nameSubjectTypes(page.follows.map((follow) => (follow.targetType === 'subject' ? follow.target : null)));
+  if (!page.addressInvalid)
+    await nameSubjectTypes(page.follows.map((follow) => (follow.targetType === 'subject' ? follow.target : null)));
   return { subject, cursor: data.cursor ?? null, locale: requestLocale(request) ?? 'en', page };
 }
 

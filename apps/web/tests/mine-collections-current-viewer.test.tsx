@@ -196,8 +196,8 @@ test('The default My Collections route immediately retires private collections a
     currentRequest = request();
     expect(await reads.readMineCollectionsViewerPage({ data: { cursor: '' } })).toMatchObject({
       sessionSubject: null,
-      requested: { cursor: null, layout: 'rows' },
-      page: { collections: [] },
+      requested: { cursor: null, layout: 'rows', addressError: { cursor: 'empty string' } },
+      page: { signedIn: false, collections: [] },
       pins: { state: 'closed' },
     });
     currentRequest = new Request('https://site.test/en/library/collections', {

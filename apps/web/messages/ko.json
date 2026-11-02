@@ -39,6 +39,8 @@
   "library_collections_start": "컬렉션을 만들어 함께 보관하고 싶은 항목을 모아 보세요.",
   "library_collections_start_unavailable": "지금은 컬렉션을 만들 수 없습니다. 콘텐츠는 계속 둘러볼 수 있습니다.",
   "library_collections_first_page": "첫 페이지",
+  "library_directory_address_invalid": "저장된 페이지 주소가 올바르지 않거나 너무 깁니다. 첫 페이지에서 다시 시작할 수 있습니다.",
+  "library_directory_address_first_page": "첫 페이지로 이동",
   "content_edition_creator_unknown": "창작자 정보를 확인할 수 없습니다",
   "content_edition_not_published": "이 판본은 아직 게시되지 않아 읽을 수 없습니다.",
   "content_edition_purchases": "구매 내역으로 돌아가기",

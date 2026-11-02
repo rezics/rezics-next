@@ -39,6 +39,8 @@
   "library_collections_start": "建立收藏集，把想放在一起的項目整理起來。",
   "library_collections_start_unavailable": "目前無法建立收藏集，你仍可繼續探索。",
   "library_collections_first_page": "第一頁",
+  "library_directory_address_invalid": "此儲存頁面地址無效或過長。你可以從第一頁重新開始。",
+  "library_directory_address_first_page": "前往第一頁",
   "content_edition_creator_unknown": "創作者資訊無法取得",
   "content_edition_not_published": "此版本尚未發布，無法閱讀。",
   "content_edition_purchases": "返回購買紀錄",

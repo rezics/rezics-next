@@ -279,10 +279,17 @@ test('Following management has a genuine discovery destination after the last un
   const { m } = await import('../src/paraglide/messages.js');
   const initial = await read();
   let showPage!: (page: MineFollowingPage) => void;
+  let showAddressRejected!: (rejected: boolean) => void;
   function Page() {
     const [page, setPage] = useState(initial);
+    const [addressRejected, setRejected] = useState(false);
     showPage = setPage;
-    return createElement(MineFollowingPageView, { page });
+    showAddressRejected = setRejected;
+    return createElement(MineFollowingPageView, {
+      page,
+      ...(addressRejected ? { cursor: 'x'.repeat(2049) } : {}),
+      invalidAddress: addressRejected,
+    });
   }
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnMount: false } } });
   queryClient.setQueryData(session.exposureQuery.queryKey, ['personal_library']);
@@ -324,6 +331,15 @@ test('Following management has a genuine discovery destination after the last un
     expect(row()?.textContent).toContain('Kokoro');
     expect(row()?.textContent).toContain(m.library_follow_reason_library());
     expect(empty()).toBeNull();
+    await act(async () => showAddressRejected(true));
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe(m.library_directory_address_invalid());
+    expect(host.querySelector<HTMLAnchorElement>('a[href="/en/library/following"]')?.textContent).toBe(
+      m.library_directory_address_first_page(),
+    );
+    expect(row()).toBeNull();
+    expect(host.textContent).not.toContain('Kokoro');
+    await act(async () => showAddressRejected(false));
+    expect(row()?.textContent).toContain('Kokoro');
     for (const response of [
       async () => Response.json({ code: 'forbidden' }, { status: 403 }),
       async () => Response.json({ code: 'unavailable' }, { status: 503 }),

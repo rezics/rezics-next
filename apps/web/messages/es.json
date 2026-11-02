@@ -39,6 +39,8 @@
   "library_collections_start": "Crea una colección para reunir los elementos que quieras guardar juntos.",
   "library_collections_start_unavailable": "Ahora no se pueden crear colecciones. Puedes seguir explorando.",
   "library_collections_first_page": "Primera página",
+  "library_directory_address_invalid": "La dirección de esta página guardada no es válida o es demasiado larga. Puedes volver a empezar desde la primera página.",
+  "library_directory_address_first_page": "Ir a la primera página",
   "content_edition_creator_unknown": "Autor no disponible",
   "content_edition_not_published": "Esta edición no se ha publicado y no se puede leer.",
   "content_edition_purchases": "Volver a las compras",

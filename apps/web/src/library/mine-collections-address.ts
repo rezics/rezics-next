@@ -24,12 +24,15 @@ export function admitMineCollectionsAddress(input: unknown): MineCollectionsSear
     } else errors.cursor = describe(prior);
   }
   if (input !== undefined && (!input || typeof input !== 'object')) errors.cursor = describe(input);
-  if (source.cursor !== undefined && (typeof source.cursor !== 'string' || source.cursor.length > 4096))
-    errors.cursor = describe(source.cursor);
+  if (
+    source.cursor !== undefined &&
+    (typeof source.cursor !== 'string' || source.cursor.length === 0 || source.cursor.length > 4096)
+  )
+    errors.cursor = typeof source.cursor === 'string' && source.cursor.length === 0 ? 'empty string' : describe(source.cursor);
   if (source.layout !== undefined && source.layout !== 'rows' && source.layout !== 'previews')
     errors.layout = describe(source.layout);
   return {
-    ...(typeof source.cursor === 'string' && source.cursor.length <= 4096 && source.cursor
+    ...(typeof source.cursor === 'string' && source.cursor.length > 0 && source.cursor.length <= 4096
       ? { cursor: source.cursor }
       : {}),
     layout: source.layout === 'previews' ? 'previews' : 'rows',

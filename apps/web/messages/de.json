@@ -39,6 +39,8 @@
   "library_collections_start": "Erstelle eine Sammlung, um Einträge zusammenzustellen, die zusammengehören.",
   "library_collections_start_unavailable": "Sammlungen können derzeit nicht erstellt werden. Du kannst weiterhin Inhalte entdecken.",
   "library_collections_first_page": "Erste Seite",
+  "library_directory_address_invalid": "Die gespeicherte Seitenadresse ist ungültig oder zu lang. Du kannst auf der ersten Seite neu beginnen.",
+  "library_directory_address_first_page": "Zur ersten Seite",
   "content_edition_creator_unknown": "Urheber nicht verfügbar",
   "content_edition_not_published": "Diese Ausgabe wurde noch nicht veröffentlicht und kann nicht gelesen werden.",
   "content_edition_purchases": "Zurück zu den Käufen",

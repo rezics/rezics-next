@@ -9,6 +9,7 @@ import {
   subjectOf,
   type LibrarySubject,
 } from './reads';
+import { PERSONAL_DIRECTORY_CURSOR_LIMITS, personalDirectoryAddress } from './personal-directory-address';
 
 type FollowRead = NonNullable<Awaited<ReturnType<KernelClient['follows']['get']>>['data']>;
 type RawFollow = FollowRead['follows'][number];
@@ -26,6 +27,7 @@ export type MineFollowingPage = {
   signedIn: boolean;
   follows: MineFollow[];
   next: string | null;
+  addressInvalid?: true;
   /** A successful native stale-cursor fallback; the requested address remains unchanged. */
   cursorReset?: true;
 };
@@ -46,12 +48,14 @@ export async function loadMineFollowingPage(
   client: KernelClient,
   request: Request,
   sessionEnv: Partial<SessionEnv>,
-  input: { cursor?: string },
+  input: { cursor?: string; invalidAddress?: true },
 ): Promise<MineFollowingPage> {
   if (await prepareSession(request, sessionEnv)) return { signedIn: false, follows: [], next: null };
   const authorization = viewerCredential(request);
   const accountId = sessionSubject(request);
   if (!authorization || !accountId) return { signedIn: false, follows: [], next: null };
+  if (input.invalidAddress || !personalDirectoryAddress(input.cursor, PERSONAL_DIRECTORY_CURSOR_LIMITS.following).valid)
+    return { signedIn: true, follows: [], next: null, addressInvalid: true };
   const read = async (cursor?: string) => {
     const result = await client.follows.get({
       query: libraryListQuery(cursor, LIBRARY_PAGE_LIMIT),

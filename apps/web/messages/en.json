@@ -37,6 +37,8 @@
   "library_collections_start": "Create a Collection to gather subjects you want to keep together.",
   "library_collections_start_unavailable": "Creating Collections isn't available right now. You can still explore.",
   "library_collections_first_page": "First page",
+  "library_directory_address_invalid": "This saved page address is invalid or too long. You can restart from the first page.",
+  "library_directory_address_first_page": "Go to the first page",
   "content_edition_creator_unknown": "Creator unavailable",
   "content_edition_not_published": "This edition has not been published and cannot be read.",
   "content_edition_purchases": "Back to purchases",

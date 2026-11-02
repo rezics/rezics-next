@@ -39,6 +39,8 @@
   "library_collections_start": "Créez une collection pour regrouper les éléments que vous souhaitez garder ensemble.",
   "library_collections_start_unavailable": "La création de collections est indisponible pour le moment. Vous pouvez continuer à explorer.",
   "library_collections_first_page": "Première page",
+  "library_directory_address_invalid": "L’adresse de cette page enregistrée est invalide ou trop longue. Vous pouvez recommencer à la première page.",
+  "library_directory_address_first_page": "Aller à la première page",
   "content_edition_creator_unknown": "Auteur indisponible",
   "content_edition_not_published": "Cette édition n’a pas été publiée et ne peut pas être lue.",
   "content_edition_purchases": "Retour aux achats",
