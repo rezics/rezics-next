@@ -18,7 +18,7 @@ WITH input AS (SELECT
  $16::text AS receiving_epoch,
  $17::text AS effect_key
 )
-SELECT s.registration::text,s.capture_id::text,s.revision::text
+SELECT s.registration::text,s.capture_id::text,s.revision::text,s.state
 FROM input i JOIN semantic.identity_scope_summary s
  ON s.partition_no=i.partition_no AND s.source_key=i.source_key AND s.scope_id=i.scope_id
 JOIN core.partition p ON p.partition_no=s.partition_no

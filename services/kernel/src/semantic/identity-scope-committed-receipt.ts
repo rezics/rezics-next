@@ -26,6 +26,7 @@ import { serializeIdentityValue as json } from './identity-epoch-store.ts';
 import { withReadTransaction } from './read.ts';
 import current from './identity-scope-committed-receipt-current.sql';
 import repair from './identity-scope-committed-receipt-repair.sql';
+import association from './identity-scope-committed-receipt-association.sql';
 
 /** Locators only. Even the pre-arm native tuple must resolve its retained rows. */
 export type IdentityScopeCommittedLocator = Readonly<{
@@ -52,7 +53,7 @@ export type IdentityScopeCommittedEvidence = Readonly<{
 
 type Refusal = Readonly<{
   status: 'unavailable';
-  reason: 'work_binding' | 'source_binding' | 'initial_binding_missing' | 'not_current' | 'native_unavailable';
+  reason: 'work_binding' | 'source_binding' | 'not_current' | 'native_unavailable';
   /** Cumulative receipt of the SAME supplied original ledger, never a fresh allowance. */
   work: WorkReceipt | null;
 }>;
@@ -74,6 +75,7 @@ const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 const unsigned = /^(0|[1-9][0-9]{0,18})$/;
 const maxBigint = 9223372036854775807n;
 const currentLocked = current.sql + '\nFOR UPDATE OF s FOR SHARE OF p,l,a,c,r,h,fc,fa';
+const associationLocked = association.sql + '\nFOR SHARE OF s,a,n,p';
 const repairLocked = repair.sql + '\nFOR SHARE OF s,a,c,r,n,prepared';
 const zero = (): WorkDimensions => ({
   candidateKeys: 0, identityMetadataRows: 0, nativeRows: 0, nativePoints: 0,
@@ -92,6 +94,9 @@ export function identityScopeCommittedReceiptFootprint(
   let output: number;
   if (sql === current.sql || sql === currentLocked) {
     rows = 12; // nine keyed rows, consumer fence, unresolved forward, active attempt
+    output = 512;
+  } else if (sql === association.sql || sql === associationLocked) {
+    rows = 7; // association/component, summary/partition, capture association/component, attempt probe
     output = 512;
   } else if (sql === repair.sql || sql === repairLocked) {
     rows = 7; // six keyed native/completion rows and one partition existence point
@@ -153,7 +158,7 @@ type CompletionRow = {
   epoch: number; position: string; transaction_id: string; version: string; seal: object;
   source_generation: string; completion_revision: string;
 };
-type HeadRow = { registration: string; capture_id: string; revision: string };
+type HeadRow = { registration: string; capture_id: string; revision: string; state: string };
 const digestSeal = (seal: object): string => createHash('sha256').update(canonicalize(seal)!).digest('hex');
 function freezeTree<T>(value: T): T {
   if (value && typeof value === 'object') {
@@ -171,10 +176,23 @@ async function read(
 ): Promise<IdentityScopeCommittedEvidence | null> {
   const row = (await tx.query<HeadRow>(lock ? currentLocked : current.sql, values)).rows[0];
   if (!row) return null;
-  // There is deliberately no fallback from a UUID, revision, capture receipt or
-  // source command position to an identity native receipt. The initial writer
-  // has no retained registration -> native transaction association (see contract).
-  if (locator.completion.kind === 'initial') return null;
+  // Ready is its own real native command, including after a completed repair.
+  // Read-only replay never mints or repairs a historical missing association.
+  const ready = row.state === 'ready' ? (await tx.query<Pick<CompletionRow,
+    'epoch' | 'position' | 'transaction_id' | 'completion_revision'>>(
+      lock ? associationLocked : association.sql,
+      [...values.slice(0, 7), locator.completion.kind === 'initial'],
+    )).rows[0] : undefined;
+  if (row.state === 'ready' && !ready) return null;
+  if (locator.completion.kind === 'initial') {
+    if (!ready) return null;
+    return freezeTree({ locator,
+      native: { partition: Number(values[0]), epoch: ready.epoch,
+        position: BigInt(ready.position), transactionId: ready.transaction_id },
+      completionRevision: BigInt(ready.completion_revision), completionVersion: 0n,
+      sealDigest: digestSeal({ phase: 'ready', ...ready }), sourceGeneration: String(values[13]),
+    });
+  }
   const { receiving, attempt } = locator.completion;
   const completed = (await tx.query<CompletionRow>(lock ? repairLocked : repair.sql, [
     ...values.slice(0, 7), receiving.job.jobId, receiving.job.epoch.toString(), json(attempt),
@@ -183,8 +201,8 @@ async function read(
   if (!completed) return null;
   return freezeTree({
     locator,
-    native: Object.freeze({ partition: Number(values[0]), epoch: completed.epoch,
-      position: BigInt(completed.position), transactionId: completed.transaction_id }),
+    native: Object.freeze({ partition: Number(values[0]), epoch: (ready ?? completed).epoch,
+      position: BigInt((ready ?? completed).position), transactionId: (ready ?? completed).transaction_id }),
     completionRevision: BigInt(completed.completion_revision),
     completionVersion: BigInt(completed.version), sealDigest: digestSeal(completed.seal),
     sourceGeneration: completed.source_generation,
@@ -206,7 +224,6 @@ export async function resolveCommittedIdentityScopeReceipt(
   const locator = structuredClone(input.locator);
   const values = parameters(locator);
   if (!values) return refuse('source_binding', work);
-  if (locator.completion.kind === 'initial') return refuse('initial_binding_missing', work);
   try {
     const evidence = await instrumentNativeCollectionWork(pool, work, (sql, args) =>
       identitySourceConsumerLibraryWork(pool, context.identityConsumerWork, context.deadline) === work
@@ -259,7 +276,6 @@ export async function holdCommittedIdentityScopeReceipt(
   const expected = structuredClone(input.evidence);
   const values = parameters(expected.locator);
   if (!values || !liveHome(tx, pool, expected.locator, context.deadline)) return refuse('source_binding', work);
-  if (expected.locator.completion.kind === 'initial') return refuse('initial_binding_missing', work);
   try {
     const evidence = await instrumentNativeCollectionWork(pool, work, (sql, args) =>
       identitySourceConsumerLibraryWork(pool, context.identityConsumerWork, context.deadline) === work &&

@@ -400,3 +400,268 @@ test('body-derived bounds stay constant with unrelated retained jobs and cannot 
   admitted.settle(); // dispatched failure and zero-row absence keep the same bound
   expect(ledger.receipt().used.nativeRows).toBe(7);
 });
+
+// Association continuation regressions. Existing regression bytes above are frozen.
+import {
+  prepayIdentityScopeNativeAssociation, bindIdentityScopeNativeAssociation,
+  recordIdentityScopeNativeAssociation, identityScopeNativeAssociationPrices,
+  type IdentityScopeNativeAssociationAdmission,
+} from '../../src/semantic/identity-scope-native-association.ts';
+import associationSQL from '../../src/semantic/identity-scope-committed-receipt-association.sql';
+import associationInsertSQL from '../../src/semantic/identity-scope-native-association-insert.sql';
+import { IDENTITY_SCOPE_NATIVE_ASSOCIATED } from '../../src/semantic/events.ts';
+
+async function fundedInitial() {
+  return frame(async (context) => {
+    const s = await ordinaryRegistration();
+    const locator: IdentityScopeCommittedLocator = { expected: s.observation,
+      registration: await registrationOf(s.observation), completion: { kind: 'initial' } };
+    const result = await observed(locator, context);
+    return { ...s, locator, evidence: result.evidence };
+  });
+}
+
+async function associationsFor(locator: IdentityScopeCommittedLocator) {
+  const a = identityScopeAddress(locator.expected.key);
+  return (await f.admin.query(`SELECT phase,revision::text,capture_id,registration,
+    transaction_id,epoch,position::text,purpose,scan_complete,job_id,job_epoch::text,completion_version::text
+    FROM semantic.identity_scope_native_association
+    WHERE partition_no=$1 AND source_key=$2 AND scope_id=$3 AND registration=$4
+    ORDER BY revision,phase`, [a.partition,a.source,a.scope,locator.registration])).rows;
+}
+
+test('funded real initial registration commits capture and ready associations with the genuine closed event', async () => {
+  const s = await fundedInitial();
+  const rows = await associationsFor(s.locator);
+  const ready = rows.find((r) => r.phase === 'ready');
+  const capture = rows.find((r) => r.phase === 'capture' && r.scan_complete && r.capture_id === s.observation.captureId);
+  expect(ready).toBeDefined();
+  expect(capture).toBeDefined();
+  expect(BigInt(capture.revision) + 1n).toBe(s.observation.committedRevision);
+  expect(ready.transaction_id).toBe(s.evidence.native.transactionId);
+  expect(ready.epoch).toBe(s.evidence.native.epoch);
+  expect(BigInt(ready.position)).toBe(s.evidence.native.position);
+  expect(ready.purpose).toBe('identity-scope-registration');
+  expect(ready.job_id).toBeNull(); // initial success never invents a repair job
+  const event = (await f.admin.query(`SELECT data FROM core.outbox
+    WHERE partition_no=$1 AND position=$2 AND type=$3`,
+  [s.evidence.native.partition,s.evidence.native.position.toString(),IDENTITY_SCOPE_NATIVE_ASSOCIATED])).rows[0];
+  expect(event.data).toMatchObject({ phase: 'ready', transactionId: s.evidence.native.transactionId });
+  await frame(async (context) => {
+    const replay = await s.observations.register({ key: s.key, capture: {
+      kind: 'library', capture: s.capture, frontier: s.frontier, allowance: allowance(),
+    }, deadline: context.deadline });
+    expect(replay.status).toBe('registered');
+    expect((await observed(s.locator, context)).evidence).toEqual(s.evidence);
+  });
+  expect(await associationsFor(s.locator)).toEqual(rows);
+}, 120000);
+
+test('historical ready metadata cannot mint registration evidence during replay or resolution', async () => {
+  const s = await retainedFixture();
+  await f.admin.query(`UPDATE semantic.identity_scope_summary SET state='ready',revision=5
+    WHERE partition_no=$1 AND source_key=$2 AND scope_id=$3`, s.keys);
+  const locator: IdentityScopeCommittedLocator = { expected: { ...s.locator.expected, committedRevision: 5n },
+    registration: s.locator.registration, completion: { kind: 'initial' } };
+  await frame(async (context) => {
+    const before = await associationsFor(locator);
+    expect((await resolveCommittedIdentityScopeReceipt(f.pool, { locator, context })).status).toBe('unavailable');
+    const replay = await createIdentityScopedObservations(f.pool).register({ key: s.key, capture: {
+      kind: 'library', capture: s.capture, frontier: s.frontier, allowance: allowance(),
+    }, deadline: context.deadline });
+    expect(replay.status).toBe('registered');
+    expect((await resolveCommittedIdentityScopeReceipt(f.pool, { locator, context })).status).toBe('unavailable');
+    expect(await associationsFor(locator)).toEqual(before);
+  });
+});
+
+test('initial association rejects committed native substitution and cannot authorize after release', async () => {
+  const s = await fundedInitial();
+  const address = identityScopeAddress(s.key);
+  const unrelated = (await runCommand(f.pool, { partition: address.partition, deadline: deadline() }, async (tx) => {
+    recordIdentityEpochNativeCommit(tx, 'identity-scope-registration');
+    return { value: currentCommand(tx).transactionId, events: [{ type: 'com.rezics.fixture.created.v1', data: {} }] };
+  })).value;
+  const other = (await f.admin.query(`SELECT epoch,position::text FROM semantic.identity_epoch_native_commit
+    WHERE partition_no=$1 AND transaction_id=$2`, [address.partition, unrelated])).rows[0];
+  await f.admin.query(`UPDATE semantic.identity_scope_native_association
+    SET transaction_id=$7,epoch=$8,position=$9
+    WHERE partition_no=$1 AND source_key=$2 AND scope_id=$3 AND registration=$4
+     AND capture_id=$5 AND revision=$6 AND phase='ready'`,
+  [address.partition,address.source,address.scope,s.locator.registration,s.observation.captureId,
+    s.observation.committedRevision.toString(),unrelated,other.epoch,other.position]);
+  // Use a same-home native substitution as well as the original suite's foreign
+  // completion substitution. The native/association transaction version must match.
+  await frame(async (context) => {
+    expect((await resolveCommittedIdentityScopeReceipt(f.pool, { locator: s.locator, context })).status).toBe('unavailable');
+    await runCommand(f.pool, { partition: address.partition, deadline: context.deadline }, async (tx) => {
+      expect(isHeldCommittedIdentityScopeReceipt(tx, { status: 'observed', evidence: s.evidence })).toBe(false);
+      return noEffect(null);
+    });
+  });
+}, 120000);
+
+test('association admission belongs to the original Pool, episode, deadline and single actual transaction', async () => {
+  expect(() => prepayIdentityScopeNativeAssociation(f.pool, deadline())).toThrow();
+  let escaped: IdentityScopeNativeAssociationAdmission | undefined;
+  const address = identityScopeAddress((await nativeCapture()).key);
+  await frame(async (context) => {
+    const original = identitySourceConsumerLibraryWork(f.pool, context.identityConsumerWork, context.deadline)!;
+    const before = original.receipt();
+    expect(() => prepayIdentityScopeNativeAssociation(f.pool, Date.now() - 1)).toThrow();
+    const foreign = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+    try { expect(() => prepayIdentityScopeNativeAssociation(foreign, context.deadline)).toThrow(); }
+    finally { await foreign.end(); }
+    expect(original.receipt()).toEqual(before);
+    escaped = prepayIdentityScopeNativeAssociation(f.pool, context.deadline);
+    const charged = original.receipt();
+    expect(charged.reservationId).toBe(before.reservationId);
+    const expectedRows = Object.values(identityScopeNativeAssociationPrices).reduce((n, p) => n + p.nativeRows, 0);
+    expect(charged.used.nativeRows - before.used.nativeRows).toBe(expectedRows);
+    await runCommand(f.pool, { partition: address.partition, deadline: escaped.deadline }, async (tx) => {
+      expect(() => bindIdentityScopeNativeAssociation(tx, { ...escaped! })).toThrow();
+      bindIdentityScopeNativeAssociation(tx, escaped!);
+      return noEffect(null);
+    });
+    await expect(runCommand(f.pool, { partition: address.partition, deadline: escaped.deadline }, async (tx) => {
+      bindIdentityScopeNativeAssociation(tx, escaped!);
+      return noEffect(null);
+    })).rejects.toThrow();
+    expect(original.receipt()).toEqual(charged); // repeats never reset the balance
+  });
+  await frame(async (context) => {
+    await expect(runCommand(f.pool, { partition: address.partition, deadline: context.deadline }, async (tx) => {
+      bindIdentityScopeNativeAssociation(tx, escaped!);
+      return noEffect(null);
+    })).rejects.toThrow();
+  });
+});
+
+test('rolled-back native association and expired callback cannot produce committed evidence', async () => {
+  const s = await fundedInitial();
+  const address = identityScopeAddress(s.key);
+  const before = await associationsFor(s.locator);
+  await frame(async (context) => {
+    const admission = prepayIdentityScopeNativeAssociation(f.pool, context.deadline);
+    const rollback = new Error('Association transaction intentionally rolled back');
+    await expect(runCommand(f.pool, { partition: address.partition, deadline: admission.deadline }, async (tx) => {
+      bindIdentityScopeNativeAssociation(tx, admission);
+      await tx.query(`UPDATE semantic.identity_scope_summary SET state='enrolling',revision=revision+1
+        WHERE partition_no=$1 AND source_key=$2 AND scope_id=$3`, [address.partition,address.source,address.scope]);
+      recordIdentityScopeNativeAssociation(tx, admission, s.key, 'capture');
+      throw rollback;
+    })).rejects.toBe(rollback);
+    expect((await observed(s.locator, context)).evidence).toEqual(s.evidence);
+    const expiring = prepayIdentityScopeNativeAssociation(f.pool, Date.now() + 100);
+    await expect(runCommand(f.pool, { partition: address.partition, deadline: expiring.deadline }, async (tx) => {
+      bindIdentityScopeNativeAssociation(tx, expiring);
+      await tx.query(`UPDATE semantic.identity_scope_summary SET state='enrolling',revision=revision+1
+        WHERE partition_no=$1 AND source_key=$2 AND scope_id=$3`, [address.partition,address.source,address.scope]);
+      const event = recordIdentityScopeNativeAssociation(tx, expiring, s.key, 'capture');
+      await new Promise((resolve) => setTimeout(resolve, 110));
+      return { value: null, events: [event] };
+    })).rejects.toThrow();
+  });
+  expect(await associationsFor(s.locator)).toEqual(before);
+}, 120000);
+
+test('ready association reads and writer prices remain literal under unrelated revision growth', async () => {
+  const s = await fundedInitial();
+  const first = await frame((context) => observed(s.locator, context));
+  const address = identityScopeAddress(s.key);
+  await f.admin.query(`INSERT INTO semantic.identity_scope_native_association
+    (partition_no,source_key,scope_id,registration,capture_id,revision,phase,source,
+     transaction_id,epoch,position,purpose,scan_complete)
+    SELECT partition_no,source_key,scope_id,registration,capture_id,revision+g,'progress',source,
+     transaction_id,epoch,position,purpose,scan_complete
+    FROM semantic.identity_scope_native_association CROSS JOIN generate_series(1,1000) g
+    WHERE partition_no=$1 AND source_key=$2 AND scope_id=$3 AND registration=$4 AND phase='ready'`,
+  [address.partition,address.source,address.scope,s.locator.registration]);
+  const second = await frame((context) => observed(s.locator, context));
+  expect(second.work.used).toEqual(first.work.used);
+  expect(identityScopeCommittedReceiptFootprint(associationSQL.sql, [])?.nativeRows).toBe(7);
+  expect(associationSQL.sql).not.toMatch(/OFFSET|ORDER BY|count\(\*\)/i);
+  expect(associationInsertSQL.sql).toContain('FOR UPDATE OF s');
+  expect(associationInsertSQL.sql).toContain('a.transaction_id=n.transaction_id');
+  expect(identityScopeNativeAssociationPrices.association.nativeRows).toBe(8);
+  expect(identityScopeNativeAssociationPrices.event.nativeRows).toBe(2);
+  for (const p of Object.values(identityScopeNativeAssociationPrices)) {
+    expect(Object.keys(p)).toHaveLength(8);
+    expect(p.bytes).toBeGreaterThan(0);
+    expect(p.statements).toBeGreaterThan(0);
+  }
+}, 120000);
+
+test('finish association binds the exact completion and ready advancement materializes its own component', async () => {
+  const s = await retainedFixture(false);
+  if (s.locator.completion.kind !== 'repair') throw new Error('Expected repair fixture');
+  const { attempt, receiving } = s.locator.completion;
+  await frame(async (context) => {
+    const admission = prepayIdentityScopeNativeAssociation(f.pool, context.deadline);
+    const finished = (await runCommand(f.pool, { partition: s.address.partition, deadline: admission.deadline }, async (tx) => {
+      bindIdentityScopeNativeAssociation(tx, admission);
+      const transactionId = currentCommand(tx).transactionId;
+      await tx.query(`INSERT INTO semantic.identity_scope_completion
+        (partition_no,source_key,scope_id,registration,job_id,job_epoch,source_generation,capture_id,attempt,seal,complete)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,true)`,
+      [...s.keys,s.locator.registration,receiving.job.jobId,receiving.job.epoch.toString(),s.identity.generation,
+        s.capture.captureId,json(attempt),json({ key: { job: receiving.job, sourceIdentity: s.identity, scope: s.key.scopeId },
+          generation: s.identity.generation,version: '1',frontier: { after: [],segment: 0 },receipt: attempt })]);
+      await tx.query(`UPDATE semantic.identity_scope_attempt SET state='finished',revision=4,transaction_id=$7
+        WHERE partition_no=$1 AND source_key=$2 AND scope_id=$3 AND registration=$4 AND job_id=$5 AND job_epoch=$6`,
+      [...s.keys,s.locator.registration,receiving.job.jobId,receiving.job.epoch.toString(),transactionId]);
+      await tx.query(`UPDATE semantic.identity_scope_summary SET active=0,revision=4
+        WHERE partition_no=$1 AND source_key=$2 AND scope_id=$3`,s.keys);
+      return { value: transactionId, events: [recordIdentityScopeNativeAssociation(tx, admission, s.key,
+        'finish', { job: receiving.job })] };
+    })).value;
+    const resolved = await observed(s.locator, context);
+    expect(resolved.evidence.native.transactionId).toBe(finished);
+    const association = (await associationsFor(s.locator)).find((r) => r.phase === 'finish');
+    expect(association.transaction_id).toBe(finished);
+    expect(association.job_id).toBe(receiving.job.jobId);
+    expect(association.job_epoch).toBe(receiving.job.epoch.toString());
+    expect(association.completion_version).toBe('1');
+    const ready = await createIdentityScopedObservations(f.pool).register({ key: s.key, capture: {
+      kind: 'library',capture: s.capture,frontier: s.frontier,allowance: allowance(),
+    },deadline: context.deadline });
+    expect(ready.status).toBe('registered');
+    if (ready.status !== 'registered') throw new Error('Ready transition did not settle');
+    expect(ready.observation.committedRevision).toBe(5n);
+    const currentLocator = { ...s.locator,expected: ready.observation };
+    const current = await observed(currentLocator, context);
+    expect(current.evidence.native.transactionId).not.toBe(finished);
+    expect(current.evidence.completionRevision).toBe(4n);
+    const readyAssociation = (await associationsFor(currentLocator)).find((r) => r.phase === 'ready');
+    expect(current.evidence.native.transactionId).toBe(readyAssociation.transaction_id);
+  });
+},120000);
+
+test('initial held verification locks the ready association through commit and loses authority on release', async () => {
+  const s = await fundedInitial();
+  const a = identityScopeAddress(s.key);
+  let released: unknown;
+  await frame(async (context) => {
+    await runCommand(f.pool,{ partition: a.partition,deadline: context.deadline },async (tx) => {
+      const result = await holdCommittedIdentityScopeReceipt(tx,f.pool,{ evidence: s.evidence,context });
+      expect(result.status).toBe('held');
+      expect(isHeldCommittedIdentityScopeReceipt(tx,result)).toBe(true);
+      released = result;
+      const competing = await f.admin.connect();
+      try {
+        await competing.query('BEGIN');
+        await competing.query("SET LOCAL lock_timeout = '30ms'");
+        await expect(competing.query(`UPDATE semantic.identity_scope_native_association SET scan_complete=false
+          WHERE partition_no=$1 AND source_key=$2 AND scope_id=$3 AND registration=$4
+          AND capture_id=$5 AND revision=$6 AND phase='ready'`,
+        [a.partition,a.source,a.scope,s.locator.registration,s.observation.captureId,
+          s.observation.committedRevision.toString()])).rejects.toThrow();
+      } finally { await competing.query('ROLLBACK'); competing.release(); }
+      return noEffect(null);
+    });
+    await runCommand(f.pool,{ partition: a.partition,deadline: context.deadline },async (tx) => {
+      expect(isHeldCommittedIdentityScopeReceipt(tx,released)).toBe(false);
+      return noEffect(null);
+    });
+  });
+},120000);
