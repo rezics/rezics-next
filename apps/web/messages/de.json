@@ -4487,5 +4487,6 @@
   "search_input_recovery_description": "Die Eingabe {parameter} ist ungültig. Korrigieren Sie sie unten und wenden Sie die Änderung an, oder entfernen Sie diese Eingabe. Andere Auswahlen bleiben erhalten.",
   "search_input_recovery_input_label": "Eingabe für {parameter}",
   "search_input_recovery_apply": "Korrektur anwenden",
-  "search_input_recovery_remove": "Diese Eingabe entfernen"
+  "search_input_recovery_remove": "Diese Eingabe entfernen",
+  "search_query_limit_error": "Suchanfragen dürfen bis zu 512 UTF-8-Byte lang sein. Ihr Entwurf bleibt erhalten; kürzen Sie ihn, um zu suchen."
 }

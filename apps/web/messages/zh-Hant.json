@@ -4487,5 +4487,6 @@
   "search_input_recovery_description": "{parameter} 輸入無效。請在下方修正並套用，或移除此輸入。其他選取項目會保留。",
   "search_input_recovery_input_label": "{parameter} 輸入",
   "search_input_recovery_apply": "套用修正",
-  "search_input_recovery_remove": "移除此輸入"
+  "search_input_recovery_remove": "移除此輸入",
+  "search_query_limit_error": "搜尋詞最多為 512 個 UTF-8 位元組。草稿會保留，請縮短後再搜尋。"
 }

@@ -4487,5 +4487,6 @@
   "search_input_recovery_description": "{parameter} 输入无效。请在下方更正并应用，或删除此输入。其他选择会保留。",
   "search_input_recovery_input_label": "{parameter} 输入",
   "search_input_recovery_apply": "应用更正",
-  "search_input_recovery_remove": "删除此输入"
+  "search_input_recovery_remove": "删除此输入",
+  "search_query_limit_error": "搜索词最多为 512 个 UTF-8 字节。草稿会保留，请缩短后再搜索。"
 }

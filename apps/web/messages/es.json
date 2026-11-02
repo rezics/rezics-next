@@ -4487,5 +4487,6 @@
   "search_input_recovery_description": "La entrada {parameter} no es válida. Corrígela abajo y aplica el cambio, o elimina esta entrada. Se conservarán las demás selecciones.",
   "search_input_recovery_input_label": "Entrada para {parameter}",
   "search_input_recovery_apply": "Aplicar corrección",
-  "search_input_recovery_remove": "Eliminar esta entrada"
+  "search_input_recovery_remove": "Eliminar esta entrada",
+  "search_query_limit_error": "Las consultas admiten hasta 512 bytes UTF-8. Se conserva el borrador; acórtalo para buscar."
 }

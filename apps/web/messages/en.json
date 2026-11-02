@@ -4522,5 +4522,6 @@
   "search_input_recovery_description": "The {parameter} input is invalid. Correct it below and apply the change, or remove this input. Other selections will be kept.",
   "search_input_recovery_input_label": "Input for {parameter}",
   "search_input_recovery_apply": "Apply correction",
-  "search_input_recovery_remove": "Remove this input"
+  "search_input_recovery_remove": "Remove this input",
+  "search_query_limit_error": "Search queries can use up to 512 UTF-8 bytes. Your draft is kept; shorten it to search."
 }

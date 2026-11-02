@@ -39,3 +39,5 @@ Recent history keeps failed local writes in its memory fallback until a write su
 Filters edits result-language preferences as an ordered list of at most eight: add from supported locales, preserve existing valid authored tags verbatim, remove or move individual entries, and use the page-language default only when the user clears the list.
 
 Native GET sort submission uses an empty `sort` value for Relevance, parsed as the default; `rating` is the only explicit sort value.
+
+Global search accepts drafts up to 512 UTF-8 bytes; scoped inputs keep their existing 256 UTF-16-unit cap, and typeahead keeps its independent 64-code-point prefix bound.

@@ -4487,5 +4487,6 @@
   "search_input_recovery_description": "{parameter} の入力が無効です。下で修正して適用するか、この入力を削除してください。他の選択内容は保持されます。",
   "search_input_recovery_input_label": "{parameter} の入力",
   "search_input_recovery_apply": "修正を適用",
-  "search_input_recovery_remove": "この入力を削除"
+  "search_input_recovery_remove": "この入力を削除",
+  "search_query_limit_error": "検索語は UTF-8 で最大512バイトです。入力内容は保持されます。短くして検索してください。"
 }

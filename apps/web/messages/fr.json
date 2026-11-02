@@ -4487,5 +4487,6 @@
   "search_input_recovery_description": "L’entrée {parameter} n’est pas valide. Corrigez-la ci-dessous et appliquez la modification, ou supprimez cette entrée. Les autres sélections seront conservées.",
   "search_input_recovery_input_label": "Entrée pour {parameter}",
   "search_input_recovery_apply": "Appliquer la correction",
-  "search_input_recovery_remove": "Supprimer cette entrée"
+  "search_input_recovery_remove": "Supprimer cette entrée",
+  "search_query_limit_error": "Les requêtes peuvent contenir jusqu’à 512 octets UTF-8. Votre brouillon est conservé ; raccourcissez-le pour lancer la recherche."
 }

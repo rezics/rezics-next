@@ -4487,5 +4487,6 @@
   "search_input_recovery_description": "{parameter} 입력이 올바르지 않습니다. 아래에서 수정한 뒤 적용하거나 이 입력을 삭제하세요. 다른 선택 항목은 유지됩니다.",
   "search_input_recovery_input_label": "{parameter} 입력",
   "search_input_recovery_apply": "수정 적용",
-  "search_input_recovery_remove": "이 입력 삭제"
+  "search_input_recovery_remove": "이 입력 삭제",
+  "search_query_limit_error": "검색어는 UTF-8 기준 최대 512바이트입니다. 입력한 내용은 유지되므로 줄인 뒤 검색하세요."
 }

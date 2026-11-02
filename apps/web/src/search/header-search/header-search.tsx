@@ -32,6 +32,7 @@ import { applyRecentSearch, type RecentEntry, type RecentHistory } from '../rece
 import { nextSuggestion, startTypeahead, validSuggestionText } from '../typeahead';
 import type { SearchScope } from './types';
 import { canEnterHeaderSearch } from './keyboard';
+import { isWithinGlobalSearchQueryLimit } from '../query-text-limit';
 
 const controlFocus =
   'focus-visible:ring-0 focus-visible:border-foreground focus-visible:outline-2 focus-visible:outline-foreground focus-visible:outline-offset-2';
@@ -79,6 +80,7 @@ type ViewProps = Pick<
   onRetry?(): void;
   onRecent?(entry: RecentEntry): void;
   onQuery?(query: string): void;
+  queryLimitError?: boolean;
   triggerRef?: RefObject<HTMLButtonElement | null>;
   recent?: React.ReactNode;
 };
@@ -109,6 +111,7 @@ export function HeaderSearchView({
   loadRealmDiscovery,
   onRecent,
   onQuery,
+  queryLimitError = false,
   keyboardShortcut = false,
 }: ViewProps) {
   const { expanded, phoneSheet, scope, query, suggestions, result, activeIndex } = state;
@@ -118,6 +121,7 @@ export function HeaderSearchView({
   const triggerLabel = query || (scope ? m.header_search_in_scope({ scope: scope.name }) : m.header_search_global());
   const shortcutLabel = 'Ctrl/⌘ K';
   const triggerName = keyboardShortcut ? `${triggerLabel} ${shortcutLabel}` : triggerLabel;
+  const showQueryLimitError = !scope && queryLimitError;
   const status = !action
     ? m.header_search_scope_unavailable()
     : suggestions === 'closed'
@@ -246,8 +250,13 @@ export function HeaderSearchView({
               aria-controls={expanded ? `${id}-suggestions` : undefined}
               aria-activedescendant={expanded && subjects[activeIndex] ? `${id}-option-${activeIndex}` : undefined}
               aria-keyshortcuts={keyboardShortcut ? 'Control+k Meta+k' : undefined}
+              aria-invalid={showQueryLimitError || undefined}
               aria-describedby={
-                [keyboardShortcut && `${id}-keyboard-help`, expanded && status && `${id}-status`]
+                [
+                  keyboardShortcut && `${id}-keyboard-help`,
+                  expanded && status && `${id}-status`,
+                  showQueryLimitError && `${id}-query-limit-error`,
+                ]
                   .filter(Boolean)
                   .join(' ') || undefined
               }
@@ -255,7 +264,7 @@ export function HeaderSearchView({
               placeholder={scope ? m.header_search_in_scope({ scope: scope.name }) : m.header_search_global()}
               value={query}
               autoComplete="off"
-              maxLength={256}
+              maxLength={scope ? 256 : undefined}
               className="h-11 min-w-0 flex-1 rounded-lg border-0 bg-transparent px-2 py-3 text-sm outline-none placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-foreground focus-visible:-outline-offset-2"
             />
             {keyboardShortcut && (
@@ -291,6 +300,11 @@ export function HeaderSearchView({
             </div>
           )}
         </div>
+        {showQueryLimitError && (
+          <p id={`${id}-query-limit-error`} role="alert" className="px-4 pb-3 text-sm text-destructive">
+            {m.search_query_limit_error()}
+          </p>
+        )}
         {expanded && (
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
             {!query.trim() && (
@@ -426,6 +440,7 @@ function HeaderSearchController({
   const request = useRef<(() => void) | null>(null);
   const [attempt, retry] = useReducer((value: number) => value + 1, 0);
   const [composing, setComposing] = useState(false);
+  const [queryLimitError, setQueryLimitError] = useState(false);
   const region = useHeaderSearchFilterRegion();
   useEffect(() => {
     dispatch({ type: 'sync-scope', scope });
@@ -575,6 +590,11 @@ function HeaderSearchController({
   const submitQuery = (query: string, scope: SearchScope | undefined, resumed?: RecentEntry) => {
     const action = headerSearchAction(locale, scope);
     if (!action || (!query.trim() && !scope)) return;
+    if (!scope && !isWithinGlobalSearchQueryLimit(query)) {
+      setQueryLimitError(true);
+      return;
+    }
+    setQueryLimitError(false);
     history?.remember(query, scope, resumed ? resumed.languages : searchLanguages());
     const url = new URL(action, window.location.origin);
     url.searchParams.delete('q');
@@ -602,6 +622,7 @@ function HeaderSearchController({
       }}
       state={state}
       locale={locale}
+      queryLimitError={queryLimitError}
       fields={fields}
       region={state.scope ? null : region}
       inputRef={input}
@@ -616,7 +637,8 @@ function HeaderSearchController({
         input.current?.focus();
       }}
       onSuggestion={(href) => {
-        history?.remember(state.query, state.scope, searchLanguages());
+        if (state.scope || isWithinGlobalSearchQueryLimit(state.query))
+          history?.remember(state.query, state.scope, searchLanguages());
         visit(href);
       }}
       onActive={(index) => dispatch({ type: 'active', index })}
@@ -635,7 +657,9 @@ function HeaderSearchController({
         onChange: (event) => {
           request.current?.();
           if (!state.expanded) open();
-          dispatch({ type: 'query', query: event.currentTarget.value });
+          const query = event.currentTarget.value;
+          dispatch({ type: 'query', query });
+          if (state.scope || isWithinGlobalSearchQueryLimit(query)) setQueryLimitError(false);
         },
         onCompositionStart: () => {
           request.current?.();
@@ -643,7 +667,9 @@ function HeaderSearchController({
           setComposing(true);
         },
         onCompositionEnd: (event) => {
-          dispatch({ type: 'query', query: event.currentTarget.value });
+          const query = event.currentTarget.value;
+          dispatch({ type: 'query', query });
+          if (state.scope || isWithinGlobalSearchQueryLimit(query)) setQueryLimitError(false);
           setComposing(false);
         },
         onKeyDown: (event) => {
@@ -669,7 +695,8 @@ function HeaderSearchController({
           if (event.key === 'Enter' && state.expanded && state.activeIndex >= 0 && subjects[state.activeIndex]) {
             event.preventDefault();
             const hit = subjects[state.activeIndex]!;
-            history?.remember(state.query, state.scope, searchLanguages());
+            if (state.scope || isWithinGlobalSearchQueryLimit(state.query))
+              history?.remember(state.query, state.scope, searchLanguages());
             visit(subjectHref({ id: hit.id, label: localizedLabel(hit.labels, locale).text }, locale).href);
           }
         },
@@ -681,6 +708,12 @@ function HeaderSearchController({
             event.preventDefault();
             return;
           }
+          if (!state.scope && !isWithinGlobalSearchQueryLimit(state.query)) {
+            event.preventDefault();
+            setQueryLimitError(true);
+            return;
+          }
+          setQueryLimitError(false);
           history?.remember(state.query, state.scope, searchLanguages());
           if (!onNavigate) return;
           event.preventDefault();
