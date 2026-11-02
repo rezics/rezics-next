@@ -58,9 +58,9 @@ test('unreadable captures and injected staging failures preserve original source
       log: readFileSync(h.store.attempt({ taskId: task.id, attempt: 1 }).logPath),
     };
     const source = readFileSync(fixture);
-    expect(() =>
-      importAttempt(h.tasks, join(h.settings.stateDirectory, 'missing.jsonl'), options(task.id)),
-    ).toThrow(/failed to read import capture .*missing\.jsonl/);
+    expect(() => importAttempt(h.tasks, join(h.settings.stateDirectory, 'missing.jsonl'), options(task.id))).toThrow(
+      /failed to read import capture .*missing\.jsonl/,
+    );
     const blocked = join(h.settings.stateDirectory, 'blocked-capture');
     mkdirSync(blocked);
     expect(() => importAttempt(h.tasks, blocked, options(task.id))).toThrow(/failed to read import capture/);
@@ -151,4 +151,3 @@ test('successful imports retain matching log, record and terminal metadata', () 
     h.dispose();
   }
 });
-
