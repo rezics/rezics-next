@@ -94,6 +94,38 @@ export function relationIdentityKey(identity: RelationIdentity): string {
   return JSON.stringify([identity.database ?? null, identity.schema ?? null, identity.kind, identity.name]);
 }
 
+function quoteIdentifier(value: string): string {
+  return `"${value.replaceAll('"', '""')}"`;
+}
+
+/** Independent SQL quoting of schema and relation name. */
+export function quotedRelationIdentity(identity: RelationIdentity): string {
+  if (identity.schema === undefined) throw new TypeError(`Expected schema-qualified relation: ${identity.name}`);
+  return `${quoteIdentifier(identity.schema)}.${quoteIdentifier(identity.name)}`;
+}
+
+/**
+ * Ordinary `schema.name` callers. Quotes or more than one dot are ambiguous without an identity object.
+ * Does not parse SQL quoting or restrict characters PostgreSQL accepts in a quoted identifier.
+ */
+export function relationIdentityFromQualifiedName(value: string): RelationIdentity {
+  const split = value.indexOf('.');
+  if (split < 1 || split === value.length - 1) throw new TypeError(`Expected schema-qualified relation: ${value}`);
+  const schema = value.slice(0, split);
+  const name = value.slice(split + 1);
+  if (schema.includes('"') || name.includes('"') || name.includes('.'))
+    throw new TypeError(`Ambiguous legacy relation ${value}; pass a relation identity with schema and name`);
+  return { kind: 'relation', schema, name };
+}
+
+export function addRelationIdentity(
+  identities: Map<string, RelationIdentity>,
+  identity: RelationIdentity,
+): Map<string, RelationIdentity> {
+  identities.set(relationIdentityKey(identity), identity);
+  return identities;
+}
+
 export function legacyRelationKey(identity: RelationIdentity): string {
   if (identity.kind === 'index') return `index:${identity.name}`;
   return identity.schema === undefined ? identity.name : `${identity.schema}.${identity.name}`;

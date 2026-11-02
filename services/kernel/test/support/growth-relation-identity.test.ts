@@ -4,8 +4,11 @@ import { assertGrowthAccessPaths, type AccessPathSample } from './growth-access-
 import { costOf, type Capture, type Cost } from './growth-cost.ts';
 import {
   keyedRelationEntries,
+  quotedRelationIdentity,
   RELATION_CATALOG_LOOKUP_CHUNK_SIZE,
   relationCatalogLookupRequests,
+  relationIdentityFromQualifiedName,
+  relationIdentityKey,
   type RelationIdentity,
 } from './growth-relation-identity.ts';
 import { statementAttributions } from './growth-report.ts';
@@ -37,6 +40,35 @@ function bitmapPlan(schema: string) {
     ],
   };
 }
+
+test('qualified-string compatibility keeps ordinary names and refuses ambiguous legacy input', () => {
+  assert.deepEqual(relationIdentityFromQualifiedName('sales.items'), {
+    kind: 'relation',
+    schema: 'sales',
+    name: 'items',
+  });
+  assert.equal(
+    quotedRelationIdentity({ kind: 'relation', schema: 'sales.region', name: 'items.v1' }),
+    '"sales.region"."items.v1"',
+  );
+  assert.equal(
+    quotedRelationIdentity({ kind: 'relation', schema: 'quote"d', name: 'name"d' }),
+    '"quote""d"."name""d"',
+  );
+  assert.notEqual(
+    relationIdentityKey({ database: 'kernel', schema: 'app', kind: 'relation', name: 'items' }),
+    relationIdentityKey({ database: 'auth', schema: 'app', kind: 'relation', name: 'items' }),
+  );
+  assert.throws(() => relationIdentityFromQualifiedName('items'), /Expected schema-qualified relation: items/);
+  assert.throws(
+    () => relationIdentityFromQualifiedName('sales.region.items'),
+    /Ambiguous legacy relation sales.region.items/,
+  );
+  assert.throws(
+    () => relationIdentityFromQualifiedName('"sales"."items"'),
+    /Ambiguous legacy relation "sales"."items"/,
+  );
+});
 
 test('relation and index costs retain database and schema provenance', () => {
   const query = 'SELECT * FROM content.report';

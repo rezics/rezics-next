@@ -620,7 +620,11 @@ with retained capture evidence entries and refuses a child collection before it 
 These are evidence input limits, not growth verdicts.
 Measured-run write discovery uses those same admitted EXPLAIN document envelopes and the native plan walk; a
 ModifyTable without Relation Name fails at that node path, a missing Schema defaults to public, and malformed
-documents fail at their location instead of omitting writes.
+documents fail at their location instead of omitting writes. Each write target keeps its schema, relation name and
+the physical database of the captured plan as a relation identity; settlement quotes those components independently
+and deduplicates exact identities. Ordinary `schema.name` callers remain on an explicit compatibility path. Strings
+with quotes or more than one dot are refused as ambiguous rather than guessed. Native SQL text is not parsed to
+recover names, and PostgreSQL's accepted identifiers are not narrowed.
 The line also carries every repetition, relation sizes, the selected-rule `verdicts`, a shadow whole-series verdict and
 any `settleFailures` recorded on samples. Each repetition may include `limitations` from that run; when any scale has
 them, a parallel `limitations` array is the union across that scale's repetitions so a median-selected run is not
@@ -691,8 +695,8 @@ the original error is the cause, and a later client release failure stays subord
 retires only its checked-out admin connection, and a late checkout is retired when it arrives. Opening a growth database
 disables autovacuum on non-catalog tables; an unscoped settle does the same for all such tables, including those created
 after opening. Prior to each measured repetition, the harness captures writes from each warm-up, prepare hook, or
-preceding run's ModifyTable targets, including nested trigger and foreign-key statements, and settles those relations
-without ANALYZE in every database that run measured. Explicit settle targets inspect autovacuum and TOAST options only
+preceding run's ModifyTable targets, including nested trigger and foreign-key statements, and settles those exact identities without ANALYZE
+in every database that run measured. Same-named relations in separate databases stay separate. Explicit settle targets inspect autovacuum and TOAST options only
 for those relations and ALTER only tables that still require it. An empty target list still rejects a measured
 transaction left open and does not inspect or write unrelated relation metadata. A missing explicit target still fails
 at VACUUM with database and relation context. It also settles `dbos.workflow_status` when present. The optional `prepare(db,

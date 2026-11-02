@@ -10,6 +10,7 @@ import {
   trackGrow,
   type GrowthDatabase,
 } from './growth-capture.ts';
+import { quotedRelationIdentity } from './growth-relation-identity.ts';
 import type { Capture } from './growth-cost.ts';
 import { statementOccurrences } from './growth-report.ts';
 import { checkGrowth } from './growth.ts';
@@ -1020,7 +1021,71 @@ test('measured-run write discovery records schema-qualified ModifyTable targets'
       ),
     ),
   );
-  expect(measured.writes.get(database)).toEqual(new Set(['growth_capture_test.trigger_input']));
+  expect([...(measured.writes.get(database)?.values() ?? [])]).toEqual([
+    {
+      kind: 'relation',
+      database: new URL(database.url).pathname.slice(1),
+      schema: 'growth_capture_test',
+      name: 'trigger_input',
+    },
+  ]);
+});
+
+test('measured writes with dotted and quoted names settle the exact relations', async () => {
+  const database = db!;
+  const schema = 'gcap.ident';
+  const dotted = { kind: 'relation' as const, schema, name: 'write.target' };
+  const quoted = { kind: 'relation' as const, schema, name: 'quote"d' };
+  const colliding = { kind: 'relation' as const, schema: 'gcap', name: 'ident.write.target' };
+  await database.admin.query(`DROP SCHEMA IF EXISTS ${quotedRelationIdentity(dotted)} CASCADE`);
+  await database.admin.query('DROP SCHEMA IF EXISTS gcap CASCADE');
+  await database.admin.query(`CREATE SCHEMA ${quotedRelationIdentity(dotted)}`);
+  await database.admin.query(`CREATE TABLE ${quotedRelationIdentity(dotted)} (id integer PRIMARY KEY)`);
+  await database.admin.query(`CREATE TABLE ${quotedRelationIdentity(quoted)} (id integer PRIMARY KEY)`);
+  await database.admin.query('CREATE SCHEMA gcap');
+  await database.admin.query(`CREATE TABLE ${quotedRelationIdentity(colliding)} (id integer PRIMARY KEY)`);
+
+  try {
+    const measured = await captureMeasuredRun(() =>
+      capture(database, () =>
+        withConnection(database.pool, async (client) => {
+          await client.query(`INSERT INTO ${quotedRelationIdentity(dotted)} (id) VALUES (1)`);
+          await client.query(`INSERT INTO ${quotedRelationIdentity(quoted)} (id) VALUES (1)`);
+        }),
+      ),
+    );
+    const physical = new URL(database.url).pathname.slice(1);
+    expect([...(measured.writes.get(database)?.values() ?? [])]).toEqual([
+      { kind: 'relation', database: physical, schema, name: 'write.target' },
+      { kind: 'relation', database: physical, schema, name: 'quote"d' },
+    ]);
+
+    const recorded = recordAdminQueries(database);
+    try {
+      await settle(database, {
+        relations: [...(measured.writes.get(database)?.values() ?? [])],
+      });
+      await expect(settle(database, { relations: ['gcap.ident.write.target'] })).rejects.toThrow(
+        /Ambiguous legacy relation gcap.ident.write.target/,
+      );
+    } finally {
+      recorded.restore();
+    }
+
+    const maintenance = recorded.statements.filter(({ text }) => /unnest\(\$1::text\[\],\s*\$2::text\[\]\)/.test(text));
+    expect(maintenance).toHaveLength(1);
+    expect(maintenance[0]!.values).toEqual([
+      [schema, schema],
+      ['write.target', 'quote"d'],
+    ]);
+    const alters = recorded.statements.filter(({ text }) => /^\s*ALTER TABLE\b/i.test(text)).map(({ text }) => text);
+    expect(alters.some((text) => text.includes('"gcap.ident"."write.target"'))).toBe(true);
+    expect(alters.some((text) => text.includes('"gcap.ident"."quote""d"'))).toBe(true);
+    expect(alters.some((text) => text.includes('"gcap"."ident.write.target"'))).toBe(false);
+  } finally {
+    await database.admin.query(`DROP SCHEMA IF EXISTS ${quotedRelationIdentity(dotted)} CASCADE`);
+    await database.admin.query('DROP SCHEMA IF EXISTS gcap CASCADE');
+  }
 });
 
 test('trackGrow drains queued seeding queries before closing accounting', async () => {

@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { costOf } from './growth-cost.ts';
 import { collectModifyTargets, MAX_CAPTURE_PLAN_NODES, MAX_PLAN_DEPTH, MAX_PLAN_NODES } from './growth-plan-walk.ts';
+import { relationIdentityKey, type RelationIdentity } from './growth-relation-identity.ts';
 import { statementAttributions, statementOccurrences } from './growth-report.ts';
 
 function node(fields: Record<string, unknown> = {}, children?: unknown[]) {
@@ -95,15 +96,21 @@ test('valid plan costs and statement diagnostics retain their measured descendan
   expect(statementAttributions(sample)[0]).toMatchObject({ rows: 3, blocks: 3, node: 'Seq Scan app.items' });
 });
 
-function modify(schema?: string, children?: unknown[]) {
+function modify(schema?: string, children?: unknown[], name = 'items') {
   return node(
     {
       'Node Type': 'ModifyTable',
       ...(schema === undefined ? {} : { Schema: schema }),
-      'Relation Name': 'items',
+      'Relation Name': name,
     },
     children,
   );
+}
+
+function writeTargets(...documents: unknown[]) {
+  const output = new Map<string, RelationIdentity>();
+  for (const document of documents) collectModifyTargets(document, output);
+  return [...output.values()].sort((left, right) => relationIdentityKey(left).localeCompare(relationIdentityKey(right)));
 }
 
 function document(plan: unknown, queryText = 'insert') {
@@ -111,17 +118,35 @@ function document(plan: unknown, queryText = 'insert') {
 }
 
 test('write-target discovery keeps schema-qualified ModifyTable targets from admitted envelopes', () => {
-  const output = new Set<string>();
   const decoy = modify('decoy');
-  collectModifyTargets(document(modify('sales')), output);
-  collectModifyTargets([{ Plan: node({}, [modify('app')]) }], output);
-  collectModifyTargets(document(modify()), output);
-  collectModifyTargets({ ...document(node({ Extra: decoy })), Extra: decoy }, output);
-  expect([...output].sort()).toEqual(['app.items', 'public.items', 'sales.items']);
+  expect(
+    writeTargets(
+      document(modify('sales')),
+      [{ Plan: node({}, [modify('app')]) }],
+      document(modify()),
+      { ...document(node({ Extra: decoy })), Extra: decoy },
+    ),
+  ).toEqual([
+    { kind: 'relation', schema: 'app', name: 'items' },
+    { kind: 'relation', schema: 'public', name: 'items' },
+    { kind: 'relation', schema: 'sales', name: 'items' },
+  ]);
+});
+
+test('write-target discovery retains dotted and quoted schema and relation names', () => {
+  expect(
+    writeTargets(
+      document(modify('sales.region', undefined, 'items.v1')),
+      document(modify('quote"d', undefined, 'name"d')),
+    ),
+  ).toEqual([
+    { kind: 'relation', schema: 'quote"d', name: 'name"d' },
+    { kind: 'relation', schema: 'sales.region', name: 'items.v1' },
+  ]);
 });
 
 test('write-target discovery fails malformed documents and bounded native trees at their location', () => {
-  const output = new Set<string>();
+  const output = new Map<string, RelationIdentity>();
   expect(() => collectModifyTargets({}, output)).toThrow(/plan: Unrecognized plan document/);
   expect(() => collectModifyTargets([], output)).toThrow(/plan: EXPLAIN plan document is empty/);
   expect(() => collectModifyTargets([{ Plans: [] }], output)).toThrow(/plan\[0\]: EXPLAIN plan document has no Plan/);

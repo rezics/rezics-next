@@ -9,6 +9,13 @@ import type { Capture } from './growth-cost.ts';
 import { drainCaptureWork } from './growth-capture-drain.ts';
 import { collectModifyTargets } from './growth-plan-walk.ts';
 import { classifyGrowthSql } from './growth-sql-kind.ts';
+import {
+  addRelationIdentity,
+  quotedRelationIdentity,
+  relationIdentityFromQualifiedName,
+  relationIdentityLabel,
+  type RelationIdentity,
+} from './growth-relation-identity.ts';
 
 export type GrowthDatabase = {
   readonly url: string;
@@ -165,7 +172,8 @@ export async function withGrowthCheck<T>(database: GrowthDatabase, operation: ()
 }
 
 type BackendSet = Set<number> & { readonly transactions: Map<GrowthDatabase, Map<number, number>> };
-type RunCapture = Map<GrowthDatabase, Set<string>> & {
+type WriteTargets = Map<string, RelationIdentity>;
+type RunCapture = Map<GrowthDatabase, WriteTargets> & {
   readonly databases: Set<GrowthDatabase>;
   readonly backends: BackendSet;
 };
@@ -1056,10 +1064,14 @@ async function captureInternal<T>(
         [active.backgroundPlans, active.backgroundPlanDatabases, 'backgroundPlans'],
       ] as const) {
         for (let index = 0; index < plans.length; index++) {
-          const target = databaseForName(database, databaseNames[index] || databaseName(database));
-          const relations = run.get(target) ?? new Set<string>();
+          const physical = databaseNames[index] || databaseName(database);
+          const target = databaseForName(database, physical);
+          const relations = run.get(target) ?? new Map<string, RelationIdentity>();
           run.databases.add(target);
-          collectModifyTargets(plans[index], relations, `${collection}[${index}]`);
+          const discovered = new Map<string, RelationIdentity>();
+          collectModifyTargets(plans[index], discovered, `${collection}[${index}]`);
+          for (const identity of discovered.values())
+            addRelationIdentity(relations, { ...identity, database: physical });
           if (relations.size > 0) run.set(target, relations);
         }
       }
@@ -1335,13 +1347,20 @@ function querySettleClient<T extends QueryResultRow = QueryResultRow>(
   return waitUntilDeadline(pending, deadline, operation, (error) => releaseClient(lease, true, error), kind);
 }
 
-function quoteIdentifier(value: string): string {
-  return `"${value.replaceAll('"', '""')}"`;
+export type MaintenanceTarget = string | RelationIdentity;
+
+function maintenanceIdentity(target: MaintenanceTarget): RelationIdentity {
+  const identity = typeof target === 'string' ? relationIdentityFromQualifiedName(target) : target;
+  if (identity.kind !== 'relation')
+    throw new TypeError(`Expected a relation maintenance target: ${relationIdentityLabel(identity)}`);
+  if (identity.schema === undefined) throw new TypeError(`Expected schema-qualified relation: ${identity.name}`);
+  return identity;
 }
 
-function qualifiedIdentifier(value: string): string {
-  const { schema, name } = qualifiedName(value);
-  return `${quoteIdentifier(schema)}.${quoteIdentifier(name)}`;
+function maintenanceIdentities(relations: readonly MaintenanceTarget[]): RelationIdentity[] {
+  const unique = new Map<string, RelationIdentity>();
+  for (const target of relations) addRelationIdentity(unique, maintenanceIdentity(target));
+  return [...unique.values()];
 }
 
 type RelationMaintenance = {
@@ -1352,20 +1371,16 @@ type RelationMaintenance = {
   toast_disabled: boolean;
 };
 
-function qualifiedName(value: string): { schema: string; name: string } {
-  const split = value.indexOf('.');
-  if (split < 1) throw new TypeError(`Expected schema-qualified relation: ${value}`);
-  return { schema: value.slice(0, split), name: value.slice(split + 1) };
-}
-
 async function relationMaintenance(
-  relations?: readonly string[],
-  lease?: SettleClient,
-  deadline?: SettleDeadline,
+  relations: readonly RelationIdentity[] | undefined,
+  lease: SettleClient,
+  deadline: SettleDeadline,
 ): Promise<RelationMaintenance[]> {
   if (relations && relations.length === 0) return [];
-  if (!lease || !deadline) throw new Error('Relation maintenance requires an owned settle connection and deadline');
-  const wanted = relations?.map(qualifiedName);
+  const wanted = relations?.map((identity) => {
+    if (identity.schema === undefined) throw new TypeError(`Expected schema-qualified relation: ${identity.name}`);
+    return { schema: identity.schema, name: identity.name };
+  });
   const from = `SELECT n.nspname AS schema, c.relname AS name,c.relkind AS kind,c.reloptions AS options,
             c.reltoastrelid=0 OR COALESCE(t.reloptions @> ARRAY['autovacuum_enabled=false'],false) AS toast_disabled
        FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
@@ -1395,7 +1410,7 @@ async function relationMaintenance(
   return result.rows;
 }
 
-async function disableAutovacuum(database: GrowthDatabase, relations?: readonly string[]): Promise<void> {
+async function disableAutovacuum(database: GrowthDatabase, relations?: readonly RelationIdentity[]): Promise<void> {
   const deadline = makeSettleDeadline(DEFAULT_SETTLE_TIMEOUT_MS);
   const lease = await checkoutSettleClient(database, deadline);
   let primary: unknown;
@@ -1422,7 +1437,7 @@ async function disableAutovacuumOn(
     await querySettleClient(
       lease,
       deadline,
-      `ALTER TABLE ${qualifiedIdentifier(`${schema}.${name}`)} SET (autovacuum_enabled = false, toast.autovacuum_enabled = false)`,
+      `ALTER TABLE ${quotedRelationIdentity({ kind: 'relation', schema, name })} SET (autovacuum_enabled = false, toast.autovacuum_enabled = false)`,
       undefined,
       `autovacuum settings for ${schema}.${name}`,
     );
@@ -1496,7 +1511,7 @@ export async function assertMeasuredTransactionsSettled(
 export async function settle(
   database: GrowthDatabase,
   options: {
-    readonly relations?: readonly string[];
+    readonly relations?: readonly MaintenanceTarget[];
     readonly analyze?: boolean;
     readonly timeoutMs?: number;
     /** Backends observed in the preceding measured run. */
@@ -1512,7 +1527,7 @@ export async function settle(
     throw new TypeError('Settle analyze must be a boolean');
   if (options.relations !== undefined) {
     if (!Array.isArray(options.relations)) throw new TypeError('Settle relations must be an array');
-    for (const relation of options.relations) qualifiedName(relation);
+    for (const relation of options.relations) maintenanceIdentity(relation);
   }
   if (
     options.operationBackends !== undefined &&
@@ -1524,7 +1539,8 @@ export async function settle(
   const started = performance.now();
   const deadline = makeSettleDeadline(timeoutMs);
   const backend = measuredTransactionBackend(database, options.operationBackends);
-  const needsMaintenance = options.relations === undefined || options.relations.length > 0;
+  const requested = options.relations === undefined ? undefined : maintenanceIdentities(options.relations);
+  const needsMaintenance = requested === undefined || requested.length > 0;
   if (!needsMaintenance && backend === undefined) return performance.now() - started;
 
   const lease = await checkoutSettleClient(database, deadline);
@@ -1532,21 +1548,22 @@ export async function settle(
   let primary: unknown;
   try {
     if (backend !== undefined) await assertMeasuredTransactionOnClient(backend, lease, deadline);
-    const metadata = needsMaintenance ? await relationMaintenance(options.relations, lease, deadline) : [];
+    const metadata = needsMaintenance ? await relationMaintenance(requested, lease, deadline) : [];
     await disableAutovacuumOn(metadata, lease, deadline);
-    const names = options.relations ?? metadata.map(({ schema, name }) => `${schema}.${name}`);
-    for (const relation of names) {
+    const targets =
+      requested ?? metadata.map(({ schema, name }) => ({ kind: 'relation' as const, schema, name }));
+    for (const relation of targets) {
       const sql = [
         'VACUUM (INDEX_CLEANUP ON',
         options.analyze ? ', ANALYZE' : '',
         ') ',
-        qualifiedIdentifier(relation),
+        quotedRelationIdentity(relation),
       ].join('');
       try {
-        await querySettleClient(lease, deadline, sql, undefined, `VACUUM relation ${relation}`);
+        await querySettleClient(lease, deadline, sql, undefined, `VACUUM relation ${quotedRelationIdentity(relation)}`);
       } catch (error) {
         throw new GrowthSettleInfrastructureError(
-          `Could not settle database ${physicalName} relation ${relation}: ${error instanceof Error ? error.message : String(error)}`,
+          `Could not settle database ${physicalName} relation ${relation.schema}.${relation.name}: ${error instanceof Error ? error.message : String(error)}`,
           { cause: error },
         );
       }

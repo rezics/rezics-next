@@ -36,6 +36,7 @@ import {
 } from './growth-cost.ts';
 import { classifyGrowthSql } from './growth-sql-kind.ts';
 import {
+  addRelationIdentity,
   keyedRelationEntries,
   legacyRelationKey,
   relationCatalogLookupRequests,
@@ -84,6 +85,7 @@ export {
   settleAdmin,
   GrowthSettleInfrastructureError,
   type GrowthDatabase,
+  type MaintenanceTarget,
 } from './growth-capture.ts';
 export * from './growth-seed.ts';
 export * from './growth-uncertainty.ts';
@@ -1049,15 +1051,15 @@ async function runGrowthCheck(
     let settleMs = vacuumMs;
     const seeding: SeedingCost = { ...grown.seeding, growMs: vacuumStart - growStart, vacuumMs, settleMs };
     const measuredDatabases = new Set<GrowthDatabase>([db]);
-    let pendingWrites = new Map<GrowthDatabase, Set<string>>();
+    let pendingWrites = new Map<GrowthDatabase, Map<string, RelationIdentity>>();
     const seenBackends = new Set<number>();
     let pendingBackends = operationBackends();
     const absorbUnmeasured = (run: Awaited<ReturnType<typeof captureMeasuredRun>>) => {
       for (const backend of run.backends) seenBackends.add(backend);
       for (const target of run.databases) measuredDatabases.add(target);
       for (const [target, relations] of run.writes) {
-        const accumulated = pendingWrites.get(target) ?? new Set<string>();
-        for (const relation of relations) accumulated.add(relation);
+        const accumulated = pendingWrites.get(target) ?? new Map<string, RelationIdentity>();
+        for (const identity of relations.values()) addRelationIdentity(accumulated, identity);
         pendingWrites.set(target, accumulated);
       }
       for (const backend of run.backends) pendingBackends.add(backend);
@@ -1072,11 +1074,18 @@ async function runGrowthCheck(
         const workflowStatus = await target.admin.query<{ exists: boolean }>(
           `SELECT to_regclass('"dbos".workflow_status') IS NOT NULL AS exists`,
         );
-        if (workflowStatus.rows[0]!.exists) pendingWrites.get(target)!.add('dbos.workflow_status');
+        if (workflowStatus.rows[0]!.exists) {
+          addRelationIdentity(pendingWrites.get(target)!, {
+            kind: 'relation',
+            schema: 'dbos',
+            name: 'workflow_status',
+            database: new URL(target.url).pathname.slice(1),
+          });
+        }
       }
       const targets = new Set<GrowthDatabase>([...pendingWrites.keys(), ...pendingBackends.transactions.keys()]);
       for (const target of targets) {
-        const relations = [...(pendingWrites.get(target) ?? [])];
+        const relations = [...(pendingWrites.get(target)?.values() ?? [])];
         if (relations.length === 0 && (pendingBackends.transactions.get(target)?.size ?? 0) === 0) continue;
         settleMs += await recordedSettle(target, {
           relations,
@@ -1134,8 +1143,8 @@ async function runGrowthCheck(
           coldBackendDiscards++;
           for (const backend of runBackends) seenBackends.add(backend);
           for (const [target, relations] of writes) {
-            const accumulated = pendingWrites.get(target) ?? new Set<string>();
-            for (const relation of relations) accumulated.add(relation);
+            const accumulated = pendingWrites.get(target) ?? new Map<string, RelationIdentity>();
+            for (const identity of relations.values()) addRelationIdentity(accumulated, identity);
             pendingWrites.set(target, accumulated);
           }
           repetition++;

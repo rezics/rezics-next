@@ -1,4 +1,5 @@
 import { MAX_GROWTH_CAPTURE_ENTRIES } from './growth-capture-budget.ts';
+import { addRelationIdentity, type RelationIdentity } from './growth-relation-identity.ts';
 
 export const MAX_PLAN_NODES = 10_000;
 export const MAX_PLAN_DEPTH = 256;
@@ -167,8 +168,12 @@ export function explainPlanEntries(document: unknown, location = 'plan'): Explai
   throw new TypeError(`${location}: Unrecognized plan document`);
 }
 
-/** Schema-qualified ModifyTable relations from an admitted EXPLAIN document. */
-export function collectModifyTargets(document: unknown, output: Set<string>, location = 'plan'): void {
+/** ModifyTable schema and relation name from an admitted EXPLAIN document. */
+export function collectModifyTargets(
+  document: unknown,
+  output: Map<string, RelationIdentity>,
+  location = 'plan',
+): void {
   for (const { plan, location: planLocation } of explainPlanEntries(document, location)) {
     for (const { node, path } of walkPlanTree(plan, planLocation)) {
       if (node['Node Type'] !== 'ModifyTable') continue;
@@ -176,7 +181,7 @@ export function collectModifyTargets(document: unknown, output: Set<string>, loc
       if (typeof name !== 'string' || name.length === 0)
         throw new TypeError(`${path}: ModifyTable is missing Relation Name`);
       const schema = typeof node.Schema === 'string' && node.Schema.length > 0 ? node.Schema : 'public';
-      output.add(`${schema}.${name}`);
+      addRelationIdentity(output, { kind: 'relation', schema, name });
     }
   }
 }

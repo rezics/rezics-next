@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import type { Pool } from 'pg';
 import { GrowthSettleInfrastructureError, settle, settleAdmin, type GrowthDatabase } from './growth-capture.ts';
+import { quotedRelationIdentity } from './growth-relation-identity.ts';
 
 function vacuumAdmin(options: {
   readonly vacuumError: Error;
@@ -53,6 +54,45 @@ function vacuumAdmin(options: {
   };
   return { admin, database, poolQueries, releases };
 }
+
+test('settle quotes identity components and refuses ambiguous qualified strings', async () => {
+  const vacuum: string[] = [];
+  const client = {
+    connectionParameters: { database: 'app' },
+    async query(sql: string) {
+      if (sql.startsWith('VACUUM')) vacuum.push(sql);
+      return { rows: [] };
+    },
+    release() {},
+  };
+  const admin = {
+    options: { connectionString: 'postgres://localhost/app' },
+    async query() {
+      return { rows: [] };
+    },
+    async connect() {
+      return client;
+    },
+  } as unknown as Pool;
+  const database: GrowthDatabase = {
+    url: 'postgres://localhost/app',
+    pool: admin,
+    admin,
+    openPool: () => {
+      throw new Error('test admin cannot open instrumented pools');
+    },
+    close: async () => {},
+  };
+  const identity = { kind: 'relation' as const, schema: 'sales.region', name: 'items.v1' };
+  await settle(database, { relations: [identity, 'public.rows', identity] });
+  expect(vacuum).toEqual([
+    `VACUUM (INDEX_CLEANUP ON) ${quotedRelationIdentity(identity)}`,
+    'VACUUM (INDEX_CLEANUP ON) "public"."rows"',
+  ]);
+  await expect(settle(database, { relations: ['sales.region.items'] })).rejects.toThrow(
+    /Ambiguous legacy relation sales.region.items/,
+  );
+});
 
 test('a failing VACUUM on a single-client admin pool reports the original failure without another checkout', async () => {
   const vacuumError = new Error('relation "public.missing" does not exist');
