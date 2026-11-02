@@ -17,6 +17,56 @@ Decision: retain the source inventory as a partial result and continue the scree
 capture owners; infer neither defects nor passes from source, story plays or earlier reviews.
 The manager was sent this decision through the Goal inbox.
 
+### Retained-source continuation
+
+The continuation starts from clean retained source
+`f85b7a81cc54a0e1fa04ff99cd3381d2bf08150a`, with the preceding inventory dependency integrated at
+`1f524dcfc8d1400181614c622e46fb1e90df16e6`. The route inventory below remains a source inventory of
+`88a6a9c65a15ad5314f9337a2ddf4362c9df9bed`; it is **not** a rendered catalogue of the retained source.
+No Storybook build was started, so there is no new build identity, running-index observation or rendering result.
+
+This continuation's launch policy also prohibits browser, native and acceptance execution. Only admitted existing
+images may be reused. The worktree's `.temp/` contains no PNG/JPEG images, screenshot manifest or `build.json`;
+no shared image with the required provenance was supplied. A request for the Performance, Web and Accounts
+handoffs was sent to the Content manager, rather than attempting another shared-inbox read. Until that manager
+relays the artifacts, their source/build, viewport, theme, locale, producer and recording basis remain unknown.
+No review URL, source export or fixture assertion fills those fields.
+
+Decision: preserve the existing capture assignments and continue measurement when admitted images or a
+browser-permitted launch are available; retain every visual and interaction verdict as unmeasured meanwhile.
+This decision was sent to the Content manager. No product repair is justified by this continuation.
+
+The retained appeals source declares `Pending`, `Empty` and `IllustrativeCurrentTargetWithLongReferences` in
+`apps/web/src/stories/moderation-appeals.stories.tsx`, titled `Pages/Moderation appeals`. These are source-only
+candidates under `pages-moderation-appeals--`; none was confirmed in a running index. The stale width/theme exports
+noted below must not be used as capture identifiers. Other inventory exports also await runtime confirmation.
+
+The remaining measurement is explicit for every route group. In this table, **missing** means no admitted image
+at any of `phone390` light/dark or `desktop1280` light/dark; it does not mean the Page or state fails to render.
+The existing owner-bar table supplies the authority for each row.
+
+| Integrated Page group | Capture handoff / owner bar still to observe | Evidence status |
+| --- | --- | --- |
+| Board directory, board and new thread | Purpose and ranking, sparse Next, empty/long draft and departure protection | Missing |
+| Thread, history, exact revision and author-erasure operation | Reply/revision provenance, unavailable history and concealed protected bodies | Missing |
+| Addressed Space/Realm home and setup | Attention, participation and authority on one home; setup refusal/recovery | Missing |
+| Appearance and publications | Current authority, pending/conflict preservation and disclosure | Missing |
+| Membership, follow, lifecycle, bans and claims | Independent follow/member state, protected access and lifecycle outcomes | Missing |
+| Private My Realms | Private navigation, sparse/empty/unavailable results and current identity | Missing |
+| Subject rating and review integration | Web frame handoff; private vote versus population, freshness and exact citation | Missing shared frame and supplied region |
+| Report entry and receipt | Submitted reference/reason versus current target; long evidence and unavailable target | Missing |
+| Board and catalogue queues | Content board Pages and Web catalogue frame; selection, sparse continuation and current disclosure | Missing; catalogue frame handoff outstanding |
+| Decision and appeal | Legible reason, independent appeal outcome, deadline and unavailable target | Missing; runtime appeals exports unconfirmed |
+| Private Inbox | Performance images only; private recipient, unavailable links and explicit seen retry | Missing shared capture; no Content recapture |
+| Settings notification region | Accounts frame and supplied region; mandatory outcomes versus optional preferences | Missing shared capture; no second Settings writer |
+| Mixed Home | Content capture, then provenance handoff to Web; one mixed stream and bounded controls | Missing; no captured artifacts to hand off |
+
+For every row, long/populated, empty, loading, unavailable and error states and applicable reader, author, member,
+moderator, owner, banned and suspended personas remain uncovered. Locale coverage, hierarchy, density, legibility,
+wrapping/overflow, shared consistency, focus and keyboard behavior remain uncovered too. Future static-image
+findings must be distinguished from browser interaction observations and from native API proof. There is no
+observed defect class to consolidate and no failing image from which to write a UI repair brief.
+
 This report applies [Content's six completion clauses](../goals/content.md#done-when), the
 [interface review rule](../development/verification.md#review) and
 [Storybook's page/pattern distinction](../development/storybook.md#catalogue-and-ownership).
@@ -91,7 +141,8 @@ Every row has **no admitted image** and **no visual verdict**.
 
 The [page-story map](../development/page-stories.md) is useful inventory, not current visual coverage. Its board
 moderation section still names `PendingEnglishLightDesktop`, `PendingEnglishLightPhone`,
-`EmptyEnglishLightDesktop` and `EmptyEnglishLightPhone`; the current appeals source exports `Pending` and `Empty`.
+`EmptyEnglishLightDesktop` and `EmptyEnglishLightPhone`; the retained appeals source exports `Pending`, `Empty`
+and `IllustrativeCurrentTargetWithLongReferences`.
 Use those current exports with viewport/theme globals. This source-reference discrepancy warrants inventory
 reconciliation during capture selection; it is not a visible page defect and does not authorize UI work here.
 The map also lacks several newer route headings shown above. Missing ledger cells cannot establish that a
