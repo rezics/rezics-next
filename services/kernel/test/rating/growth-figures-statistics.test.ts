@@ -531,8 +531,7 @@ afterAll(async () => {
   await database?.close();
 });
 
-// `public-figures-page.sql` reads later same-partition `rating.public_figure` rows before applying its limit.
-test.failing('Public figure batches and pages stay within their bound as figure and voter history grows', async () => {
+test('Public figure batches and pages stay within their bound as figure and voter history grows', async () => {
   let report;
   try {
     report = await checkGrowth(database, {
@@ -600,6 +599,101 @@ test.failing('Public figure batches and pages stay within their bound as figure 
   }
   expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
   expect(report.samples.every(({ cost }) => cost.statements === 2)).toBe(true);
+});
+
+test('Public figure pages preserve start, strict cursor, end and exact published prefix semantics', async () => {
+  const populationId = id(figureRoute, 90);
+  const otherPopulationId = id(figureRoute, 91);
+  const otherQuestionId = id(figureRoute, 92);
+  const first = id(figureRoute, 10);
+  const unpublished = id(figureRoute, 11);
+  const second = id(figureRoute + 1, 10);
+  const input = { partition: partitionOf(figureRoute), questionId: STANDARD_QUESTION_ID, populationId };
+  await database.admin.query(
+    `INSERT INTO rating.question (id, owner_id, revision, label, grain, minimum_units, maximum_units, step_units)
+     VALUES ($1, NULL, 1, 'Other figure question', 'work', 0, 20, 1)`,
+    [otherQuestionId],
+  );
+  for (const [subjectId, questionId, population, revision] of [
+    [first, STANDARD_QUESTION_ID, populationId, 1],
+    [unpublished, STANDARD_QUESTION_ID, populationId, 0],
+    [second, STANDARD_QUESTION_ID, populationId, 2],
+    [id(figureRoute, 12), otherQuestionId, populationId, 1],
+    [id(figureRoute, 13), STANDARD_QUESTION_ID, otherPopulationId, 1],
+    [id(figureRoute + 16, 10), STANDARD_QUESTION_ID, populationId, 1],
+  ] as const) {
+    const scored = subjectId === second;
+    await database.admin.query(
+      `INSERT INTO rating.public_figure
+         (route, question_id, population_id, subject_id, count, mean, score, m, c, prior_epoch, revision, as_of, position)
+       VALUES (get_byte(uuid_send($1::uuid), 10) * 256 + get_byte(uuid_send($1::uuid), 11),
+               $2, $3, $1, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+      [
+        subjectId,
+        questionId,
+        population,
+        scored ? 7 : 1,
+        scored ? 8.5 : null,
+        scored ? 8.25 : null,
+        scored ? 8 : null,
+        scored ? 5 : null,
+        scored ? 3 : null,
+        revision,
+        scored ? timestamp : null,
+        scored ? 9 : 0,
+      ],
+    );
+  }
+  const expected = [
+    {
+      questionId: STANDARD_QUESTION_ID,
+      populationId,
+      subjectId: first,
+      count: 1,
+      mean: null,
+      score: null,
+      m: null,
+      C: null,
+      priorEpoch: null,
+      revision: '1',
+      asOf: null,
+      position: '0',
+    },
+    {
+      questionId: STANDARD_QUESTION_ID,
+      populationId,
+      subjectId: second,
+      count: 7,
+      mean: 8.5,
+      score: 8.25,
+      m: 8,
+      C: 5,
+      priorEpoch: 3,
+      revision: '2',
+      asOf: timestamp,
+      position: '9',
+    },
+  ];
+  expect(await pagePublicFigures(database.pool, { ...input, after: null, limit: 500 })).toEqual(expected);
+  expect(await pagePublicFigures(database.pool, { ...input, after: null, limit: 1 })).toEqual(expected.slice(0, 1));
+  expect(await pagePublicFigures(database.pool, { ...input, after: first, limit: 1 })).toEqual(expected.slice(1));
+  expect(await pagePublicFigures(database.pool, { ...input, after: unpublished, limit: 500 })).toEqual(expected.slice(1));
+  expect(await pagePublicFigures(database.pool, { ...input, after: second, limit: 500 })).toEqual([]);
+  expect(
+    await pagePublicFigures(database.pool, {
+      ...input,
+      populationId: id(figureRoute, 93),
+      after: null,
+      limit: 500,
+    }),
+  ).toEqual([]);
+  expect(
+    await readPublicFigures(database.pool, {
+      ...input,
+      subjectIds: [second, unpublished, first, first, id(figureRoute, 12), id(figureRoute, 13)],
+    }),
+  ).toEqual(expected);
+  expect(await readPublicFigures(database.pool, { ...input, subjectIds: [] })).toEqual([]);
 });
 
 test('Source statistic writes and reads stay within their bound as statistics grow', async () => {
