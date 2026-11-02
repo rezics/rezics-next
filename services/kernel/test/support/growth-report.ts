@@ -1,6 +1,7 @@
 import type { Capture } from './growth-cost.ts';
 import type { GrowthMetric } from './growth-bound.ts';
 import type { ReportSample, StatementAttribution } from './growth.ts';
+import { indexStatementRepetitions } from './growth-report-index.ts';
 import { walkPlanTree, type PlanNode } from './growth-plan-walk.ts';
 
 function normalizeStatement(statement: string): string {
@@ -188,36 +189,60 @@ export function statementOccurrences(capture: Capture): StatementOccurrences {
   };
 }
 
-function median(values: readonly number[]): number {
-  if (!values.length) return 0;
+function medianWithMissingZeros(values: readonly number[], repetitionCount: number): number {
+  if (!repetitionCount) return 0;
   const sorted = [...values].sort((a, b) => a - b);
-  const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[middle]! : (sorted[middle - 1]! + sorted[middle]!) / 2;
+  const missing = repetitionCount - sorted.length;
+  let firstZero = 0;
+  while (firstZero < sorted.length && sorted[firstZero]! < 0) firstZero++;
+  const at = (index: number) => {
+    if (index >= firstZero && index < firstZero + missing) return 0;
+    return sorted[index < firstZero ? index : index - missing]!;
+  };
+  const middle = Math.floor(repetitionCount / 2);
+  return repetitionCount % 2 ? at(middle) : (at(middle - 1) + at(middle)) / 2;
 }
 
-export function profileStatements(samples: readonly ReportSample[]) {
+type ProfiledStatement = {
+  readonly rows: number;
+  readonly blocks: number;
+  readonly count: number;
+  readonly repetitions: readonly number[];
+  readonly node?: string;
+};
+
+function profileStatementRuns(runs: readonly (readonly StatementAttribution[])[]) {
+  const index = indexStatementRepetitions(runs);
+  const statements = new Map<string, ProfiledStatement>();
+  for (const [statement, summary] of index.statements)
+    statements.set(statement, {
+      rows: medianWithMissingZeros(summary.entries.map(({ rows }) => rows), index.repetitionCount),
+      blocks: medianWithMissingZeros(summary.entries.map(({ blocks }) => blocks), index.repetitionCount),
+      count: medianWithMissingZeros(summary.entries.map(({ count }) => count), index.repetitionCount),
+      repetitions: summary.repetitions,
+      ...(summary.node === undefined ? {} : { node: summary.node }),
+    });
+  return { repetitionCount: index.repetitionCount, statements };
+}
+
+export function profileStatements(samples: readonly Pick<ReportSample, 'statementRepetitions'>[]) {
   return samples.map(({ statementRepetitions }) => {
-    const keys = new Set(statementRepetitions.flatMap((run) => run.map(({ statement }) => statement)));
-    return [...keys].sort().map((statement) => {
-      const values = statementRepetitions.map((run) => run.find((item) => item.statement === statement));
-      return {
-        statement,
-        rows: median(values.map((item) => item?.rows ?? 0)),
-        blocks: median(values.map((item) => item?.blocks ?? 0)),
-        count: median(values.map((item) => item?.count ?? 0)),
-      };
+    const { statements } = profileStatementRuns(statementRepetitions);
+    return [...statements.keys()].sort().map((statement) => {
+      const profile = statements.get(statement)!;
+      return { statement, rows: profile.rows, blocks: profile.blocks, count: profile.count };
     });
   });
 }
 
-export function formatStatementAttribution(samples: readonly ReportSample[], metrics: readonly GrowthMetric[]): string {
+export function formatStatementAttribution(
+  samples: readonly Pick<ReportSample, 'scale' | 'statementRepetitions'>[],
+  metrics: readonly GrowthMetric[],
+): string {
   const lines: string[] = [];
+  const profiles = samples.map(({ statementRepetitions }) => profileStatementRuns(statementRepetitions));
   for (const metric of [...new Set(metrics)]) {
-    const all = new Set(
-      samples.flatMap(({ statementRepetitions }) =>
-        statementRepetitions.flatMap((run) => run.map((item) => item.statement)),
-      ),
-    );
+    const all = new Set(profiles.flatMap(({ statements }) => [...statements.keys()]));
     const field =
       metric === 'rows' || metric === 'requestBytes' || metric === 'responseBytes'
         ? 'rows'
@@ -226,17 +251,11 @@ export function formatStatementAttribution(samples: readonly ReportSample[], met
           : 'count';
     const ranked = [...all]
       .map((statement) => {
-        const values = samples.map(({ statementRepetitions }) =>
-          median(statementRepetitions.map((run) => run.find((item) => item.statement === statement)?.[field] ?? 0)),
-        );
-        const nodes = samples.flatMap(({ statementRepetitions }) =>
-          statementRepetitions.flatMap((run) =>
-            run
-              .filter((item) => item.statement === statement)
-              .map((item) => item.node)
-              .filter((node): node is string => !!node),
-          ),
-        );
+        const values = profiles.map(({ statements }) => statements.get(statement)?.[field] ?? 0);
+        const nodes = profiles.flatMap(({ statements }) => {
+          const node = statements.get(statement)?.node;
+          return node ? [node] : [];
+        });
         return {
           statement,
           values,
@@ -252,14 +271,13 @@ export function formatStatementAttribution(samples: readonly ReportSample[], met
         `  ${item.statement.split('\n')[0]} | ${samples.map(({ scale }, index) => `${scale}: ${item.values[index] ?? 0}`).join(', ')} | ${item.node}`,
       );
   }
-  samples.forEach(({ scale, statementRepetitions }) => {
-    const keys = new Set(statementRepetitions.flatMap((run) => run.map(({ statement }) => statement)));
-    for (const statement of keys) {
-      const reps = statementRepetitions.flatMap((run, index) =>
-        run.some((item) => item.statement === statement) ? [index + 1] : [],
-      );
-      if (reps.length > 0 && reps.length < statementRepetitions.length)
-        lines.push(`Intermittent at scale ${scale}: ${statement.split('\n')[0]} ran in repetitions ${reps.join(', ')}`);
+  samples.forEach(({ scale }, sampleIndex) => {
+    const { repetitionCount, statements } = profiles[sampleIndex]!;
+    for (const [statement, profile] of statements) {
+      if (profile.repetitions.length > 0 && profile.repetitions.length < repetitionCount)
+        lines.push(
+          `Intermittent at scale ${scale}: ${statement.split('\n')[0]} ran in repetitions ${profile.repetitions.join(', ')}`,
+        );
     }
   });
   return lines.length ? `\nStatement attribution:\n${lines.join('\n')}` : '';
