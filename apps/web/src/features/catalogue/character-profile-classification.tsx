@@ -17,7 +17,7 @@ import {
   type FactsCurrent,
   type FactsTransport,
 } from './subject-facts';
-import { statementInput } from './statement-editor';
+import { statementInput, type StatementInput } from './statement-editor';
 import { EditorFailure, StatementFields } from './statement-editor-view';
 
 const actionClassName =
@@ -57,8 +57,12 @@ export function CharacterClassification({
   const label = pageText(definition.labels, locale);
   const current = selected.find((statement) => statement.id === draft?.source);
   const stage = (id: string | null) => {
+    if (running.current || (draft && factLocked(draft))) return;
     const source = selected.find((statement) => statement.id === id);
+    if (id && !source) return;
     const baseline = source ? statementInput(source) : null;
+    setPicked([]);
+    setReviewing(false);
     setDraft({
       property,
       source: id,
@@ -74,6 +78,17 @@ export function CharacterClassification({
             rank: 'normal',
           },
     });
+  };
+  const discard = () => {
+    if (!draft || running.current || factLocked(draft)) return;
+    setDraft(undefined);
+    setPicked([]);
+    setReviewing(false);
+    setSource(selected.length === 1 ? selected[0]!.id : '');
+  };
+  const change = (statement: StatementInput) => {
+    if (!draft || running.current || factLocked(draft)) return;
+    setDraft({ ...draft, statement, command: undefined, result: undefined });
   };
   async function submit() {
     if (!draft || running.current) return;
@@ -149,7 +164,7 @@ export function CharacterClassification({
                   disabled={busy || factLocked(draft)}
                   src={coverSrc}
                   value={
-                    picked.length
+                    picked[0]?.id === target
                       ? picked
                       : target
                         ? [
@@ -175,12 +190,11 @@ export function CharacterClassification({
                     )
                   }
                   onValueChange={(items) => {
+                    if (running.current || factLocked(draft)) return;
                     setPicked(items);
-                    setDraft({
-                      ...draft,
-                      command: undefined,
-                      result: undefined,
-                      statement: { ...draft.statement, value: { type: 'value', content: items[0]?.id ?? '' } },
+                    change({
+                      ...draft.statement,
+                      value: { type: 'value', content: items[0]?.id ?? '' },
                     });
                   }}
                 />
@@ -189,11 +203,14 @@ export function CharacterClassification({
                   draft={draft.statement}
                   current={{ ...read, source: current ?? null }}
                   locale={locale}
-                  change={(statement) => setDraft({ ...draft, statement, command: undefined, result: undefined })}
+                  change={change}
                 />
               </fieldset>
             )}
             {result && !result.ok && <EditorFailure reason={result.reason} locale={locale} />}
+            {result && !result.ok && factLocked(draft) && (
+              <p className="text-sm text-muted-foreground">{m.facts_uncertain({}, o)}</p>
+            )}
             {result?.ok ? (
               <>
                 <p role="status">{m.correction_proposed({}, o)}</p>
@@ -213,9 +230,23 @@ export function CharacterClassification({
                 )}
               </>
             ) : (
-              <Button className={actionClassName} disabled={busy || !factChanged(draft)} onClick={() => void submit()}>
-                {draft.command ? m.correction_retry({}, o) : m.correction_submit({}, o)}
-              </Button>
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  className={actionClassName}
+                  disabled={busy || !factChanged(draft)}
+                  onClick={() => void submit()}
+                >
+                  {draft.command ? m.correction_retry({}, o) : m.correction_submit({}, o)}
+                </Button>
+                <Button
+                  className={actionClassName}
+                  variant="outline"
+                  disabled={busy || factLocked(draft)}
+                  onClick={discard}
+                >
+                  {m.curation_view_discard({}, o)}
+                </Button>
+              </div>
             )}
           </>
         )}

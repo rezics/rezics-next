@@ -94,6 +94,57 @@ const concept = '00000000-0000-4000-8000-00000000d101';
 const replacement = '00000000-0000-4000-8000-00000000d102';
 const evidence = 'https://archive.example/character/' + 'original-source-'.repeat(12) + '?record=A%2Fb#evidence';
 
+test('discarding a changed classification returns to another source without a request or remount', async () => {
+  await mounted(async ({ host, render, choose, enter }) => {
+    const { CharacterClassification } = await import('../src/features/catalogue/character-profile-classification');
+    const { m } = await import('../src/paraglide/messages.js');
+    const setup = await supplied(2);
+    const sources = setup.read.public.subject.statements[property]!;
+    sources[1]!.qualifiers = [{ property: { id: 'schema:url', data_type: 'url' }, value: { type: 'value', content: evidence } }];
+    await render(<CharacterClassification {...setup} property={property} locale="en" search={async () => []} />);
+    const section = host.querySelector('section');
+    await choose(host.querySelector('select')!, sources[0]!.id);
+    await act(async () => button(host, m.facts_edit_field()).click());
+    await enter(host.querySelector<HTMLInputElement>(`input[aria-label="${m.correction_value()}"]`)!, replacement);
+    await act(async () => button(host, m.curation_view_discard()).click());
+    expect(host.querySelector('section')).toBe(section);
+    expect(host.querySelector('fieldset')).toBeNull();
+    expect(host.querySelector<HTMLSelectElement>('select')!.value).toBe('');
+    expect(setup.fixture.calls).toEqual([]);
+    await choose(host.querySelector('select')!, sources[1]!.id);
+    await act(async () => button(host, m.facts_edit_field()).click());
+    expect(host.querySelector<HTMLInputElement>('[role="combobox"]')!.value).toBe(setup.read.public.related[replacement]!.labels.en!);
+    expect(button(host, m.correction_submit()).disabled).toBe(true);
+    await enter(host.querySelector<HTMLInputElement>(`input[aria-label="${m.correction_value()}"]`)!, concept);
+    await act(async () => button(host, m.correction_submit()).click());
+    const { statementInput } = await import('../src/features/catalogue/statement-editor');
+    expect(setup.commands[0]!.statement).toEqual({ ...statementInput(sources[1]!), value: { type: 'value', content: concept } });
+  });
+});
+
+test('pending and uncertain classification commands cannot be discarded; retry keeps their exact identity', async () => {
+  await mounted(async ({ host, render, enter }) => {
+    const { CharacterClassification } = await import('../src/features/catalogue/character-profile-classification');
+    const { m } = await import('../src/paraglide/messages.js');
+    const setup = await supplied(1, 'uncertain');
+    const gate = Promise.withResolvers<void>();
+    const transport = { ...setup.transport, propose: async (command: FactCommand) => { await gate.promise; return setup.transport.propose(command); } };
+    await render(<CharacterClassification {...setup} transport={transport} property={property} locale="en" search={async () => []} />);
+    await act(async () => button(host, m.facts_edit_field()).click());
+    await enter(host.querySelector<HTMLInputElement>(`input[aria-label="${m.correction_value()}"]`)!, replacement);
+    await act(async () => button(host, m.correction_submit()).click());
+    expect(button(host, m.curation_view_discard()).disabled).toBe(true);
+    await act(async () => gate.resolve());
+    expect(button(host, m.curation_view_discard()).disabled).toBe(true);
+    await act(async () => button(host, m.curation_view_discard()).click());
+    expect(host.querySelector('fieldset')!.disabled).toBe(true);
+    expect(host.textContent).toContain(m.facts_uncertain());
+    await act(async () => button(host, m.correction_retry()).click());
+    expect(setup.commands[1]).toBe(setup.commands[0]);
+    expect(host.textContent).toContain(m.correction_proposed());
+  });
+});
+
 async function supplied(count = 1, scenario: 'ready' | 'uncertain' | 'denied' = 'ready') {
   const { characterProfileFixture, characterProfileId } =
     await import('../src/kernel/fake/catalogue-character-profile');
