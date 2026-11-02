@@ -24,6 +24,10 @@ explicitly unavailable until removed, without falling back to global search.
 Range controls show a localized Remove range link only for a committed property range; drafts stay local and blank
 bounds remain invalid on Apply.
 
+Property changes preserve values only when released datatypes and value definitions match, ranges only when both
+definitions support the selected unit, and statement qualifiers only when both properties allow the same released
+qualifier; incompatible nonempty operands require confirmation before reset to a fresh draft.
+
 The [canonical stories](../stories/header-search/README.md) cover resting, focused discovery, suggestions,
 filter entry and phone interaction. `tests/header-search-composition.test.tsx` exercises the existing routed
 Search page and default shell across desktop/phone, English/Simplified Chinese and light/dark. It protects actual

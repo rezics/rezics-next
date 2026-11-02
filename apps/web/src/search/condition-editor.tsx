@@ -1,4 +1,4 @@
-import { useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import {
   FILTER_LIMITS,
   facetProperties,
@@ -23,6 +23,11 @@ import {
 } from './condition-editor-model';
 import { conditionFieldChoices as buildConditionFieldChoices } from './condition-field-choices';
 import {
+  changeQualifierProperty,
+  changeStatementProperty,
+  resolveConditionPropertyChange,
+} from './condition-property-edit';
+import {
   conditionTreeCanSubmit,
   editConditionTree,
   type ConditionTreeEdit,
@@ -30,6 +35,9 @@ import {
 } from './condition-tree-edit';
 
 type Choice = { value: string; labels: Record<string, string> };
+type PendingPropertyChange =
+  | { kind: 'statement'; property: string }
+  | { kind: 'qualifier'; index: number; property: string };
 type EditorContext = {
   metadata: ConditionMetadata;
   locale: string;
@@ -251,6 +259,14 @@ function NodeEditor({
   const property = 'statement' in value ? value.statement.property : undefined;
   const definition = property ? context.metadata.properties[property] : undefined;
   const range = 'statement' in value && 'range' in value.statement ? value.statement.range : undefined;
+  const [pendingPropertyChange, setPendingPropertyChange] = useState<PendingPropertyChange>();
+  const propertyChangeDialog = useRef<HTMLDialogElement>(null);
+  const propertyChangeId = useId();
+  useEffect(() => {
+    if (pendingPropertyChange && propertyChangeDialog.current && !propertyChangeDialog.current.open) {
+      propertyChangeDialog.current.showModal();
+    }
+  }, [pendingPropertyChange]);
   const properties = facetProperties(context.metadata, Object.keys(context.metadata.types));
   const fieldChoices = (ids: readonly string[], selected: string) => {
     const choices = ids.map((id) => ({
@@ -269,6 +285,32 @@ function NodeEditor({
   ) => {
     if (!('statement' in value)) return;
     onChange({ statement: { ...value.statement, ...next } });
+  };
+  const selectStatementProperty = (nextProperty: string) => {
+    const transition = changeStatementProperty(value, nextProperty, context.metadata.properties);
+    setPendingPropertyChange(undefined);
+    if (transition.requiresConfirmation) setPendingPropertyChange({ kind: 'statement', property: nextProperty });
+    else onChange(transition.next);
+  };
+  const selectQualifierProperty = (index: number, nextProperty: string) => {
+    const transition = changeQualifierProperty(value, index, nextProperty, context.metadata.properties);
+    setPendingPropertyChange(undefined);
+    if (transition.requiresConfirmation) setPendingPropertyChange({ kind: 'qualifier', index, property: nextProperty });
+    else onChange(transition.next);
+  };
+  const resolvePendingPropertyChange = (confirmed: boolean) => {
+    if (!pendingPropertyChange) return;
+    const transition =
+      pendingPropertyChange.kind === 'statement'
+        ? changeStatementProperty(value, pendingPropertyChange.property, context.metadata.properties)
+        : changeQualifierProperty(
+            value,
+            pendingPropertyChange.index,
+            pendingPropertyChange.property,
+            context.metadata.properties,
+          );
+    onChange(resolveConditionPropertyChange(transition, confirmed));
+    setPendingPropertyChange(undefined);
   };
   const remove = () => {
     if (context.editTree(path, { type: 'remove' }))
@@ -414,25 +456,7 @@ function NodeEditor({
                 {...props}
                 value={property}
                 onChange={(event) => {
-                  const next = event.currentTarget.value;
-                  const metadata = context.metadata.properties[next];
-                  const ranged = metadata?.datatype === 'quantity' || metadata?.datatype === 'time';
-                  onChange({
-                    statement: {
-                      property: next,
-                      ...(ranged
-                        ? {
-                            range:
-                              'range' in value.statement
-                                ? value.statement.range
-                                : metadata.datatype === 'quantity' && metadata.units?.[0]
-                                  ? { unit: metadata.units[0] }
-                                  : {},
-                          }
-                        : { in: 'in' in value.statement ? value.statement.in : [''] }),
-                      ...(value.statement.qualifiers ? { qualifiers: value.statement.qualifiers } : {}),
-                    },
-                  });
+                  selectStatementProperty(event.currentTarget.value);
                 }}
               >
                 <NativeSelectOption value="">{m.refinement_choose_property()}</NativeSelectOption>
@@ -526,13 +550,7 @@ function NodeEditor({
                   <NativeSelect
                     {...props}
                     value={qualifier.property}
-                    onChange={(event) =>
-                      replaceStatement({
-                        qualifiers: value.statement.qualifiers!.map((entry, at) =>
-                          at === index ? { ...entry, property: event.currentTarget.value } : entry,
-                        ),
-                      })
-                    }
+                    onChange={(event) => selectQualifierProperty(index, event.currentTarget.value)}
                   >
                     <NativeSelectOption value="">{m.refinement_choose_property()}</NativeSelectOption>
                     {fieldChoices(definition?.qualifiers ?? [], qualifier.property).map(({ value, label }) => (
@@ -589,6 +607,43 @@ function NodeEditor({
       )}
       {('saved' in value || 'owner' in value) && !extensionLeaf && (
         <p className="text-sm text-muted-foreground">{m.condition_retained()}</p>
+      )}
+      {pendingPropertyChange && (
+        <dialog
+          ref={propertyChangeDialog}
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby={`${propertyChangeId}-title`}
+          aria-describedby={`${propertyChangeId}-description`}
+          className="max-w-lg rounded-lg border border-border bg-background p-4 text-foreground shadow-xl backdrop:bg-black/50"
+          onCancel={(event) => {
+            event.preventDefault();
+            resolvePendingPropertyChange(false);
+          }}
+        >
+          <h2 id={`${propertyChangeId}-title`} className="font-semibold">
+            {m.condition_property_change_title()}
+          </h2>
+          <p className="mt-2 font-medium">
+            {pendingPropertyChange.property
+              ? name(
+                  context.metadata.properties[pendingPropertyChange.property]?.labels,
+                  pendingPropertyChange.property,
+                )
+              : m.refinement_choose_property()}
+          </p>
+          <p id={`${propertyChangeId}-description`} className="mt-2 text-sm text-muted-foreground">
+            {m.condition_property_change_message()}
+          </p>
+          <div className="mt-4 flex justify-end gap-2">
+            <Button type="button" variant="outline" autoFocus onClick={() => resolvePendingPropertyChange(false)}>
+              {m.condition_property_change_cancel()}
+            </Button>
+            <Button type="button" onClick={() => resolvePendingPropertyChange(true)}>
+              {m.condition_property_change_confirm()}
+            </Button>
+          </div>
+        </dialog>
       )}
     </FieldSet>
   );
