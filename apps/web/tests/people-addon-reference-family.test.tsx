@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { act, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { PeopleRead } from '../src/features/catalogue/people-profile';
+import type { FactCommand, FactResult } from '../src/features/catalogue/subject-facts';
 import type { AddonRead } from '../src/features/catalogue/addon-profile';
 import * as start from '../.storybook/react-start';
 
@@ -45,6 +46,8 @@ test('People credit and Addon base references share installed parts without chan
   const { createRoot } = await import('react-dom/client');
   const { CandidateReaderBoundary } = await import('../src/subject/candidate-lifetime');
   const { PeopleProfileEditor } = await import('../src/features/catalogue/people-profile-view');
+  const { RelationEditor } = await import('../src/features/catalogue/relation-editor');
+  const { relationFields } = await import('../src/subject/relation-candidates');
   const { AddonProfile } = await import('../src/features/catalogue/addon-profile-view');
   const { peopleProfileFixture, peopleWorkId, peoplePersonId } =
     await import('../src/kernel/fake/catalogue-people-profile');
@@ -74,7 +77,12 @@ test('People credit and Addon base references share installed parts without chan
     }
   });
   type Session = 'signed-in' | 'signed-out' | 'unknown' | 'unavailable';
-  async function render(node: ReactNode, session: Session = 'signed-in', fresh = true) {
+  async function render(
+    node: ReactNode,
+    session: Session = 'signed-in',
+    fresh = true,
+    csrfToken = 'illustrative-token',
+  ) {
     if (fresh) {
       await act(async () => root.render(null));
       client.clear();
@@ -88,7 +96,7 @@ test('People credit and Addon base references share installed parts without chan
             observed={{
               state: session,
               subject: session === 'signed-in' ? '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10' : null,
-              csrfToken: session === 'signed-in' ? 'illustrative-token' : null,
+              csrfToken: session === 'signed-in' ? csrfToken : null,
             }}
             address={`reference-renderer:${generation}`}
           >
@@ -265,42 +273,177 @@ test('People credit and Addon base references share installed parts without chan
           );
       }
 
-      const currentRead = await currentPerson.transport.load();
-      if (!currentRead.ok) throw new Error('Expected supplied current person');
-      let personNext: PeopleRead = currentRead;
-      const currentTransport = { ...currentPerson.transport, load: async () => personNext };
+      const loaded = await currentPerson.transport.load();
+      if (!loaded.ok || !loaded.public) throw new Error('Expected supplied current person');
+      const currentRead = { ...loaded, public: loaded.public, work: currentPerson.work, credits: ['schema:author'] };
+      const nested = {
+        ok: true as const,
+        public: currentRead.public,
+        fields: relationFields(currentRead.release, 'schema:Person', 'en'),
+        page: null,
+        names: Object.fromEntries(
+          Object.entries(currentRead.release.properties).map(([id, property]) => [id, property.labels]),
+        ),
+      };
+      let personNext: PeopleRead | Error | Promise<PeopleRead> = currentRead;
+      let relationReads = 0;
+      const currentTransport = {
+        ...currentPerson.transport,
+        load: async () => {
+          if (personNext instanceof Error) throw personNext;
+          return await personNext;
+        },
+      };
+      const commands: FactCommand[] = [];
+      let finishProposal!: (result: FactResult) => void;
       const currentPage = () => (
         <PeopleProfileEditor
           id={peoplePersonId}
           locale="en"
           session="signed-in"
           transport={currentTransport}
-          propose={currentPerson.propose}
+          propose={async (command) => {
+            command.session ??= 'original-credential';
+            commands.push(command);
+            return new Promise((resolve) => {
+              finishProposal = resolve;
+            });
+          }}
           review={currentPerson.review}
           onNavigate={() => {}}
+          relations={
+            <RelationEditor
+              id={peoplePersonId}
+              locale="en"
+              initial={nested}
+              search={async () => []}
+              transport={{
+                read: async () => {
+                  relationReads++;
+                  return nested;
+                },
+                propose: async () => ({ ok: false, reason: 'unavailable' }),
+                confirm: async () => ({ ok: false, reason: 'unavailable' }),
+              }}
+            />
+          }
         />
       );
+      const click = (name: string, scope = host) =>
+        act(async () => user.click(within(scope).getByRole('button', { name })));
+      const field = () =>
+        within(host).getByRole('region', { name: currentRead.release.properties['schema:url']!.labels.en! });
+      const value = () => within(field()).getByRole('textbox', { name: m.correction_value() }) as HTMLInputElement;
+      const citation = () => within(host).getByRole('textbox', { name: m.relation_citation() }) as HTMLInputElement;
+      const retired = () => {
+        for (const text of [
+          personTitle,
+          '佐藤ミラ',
+          peoplePersonId,
+          peopleWorkId,
+          'Lantern Songs',
+          'original-credential',
+        ])
+          expect(host.innerHTML).not.toContain(text);
+        expect(host.querySelectorAll('input,select,textarea,a')).toHaveLength(0);
+      };
       await render(currentPage());
       await waitFor(() => expect(host.querySelector('form')).not.toBeNull());
-      personNext = { ok: false, reason: 'unavailable' };
-      await act(async () => user.click(within(host).getByRole('button', { name: m.correction_reload() })));
-      await waitFor(() => expect(readingText()).toContain(m.correction_unavailable()));
-      expect(host.innerHTML).not.toContain(personTitle);
+      await click(m.facts_edit_field(), field());
+      await act(async () => {
+        await user.clear(value());
+        await user.type(value(), 'https://example.org/private');
+      });
+      await act(async () =>
+        user.selectOptions(within(host).getByRole('combobox', { name: m.relation_property() }), nested.fields[0]!.id),
+      );
+      await act(async () => user.type(citation(), 'https://example.org/private-citation'));
+      await click(m.facts_submit());
+      expect(commands).toHaveLength(1);
+      const exact = structuredClone(commands[0]!);
+      const staleSubmit = within(host).getByRole('button', { name: m.facts_submit() });
       let finishPerson!: (read: PeopleRead) => void;
-      const pendingPerson = new Promise<PeopleRead>((resolve) => {
+      personNext = new Promise((resolve) => {
         finishPerson = resolve;
       });
-      await render(
-        <PeopleProfileEditor
-          id={peoplePersonId}
-          locale="en"
-          session="signed-in"
-          transport={{ ...currentTransport, load: () => pendingPerson }}
-          propose={currentPerson.propose}
-          review={currentPerson.review}
-          onNavigate={() => {}}
-        />,
+      await click(m.correction_reload());
+      retired();
+      await act(async () =>
+        finishProposal({ ok: true, kind: 'proposed-awaiting-review', candidate: 'retired-candidate', revision: 2 }),
       );
+      retired();
+      await act(async () => finishPerson({ ok: false, reason: 'unavailable' }));
+      await waitFor(() => expect(readingText()).toContain(m.correction_unavailable()));
+      retired();
+      const failures: (PeopleRead | Error)[] = [
+        new Error('offline'),
+        { ok: false, reason: 'denied' },
+        { ok: false, reason: 'concealed' },
+        {
+          ...currentRead,
+          public: { ...currentRead.public, subject: { ...currentRead.public.subject, id: crypto.randomUUID() } },
+        },
+        {
+          ...currentRead,
+          public: { ...currentRead.public, subject: { ...currentRead.public.subject, type: 'schema:Organization' } },
+        },
+        {
+          ...currentRead,
+          work: { ...currentRead.work, subject: { ...currentRead.work.subject, id: crypto.randomUUID() } },
+        },
+        { ...currentRead, release: { ...currentRead.release, types: {} } },
+      ];
+      for (const failure of failures) {
+        personNext = failure;
+        await click(m.correction_retry());
+        retired();
+      }
+      const recovered = structuredClone(currentRead);
+      recovered.public.subject.labels = { en: 'Fresh Person', ja: '新しい名前' };
+      recovered.public.subject.descriptions = { ja: '新しい説明' };
+      recovered.public.subject.aliases = { ja: ['新しい別名'] };
+      recovered.work.subject.labels.en = 'Fresh Work';
+      personNext = recovered;
+      await click(m.correction_retry());
+      await waitFor(() => expect(host.textContent).toContain('Fresh Person'));
+      for (const text of ['新しい名前', '新しい説明', '新しい別名', 'Fresh Work'])
+        expect(host.textContent).toContain(text);
+      expect(host.innerHTML).not.toContain(personTitle);
+      expect(host.innerHTML).not.toContain('retired-candidate');
+      expect(frame().querySelector('a')?.getAttribute('href')).toBe(
+        subjectHref({ id: peopleWorkId, label: 'Fresh Work' }, 'en').href,
+      );
+      expect(value().value).toBe('https://example.org/private');
+      expect(citation().value).toBe('https://example.org/private-citation');
+      expect(relationReads).toBeGreaterThan(0);
+      await act(async () => staleSubmit.click());
+      expect(commands).toHaveLength(1);
+      await click(m.facts_submit());
+      expect(commands[1]).toBe(commands[0]);
+      expect(commands[1]).toEqual(exact);
+      personNext = new Error('offline');
+      await act(async () => {
+        await client.invalidateQueries({ queryKey: ['people-profile'] });
+      });
+      retired();
+      personNext = recovered;
+      await click(m.correction_retry());
+      await render(currentPage(), 'signed-in', false, 'changed-session');
+      await waitFor(() => expect(host.textContent).toContain('Fresh Person'));
+      await act(async () =>
+        finishProposal({ ok: true, kind: 'proposed-awaiting-review', candidate: 'old-session-candidate', revision: 3 }),
+      );
+      expect(host.innerHTML).not.toContain('old-session-candidate');
+      expect(within(field()).queryByRole('textbox')).toBeNull();
+      await act(async () =>
+        user.selectOptions(within(host).getByRole('combobox', { name: m.relation_property() }), nested.fields[0]!.id),
+      );
+      expect(citation().value).toBe('');
+      personNext = new Promise((resolve) => {
+        finishPerson = resolve;
+      });
+      await click(m.correction_reload());
+      retired();
       await render(
         <PeopleProfileEditor
           id={peoplePersonId}
@@ -315,8 +458,7 @@ test('People credit and Addon base references share installed parts without chan
         false,
       );
       await act(async () => finishPerson(currentRead));
-      await waitFor(() => expect(readingText()).toContain(m.correction_unavailable()));
-      expect(host.innerHTML).not.toContain(personTitle);
+      await waitFor(() => expect(readingText()).toContain(m.catalogue_create_signed_out()));
       expect(host.querySelector('form')).toBeNull();
 
       const addon = addonProfileFixture();
