@@ -336,6 +336,35 @@ test('invalid subject, statement, or link counts are rejected before the command
 import { VerificationRecovery, verificationQueryKey } from '../src/settings/verification-recovery';
 import type { AgentVerificationRequest, VerificationCommandResult } from '../src/settings/verification-core';
 
+test('a receipt waits for current readback and older requests or revisions cannot replace it', async () => {
+  const pending = { ...request, id: 'new-request', createdAt: '2026-02-01T00:00:00Z', updatedAt: '2026-02-01T00:00:00Z' };
+  const approved = { ...pending, state: 'approved' as const, updatedAt: '2026-02-02T00:00:00Z' };
+  let current: AgentVerificationRequest | null = null;
+  const controller = new VerificationRecovery('alice', {
+    read: async () => ({ accountId: 'alice', verificationRequest: current, subjectTitle: 'Agent' }),
+    request: async () => ({ ok: true, verificationRequest: pending }),
+    withdraw: async () => { throw new Error('Unexpected withdrawal'); },
+  });
+  await controller.reload();
+  await controller.submit(input);
+  const attempt = controller.snapshot().attempt;
+  expect(attempt?.receipt?.id).toBe(pending.id);
+  expect(controller.snapshot().phase).toBe('uncertain');
+  current = { ...request, state: 'approved' };
+  await controller.reload();
+  expect(controller.snapshot().current).toBeNull();
+  expect(controller.snapshot().attempt).toBe(attempt);
+  current = approved;
+  await controller.reload();
+  expect(controller.snapshot()).toMatchObject({ phase: 'review', attempt: null, current: { verificationRequest: approved } });
+  current = pending;
+  await controller.reload();
+  expect(controller.snapshot()).toMatchObject({ phase: 'unavailable', current: null });
+  current = approved;
+  await controller.reload();
+  expect(controller.snapshot().current?.verificationRequest).toEqual(approved);
+});
+
 test('An uncertain verification request or withdrawal retries the exact original command and key, preserves later draft edits, and never claims native completion from transport failure', async () => {
   const pending: AgentVerificationRequest = { ...request, links: request.links.map((link) => ({ ...link })) };
   const approving = { ...pending, state: 'approving' as const };

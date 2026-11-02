@@ -116,6 +116,7 @@ test('the current card announces loading, native read failure and explicit empty
     code: 'dependency_unavailable',
     message: 'Native status unavailable',
     requestId: 'read-1',
+    retryAfter: 'private header text',
   };
   const controller = new VerificationRecovery('alice', {
     read: async () => {
@@ -161,8 +162,15 @@ test('the current card announces loading, native read failure and explicit empty
         expect(html).toContain(m.settings_verification_read_error({ status: 503, message: failure.message }));
         expect(html).toContain(m.settings_verification_read_current());
         expect(html).not.toContain(m.settings_verification_read_empty());
+        expect(html).not.toContain(failure.retryAfter);
+        expect(html).not.toContain(failure.message);
       });
     expect(reads).toBe(2); // Rendering and subscriptions never repeat private IO.
+    Object.assign(failure, { code: 'private diagnostic text', requestId: 'private request text' });
+    storage.run({ locale: 'en' }, () => {
+      expect(markup()).not.toContain(failure.code);
+      expect(markup()).not.toContain(failure.requestId);
+    });
     await controller.reload();
     expect(controller.snapshot()).toMatchObject({ readStatus: 'success', current: empty, attempt: null });
     expect(canRequestVerification(controller.snapshot().current)).toBe(true);

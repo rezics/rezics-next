@@ -81,6 +81,8 @@ export class VerificationRecovery {
   private listeners = new Set<() => void>();
   private epoch = 0;
   private active = true;
+  // Keep only ordering metadata while a fresh read hides the previous private snapshot.
+  private latest: Pick<AgentVerificationRequest, 'id' | 'createdAt' | 'updatedAt'> | null = null;
   constructor(
     readonly accountId: string,
     private io: VerificationRecoveryIO,
@@ -117,6 +119,16 @@ export class VerificationRecovery {
   }
   private waiting() {
     return this.state.retryAt > Date.now();
+  }
+  private older(request: AgentVerificationRequest) {
+    if (!this.latest) return false;
+    if (request.id === this.latest.id)
+      return Date.parse(request.updatedAt) < Date.parse(this.latest.updatedAt);
+    // A different identity must be newer, even when an earlier request reused the same evidence.
+    return Date.parse(request.createdAt) < Date.parse(this.latest.createdAt);
+  }
+  private remember(request: AgentVerificationRequest) {
+    this.latest = { id: request.id, createdAt: request.createdAt, updatedAt: request.updatedAt };
   }
   async submit(draft: Omit<VerificationInput, 'idempotencyKey'>) {
     if (
@@ -196,12 +208,15 @@ export class VerificationRecovery {
     const receipt = result.verificationRequest;
     if (
       receipt.accountId !== this.accountId ||
+      (attempt.receipt && receipt.id !== attempt.receipt.id) ||
+      this.older(receipt) ||
       (attempt.kind === 'request' && !this.matchesInput(receipt, attempt.input)) ||
       (attempt.kind === 'withdraw' && (receipt.id !== attempt.requestId || receipt.state !== 'withdrawn'))
     ) {
       this.update({ phase: 'uncertain' });
       return;
     }
+    this.remember(receipt);
     this.update({ attempt: frozen({ ...attempt, receipt }) });
     await this.readCurrent(epoch);
   }
@@ -230,6 +245,8 @@ export class VerificationRecovery {
         (current.verificationRequest && current.verificationRequest.accountId !== this.accountId)
       )
         throw new Error('Verification account changed');
+      if (current.verificationRequest && this.older(current.verificationRequest))
+        throw new Error('Verification status predates the current request');
     } catch (error) {
       const failure: VerificationFailure | undefined =
         error instanceof VerificationReadError
@@ -249,6 +266,7 @@ export class VerificationRecovery {
     if (!this.live(epoch)) return;
     const attempt = this.state.attempt;
     const request = current.verificationRequest;
+    if (request) this.remember(request);
     // A latest status or identical payload cannot identify a lost request command. Its receipt supplies the ID.
     const resolved =
       attempt &&

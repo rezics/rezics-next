@@ -1519,6 +1519,8 @@ does not establish either outcome.
 
 ### Settings page
 
+Verification recovery starts a fresh private status query and rejects request identities or revisions older than the latest observed read or receipt; receipts remain unresolved until an identified current readback, and rendered diagnostics use bounded public identifiers and standard Retry-After forms.
+
 Profile name, biography, links and avatar remain a local draft until **Save profile**. The visible live unsaved
 indicator compares only those Profile fields, never Public activity. It yields to pending or unknown command
 outcomes; existing save, confirmed readback and recovery announcements retain their separate meanings.

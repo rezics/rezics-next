@@ -58,9 +58,22 @@ function boundedDiagnosticId(value: string | null | undefined) {
   return value && /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}$/.test(value) ? value : null;
 }
 
+function diagnosticCode(value: string | undefined) {
+  return value && /^[a-z][a-z0-9_]{0,63}$/.test(value) ? value : undefined;
+}
+
+function diagnosticRetryAfter(value: string | undefined) {
+  if (!value) return undefined;
+  // DOM attributes are disclosed too. Keep only the two standard header forms.
+  return /^\d{1,10}$/.test(value) ||
+    /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{2} (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4} \d{2}:\d{2}:\d{2} GMT$/.test(value)
+    ? value
+    : undefined;
+}
+
 function CommandDetails({ failure }: { failure: VerificationFailure }) {
   // Only bounded diagnostic identifiers belong here; never render the transported message or command key.
-  const code = failure.code && /^[a-z][a-z0-9_]{0,63}$/.test(failure.code) ? failure.code : null;
+  const code = diagnosticCode(failure.code);
   const requestId = boundedDiagnosticId(failure.requestId);
   return (
     <details>
@@ -160,6 +173,9 @@ export function verificationRecoveryIO(
     read: (accountId) =>
       readGuard(async () => {
         if (accountId !== owner.subject) throw new Error('Verification account changed');
+        // A status read begun before this action cannot serve as its authoritative readback.
+        await client.cancelQueries({ queryKey: key, exact: true });
+        if (!isCurrent()) throw new Error('Settings viewer changed');
         return client.fetchQuery({
           ...personalRead,
           queryKey: key,
@@ -326,9 +342,9 @@ export function VerificationCard({
           <div
             role="alert"
             data-response-status={state.failure?.status}
-            data-response-code={state.failure?.code}
-            data-request-id={state.failure?.requestId}
-            data-retry-after={state.failure?.retryAfter}
+            data-response-code={diagnosticCode(state.failure?.code)}
+            data-request-id={boundedDiagnosticId(state.failure?.requestId)}
+            data-retry-after={diagnosticRetryAfter(state.failure?.retryAfter)}
           >
             <p>
               {m.settings_verification_load_failed()}{' '}
