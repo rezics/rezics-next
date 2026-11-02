@@ -1,7 +1,6 @@
 export type GrowthSqlKind = 'statement' | 'control' | 'begin' | 'commit' | 'rollback' | 'rollback-to';
 
-const MULTI_COMMAND_CONTROL =
-  'multi-command SQL cannot be classified from its leading control keyword';
+const MULTI_COMMAND_CONTROL = 'multi-command SQL cannot be classified from its leading control keyword';
 
 function isIdentifierPart(character: string): boolean {
   const code = character.charCodeAt(0);
