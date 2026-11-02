@@ -32,6 +32,10 @@ import {
   resolveConditionPropertyChange,
 } from './condition-property-edit';
 import {
+  conditionDraftNodeAt,
+  createConditionEditFocus,
+} from './condition-edit-focus';
+import {
   conditionTreeCanSubmit,
   createConditionDraftNode,
   editConditionDraftNode,
@@ -121,29 +125,40 @@ export function ConditionEditor({
     value,
     node: value ? createConditionDraftNode(value, nextKey) : undefined,
   }));
+  const disabledRef = useRef(disabled);
+  disabledRef.current = disabled;
+  const recovery = useRef(
+    createConditionEditFocus({
+      root: () => root.current,
+      current: () => Boolean(root.current?.isConnected) && !disabledRef.current,
+    }),
+  );
   // Only documents emitted by this session inherit its drafts. Revert and external
   // replacements start fresh, even when they reuse an earlier document object.
   if (session.value !== value) {
+    recovery.current.cancel();
     session = { value, node: value ? createConditionDraftNode(value, nextKey) : undefined };
     setSession(session);
   }
+  useEffect(() => {
+    const focus = recovery.current;
+    return () => focus.cancel();
+  }, []);
+  useEffect(() => {
+    if (disabled) recovery.current.cancel();
+  }, [disabled]);
   const publish = (next: FilterDocument | undefined, node: ConditionDraftNode | undefined) => {
-    setSession({ value: next, node });
+    session = { value: next, node };
+    setSession(session);
     onChange(next);
   };
   const [announcement, setAnnouncement] = useState({ text: '', version: 0 });
   const announce = (message: string, pointer: string) => {
     setAnnouncement((previous) => ({ text: message, version: previous.version + 1 }));
-    requestAnimationFrame(() => {
-      const region =
-        Array.from(root.current?.querySelectorAll<HTMLElement>('[data-condition-pointer]') ?? []).find(
-          (element) => element.dataset.conditionPointer === pointer,
-        ) ?? root.current;
-      region
-        ?.querySelector<HTMLElement>(
-          'select:not(:disabled), input:not([type="hidden"]):not(:disabled), button:not(:disabled)',
-        )
-        ?.focus();
+    recovery.current.recover({
+      pointer,
+      nodeKey: conditionDraftNodeAt(session.node, pointer)?.key,
+      source: root.current?.ownerDocument.activeElement ?? null,
     });
   };
   const canEditTree = (path: ConditionTreePath, edit: ConditionTreeEdit) =>
@@ -423,6 +438,7 @@ function NodeEditor({
     <FieldSet
       className="min-w-0 gap-3 rounded-lg border border-border/60 p-3"
       data-condition-pointer={pointer}
+      data-condition-node={draft.key}
       tabIndex={-1}
     >
       <FieldLegend variant="label">{label}</FieldLegend>

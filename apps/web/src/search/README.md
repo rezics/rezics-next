@@ -49,6 +49,10 @@ The Revert edits action appears at the bottom of Filters only when condition or 
 the committed search; it restores those drafts, clears draft validation, and focuses a status announcement in the
 active surface.
 
+Condition-tree edits recover keyboard focus for the initiating action after the changed DOM commits, using that
+session's draft-node identity. A later recovery, external replacement, disablement, unmount, or a focus move away from
+the initiating control retires the queued handoff; the live status still announces the edit.
+
 Range controls show a localized Remove range link only for a committed property range; lower/upper strings and units
 stay local to the SearchPage committed-state identity across Filters dismissal and desktop/phone changes, and blank
 bounds remain invalid on Apply. The condition/language Revert action does not reset range drafts.
