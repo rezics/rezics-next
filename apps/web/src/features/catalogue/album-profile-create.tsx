@@ -580,7 +580,7 @@ function AlbumInitialField({
   const trigger = useRef<HTMLButtonElement>(null);
   const cancel = useRef<HTMLButtonElement>(null);
   const restoreFocus = useRef(false);
-  const qualifierFocus = useRef<{ cancel: () => void }>();
+  const qualifierFocus = useRef<{ cancel: () => void } | undefined>(undefined);
   const [confirming, setConfirming] = useState(false);
   const current = useRef({ disabled, remove });
   current.current = { disabled, remove };

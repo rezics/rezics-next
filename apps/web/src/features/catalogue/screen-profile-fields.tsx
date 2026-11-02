@@ -199,7 +199,7 @@ function InitialStatement({
   const qualifierState = useRef({ row, release, disabled, parentAdmitted, choice: qualifierChoice, qualifierOptions });
   qualifierState.current = { row, release, disabled, parentAdmitted, choice: qualifierChoice, qualifierOptions };
   const section = useRef<HTMLDivElement>(null);
-  const qualifierFocus = useRef<{ cancel: () => void }>();
+  const qualifierFocus = useRef<{ cancel: () => void } | undefined>(undefined);
   const emptyCitation = useRef<SnakInput>({ property: { id: 'schema:url' }, value: { type: 'value', content: '' } });
   const citations = statement.references.flatMap((reference, group) =>
     reference.parts.flatMap((part, index) => (part.property.id === 'schema:url' ? [{ part, group, index }] : [])),
