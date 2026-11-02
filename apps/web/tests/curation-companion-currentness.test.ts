@@ -1,12 +1,6 @@
 import { expect, test } from 'bun:test';
 import { PROFILE_FORMAT, type CompositionDocument, type PresentationProfile } from '@rezics/composition';
-import {
-  addCompanionView,
-  resetCompanionView,
-  viewOf,
-  withView,
-  type Template,
-} from '../src/features/pages/curate';
+import { addCompanionView, resetCompanionView, viewOf, withView, type Template } from '../src/features/pages/curate';
 import {
   admitCompanionAdd,
   admitCompanionReset,
