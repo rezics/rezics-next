@@ -41,7 +41,14 @@ import { blockerFingerprint, noProgressTwice, toolRetryDelay } from './attempt-p
 import { checkHostsInOutage } from './watchdog.ts';
 import { evidenceBundle } from './evidence.ts';
 import { consult } from './consult.ts';
-import { makeRecord, readMeasurement, readLogTail, reportedApproaches, CHECK_HOST_TRANSPORT } from './records.ts';
+import {
+  makeRecord,
+  readMeasurement,
+  readLogTail,
+  reportedApproaches,
+  CHECK_HOST_TRANSPORT,
+  reportsSuccess,
+} from './records.ts';
 import { readRouting } from './routing.ts';
 import {
   FINAL_REPORT_PROMPT,
@@ -73,6 +80,13 @@ import { awaitHostCapacity, startsFirst } from './launch.ts';
 import { agentAdapter, agentCommands } from './agents.ts';
 import { removeFinishedWorktree, type LifetimeRuntime } from './worktree-lifetime.ts';
 import { captureLaunchContext } from './launch-context.ts';
+import {
+  holdRetryForToolIncident,
+  recordToolBlockerFailure,
+  resolveToolIncidentsAfterAttempt,
+  toolIncidentForRetry,
+  toolIncidentRetryAllowed,
+} from './tool-incidents.ts';
 
 function rebaseConflictFiles(outcome: GateOutcome): string[] {
   const files = new Set(outcome.conflictedFiles ?? []);
@@ -327,10 +341,14 @@ export class WorkerJob implements GateOutcomeSink {
       }
       if (task.currentAttempt !== ref.attempt) return;
       if (task.state === 'held') return;
+      const incident = toolIncidentForRetry(store, ref);
+      const incidentProbe = incident !== null;
+      if (incident && !toolIncidentRetryAllowed(store, ref)) return;
       // A backed-off retry waits for its time, and a check-host transport failure until the watchdog's probes see
       // every check host answer again: relaunching into a broken host repeats the failure. The intent stays pending,
       // and the host's recovery sweep tries it again every minute.
-      if (intent.options.notBefore && Date.parse(intent.options.notBefore) - Date.now() > 1_000) return;
+      if (!incidentProbe && intent.options.notBefore && Date.parse(intent.options.notBefore) - Date.now() > 1_000)
+        return;
       if (intent.options.awaitCheckHosts) {
         const hosts = checkHostsInOutage(this.tasks.settings.stateDirectory);
         if (hosts.length) {
@@ -415,6 +433,12 @@ export class WorkerJob implements GateOutcomeSink {
       this.track(this.runRetryIntent({ taskId: intent.taskId, attempt: intent.attempt }));
   }
   async start(taskId: string, options: RetryOptions = {}): Promise<void> {
+    const task = this.tasks.store.task(taskId);
+    if (
+      task.currentAttempt > 0 &&
+      holdRetryForToolIncident(this.tasks.store, { taskId, attempt: task.currentAttempt }, options)
+    )
+      return;
     try {
       await this.follow(await this.tasks.retry(taskId, options));
     } catch (error) {
@@ -854,6 +878,20 @@ export class WorkerJob implements GateOutcomeSink {
       watcher?.close();
     }
     if (!stopping) {
+      const settledAttempt = store.attempt(ref);
+      if (
+        settledAttempt.state === 'exited' &&
+        !settledAttempt.failureKind &&
+        reportsSuccess(settledAttempt.result, agentAdapter(settledAttempt.profile.cli))
+      ) {
+        const resolved = resolveToolIncidentsAfterAttempt(
+          store,
+          ref,
+          store.task(ref.taskId),
+          settledAttempt,
+        );
+        if (resolved.length) this.resumePendingRetries();
+      }
       if (silenceFailure && store.attempt(ref).state === 'exited') {
         store.updateAttempt(ref, (attempt) => {
           attempt.failureKind = 'tool';
@@ -1500,6 +1538,8 @@ export class WorkerJob implements GateOutcomeSink {
     let retry = false,
       capacity = false,
       retryDelayMs = 0;
+    let releasedIncidents = false;
+    let hasSharedIncident = false;
     const queueRetry = (options: RetryOptions) => {
       store.updateTask(ref, (t) => {
         t.state = 'ready';
@@ -1511,6 +1551,16 @@ export class WorkerJob implements GateOutcomeSink {
       const task = store.task(ref.taskId),
         attempt = store.attempt(ref),
         kind = attempt.failureKind;
+      if (kind) {
+        releasedIncidents =
+          resolveToolIncidentsAfterAttempt(store, ref, task, attempt).length > 0 || releasedIncidents;
+        const detail = `${attempt.result ?? ''}\n${attempt.blocker ?? ''}`;
+        capacity = kind === 'tool' && Boolean(agentAdapter(attempt.profile.cli).signals?.(detail).capacity);
+        if (kind === 'tool' && !capacity)
+          hasSharedIncident = Boolean(
+            recordToolBlockerFailure(store, task, attempt, this.tasks.settings, this.inbox).incident,
+          );
+      }
       if (task.brief.kind === 'verification') {
         if (store.events(task.id, ref.attempt).some((event) => event.kind === 'proof-failure-routed')) return;
         store.updateTask(ref, (current) => {
@@ -1638,7 +1688,6 @@ export class WorkerJob implements GateOutcomeSink {
       } else {
         // A provider capacity refusal is not the task's failure: continue after a pause, however often it repeats.
         const detail = `${attempt.result ?? ''}\n${attempt.blocker ?? ''}`;
-        capacity = kind === 'tool' && Boolean(agentAdapter(attempt.profile.cli).signals?.(detail).capacity);
         const retryOptions = this.exitRetryOptions(attempt, evidencePath);
         if (kind === 'tool' && !capacity) {
           // A tool blocker resumes the same session after a backoff by its fingerprint. The same blocker twice in a
@@ -1646,14 +1695,15 @@ export class WorkerJob implements GateOutcomeSink {
           // Product work on dev also stops after two consecutive attempts without a new commit; other work keeps
           // stopping when the worker did not rerun the failing command.
           const silence = attempt.result.startsWith('stalled: no output for ');
-          const fingerprint = blockerFingerprint(attempt);
-          const repeated = previous?.failureKind === 'tool' && blockerFingerprint(previous) === fingerprint;
+          const fingerprint = blockerFingerprint(attempt, task.worktree);
+          const repeated =
+            previous?.failureKind === 'tool' && blockerFingerprint(previous, task.worktree) === fingerprint;
           const unrerun =
             !devProductBrief(task.brief) &&
             previous?.failureKind === 'tool' &&
             !reranFailingCommand(task, attempt, previous);
           const idle = !repeated && !unrerun && devProductBrief(task.brief) && noProgressTwice(store, task, ref);
-          if (repeated || unrerun || idle) {
+          if ((repeated || unrerun || idle) && !hasSharedIncident) {
             const firstLine = (
               silence
                 ? attempt.result
@@ -1698,6 +1748,7 @@ export class WorkerJob implements GateOutcomeSink {
           }
           retryDelayMs = toolRetryDelay(store, this.tasks.settings, ref, fingerprint);
           if (retryDelayMs) retryOptions.notBefore = new Date(Date.now() + retryDelayMs).toISOString();
+          if (hasSharedIncident) retryDelayMs = 0;
           if (CHECK_HOST_TRANSPORT.test(detail)) retryOptions.awaitCheckHosts = true;
         }
         if (kind === 'pool-exhausted' && !usageLimitRefusal) {
@@ -1715,6 +1766,7 @@ export class WorkerJob implements GateOutcomeSink {
         queueRetry(retryOptions);
       }
     });
+    if (releasedIncidents) this.resumePendingRetries();
     // The recovery sweep calls this while it holds the task's lease, which the retry takes: start after it is released.
     if (retry)
       this.track(

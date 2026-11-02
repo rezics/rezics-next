@@ -83,10 +83,16 @@ export function noProgressTwice(store: WorkerStore, task: Task, ref: AttemptRef)
   return recordedProgress(store, { taskId: ref.taskId, attempt: ref.attempt - 1 }) === false;
 }
 
-/** A tool blocker's identity: its first line with volatile numbers, hashes and identifiers removed. */
-export function blockerFingerprint(attempt: Pick<Attempt, 'blocker' | 'result'>): string {
+/** A tool blocker's identity: its first line with its worktree and volatile numbers, hashes and identifiers removed. */
+export function blockerFingerprint(
+  attempt: Pick<Attempt, 'blocker' | 'result'>,
+  worktree?: string | null,
+): string {
   const line = (attempt.blocker || attempt.result || '').split(/\r?\n/, 1)[0] ?? '';
-  return line
+  const withoutWorktree = worktree
+    ? line.replace(new RegExp(escapeRegExp(worktree.replaceAll('\\', '/')).replaceAll('/', '[\\\\/]'), 'gi'), '<worktree>')
+    : line;
+  return withoutWorktree
     .replace(/\x1b\[[0-9;]*m/g, '')
     .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '#')
     .replace(/\b[0-9a-f]{7,}\b/gi, '#')
@@ -95,6 +101,10 @@ export function blockerFingerprint(attempt: Pick<Attempt, 'blocker' | 'result'>)
     .trim()
     .toLowerCase()
     .slice(0, 300);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /** The delay before retrying a tool blocker with this fingerprint; records the sighting for later retries. */
