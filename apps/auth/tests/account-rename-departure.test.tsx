@@ -23,6 +23,7 @@ const globals = {
   HTMLElement: dom.HTMLElement,
   Element: dom.Element,
   Node: dom.Node,
+  scrollTo: (_options?: unknown) => {},
   getComputedStyle: dom.getComputedStyle.bind(dom),
 };
 const previous = new Map(
