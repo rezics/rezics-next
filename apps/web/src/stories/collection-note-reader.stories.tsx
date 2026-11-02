@@ -29,16 +29,29 @@ const subject = { ...subjectOf(recorded.members[0]!.subject)!, label: 'Repeated 
 const firstNote = `  First occurrence\n\n\t${'Exact spaces and lines.  '.repeat(18)}\n `;
 const secondNote = `Second occurrence\n${'A different note. '.repeat(20)}`;
 const unbroken = '界'.repeat(600);
-const members: CollectionMember[] = [firstNote, secondNote, 'Short note', null, '', 'Concealed note', unbroken, ' \t\n '].map(
-  (note, index) => ({
-    id: `occurrence-${index}`,
-    subject: index === 5 ? null : subject,
-    note,
-    addedAt: recorded.members[0]!.addedAt,
-  }),
-);
+const members: CollectionMember[] = [
+  firstNote,
+  secondNote,
+  'Short note',
+  null,
+  '',
+  'Concealed note',
+  unbroken,
+  ' \t\n ',
+].map((note, index) => ({
+  id: `occurrence-${index}`,
+  subject: index === 5 ? null : subject,
+  note,
+  addedAt: recorded.members[0]!.addedAt,
+}));
 
-function ReadPresentation({ presentation, items = members }: { presentation: Presentation; items?: CollectionMember[] }) {
+function ReadPresentation({
+  presentation,
+  items = members,
+}: {
+  presentation: Presentation;
+  items?: CollectionMember[];
+}) {
   return (
     <div className="min-w-0 p-4" data-note-presentation={presentation}>
       {presentation === 'occurrence' ? (
@@ -52,7 +65,13 @@ function ReadPresentation({ presentation, items = members }: { presentation: Pre
 
 async function readNotes(canvasElement: HTMLElement) {
   const notes = [...canvasElement.querySelectorAll<HTMLParagraphElement>('[data-slot="collection-member-note"]')];
-  await expect(notes.map((note) => note.textContent)).toEqual([firstNote, secondNote, 'Short note', unbroken, ' \t\n ']);
+  await expect(notes.map((note) => note.textContent)).toEqual([
+    firstNote,
+    secondNote,
+    'Short note',
+    unbroken,
+    ' \t\n ',
+  ]);
   const controlFor = (note: HTMLParagraphElement) => note.parentElement!.querySelector<HTMLButtonElement>('button')!;
   await waitFor(() => expect(controlFor(notes[0]!)).not.toBeNull());
   const first = controlFor(notes[0]!);

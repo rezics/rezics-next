@@ -73,7 +73,9 @@ for (const presentation of ['occurrence list', 'member list', 'grid'] as const) 
       cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
       IS_REACT_ACT_ENVIRONMENT: true,
     };
-    const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+    const previous = new Map(
+      Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
+    );
     for (const [key, value] of Object.entries(globals))
       Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
     const require = createRequire(import.meta.url);
@@ -90,14 +92,21 @@ for (const presentation of ['occurrence list', 'member list', 'grid'] as const) 
     const firstNote = `  First occurrence\n\n\t${'Exact spaces and lines.  '.repeat(18)}\n `;
     const secondNote = `Second occurrence\n${'A different note. '.repeat(20)}`;
     const unbroken = '界'.repeat(600);
-    const members: CollectionMember[] = [firstNote, secondNote, 'Short note', null, '', 'Concealed note', unbroken, ' \t\n '].map(
-      (note, index) => ({
-        id: `occurrence-${index}`,
-        subject: index === 5 ? null : subject,
-        note,
-        addedAt: recorded.members[0]!.addedAt,
-      }),
-    );
+    const members: CollectionMember[] = [
+      firstNote,
+      secondNote,
+      'Short note',
+      null,
+      '',
+      'Concealed note',
+      unbroken,
+      ' \t\n ',
+    ].map((note, index) => ({
+      id: `occurrence-${index}`,
+      subject: index === 5 ? null : subject,
+      note,
+      addedAt: recorded.members[0]!.addedAt,
+    }));
     const copies: unknown[] = [];
     const destinations: string[] = [];
     host.addEventListener('click', (event) => {
@@ -113,13 +122,17 @@ for (const presentation of ['occurrence list', 'member list', 'grid'] as const) 
           members={items}
           editing={false}
           firstPage
-          onCopy={(id) => { copies.push(id); }}
+          onCopy={(id) => {
+            copies.push(id);
+          }}
         />
       ) : (
         <CollectionReadMembers
           members={items}
           layout={presentation === 'grid' ? 'grid' : 'list'}
-          onCopy={(item) => { copies.push(item); }}
+          onCopy={(item) => {
+            copies.push(item);
+          }}
         />
       );
     const notes = () => [...host.querySelectorAll<HTMLParagraphElement>('[data-slot="collection-member-note"]')];
@@ -173,7 +186,9 @@ for (const presentation of ['occurrence list', 'member list', 'grid'] as const) 
       expect(controlFor(notes()[0]!).getAttribute('aria-expanded')).toBe('false');
       expect(controlFor(notes()[1]!)).toBe(first);
       expect(first.getAttribute('aria-expanded')).toBe('true');
-      expect(first.getAttribute('aria-label')).toContain(m.library_member_occurrence({ title: 'Repeated subject', position: 2 }));
+      expect(first.getAttribute('aria-label')).toContain(
+        m.library_member_occurrence({ title: 'Repeated subject', position: 2 }),
+      );
       await act(async () => user.click(controlFor(notes()[3]!)));
       expect(notes()[3]!.textContent).toBe(unbroken);
       expect(notes()[3]!.classList.contains(clamp)).toBe(false);
