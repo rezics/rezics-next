@@ -9,7 +9,17 @@ import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { DocumentBody } from '../document-body';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
-import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type ComponentType } from 'react';
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ComponentType,
+  type MouseEvent,
+} from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale, localizeHref } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
@@ -30,6 +40,7 @@ import {
   type EditionSourceIdentity,
   type EditionResumeRead,
   type EditionPreviewImage,
+  type EditionPublicationState,
 } from './edition-create';
 
 type NativeDocumentImageProps = { image: EditionPreviewImage | null; alt: string; locale: string };
@@ -142,6 +153,75 @@ export function EditionPublication({
   const locale = getLocale();
   const initialPostId = initialSource?.postId;
   const initialRevisionId = initialSource?.revisionId;
+  const resultHeading = useRef<HTMLHeadingElement>(null);
+  const handoff = useRef<{
+    caller: HTMLButtonElement;
+    operation: EditionPublicationState | null;
+    result: EditionPublicationState | null;
+  } | null>(null);
+  useLayoutEffect(() => {
+    const cancel = () => {
+      handoff.current = null;
+    };
+    const moved = (event: FocusEvent) => {
+      if (event.target !== handoff.current?.caller) cancel();
+    };
+    // Every admitted command/read starts with a new busy snapshot. A second update while
+    // busy supersedes this caller even if its old response arrives after the newer read.
+    const unsubscribe = controller.subscribe(() => {
+      const pending = handoff.current;
+      const next = controller.snapshot();
+      if (!pending || next === pending.operation) return;
+      if (!pending.operation) {
+        pending.operation = next;
+        if (!next.busy) pending.result = next;
+        return;
+      }
+      if (pending.result || next.busy) cancel();
+      else pending.result = next;
+    });
+    document.addEventListener('focusin', moved);
+    document.addEventListener('pointerdown', cancel, true);
+    document.addEventListener('keydown', cancel, true);
+    window.addEventListener('blur', cancel);
+    return () => {
+      cancel();
+      unsubscribe();
+      document.removeEventListener('focusin', moved);
+      document.removeEventListener('pointerdown', cancel, true);
+      document.removeEventListener('keydown', cancel, true);
+      window.removeEventListener('blur', cancel);
+    };
+  }, [controller, initialPostId, initialRevisionId, initialEditionId, initialResume]);
+  useLayoutEffect(() => {
+    const pending = handoff.current;
+    if (!pending?.result) return;
+    handoff.current = null;
+    // Retirement changes the controller snapshot without notifying its old subscribers.
+    // A surviving caller (including retry/failure controls) keeps its ordinary focus.
+    if (
+      pending.result !== state ||
+      controller.snapshot() !== state ||
+      state.busy ||
+      state.failure ||
+      state.uncertain ||
+      state.intent ||
+      state.review ||
+      pending.caller.isConnected ||
+      (document.activeElement !== pending.caller && document.activeElement !== document.body)
+    )
+      return;
+    resultHeading.current?.focus();
+  }, [controller, state]);
+  const activate = (event: MouseEvent<HTMLButtonElement>, run: () => void) => {
+    handoff.current = null;
+    const caller = event.currentTarget;
+    const keyboard = event.detail === 0 && document.activeElement === caller;
+    const pending = keyboard ? { caller, operation: null, result: null } : null;
+    handoff.current = pending;
+    run();
+    if (pending && !pending.operation && handoff.current === pending) handoff.current = null;
+  };
   const unresolvedCommand = !!state.intent && (state.busy || state.uncertain);
   const localSelection = state.resumeEditionId === null && !state.edition && (!!sourceLink.trim() || !!state.identity);
   const needsDeparture = localSelection || (confirmed && state.edition?.state === 'draft') || unresolvedCommand;
@@ -302,7 +382,9 @@ export function EditionPublication({
       ) : null}
       {edition?.state === 'withdrawn' ? (
         <section className="space-y-3 rounded-xl border border-border p-4 sm:p-5">
-          <h2 className="text-lg font-semibold">{m.edition_publication_withdrawn_heading()}</h2>
+          <h2 ref={resultHeading} tabIndex={-1} className="text-lg font-semibold">
+            {m.edition_publication_withdrawn_heading()}
+          </h2>
           <p role="status" className="text-sm">
             {m.edition_publication_withdrawn_help()}
           </p>
@@ -313,7 +395,9 @@ export function EditionPublication({
       {previewSource ? (
         <section className="min-w-0 space-y-5" aria-label={m.edition_publication_preview()}>
           <div className="space-y-3 border-b border-border pb-5">
-            <h2 className="text-lg font-semibold">{m.edition_publication_preview()}</h2>
+            <h2 ref={!edition ? resultHeading : undefined} tabIndex={-1} className="text-lg font-semibold">
+              {m.edition_publication_preview()}
+            </h2>
             <a
               className="inline-flex min-h-11 items-center text-sm underline underline-offset-4"
               href={exactRevisionHref(previewSource, locale)}
@@ -419,13 +503,16 @@ export function EditionPublication({
             </p>
           ) : null}
           {state.review.edition && <EditionIdentitySummary edition={state.review.edition} />}
-          <Button disabled={state.busy} onClick={() => controller.acceptReview()}>
+          <Button disabled={state.busy} onClick={(event) => activate(event, () => controller.acceptReview())}>
             {m.edition_publication_accept_review()}
           </Button>
         </section>
       ) : null}
       {source && !failure && !edition && state.resumeEditionId === null ? (
-        <Button disabled={state.busy || !state.targetSubjectId || !recognized} onClick={() => void controller.create()}>
+        <Button
+          disabled={state.busy || !state.targetSubjectId || !recognized}
+          onClick={(event) => activate(event, () => void controller.create())}
+        >
           {m.edition_publication_create()}
         </Button>
       ) : null}
@@ -434,7 +521,9 @@ export function EditionPublication({
           className="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6"
           aria-label={m.edition_publication_draft_heading()}
         >
-          <h2 className="text-lg font-semibold">{m.edition_publication_draft_heading()}</h2>
+          <h2 ref={resultHeading} tabIndex={-1} className="text-lg font-semibold">
+            {m.edition_publication_draft_heading()}
+          </h2>
           <p className="text-sm">{m.edition_publication_draft_help()}</p>
           <EditionIdentitySummary edition={edition} />
           <EditionTechnicalDetails edition={edition} />
@@ -465,7 +554,7 @@ export function EditionPublication({
           </label>
           <Button
             disabled={!confirmed || state.busy || !!failure || !recognized}
-            onClick={() => void controller.publish()}
+            onClick={(event) => activate(event, () => void controller.publish())}
           >
             {m.edition_publication_publish()}
           </Button>
@@ -477,7 +566,9 @@ export function EditionPublication({
           aria-label={m.edition_publication_published_heading()}
           role="status"
         >
-          <h2 className="text-lg font-semibold">{m.edition_publication_published_heading()}</h2>
+          <h2 ref={resultHeading} tabIndex={-1} className="text-lg font-semibold">
+            {m.edition_publication_published_heading()}
+          </h2>
           <p className="text-sm">{m.edition_publication_published_help()}</p>
           <EditionIdentitySummary edition={edition} />
           <EditionTechnicalDetails edition={edition} />
