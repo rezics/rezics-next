@@ -118,14 +118,14 @@ test('successful Character refresh withdraws only the choice and requires delibe
     expect(canvas.getByRole('button', { name: m.character_add_fact() })).toHaveProperty('disabled', true);
     await click(m.character_add_fact());
     expect(host.querySelectorAll('[data-slot="character-initial-fact"]')).toHaveLength(1);
-    await choose('schema:abstract');
+    await choose('wdt:P3180');
     expect(canvas.queryByRole('status')).toBeNull();
     await click(m.character_add_fact());
     await click(m.character_add_fact());
     const rows = host.querySelectorAll('[data-slot="character-initial-fact"]');
     expect(rows).toHaveLength(2);
     expect(window.document.activeElement).toBe(rows[1]);
-    await type(m.correction_value(), 'A wandering character');
+    await type(m.correction_value(), 'c123');
     expect(commands).toHaveLength(1);
     await click(m.character_create());
     expect(commands).toHaveLength(2);
@@ -135,10 +135,10 @@ test('successful Character refresh withdraws only the choice and requires delibe
       aliases: { ja: ['旅行者'] },
       statements: {
         'schema:url': [{ value: { content: 'https://example.org/private' } }],
-        'schema:abstract': [{ value: { content: 'A wandering character' } }],
+        'wdt:P3180': [{ value: { content: 'c123' } }],
       },
     });
-    expect(Object.keys(commands[1]!.item.statements)).toEqual(['schema:url', 'schema:abstract']);
+    expect(Object.keys(commands[1]!.item.statements)).toEqual(['schema:url', 'wdt:P3180']);
     const sealed = structuredClone(commands[1]);
     expect(chooser.closest('fieldset[disabled]')).not.toBeNull();
     await click(m.correction_retry());
