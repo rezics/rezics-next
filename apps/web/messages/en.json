@@ -1,4 +1,12 @@
 {
+  "library_bulk_undo_title": "Undo Library removals",
+  "library_bulk_undo_intro": "Choose Undo for one removed entry at a time. Each restore is checked separately.",
+  "library_bulk_undo_other_action": "This operation did not remove Library entries.",
+  "library_bulk_undo_deadline": "Original Undo deadline:",
+  "library_bulk_undo_sending": "Restoring this entry…",
+  "library_bulk_undo_uncertain": "The restore result is uncertain. Retry the original command to confirm its outcome.",
+  "library_bulk_undo_expired": "The original Undo deadline has passed.",
+  "library_bulk_undo_restored": "This entry was restored.",
   "library_progress_decimal_input_required": "Enter a value.",
   "library_progress_decimal_input_syntax": "Use a nonnegative decimal with up to 12 integer digits and 6 decimal places, without exponent notation.",
   "library_progress_decimal_input_min": "Enter {value} or more.",

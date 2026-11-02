@@ -1,4 +1,12 @@
 {
+  "library_bulk_undo_title": "撤销资料库移除",
+  "library_bulk_undo_intro": "每次选择一个已移除的条目进行撤销。每次恢复都会单独检查。",
+  "library_bulk_undo_other_action": "此操作未移除资料库条目。",
+  "library_bulk_undo_deadline": "原始撤销截止时间：",
+  "library_bulk_undo_sending": "正在恢复此条目…",
+  "library_bulk_undo_uncertain": "恢复结果尚未确定。请重试原始命令以确认结果。",
+  "library_bulk_undo_expired": "原始撤销期限已过。",
+  "library_bulk_undo_restored": "此条目已恢复。",
   "library_progress_decimal_input_required": "请输入数值。",
   "library_progress_decimal_input_syntax": "请输入非负定点小数，整数部分最多12位、小数部分最多6位，不使用指数记法。",
   "library_progress_decimal_input_min": "请输入不小于{value}的数值。",

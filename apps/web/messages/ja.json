@@ -1,4 +1,12 @@
 {
+  "library_bulk_undo_title": "ライブラリの削除を元に戻す",
+  "library_bulk_undo_intro": "削除した項目を1件ずつ選んで元に戻します。復元は個別に確認されます。",
+  "library_bulk_undo_other_action": "この操作ではライブラリの項目は削除されていません。",
+  "library_bulk_undo_deadline": "元の復元期限：",
+  "library_bulk_undo_sending": "この項目を復元中…",
+  "library_bulk_undo_uncertain": "復元結果を確認できません。元のコマンドを再試行して結果を確認してください。",
+  "library_bulk_undo_expired": "元の復元期限を過ぎています。",
+  "library_bulk_undo_restored": "この項目を復元しました。",
   "library_progress_decimal_input_required": "値を入力してください。",
   "library_progress_decimal_input_syntax": "指数表記を使わず、整数部12桁、小数部6桁以内の0以上の小数を入力してください。",
   "library_progress_decimal_input_min": "{value}以上を入力してください。",

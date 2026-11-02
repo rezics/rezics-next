@@ -1,4 +1,12 @@
 {
+  "library_bulk_undo_title": "Deshacer eliminaciones de la Biblioteca",
+  "library_bulk_undo_intro": "Elige Deshacer para una entrada eliminada a la vez. Cada restauración se comprueba por separado.",
+  "library_bulk_undo_other_action": "Esta operación no eliminó entradas de la Biblioteca.",
+  "library_bulk_undo_deadline": "Plazo original para deshacer:",
+  "library_bulk_undo_sending": "Restaurando esta entrada…",
+  "library_bulk_undo_uncertain": "El resultado es incierto. Reintenta el comando original para confirmar el resultado.",
+  "library_bulk_undo_expired": "El plazo original para deshacer ha vencido.",
+  "library_bulk_undo_restored": "Esta entrada se ha restaurado.",
   "library_progress_decimal_input_required": "Introduce un valor.",
   "library_progress_decimal_input_syntax": "Usa un decimal no negativo con hasta 12 dígitos enteros y 6 decimales, sin notación exponencial.",
   "library_progress_decimal_input_min": "Introduce {value} o más.",

@@ -4,6 +4,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import { usePrivateReportOrigin } from './private-report-current-origin';
 import { BulkOperationRecovery, type RecoveryState } from './bulk-operation-recovery';
 import { readBulkOperation, cancelBulkOperation } from './bulk-operation-recovery-server';
+import { bulkOperationUndoHref } from './bulk-operation-undo';
 import type { BulkOperation } from './bulk-operation-recovery-native';
 
 function addressed(href: string) {
@@ -95,6 +96,11 @@ function OperationReader({
       {operation && (
         <>
           <OperationDetails operation={operation} />
+          {operation.action === 'remove_from_library' && (
+            <a className="inline-flex min-h-11 items-center underline" href={bulkOperationUndoHref(getLocale(), id)}>
+              {m.library_bulk_undo_title()}
+            </a>
+          )}
           <section aria-label={m.bulk_operation_results()} className="space-y-3">
             <h2 className="text-xl font-semibold">{m.bulk_operation_results()}</h2>
             {state?.page?.outcomes.length === 0 && (

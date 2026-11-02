@@ -1,4 +1,4 @@
-import { useContext, useState } from 'react';
+import { useContext, useState, type FormEventHandler } from 'react';
 import { QueryClientContext } from '@tanstack/react-query';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { cn } from '@rezics/ui/utils';
@@ -28,14 +28,22 @@ function ContextFields({ locale, csrfToken, returnTo }: EntryFormContext) {
 export function EntryUndoForm({
   undo,
   retry = false,
+  onSubmit,
+  disabled = false,
   ...context
-}: EntryFormContext & { undo: LibraryRestoreReceipt; retry?: boolean }) {
+}: EntryFormContext & {
+  undo: LibraryRestoreReceipt;
+  retry?: boolean;
+  onSubmit?: FormEventHandler<HTMLFormElement>;
+  disabled?: boolean;
+}) {
   const [key] = useState(() => undo.idempotencyKey ?? crypto.randomUUID());
   return (
     <Exposure operation="library_entry.restore">
       <form
         method="post"
         action="/library/entry"
+        onSubmit={onSubmit}
         className="flex min-w-0 max-w-full flex-wrap items-center gap-3 text-sm [overflow-wrap:anywhere]"
       >
         <ContextFields {...context} />
@@ -48,7 +56,7 @@ export function EntryUndoForm({
         <p role="status" className="min-w-0 max-w-full">
           {m.library_removed()}
         </p>
-        <button className={entryActionClassName} type="submit">
+        <button className={entryActionClassName} type="submit" disabled={disabled}>
           {retry ? m.library_entry_restore_retry_action() : m.editor_undo()}
         </button>
       </form>

@@ -1,4 +1,12 @@
 {
+  "library_bulk_undo_title": "라이브러리 삭제 실행 취소",
+  "library_bulk_undo_intro": "삭제한 항목을 한 번에 하나씩 선택하여 복원하세요. 각 복원은 별도로 확인됩니다.",
+  "library_bulk_undo_other_action": "이 작업은 라이브러리 항목을 삭제하지 않았습니다.",
+  "library_bulk_undo_deadline": "원래 복원 기한:",
+  "library_bulk_undo_sending": "이 항목을 복원하는 중…",
+  "library_bulk_undo_uncertain": "복원 결과가 불확실합니다. 원래 명령을 다시 시도하여 결과를 확인하세요.",
+  "library_bulk_undo_expired": "원래 복원 기한이 지났습니다.",
+  "library_bulk_undo_restored": "이 항목을 복원했습니다.",
   "library_progress_decimal_input_required": "값을 입력하세요.",
   "library_progress_decimal_input_syntax": "지수 표기 없이 정수부 최대 12자리, 소수부 최대 6자리의 0 이상인 소수를 입력하세요.",
   "library_progress_decimal_input_min": "{value} 이상을 입력하세요.",

@@ -9,6 +9,7 @@ type Session = ReturnType<typeof useSession>;
 const idleSubscribe = () => () => {};
 const groups = [
   'personal_library',
+  'library_entry.restore',
   'reading_progress',
   'library_label.assignment_list',
   'library_label.unassign',

@@ -1,4 +1,12 @@
 {
+  "library_bulk_undo_title": "復原資料庫移除",
+  "library_bulk_undo_intro": "每次選擇一個已移除的項目進行復原。每次還原都會個別檢查。",
+  "library_bulk_undo_other_action": "此操作未移除資料庫項目。",
+  "library_bulk_undo_deadline": "原始復原截止時間：",
+  "library_bulk_undo_sending": "正在還原此項目…",
+  "library_bulk_undo_uncertain": "還原結果尚未確定。請重試原始命令以確認結果。",
+  "library_bulk_undo_expired": "原始復原期限已過。",
+  "library_bulk_undo_restored": "此項目已還原。",
   "library_progress_decimal_input_required": "請輸入數值。",
   "library_progress_decimal_input_syntax": "請輸入非負定點小數，整數部分最多12位、小數部分最多6位，不使用指數記法。",
   "library_progress_decimal_input_min": "請輸入不小於{value}的數值。",

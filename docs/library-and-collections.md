@@ -255,6 +255,8 @@ revision, incarnation and command key, independent of later selection; a refused
 
 Decision: Library entry Undo captures a distinct restore key with the deletion receipt and retains its original sender, headers and operands for explicit retry; cookie-backed credentials travel only as a session-bound encrypted command field, and read recovery never replaces them.
 
+Decision: Reopened bulk Library removals offer one explicit restore at a time; a separate POST rechecks the exact native target and seals its original credential before the ordinary restore command, while a typed decoder retains the installed result-evidence fields until generated client declarations are refreshed.
+
 ## Indexed filtering and disclosure
 
 Decision: Collection filter links reject the whole requested read when any predicate group is invalid, exceeds

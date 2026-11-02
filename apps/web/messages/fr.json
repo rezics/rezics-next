@@ -1,4 +1,12 @@
 {
+  "library_bulk_undo_title": "Annuler des suppressions de la Bibliothèque",
+  "library_bulk_undo_intro": "Choisissez une entrée supprimée à restaurer à la fois. Chaque restauration est vérifiée séparément.",
+  "library_bulk_undo_other_action": "Cette opération n’a pas supprimé d’entrées de la Bibliothèque.",
+  "library_bulk_undo_deadline": "Date limite d’annulation d’origine :",
+  "library_bulk_undo_sending": "Restauration de cette entrée…",
+  "library_bulk_undo_uncertain": "Le résultat est incertain. Réessayez la commande d’origine pour confirmer son résultat.",
+  "library_bulk_undo_expired": "La date limite d’annulation d’origine est dépassée.",
+  "library_bulk_undo_restored": "Cette entrée a été restaurée.",
   "library_progress_decimal_input_required": "Saisissez une valeur.",
   "library_progress_decimal_input_syntax": "Utilisez un nombre décimal positif ou nul avec au plus 12 chiffres entiers et 6 décimales, sans notation exponentielle.",
   "library_progress_decimal_input_min": "Saisissez au moins {value}.",

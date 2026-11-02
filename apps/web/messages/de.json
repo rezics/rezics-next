@@ -1,4 +1,12 @@
 {
+  "library_bulk_undo_title": "Bibliotheksentfernungen rückgängig machen",
+  "library_bulk_undo_intro": "Wähle jeweils einen entfernten Eintrag zum Wiederherstellen. Jede Wiederherstellung wird einzeln geprüft.",
+  "library_bulk_undo_other_action": "Dieser Vorgang hat keine Bibliothekseinträge entfernt.",
+  "library_bulk_undo_deadline": "Ursprüngliche Wiederherstellungsfrist:",
+  "library_bulk_undo_sending": "Eintrag wird wiederhergestellt…",
+  "library_bulk_undo_uncertain": "Das Ergebnis ist ungewiss. Wiederhole den ursprünglichen Befehl, um das Ergebnis zu bestätigen.",
+  "library_bulk_undo_expired": "Die ursprüngliche Wiederherstellungsfrist ist abgelaufen.",
+  "library_bulk_undo_restored": "Dieser Eintrag wurde wiederhergestellt.",
   "library_progress_decimal_input_required": "Gib einen Wert ein.",
   "library_progress_decimal_input_syntax": "Verwende eine nicht negative Dezimalzahl mit höchstens 12 Vorkomma- und 6 Nachkommastellen, ohne Exponentialschreibweise.",
   "library_progress_decimal_input_min": "Gib mindestens {value} ein.",

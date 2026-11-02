@@ -12,5 +12,6 @@ original viewer and CSRF, and sends complete native authorization and idempotenc
 all effects. Cancellation preserves already committed target counts and outcomes. Navigation, viewer replacement,
 locale retirement and observed exposure retirement reject late disclosure; there is no polling or persistence.
 
-Decision: render native outcome and reason identifiers verbatim, and omit deletion receipts because the current
-native outcome binding discloses no receipt; never infer a receipt from an applied removal.
+Decision: render native outcome and reason identifiers verbatim. The separate `/:locale/library/operations/:id/undo`
+address consumes the authorized native deletion evidence through `bulkOperationUndoHref`; this reader never
+restores entries or infers receipts from applied outcomes.
