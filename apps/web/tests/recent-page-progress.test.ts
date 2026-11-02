@@ -1,10 +1,13 @@
 import { expect, test } from 'bun:test';
-import { readRecentDocument, readRecentHistory, writeRecentDocument, type RecentEntry, type RecentStorage } from '../src/search/recent-history';
-import { createRecentPageProgress, RECENT_HISTORY_READ_PAGE_LIMIT } from '../src/search/recent-page-progress';
 import {
-  createRecentSearchSyncAdapter,
-  type RecentSearchTransport,
-} from '../src/search/recent-sync';
+  readRecentDocument,
+  readRecentHistory,
+  writeRecentDocument,
+  type RecentEntry,
+  type RecentStorage,
+} from '../src/search/recent-history';
+import { createRecentPageProgress, RECENT_HISTORY_READ_PAGE_LIMIT } from '../src/search/recent-page-progress';
+import { createRecentSearchSyncAdapter, type RecentSearchTransport } from '../src/search/recent-sync';
 import type { RecentItem } from '../src/search/recent';
 
 const identityRows = (start: number, count: number) =>
@@ -44,8 +47,12 @@ function nativeRows(revision: number): RecentItem[] {
 }
 
 test('keeps accepted history and pending removal on a malformed page, then retries from page one', async () => {
-  const storage = memory(), reads: (string | undefined)[] = [], writes: Parameters<RecentSearchTransport['write']>[0][] = [];
-  let revision = 4, rows = nativeRows(revision), failNext = false;
+  const storage = memory(),
+    reads: (string | undefined)[] = [],
+    writes: Parameters<RecentSearchTransport['write']>[0][] = [];
+  let revision = 4,
+    rows = nativeRows(revision),
+    failNext = false;
   const transport: RecentSearchTransport = {
     async read(cursor) {
       reads.push(cursor);
@@ -81,7 +88,8 @@ test('keeps accepted history and pending removal on a malformed page, then retri
   });
   await adapter.sync([], signal());
   expect(visible).toHaveLength(32);
-  const accepted = readRecentHistory(storage, bucket), removedId = accepted[0]!.id;
+  const accepted = readRecentHistory(storage, bucket),
+    removedId = accepted[0]!.id;
   const document = readRecentDocument(storage, bucket);
   writeRecentDocument(storage, bucket, {
     ...document,
