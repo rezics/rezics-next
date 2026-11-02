@@ -112,7 +112,9 @@ test('Game classification keyboard opening and discard preserve independent draf
     const openByKeyboard = async (opener: HTMLElement) => {
       opener.focus();
       await act(async () => user.keyboard('{Enter}'));
-      expect(window.document.activeElement).toBe(within(section()).getByRole('group', { name: /Private proposal draft/ }));
+      expect(window.document.activeElement).toBe(
+        within(section()).getByRole('group', { name: /Private proposal draft/ }),
+      );
       expect(section('schema:gamePlatform').querySelector('fieldset')).toBe(privateSibling);
       expect(siblingInputs.map((field) => field.value)).toEqual(siblingValues);
       expect(requests).toBe(0);
