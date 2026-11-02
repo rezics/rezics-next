@@ -8,17 +8,10 @@ import {
   type RealmDiscoverySectionProps,
 } from '../src/community/realm-discovery';
 import { createSearchRealmDiscoveryPage } from '../src/search/realm-discovery-section';
-import realm from '../src/kernel/recorded/board-realm-realm.json';
+import { discoveryRealm as card } from '../src/stories/patterns/realm-discovery/fixtures';
 import { m } from '../src/paraglide/messages.js';
 
 test('installed discovery retains rows through an actual page failure and retries exactly once before continuing', async () => {
-  const card = {
-    realmId: realm.realm.realmId,
-    spaceId: realm.realm.spaceId,
-    name: realm.realm.title,
-    description: '',
-    avatar: null,
-  };
   const cursor = 'failed signed +/= cursor';
   const failed = Promise.withResolvers<Response>();
   const responses = [
