@@ -2096,6 +2096,7 @@
   "refinement_selected_value": "Valor seleccionado",
   "refinement_remove": "Quitar {value}",
   "refinement_range": "Intervalo",
+  "refinement_range_remove_action": "Quitar intervalo",
   "refinement_clear": "Borrar filtros",
   "refinement_property": "Propiedad",
   "refinement_choose_property": "Elegir una propiedad",

@@ -21,6 +21,9 @@ result filters; Collection's dialog remains a separate delivery slice. No new fi
 is introduced here. Scope labels require a supported scoped action and suggestion loader; otherwise they remain
 explicitly unavailable until removed, without falling back to global search.
 
+Range controls show a localized Remove range link only for a committed property range; drafts stay local and blank
+bounds remain invalid on Apply.
+
 The [canonical stories](../stories/header-search/README.md) cover resting, focused discovery, suggestions,
 filter entry and phone interaction. `tests/header-search-composition.test.tsx` exercises the existing routed
 Search page and default shell across desktop/phone, English/Simplified Chinese and light/dark. It protects actual

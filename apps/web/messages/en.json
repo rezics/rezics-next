@@ -2126,6 +2126,7 @@
   "refinement_selected_value": "Selected value",
   "refinement_remove": "Remove {value}",
   "refinement_range": "Range",
+  "refinement_range_remove_action": "Remove range",
   "refinement_clear": "Clear filters",
   "refinement_property": "Property",
   "refinement_choose_property": "Choose a property",

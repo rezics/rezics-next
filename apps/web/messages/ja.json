@@ -2096,6 +2096,7 @@
   "refinement_selected_value": "選択した値",
   "refinement_remove": "{value}を削除",
   "refinement_range": "範囲",
+  "refinement_range_remove_action": "範囲を削除",
   "refinement_clear": "条件をクリア",
   "refinement_property": "プロパティ",
   "refinement_choose_property": "プロパティを選択",

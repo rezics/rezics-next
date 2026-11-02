@@ -2096,6 +2096,7 @@
   "refinement_selected_value": "선택한 값",
   "refinement_remove": "{value} 제거",
   "refinement_range": "범위",
+  "refinement_range_remove_action": "범위 제거",
   "refinement_clear": "필터 지우기",
   "refinement_property": "속성",
   "refinement_choose_property": "속성 선택",

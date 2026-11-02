@@ -2096,6 +2096,7 @@
   "refinement_selected_value": "已選值",
   "refinement_remove": "移除{value}",
   "refinement_range": "範圍",
+  "refinement_range_remove_action": "移除範圍",
   "refinement_clear": "清除篩選條件",
   "refinement_property": "屬性",
   "refinement_choose_property": "選擇屬性",

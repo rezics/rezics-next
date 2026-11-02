@@ -2096,6 +2096,7 @@
   "refinement_selected_value": "Ausgewählter Wert",
   "refinement_remove": "{value} entfernen",
   "refinement_range": "Bereich",
+  "refinement_range_remove_action": "Bereich entfernen",
   "refinement_clear": "Filter löschen",
   "refinement_property": "Eigenschaft",
   "refinement_choose_property": "Eigenschaft auswählen",

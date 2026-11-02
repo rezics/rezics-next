@@ -380,11 +380,21 @@ function RangeControl({
 }) {
   const id = useId();
   const range = conditions.ranges?.[definition.property];
-  const [lower, setLower] = useState(range?.gte?.toString() ?? '');
-  const [upper, setUpper] = useState(range?.lte?.toString() ?? '');
-  const [unit, setUnit] = useState(range?.unit ?? definition.units[0] ?? '');
+  const applied = range !== undefined;
+  const committedLower = range?.gte?.toString() ?? '';
+  const committedUpper = range?.lte?.toString() ?? '';
+  const committedUnit = range?.unit ?? definition.units[0] ?? '';
+  const [lower, setLower] = useState(committedLower);
+  const [upper, setUpper] = useState(committedUpper);
+  const [unit, setUnit] = useState(committedUnit);
   const [invalid, setInvalid] = useState(false);
   const time = definition.datatype === 'time';
+  useEffect(() => {
+    setLower(committedLower);
+    setUpper(committedUpper);
+    setUnit(committedUnit);
+    setInvalid(false);
+  }, [applied, committedLower, committedUpper, committedUnit]);
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-2">
@@ -397,7 +407,10 @@ function RangeControl({
             max={time ? Number.MAX_SAFE_INTEGER : undefined}
             step={time ? '1' : 'any'}
             value={lower}
-            onChange={(event) => setLower(event.currentTarget.value)}
+            onChange={(event) => {
+              setLower(event.currentTarget.value);
+              setInvalid(false);
+            }}
           />
         </Field>
         <Field>
@@ -409,7 +422,10 @@ function RangeControl({
             max={time ? Number.MAX_SAFE_INTEGER : undefined}
             step={time ? '1' : 'any'}
             value={upper}
-            onChange={(event) => setUpper(event.currentTarget.value)}
+            onChange={(event) => {
+              setUpper(event.currentTarget.value);
+              setInvalid(false);
+            }}
           />
         </Field>
       </div>
@@ -431,41 +447,57 @@ function RangeControl({
           {m.refinement_invalid_range()}
         </p>
       )}
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={!time && !unit}
-        onClick={() => {
-          const gte = lower === '' ? undefined : Number(lower);
-          const lte = upper === '' ? undefined : Number(upper);
-          if (
-            (gte === undefined && lte === undefined) ||
-            [gte, lte].some(
-              (value) => value !== undefined && (!Number.isFinite(value) || (time && !Number.isSafeInteger(value))),
-            ) ||
-            (gte !== undefined && lte !== undefined && gte > lte)
-          ) {
-            setInvalid(true);
-            return;
-          }
-          navigate(
-            href({
+      <div className="flex flex-wrap gap-2">
+        {applied && (
+          <a
+            className={buttonVariants({ variant: 'outline', size: 'sm' })}
+            href={href({
               ...conditions,
-              ranges: {
-                ...conditions.ranges,
-                [definition.property]: {
-                  ...(gte !== undefined ? { gte } : {}),
-                  ...(lte !== undefined ? { lte } : {}),
-                  ...(!time ? { unit } : {}),
+              ranges: Object.fromEntries(
+                Object.entries(conditions.ranges ?? {}).filter(([property]) => property !== definition.property),
+              ),
+            })}
+          >
+            {m.refinement_range_remove_action()}
+          </a>
+        )}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={!time && !unit}
+          onClick={() => {
+            const gte = lower === '' ? undefined : Number(lower);
+            const lte = upper === '' ? undefined : Number(upper);
+            if (
+              (gte === undefined && lte === undefined) ||
+              [gte, lte].some(
+                (value) => value !== undefined && (!Number.isFinite(value) || (time && !Number.isSafeInteger(value))),
+              ) ||
+              (gte !== undefined && lte !== undefined && gte > lte)
+            ) {
+              setInvalid(true);
+              return;
+            }
+            setInvalid(false);
+            navigate(
+              href({
+                ...conditions,
+                ranges: {
+                  ...conditions.ranges,
+                  [definition.property]: {
+                    ...(gte !== undefined ? { gte } : {}),
+                    ...(lte !== undefined ? { lte } : {}),
+                    ...(!time ? { unit } : {}),
+                  },
                 },
-              },
-            }),
-          );
-        }}
-      >
-        {m.search_apply()}
-      </Button>
+              }),
+            );
+          }}
+        >
+          {m.search_apply()}
+        </Button>
+      </div>
     </div>
   );
 }
