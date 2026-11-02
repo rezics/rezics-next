@@ -153,10 +153,24 @@ export function collectionFilterAddress(
     params.set(`r.${property}`, `${range.from ?? ''},${range.to ?? ''}`);
   const predicate = (value: URLSearchParams) =>
     JSON.stringify(
-      [...new Set(value.keys())]
+      [...new Set(['type', ...value.keys()])]
         .filter((key) => key === 'type' || /^[fr]\./.test(key))
         .sort()
-        .map((key) => [key, [...new Set(value.getAll(key))].sort()]),
+        .map((key) => {
+          if (key === 'type') return [key, value.getAll(key).length ? value.getAll(key) : ['schema:Book']];
+          if (key.startsWith('r.'))
+            return [
+              key,
+              value.getAll(key).map((range) => {
+                const [from, to, ...extra] = range.split(',');
+                const bounds = [from ? Number(from) : null, to ? Number(to) : null];
+                return extra.length || bounds.some((bound) => bound !== null && !Number.isFinite(bound))
+                  ? range
+                  : bounds;
+              }),
+            ];
+          return [key, [...new Set(value.getAll(key))].sort()];
+        }),
     );
   if (predicate(new URLSearchParams(context)) !== predicate(params)) params.delete('cursor');
   const query = params.toString();

@@ -111,6 +111,12 @@ test('correction is explicit, inspectable and preserves context; only a changed 
   const clear = new URL(collectionFilterAddress('en', 'c', {}, {}, {}, type, corrected.searchParams), corrected);
   expect(clear.searchParams.has('cursor')).toBe(false);
   expect(clear.searchParams.get('layout')).toBe('grid');
+  const unchanged = new URLSearchParams({ cursor: 'opaque', [`r.${count}`]: '1e3,' });
+  const normalized = new URL(
+    collectionFilterAddress('en', 'c', {}, { [count]: { from: 1000 } }, {}, type, unchanged),
+    corrected,
+  );
+  expect(normalized.searchParams.get('cursor')).toBe('opaque');
   expect(parse(clear.searchParams).document).toBeUndefined();
 });
 
@@ -118,8 +124,8 @@ test('rejected addresses dispatch no members request for curated or dynamic Coll
   for (const membershipKind of ['curated', 'dynamic']) {
     const calls: string[] = [];
     const client = createKernelClient('https://kernel.test', {
-      fetch: async (input) => {
-        calls.push(new URL(String(input)).pathname);
+      fetch: async (input, init) => {
+        calls.push(new URL(new Request(input, init).url).pathname);
         return Response.json({
           collection: {
             id: 'c',
