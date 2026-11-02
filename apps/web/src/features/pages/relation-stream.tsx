@@ -17,6 +17,7 @@ import {
   type Section,
 } from './overview';
 import { loadRelationGroup, relationGroupKey, type RelationGroupRequest } from './relation-stream-query';
+import { admitRelationPage } from './relation-page-admission';
 import { sameRelationStream } from './relation-stream-descriptor';
 import {
   advanceRelationProgress,
@@ -173,7 +174,7 @@ export function relationStreamItems(section: Section, value: OverviewValue, limi
 }
 
 function windowItems(section: Section | undefined, value: OverviewValue): Item[] | undefined {
-  if (!section?.ok) return;
+  if (!section?.ok || !admitRelationPage(section).ok) return;
   const decoded = relationStreamItems(section, value);
   if (!decoded) return;
   const unique = new Map<string, Item>();
@@ -501,36 +502,43 @@ function StreamState({
         result.ok && (!section.ok || !sameRelationStream(section.read, result.read))
           ? { ok: false, status: 409 }
           : result;
-      if (next.ok && !windowItems(next, value)) next = { ok: false };
-      if (next.ok && owner.expectedReader !== null) {
-        const nextObjects = privateReadingObjects(next);
-        if (!claimPrivateReading(nextObjects, owner)) {
-          owner.retire();
-          return;
+      const admission = next.ok ? admitRelationPage(next) : undefined;
+      if (next.ok && admission && !admission.ok && admission.reason === 'over-limit') {
+        setState((previous) =>
+          owner.matches(generation) ? { ...previous, error: {}, completion: undefined } : previous,
+        );
+      } else {
+        if (next.ok && !windowItems(next, value)) next = { ok: false };
+        if (next.ok && owner.expectedReader !== null) {
+          const nextObjects = privateReadingObjects(next);
+          if (!claimPrivateReading(nextObjects, owner)) {
+            owner.retire();
+            return;
+          }
+          closePrivateReading(owner.readingObjects);
+          owner.readingObjects = nextObjects;
         }
-        closePrivateReading(owner.readingObjects);
-        owner.readingObjects = nextObjects;
+        const focusTrigger = trigger.ownerDocument.activeElement === trigger ? trigger : null;
+        setState((previous) => {
+          if (!owner.matches(generation)) return previous;
+          const nextCursor = next.ok ? relationCursor(next.body) : undefined;
+          const nextProgress = next.ok ? advanceRelationProgress(previous.progress, nextCursor) : previous.progress;
+          return {
+            ...previous,
+            page: next.ok ? next : undefined,
+            progress: nextProgress,
+            error: next.ok ? undefined : { status: next.status },
+            completion: next.ok
+              ? {
+                  count: windowItems(next, value)!.length,
+                  terminal: !nextCursor || !!nextProgress.stopped,
+                  trigger: focusTrigger,
+                }
+              : undefined,
+          };
+        });
+        if (!next.ok && owner.current(generation)) void router?.invalidate();
       }
-      const focusTrigger = trigger.ownerDocument.activeElement === trigger ? trigger : null;
-      setState((previous) => {
-        if (!owner.matches(generation)) return previous;
-        const nextCursor = next.ok ? relationCursor(next.body) : undefined;
-        const nextProgress = next.ok ? advanceRelationProgress(previous.progress, nextCursor) : previous.progress;
-        return {
-          ...previous,
-          page: next.ok ? next : undefined,
-          progress: nextProgress,
-          error: next.ok ? undefined : { status: next.status },
-          completion: next.ok
-            ? {
-                count: windowItems(next, value)!.length,
-                terminal: !nextCursor || !!nextProgress.stopped,
-                trigger: focusTrigger,
-              }
-            : undefined,
-        };
-      });
-      if (!next.ok && owner.current(generation)) void router?.invalidate();
     } catch (cause) {
       if (owner.current(generation)) {
         const status = relationFailureStatus(cause);
