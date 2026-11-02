@@ -1,6 +1,8 @@
-import { useContext } from 'react';
+import { useContext, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AnonymousSessionContext, useSession } from '../../session/query';
+import { AnonymousSessionContext, sessionQuery, useSession } from '../../session/query';
+import { Button } from '../../components/ui/button';
+import { m } from '../../paraglide/messages.js';
 import { useListReaderAdmission } from './list-reader-admission';
 import { hasSelectedRealmTarget, typeListTargetFromPage } from './type-list-model';
 import { typeListQuery, type TypeListAdmissionInput, type TypeListQueryResult } from './type-list-query';
@@ -45,6 +47,8 @@ export function ConfiguredList({ list, page, cursor, locale, initialData }: Conf
   const session = useSession();
   const anonymous = useContext(AnonymousSessionContext);
   const queryClient = useQueryClient();
+  const [retrying, setRetrying] = useState(false);
+  const retryingRef = useRef(false);
   const target = typeListTargetFromPage(page);
   const selectedRealm = hasSelectedRealmTarget(target);
   const reader = useListReaderAdmission(queryClient, JSON.stringify([locale, list, page, cursor ?? null]), {
@@ -88,6 +92,7 @@ export function ConfiguredList({ list, page, cursor, locale, initialData }: Conf
     selectedRealm ? { isCurrent: () => reader.current(incarnation) } : undefined,
   );
   const loaderResult =
+    (!selectedRealm || state !== 'unavailable') &&
     requestMatches &&
     initialData?.admission.request.mode === mode &&
     (!selectedRealm || reader.initialAllowed(expectedReader))
@@ -112,16 +117,49 @@ export function ConfiguredList({ list, page, cursor, locale, initialData }: Conf
   if (selectedRealm) reader.registerQuery('configured-list', queryKey);
   const query = useQuery({
     ...options,
-    enabled: mode !== 'initial-hydration' && (!selectedRealm || (reader.canRead && state !== 'unknown')),
+    enabled:
+      mode !== 'initial-hydration' &&
+      (!selectedRealm || (reader.canRead && state !== 'unknown' && state !== 'unavailable')),
     ...(loaderResult ? { initialData: loaderResult, initialDataUpdatedAt: Date.now() } : {}),
   });
 
-  if (selectedRealm && !reader.current(incarnation)) return null;
-  if (query.isError) throw query.error;
+  async function retry() {
+    if (retryingRef.current) return;
+    retryingRef.current = true;
+    setRetrying(true);
+    try {
+      if (selectedRealm) await queryClient.fetchQuery({ ...sessionQuery, staleTime: 0 });
+      else await query.refetch();
+    } catch {
+      // The unavailable state stays available for another deliberate retry.
+    } finally {
+      retryingRef.current = false;
+      setRetrying(false);
+    }
+  }
+
+  const recovery = (unavailable: boolean) => (
+    <div className="mx-auto max-w-5xl space-y-3" aria-busy={!unavailable}>
+      <p role="status">
+        {unavailable ? m.configured_list_recovery_unavailable() : m.configured_list_recovery_pending()}
+      </p>
+      {unavailable ? (
+        <Button variant="outline" disabled={retrying} onClick={() => void retry()}>
+          {m.configured_list_recovery_retry()}
+        </Button>
+      ) : null}
+    </div>
+  );
+
+  if (selectedRealm && state === 'unavailable') return recovery(true);
+  if (selectedRealm && (state === 'unknown' || !reader.current(incarnation))) return recovery(false);
+  if (query.isError) return recovery(true);
   const result = query.data;
-  if (!result || result.kind !== 'ready') return null;
+  if (!result) return recovery(false);
+  if (result.kind !== 'ready') return recovery(true);
   const request = result.admission.request;
   const isCurrentResult =
+    (!selectedRealm || state !== 'unavailable') &&
     request.locale === locale &&
     request.node === list &&
     request.page === page &&
@@ -139,7 +177,7 @@ export function ConfiguredList({ list, page, cursor, locale, initialData }: Conf
         ? mode === 'initial-hydration' && !query.isFetchedAfterMount
         : result.admission.reader === expectedReader
       : result.admission.reader === null);
-  if (!isCurrentResult) return null;
+  if (!isCurrentResult) return recovery(true);
   return <TypeListPage page={result.page} target={result.target} node={result.node} locale={locale} />;
 }
 

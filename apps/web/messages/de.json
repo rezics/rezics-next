@@ -1,4 +1,7 @@
 {
+  "configured_list_recovery_pending": "Der aktuelle Leser wird geprüft und diese Liste wird geladen…",
+  "configured_list_recovery_retry": "Liste erneut laden",
+  "configured_list_recovery_unavailable": "Diese Liste ist vorübergehend nicht verfügbar. Versuche es erneut.",
   "member_window_cycle": "Die Liste hat eine Fortsetzung wiederholt. Beginne erneut, um aktuelle Einträge zu lesen.",
   "member_window_restart": "Neu beginnen",
   "collection_filter_address_rejected": "Dieser Filterlink kann nicht angewendet werden. Für diese Adresse wurden keine Mitglieder angefordert. Korrigiere oder lösche die Filter, um fortzufahren.",

@@ -1,4 +1,7 @@
 {
+  "configured_list_recovery_pending": "正在確認目前的讀者並載入此清單…",
+  "configured_list_recovery_retry": "重試清單",
+  "configured_list_recovery_unavailable": "此清單暫時無法使用。請再試一次。",
   "member_window_cycle": "清單的後續頁面出現重複。請重新開始讀取目前的項目。",
   "member_window_restart": "重新開始",
   "collection_filter_address_rejected": "無法套用此篩選連結。尚未為此位址請求任何成員。請修正或清除篩選條件以繼續。",

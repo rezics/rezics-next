@@ -1,4 +1,7 @@
 {
+  "configured_list_recovery_pending": "正在确认当前读者并加载此列表…",
+  "configured_list_recovery_retry": "重试列表",
+  "configured_list_recovery_unavailable": "此列表暂时无法使用。请重试。",
   "member_window_cycle": "列表的后续页面出现重复。请重新开始读取当前的条目。",
   "member_window_restart": "重新开始",
   "collection_filter_address_rejected": "无法应用此筛选链接。尚未为此地址请求任何成员。请修正或清除筛选条件以继续。",

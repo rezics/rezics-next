@@ -1,4 +1,7 @@
 {
+  "configured_list_recovery_pending": "Vérification de la session actuelle et chargement de cette liste…",
+  "configured_list_recovery_retry": "Réessayer la liste",
+  "configured_list_recovery_unavailable": "Cette liste est temporairement indisponible. Réessayez.",
   "member_window_cycle": "La liste a répété une continuation. Recommencez pour lire les entrées actuelles.",
   "member_window_restart": "Recommencer",
   "collection_filter_address_rejected": "Ce lien de filtre ne peut pas être appliqué. Aucun membre n’a été demandé pour cette adresse. Corrigez ou effacez les filtres pour continuer.",

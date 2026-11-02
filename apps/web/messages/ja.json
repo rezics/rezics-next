@@ -1,4 +1,7 @@
 {
+  "configured_list_recovery_pending": "現在の閲覧者を確認してリストを読み込んでいます…",
+  "configured_list_recovery_retry": "リストを再試行",
+  "configured_list_recovery_unavailable": "このリストは一時的に利用できません。もう一度お試しください。",
   "member_window_cycle": "一覧の続きが繰り返されました。現在の項目を最初から読み直してください。",
   "member_window_restart": "最初から読む",
   "collection_filter_address_rejected": "このフィルターリンクは適用できません。このアドレスのメンバーはリクエストされていません。フィルターを修正または解除して続行してください。",
