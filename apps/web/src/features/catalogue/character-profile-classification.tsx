@@ -96,8 +96,8 @@ export function CharacterClassification({
     const control = chooser.current?.querySelector<HTMLElement>('select, button');
     control?.focus();
   }, [draft]);
-  const current = useRef({ draft, confirmation, busy, active });
-  current.current = { draft, confirmation, busy, active };
+  const latestState = useRef({ draft, confirmation, busy, active });
+  latestState.current = { draft, confirmation, busy, active };
   const confirming =
     !!draft &&
     confirmation?.draft === draft &&
@@ -147,7 +147,7 @@ export function CharacterClassification({
     });
   };
   const closeDraft = (original: FactDraft, pending?: { draft: FactDraft; active: () => boolean }) => {
-    const latest = current.current;
+    const latest = latestState.current;
     if (
       !latest.active() ||
       latest.draft !== original ||
@@ -174,7 +174,7 @@ export function CharacterClassification({
     closeDraft(draft);
   };
   const cancelDiscard = () => {
-    const latest = current.current;
+    const latest = latestState.current;
     if (
       !latest.active() ||
       !latest.confirmation ||
