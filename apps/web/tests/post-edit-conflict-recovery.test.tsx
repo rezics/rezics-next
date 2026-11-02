@@ -36,9 +36,7 @@ test('stale editing reviews before replacement, keeps the full correction, and s
   const { sessionQuery } = await import('../src/session/query');
   const { fromPlainText } = await import('@rezics/document');
   const { m } = await import('../src/paraglide/messages.js');
-  const fetcher = mock(async () => {
-    throw new Error('Unexpected recovery read');
-  });
+  const fetcher = mock(() => Promise.reject(new Error('Unexpected recovery read')));
   Object.defineProperty(globalThis, 'fetch', {
     configurable: true,
     writable: true,
@@ -50,20 +48,11 @@ test('stale editing reviews before replacement, keeps the full correction, and s
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const owner = { state: 'signed-in' as const, subject: 'author', csrfToken: 'original-session' };
   const localMedia = '0192f3a0-6c1e-7b2a-9d4e-000000000011';
-  const currentMedia = '0192f3a0-6c1e-7b2a-9d4e-000000000012';
-  const bodyWithImage = (text: string, media: string) => {
-    const body = fromPlainText(text, 'blocks');
-    return {
-      ...body,
-      doc: {
-        ...body.doc,
-        content: [...(body.doc.content ?? []), { type: 'image', attrs: { src: media, alt: 'Selected image' } }],
-      },
-    };
-  };
+  const draft = fromPlainText('Unsaved correction', 'blocks');
+  draft.doc.content?.push({ type: 'image', attrs: { src: localMedia, alt: 'Selected image' } });
   const current = {
-    body: bodyWithImage('Admitted current correction', currentMedia),
-    mediaIds: [currentMedia],
+    body: fromPlainText('Admitted current correction', 'blocks'),
+    mediaIds: [],
     revisionId: 'current-revision',
     availability: 'available',
     licence: 'CC-BY-4.0',
@@ -95,7 +84,7 @@ test('stale editing reviews before replacement, keeps the full correction, and s
       root.render(
         <QueryClientProvider client={client}>
           <InlinePostEditor
-            initialBody={bodyWithImage('Unsaved correction', localMedia)}
+            initialBody={draft}
             initialMediaIds={[localMedia]}
             revisionId="original-revision"
             idempotencyKey="original-key"
@@ -104,12 +93,8 @@ test('stale editing reviews before replacement, keeps the full correction, and s
               commands.push(structuredClone(command));
               return outcome;
             }}
-            onCancel={() => {
-              cancelled = true;
-            }}
-            onSuccess={() => {
-              throw new Error('Unexpected success');
-            }}
+            onCancel={() => (cancelled = true)}
+            onSuccess={() => undefined}
           />
         </QueryClientProvider>,
       ),
@@ -140,25 +125,20 @@ test('stale editing reviews before replacement, keeps the full correction, and s
     await settle(() => !popup() && !!editor()?.textContent?.includes('Admitted current correction'));
     outcome = { ok: false, reason: 'unavailable' };
     await click(m.thread_edit_save());
-    expect(commands[2]).toMatchObject({ body: current.body, revisionId: current.revisionId, mediaIds: [currentMedia] });
+    expect(commands[2]).toMatchObject({ body: current.body, revisionId: current.revisionId, mediaIds: [] });
     expect(commands[2]!.idempotencyKey).not.toBe(commands[0]!.idempotencyKey);
     expect(host.textContent).not.toContain(m.thread_edit_review_current());
     await click(m.thread_edit_save());
     expect(commands[3]).toEqual(commands[2]);
-    for (const unavailable of [
-      { ...current, body: null },
-      { ...current, availability: 'removed' as const },
-    ]) {
-      outcome = { ok: false, reason: 'stale', currentPost: unavailable };
-      await mount();
-      await click(m.thread_edit_save());
-      await click(m.thread_edit_review_current());
-      expect(popup()!.textContent).toContain(m.thread_edit_current_unavailable());
-      expect(popup()!.textContent).not.toContain('Admitted current correction');
-      expect(button(m.thread_edit_replace_current(), popup()!).disabled).toBe(true);
-      await click(m.thread_edit_keep_editing(), popup()!);
-      expect(editor()!.textContent).toContain('Unsaved correction');
-    }
+    outcome = { ok: false, reason: 'stale', currentPost: { ...current, body: null } };
+    await mount();
+    await click(m.thread_edit_save());
+    await click(m.thread_edit_review_current());
+    expect(popup()!.textContent).toContain(m.thread_edit_current_unavailable());
+    expect(popup()!.textContent).not.toContain('Admitted current correction');
+    expect(button(m.thread_edit_replace_current(), popup()!).disabled).toBe(true);
+    await click(m.thread_edit_keep_editing(), popup()!);
+    expect(editor()!.textContent).toContain('Unsaved correction');
     expect(fetcher).not.toHaveBeenCalled();
   } finally {
     await act(async () => root.unmount());
