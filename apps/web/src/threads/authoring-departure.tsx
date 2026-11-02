@@ -34,6 +34,7 @@ type Decision = { kind: 'navigation'; resolve: (stay: boolean) => void } | { kin
 
 export type AuthoringLocation = { pathname: string; search: Record<string, unknown> };
 type NavigationContext = (location: AuthoringLocation) => string;
+type NavigationMessages = { title: string; unsaved: string; pending: string };
 const pathnameContext: NavigationContext = (location) => location.pathname;
 
 /** A page-local registry keeps editors' state in their owners while presenting one shared decision. */
@@ -177,10 +178,12 @@ export function AuthoringDepartureProvider({
   children,
   navigationContext = pathnameContext,
   onNavigationLeave,
+  navigationMessages,
 }: {
   children: ReactNode;
   navigationContext?: NavigationContext;
   onNavigationLeave?: () => void;
+  navigationMessages?: NavigationMessages;
 }) {
   const leave = useRef(onNavigationLeave);
   leave.current = onNavigationLeave;
@@ -222,7 +225,10 @@ export function AuthoringDepartureProvider({
       const form = event.target;
       if (event.defaultPrevented || !(form instanceof HTMLFormElement) || form.method.toLowerCase() !== 'post') return;
       const action = new URL(form.action, window.location.href);
-      if (action.origin === window.location.origin && action.pathname === '/auth/sign-out') navigation.deactivate();
+      if (action.origin === window.location.origin && action.pathname === '/auth/sign-out') {
+        leave.current?.();
+        navigation.deactivate();
+      }
     };
     document.addEventListener('submit', signingOut);
     return () => document.removeEventListener('submit', signingOut);
@@ -257,7 +263,7 @@ export function AuthoringDepartureProvider({
           if (!open) navigation.stay();
         }}
       >
-        <DepartureDialog navigation={navigation} />
+        <DepartureDialog navigation={navigation} messages={navigationMessages} />
       </AlertDialog>
     </DepartureContext.Provider>
   );
@@ -283,7 +289,13 @@ function RouterDeparture({
   return null;
 }
 
-function DepartureDialog({ navigation }: { navigation: AuthoringDepartureState }) {
+function DepartureDialog({
+  navigation,
+  messages,
+}: {
+  navigation: AuthoringDepartureState;
+  messages?: NavigationMessages;
+}) {
   const stayButton = useRef<HTMLButtonElement>(null);
   const discard = navigation.prompt?.kind === 'discard';
   const recovery = navigation.unresolved();
@@ -301,7 +313,7 @@ function DepartureDialog({ navigation }: { navigation: AuthoringDepartureState }
     >
       <AlertDialogHeader className="min-w-0 grid-cols-[minmax(0,1fr)] place-items-stretch gap-3 text-start sm:group-data-[size=default]/alert-dialog-content:place-items-stretch sm:group-data-[size=default]/alert-dialog-content:text-start">
         <AlertDialogTitle className="min-w-0 text-xl leading-snug [overflow-wrap:anywhere]">
-          {discard ? m.thread_authoring_discard_title() : m.thread_authoring_leave_title()}
+          {discard ? m.thread_authoring_discard_title() : (messages?.title ?? m.thread_authoring_leave_title())}
         </AlertDialogTitle>
         <AlertDialogDescription className="min-w-0 text-base leading-relaxed text-pretty [overflow-wrap:anywhere]">
           {discard
@@ -309,8 +321,8 @@ function DepartureDialog({ navigation }: { navigation: AuthoringDepartureState }
               ? m.thread_authoring_discard_pending()
               : m.thread_authoring_discard_unsaved()
             : recovery
-              ? m.thread_authoring_leave_pending()
-              : m.thread_authoring_leave_unsaved()}
+              ? (messages?.pending ?? m.thread_authoring_leave_pending())
+              : (messages?.unsaved ?? m.thread_authoring_leave_unsaved())}
         </AlertDialogDescription>
       </AlertDialogHeader>
       <AlertDialogFooter className="grid min-w-0 grid-cols-[minmax(0,1fr)] items-stretch gap-3 sm:grid-cols-2">

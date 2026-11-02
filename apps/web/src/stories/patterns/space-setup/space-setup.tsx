@@ -19,6 +19,11 @@ import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { NativeSelect } from '@rezics/ui/shadcn/native-select';
 import { Field, FieldLabel, FieldDescription } from '@rezics/ui/shadcn/field';
 import { m } from '../../../paraglide/messages.js';
+import {
+  AuthoringDepartureProvider,
+  useAuthoringDeparture,
+  type AuthoringLocation,
+} from '../../../threads/authoring-departure';
 import { SetupBoardPicker } from '../../../community/setup-board-picker-control';
 import {
   currentBoardConcept,
@@ -50,6 +55,9 @@ import {
 } from '../../../community/space-setup-lifetime';
 
 const useCallerLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
+// Router locations already carry the route's validated Space target. Picker searches and steps are local work.
+const setupNavigationContext = ({ pathname, search }: AuthoringLocation) =>
+  JSON.stringify([pathname, typeof search.spaceId === 'string' ? search.spaceId : null]);
 
 export type SetupTransport = {
   contexts?: ContextChoiceSource;
@@ -281,13 +289,18 @@ export function SpaceSetupForm({
   const standalone = useMemo(() => standaloneSpaceSetupLifetime(), [initialIdentity, transport, boardChoices]);
   const caller = inherited ?? standalone;
   return (
-    <SpaceSetupFormVisit
+    <AuthoringDepartureProvider
       key={caller.id}
-      initial={initial}
-      transport={transport}
-      boardChoices={boardChoices}
-      caller={caller}
-    />
+      navigationContext={setupNavigationContext}
+      onNavigationLeave={() => caller.retire()}
+      navigationMessages={{
+        title: m.space_setup_leave_title(),
+        unsaved: m.space_setup_leave_unsaved(),
+        pending: m.space_setup_leave_pending(),
+      }}
+    >
+      <SpaceSetupFormVisit initial={initial} transport={transport} boardChoices={boardChoices} caller={caller} />
+    </AuthoringDepartureProvider>
   );
 }
 
@@ -312,6 +325,8 @@ function SpaceSetupFormVisit({
   const operation = useRef(0);
   const heading = useRef<HTMLHeadingElement>(null);
   const [boardId, setBoardId] = useState<string | null>(null);
+  const [acceptedBoard, setAcceptedBoard] = useState<Extract<SetupCommand, { step: 'board' }> | null>(null);
+  const [contextReferenceBaseline, setContextReferenceBaseline] = useState(snapshot.realm?.contextId ?? '');
   const [spaceTitle, setSpaceTitle] = useState(snapshot.space?.title ?? '');
   const [spaceSummary, setSpaceSummary] = useState(snapshot.space?.summary ?? '');
   const [address, setAddress] = useState(snapshot.space?.address ?? '');
@@ -357,6 +372,48 @@ function SpaceSetupFormVisit({
   const locked = busy || pending !== null || needsRefresh || !callerCurrent || !readReady;
   const { space, realm, permitted } = snapshot;
   const concept = currentBoardConcept(currentConceptSelection, realm?.schemeId ?? null)?.choice ?? null;
+  // Each resource snapshot is its accepted baseline; another step's success cannot consume these local fields.
+  const changed =
+    (!space && (spaceTitle !== '' || spaceSummary !== '')) ||
+    address !== (space?.address ?? '') ||
+    realmTitle !== (realm?.title ?? '') ||
+    realmSummary !== (realm?.summary ?? '') ||
+    visibility !== (realm?.visibility ?? 'public') ||
+    (contextState.selected !== null && contextState.selected.id !== (realm?.contextId ?? null)) ||
+    (!contextState.selected && contextState.reference !== contextReferenceBaseline) ||
+    (scheme !== null && scheme.id !== (realm?.schemeId ?? null)) ||
+    (concept?.id ?? null) !== (acceptedBoard?.conceptId ?? null) ||
+    boardTitle !== (acceptedBoard?.title ?? '') ||
+    boardVisibility !== (acceptedBoard?.visibility ?? 'published') ||
+    purpose !== (acceptedBoard?.purpose ?? 'discussion');
+  const departure = useAuthoringDeparture(
+    callerCurrent && loaded && (changed || pending !== null),
+    pending !== null,
+    JSON.stringify([
+      spaceTitle,
+      spaceSummary,
+      address,
+      realmTitle,
+      realmSummary,
+      visibility,
+      contextState.reference,
+      contextState.selected?.id,
+      scheme?.id,
+      concept?.id,
+      boardTitle,
+      boardVisibility,
+      purpose,
+      pending?.key,
+      callerRevision,
+    ]),
+  );
+  useCallerLayoutEffect(
+    () =>
+      caller.subscribe(() => {
+        if (caller.isRetired()) departure.release();
+      }),
+    [caller, departure.release],
+  );
   useEffect(() => {
     if (conceptSelection?.source === boardChoices && !currentBoardConcept(conceptSelection, realm?.schemeId ?? null)) {
       setConceptSelection(null);
@@ -402,6 +459,7 @@ function SpaceSetupFormVisit({
           setRealmSummary(current.realm?.summary ?? '');
           setVisibility(current.realm?.visibility ?? 'public');
           contextPicker.reference(current.realm?.contextId ?? '');
+          setContextReferenceBaseline(current.realm?.contextId ?? '');
         }
         setSnapshot(current);
         setLoaded(true);
@@ -449,7 +507,16 @@ function SpaceSetupFormVisit({
         spaceId = result.space.id;
         if (command.step === 'address') setAddress(result.space.address ?? address);
       }
-      if (result.kind === 'board') setBoardId(result.id);
+      if (result.kind === 'realm' && (command.step === 'realm' || command.step === 'settings')) {
+        setRealmTitle(result.realm.title);
+        setRealmSummary(result.realm.summary);
+        setVisibility(result.realm.visibility);
+        setContextReferenceBaseline(contextPicker.getSnapshot().reference);
+      }
+      if (result.kind === 'board' && command.step === 'board') {
+        setBoardId(result.id);
+        setAcceptedBoard(command);
+      }
       // A failed refresh must never discard the command's returned identity.
       setNeedsRefresh(true);
       const current = await transport.read(spaceId);

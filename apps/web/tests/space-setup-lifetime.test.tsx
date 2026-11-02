@@ -110,7 +110,8 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 
 const { createRoot } = await import('react-dom/client');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
-const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
+const { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } =
+  await import('@tanstack/react-router');
 const { sessionQuery } = await import('../src/session/query');
 const { SpaceSetupEntry, SpaceSetupPage } = await import('../src/community/space-setup-page');
 const { SpaceSetupForm } = await import('../src/stories/patterns/space-setup/space-setup');
@@ -163,6 +164,8 @@ let client: QueryClient;
 let router: ReturnType<typeof createRouter>;
 let rerender: (() => void) | undefined;
 let replaceBoardSource: ((source: BoardChoiceSource) => void) | undefined;
+let destinationRead = deferred<void>();
+let destinationReads = 0;
 
 function PageFrame({ initial, spaceId: target }: { initial: ReadResult; spaceId?: string }) {
   const [, setRevision] = useState(0);
@@ -240,8 +243,23 @@ async function mount(
     loaderAdmissions.set(initial, captureSpaceSetupInitialAdmission(client));
   }
   if (sessionAtRender !== undefined) client.setQueryData(sessionQuery.queryKey, sessionAtRender);
-  const route = createRootRoute({ component: () => content });
-  router = createRouter({ routeTree: route, history: createMemoryHistory({ initialEntries: ['/realms/new'] }) });
+  destinationRead = deferred<void>();
+  destinationReads = 0;
+  const route = createRootRoute({ component: Outlet });
+  const setup = createRoute({ getParentRoute: () => route, path: '/realms/new', component: () => content });
+  const destination = createRoute({
+    getParentRoute: () => route,
+    path: '/destination',
+    loader: () => {
+      destinationReads++;
+      return destinationRead.promise;
+    },
+    component: () => <p>Destination</p>,
+  });
+  router = createRouter({
+    routeTree: route.addChildren([setup, destination]),
+    history: createMemoryHistory({ initialEntries: ['/realms/new'] }),
+  });
   root = createRoot(host);
   mounted = true;
   await paint();
@@ -264,7 +282,7 @@ async function edit(element: HTMLInputElement | HTMLTextAreaElement, value: stri
   });
 }
 function button(label: string) {
-  const node = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+  const node = [...window.document.querySelectorAll<HTMLButtonElement>('button')].find(
     (candidate) => candidate.textContent?.trim() === label,
   );
   expect(node).toBeDefined();
@@ -281,6 +299,18 @@ async function submit() {
   expect(form).not.toBeNull();
   await act(async () => {
     form!.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+}
+const dialog = () => window.document.querySelector('[role="alertdialog"]');
+function protectedUnload() {
+  const event = new window.Event('beforeunload', { cancelable: true });
+  window.dispatchEvent(event);
+  return event.defaultPrevented;
+}
+async function depart(href = '/destination') {
+  await act(async () => {
+    void router.navigate({ href });
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
 }
@@ -315,6 +345,7 @@ test('same-account session revisions retire Space setup command/read callbacks a
   expect(commands[0]!.headers).toEqual({ 'X-CSRF-Token': 'csrf-one' });
 
   await setSession(viewer('csrf-two'));
+  expect(protectedUnload()).toBe(false);
   hidden('Private draft from first caller');
   const readsBeforeLateCommand = reads.length;
   await settle(
@@ -331,6 +362,7 @@ test('same-account session revisions retire Space setup command/read callbacks a
   await setSession(viewer('csrf-one'));
   hidden('Private draft from first caller', 'Late private result');
   expect(commands).toHaveLength(1);
+  expect(protectedUnload()).toBe(false);
 });
 
 test('a route-loader snapshot stays bound to the session-cache revision that admitted its read', async () => {
@@ -532,4 +564,108 @@ test('production setup form fences late Board source and text pages after concep
   expect(search!.value).toBe('new-text');
   expect(host.querySelector('[role="radio"]')!.getAttribute('aria-checked')).toBe('true');
   expect(commands).toHaveLength(0);
+});
+
+test('Space setup Stay preserves exact drafts and immutable retry; Leave retires before destination reads finish', async () => {
+  await mount(<PageFrame initial={{ ...empty }} />);
+  expect(protectedUnload()).toBe(false);
+  await edit(host.querySelector('input')!, '  Private Space  ');
+  await edit(host.querySelector('textarea')!, 'First line\n  second line  ');
+  await depart('/realms/new?unrelated=value#section');
+  expect(dialog()).toBeNull();
+  await depart('/realms/new?spaceId=' + spaceId);
+  expect(window.document.querySelectorAll('[role="alertdialog"]')).toHaveLength(1);
+  expect(dialog()?.textContent).toContain(m.space_setup_leave_unsaved());
+  expect(dialog()?.querySelectorAll('button')).toHaveLength(2);
+  await click(m.thread_authoring_stay());
+  expect(host.querySelector('input')?.value).toBe('  Private Space  ');
+  expect(host.querySelector('textarea')?.value).toBe('First line\n  second line  ');
+  expect(protectedUnload()).toBe(true);
+  await submit();
+  const original = commands[0]!.data;
+  await depart();
+  expect(dialog()?.textContent).toContain(m.space_setup_leave_pending());
+  await click(m.thread_authoring_stay());
+  await settle(commands[0]!.pending, unavailable);
+  await depart();
+  await click(m.thread_authoring_stay());
+  await click(m.space_setup_retry());
+  expect(commands[1]!.data).toBe(original);
+  await depart();
+  await click(m.thread_authoring_leave());
+  expect(destinationReads).toBe(1);
+  expect(protectedUnload()).toBe(false);
+  hidden('  Private Space  ');
+  await settle(commands[1]!.pending, { kind: 'space', space: { ...existing.space!, title: 'Late accepted Space' } });
+  expect(reads).toHaveLength(0);
+  hidden('Late accepted Space');
+  await settle(destinationRead, undefined);
+});
+
+test('Space setup protects choices and independent fields, releasing only accepted steps and restored values', async () => {
+  const schemeId = id(9),
+    conceptId = id(10),
+    replacementContext = id(11);
+  let saved: SetupSnapshot = { ...existing, permitted: { address: true, settings: true, scheme: true, board: true } };
+  const transport: SetupTransport = {
+    choice: async (_kind, choiceId) => ({
+      id: choiceId,
+      label: choiceId === contextId ? 'Current Context' : 'Chosen Context',
+    }),
+    command: async (command) => {
+      if (command.step === 'scheme') {
+        saved = { ...saved, realm: { ...saved.realm!, schemeId: command.schemeId } };
+        return { kind: 'realm', realm: saved.realm! };
+      }
+      return { kind: 'board', id: id(12) };
+    },
+    read: async () => saved,
+  };
+  const source: BoardChoiceSource = {
+    schemes: async () => ({ schemes: [{ id: schemeId, label: 'Chosen scheme' }], next: null }),
+    concepts: async () => ({ concepts: [{ id: conceptId, label: 'Chosen concept' }], next: null }),
+  };
+  const choose = async () =>
+    act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 270));
+      host.querySelector<HTMLElement>('[role="radio"]')!.click();
+    });
+  const stay = async (label: string) => {
+    await depart();
+    await click(m.thread_authoring_stay());
+    expect(host.textContent).toContain(label);
+  };
+  await mount(<DynamicFormFrame initial={saved} transport={transport} source={source} />);
+  expect(protectedUnload()).toBe(false);
+  await edit(host.querySelector('input')!, 'changed-address');
+  expect(protectedUnload()).toBe(true);
+  await edit(host.querySelector('input')!, existing.space!.address!);
+  expect(protectedUnload()).toBe(false);
+  await click(m.space_setup_realm());
+  await edit(host.querySelector('textarea')!, 'Independent unsaved Realm summary');
+  await edit(host.querySelector('input[id$="-reference"]')!, replacementContext);
+  await click(m.space_setup_resolve());
+  await stay('Chosen Context');
+  await click(m.setup_context_use_current());
+  await click(m.space_setup_scheme());
+  await choose();
+  await stay('Chosen scheme');
+  await submit();
+  expect(protectedUnload()).toBe(true);
+  await click(m.space_setup_realm());
+  expect(host.querySelector('textarea')?.value).toBe('Independent unsaved Realm summary');
+  await edit(host.querySelector('textarea')!, '');
+  await edit(host.querySelector('input[id$="-reference"]')!, contextId);
+  expect(protectedUnload()).toBe(false);
+  await click(m.setup_context_use_current());
+  expect(protectedUnload()).toBe(false);
+  await click(m.space_setup_board());
+  expect(protectedUnload()).toBe(false);
+  await choose();
+  await edit(host.querySelector('input')!, 'New Board');
+  await stay('Chosen concept');
+  expect(host.querySelector('input')?.value).toBe('New Board');
+  await submit();
+  expect(host.textContent).toContain(m.space_setup_complete());
+  expect(protectedUnload()).toBe(false);
 });

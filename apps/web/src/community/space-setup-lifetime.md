@@ -32,6 +32,16 @@ does not lose a confirmed result or replay the accepted command. Context/Subject
 Context directory, Board scheme/concept limits, native ordering/cursors, freshness and disclosure remain with their
 existing readers and command authorities.
 
+The mounted form registers changed setup fields, Context/scheme/concept selections and unresolved commands with the
+shared authoring-departure provider. Router departure (including a changed validated Space target and Back/Forward)
+offers one accessible Stay/Leave decision; active protection also installs the native browser beforeunload guard.
+Stay keeps the step, exact fields, selections and immutable command/key. Leave immediately retires the caller before
+the next route read, losing local retry recovery without cancelling or undoing an accepted command. Session, target
+and source retirement release old protection irreversibly. Confirmed steps compare against their accepted resource
+values even when the follow-up read fails; independent changed fields remain protected after any successful step.
+Decision: picker search queries are browsing state; changed Context reference input and selections are protected,
+while step navigation and pausing keep the same in-memory draft without a departure decision.
+
 `SpaceSetupEntry` captures the session source before its read, checks the actual reader before returning a result to
 its private cache, and keys each generation by the observed source revision. No lifecycle or permission authority is
 inferred from Context directory or Board display data. No additional native read, polling or per-row hydration is
