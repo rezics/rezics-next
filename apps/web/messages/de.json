@@ -2024,6 +2024,7 @@
   "realm_shelf_stale": "Diese Fortsetzung ist abgelaufen oder wurde geändert. Lade die Liste erneut.",
   "realm_shelf_unavailable": "Dieser Teil der Liste ist nicht verfügbar. Versuche es erneut.",
   "realm_shelf_restart": "Liste neu laden",
+  "realm_shelf_retry": "Erneut versuchen",
   "realm_shelf_loading": "Wird geladen…",
   "realm_boards_more": "Weitere Boards laden",
   "realm_publications_more": "Weitere Veröffentlichungen laden",

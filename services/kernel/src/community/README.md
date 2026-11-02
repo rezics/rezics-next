@@ -540,6 +540,11 @@ cursors have distinct visible states; only an explicit reload restarts a list. C
 credential mode and native viewer binding. The existing bounded subject-summary reads are reused without an
 additional publication-head read per card.
 
+A transient read failure retains the admitted window and cursor. Retry repeats the failed request, including a
+first-page refresh when the retained window is exhausted; only its successful response replaces that window.
+Denial clears the old disclosure, and Realm or session retirement hides it. Supplied board descriptions are retained
+on every page from the bounded list response, without per-board reads.
+
 Curation uses `POST /v1/realms/{realmId}/publications` with `{subjectId}`, or the existing `:withdraw` and `:reject`
 commands. Native `realm:publish` and subject readability authorize each command, including receipt replay.
 Membership, `realm:manage`, ownership elsewhere and Context editorial authority never substitute for that check.

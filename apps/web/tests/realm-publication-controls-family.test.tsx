@@ -90,7 +90,7 @@ test('Realm publication selection and outcomes use installed shared family with 
   let currentSubjects: PublishedSubject[] = [{ ...supplied, publicationId: publication.publicationId }];
   let control!: ReturnType<typeof usePublicationControls>;
   let restarts = 0;
-  const loads: (boolean | undefined)[] = [];
+  const loads: (boolean | undefined | 'retry')[] = [];
   let continuation: { next: string | null; busy: boolean; failure: 'denied' | 'unavailable' | 'stale' | null } = {
     next: null,
     busy: false,
@@ -132,6 +132,9 @@ test('Realm publication selection and outcomes use installed shared family with 
             label={m.realm_publications_more()}
             load={async (restart) => {
               loads.push(restart);
+            }}
+            retry={async () => {
+              loads.push('retry');
             }}
           />
         </aside>
@@ -379,17 +382,15 @@ test('Realm publication selection and outcomes use installed shared family with 
                   : null,
           );
           const restart = failure === 'stale' || failure === 'denied';
-          expect(buttons(aside)).toHaveLength(restart || next ? 1 : 0);
-          if (restart || next) {
-            const node = button(
-              restart ? m.realm_shelf_restart() : busy ? m.realm_shelf_loading() : m.realm_publications_more(),
-              aside,
-            );
+          const idleLabel = failure ? m.realm_shelf_retry() : m.realm_publications_more();
+          expect(buttons(aside)).toHaveLength(failure || next ? 1 : 0);
+          if (failure || next) {
+            const node = button(restart ? m.realm_shelf_restart() : busy ? m.realm_shelf_loading() : idleLabel, aside);
             expect(node.disabled).toBe(busy);
             expect(node.className).toContain('min-h-11');
             if (!busy) {
               await click(node);
-              expect(loads.at(-1)).toBe(restart ? true : undefined);
+              expect(loads.at(-1)).toBe(restart ? true : failure ? 'retry' : undefined);
             }
           }
           expect(aside.textContent).not.toContain(m.realm_published_empty());

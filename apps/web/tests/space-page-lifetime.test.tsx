@@ -191,6 +191,7 @@ const { createMemoryHistory, createRootRoute, createRootRouteWithContext, create
   await import('@tanstack/react-router');
 const { sessionQuery } = await import('../src/session/query');
 const { spaceQuery, useShelfList } = await import('../src/community/space-queries');
+const { ShelfContinuation } = await import('../src/community/publication-controls-view');
 const { captureSpacePageAdmission, SpacePageLifetimeHost, useSpacePageLifetime } =
   await import('../src/community/space-page-lifetime');
 const { SpacePage } = await import('../src/community/space-page');
@@ -294,7 +295,12 @@ function ShelfProbe({
   const lifetime = useSpacePageLifetime();
   const shelf = useShelfList(initial, read, lifetime);
   latestShelfProbe = shelf;
-  return <output aria-label="Shelf probe">{shelf.items.map((item) => item.title).join(',')}</output>;
+  return (
+    <>
+      <output aria-label="Shelf probe">{shelf.items.map((item) => item.title).join(',')}</output>
+      <ShelfContinuation {...shelf} label={m.realm_boards_more()} />
+    </>
+  );
 }
 
 async function loadSpaceRoute(
@@ -984,7 +990,7 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
     expect(calls.publications).toHaveLength(1);
   });
 
-  test('current explicit next and restart preserve independent cursors, bounded reads and merge behavior', async () => {
+  test('current explicit next and retry preserve independent cursors, bounded reads and merge behavior', async () => {
     const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
     client = nextClient;
     nextClient.setQueryData(sessionQuery.queryKey, signedOut());
@@ -1009,15 +1015,45 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
     await settle();
     expect(host.textContent).toContain(m.realm_shelf_unavailable());
     expect(host.textContent).toContain('Next publication');
-    click(m.realm_shelf_restart());
+    click(m.realm_shelf_retry());
     await settle();
     expect(calls.boards).toEqual([
       { realmId, cursor: 'board-cursor-one', credentialMode: 'anonymous' },
-      { realmId, credentialMode: 'anonymous' },
+      { realmId, cursor: 'board-cursor-one', credentialMode: 'anonymous' },
     ]);
     expect(host.textContent).toContain('Original board');
     expect(host.textContent).toContain('Restart board');
     expect(calls.publications).toEqual([{ realmId, cursor: 'publication-cursor-one', credentialMode: 'anonymous' }]);
+  });
+
+  test('failed fresh reads retain their window and retry the first page even after exhaustion', async () => {
+    for (const next of [null, 'retained-cursor']) {
+      const initial = { items: [board()], next, unavailable: 2, credentialMode: 'anonymous' as const };
+      const fresh = deferred<ShelfPage<RealmBoard>>();
+      const replacement = { ...initial, items: [board(id(52), 'Fresh board')], next: null, unavailable: 1 };
+      const requests: { cursor?: string; credentialMode: 'anonymous' | 'session' }[] = [];
+      await mount(
+        <ShelfProbe
+          initial={initial}
+          read={async (input) => {
+            requests.push(input);
+            if (requests.length === 1) throw new Error('Transient transport failure');
+            return requests.length === 2 ? fresh.promise : { kind: 'denied' };
+          }}
+        />,
+      );
+      await act(() => latestShelfProbe!.load(true));
+      expect(latestShelfProbe).toMatchObject({ ...initial, failure: 'unavailable' });
+      await act(() => click(m.realm_shelf_retry()));
+      expect(latestShelfProbe).toMatchObject({ ...initial, busy: true });
+      expect(host.querySelector('button')?.disabled).toBe(true);
+      await act(() => fresh.resolve({ ...replacement, kind: 'page' }));
+      expect(requests).toEqual([{ credentialMode: 'anonymous' }, { credentialMode: 'anonymous' }]);
+      expect(latestShelfProbe).toMatchObject({ ...replacement, failure: null });
+      expect(host.querySelector('button')).toBeNull();
+      await act(() => latestShelfProbe!.load(true));
+      expect(latestShelfProbe).toMatchObject({ items: [], unavailable: 0, failure: 'denied' });
+    }
   });
 
   test('saved update and continuation callbacks cannot change a new target, locale or remounted visit', async () => {

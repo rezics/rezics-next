@@ -133,6 +133,7 @@ function problem(status: number) {
 const boardWire = (title: string) => ({
   id: boardId,
   title,
+  description: `${title} description`,
   purpose: 'discussion',
   visibility: 'published',
   availability: 'available',
@@ -667,6 +668,8 @@ test('connected Space and Realm reads preserve their original reader through hyd
     }),
   );
   expect(host.textContent).toContain('Native board');
+  expect(host.textContent).toContain('Native board description');
+  expect(nativeCalls.filter((call) => call.path.includes('/boards'))).toHaveLength(1);
   expect(host.textContent).toContain('Native publication');
 
   // The actual Realm route binds a null-CSRF read-only browser session to the subject returned by preparation.

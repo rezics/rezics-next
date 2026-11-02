@@ -354,12 +354,14 @@ export function ShelfContinuation({
   busy,
   failure,
   load,
+  retry,
   label,
 }: {
   next: string | null;
   busy: boolean;
   failure: 'denied' | 'unavailable' | 'stale' | null;
   load: (restart?: boolean) => Promise<void>;
+  retry: () => Promise<void>;
   label: string;
 }) {
   return (
@@ -382,6 +384,15 @@ export function ShelfContinuation({
             onClick={() => void load(true)}
           >
             {m.realm_shelf_restart()}
+          </Button>
+        ) : failure === 'unavailable' ? (
+          <Button
+            className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
+            variant="outline"
+            disabled={busy}
+            onClick={() => void retry()}
+          >
+            {busy ? m.realm_shelf_loading() : m.realm_shelf_retry()}
           </Button>
         ) : next ? (
           <Button

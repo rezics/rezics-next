@@ -2024,6 +2024,7 @@
   "realm_shelf_stale": "Cette pagination a expiré ou changé. Rechargez la liste pour continuer.",
   "realm_shelf_unavailable": "Cette partie de la liste est indisponible. Réessayez.",
   "realm_shelf_restart": "Recharger la liste",
+  "realm_shelf_retry": "Réessayer",
   "realm_shelf_loading": "Chargement…",
   "realm_boards_more": "Charger plus de forums",
   "realm_publications_more": "Charger plus de publications",

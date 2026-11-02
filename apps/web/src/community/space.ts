@@ -316,7 +316,13 @@ export async function loadRealmShelfPageWithOrigin(
       const page = readCommunity(result);
       const items = page.items
         .filter((board) => board.availability === 'available' && board.visibility !== 'taken_down')
-        .map((board) => ({ id: board.id, title: board.title, purpose: board.purpose, visibility: board.visibility }));
+        .map((board) => ({
+          id: board.id,
+          title: board.title,
+          description: (board as typeof board & { description?: string | null }).description ?? null,
+          purpose: board.purpose,
+          visibility: board.visibility,
+        }));
       return {
         value: {
           kind: 'page',

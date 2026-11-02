@@ -28,7 +28,10 @@ export type RealmPageQueryResult = {
   admission: SpacePageAdmission;
 };
 
-/** A failed continuation retains both its window and cursor. Only an explicit restart replaces them. */
+type ShelfRead = { restart: boolean; cursor: string | null };
+type FailedShelfRead = ShelfRead & { kind: 'denied' | 'unavailable' | 'stale' };
+
+/** A failed read retains its admitted window and request; a successful restart replaces the window. */
 export function useShelfList<T extends { id: string }>(
   initial: { items: T[]; next: string | null; unavailable: number; credentialMode: ReadCredentialMode },
   read: (input: {
@@ -40,7 +43,7 @@ export function useShelfList<T extends { id: string }>(
 ) {
   const queryClient = useQueryClient();
   const [page, setPage] = useState(initial);
-  const [failure, setFailure] = useState<'denied' | 'unavailable' | 'stale' | null>(null);
+  const [failedRead, setFailedRead] = useState<FailedShelfRead | null>(null);
   const [busy, setBusy] = useState(false);
   const generation = useRef(0);
   const mounted = useRef(true);
@@ -60,13 +63,13 @@ export function useShelfList<T extends { id: string }>(
     generation.current++;
     active.current = null;
     setPage(initial);
-    setFailure(null);
+    setFailedRead(null);
     setBusy(false);
   }, [lifetime]);
   const canPublish = () => mounted.current && (!lifetime || lifetime.current());
-  async function load(restart = false) {
+  async function requestPage({ restart, cursor }: ShelfRead) {
     const previous = active.current;
-    if (!canPublish() || (previous && previous.generation === generation.current) || (!restart && !page.next)) return;
+    if (!canPublish() || (previous && previous.generation === generation.current)) return;
     const shelfTicket = lifetime
       ? lifetime.captureShelfRead()
       : requireReaderOrigin
@@ -88,6 +91,8 @@ export function useShelfList<T extends { id: string }>(
           lifetime.owns(ticket) &&
           lifetime.shelfReadOwns(shelfTicket))) &&
       (!requireReaderOrigin || !!lifetime || (!!shelfTicket && standaloneShelfReadIsCurrent(shelfTicket)));
+    const fail = (kind: FailedShelfRead['kind']) =>
+      setFailedRead((previous) => (owns() ? { kind, restart, cursor } : previous));
     if (!owns()) {
       if (active.current === request) active.current = null;
       return;
@@ -97,7 +102,7 @@ export function useShelfList<T extends { id: string }>(
       if (!owns()) return;
       const result = await read({
         credentialMode: page.credentialMode,
-        ...(!restart && page.next ? { cursor: page.next } : {}),
+        ...(cursor ? { cursor } : {}),
       });
       if (!owns()) return;
       const readerOrigin = result.readerOrigin;
@@ -109,16 +114,16 @@ export function useShelfList<T extends { id: string }>(
           !lifetime &&
           (!shelfTicket || !standaloneShelfReaderMatches(shelfTicket, readerOrigin)))
       ) {
-        setFailure((previous) => (owns() ? 'unavailable' : previous));
+        fail('unavailable');
         return;
       }
       if (result.kind !== 'page') {
-        setFailure((previous) => (owns() ? result.kind : previous));
+        fail(result.kind);
         if (result.kind === 'denied' && owns())
           setPage((previous) => (owns() ? { ...previous, items: [], unavailable: 0 } : previous));
         return;
       }
-      setFailure((previous) => (owns() ? null : previous));
+      setFailedRead((previous) => (owns() ? null : previous));
       setPage((previous) => {
         if (!owns()) return previous;
         const items = new Map((restart ? [] : previous.items).map((item) => [item.id, item]));
@@ -131,13 +136,21 @@ export function useShelfList<T extends { id: string }>(
         };
       });
     } catch {
-      setFailure((previous) => (owns() ? 'unavailable' : previous));
+      fail('unavailable');
     } finally {
       const stillOwns = owns();
       settled = stillOwns;
       if (active.current === request) active.current = null;
       if (stillOwns) setBusy(false);
     }
+  }
+  function load(restart = false) {
+    if (!restart && !page.next) return Promise.resolve();
+    return requestPage({ restart, cursor: restart ? null : page.next });
+  }
+  function retry() {
+    if (!failedRead) return Promise.resolve();
+    return requestPage(failedRead);
   }
   function update(change: (previous: typeof initial) => typeof initial) {
     if (!canPublish()) return;
@@ -150,7 +163,7 @@ export function useShelfList<T extends { id: string }>(
       return change(previous);
     });
   }
-  return { ...page, failure, busy, load, update };
+  return { ...page, failure: failedRead?.kind ?? null, busy, load, retry, update };
 }
 
 export const spaceQuery = (

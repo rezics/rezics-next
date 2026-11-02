@@ -2024,6 +2024,7 @@
   "realm_shelf_stale": "Esta continuación ha caducado o cambiado. Recarga la lista para continuar.",
   "realm_shelf_unavailable": "Esta parte de la lista no está disponible. Inténtalo de nuevo.",
   "realm_shelf_restart": "Recargar lista",
+  "realm_shelf_retry": "Reintentar",
   "realm_shelf_loading": "Cargando…",
   "realm_boards_more": "Cargar más foros",
   "realm_publications_more": "Cargar más publicaciones",
