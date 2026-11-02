@@ -197,17 +197,25 @@ completion precedence. Explicit NULL tags and deduplication avoid duplicate rows
 For `m=popcount(unsigned(C))`, there are `q=2m <=128` streams. The actual submitted
 head/refill algorithm performs at most `q+d` seeks, at most 1,128 for a full batch.
 That is only selection. A conservative four native family probes per ID already
-reserve `4d`; consequently its disconnected certificate is:
+reserve `4d` **if all four families require independent growing-path starts per
+ID**. Under that additional assumption, the proposed budget would be:
 
 ```text
-P_full >= 128 + 1,000 + 4*1,000 + P_other = 5,128 + P_other > 4,000
-P_short >= 128 +    10 + 4*   10 + P_other =   178 + P_other >    40
+P_full_budget  = 128 + 1,000 + 4*1,000 + P_other = 5,128 + P_other > 4,000
+P_short_budget = 128 +    10 + 4*   10 + P_other =   178 + P_other >    40
 ```
 
-These are required reservations for that conservative composition, **not lower
-bounds on all PostgreSQL executions**. Native array scans, persistent stream
-cursors or a changed physical layout might save descents. No such savings or
-inclusive inequality are established by the submitted schema and SQL.
+This is a conditional composition, **not a lower bound on the frozen fixture or
+all PostgreSQL executions**. The frozen fixture seeds status rows; its other
+three deletion families are empty. Their negative probes cannot be assigned
+growing height without growing those relations too. With one native and one
+projection growing-path start per ID, the arithmetic would instead be
+`128+1,000+1,000+1,000=3,128`, leaving 872 for every remaining path. That is not a
+proved pass either: array scans, stream refills, constraints and triggers need
+their actual trace. Native array scans, persistent stream cursors or a changed
+physical layout might save starts. Counting alone does not reject the full-batch
+prefix candidate; its full-domain representation, short-batch and inclusive cost
+certificate remain unproved.
 
 The short problem is not only the worst 64-bit cutoff. Choose the supported
 millisecond cutoff `C=2^32-1`, with `now=C+30 days`. Its sign-flipped value has 33
@@ -216,6 +224,9 @@ the queried completion prefixes in both apps with creation-ineligible rows, and
 put ten eligible rows in one prefix. Empty/range-negative streams still cost
 seeks; they cannot be omitted without a maintained, covered emptiness directory.
 That directory's updates, coverage, invalidation and deletion would be new costs.
+The 66 starts refute a one-start-per-stream certificate under 40; they do not
+alone prove a failed physical classifier. That additionally requires growing
+backing indexes and the measured block trace, with its ordinary-logarithmic fit.
 
 An important correction to an easy rejection argument: **PostgreSQL DELETE does
 not synchronously descend all 64 expression indexes to remove each tuple**.
