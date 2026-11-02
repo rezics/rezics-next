@@ -32,10 +32,12 @@ export type NativeEffect = {
 type RegisteredEffect = Effect | NativeEffect;
 
 type RegisteredEffects = {
-  prepareIdentityOriginals(envelopes: readonly Envelope[]): Promise<void>;
   enqueue(envelopes: readonly Envelope[]): Promise<void>;
   admit?: (client: PoolClient, envelopes: readonly Envelope[]) => Promise<void>;
 };
+const identityOriginalPreparations = new WeakMap<
+  RegisteredEffects, (envelopes: readonly Envelope[]) => Promise<void>
+>();
 
 type WorkOptions = { databaseUrl: string; executorId?: string; systemDatabasePool?: Pool };
 
@@ -152,8 +154,7 @@ export function registerEffects(effects: RegisteredEffect[], pool?: Pool): Regis
     }
   };
 
-  return {
-    prepareIdentityOriginals,
+  const registered: RegisteredEffects = {
     ...(admit === undefined ? {} : { admit }),
     async enqueue(envelopes) {
       // Direct enqueuers converge on the same durable original too.
@@ -213,6 +214,8 @@ export function registerEffects(effects: RegisteredEffect[], pool?: Pool): Regis
       );
     },
   };
+  identityOriginalPreparations.set(registered, prepareIdentityOriginals);
+  return registered;
 }
 
 let worker: { stop(): Promise<void> } | undefined;
@@ -267,7 +270,7 @@ export function relayEffects(pool: Pool, effects: ReturnType<typeof registerEffe
     consumer: EFFECTS_CONSUMER,
     partition,
     apply: async (envelopes) => {
-      await effects.prepareIdentityOriginals(envelopes);
+      await identityOriginalPreparations.get(effects)?.(envelopes);
       if (effects.admit) {
         await withConnection(pool, async (client) => {
           await client.query('BEGIN');
