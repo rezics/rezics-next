@@ -44,15 +44,16 @@ async function setup() {
   const type = (value = 'delete my account') => flush(() => fill(page.host.querySelector('input')!, value));
   return { ...page, router, view, navigate, choose, unload, type };
 }
-test('clean input leaves freely; Stay keeps the exact invalid confirmation, feedback and keyboard focus', async () => {
+test('clean confirmation leaves freely', async () => {
   const page = await setup();
   await page.type('   ');
   expect(page.unload()).toBe(false);
   await page.navigate();
+  expect(page.router.history.location.pathname).toBe('/security');
   expect(document.querySelector('[role="alertdialog"]')).toBeNull();
-  await flush(() => {
-    void page.router.navigate({ to: '/account/delete' });
-  });
+});
+test('Stay keeps the exact invalid confirmation, feedback and keyboard focus; Leave discards it', async () => {
+  const page = await setup();
   await page.type('  unfinished DELETE  ');
   await flush(() => send(page.host));
   const input = page.host.querySelector('input')!;
