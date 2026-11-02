@@ -22,7 +22,7 @@ import { dirname, join, resolve } from 'node:path';
 
 const MANIFEST_FILE = 'manifest.json';
 const PACK_FILE = 'snapshot.pack';
-const FORMAT = 'rezics-native-git-snapshot-v1';
+const FORMAT = 'rezics-native-git-snapshot-v2';
 const OBJECT_FORMATS = ['sha1', 'sha256'] as const;
 // Dozens of workers pack concurrently on a loaded host; two minutes was too short at load 70.
 const GIT_OPERATION_TIMEOUT_MS = 600_000;
@@ -33,6 +33,8 @@ type Manifest = {
   objectFormat: ObjectFormat;
   head: string;
   indexTree: string;
+  dev: string | null;
+  shallow: string;
   pack: { file: typeof PACK_FILE; bytes: number; sha256: string };
 };
 
@@ -85,6 +87,20 @@ function runGit(cwd: string, args: string[], overrides: Record<string, string> =
   git(cwd, args, overrides);
 }
 
+function optionalGit(cwd: string, args: string[], missingExitCode: number): string | undefined {
+  const result = Bun.spawnSync(['git', ...args], {
+    cwd,
+    env: environment(),
+    stdin: 'ignore',
+    stdout: 'pipe',
+    stderr: 'ignore',
+    timeout: GIT_OPERATION_TIMEOUT_MS,
+  });
+  if (result.exitCode === 0) return result.stdout.toString().trim();
+  if (!result.exitedDueToTimeout && result.exitCode === missingExitCode) return undefined;
+  throw new Error('check-git: native Git operation failed');
+}
+
 function validObjectId(value: unknown, format: ObjectFormat): value is string {
   return typeof value === 'string' && new RegExp(`^[a-f0-9]{${format === 'sha1' ? 40 : 64}}$`).test(value);
 }
@@ -128,6 +144,7 @@ function verifySnapshotRepository(repository: string, packPath: string, manifest
     `--template=${template}`,
     gitDirectory,
   ]);
+  writeFileSync(join(gitDirectory, 'shallow'), `${manifest.shallow}\n`, { mode: 0o600, flag: 'wx' });
   const pack = Bun.spawnSync(['git', '--git-dir', gitDirectory, 'index-pack', '--strict', '--stdin'], {
     cwd: repository,
     env: environment(),
@@ -139,9 +156,16 @@ function verifySnapshotRepository(repository: string, packPath: string, manifest
   if (pack.exitCode !== 0) throw new Error('check-git: native Git pack verification failed');
   const gitEnv = { GIT_DIR: gitDirectory };
   runGit(repository, ['update-ref', 'refs/heads/check-snapshot', manifest.head], gitEnv);
+  if (manifest.dev !== null) runGit(repository, ['update-ref', 'refs/heads/dev', manifest.dev], gitEnv);
   runGit(repository, ['update-ref', 'refs/rezics-check/staged-index', manifest.indexTree], gitEnv);
   runGit(repository, ['symbolic-ref', 'HEAD', 'refs/heads/check-snapshot'], gitEnv);
   runGit(repository, ['fsck', '--strict', '--connectivity-only', '--no-reflogs'], gitEnv);
+  if (
+    manifest.dev !== null &&
+    git(repository, ['merge-base', manifest.head, manifest.dev], gitEnv) !== manifest.shallow
+  ) {
+    throw new Error('check-git: restored snapshot does not preserve its development merge base');
+  }
   runGit(repository, ['cat-file', '-e', `${manifest.head}^{commit}`], gitEnv);
   runGit(repository, ['cat-file', '-e', `${manifest.indexTree}^{tree}`], gitEnv);
 }
@@ -162,7 +186,7 @@ function reusableCacheRoot(source: string): string | undefined {
 
 async function readReusableSnapshot(
   directory: string,
-  identity: Pick<Manifest, 'objectFormat' | 'head' | 'indexTree'>,
+  identity: Pick<Manifest, 'objectFormat' | 'head' | 'indexTree' | 'dev' | 'shallow'>,
 ): Promise<{ manifestPath: string; packPath: string }> {
   const manifestPath = join(directory, MANIFEST_FILE);
   const packPath = join(directory, PACK_FILE);
@@ -179,6 +203,8 @@ async function readReusableSnapshot(
     manifest.objectFormat !== identity.objectFormat ||
     manifest.head !== identity.head ||
     manifest.indexTree !== identity.indexTree ||
+    manifest.dev !== identity.dev ||
+    manifest.shallow !== identity.shallow ||
     statSync(packPath).size !== manifest.pack.bytes ||
     (await sha256File(packPath)) !== manifest.pack.sha256
   ) {
@@ -192,7 +218,7 @@ async function publishReusableSnapshot(
   cacheDirectory: string,
   manifestPath: string,
   packPath: string,
-  identity: Pick<Manifest, 'objectFormat' | 'head' | 'indexTree'>,
+  identity: Pick<Manifest, 'objectFormat' | 'head' | 'indexTree' | 'dev' | 'shallow'>,
 ): Promise<void> {
   mkdirSync(cacheRoot, { recursive: true, mode: 0o700 });
   if (!isDirectory(cacheRoot)) throw new Error('check-git: native Git snapshot cache directory is unsafe');
@@ -241,6 +267,18 @@ export async function stageCheckGit(workspace: string, artifactDirectory: string
   }
   const objectFormat = objectFormatText as ObjectFormat;
   const head = git(source, ['rev-parse', '--verify', 'HEAD^{commit}']);
+  const devCandidate = optionalGit(source, ['rev-parse', '--verify', 'dev^{commit}'], 128);
+  const dev = devCandidate && validObjectId(devCandidate, objectFormat) ? devCandidate : undefined;
+  if (devCandidate !== undefined && dev === undefined)
+    throw new Error('check-git: development ref identity is invalid');
+  const mergeBaseCandidate = dev ? optionalGit(source, ['merge-base', head, dev], 1) : undefined;
+  const mergeBase =
+    mergeBaseCandidate && validObjectId(mergeBaseCandidate, objectFormat) ? mergeBaseCandidate : undefined;
+  if (mergeBaseCandidate !== undefined && mergeBase === undefined) {
+    throw new Error('check-git: development merge-base identity is invalid');
+  }
+  const shallow = mergeBase ?? head;
+  const devCommit = mergeBase ? dev! : null;
   const objectDirectory = git(source, ['rev-parse', '--path-format=absolute', '--git-path', 'objects']);
   const sourceIndex = git(source, ['rev-parse', '--path-format=absolute', '--git-path', 'index']);
   if (!validObjectId(head, objectFormat) || !isDirectory(objectDirectory)) {
@@ -264,6 +302,7 @@ export async function stageCheckGit(workspace: string, artifactDirectory: string
       GIT_ALTERNATE_OBJECT_DIRECTORIES: alternateObjectPath(objectDirectory),
     };
     const isolatedGit = { GIT_DIR: bare, GIT_ALTERNATE_OBJECT_DIRECTORIES: alternateObjectPath(objectDirectory) };
+    writeFileSync(join(bare, 'shallow'), `${shallow}\n`, { mode: 0o600, flag: 'wx' });
     // Keep the source Git directory active while reading a copied index. This lets Git resolve linked-worktree
     // split-index shared files without changing the source index or writing objects into the source object store.
     const indexTree = git(source, ['write-tree'], {
@@ -271,12 +310,18 @@ export async function stageCheckGit(workspace: string, artifactDirectory: string
       GIT_INDEX_FILE: indexCopy,
     });
     if (!validObjectId(indexTree, objectFormat)) throw new Error('check-git: staged index identity is invalid');
-    const identity: Pick<Manifest, 'objectFormat' | 'head' | 'indexTree'> = { objectFormat, head, indexTree };
+    const identity: Pick<Manifest, 'objectFormat' | 'head' | 'indexTree' | 'dev' | 'shallow'> = {
+      objectFormat,
+      head,
+      indexTree,
+      dev: devCommit,
+      shallow,
+    };
     const cacheRoot = reusableCacheRoot(source);
     if (cacheRoot !== undefined) {
       mkdirSync(cacheRoot, { recursive: true, mode: 0o700 });
       if (!isDirectory(cacheRoot)) throw new Error('check-git: native Git snapshot cache directory is unsafe');
-      const cacheDirectory = join(cacheRoot, `${objectFormat}-${head}-${indexTree}`);
+      const cacheDirectory = join(cacheRoot, `${objectFormat}-${head}-${indexTree}-${devCommit ?? 'unscoped'}`);
       if (existsSync(cacheDirectory)) {
         const cached = await readReusableSnapshot(cacheDirectory, identity);
         copyFileSync(cached.manifestPath, manifestPath);
@@ -285,6 +330,7 @@ export async function stageCheckGit(workspace: string, artifactDirectory: string
       }
     }
     runGit(build, ['update-ref', 'refs/heads/check-snapshot', head], isolatedGit);
+    if (devCommit !== null) runGit(build, ['update-ref', 'refs/heads/dev', devCommit], isolatedGit);
     runGit(build, ['update-ref', 'refs/rezics-check/staged-index', indexTree], isolatedGit);
     runGit(build, ['symbolic-ref', 'HEAD', 'refs/heads/check-snapshot'], isolatedGit);
 
@@ -294,7 +340,9 @@ export async function stageCheckGit(workspace: string, artifactDirectory: string
       packed = Bun.spawnSync(['git', 'pack-objects', '--stdout', '--revs', '--threads=2'], {
         cwd: build,
         env: environment(isolatedGit),
-        stdin: new Blob(['refs/heads/check-snapshot\nrefs/rezics-check/staged-index\n']),
+        stdin: new Blob([
+          `refs/heads/check-snapshot\n${devCommit === null ? '' : 'refs/heads/dev\n'}refs/rezics-check/staged-index\n`,
+        ]),
         stdout: descriptor,
         stderr: 'pipe',
         timeout: GIT_OPERATION_TIMEOUT_MS,
@@ -307,7 +355,14 @@ export async function stageCheckGit(workspace: string, artifactDirectory: string
       throw new Error(`check-git: native Git snapshot packing failed${reason ? `: ${reason}` : ''}`);
     }
 
-    const manifestWithoutPack: Omit<Manifest, 'pack'> = { format: FORMAT, objectFormat, head, indexTree };
+    const manifestWithoutPack: Omit<Manifest, 'pack'> = {
+      format: FORMAT,
+      objectFormat,
+      head,
+      indexTree,
+      dev: devCommit,
+      shallow,
+    };
     const validation = join(build, 'validation');
     verifySnapshotRepository(validation, packPath, manifestWithoutPack);
     const packBytes = statSync(packPath).size;
@@ -320,7 +375,7 @@ export async function stageCheckGit(workspace: string, artifactDirectory: string
     if (cacheRoot !== undefined) {
       await publishReusableSnapshot(
         cacheRoot,
-        join(cacheRoot, `${objectFormat}-${head}-${indexTree}`),
+        join(cacheRoot, `${objectFormat}-${head}-${indexTree}-${devCommit ?? 'unscoped'}`),
         manifestPath,
         packPath,
         identity,
@@ -351,6 +406,9 @@ function parseManifest(contents: string): Manifest {
     !(OBJECT_FORMATS as readonly unknown[]).includes(candidate.objectFormat) ||
     !validObjectId(candidate.head, candidate.objectFormat as ObjectFormat) ||
     !validObjectId(candidate.indexTree, candidate.objectFormat as ObjectFormat) ||
+    !(candidate.dev === null || validObjectId(candidate.dev, candidate.objectFormat as ObjectFormat)) ||
+    !validObjectId(candidate.shallow, candidate.objectFormat as ObjectFormat) ||
+    (candidate.dev === null && candidate.shallow !== candidate.head) ||
     !candidate.pack ||
     candidate.pack.file !== PACK_FILE ||
     !Number.isSafeInteger(candidate.pack.bytes) ||
@@ -393,6 +451,7 @@ export async function restoreCheckGit(manifestPath: string, checkout: string): P
       `--template=${template}`,
       metadata,
     ]);
+    writeFileSync(join(metadata, 'shallow'), `${manifest.shallow}\n`, { mode: 0o600, flag: 'wx' });
     const pack = Bun.spawnSync(['git', '--git-dir', metadata, 'index-pack', '--strict', '--stdin'], {
       cwd: staging,
       env: environment(),
@@ -407,6 +466,7 @@ export async function restoreCheckGit(manifestPath: string, checkout: string): P
     runGit(staging, ['config', '--file', join(metadata, 'config'), 'core.bare', 'false']);
     runGit(staging, ['config', '--file', join(metadata, 'config'), 'core.logAllRefUpdates', 'false']);
     runGit(staging, ['update-ref', 'refs/heads/check-snapshot', manifest.head], gitEnv);
+    if (manifest.dev !== null) runGit(staging, ['update-ref', 'refs/heads/dev', manifest.dev], gitEnv);
     runGit(staging, ['update-ref', 'refs/rezics-check/staged-index', manifest.indexTree], gitEnv);
     runGit(staging, ['symbolic-ref', 'HEAD', 'refs/heads/check-snapshot'], gitEnv);
     runGit(staging, ['cat-file', '-e', `${manifest.head}^{commit}`], gitEnv);
@@ -422,6 +482,12 @@ export async function restoreCheckGit(manifestPath: string, checkout: string): P
       '\n# Files created by the bounded remote check runner.\n/.alive\n/.bun-install-complete\n/.remote-check-slot-count\n/bun-runtime-transpiler-cache/\n/command-phases.tsv\n/command-started\n/exit-status\n',
     );
     runGit(staging, ['--git-dir', metadata, 'fsck', '--strict', '--connectivity-only', '--no-reflogs'], gitEnv);
+    if (
+      manifest.dev !== null &&
+      git(staging, ['--git-dir', metadata, 'merge-base', manifest.head, manifest.dev], gitEnv) !== manifest.shallow
+    ) {
+      throw new Error('check-git: restored snapshot does not preserve its development merge base');
+    }
     if (git(staging, ['--git-dir', metadata, 'rev-parse', 'HEAD'], gitEnv) !== manifest.head) {
       throw new Error('check-git: restored HEAD does not match the snapshot');
     }
@@ -436,10 +502,19 @@ export async function restoreCheckGit(manifestPath: string, checkout: string): P
     if (cacheRoot !== undefined) {
       await publishReusableSnapshot(
         cacheRoot,
-        join(cacheRoot, `${manifest.objectFormat}-${manifest.head}-${manifest.indexTree}`),
+        join(
+          cacheRoot,
+          `${manifest.objectFormat}-${manifest.head}-${manifest.indexTree}-${manifest.dev ?? 'unscoped'}`,
+        ),
         manifestFile,
         packPath,
-        { objectFormat: manifest.objectFormat, head: manifest.head, indexTree: manifest.indexTree },
+        {
+          objectFormat: manifest.objectFormat,
+          head: manifest.head,
+          indexTree: manifest.indexTree,
+          dev: manifest.dev,
+          shallow: manifest.shallow,
+        },
       );
     }
   } catch (error) {
