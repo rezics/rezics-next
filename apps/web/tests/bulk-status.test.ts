@@ -34,7 +34,12 @@ test('refuses an unsupported selected target or an oversized target set instead 
     ok: false,
     reason: 'unsupported_selection',
   });
-  expect(captureBulkStatusPreview(Array.from({ length: 1001 }, (_, index) => entry(index + 1)), 'completed')).toMatchObject({
+  expect(
+    captureBulkStatusPreview(
+      Array.from({ length: 1001 }, (_, index) => entry(index + 1)),
+      'completed',
+    ),
+  ).toMatchObject({
     ok: false,
     reason: 'too_many_targets',
   });

@@ -25,7 +25,12 @@ export type BulkStatusPreviewCapture =
     }>
   | Readonly<{
       ok: false;
-      reason: 'empty_selection' | 'unsupported_selection' | 'status_incompatible' | 'too_many_targets' | 'command_too_large';
+      reason:
+        | 'empty_selection'
+        | 'unsupported_selection'
+        | 'status_incompatible'
+        | 'too_many_targets'
+        | 'command_too_large';
     }>;
 
 /** Capture the explicit loaded subjects and status that the native preview will persist. */
@@ -36,11 +41,7 @@ export function captureBulkStatusPreview(
   if (!entries.length) return { ok: false, reason: 'empty_selection' };
   if (
     entries.some(
-      (entry) =>
-        !selectableEntry(entry) ||
-        !entry.subject ||
-        !entry.subjectId ||
-        entry.subject.id !== entry.subjectId,
+      (entry) => !selectableEntry(entry) || !entry.subject || !entry.subjectId || entry.subject.id !== entry.subjectId,
     )
   )
     return { ok: false, reason: 'unsupported_selection' };
