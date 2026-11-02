@@ -494,7 +494,10 @@ export async function restoreCheckGit(manifestPath: string, checkout: string): P
     if (cacheRoot !== undefined) {
       await publishReusableSnapshot(
         cacheRoot,
-        join(cacheRoot, `${manifest.objectFormat}-${manifest.head}-${manifest.indexTree}`),
+        join(
+          cacheRoot,
+          `${manifest.objectFormat}-${manifest.head}-${manifest.indexTree}-${manifest.dev ?? 'unscoped'}`,
+        ),
         manifestFile,
         packPath,
         {

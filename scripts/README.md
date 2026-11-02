@@ -419,9 +419,9 @@ Admission retries races against other callers. The default probe interval is fiv
 2. Rsync existing tracked and unignored untracked files into `/srv/rezics-check/runs/<run-id>` without an execution
    slot.
    Omit Git metadata, `node_modules` and root `.temp` files. For Bun-backed commands, stage a native Git snapshot in
-   an ignored, unique directory under root `.temp` and include its manifest and pack in the same upload. The snapshot
-   Snapshot boundary: `merge-base(HEAD, dev)`, or `HEAD` without a usable `dev` merge base (affected-test selection
-   then runs unscoped). The snapshot retains the checkout's real `HEAD`, staged index tree and commit paths from
+   an ignored, unique directory under root `.temp` and include its manifest and pack in the same upload. Snapshot
+   boundary: `merge-base(HEAD, dev)`, or `HEAD` without a usable `dev` merge base (affected-test selection then runs
+   unscoped). The snapshot retains the checkout's real `HEAD`, staged index tree and commit paths from
    `HEAD` and `dev` to their merge base. It does not transfer `.git`, the mutable index, configuration, remotes,
    credentials, hooks, reflogs or object alternates. A
    reusable immutable pack is accepted only when its object format, `HEAD`, `dev` base, shallow boundary, index tree
