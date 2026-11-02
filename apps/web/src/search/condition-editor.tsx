@@ -8,11 +8,11 @@ import {
 } from '@rezics/filter';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel, FieldLegend, FieldSet } from '@rezics/ui/shadcn/field';
-import { Input } from '@rezics/ui/shadcn/input';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { m } from '../paraglide/messages.js';
 import { locales } from '../paraglide/runtime.js';
 import { localizedLabel } from './results';
+import { ConditionRangeInput } from './condition-range-input';
 import {
   CONDITION_POINTER,
   conditionChoiceLabels,
@@ -433,16 +433,15 @@ function NodeEditor({
           <p className="text-sm text-muted-foreground">{definition?.datatype}</p>
           {range ? (
             <>
-              {(['gte', 'lte'] as const).map((bound) => (
-                <EditorField
-                  key={bound}
-                  context={context}
-                  pointer={`${pointer}/statement/range/${bound}`}
-                  label={bound === 'gte' ? m.refinement_lower() : m.refinement_upper()}
-                >
+              {(['gte', 'lte'] as const).map((bound) => {
+                const label = bound === 'gte' ? m.refinement_lower() : m.refinement_upper();
+                return (
+                  <EditorField key={bound} context={context} pointer={`${pointer}/statement/range/${bound}`} label={label}>
                   {(props) => (
-                    <RangeInput
+                    <ConditionRangeInput
                       {...props}
+                      datatype={definition?.datatype === 'time' ? 'time' : 'quantity'}
+                      label={label}
                       value={range[bound]}
                       onValue={(number) => {
                         const next = { ...range };
@@ -452,8 +451,9 @@ function NodeEditor({
                       }}
                     />
                   )}
-                </EditorField>
-              ))}
+                  </EditorField>
+                );
+              })}
               {definition?.datatype === 'time' && (
                 <p className="text-sm text-muted-foreground">{m.refinement_year_hint()}</p>
               )}
@@ -675,37 +675,3 @@ function ValueFields({
   );
 }
 
-function RangeInput({
-  value,
-  onValue,
-  ...props
-}: {
-  value: number | undefined;
-  onValue(value: number | undefined): void;
-  id: string;
-  'aria-invalid': boolean;
-  'aria-describedby'?: string;
-}) {
-  const [raw, setRaw] = useState(value?.toString() ?? '');
-  const [previous, setPrevious] = useState(value);
-  if (!Object.is(previous, value)) {
-    setPrevious(value);
-    setRaw(value?.toString() ?? '');
-  }
-  return (
-    <Input
-      {...props}
-      type="text"
-      inputMode="decimal"
-      value={raw}
-      onChange={(event) => {
-        const text = event.currentTarget.value;
-        const number =
-          text === '' ? undefined : /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(text) ? Number(text) : NaN;
-        setRaw(text);
-        setPrevious(number);
-        onValue(number);
-      }}
-    />
-  );
-}
