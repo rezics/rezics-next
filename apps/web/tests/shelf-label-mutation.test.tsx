@@ -25,6 +25,7 @@ test('selected removal keeps later selection separate, preserves personal facts 
   mock.module('../src/library/personal-shelf-origin', () => ({ PersonalShelfOrigin: context }));
   mock.module('../src/kernel/exposure', () => ({ useOperation: () => true }));
   mock.module('../src/session/query', () => ({ useSession: () => ({ state: 'signed-in', subject: 'owner' }) }));
+  mock.module('../src/threads/composer', () => ({ csrfHeaders: () => new Headers() }));
   mock.module('@rezics/ui/undo-toast', () => ({ undoToast() {} }));
   mock.module('../src/library/entries-actions', () => ({
     deletePersonalLibraryEntry() {
