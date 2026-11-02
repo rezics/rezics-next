@@ -34,9 +34,10 @@ cannot enter are omitted, so their names are never disclosed; consumers treat an
 shares the open-groups read and `authorizePlatformGate` port with `visibleOperations`: a closed group is admitted
 only when at least one mounted operation is in the caller's scopes and the formula allows its gate, including the
 actor and principal requirement for delegated callers. Both served discovery routes use the kernel's Access instance,
-which holds the viewer's authenticated identity evidence. The read additionally advertises `commerce_sale.list` when that exact mounted operation is visible; its native
-exposure remains `gate:selling`. This operation marker enables Sales navigation without inferring endpoint support
-from group admission. It adds no Access or SQL calls. The read sends `cache-control: no-store`.
+which holds the viewer's authenticated identity evidence. The read additionally advertises `commerce_sale.list`,
+`subject.create`, `realm.create` and `provider_review.list` when each exact mounted operation is visible. These
+operation markers enable shell journeys without inferring endpoint support from group admission; native exposure and
+authorization stay unchanged. They add no Access or SQL calls. The read sends `cache-control: no-store`.
 
 ## Current management configuration
 

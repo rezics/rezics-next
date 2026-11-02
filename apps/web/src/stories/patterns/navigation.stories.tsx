@@ -5,6 +5,13 @@ import { createNavigation, type NavigationSession } from '../../shell/navigation
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { PatternStory } from '../page';
+import { threadsNavigation } from '../../threads/navigation';
+import { catalogueNavigation } from '../../features/catalogue/navigation';
+import { importReviewNavigation } from '../../features/import-review/navigation';
+import { communityNavigation } from '../../community/navigation';
+import { libraryNavigation } from '../../library/navigation';
+import { contextsNavigation } from '../../features/contexts/navigation';
+import { zonesNavigation } from '../../features/zones/manage/navigation';
 
 const meta = {
   title: 'Patterns/Navigation/Contributions',
@@ -14,6 +21,13 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 const contributions = createNavigation([
+  ...threadsNavigation,
+  ...catalogueNavigation,
+  ...importReviewNavigation,
+  ...communityNavigation,
+  ...libraryNavigation,
+  ...contextsNavigation,
+  ...zonesNavigation,
   {
     id: 'community.realms',
     kind: 'navigation',
@@ -22,16 +36,6 @@ const contributions = createNavigation([
     href: '/realms',
     match: 'prefix',
     label: ({ locale }) => m.realms_heading({}, { locale }),
-  },
-  {
-    id: 'library.create-collection',
-    kind: 'creation',
-    group: 'create',
-    order: 0,
-    signedIn: true,
-    operation: 'collection.create',
-    label: ({ locale }) => m.library_collection_new({}, { locale }),
-    href: ({ pathname }) => (pathname.startsWith('/library') ? '/collections/new' : null),
   },
 ]);
 

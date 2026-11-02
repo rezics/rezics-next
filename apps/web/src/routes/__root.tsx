@@ -31,10 +31,22 @@ import { Tags, ChartNoAxesCombined, FileText } from 'lucide-react';
 import { subjectPurchaseRegions } from '../checkout/subject-purchase';
 import { contextsNavigation } from '../features/contexts/navigation';
 import { myLogsNavigation } from '../library/my-logs';
+import { threadsNavigation } from '../threads/navigation';
+import { zonesNavigation } from '../features/zones/manage/navigation';
+import { catalogueNavigation } from '../features/catalogue/navigation';
+import { importReviewNavigation } from '../features/import-review/navigation';
+import { communityNavigation } from '../community/navigation';
+import { libraryNavigation } from '../library/navigation';
 
 export const commerceNavigation = createNavigation([
   ...contextsNavigation,
   ...myLogsNavigation,
+  ...threadsNavigation,
+  ...zonesNavigation,
+  ...catalogueNavigation,
+  ...importReviewNavigation,
+  ...communityNavigation,
+  ...libraryNavigation,
   {
     id: 'commerce.creator-offers',
     kind: 'navigation',

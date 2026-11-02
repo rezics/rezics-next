@@ -13,6 +13,8 @@ import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
+import { candidateSession, useCatalogueLifetime } from '../../subject/candidate-lifetime';
+import { editorRequest } from '../../features/catalogue/editor-request';
 
 export const Route = createFileRoute('/catalogue/new')({
   head: ({ match }) =>

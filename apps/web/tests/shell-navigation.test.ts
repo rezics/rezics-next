@@ -222,6 +222,26 @@ afterAll(async () => {
 type Destination = { name: string; href: string };
 type FoundLink = Destination & { current: string | null; icon: boolean };
 
+function shellDestinations(own: Messages, locale: string, signed: boolean, desktop = true): Destination[] {
+  const entry = (key: string, path: string) => ({ name: own[key]!, href: `/${locale}${path}` });
+  return [
+    entry('nav_home', ''),
+    entry('nav_search', '/search'),
+    entry('board_directory_heading', '/boards'),
+    ...(signed
+      ? [
+          entry('nav_library', '/library'),
+          ...(desktop ? [entry('nav_inbox', '/inbox')] : []),
+          entry('ctxw_title', '/my/contexts'),
+          entry('zones_owner_title', '/my/zones'),
+          entry('library_collection_new', '/collections/new'),
+          entry('ctxw_create', '/my/contexts/new'),
+          entry('zones_owner_create', '/my/zones/new'),
+        ]
+      : []),
+  ];
+}
+
 async function navigationLinks(page: Page, name: string): Promise<FoundLink[]> {
   const navigation = page.getByRole('navigation', { name, exact: true });
   expect(await navigation.count()).toBe(1);
@@ -264,7 +284,7 @@ async function expectDestinations(
     where,
   ).toEqual(expected);
   expect(
-    found.every((item) => item.icon),
+    found.filter(({ href }) => !href.includes('/my/')).every((item) => item.icon),
     where,
   ).toBe(true);
   expect(
@@ -300,7 +320,7 @@ function signedInState(): Promise<NonNullable<BrowserContextOptions['storageStat
 }
 
 test.serial(
-  'the navigation offers Home and Search to everyone and Library to signed-in visitors, and marks the current one',
+  'the navigation offers public and signed-in journeys and marks the current destination',
   async () => {
     for (const locale of locales) {
       const own = await messages(locale);
@@ -334,7 +354,7 @@ test.serial(
       const library = { name: own.nav_library!, href: `/${locale}/library` };
       for (const viewport of [desktop, phone])
         for (const signed of [false, true]) {
-          const expected = signed ? [home, search, library] : [home, search];
+          const expected = shellDestinations(own, locale, signed, viewport === desktop);
           const where = `${locale} ${viewport.width}px ${signed ? 'signed in' : 'signed out'}`;
           const page = await open(`/${locale}`, {
             viewport,
@@ -387,7 +407,7 @@ test.serial(
       await expectDestinations(
         collapsed,
         own.shell_navigation!,
-        [home, search, library],
+        shellDestinations(own, locale, true),
         home.name,
         `${locale} collapsed`,
       );
@@ -395,7 +415,7 @@ test.serial(
       await expectDestinations(
         collapsed,
         own.shell_navigation!,
-        [home, search, library],
+        shellDestinations(own, locale, true),
         library.name,
         `${locale} collapsed library`,
       );
@@ -411,16 +431,13 @@ test.serial(
     const session = await signedInState();
     for (const locale of ['en', 'ja'] as const) {
       const own = await messages(locale);
-      const home = { name: own.nav_home!, href: `/${locale}` };
-      const search = { name: own.nav_search!, href: `/${locale}/search` };
-      const library = { name: own.nav_library!, href: `/${locale}/library` };
       for (const signed of [false, true]) {
-        const expected = signed ? [home, search, library] : [home, search];
+        const expected = shellDestinations(own, locale, signed, false);
         const storageState = signed ? session : undefined;
         const where = `${locale} ${signed ? 'signed in' : 'signed out'}`;
         const wide = await open(`/${locale}/no-such-page`, storageState ? { storageState } : {});
         const rail = (await navigationLinks(wide, own.shell_navigation!)).map(({ name, href }) => ({ name, href }));
-        expect(rail, `${where} rail`).toEqual(expected);
+        expect(rail, `${where} rail`).toEqual(shellDestinations(own, locale, signed));
         await wide.context().close();
 
         const narrow = await open(`/${locale}/no-such-page`, {

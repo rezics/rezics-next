@@ -6,6 +6,9 @@ import { viewerExposureLifetime, viewerExposureQuery } from './viewer-exposure';
 
 /** The site's gated operations. Controls name an operation; OpenAPI owns its group. */
 export const operationGroups = {
+  'subject.create': 'subject.create',
+  'realm.create': 'realm.create',
+  'provider_review.list': 'provider_review.list',
   'agent_verification.request': 'agent_verification',
   'agent_verification.withdraw': 'agent_verification',
   'account.collections': 'collections',

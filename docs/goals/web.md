@@ -160,6 +160,8 @@ Signed-in entries wait for hydration and session preparation; operations use exi
 private no-store viewer read. An offered entry grants no read or command permission. There is no user registry,
 account-menu fetch, new permission engine or private data in static configuration.
 
+Fixed Subject, Realm and provider-review entries use exact operation markers from the existing Exposure read, like Sales, because their public native routes have no gate group.
+
 `AppShellProps.subjectPurchase` accepts `SubjectPurchaseRegions` from
 [`features/pages/subject-slots.tsx`](../../apps/web/src/features/pages/subject-slots.tsx): optional `publicRegion`
 and `privateRegion`, each a React component with `SubjectPurchaseContext` props `{subjectId, subjectType, locale}`.

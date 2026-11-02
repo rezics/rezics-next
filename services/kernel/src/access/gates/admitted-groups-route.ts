@@ -40,9 +40,10 @@ export function admittedGroupsRoutes(
       const admitted = new Set(
         visible.flatMap((operation) => (operation.exposure.startsWith('gate:') ? [operation.exposure.slice(5)] : [])),
       );
-      // Sales navigation requires an actual mounted operation, independently of its selling gate.
-      if (visible.some((operation) => operation.operationId === 'commerce_sale.list'))
-        admitted.add('commerce_sale.list');
+      // Fixed shell journeys require their mounted operation, independently of gate-group admission.
+      for (const id of ['commerce_sale.list', 'subject.create', 'realm.create', 'provider_review.list']) {
+        if (visible.some((operation) => operation.operationId === id)) admitted.add(id);
+      }
       set.headers['cache-control'] = 'no-store';
       return { admitted: [...admitted].sort() };
     },

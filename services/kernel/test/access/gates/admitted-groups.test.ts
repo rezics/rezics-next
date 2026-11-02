@@ -22,7 +22,8 @@ const groups = {
   future: 'admitted_future',
   past: 'admitted_past',
 };
-const opened = [groups.a, groups.z];
+const publicJourneys = ['provider_review.list', 'realm.create', 'subject.create'];
+const opened = [groups.a, groups.z, ...publicJourneys].sort();
 const issuer = 'https://admitted.auth.test';
 const audience = 'https://admitted.api.test';
 let fixture: Awaited<ReturnType<typeof actorFixture>>;
@@ -102,10 +103,10 @@ async function read(token?: string): Promise<string[]> {
   const visibleGroups = visible.flatMap((operation) =>
     operation.exposure.startsWith('gate:') ? [operation.exposure.slice(5)] : [],
   );
-  const sales = visible.some((operation) => operation.operationId === 'commerce_sale.list')
-    ? ['commerce_sale.list']
-    : [];
-  expect(body.admitted).toEqual([...new Set([...visibleGroups, ...sales])].sort());
+  const journeys = visible.flatMap(({ operationId }) =>
+    ['commerce_sale.list', ...publicJourneys].includes(operationId) ? [operationId] : [],
+  );
+  expect(body.admitted).toEqual([...new Set([...visibleGroups, ...journeys])].sort());
   for (const group of mountedGroups().filter((group) => !body.admitted.includes(group))) {
     expect(text).not.toContain(group);
   }
@@ -192,11 +193,11 @@ afterAll(async () => {
   await pool.end();
 });
 
-test('an anonymous caller sees exactly the mounted groups open at T', async () => {
+test('an anonymous caller sees the mounted groups open at T and public journey markers', async () => {
   expect(await read()).toEqual(opened);
   now = new Date(instant.getTime() - 1);
   try {
-    expect(await read()).toEqual([groups.z, groups.past].sort());
+    expect(await read()).toEqual([groups.z, groups.past, ...publicJourneys].sort());
   } finally {
     now = new Date(instant);
   }
@@ -208,7 +209,7 @@ test('an account holding gate:<group> or gate:any on the Global Context also see
   await grant(ordinaryId, `gate:${groups.secret}`, fixture.resource);
   expect(await read(await bearer(fixture.actorId))).toEqual([...opened, groups.secret].sort());
   expect(await read(await bearer(fixture.actorId, undefined, ['exposure:read']))).toEqual(opened);
-  const fixtureGroups = Object.values(groups);
+  const fixtureGroups = [...Object.values(groups), ...publicJourneys];
   expect(await read(await bearer(fixture.principalId))).toEqual(fixtureGroups.sort());
   expect(await read(await bearer(ordinaryId))).toEqual(opened);
 });
