@@ -365,7 +365,7 @@ test('options getters and prototypes refuse before reading an unsupported option
         pool,
         {
           partition,
-          get deadline() {
+          get deadline(): number {
             throw new Error('getter executed');
           },
         },
