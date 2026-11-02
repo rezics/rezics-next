@@ -191,6 +191,17 @@ discloses private predicates/facts or grants subject access. Common bulk preview
 filtered or selected population, reject stale selection, prevent replay effects and retain inspectable partial failures.
 This document invents no bulk/export ABI and does not make existing stub factories functional.
 
+Web's public download controls admit a detached first-page capture of viewer, native metadata revision and exact
+occurrences, then compare it with current native FULL reads at admission and terminal delivery. Each read uses the
+existing 100-member page bound: two reads examine at most 200 returned members, two Collection headers and at most
+four existing viewer-action/follow point reads. There is no cursor accumulation. The resulting ItemList retains
+occurrence identifiers, permitted notes and order; cancellation retires delivery and retry keeps the same capture.
+Larger, later-page and filtered curated populations remain explicitly unavailable until native durable preparation
+is integrated. Decision: unavailable preparation never falls back to exporting the displayed partial population;
+expired preparation will require a new admitted request. The default Members factory and worker are unavailable
+specification adapters, not a delivered preparation backend. Native and browser verification remain launch
+integration obligations; focused tests and typing do not establish whole-feature completion.
+
 Tracked-entry state actions retain unattempted targets for explicit per-entry recovery with their captured state,
 revision, incarnation and command key, independent of later selection; a refused unknown replay keeps its exact intent.
 

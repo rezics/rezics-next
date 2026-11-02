@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import {
@@ -7,6 +7,15 @@ import {
   type CollectionPublicPage,
 } from './collection-public-document';
 
+import type { CollectionPageResult } from './collection-load';
+import { captureCollectionExport, CollectionExportAttempt, type CollectionExportCapture, type CollectionExportFile, type CollectionExportResult } from './collection-export-request';
+
+type ExportRequest = (capture: CollectionExportCapture, context: CollectionPublicContext) => Promise<CollectionExportResult>;
+const nativeExportRequest: ExportRequest = async (capture, context) => {
+  const { readCollectionExport } = await import('./collection-export-read');
+  return readCollectionExport({ data: { capture, context } });
+};
+
 export function downloadCollectionItemList(
   page: CollectionPublicPage,
   context: CollectionPublicContext,
@@ -14,6 +23,10 @@ export function downloadCollectionItemList(
 ) {
   const file = collectionPublicDocument(page, context, laterPage);
   if (!file) return false;
+  return downloadFile(file);
+}
+
+function downloadFile(file: CollectionExportFile) {
   const anchor = document.createElement('a');
   const url = URL.createObjectURL(new Blob([file.text], { type: file.mediaType }));
   try {
@@ -40,18 +53,21 @@ export async function copyCollectionItemList(
   return true;
 }
 
-/** A read action over the current payload, with no source read, permission grant or export service. */
+/** The public document controls require an admitted native request before browser delivery. */
 export function CollectionExport({
   page,
   context,
   laterPage = false,
+  request = nativeExportRequest,
 }: {
   page: CollectionPublicPage;
   context: CollectionPublicContext;
   laterPage?: boolean;
+  request?: ExportRequest;
 }) {
   const { origin, locale } = context;
-  const available = collectionPublicDocument(page, context, laterPage) !== null;
+  const capture = captureCollectionExport(page as CollectionPageResult);
+  const available = capture !== null && collectionPublicDocument(page, context, laterPage) !== null;
   const [lifetime, setLifetime] = useState({ page, origin, locale, laterPage, available, key: 0 });
   if (
     lifetime.page !== page ||
@@ -64,48 +80,61 @@ export function CollectionExport({
     setLifetime({ page, origin, locale, laterPage, available, key: lifetime.key + 1 });
   }
 
-  if (!available) return null;
-  return <CollectionExportActions key={lifetime.key} page={page} context={context} laterPage={laterPage} />;
+  if (!available || !capture) return null;
+  return <CollectionExportActions key={lifetime.key} capture={capture} context={context} request={request} />;
 }
 
 /** A retired instance may finish clipboard IO, but its state cannot reach the replacement controls. */
 function CollectionExportActions({
-  page,
+  capture,
   context,
-  laterPage,
+  request,
 }: {
-  page: CollectionPublicPage;
+  capture: CollectionExportCapture;
   context: CollectionPublicContext;
-  laterPage: boolean;
+  request: ExportRequest;
 }) {
   const descriptionId = useId();
-  const inFlight = useRef(false);
+  const attempt = useRef(new CollectionExportAttempt(capture));
+  const inFlight = useRef<object | null>(null);
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState('');
+  useEffect(() => () => {
+    attempt.current.cancel();
+    inFlight.current = null;
+  }, []);
+
+  function cancel() {
+    attempt.current.cancel();
+    inFlight.current = null;
+    setPending(false);
+    setNotice('');
+  }
 
   async function perform(kind: 'download' | 'copy') {
     if (inFlight.current) return;
-    inFlight.current = true;
+    const operation = {};
+    inFlight.current = operation;
     setPending(true);
     setNotice('');
-    let message: string;
+    let message = m.library_collection_export_failed();
     try {
-      const done =
-        kind === 'download'
-          ? downloadCollectionItemList(page, context, laterPage)
-          : await copyCollectionItemList(page, context, laterPage);
-      message = done
-        ? kind === 'download'
-          ? m.library_collection_export_downloaded()
-          : m.library_collection_export_copied()
-        : m.library_collection_export_unavailable();
+      const result = await attempt.current.run((captured) => request(captured, context));
+      if (inFlight.current !== operation || result.state === 'cancelled') return;
+      if (result.state === 'complete') {
+        if (kind === 'download') downloadFile(result.file);
+        else await navigator.clipboard.writeText(result.file.text);
+        message = kind === 'download' ? m.library_collection_export_downloaded() : m.library_collection_export_copied();
+      } else message = m.library_collection_export_unavailable();
     } catch {
       message = m.library_collection_export_failed();
     } finally {
-      inFlight.current = false;
-      setPending(false);
+      if (inFlight.current === operation) {
+        inFlight.current = null;
+        setPending(false);
+        setNotice(message);
+      }
     }
-    setNotice(message);
   }
 
   return (
@@ -129,6 +158,9 @@ function CollectionExportActions({
         >
           {m.library_collection_export_copy()}
         </Button>
+        {pending ? <Button type="button" variant="outline" onClick={cancel}>
+          {m.library_collection_cancel()}
+        </Button> : null}
       </div>
       <p id={descriptionId} className="text-sm text-muted-foreground">
         {m.library_collection_export_note()}

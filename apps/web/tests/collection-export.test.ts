@@ -8,6 +8,8 @@ import { getLocale, locales, setLocale } from '../src/paraglide/runtime.js';
 const context = { origin: 'https://rezics.com', locale: 'en' } as const;
 const page: CollectionPublicPage = {
   id: 'public-list',
+  revision: 1,
+  provenance: { mode: 'anonymous', viewerId: null, request: JSON.stringify(['page', 'public-list', null, false, []]) },
   visibility: null,
   disclosedVisibility: 'public',
   memberState: 'ready',

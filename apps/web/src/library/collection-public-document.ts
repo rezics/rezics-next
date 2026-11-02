@@ -1,11 +1,11 @@
-import { collectionRenderPolicy, type CollectionPageResult, type CollectionPolicyPage } from './collection-load';
+import { collectionRenderPolicy, type CollectionPageResult, type CollectionPolicyPage, type CollectionReadProvenance } from './collection-load';
 import { pageText } from '../features/pages/shared';
 import { libraryTitleValue } from './title';
 import { subjectHref } from '../subject/subject-href';
 import type { HeadContext } from '../shell/head';
 import { validatePublicOrigin } from '../shell/origin';
 
-export type CollectionPublicPage = Pick<CollectionPageResult, 'id' | 'members'> & CollectionPolicyPage;
+export type CollectionPublicPage = Pick<CollectionPageResult, 'id' | 'members'> & CollectionPolicyPage & { revision?: number; provenance?: CollectionReadProvenance };
 export type CollectionPublicContext = Pick<HeadContext, 'origin' | 'locale'>;
 
 /** The exact public mainEntity used by the head; native completeness is never inferred from members or counts. */

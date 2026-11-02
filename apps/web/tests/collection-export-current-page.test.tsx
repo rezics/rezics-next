@@ -55,6 +55,8 @@ test('a replacement public Collection export stays usable while retired clipboar
   const root = createRoot(host);
   const pageA: CollectionPublicPage = {
     id: 'public-list',
+    revision: 1,
+    provenance: { mode: 'anonymous', viewerId: null, request: JSON.stringify(['page', 'public-list', null, false, []]) },
     visibility: null,
     disclosedVisibility: 'public',
     memberState: 'ready',
@@ -84,7 +86,7 @@ test('a replacement public Collection export stays usable while retired clipboar
     await act(async () => {
       root.render(
         <StrictMode>
-          {visible ? <CollectionExport page={page} context={context} laterPage={laterPage} /> : null}
+          {visible ? <CollectionExport page={page} context={context} laterPage={laterPage} request={async () => ({ state: 'complete', file: collectionPublicDocument(page, context)! })} /> : null}
         </StrictMode>,
       );
     });
