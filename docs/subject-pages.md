@@ -62,6 +62,7 @@ Removing an unsent Manga qualifier keeps the assertion and sibling drafts, confi
 People creation resolves only its produced assertion and editable scalar or citation parts to stable, named controls;
 unsupported addresses remain inspectable without links, and retired Types retain staged facts for explicit removal.
 With a supplied work, creation retains the credit context and offers the exact returned reader through its explicit link.
+People creation confirms populated initial-fact removal locally, including meaningful citations with a blank scalar; Cancel or Escape preserves the mounted row and restores trigger focus, confirmation focuses the next usable control or a preceding survivor, and current command or retired-metadata locks apply to open confirmations.
 People creation keeps editable private terms, facts and citations through failed metadata recovery, hides retired work references, admits only fresh reads of the original work, and blocks new commands until recovery while preserving exact unresolved retries within the original viewer and CSRF session.
 
 Screen creation resolves submitted assertion indices to stable row and nested-part identities, links only supported value, qualifier and citation controls with human field labels, and preserves sibling assertions and citation groups when correcting; a blank citation remains editable until explicitly removed, unknown addresses remain technical details and uncertain commands stay sealed across metadata recovery.

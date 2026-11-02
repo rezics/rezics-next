@@ -1,6 +1,6 @@
 import { CatalogueCurrentReading, catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Field, FieldError, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -179,6 +179,136 @@ function ProfileIntro({ read, locale }: { read: Current; locale: string }) {
             </details>
           </ContentItemFrame>
         </section>
+      )}
+    </div>
+  );
+}
+
+/** Keep the scalar and citation mounted until a populated unsent fact is deliberately removed. */
+function PeopleInitialFactRemove({
+  id,
+  statement,
+  disabled,
+  locale,
+  onRemove,
+}: {
+  id: string;
+  statement: StatementInput;
+  disabled: boolean;
+  locale: string;
+  onRemove: () => void;
+}) {
+  const lifetime = useEditorLifetime();
+  const o = { locale: locale as never };
+  const holder = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const cancel = useRef<HTMLButtonElement>(null);
+  const restoreFocus = useRef(false);
+  const [confirmingId, setConfirmingId] = useState<string>();
+  const confirming = confirmingId === id;
+  const current = useRef({ id, disabled, onRemove });
+  current.current = { id, disabled, onRemove };
+  const editable = () =>
+    lifetime.active() &&
+    !current.current.disabled &&
+    current.current.id === id &&
+    !!holder.current?.isConnected &&
+    !holder.current.closest('fieldset:disabled');
+  useLayoutEffect(() => {
+    if (!editable()) return;
+    if (confirming) cancel.current?.focus();
+    else if (restoreFocus.current) {
+      trigger.current?.focus();
+      restoreFocus.current = false;
+    }
+  }, [confirming, disabled]);
+  const cancelRemoval = () => {
+    if (!editable()) return;
+    restoreFocus.current = true;
+    setConfirmingId(undefined);
+  };
+  const remove = () => {
+    const row = holder.current?.closest('fieldset');
+    if (!editable() || !row) return;
+    const controls = [
+      ...(row
+        .closest('form')
+        ?.querySelectorAll<HTMLElement>('button, input, select, textarea, [tabindex="0"], [contenteditable="true"]') ??
+        []),
+    ];
+    const first = controls.findIndex((control) => row.contains(control));
+    const last = controls.findLastIndex((control) => row.contains(control));
+    [...controls.slice(last + 1), ...controls.slice(0, first).reverse()]
+      .find(
+        (control) =>
+          !control.matches(':disabled, [aria-disabled="true"], [type="hidden"]') &&
+          !control.closest('[hidden], [inert]'),
+      )
+      ?.focus();
+    current.current.onRemove();
+  };
+  const hasContent = (value: unknown): boolean => {
+    if (typeof value === 'string') return !!value.trim();
+    if (value == null) return false;
+    if (typeof value === 'object') return Object.values(value).some(hasContent);
+    return true;
+  };
+  const populatedPart = (part: StatementInput | StatementInput['references'][number]['parts'][number]) =>
+    part.value.type !== 'value' || hasContent(part.value.content);
+  const populated =
+    populatedPart(statement) ||
+    statement.qualifiers?.some(populatedPart) ||
+    statement.references.some((reference) => reference.parts.some(populatedPart));
+  return (
+    <div ref={holder}>
+      {confirming ? (
+        <div
+          role="group"
+          aria-label={m.candidate_confirm_title({ action: m.people_profile_remove_fact({}, o) }, o)}
+          className="space-y-2"
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              cancelRemoval();
+            }
+          }}
+        >
+          <p>{m.candidate_confirm_title({ action: m.people_profile_remove_fact({}, o) }, o)}</p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              ref={cancel}
+              type="button"
+              variant="outline"
+              className={peopleActionTarget}
+              disabled={disabled}
+              onClick={cancelRemoval}
+            >
+              {m.candidate_cancel({}, o)}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              className={peopleActionTarget}
+              disabled={disabled}
+              onClick={remove}
+            >
+              {m.people_profile_remove_fact({}, o)}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <Button
+          ref={trigger}
+          type="button"
+          variant="ghost"
+          className={peopleActionTarget + ' self-start'}
+          disabled={disabled}
+          onClick={() => {
+            if (editable()) populated ? setConfirmingId(id) : remove();
+          }}
+        >
+          {m.people_profile_remove_fact({}, o)}
+        </Button>
       )}
     </div>
   );
@@ -438,14 +568,14 @@ function PeopleCreate({
                               {error.instruction}
                             </FieldError>
                           ))}
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            className={peopleActionTarget + ' self-start'}
-                            onClick={() => update(type, property)}
-                          >
-                            {m.people_profile_remove_fact({}, o)}
-                          </Button>
+                          <PeopleInitialFactRemove
+                            key={id}
+                            id={id}
+                            statement={statement}
+                            disabled={disabled || !current || recovering}
+                            locale={locale}
+                            onRemove={() => update(type, property)}
+                          />
                         </ContentItemFrame>
                       </fieldset>
                     );
