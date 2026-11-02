@@ -18,7 +18,11 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-let sessionReader: () => Promise<SessionResult> = async () => ({ state: 'unavailable', csrfToken: null, subject: null });
+let sessionReader: () => Promise<SessionResult> = async () => ({
+  state: 'unavailable',
+  csrfToken: null,
+  subject: null,
+});
 let sessionReads = 0;
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
@@ -305,7 +309,12 @@ test('one shared client read and bounded cache subscription serve multiple consu
 
     await ui.render(
       client,
-      createElement(Fragment, null, createElement(SessionProbe, { name: 'first' }), createElement(SessionProbe, { name: 'second' })),
+      createElement(
+        Fragment,
+        null,
+        createElement(SessionProbe, { name: 'first' }),
+        createElement(SessionProbe, { name: 'second' }),
+      ),
     );
     await ui.flush();
 
