@@ -9,6 +9,7 @@ import { Input } from '@rezics/ui/shadcn/input';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { locales } from '../../paraglide/runtime';
 import { m } from '../../paraglide/messages.js';
+import { EditorialContextNavigation } from './editorial-context-navigation';
 import {
   editorialCommand,
   type EditorialCommand,
@@ -163,6 +164,8 @@ function EditorialContextWorkspaceLive({
             ? m.editorial_conflict({}, o)
             : m.editorial_unavailable({}, o);
   const uncertain = pending && failure?.reason === 'unavailable';
+  const draftDirty = name !== '' || language !== locale;
+  const createUnsettled = !currentId && (busy || !!uncertain);
   const action = knownDeleted ? 'restore' : 'delete';
   const eligibleAttempt = (knownDeleted && !restoreBlocked) || active?.kind === 'community';
   return (
@@ -172,6 +175,11 @@ function EditorialContextWorkspaceLive({
       className="min-w-0 space-y-6"
       data-editorial-workspace
     >
+      <EditorialContextNavigation
+        locale={locale}
+        dirty={!currentId && draftDirty}
+        unsettled={createUnsettled}
+      />
       <ContentItemFrame as="div" className="min-w-0 space-y-6 p-4 [overflow-wrap:anywhere] sm:p-6" data-editorial-panel>
         <header className="space-y-2">
           <ContentItemHeading level={2} className="text-2xl font-semibold">

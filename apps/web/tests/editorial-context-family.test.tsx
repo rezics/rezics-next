@@ -375,6 +375,98 @@ test('Editorial Context family retains supplied comparison, independent controls
     expect([...uncertain.calls[0]!.headers]).toEqual([...uncertain.calls[1]!.headers]);
     expect(uncertain.calls.map((call) => call.method)).toEqual(['POST', 'POST', 'GET']);
 
+    await render(null);
+    const { createMemoryHistory, createRootRoute, createRoute, createRouter, Link, Outlet, RouterProvider } =
+      await import('@tanstack/react-router');
+    const draft = editorialContextFixture();
+    let arrivals = 0;
+    const rootRoute = createRootRoute({ component: Outlet });
+    const createRouteView = createRoute({
+      getParentRoute: () => rootRoute,
+      path: '/en/contexts/new',
+      component: () => (
+        <div>
+          <Link to="/next">Next</Link>
+          <EditorialContextWorkspace locale="en" transport={draft.transport} />
+        </div>
+      ),
+    });
+    const nextRoute = createRoute({
+      getParentRoute: () => rootRoute,
+      path: '/next',
+      onEnter: () => {
+        arrivals++;
+      },
+      component: () => <h1>Next</h1>,
+    });
+    const router = createRouter({
+      routeTree: rootRoute.addChildren([createRouteView, nextRoute]),
+      history: createMemoryHistory({ initialEntries: ['/en/contexts/new'] }),
+    });
+    await router.load();
+    await render(<RouterProvider router={router} />);
+    await until(() => !!host.querySelector('[data-editorial-form]'));
+    const nameInput = host.querySelector('input')!;
+    const languageSelect = host.querySelector('select')!;
+    await act(async () => userEvent.type(nameInput, 'Unfinished Context'));
+    await act(async () => {
+      languageSelect.value = 'ja';
+      languageSelect.dispatchEvent(new window.Event('change', { bubbles: true }));
+    });
+    const unload = () => {
+      const event = new window.Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    expect(unload()).toBe(true);
+    const navigateNext = async () => {
+      await act(async () => userEvent.click(host.querySelector('a')!));
+      await until(() => !!window.document.querySelector('[role="alertdialog"]'));
+      return window.document.querySelector('[role="alertdialog"]')!;
+    };
+    const draftDialog = await navigateNext();
+    expect(draftDialog.textContent).toContain(m.thread_authoring_leave_unsaved({}, o));
+    const dialogButton = (label: string) =>
+      [...window.document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button')].find(
+        (node) => node.textContent?.trim() === label,
+      )!;
+    await act(async () => userEvent.click(dialogButton(m.thread_authoring_stay({}, o))));
+    await until(() => !window.document.querySelector('[role="alertdialog"]'));
+    expect(nameInput.value).toBe('Unfinished Context');
+    expect(languageSelect.value).toBe('ja');
+    await act(async () => userEvent.clear(nameInput));
+    await act(async () => {
+      languageSelect.value = 'en';
+      languageSelect.dispatchEvent(new window.Event('change', { bubbles: true }));
+    });
+    expect(unload()).toBe(false);
+    await act(async () => userEvent.click(host.querySelector('a')!));
+    await until(() => router.state.location.pathname === '/next');
+    expect(arrivals).toBe(1);
+
+    await act(async () => router.navigate({ to: '/en/contexts/new' }));
+    await until(() => !!host.querySelector('[data-editorial-form]'));
+    await act(async () => userEvent.type(host.querySelector('input')!, 'Leave this draft'));
+    const leaveDialog = await navigateNext();
+    expect(leaveDialog.textContent).toContain(m.thread_authoring_leave_unsaved({}, o));
+    await act(async () => userEvent.click(dialogButton(m.zone_editor_discard({}, o))));
+    await until(() => router.state.location.pathname === '/next');
+    expect(arrivals).toBe(2);
+
+    await act(async () => router.navigate({ to: '/en/contexts/new' }));
+    await until(() => !!host.querySelector('[data-editorial-form]'));
+    await act(async () => userEvent.type(host.querySelector('input')!, 'Saved Context'));
+    await click(m.editorial_create({}, o));
+    await until(
+      () =>
+        host.textContent!.includes(m.editorial_created({}, o)) &&
+        host.querySelector('[data-editorial-workspace]')?.getAttribute('aria-busy') === 'false',
+    );
+    await act(async () => userEvent.click(host.querySelector('a')!));
+    await until(() => router.state.location.pathname === '/next');
+    expect(arrivals).toBe(3);
+    await render(null);
+
     // Local acceptance does not adopt a value or turn the selected Context into publication.
     await render(null);
     const local = contextFixture('unresolved');
