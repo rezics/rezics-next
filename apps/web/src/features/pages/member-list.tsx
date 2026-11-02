@@ -381,23 +381,23 @@ export function MemberList({
       if (!next.ok) {
         setError((previous) => (isCurrent() ? next : previous));
         if ([401, 403, 404, 409].includes(next.status ?? 0)) {
-          setPage(next);
+          setPage((previous) => (isCurrent() ? next : previous));
           progress.current = createMemberPageProgress();
-          setRestart(false);
+          setRestart((previous) => (isCurrent() ? false : previous));
         }
       } else {
         // A fresh restart gets fresh progress only after native admission succeeds. A transport failure keeps
         // the accepted window and repeats this exact request, including an absent cursor for a fresh restart.
         const nextProgress = cursor ? progress.current : createMemberPageProgress();
         if (!nextProgress.accept(memberPageCursor(next.body))) {
-          setRestart(true);
+          setRestart((previous) => (isCurrent() ? true : previous));
           return;
         }
         progress.current = nextProgress;
         const visible = new Set(unique.keys());
         for (const item of memberItems(next, value)) visible.add(item.id);
-        setPage(next);
-        setRestart(false);
+        setPage((previous) => (isCurrent() ? next : previous));
+        setRestart((previous) => (isCurrent() ? false : previous));
         setCompletion((previous) =>
           isCurrent()
             ? {
