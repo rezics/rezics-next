@@ -397,7 +397,7 @@ const referenceExample = {
   resolvedAt: '2026-10-29T08:45:23.120400Z',
 };
 
-export const IllustrativeReferenceAndPreciseDates: Story = {
+export const IllustrativeReferenceAndPreciseDates = {
   name: 'Illustrative reference and precise UTC dates (fixture-derived)',
   args: {
     reports: [referenceExample],
@@ -431,7 +431,7 @@ export const IllustrativeReferenceAndPreciseDates: Story = {
     await expect(article.scrollWidth).toBeLessThanOrEqual(article.clientWidth);
     await expect(args.onAction).not.toHaveBeenCalled();
   },
-};
+} satisfies Story;
 
 export const IllustrativeReferenceAndPreciseDatesRtl: Story = {
   ...IllustrativeReferenceAndPreciseDates,
