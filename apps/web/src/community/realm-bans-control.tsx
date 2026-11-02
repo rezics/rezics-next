@@ -258,8 +258,7 @@ function RealmBansVisit({
     if (!pageRead.current.focus || view.state === 'loading') return;
     pageRead.current.focus = false;
     if (!visible || !gate.current()) return;
-    const boundary =
-      view.state === 'ready' ? pageHeading.current : (retryReadAction.current ?? restartAction.current);
+    const boundary = view.state === 'ready' ? pageHeading.current : (retryReadAction.current ?? restartAction.current);
     boundary?.focus();
   }, [view, visible, gate]);
 
