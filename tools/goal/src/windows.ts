@@ -76,11 +76,12 @@ export class TermspacesWindows implements ManagerWindows {
     }
   }
   private lookupSession(): string | undefined {
-    return this.observe(() =>
-      this.tmux(['list-sessions', '-F', '#{session_id}\t#{session_name}\t#{@ts-session-id}'])
-        .split('\n')
-        .map((line) => line.split('\t'))
-        .find(([, name, id]) => name === this.settings.session || id === this.settings.session)?.[0],
+    return this.observe(
+      () =>
+        this.tmux(['list-sessions', '-F', '#{session_id}\t#{session_name}\t#{@ts-session-id}'])
+          .split('\n')
+          .map((line) => line.split('\t'))
+          .find(([, name, id]) => name === this.settings.session || id === this.settings.session)?.[0],
     );
   }
   private session(): string {
@@ -119,11 +120,12 @@ export class TermspacesWindows implements ManagerWindows {
     return id;
   }
   private find(session: string, manager: string): string | undefined {
-    return this.observe(() =>
-      this.tmux(['list-windows', '-t', session, '-F', '#{window_id}\t#{@goal-manager}'])
-        .split('\n')
-        .map((line) => line.split('\t'))
-        .find(([, owner]) => owner === manager)?.[0],
+    return this.observe(
+      () =>
+        this.tmux(['list-windows', '-t', session, '-F', '#{window_id}\t#{@goal-manager}'])
+          .split('\n')
+          .map((line) => line.split('\t'))
+          .find(([, owner]) => owner === manager)?.[0],
     );
   }
   alive(manager: string): boolean {
