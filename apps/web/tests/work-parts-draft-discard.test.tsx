@@ -9,10 +9,28 @@ test('Work Parts closes only the chosen unsent draft and preserves sealed comman
   const require = createRequire(import.meta.url);
   const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
   const window = new Window({ url: 'https://site.test/en/subjects/book/title' });
-  const keys = ['window', 'document', 'navigator', 'HTMLElement', 'Element', 'Node', 'DocumentFragment', 'MutationObserver', 'ResizeObserver', 'getComputedStyle', 'requestAnimationFrame', 'cancelAnimationFrame', 'IS_REACT_ACT_ENVIRONMENT'];
+  const keys = [
+    'window',
+    'document',
+    'navigator',
+    'HTMLElement',
+    'Element',
+    'Node',
+    'DocumentFragment',
+    'MutationObserver',
+    'ResizeObserver',
+    'getComputedStyle',
+    'requestAnimationFrame',
+    'cancelAnimationFrame',
+    'IS_REACT_ACT_ENVIRONMENT',
+  ];
   const saved = new Map(keys.map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const key of keys)
-    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: key === 'window' ? window : key === 'IS_REACT_ACT_ENVIRONMENT' ? true : window[key] });
+    Object.defineProperty(globalThis, key, {
+      configurable: true,
+      writable: true,
+      value: key === 'window' ? window : key === 'IS_REACT_ACT_ENVIRONMENT' ? true : window[key],
+    });
   const { createRoot } = await import('react-dom/client');
   const { setLocale } = await import('../src/paraglide/runtime.js');
   setLocale('en', { reload: false });
@@ -21,22 +39,28 @@ test('Work Parts closes only the chosen unsent draft and preserves sealed comman
   const root = createRoot(host);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const click = async (name: string, scope: ParentNode = host) => {
-    const button = [...scope.querySelectorAll<HTMLButtonElement>('button')].filter((item) => item.textContent?.trim() === name).at(-1)!;
+    const button = [...scope.querySelectorAll<HTMLButtonElement>('button')]
+      .filter((item) => item.textContent?.trim() === name)
+      .at(-1)!;
     await act(async () => button.click());
     return button;
   };
-  const input = (element: HTMLInputElement, value: string) => act(async () => {
-    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(element, value);
-    element.dispatchEvent(new window.Event('input', { bubbles: true }));
-  });
+  const input = (element: HTMLInputElement, value: string) =>
+    act(async () => {
+      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(element, value);
+      element.dispatchEvent(new window.Event('input', { bubbles: true }));
+    });
   const until = async (predicate: () => boolean) => {
-    for (let attempt = 0; attempt < 100 && !predicate(); attempt++) await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    for (let attempt = 0; attempt < 100 && !predicate(); attempt++)
+      await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
     expect(predicate()).toBe(true);
   };
 
   try {
     const [{ WorkPartsPage }, { workPartsFixture }, { m }] = await Promise.all([
-      import('../src/features/catalogue/work-parts-page'), import('../src/kernel/fake/work-parts'), import('../src/paraglide/messages.js'),
+      import('../src/features/catalogue/work-parts-page'),
+      import('../src/kernel/fake/work-parts'),
+      import('../src/paraglide/messages.js'),
     ]);
     const fixture = workPartsFixture('partial');
     const first = fixture.snapshot();
@@ -44,22 +68,46 @@ test('Work Parts closes only the chosen unsent draft and preserves sealed comman
     const next = await fixture.transport.read(first.stream.key, first.next, first.session);
     if (!next.ok) throw new Error('Expected a second native page');
     fixture.setScenario('uncertain');
-    const initial = { ...first, rows: [...first.rows, ...next.rows], labels: { ...first.labels, ...next.labels }, next: null };
-    await act(async () => root.render(h(QueryClientProvider, { client }, h(WorkPartsPage, {
-      id: fixture.id, locale: 'en', initial, search: fixture.search, transport: fixture.transport,
-    }))));
+    const initial = {
+      ...first,
+      rows: [...first.rows, ...next.rows],
+      labels: { ...first.labels, ...next.labels },
+      next: null,
+    };
+    await act(async () =>
+      root.render(
+        h(
+          QueryClientProvider,
+          { client },
+          h(WorkPartsPage, {
+            id: fixture.id,
+            locale: 'en',
+            initial,
+            search: fixture.search,
+            transport: fixture.transport,
+          }),
+        ),
+      ),
+    );
 
-    const editors = () => [...host.querySelectorAll<HTMLElement>('section[aria-label]')].filter((item) => item.getAttribute('aria-label') === m.relation_title());
+    const editors = () =>
+      [...host.querySelectorAll<HTMLElement>('section[aria-label]')].filter(
+        (item) => item.getAttribute('aria-label') === m.relation_title(),
+      );
     const rows = [...host.querySelectorAll('ul > li')];
     expect(rows).toHaveLength(2);
-    const source = [...rows[0]!.querySelectorAll('button')].find((item) => item.textContent?.trim() === m.work_parts_correct())!;
+    const source = [...rows[0]!.querySelectorAll('button')].find(
+      (item) => item.textContent?.trim() === m.work_parts_correct(),
+    )!;
     for (const row of rows) await click(m.work_parts_correct(), row);
     const [firstEditor, sibling] = editors() as [HTMLElement, HTMLElement];
     for (const editor of [firstEditor, sibling]) {
       await click(m.relation_open(), editor);
       await until(() => !!editor.querySelector('input[id$="qualifier-0"]'));
     }
-    const [firstPosition, siblingPosition] = [firstEditor, sibling].map((editor) => editor.querySelector<HTMLInputElement>('input[id$="qualifier-0"]')!);
+    const [firstPosition, siblingPosition] = [firstEditor, sibling].map((editor) =>
+      editor.querySelector<HTMLInputElement>('input[id$="qualifier-0"]')!,
+    );
     const admittedPosition = firstPosition!.value;
     await input(firstPosition!, '41');
     await input(siblingPosition!, '55');
@@ -92,7 +140,9 @@ test('Work Parts closes only the chosen unsent draft and preserves sealed comman
     await click(m.relation_propose(), reopened);
     await click(m.relation_propose(), reopened);
     await until(() => reopened.textContent!.includes(m.candidate_unavailable()));
-    const discard = [...reopened.querySelectorAll<HTMLButtonElement>('button')].find((item) => item.textContent?.trim() === m.work_parts_draft_discard())!;
+    const discard = [...reopened.querySelectorAll<HTMLButtonElement>('button')].find(
+      (item) => item.textContent?.trim() === m.work_parts_draft_discard(),
+    )!;
     expect(discard.disabled).toBe(true);
     const props = Object.keys(discard).find((key) => key.startsWith('__reactProps$'))!;
     await act(async () => Reflect.get(discard, props).onClick());
@@ -110,6 +160,7 @@ test('Work Parts closes only the chosen unsent draft and preserves sealed comman
     await act(async () => root.unmount());
     client.clear();
     await window.happyDOM.abort();
-    for (const [key, descriptor] of saved) descriptor ? Object.defineProperty(globalThis, key, descriptor) : Reflect.deleteProperty(globalThis, key);
+    for (const [key, descriptor] of saved)
+      descriptor ? Object.defineProperty(globalThis, key, descriptor) : Reflect.deleteProperty(globalThis, key);
   }
 });
