@@ -55,19 +55,30 @@ export function SetupBoardPicker({
   const shown: BoardChoicePage = current ? page : { status: 'loading', choices: [], next: null };
   const label = kind === 'scheme' ? m.space_setup_scheme_label() : m.space_setup_concept_label();
   return (
-    <Field>
-      <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      <FieldDescription id={`${id}-hint`}>
+    <Field className="min-w-0 text-start [overflow-wrap:anywhere]">
+      <FieldLabel htmlFor={id} className="min-w-0 max-w-full whitespace-normal text-start">
+        {label}
+      </FieldLabel>
+      <FieldDescription id={`${id}-hint`} className="min-w-0 text-start leading-relaxed">
         {kind === 'scheme' ? m.space_setup_board_scheme_choices_hint() : m.space_setup_concept_hint()}
         {kind === 'concept' && source.conceptQuery === 'loaded-page'
           ? ` ${m.space_setup_board_choice_local_hint()}`
           : ''}
       </FieldDescription>
       {value ? (
-        <div className="flex min-w-0 items-center gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
+        <div className="flex min-w-0 flex-wrap items-center gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
           <Check className="size-4 shrink-0 text-primary" aria-hidden="true" />
-          <span className="min-w-0 flex-1 break-words font-medium">{value.label}</span>
-          <Button type="button" variant="ghost" size="sm" disabled={disabled} onClick={() => onChange(null)}>
+          <span className="min-w-0 flex-1 basis-40 whitespace-normal font-medium [overflow-wrap:anywhere]">
+            {value.label}
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+            disabled={disabled}
+            onClick={() => onChange(null)}
+          >
             {m.space_setup_board_choice_clear()}
           </Button>
         </div>
@@ -75,6 +86,7 @@ export function SetupBoardPicker({
       <Input
         id={id}
         type="search"
+        className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
         value={query}
         maxLength={256}
         disabled={disabled}
@@ -82,7 +94,7 @@ export function SetupBoardPicker({
         placeholder={m.space_setup_board_choice_search()}
         onChange={(event) => setQuery(event.target.value)}
       />
-      <div aria-busy={shown.status === 'loading' && !disabled} className="space-y-3">
+      <div aria-busy={shown.status === 'loading' && !disabled} className="min-w-0 space-y-3">
         {shown.freshness?.caught_up === false ? (
           <p role="status" className="text-sm text-muted-foreground">
             {m.space_setup_board_choice_updating()}
@@ -92,6 +104,8 @@ export function SetupBoardPicker({
           shown.choices.length ? (
             <RadioGroup
               aria-label={label}
+              aria-describedby={`${id}-hint`}
+              className="min-w-0"
               value={value?.id ?? ''}
               disabled={disabled}
               onValueChange={(id) => {
@@ -103,10 +117,10 @@ export function SetupBoardPicker({
                 <FieldLabel
                   key={choice.id}
                   htmlFor={`${id}-${index}`}
-                  className="flex min-h-12 min-w-0 cursor-pointer items-center gap-3 rounded-xl border border-border p-3 has-[[data-checked]]:border-primary has-[[data-checked]]:bg-primary/5"
+                  className="flex h-auto min-h-12 w-full min-w-0 max-w-full cursor-pointer items-center gap-3 whitespace-normal rounded-xl border border-border p-3 text-start has-[[data-checked]]:border-primary has-[[data-checked]]:bg-primary/5 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-solid has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ring"
                 >
                   <RadioGroupItem id={`${id}-${index}`} value={choice.id} />
-                  <span className="min-w-0 break-words text-sm leading-relaxed">{choice.label}</span>
+                  <span className="min-w-0 flex-1 whitespace-normal text-sm leading-relaxed [overflow-wrap:anywhere]">{choice.label}</span>
                 </FieldLabel>
               ))}
             </RadioGroup>
@@ -128,7 +142,13 @@ export function SetupBoardPicker({
                     ? m.space_setup_invalid()
                     : m.space_setup_board_choice_unavailable()}
             </p>
-            <Button type="button" variant="outline" disabled={disabled} onClick={() => pager.retry(expected)}>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+              disabled={disabled}
+              onClick={() => pager.retry(expected)}
+            >
               {m.space_setup_retry()}
             </Button>
           </div>
@@ -138,7 +158,13 @@ export function SetupBoardPicker({
           </p>
         ) : null}
         {shown.next !== null ? (
-          <Button type="button" variant="outline" disabled={disabled} onClick={() => pager.next(expected)}>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 text-start [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+            disabled={disabled}
+            onClick={() => pager.next(expected)}
+          >
             {m.space_setup_board_choice_next()}
           </Button>
         ) : null}
