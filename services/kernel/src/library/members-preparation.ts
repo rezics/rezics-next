@@ -128,7 +128,10 @@ export interface MembersPreparation {
   /** Called inside the registered step's fenced operational transaction; locks survive to its commit. */
   admitStep(tx: OperationalTransaction, locator: PreparationLocator): Promise<boolean>;
   /** Exact retained meaning on the admitted client; never Source or result authority. */
-  readRetainedDefinition(tx: OperationalTransaction, locator: PreparationLocator): Promise<PreparationDefinition | null>;
+  readRetainedDefinition(
+    tx: OperationalTransaction,
+    locator: PreparationLocator,
+  ): Promise<PreparationDefinition | null>;
   /** Read-only on the SAME live admitted Core client; null for an obsolete or unbound episode. */
   readWorkDefinition(
     tx: OperationalTransaction,

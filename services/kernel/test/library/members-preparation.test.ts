@@ -38,16 +38,21 @@ test('retained definitions recover exact immutable meaning and reject invalid by
     const canonicalBasis = bytes!;
     await expect(
       restorePreparationDefinition(
-        addressedOwner!, addressedCollection!,
-        { canonicalBasis, basisDigest: createHash('sha256').update(canonicalBasis).digest() }, load,
+        addressedOwner!,
+        addressedCollection!,
+        { canonicalBasis, basisDigest: createHash('sha256').update(canonicalBasis).digest() },
+        load,
       ),
     ).rejects.toMatchObject({ code: 'unsupported_query' });
   }
-  await expect(restorePreparationDefinition(owner, collection, { ...retained!, basisDigest: new Uint8Array(32) }, load))
-    .rejects.toMatchObject({ code: 'unsupported_query' });
+  await expect(
+    restorePreparationDefinition(owner, collection, { ...retained!, basisDigest: new Uint8Array(32) }, load),
+  ).rejects.toMatchObject({ code: 'unsupported_query' });
   expect(reads).toEqual([]);
-  await expect(restorePreparationDefinition(owner, collection, retained!, async () => null))
-    .rejects.toMatchObject({ code: 'dependency_unavailable' });
-  await expect(restorePreparationDefinition(owner, collection, retained!, async () => ({ ...selected.release.value, types: {} })))
-    .rejects.toMatchObject({ code: 'unsupported_query' });
+  await expect(restorePreparationDefinition(owner, collection, retained!, async () => null)).rejects.toMatchObject({
+    code: 'dependency_unavailable',
+  });
+  await expect(
+    restorePreparationDefinition(owner, collection, retained!, async () => ({ ...selected.release.value, types: {} })),
+  ).rejects.toMatchObject({ code: 'unsupported_query' });
 });
