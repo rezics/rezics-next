@@ -153,7 +153,10 @@ test('Work Parts orients only current keyboard openings, closes independent draf
     const close = await click(m.work_parts_draft_close(), firstEditor);
     const retain = (name: string, editor: HTMLElement) => {
       const button = [...editor.querySelectorAll('button')].find((item) => item.textContent?.trim() === name)!;
-      return Reflect.get(button, Object.keys(button).find((key) => key.startsWith('__reactProps$'))!).onClick;
+      return Reflect.get(
+        button,
+        Object.keys(button).find((key) => key.startsWith('__reactProps$'))!,
+      ).onClick;
     };
     const cancelledConfirm = retain(m.work_parts_draft_discard(), firstEditor);
     const cancelledCancel = retain(m.candidate_cancel(), firstEditor);
