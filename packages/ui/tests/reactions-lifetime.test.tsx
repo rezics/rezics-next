@@ -141,10 +141,10 @@ async function calls(page: Page): Promise<Call[]> {
 }
 
 async function settle(page: Page, id: number, outcome: CallOutcome) {
-  await page.evaluate(({ callId, result }) => window.reactionTest?.settle(callId, result), {
-    callId: id,
-    result: outcome,
-  });
+  await page.evaluate(async ({ callId, result }) => {
+    window.reactionTest?.settle(callId, result);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  }, { callId: id, result: outcome });
 }
 
 async function retain(page: Page, panel: PanelName, surface: 'chip' | 'picker', kind: string): Promise<number> {
@@ -319,26 +319,31 @@ test('shared Reactions serialize original choices and retire every obsolete visi
     await waitForCalls(page, 8);
     await chooseFromPicker(page, 'Insightful');
     const retiredDisableHandler = await retain(page, 'primary', 'picker', 'Upvote');
+    const retiredDisableChipHandler = await retain(page, 'primary', 'chip', 'Like');
     await update(page, 'primary', { disabled: true });
     await waitBusy(page, 'primary', false);
     expect(await page.getByRole('dialog').getByRole('button', { name: /^Upvote/ }).isDisabled()).toBe(true);
+    expect(await primary.getByRole('button', { name: 'Like 3' }).isDisabled()).toBe(true);
     expect(await primary.getByRole('button', { name: 'Laugh 2' }).getAttribute('aria-pressed')).toBe('true');
     await invokeRetained(page, retiredDisableHandler);
+    await invokeRetained(page, retiredDisableChipHandler);
     expect(await calls(page)).toHaveLength(8);
     await update(page, 'primary', { disabled: false, callback: 'C' });
     await invokeRetained(page, retiredDisableHandler);
+    await invokeRetained(page, retiredDisableChipHandler);
     expect(await calls(page)).toHaveLength(8);
     await chooseFromPicker(page, 'Downvote');
     await waitForCalls(page, 9);
     expect((await calls(page))[8]).toEqual({ id: 8, panel: 'primary', callback: 'C', kind: 'downvote' });
-    await settle(page, 8, 'resolve');
-    await waitBusy(page, 'primary', false);
-    expect(await primary.getByRole('button', { name: 'Downvote 2' }).getAttribute('aria-pressed')).toBe('true');
+    await waitBusy(page, 'primary', true);
     await settle(page, 7, 'reject');
-    await waitBusy(page, 'primary', false);
+    await waitBusy(page, 'primary', true);
     expect(await calls(page)).toHaveLength(9);
     expect(await primary.getByRole('button', { name: 'Downvote 2' }).getAttribute('aria-pressed')).toBe('true');
     expect(await primary.getByRole('status').count()).toBe(0);
+    await settle(page, 8, 'resolve');
+    await waitBusy(page, 'primary', false);
+    expect(await primary.getByRole('button', { name: 'Downvote 2' }).getAttribute('aria-pressed')).toBe('true');
     await update(page, 'primary', {
       counts: { upvote: 3, downvote: 2, like: 3, love: 2, laugh: 1, insightful: 1, sad: 1 },
       value: 'downvote',
@@ -365,10 +370,12 @@ test('shared Reactions serialize original choices and retire every obsolete visi
     await chooseFromPicker(page, 'Love');
     await waitForCalls(page, 11);
     expect((await calls(page))[10]).toEqual({ id: 10, panel: 'primary', callback: 'D', kind: 'love' });
-    await settle(page, 10, 'resolve');
-    await waitBusy(page, 'primary', false);
-    expect(await primary.getByRole('button', { name: 'Love 3' }).getAttribute('aria-pressed')).toBe('true');
+    await waitBusy(page, 'primary', true);
     await settle(page, 9, 'resolve');
+    await waitBusy(page, 'primary', true);
+    expect(await calls(page)).toHaveLength(11);
+    expect(await primary.getByRole('button', { name: 'Love 3' }).getAttribute('aria-pressed')).toBe('true');
+    await settle(page, 10, 'resolve');
     await waitBusy(page, 'primary', false);
     expect(await calls(page)).toHaveLength(11);
     expect(await primary.getByRole('button', { name: 'Love 3' }).getAttribute('aria-pressed')).toBe('true');
@@ -395,14 +402,16 @@ test('shared Reactions serialize original choices and retire every obsolete visi
     await chooseFromPicker(page, 'Insightful');
     await waitForCalls(page, 13);
     expect((await calls(page))[12]).toEqual({ id: 12, panel: 'primary', callback: 'E', kind: 'insightful' });
-    await settle(page, 12, 'resolve');
-    await waitBusy(page, 'primary', false);
-    expect(await primary.getByRole('button', { name: 'Insightful 2' }).getAttribute('aria-pressed')).toBe('true');
+    await waitBusy(page, 'primary', true);
     await settle(page, 11, 'reject');
+    await waitBusy(page, 'primary', true);
+    expect(await calls(page)).toHaveLength(13);
+    expect(await primary.getByRole('status').count()).toBe(0);
+    expect(await primary.getByRole('button', { name: 'Insightful 2' }).getAttribute('aria-pressed')).toBe('true');
+    await settle(page, 12, 'resolve');
     await waitBusy(page, 'primary', false);
     expect(await calls(page)).toHaveLength(13);
     expect(await primary.getByRole('button', { name: 'Insightful 2' }).getAttribute('aria-pressed')).toBe('true');
-    expect(await primary.getByRole('status').count()).toBe(0);
     await update(page, 'primary', {
       counts: { upvote: 3, downvote: 1, like: 3, love: 2, laugh: 1, insightful: 2, sad: 1 },
       value: 'insightful',
@@ -425,11 +434,15 @@ test('shared Reactions serialize original choices and retire every obsolete visi
     await primary.getByRole('button', { name: 'Insightful 2' }).click();
     await waitForCalls(page, 15);
     expect((await calls(page))[14]).toEqual({ id: 14, panel: 'primary', callback: 'F', kind: null });
+    await waitBusy(page, 'primary', true);
+    await settle(page, 13, 'resolve');
+    await waitBusy(page, 'primary', true);
+    expect(await calls(page)).toHaveLength(15);
+    expect(await primary.getByRole('button', { name: 'Insightful 1' }).getAttribute('aria-pressed')).toBe('false');
+    expect(await primary.getByRole('status').count()).toBe(0);
     await settle(page, 14, 'resolve');
     await waitBusy(page, 'primary', false);
     expect(await primary.getByRole('button', { name: 'Insightful 1' }).getAttribute('aria-pressed')).toBe('false');
-    await settle(page, 13, 'resolve');
-    await waitBusy(page, 'primary', false);
     expect(await calls(page)).toHaveLength(15);
     expect(await primary.getByRole('button', { name: 'Insightful 1' }).getAttribute('aria-pressed')).toBe('false');
     expect(await primary.getByRole('status').count()).toBe(0);

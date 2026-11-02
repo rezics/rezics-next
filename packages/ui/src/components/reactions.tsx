@@ -107,6 +107,19 @@ interface QueueView {
   busy: boolean;
 }
 
+interface CurrentReactionProps {
+  counts: Partial<Record<ReactionKind, number>>;
+  value: ReactionKind | null;
+  disabled?: boolean;
+  signInHref?: string;
+  kinds?: readonly ReactionKind[];
+}
+
+interface ReactionVisit {
+  admission: AdmissionSignal;
+  queue: ReactionQueue;
+}
+
 interface AdmissionSignal {
   disabled: boolean;
   signInHref: string | undefined;
@@ -184,36 +197,49 @@ export const Reactions = (props: ReactionsProps) => {
   const signedOut = signInHref !== undefined;
   const kinds = admittedKinds(props.kinds);
   const disabled = props.disabled === true;
-  const propsRef = React.useRef(props);
-  const labelsRef = React.useRef(labels);
+  const currentPropsRef = React.useRef<CurrentReactionProps>({
+    counts: props.counts,
+    value: props.value,
+    disabled: props.disabled,
+    signInHref: props.signInHref,
+    kinds: props.kinds,
+  });
+  const failedLabelRef = React.useRef(labels.failed);
 
   const queueRef = React.useRef<ReactionQueue | null>(null);
-  const admissionRef = React.useRef<AdmissionSignal | null>(null);
   const [view, setView] = React.useState<QueueView | null>(null);
   const nextAdmission = admissionSignal(props);
-  if (queueRef.current === null) {
-    queueRef.current = newReactionQueue();
-    admissionRef.current = nextAdmission;
+  const [visit, setVisit] = React.useState<ReactionVisit>(() => ({
+    admission: nextAdmission,
+    queue: newReactionQueue(),
+  }));
+  if (!sameAdmission(visit.admission, nextAdmission)) {
+    // Admission changes describe a new visit. Derive its empty queue during render so stale optimistic state is never
+    // shown for the newly committed props; the layout cleanup below retires the predecessor before Promise jobs run.
+    setVisit({ admission: nextAdmission, queue: newReactionQueue() });
   }
-  const queue = queueRef.current;
+  const queue = visit.queue;
 
   useClientLayoutEffect(() => {
-    propsRef.current = props;
-    labelsRef.current = labels;
-
-    const previousAdmission = admissionRef.current;
-    if (previousAdmission && !sameAdmission(previousAdmission, nextAdmission)) {
-      // Retire at commit, before another browser event or queued Promise job can use this visit.
-      queueRef.current!.active = false;
-      const replacement = newReactionQueue();
-      queueRef.current = replacement;
-      admissionRef.current = nextAdmission;
-      setView({ queue: replacement, overlay: null, failure: null, busy: false });
-    }
-  }, [labels, nextAdmission.disabled, nextAdmission.kinds, nextAdmission.signInHref, props]);
+    currentPropsRef.current = {
+      counts: props.counts,
+      value: props.value,
+      disabled: props.disabled,
+      signInHref: props.signInHref,
+      kinds: props.kinds,
+    };
+    failedLabelRef.current = labels.failed;
+  }, [
+    props.counts,
+    props.value,
+    props.disabled,
+    props.signInHref,
+    props.kinds,
+    labels.failed,
+  ]);
 
   const isCurrent = (candidate: ReactionQueue, kind?: ReactionKind) => {
-    const current = propsRef.current;
+    const current = currentPropsRef.current;
     if (
       !candidate.active ||
       queueRef.current !== candidate ||
@@ -235,10 +261,15 @@ export const Reactions = (props: ReactionsProps) => {
   };
 
   useClientLayoutEffect(() => {
+    // Retire the previous visit at commit, before another browser event or queued Promise job can use it.
+    const previous = queueRef.current;
+    if (previous && previous !== queue) previous.active = false;
+    queueRef.current = queue;
     // Re-enable the current queue on Strict Mode's development-only effect replay.
-    if (queueRef.current === queue) queue.active = true;
+    queue.active = true;
     return () => {
       queue.active = false;
+      if (queueRef.current === queue) queueRef.current = null;
     };
   }, [queue]);
 
@@ -280,7 +311,8 @@ export const Reactions = (props: ReactionsProps) => {
     const job = queue.tail.then(async () => {
       if (!isCurrent(queue, kind)) return;
       const previous = queue.overlay;
-      const base = previous ?? { counts: propsRef.current.counts, value: propsRef.current.value };
+      const current = currentPropsRef.current;
+      const base = previous ?? { counts: current.counts, value: current.value };
       const next = base.value === kind ? null : kind;
       const pending: ReactionView = {
         counts: applyReactionChange(base.counts, base.value, next),
@@ -294,7 +326,7 @@ export const Reactions = (props: ReactionsProps) => {
       } catch {
         if (isCurrent(queue) && queue.overlay === pending) {
           queue.overlay = previous;
-          queue.failure = labelsRef.current.failed;
+          queue.failure = failedLabelRef.current;
           publish(queue);
         }
       }
