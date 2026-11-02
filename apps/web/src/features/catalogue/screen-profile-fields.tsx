@@ -307,16 +307,11 @@ function InitialStatement({
                     emptyCitation.current = { property: { id: 'schema:url' }, value: { type: 'value', content: '' } };
                     change({
                       ...statement,
-                      references: statement.references
-                        .map((reference, group) =>
-                          group !== citation.group
-                            ? reference
-                            : {
-                                ...reference,
-                                parts: reference.parts.filter((_, index) => index !== citation.index),
-                              },
-                        )
-                        .filter((reference) => reference.parts.length),
+                      references: statement.references.flatMap((reference, group) => {
+                        if (group !== citation.group) return [reference];
+                        const parts = reference.parts.filter((_, index) => index !== citation.index);
+                        return parts.length ? [{ ...reference, parts }] : [];
+                      }),
                     });
                   }}
                 >
