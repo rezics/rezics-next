@@ -11,7 +11,7 @@ import {
 } from './history-current-origin';
 import { readCurrentFollowState, readFollowState, setFollow } from './follow-actions';
 import { FollowControl } from './follow-control';
-import type { FollowState } from './follow-records';
+import type { FollowState, FollowWriteInput } from './follow-records';
 import { refreshFollowing } from './mine-following-refresh';
 
 type FollowLifetime = {
@@ -88,6 +88,8 @@ export function FollowTargetControl({
     canFollow,
     canRemove,
   ]);
+  // A refreshed session may reauthorize a retry, but cannot replace its original transport.
+  const commands = useRef(new WeakMap<FollowWriteInput, { token: string; send: typeof setFollow }>()).current;
   const viewer = origin.subject;
   const identity = origin.boundary.id;
   const [readGeneration, setReadGeneration] = useState(0);
@@ -161,10 +163,15 @@ export function FollowTargetControl({
             }
           : {})}
         write={(input) => {
-          const token = origin.credential(input.following ? 1 : 2);
-          return token && isCurrent(input.following)
-            ? setFollow({ data: input, headers: { 'X-CSRF-Token': token } })
-            : Promise.resolve({ ok: false, reason: 'unavailable' });
+          if (!isCurrent(input.following)) return Promise.resolve({ ok: false, reason: 'unavailable' });
+          let command = commands.get(input);
+          if (!command) {
+            const token = origin.credential(input.following ? 1 : 2);
+            if (!token) return Promise.resolve({ ok: false, reason: 'unavailable' });
+            command = { token, send: setFollow };
+            commands.set(input, command);
+          }
+          return command.send({ data: input, headers: { 'X-CSRF-Token': command.token } });
         }}
         onAccepted={(next, input) => {
           if (!isCurrent(input.following)) return false;

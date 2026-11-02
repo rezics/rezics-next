@@ -16,7 +16,12 @@ const groups = [
 export type ReportGroup = (typeof groups)[number];
 
 /** Local composition for the named-label shelf and count report, using the shared viewer observer. */
-export function usePrivateReportOrigin(address: string, locale: string, addressAt: (href: string) => string) {
+export function usePrivateReportOrigin(
+  address: string,
+  locale: string,
+  addressAt: (href: string) => string,
+  requireMutationCredential = true,
+) {
   const client = useQueryClient();
   const router = useRouter({ warn: false });
   useSession();
@@ -53,7 +58,11 @@ export function usePrivateReportOrigin(address: string, locale: string, addressA
       const session = client.getQueryState<Session>(sessionQuery.queryKey);
       const viewer = session?.status === 'success' ? session.data : undefined;
       const subject =
-        viewer?.state === 'signed-in' && viewer.subject?.trim() && viewer.csrfToken?.trim() ? viewer.subject : null;
+        viewer?.state === 'signed-in' &&
+        viewer.subject?.trim() &&
+        (!requireMutationCredential || viewer.csrfToken?.trim())
+          ? viewer.subject
+          : null;
       const snapshot = lifetime.getSnapshot();
       const observation = snapshot.state === 'signed-in' ? snapshot.observation : undefined;
       const exposure = client.getQueryState<ViewerExposure>(viewerExposureQuery(observation).queryKey);
@@ -92,7 +101,7 @@ export function usePrivateReportOrigin(address: string, locale: string, addressA
           unavailable,
           subject,
           authority,
-          csrfToken: subject ? viewer!.csrfToken! : '',
+          csrfToken: subject ? (viewer!.csrfToken ?? '') : '',
           state: viewer?.state ?? 'unknown',
           observation,
           admitted,
@@ -161,7 +170,7 @@ export function usePrivateReportOrigin(address: string, locale: string, addressA
         };
       },
     };
-  }, [client, router]);
+  }, [client, router, requireMutationCredential]);
   origin.bind(address, locale, addressAt);
   const value = useSyncExternalStore(origin.subscribe, origin.read, origin.server);
   useQuery({ ...viewerExposureQuery(value.observation), enabled: hydrated && value.observation !== undefined });

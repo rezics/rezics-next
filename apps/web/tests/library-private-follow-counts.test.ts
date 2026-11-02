@@ -158,9 +158,10 @@ test('private query identity and target isolate cache entries and fence late old
   const renewed = privateFollowCountsQuery({ ...viewer, csrfToken: 'B'.repeat(22) }, target, async () => ready);
   const other = privateFollowCountsQuery(viewer, { ...target, targetType: 'space' }, async () => ready);
   const own = privateFollowCountsQuery(viewer, {}, async () => ready);
-  expect(new Set([alice, bob, renewed, other, own].map((query) => JSON.stringify(query.queryKey))).size).toBe(5);
+  expect(renewed.queryKey).toEqual(alice.queryKey);
+  expect(new Set([alice, bob, other, own].map((query) => JSON.stringify(query.queryKey))).size).toBe(4);
   expect((await cache.fetchQuery(alice)).outgoing).toEqual({ state: 'ready', count: 12 });
-  for (const query of [bob, renewed, other, own]) {
+  for (const query of [bob, other, own]) {
     const fenced = await cache.fetchQuery(query);
     expect(fenced.outgoing.state).toBe('unavailable');
     expect(fenced.target).toBeNull();
@@ -187,7 +188,8 @@ test('private query identity and target isolate cache entries and fence late old
 
 test('signed-in BFF uses its prepared session, and absent runtime or session stays unavailable or signed out', async () => {
   const { client, calls } = transport(() => Response.json({ followingCount: 0 }, { headers: privateHeaders }));
-  const credential = async () => ({ status: 'active' as const, ...viewer, accessToken: 'alice-count-token' });
+  const readViewer = { ...viewer, csrfToken: null };
+  const credential = async () => ({ status: 'active' as const, ...readViewer, accessToken: 'alice-count-token' });
   const env: Partial<SessionEnv> = {
     AUTH_ISSUER: 'https://auth.example.test',
     API_RESOURCE: 'https://api.example.test',
@@ -204,7 +206,7 @@ test('signed-in BFF uses its prepared session, and absent runtime or session sta
       headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` },
     });
   expect(await loadPrivateFollowCounts(client, request(), env, {})).toEqual({
-    viewer,
+    viewer: readViewer,
     context: {},
     outgoing: { state: 'ready', count: 0 },
     target: null,

@@ -120,6 +120,7 @@ export function CurrentViewerMineFollowingPage({
     lifetime: origin.boundary.lifetime,
     isCurrent: () => current() && readCurrent(),
   };
+  const retryState = origin.client.getQueryState(options.queryKey);
   const status =
     origin.subject && origin.allowed[0] === true && (read.isError || !page.signedIn)
       ? read.isError || read.data
@@ -136,7 +137,7 @@ export function CurrentViewerMineFollowingPage({
         onRetry={
           status === 'unavailable'
             ? () => {
-                if (current()) void read.refetch();
+                if (current() && origin.client.getQueryState(options.queryKey) === retryState) void read.refetch();
               }
             : undefined
         }

@@ -1,6 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
-import { useRef } from 'react';
 import { usePrivateReportOrigin, usePrivateReportPayload } from './private-report-current-origin';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
@@ -173,14 +172,15 @@ export function PrivateFollowCountsPage({
   const client = useQueryClient();
   const context = followCountsSearch(input);
   const locale = getLocale();
-  const { origin, value, hydrated } = usePrivateReportOrigin(reportAddress(context, locale), locale, (href) =>
-    reportAddressAt(href, locale),
+  const { origin, value, hydrated } = usePrivateReportOrigin(
+    reportAddress(context, locale),
+    locale,
+    (href) => reportAddressAt(href, locale),
+    false,
   );
   const enrolled = origin.capture('personal_library');
   const current = () => enrolled() && origin.read().owner === value.owner && origin.read().subject === value.subject;
   const lifetime = { key: origin.version('personal_library'), isCurrent: current, locale };
-  const payload = useRef<{ owner: number; page?: Awaited<ReturnType<FollowCountsReader>> }>({ owner: value.owner });
-  if (payload.current.owner !== value.owner) payload.current = { owner: value.owner };
   const options = privateFollowCountsQuery(
     { subject: value.subject ?? '', csrfToken: value.csrfToken },
     context,
@@ -190,8 +190,6 @@ export function PrivateFollowCountsPage({
   const query = useQuery({
     ...options,
     enabled: hydrated && current(),
-    // A healthy refresh keeps the actual read and its captured credential; it does not perform another GET.
-    ...(payload.current.page ? { initialData: payload.current.page } : {}),
   });
   const capturePayload = usePrivateReportPayload(client, options.queryKey);
   const sameRead = capturePayload(query.data);
@@ -227,10 +225,8 @@ export function PrivateFollowCountsPage({
     !!actualContext.invalidContext === !!context.invalidContext &&
     (candidate.viewer === null
       ? candidate.outgoing.state !== 'ready' && candidate.target?.state !== 'ready'
-      : candidate.viewer.subject === value.subject &&
-        (candidate.viewer.csrfToken === value.csrfToken || candidate === payload.current.page));
+      : candidate.viewer.subject === value.subject);
   const accepted = hydrated && current() && sameRead() && !query.isFetching && matches ? candidate : undefined;
-  if (accepted) payload.current.page = accepted;
   const page: FollowCountsRead = accepted ?? {
     context,
     outgoing: outcome,

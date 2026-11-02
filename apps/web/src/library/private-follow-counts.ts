@@ -21,7 +21,7 @@ export type FollowCountsRead = {
   outgoing: FollowCountState;
   target: FollowCountState | null;
 };
-export type FollowCountsViewer = { subject: string; csrfToken: string };
+export type FollowCountsViewer = { subject: string; csrfToken: string | null };
 export type FollowCountsPage = FollowCountsRead & { viewer: FollowCountsViewer | null; locale?: string };
 export type FollowCountsReader = (input: { data: FollowCountsSearch }) => Promise<FollowCountsPage>;
 
@@ -131,7 +131,7 @@ export async function loadPrivateFollowCounts(
     const authorization = viewerCredential(request);
     const subject = sessionSubject(request);
     const csrfToken = requestCsrfToken(request);
-    if (!authorization || !subject || !csrfToken)
+    if (!authorization || !subject)
       return { locale, viewer, context, outgoing: { state: 'signed-out' }, target: null };
     viewer = { subject, csrfToken };
     if (client) return { locale, viewer, ...(await readFollowCounts(client, authorization, context)) };
@@ -183,7 +183,6 @@ export function privateFollowCountsQuery(
     queryKey: [
       'library-private-follow-counts',
       viewer.subject,
-      viewer.csrfToken,
       context.targetType ?? '',
       context.targetId ?? '',
       !!context.invalidContext,
@@ -191,7 +190,7 @@ export function privateFollowCountsQuery(
     ],
     queryFn: async ({ signal }): Promise<FollowCountsPage> => {
       signal.throwIfAborted();
-      if (!viewer.subject.trim() || !viewer.csrfToken.trim() || (lifetime && !lifetime.isCurrent())) return retired;
+      if (!viewer.subject.trim() || (lifetime && !lifetime.isCurrent())) return retired;
       const page = await read({ data: context });
       signal.throwIfAborted();
       if (lifetime && !lifetime.isCurrent()) return retired;
@@ -199,7 +198,6 @@ export function privateFollowCountsQuery(
       if (
         (lifetime?.locale !== undefined && page.locale !== lifetime.locale) ||
         page.viewer?.subject !== viewer.subject ||
-        page.viewer.csrfToken !== viewer.csrfToken ||
         actualContext.targetType !== context.targetType ||
         actualContext.targetId !== context.targetId ||
         !!actualContext.invalidContext !== !!context.invalidContext

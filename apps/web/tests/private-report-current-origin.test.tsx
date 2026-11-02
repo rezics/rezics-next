@@ -580,8 +580,15 @@ test('actual prepared read provenance, empty success and strict report values su
     });
     expect(page.scalars()).toEqual([]);
     const total = page.calls.length;
-    await act(async () => page.client.setQueryData(sessionQuery.queryKey, session('A', '')));
-    expect(page.calls).toHaveLength(total);
+    csrf = '';
+    await act(async () => page.client.setQueryData(sessionQuery.queryKey, session('A', null)));
+    await until(() => page.calls.length === total + 1);
+    await page.release(total);
+    expect(page.scalars()).toEqual(['0']);
+    await page.refresh();
+    await until(() => page.calls.length === total + 2);
+    await page.release(total + 1);
+    expect(page.scalars()).toEqual(['0']);
   } finally {
     await page.close();
   }

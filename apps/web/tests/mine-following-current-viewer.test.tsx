@@ -237,6 +237,10 @@ test('the mounted default Following composition retires viewer, cursor and row l
   const { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } =
     await import('@tanstack/react-router');
   const { sessionQuery, exposureQuery } = await import('../src/session/query');
+  const exposure = await import('../src/kernel/viewer-exposure');
+  const exposureRead = spyOn(exposure, 'readViewerExposure').mockImplementation(async ({ data }) => ({
+    subject: data, admitted: client.getQueryData<string[]>(exposureQuery.queryKey) ?? [],
+  }));
   const { mineFollowingQuery } = await import('../src/library/mine-following-page');
   const { Route } = await import('../src/routes/library/following');
   const followActions = await import('../src/library/follow-actions');
@@ -260,8 +264,8 @@ test('the mounted default Following composition retires viewer, cursor and row l
     return call.promise;
   });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const viewer = (subject: string, token = 'csrf-one') => ({ state: 'signed-in', subject, csrfToken: token });
-  client.setQueryData(sessionQuery.queryKey, viewer('A'));
+  const viewer = (subject: string, token: string | null = 'csrf-one') => ({ state: 'signed-in', subject, csrfToken: token });
+  client.setQueryData(sessionQuery.queryKey, viewer('A', null));
   client.setQueryData(exposureQuery.queryKey, ['personal_library']);
   const initial = loaded('A', null, 'A private title');
   const retainedLoader = spyOn(Route, 'useLoaderData').mockImplementation(() => initial);
@@ -321,6 +325,13 @@ test('the mounted default Following composition retires viewer, cursor and row l
     expect(host.textContent).toContain('A private title');
     expect(reads).toHaveLength(1);
     await remove();
+    expect(writes).toHaveLength(0);
+    await act(async () => {
+      client.setQueryData(sessionQuery.queryKey, viewer('A'));
+      await tick();
+    });
+    expect(writes).toHaveLength(0);
+    await remove();
     const aRead = reads[0]!;
     const aRemoval = writes[0]!;
     await act(async () => {
@@ -349,7 +360,7 @@ test('the mounted default Following composition retires viewer, cursor and row l
     await remove();
     const retry = writes.at(-1)!;
     expect(retry.input).toEqual(uncertain.input);
-    expect(retry.csrf).toBe('csrf-rotated');
+    expect(retry.csrf).toBe('csrf-one');
     await settle(aRead, loaded('A', null, 'Late A disclosure'));
     await settle(aRemoval, { ok: true, following: false });
     expect(host.textContent).toContain('B current title');
@@ -379,11 +390,17 @@ test('the mounted default Following composition retires viewer, cursor and row l
     expect(host.textContent).not.toContain(m.library_follow_removed());
 
     await act(async () => {
+      const snapshot = exposure.viewerExposureLifetime(client).getSnapshot();
+      if (snapshot.state !== 'signed-in') throw new Error('No current viewer');
+      client.setQueryData(exposure.viewerExposureQuery(snapshot.observation).queryKey, { subject: 'B', admitted: [] });
       client.setQueryData(exposureQuery.queryKey, []);
       await tick();
     });
     expectRetired();
     await act(async () => {
+      const snapshot = exposure.viewerExposureLifetime(client).getSnapshot();
+      if (snapshot.state !== 'signed-in') throw new Error('No current viewer');
+      client.setQueryData(exposure.viewerExposureQuery(snapshot.observation).queryKey, { subject: 'B', admitted: ['personal_library'] });
       client.setQueryData(exposureQuery.queryKey, ['personal_library']);
       await tick();
     });
@@ -404,6 +421,7 @@ test('the mounted default Following composition retires viewer, cursor and row l
   } finally {
     await act(async () => root.unmount());
     client.clear();
+    exposureRead.mockRestore();
     read.mockRestore();
     write.mockRestore();
     retainedLoader.mockRestore();
@@ -499,6 +517,10 @@ test('Following recovery stays page-local through terminal pages, last-row remov
   const { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } =
     await import('@tanstack/react-router');
   const { sessionQuery, exposureQuery } = await import('../src/session/query');
+  const exposure = await import('../src/kernel/viewer-exposure');
+  const exposureRead = spyOn(exposure, 'readViewerExposure').mockImplementation(async ({ data }) => ({
+    subject: data, admitted: client.getQueryData<string[]>(exposureQuery.queryKey) ?? [],
+  }));
   const { mineFollowingQuery } = await import('../src/library/mine-following-page');
   const { Route } = await import('../src/routes/library/following');
   const followActions = await import('../src/library/follow-actions');
@@ -679,6 +701,7 @@ test('Following recovery stays page-local through terminal pages, last-row remov
   } finally {
     await act(async () => root.unmount());
     client.clear();
+    exposureRead.mockRestore();
     read.mockRestore();
     write.mockRestore();
     retainedLoader.mockRestore();

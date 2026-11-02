@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
+import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { dirname } from 'node:path';
 import { act } from 'react';
@@ -39,6 +39,8 @@ const { createRoot } = await import('react-dom/client');
 const { flushSync } = await import('react-dom');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { sessionQuery, exposureQuery } = await import('../src/session/query');
+const exposure = await import('../src/kernel/viewer-exposure');
+spyOn(exposure, 'readViewerExposure').mockImplementation(async ({ data }) => ({ subject: data, admitted: ['personal_library'] }));
 const { loadPrivateFollowCounts, privateFollowCountsQuery } = await import('../src/library/private-follow-counts');
 const { PrivateFollowCountsPage } = await import('../src/library/private-follow-counts-page');
 const { m } = await import('../src/paraglide/messages.js');
@@ -52,7 +54,7 @@ function deferred<T>() {
   });
   return { promise, resolve };
 }
-const alice = { subject: 'alice', csrfToken: 'A'.repeat(22) };
+const alice = { subject: 'alice', csrfToken: null as string | null };
 const bob = { subject: 'bob', csrfToken: 'B'.repeat(22) };
 const first = { targetType: 'collection' as const, targetId: '0192f3a0-6c1e-7b2a-9d4e-000000000021' };
 const second = { targetType: 'space' as const, targetId: '0192f3a0-6c1e-7b2a-9d4e-000000000022' };
@@ -79,6 +81,11 @@ window.document.body.append(host);
 let root: ReturnType<typeof createRoot>;
 let client: InstanceType<typeof QueryClient>;
 let context: FollowCountsSearch;
+const exposureKey = () => {
+  const snapshot = exposure.viewerExposureLifetime(client).getSnapshot();
+  return snapshot.state === 'signed-in' ? exposure.viewerExposureQuery(snapshot.observation).queryKey : exposureQuery.queryKey;
+};
+const setExposure = (admitted: string[]) => client.setQueryData(exposureKey(), { subject: 'alice', admitted });
 const tick = () => new Promise((resolve) => setTimeout(resolve, 10));
 const tree = () => (
   <QueryClientProvider client={client}>
@@ -122,7 +129,7 @@ beforeEach(() => {
   setLocale('en', { reload: false });
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(sessionQuery.queryKey, signedIn());
-  client.setQueryData(exposureQuery.queryKey, ['personal_library']);
+  setExposure(['personal_library']);
   client.setQueryData(['exposure', 'anonymous'], []);
   root = createRoot(host);
 });
@@ -153,11 +160,11 @@ test('the mounted count journey retires admission, exact context and viewer ABA,
   await paint();
   expect(reads).toHaveLength(1);
 
-  await replace(() => client.setQueryData(exposureQuery.queryKey, []));
+  await replace(() => setExposure([]));
   expect(host.textContent).toContain(m.platform_closed_heading());
   expect(host.querySelector('button')).toBeNull();
   expect(reads).toHaveLength(1);
-  await replace(() => client.setQueryData(exposureQuery.queryKey, ['personal_library']));
+  await replace(() => setExposure(['personal_library']));
   expect(reads).toHaveLength(2);
   expect(host.textContent).toContain(m.library_follow_counts_loading());
   await settle(1, ready(alice, first, 0));
@@ -165,8 +172,8 @@ test('the mounted count journey retires admission, exact context and viewer ABA,
 
   await reload();
   expect(reads).toHaveLength(3);
-  await replace(() => client.setQueryData(exposureQuery.queryKey, []));
-  await replace(() => client.setQueryData(exposureQuery.queryKey, ['personal_library']));
+  await replace(() => setExposure([]));
+  await replace(() => setExposure(['personal_library']));
   expect(reads).toHaveLength(4);
   await settle(2, ready(alice, first, 902));
   expect(scalars()).toEqual([]);
@@ -255,7 +262,7 @@ test('only the actual prepared viewer and exact response context can supply moun
   expect(scalars()).toEqual([]);
   expect(host.textContent).toContain(m.library_follow_counts_unavailable());
   await reload();
-  await settle(1, ready({ ...alice, csrfToken: bob.csrfToken }, first, 905));
+  await settle(1, ready({ ...alice, subject: 'charlie' }, first, 905));
   expect(scalars()).toEqual([]);
   await reload();
   await settle(2, ready(alice, second, 906));
@@ -265,14 +272,13 @@ test('only the actual prepared viewer and exact response context can supply moun
   expect(scalars()).toEqual(['0', '0']);
 });
 
-test('session uncertainty and absent real credentials retire pending IO without dispatching private reads', async () => {
+test('session uncertainty and absent subject retire pending IO without dispatching private reads', async () => {
   await paint();
   await settle(0, ready(alice, first, 21));
   await replace(() =>
     client.setQueryData(sessionQuery.queryKey, { state: 'unknown', subject: null, csrfToken: null } satisfies Session),
   );
   await replace(() => client.setQueryData(sessionQuery.queryKey, { ...signedIn(), subject: null }));
-  await replace(() => client.setQueryData(sessionQuery.queryKey, { ...signedIn(), csrfToken: null }));
   await replace(() => client.setQueryData(sessionQuery.queryKey, { state: 'unavailable', ...alice } satisfies Session));
   await replace(() =>
     client.setQueryData(sessionQuery.queryKey, {
@@ -288,7 +294,7 @@ test('session uncertainty and absent real credentials retire pending IO without 
   );
   await replace(() => client.setQueryData(sessionQuery.queryKey, signedIn()));
   expect(reads).toHaveLength(2);
-  await replace(() => client.setQueryData(sessionQuery.queryKey, { ...signedIn(), csrfToken: '' }));
+  await replace(() => client.setQueryData(sessionQuery.queryKey, { ...signedIn(), subject: null }));
   await settle(1, ready(alice, first, 907));
   expect(scalars()).toEqual([]);
   expect(reads).toHaveLength(2);
