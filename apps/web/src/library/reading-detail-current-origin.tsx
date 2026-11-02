@@ -48,8 +48,7 @@ export class ReadingAuthority {
   private observe = () => {
     const session = this.client.getQueryState(sessionQuery.queryKey);
     const data = session?.data;
-    const viewer =
-      session?.status === 'success' && data?.state === 'signed-in' && data.subject ? data.subject : null;
+    const viewer = session?.status === 'success' && data?.state === 'signed-in' && data.subject ? data.subject : null;
     const previous = this.snapshot;
     // Unavailable authority closes every old admission, but keeps private uncertainty
     // for the last actual owner. A successful sign-out or different subject replaces it.
