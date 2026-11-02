@@ -24,7 +24,7 @@ import type {
 } from './check-placement-custody.ts';
 import { runBrowserWorker, runWebTestLanes } from './check.ts';
 import { smokeStorybook } from './storybook-smoke.ts';
-import { unavailableInteractiveCheck } from './storybook-dev.ts';
+import { storybookLaunchPlan } from './storybook-dev.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const app = resolve(root, 'apps/web');
@@ -1058,5 +1058,5 @@ test('callable workers and a supplied browser cannot bypass physical placement',
     'actual remote run directory',
   );
   await expect(runWebTestLanes({ files: [], env: forged })).rejects.toThrow('actual remote run directory');
-  expect(() => unavailableInteractiveCheck()).toThrow('remote access/tunnel');
+  expect(() => storybookLaunchPlan(['--web'], forged)).toThrow('finite test commands');
 });

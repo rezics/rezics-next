@@ -40,6 +40,9 @@ The Web landing integration check selects this command for changes under `apps/w
 
 Start an isolated local catalogue from the worktree root with an unused exact loopback port:
 
+Both launchers bind only to loopback addresses, defaulting to `127.0.0.1`, and create no tunnel. Web composes the UI
+catalogue from the worktree's `STORYBOOK_UI_URL`.
+
 ```sh
 CACHE_DIR="$PWD/.temp/storybook-cache/web" bun run --cwd apps/web storybook --host 127.0.0.1 --port 16497 --exact-port --ci
 # Or inspect the shared UI catalogue, using its own unused port:
