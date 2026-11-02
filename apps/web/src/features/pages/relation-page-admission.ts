@@ -10,10 +10,9 @@ type RelationSection =
 /** Admit the complete native page against the composition producer bound before projection. */
 export function admitRelationPage(section: RelationSection | undefined): RelationPageAdmission {
   if (!section?.ok) return { ok: false, reason: 'malformed' };
-  const { kind, limit } = section.read;
-  if ((kind !== 'links' && kind !== 'relations') || typeof limit !== 'number')
-    return { ok: false, reason: 'malformed' };
-  const rows = relationItemRows(section.body[kind], kind);
+  const { read } = section;
+  if (read.kind !== 'links' && read.kind !== 'relations') return { ok: false, reason: 'malformed' };
+  const rows = relationItemRows(section.body[read.kind], read.kind);
   if (!rows) return { ok: false, reason: 'malformed' };
-  return rows.length > limit ? { ok: false, reason: 'over-limit' } : { ok: true };
+  return rows.length > read.limit ? { ok: false, reason: 'over-limit' } : { ok: true };
 }
