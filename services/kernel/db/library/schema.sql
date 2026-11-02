@@ -769,6 +769,41 @@ $$;
 
 
 --
+-- Name: guard_live_copy_listing(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.guard_live_copy_listing() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF TG_OP='UPDATE' AND (NEW.route,NEW.subject_id,NEW.collection_id,NEW.collection_route)
+    IS DISTINCT FROM (OLD.route,OLD.subject_id,OLD.collection_id,OLD.collection_route) THEN
+  RAISE EXCEPTION 'Live listing identity is immutable' USING ERRCODE='23514';
+ END IF;
+ -- Negative cleanup may advance an EXISTING exclusion cut, but cannot insert a
+ -- new personal identity or make a relationship positive. Delayed apply still
+ -- goes through the immutable gate and monotone version CAS.
+ IF TG_TABLE_NAME='subject_collection_version' AND TG_OP='UPDATE' AND NEW.multiplicity=0
+   AND NEW.source_partition=OLD.source_partition
+   AND (NEW.source_epoch,NEW.source_position)>=(OLD.source_epoch,OLD.source_position) THEN
+  RETURN NEW;
+ END IF;
+ IF NOT EXISTS(SELECT 1 FROM access.live_copy_gate g
+   WHERE g.route=NEW.route AND g.applying_transaction=pg_current_xact_id() AND g.outcome='applying'
+     AND g.module='library.subject-listing' AND NOT g.retired
+     AND g.payload->>'subjectId'=NEW.subject_id::text AND g.payload->>'collectionId'=NEW.collection_id::text
+     AND (g.payload->>'collectionRoute')::integer=NEW.collection_route
+     AND (g.payload->>'multiplicity')::integer=NEW.multiplicity
+     AND (g.payload->'stamp'->>'partition')::integer=NEW.source_partition
+     AND (g.payload->'stamp'->>'epoch')::integer=NEW.source_epoch
+     AND (g.payload->'stamp'->>'position')::bigint=NEW.source_position) THEN
+  RAISE EXCEPTION 'Listing write requires native live receiving gate' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END; $$;
+
+
+--
 -- Name: guard_native_source_receipt(); Type: FUNCTION; Schema: library; Owner: -
 --
 
@@ -1379,6 +1414,37 @@ CREATE TABLE library.bulk_effect (
     CONSTRAINT bulk_effect_source_digest_check CHECK ((source_digest ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT bulk_effect_source_route_check CHECK (((source_route >= 0) AND (source_route <= 65535))),
     CONSTRAINT bulk_effect_target_check CHECK ((jsonb_typeof(target) = 'object'::text))
+);
+
+
+--
+-- Name: bulk_operation; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.bulk_operation (
+    route integer NOT NULL,
+    operation_id uuid NOT NULL,
+    account_id uuid NOT NULL,
+    request jsonb NOT NULL,
+    initiator jsonb NOT NULL,
+    creation_receipt jsonb NOT NULL,
+    source_digest text NOT NULL,
+    target_count integer NOT NULL,
+    phase text NOT NULL,
+    admitted_at timestamp with time zone NOT NULL,
+    confirmed_at timestamp with time zone,
+    expires_at timestamp with time zone NOT NULL,
+    results_expire_at timestamp with time zone NOT NULL,
+    CONSTRAINT bulk_operation_check CHECK ((route = ((get_byte(uuid_send(operation_id), 10) * 256) + get_byte(uuid_send(operation_id), 11)))),
+    CONSTRAINT bulk_operation_check1 CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT bulk_operation_check2 CHECK (((admitted_at < expires_at) AND (expires_at < results_expire_at))),
+    CONSTRAINT bulk_operation_creation_receipt_check CHECK ((jsonb_typeof(creation_receipt) = 'object'::text)),
+    CONSTRAINT bulk_operation_initiator_check CHECK (((jsonb_typeof(initiator) = 'object'::text) AND (octet_length((initiator)::text) <= 262144))),
+    CONSTRAINT bulk_operation_phase_check CHECK ((phase = ANY (ARRAY['preview'::text, 'applying'::text, 'completed'::text]))),
+    CONSTRAINT bulk_operation_request_check CHECK (((jsonb_typeof(request) = 'object'::text) AND (octet_length((request)::text) <= 262144))),
+    CONSTRAINT bulk_operation_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT bulk_operation_source_digest_check CHECK ((source_digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT bulk_operation_target_count_check CHECK (((target_count >= 0) AND (target_count <= 1000)))
 );
 
 
@@ -3654,6 +3720,14 @@ ALTER TABLE ONLY library.bulk_effect
 
 
 --
+-- Name: bulk_operation bulk_operation_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.bulk_operation
+    ADD CONSTRAINT bulk_operation_pkey PRIMARY KEY (route, operation_id);
+
+
+--
 -- Name: bulk_target bulk_target_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -4608,6 +4682,27 @@ CREATE INDEX bulk_effect_erasure_owner ON library.bulk_effect USING btree (route
 --
 
 CREATE INDEX bulk_effect_expiry ON library.bulk_effect USING btree (route, expires_at, operation_id, ordinal);
+
+
+--
+-- Name: bulk_operation_due; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX bulk_operation_due ON library.bulk_operation USING btree (route, phase, expires_at, operation_id);
+
+
+--
+-- Name: bulk_operation_expiry; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX bulk_operation_expiry ON library.bulk_operation USING btree (route, results_expire_at, operation_id);
+
+
+--
+-- Name: bulk_operation_owner; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX bulk_operation_owner ON library.bulk_operation USING btree (route, account_id, operation_id);
 
 
 --
@@ -5759,6 +5854,20 @@ CREATE TRIGGER label_assignment_fact_source_update AFTER UPDATE ON library.label
 
 
 --
+-- Name: subject_collection live_copy_listing_guard; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER live_copy_listing_guard BEFORE INSERT OR UPDATE ON library.subject_collection FOR EACH ROW EXECUTE FUNCTION library.guard_live_copy_listing();
+
+
+--
+-- Name: subject_collection_version live_copy_listing_version_guard; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER live_copy_listing_version_guard BEFORE INSERT OR UPDATE ON library.subject_collection_version FOR EACH ROW EXECUTE FUNCTION library.guard_live_copy_listing();
+
+
+--
 -- Name: native_public_output_binding native_public_output_binding_commit; Type: TRIGGER; Schema: library; Owner: -
 --
 
@@ -6561,26 +6670,3 @@ ALTER TABLE ONLY library.type_preparation_slot
 --
 
 
--- The sole operation header; target membership stays in the installed bulk_target table.
-CREATE TABLE library.bulk_operation (
-  route integer NOT NULL CHECK (route BETWEEN 0 AND 65535),
-  operation_id uuid NOT NULL,
-  account_id uuid NOT NULL,
-  request jsonb NOT NULL CHECK (jsonb_typeof(request) = 'object' AND octet_length(request::text) <= 262144),
-  initiator jsonb NOT NULL CHECK (jsonb_typeof(initiator) = 'object' AND octet_length(initiator::text) <= 262144),
-  creation_receipt jsonb NOT NULL CHECK (jsonb_typeof(creation_receipt) = 'object'),
-  source_digest text NOT NULL CHECK (source_digest ~ '^[0-9a-f]{64}$'),
-  target_count integer NOT NULL CHECK (target_count BETWEEN 0 AND 1000),
-  phase text NOT NULL CHECK (phase IN ('preview', 'applying', 'completed')),
-  admitted_at timestamptz NOT NULL,
-  confirmed_at timestamptz,
-  expires_at timestamptz NOT NULL,
-  results_expire_at timestamptz NOT NULL,
-  PRIMARY KEY (route, operation_id),
-  CHECK (route = get_byte(uuid_send(operation_id), 10) * 256 + get_byte(uuid_send(operation_id), 11)),
-  CHECK (route = get_byte(uuid_send(account_id), 10) * 256 + get_byte(uuid_send(account_id), 11)),
-  CHECK (admitted_at < expires_at AND expires_at < results_expire_at)
-);
-CREATE INDEX bulk_operation_owner ON library.bulk_operation (route, account_id, operation_id);
-CREATE INDEX bulk_operation_expiry ON library.bulk_operation (route, results_expire_at, operation_id);
-CREATE INDEX bulk_operation_due ON library.bulk_operation (route, phase, expires_at, operation_id);
