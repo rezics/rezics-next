@@ -1,6 +1,15 @@
 import { closeSync, fstatSync, openSync, readFileSync, readSync } from 'node:fs';
 import type { Attempt, AttemptFailure, AttemptRecord, StepClass, Task, Tokens } from './types.ts';
-import { agentAdapter, allAgentAdapters, parseAgentExit, type AgentAdapter, type SessionUsage } from './agents.ts';
+import {
+  agentAdapter,
+  allAgentAdapters,
+  parseAgentExit,
+  type AgentAdapter,
+  type AgentUsage,
+  type AgentUsageAccumulator,
+  type SessionUsage,
+} from './agents.ts';
+import { scanSessionJsonl } from './session-accounting.ts';
 
 export const CLASSIFIER_VERSION = '1';
 export const emptyTokens = (): Tokens => ({ input: 0, cached: 0, output: 0 });
@@ -118,9 +127,6 @@ export function measureLog(
   text: string,
   options: { startedAt?: string; endedAt?: string; baseline?: Tokens; adapter?: AgentAdapter } = {},
 ): LogMeasurement {
-  const start = options.startedAt ? Date.parse(options.startedAt) : -Infinity;
-  const end = options.endedAt ? Date.parse(options.endedAt) : Infinity;
-  if (Number.isNaN(start) || Number.isNaN(end) || end < start) throw new Error('invalid measurement interval');
   const lines = text.split('\n').flatMap((line) => {
     try {
       return [JSON.parse(line)];
@@ -140,6 +146,31 @@ export function measureLog(
       })();
   const adapters = options.adapter ? [options.adapter] : allAgentAdapters();
   const hasRollout = adapters.some((adapter) => adapter.hasRollout?.(events));
+  const state = measurementState(options, adapters, hasRollout);
+  for (const event of events) state.add(event);
+  const ledger =
+    adapters.map((adapter) => adapter.parseUsage(events, state.start, state.end)).find((usage) => usage !== null) ??
+    null;
+  return state.finish(ledger);
+}
+
+type MeasurementState = {
+  start: number;
+  end: number;
+  add(event: Record<string, any>): void;
+  finish(ledger: AgentUsage | null): LogMeasurement;
+  readonly hasUsage: boolean;
+  readonly exactUsage: boolean;
+};
+
+function measurementState(
+  options: { startedAt?: string; endedAt?: string; baseline?: Tokens; adapter?: AgentAdapter },
+  adapters: AgentAdapter[],
+  hasRollout: boolean,
+): MeasurementState {
+  const start = options.startedAt ? Date.parse(options.startedAt) : -Infinity;
+  const end = options.endedAt ? Date.parse(options.endedAt) : Infinity;
+  if (Number.isNaN(start) || Number.isNaN(end) || end < start) throw new Error('invalid measurement interval');
   let previous = options.baseline ?? emptyTokens();
   const result: LogMeasurement = {
     tokens: emptyTokens(),
@@ -156,100 +187,146 @@ export function measureLog(
   const seen = new Set<string>();
   // The last answer that ended a turn with a report or a blocker; see the end of the loop.
   let answered: string | null = null;
-  for (const event of events) {
-    const eventAdapters = adapters.filter((adapter) => adapter.matchesEvent(event));
-    const at = event.timestamp ? Date.parse(event.timestamp) : start;
-    const inside = at >= start && at <= end;
-    if (at > end) continue;
-    const failure = eventAdapters.map((adapter) => adapter.failure(event)).find((value) => value !== null);
-    if (inside && failure !== undefined && failure !== null) {
-      result.result = failure || result.result;
-      const limited = eventAdapters.some((adapter) => adapter.isRateLimit(event));
-      result.failureKind =
-        limited ||
-        result.failureKind === 'pool-exhausted' ||
-        eventAdapters.some((adapter) => adapter.signals?.(result.result).allowance)
-          ? 'pool-exhausted'
-          : 'tool';
-      result.usageLimitRefusal ||=
-        eventAdapters.some((adapter) => adapter.isUsageLimit?.(event)) ||
-        eventAdapters.some((adapter) => adapter.signals?.(result.result).usageLimit);
-    }
-    if (inside && eventAdapters.some((adapter) => adapter.completed(event))) result.failureKind = null;
-    if (inside && eventAdapters.some((adapter) => adapter.isRateLimit(event))) result.failureKind = 'pool-exhausted';
-    for (const adapter of eventAdapters) result.session = adapter.sessionId(event) ?? result.session;
-    const observation = adapters
-      .map((adapter) => adapter.parseEvent?.(event, hasRollout))
-      .find((value) => value != null);
-    const usage = observation?.usage;
-    if (usage) {
-      const current = usage.tokens;
-      if (inside)
-        for (const key of ['input', 'cached', 'output'] as const) {
-          result.tokens[key] += usage.delta ? current[key] : Math.max(0, current[key] - previous[key]);
+  let hasUsage = false;
+  let cumulativeBaselineKnown = options.baseline !== undefined;
+  let exactUsage = true;
+
+  return {
+    start,
+    end,
+    add(event) {
+      const eventAdapters = adapters.filter((adapter) => adapter.matchesEvent(event));
+      const at = event.timestamp ? Date.parse(event.timestamp) : start;
+      const inside = at >= start && at <= end;
+      if (at > end) return;
+      const failure = eventAdapters.map((adapter) => adapter.failure(event)).find((value) => value !== null);
+      if (inside && failure !== undefined && failure !== null) {
+        result.result = failure || result.result;
+        const limited = eventAdapters.some((adapter) => adapter.isRateLimit(event));
+        result.failureKind =
+          limited ||
+          result.failureKind === 'pool-exhausted' ||
+          eventAdapters.some((adapter) => adapter.signals?.(result.result).allowance)
+            ? 'pool-exhausted'
+            : 'tool';
+        result.usageLimitRefusal ||=
+          eventAdapters.some((adapter) => adapter.isUsageLimit?.(event)) ||
+          eventAdapters.some((adapter) => adapter.signals?.(result.result).usageLimit);
+      }
+      if (inside && eventAdapters.some((adapter) => adapter.completed(event))) result.failureKind = null;
+      if (inside && eventAdapters.some((adapter) => adapter.isRateLimit(event))) result.failureKind = 'pool-exhausted';
+      for (const adapter of eventAdapters) result.session = adapter.sessionId(event) ?? result.session;
+      const observation = adapters
+        .map((adapter) => adapter.parseEvent?.(event, hasRollout))
+        .find((value) => value != null);
+      const usage = observation?.usage;
+      if (usage) {
+        hasUsage = true;
+        if (!usage.delta) {
+          if (!inside && at < start) cumulativeBaselineKnown = true;
+          else if (inside && !cumulativeBaselineKnown) exactUsage = false;
         }
-      previous = {
-        input: Math.max(previous.input, current.input),
-        cached: Math.max(previous.cached, current.cached),
-        output: Math.max(previous.output, current.output),
-      };
-      result.total = previous;
-    }
-    if (!inside) continue;
-    for (const step of observation?.steps ?? []) {
-      if (step.id && seen.has(step.id)) continue;
-      if (step.id) seen.add(step.id);
-      result.steps[classifyStep(step.name, step.input)]++;
-    }
-    if (observation?.answer !== undefined) result.result = observation.answer;
-    if (observation?.final && isFinalAnswer(result.result, options.adapter)) answered = result.result;
-  }
-  // A worker whose background command finishes after its report is woken once more, and answers that
-  // notification in a later result ("my report above stands"): the report it gave stays its final answer.
-  if (answered !== null && !isFinalAnswer(result.result, options.adapter)) result.result = answered;
-  const blocker = /^BLOCKER:\s*(.+)$/im.exec(result.result)?.[1]?.trim();
-  result.blocker = blocker && !/^(none|no(?: blockers?)?|n\/a|not blocked)\.?$/i.test(blocker) ? blocker : null;
-  try {
-    // A CLI without an enforced output schema may wrap the status object in prose; take the last object that parses.
-    const exit = parseAgentExit(result.result, options.adapter) as {
-      status?: unknown;
-      blocker?: { kind?: unknown; detail?: unknown };
-      checks?: unknown;
-    } | null;
-    if (
-      exit?.status === 'blocked' &&
-      exit.blocker &&
-      typeof exit.blocker.kind === 'string' &&
-      ['spec-conflict', 'scope-growth', 'tool'].includes(exit.blocker.kind) &&
-      typeof exit.blocker.detail === 'string'
-    ) {
-      result.failureKind = exit.blocker.kind as AttemptFailure;
-      result.blocker = exit.blocker.detail;
-    }
-    if (exit?.status === 'waiting' && Array.isArray(exit.checks) && exit.checks.length > 0) {
-      // Workers sometimes label an id ("Focused acceptance check: <uuid>"); rejecting the label superseded the attempt
-      // and started its checks again (three times for one task on 2026-10-29), so the id is taken from the label.
-      const ids = (exit.checks as unknown[]).map((entry) =>
-        typeof entry !== 'string'
-          ? null
-          : /^[\w-]+$/.test(entry)
-            ? entry
-            : (/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.exec(entry)?.[0] ?? null),
-      );
-      if (ids.every((id): id is string => id !== null)) result.waitingChecks = [...new Set(ids)];
-    }
-  } catch {
-    /* Historical human-readable handoffs remain importable. */
-  }
-  const ledger =
-    adapters.map((adapter) => adapter.parseUsage(events, start, end)).find((usage) => usage !== null) ?? null;
-  if (ledger) {
-    result.tokens = ledger.tokens;
-    result.total = ledger.tokens;
-    result.usage = ledger.usage;
-    if (ledger.source) result.usageSource = ledger.source;
-  }
-  return result;
+        const current = usage.tokens;
+        if (inside)
+          for (const key of ['input', 'cached', 'output'] as const) {
+            result.tokens[key] += usage.delta ? current[key] : Math.max(0, current[key] - previous[key]);
+          }
+        previous = {
+          input: Math.max(previous.input, current.input),
+          cached: Math.max(previous.cached, current.cached),
+          output: Math.max(previous.output, current.output),
+        };
+        result.total = previous;
+      }
+      if (!inside) return;
+      for (const step of observation?.steps ?? []) {
+        if (step.id && seen.has(step.id)) continue;
+        if (step.id) seen.add(step.id);
+        result.steps[classifyStep(step.name, step.input)]++;
+      }
+      if (observation?.answer !== undefined) result.result = observation.answer;
+      if (observation?.final && isFinalAnswer(result.result, options.adapter)) answered = result.result;
+    },
+    get hasUsage() {
+      return hasUsage;
+    },
+    get exactUsage() {
+      return exactUsage;
+    },
+    finish(ledger) {
+      // A worker whose background command finishes after its report is woken once more, and answers that
+      // notification in a later result ("my report above stands"): the report it gave stays its final answer.
+      if (answered !== null && !isFinalAnswer(result.result, options.adapter)) result.result = answered;
+      const blocker = /^BLOCKER:\s*(.+)$/im.exec(result.result)?.[1]?.trim();
+      result.blocker = blocker && !/^(none|no(?: blockers?)?|n\/a|not blocked)\.?$/i.test(blocker) ? blocker : null;
+      try {
+        // A CLI without an enforced output schema may wrap the status object in prose; take the last object that parses.
+        const exit = parseAgentExit(result.result, options.adapter) as {
+          status?: unknown;
+          blocker?: { kind?: unknown; detail?: unknown };
+          checks?: unknown;
+        } | null;
+        if (
+          exit?.status === 'blocked' &&
+          exit.blocker &&
+          typeof exit.blocker.kind === 'string' &&
+          ['spec-conflict', 'scope-growth', 'tool'].includes(exit.blocker.kind) &&
+          typeof exit.blocker.detail === 'string'
+        ) {
+          result.failureKind = exit.blocker.kind as AttemptFailure;
+          result.blocker = exit.blocker.detail;
+        }
+        if (exit?.status === 'waiting' && Array.isArray(exit.checks) && exit.checks.length > 0) {
+          // Workers sometimes label an id ("Focused acceptance check: <uuid>"); rejecting the label superseded the attempt
+          // and started its checks again (three times for one task on 2026-10-29), so the id is taken from the label.
+          const ids = (exit.checks as unknown[]).map((entry) =>
+            typeof entry !== 'string'
+              ? null
+              : /^[\w-]+$/.test(entry)
+                ? entry
+                : (/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.exec(entry)?.[0] ?? null),
+          );
+          if (ids.every((id): id is string => id !== null)) result.waitingChecks = [...new Set(ids)];
+        }
+      } catch {
+        /* Historical human-readable handoffs remain importable. */
+      }
+      if (ledger) {
+        hasUsage = true;
+        result.tokens = ledger.tokens;
+        result.total = ledger.tokens;
+        result.usage = ledger.usage;
+        if (ledger.source) result.usageSource = ledger.source;
+      }
+      return result;
+    },
+  };
+}
+
+/** Measure a retained session JSONL file without retaining its event history. */
+export function measureSessionFile(
+  path: string,
+  options: { startedAt?: string; endedAt?: string; baseline?: Tokens; adapter?: AgentAdapter } = {},
+): { measurement: LogMeasurement; hasUsage: boolean } | null {
+  const adapters = options.adapter ? [options.adapter] : allAgentAdapters();
+  let hasRollout = false;
+  const header = scanSessionJsonl(path, (event) => {
+    if (!hasRollout) hasRollout = adapters.some((adapter) => adapter.hasRollout?.([event]) ?? false);
+  });
+  if (!header.complete) return null;
+
+  const state = measurementState(options, adapters, hasRollout);
+  const usageAccumulators: AgentUsageAccumulator[] = adapters.flatMap((adapter) =>
+    adapter.createUsageAccumulator ? [adapter.createUsageAccumulator(state.start, state.end)] : [],
+  );
+  const body = scanSessionJsonl(path, (event) => {
+    state.add(event);
+    for (const accumulator of usageAccumulators) accumulator.add(event);
+  });
+  if (!body.complete) return null;
+  const ledger = usageAccumulators.map((accumulator) => accumulator.finish()).find((usage) => usage !== null) ?? null;
+  const measurement = state.finish(ledger);
+  return { measurement, hasUsage: ledger !== null || (state.hasUsage && state.exactUsage) };
 }
 /** Whether an answer reports success or states a blocker, as a worker's final answer does. */
 function isFinalAnswer(text: string, adapter?: AgentAdapter): boolean {
@@ -397,16 +474,33 @@ export function readMeasurement(
   const session = measurement.session ?? attempt.session;
   if (!session) return measurement;
   const source = adapters
-    .map((adapter) => ({ adapter, rollout: adapter.readSession?.(options.configDirectory!, session) ?? null }))
-    .find(({ rollout }) => rollout !== null);
+    .map((adapter) => {
+      const path = adapter.readSessionPath?.(options.configDirectory!, session) ?? null;
+      return {
+        adapter,
+        path,
+        rollout: path === null ? (adapter.readSession?.(options.configDirectory!, session) ?? null) : null,
+      };
+    })
+    .find(({ path, rollout }) => path !== null || rollout !== null);
   if (!source) return measurement;
-  const { adapter, rollout } = source;
-  const usage = measureLog(rollout!, {
-    adapter,
-    ...interval,
-    ...(options.baseline ? { baseline: options.baseline } : {}),
-  });
-  if (usage.usage || !completed)
+  const { adapter, path, rollout } = source;
+  const streamed = path
+    ? measureSessionFile(path, {
+        adapter,
+        ...interval,
+        ...(options.baseline ? { baseline: options.baseline } : {}),
+      })
+    : null;
+  if (path && !streamed) return { ...measurement, session };
+  const usage =
+    streamed?.measurement ??
+    measureLog(rollout!, {
+      adapter,
+      ...interval,
+      ...(options.baseline ? { baseline: options.baseline } : {}),
+    });
+  if (usage.usage || (!completed && (path ? streamed?.hasUsage : true)))
     return {
       ...measurement,
       tokens: usage.tokens,

@@ -41,24 +41,60 @@ export function textSignals(text: string) {
   };
 }
 
+const EXIT_STATUSES = new Set(['success', 'blocked', 'waiting']);
+
+function isSupportedExit(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  return EXIT_STATUSES.has((value as { status?: unknown }).status as string);
+}
+
 /** Agents without an enforced schema may wrap the shared exit object in prose. */
 export function parseExitObject(output: string): unknown | null {
   try {
-    return JSON.parse(output);
+    const value = JSON.parse(output);
+    return isSupportedExit(value) ? value : null;
   } catch {
     return lastStatusObject(output);
   }
 }
+
+/** Last complete supported exit; unmatched braces leave the remainder unavailable. */
 function lastStatusObject(text: string): unknown {
-  for (let end = text.lastIndexOf('}'); end >= 0; end = text.lastIndexOf('}', end - 1)) {
-    for (let start = text.lastIndexOf('{', end); start >= 0; start = text.lastIndexOf('{', start - 1)) {
-      try {
-        const value = JSON.parse(text.slice(start, end + 1));
-        if (value && typeof value === 'object' && 'status' in value) return value;
-      } catch {
-        /* keep widening */
+  let last: unknown = null;
+  let start = -1;
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (start < 0) {
+      if (c === '{') {
+        start = i;
+        depth = 1;
+        inString = false;
+        escape = false;
       }
+      continue;
+    }
+    if (inString) {
+      if (escape) escape = false;
+      else if (c === '\\') escape = true;
+      else if (c === '"') inString = false;
+      continue;
+    }
+    if (c === '"') inString = true;
+    else if (c === '{') depth++;
+    else if (c === '}') {
+      depth--;
+      if (depth !== 0) continue;
+      try {
+        const value = JSON.parse(text.slice(start, i + 1));
+        if (isSupportedExit(value)) last = value;
+      } catch {
+        /* not a JSON object */
+      }
+      start = -1;
     }
   }
-  return null;
+  return last;
 }

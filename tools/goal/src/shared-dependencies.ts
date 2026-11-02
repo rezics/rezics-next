@@ -38,13 +38,26 @@ function manifestPaths(root: string): string[] {
   }
   return paths.filter((path) => existsSync(join(root, path))).sort();
 }
-function patchPaths(root: string): string[] {
+function patchInputs(root: string) {
   const packageFile = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
     patchedDependencies?: Record<string, string>;
   };
-  return Object.values(packageFile.patchedDependencies ?? {}).map((path) => join(root, path));
+  return Object.values(packageFile.patchedDependencies ?? {})
+    .map((declaredPath) => {
+      const path = relative(root, join(root, declaredPath));
+      try {
+        return { path, contents: readFileSync(join(root, declaredPath)) };
+      } catch (cause) {
+        throw new DependencyInstallError(
+          root,
+          'reading dependency patches',
+          new Error(`required patch ${path} could not be read`, { cause }),
+        );
+      }
+    })
+    .sort((left, right) => left.path.localeCompare(right.path));
 }
-export function dependencyKey(root: string): string {
+function dependencyKeyWithPatches(root: string, patches: ReturnType<typeof patchInputs>): string {
   const hash = createHash('sha256').update(spawnSync('bun', ['--version'], { encoding: 'utf8' }).stdout.trim());
   for (const path of manifestPaths(root))
     hash
@@ -52,7 +65,11 @@ export function dependencyKey(root: string): string {
       .update('\0')
       .update(readFileSync(join(root, path)))
       .update('\0');
+  for (const patch of patches) hash.update(patch.path).update('\0').update(patch.contents).update('\0');
   return hash.digest('hex');
+}
+export function dependencyKey(root: string): string {
+  return dependencyKeyWithPatches(root, patchInputs(root));
 }
 export class DependencyInstallError extends Error {
   readonly infrastructure = true;
@@ -259,9 +276,9 @@ function requireUsableInstallation(root: string, step: string): void {
 }
 
 /** A receipt/key alone is insufficient: the consumer's direct dependency links must still be usable. */
-export function dependencyInstallationMatches(worktree: string): boolean {
+export function dependencyInstallationMatches(worktree: string, expectedKey?: string): boolean {
   if (!existsSync(join(worktree, 'package.json'))) return true;
-  const key = dependencyKey(worktree);
+  const key = expectedKey ?? dependencyKey(worktree);
   const prior = readlinkStore(worktree);
   const marker = join(worktree, 'node_modules', '.goal-private-dependencies');
   if (bunInstallationFailure(worktree)) return false;
@@ -346,8 +363,10 @@ export function installShared(
   storeRoot = join(dirname(worktree), '..', 'dependency-stores'),
   processLimits?: Partial<ProcessLimits>,
 ): void {
-  if (!existsSync(join(worktree, 'package.json')) || dependencyInstallationMatches(worktree)) return;
-  const key = dependencyKey(worktree);
+  if (!existsSync(join(worktree, 'package.json'))) return;
+  const patches = patchInputs(worktree);
+  const key = dependencyKeyWithPatches(worktree, patches);
+  if (dependencyInstallationMatches(worktree, key)) return;
   const prior = readlinkStore(worktree);
   const marker = join(worktree, 'node_modules', '.goal-private-dependencies');
   if (existsSync(marker)) {
@@ -380,10 +399,10 @@ export function installShared(
           mkdirSync(dirname(dest), { recursive: true });
           cpSync(join(worktree, path), dest);
         }
-        for (const path of patchPaths(worktree)) {
-          const dest = join(temp, relative(worktree, path));
+        for (const patch of patches) {
+          const dest = join(temp, patch.path);
           mkdirSync(dirname(dest), { recursive: true });
-          cpSync(path, dest);
+          writeFileSync(dest, patch.contents);
         }
         runInstall(temp, true, processLimits);
         if (!existsSync(join(temp, 'node_modules', '.bun'))) {

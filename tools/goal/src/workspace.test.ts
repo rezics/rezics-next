@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { delimiter, dirname, join } from 'node:path';
 import { loadSettings } from './config.ts';
 import { SqliteLandingQueue } from './land.ts';
 import { workerPrompt } from './launch.ts';
@@ -402,6 +402,64 @@ test('idle merges preserve dirty files, pending launches prevent merges, and mod
     const { sharedWebModules: _modules, ...isolatedSettings } = h.settings;
     expect(webModule(task.brief, isolatedSettings)).toBeUndefined();
   } finally {
+    h.dispose();
+  }
+});
+
+test('workspace sync reports ancestry failures and preserves merge errors when abort also fails', async () => {
+  const h = fixture();
+  h.dispatch([`${library}nested/file.ts`]);
+  const bin = join(h.root, '.temp', 'bin');
+  mkdirSync(bin, { recursive: true });
+  const originalPath = process.env.PATH;
+  const realGit = (originalPath ?? '')
+    .split(delimiter)
+    .map((path) => join(path, 'git'))
+    .find(existsSync)!;
+  const marker = join(bin, 'seen-ancestry');
+  const merges = join(bin, 'merges');
+  const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
+  const fakePath = [bin, originalPath].filter(Boolean).join(delimiter);
+  writeFileSync(
+    join(bin, 'git'),
+    `#!/bin/sh
+if [ "$1" = merge-base ]; then
+    if [ ! -e ${quote(marker)} ]; then touch ${quote(marker)}; echo 'injected ancestry failure' >&2; exit 128; fi
+    exit 1
+fi
+case "$1:$2" in
+  merge:--no-edit) echo "$*" >> ${quote(merges)}; echo 'original merge failure' >&2; exit 2 ;;
+  merge:--abort) echo "$*" >> ${quote(merges)}; echo 'abort cleanup failure' >&2; exit 3 ;;
+esac
+exec ${quote(realGit)} "$@"
+`,
+    { mode: 0o755 },
+  );
+  const sync = () => {
+    process.env.PATH = fakePath;
+    try {
+      return h.controller.withLaunch('library', () => h.controller.syncIdle('library'));
+    } finally {
+      if (originalPath === undefined) delete process.env.PATH;
+      else process.env.PATH = originalPath;
+    }
+  };
+  try {
+    await expect(sync()).rejects.toThrow(
+      'git merge-base --is-ancestor refs/heads/dev HEAD failed: injected ancestry failure',
+    );
+    expect(existsSync(merges)).toBe(false);
+    const failure = await sync().catch((error: unknown) => error as AggregateError);
+    expect(failure).toBeInstanceOf(AggregateError);
+    expect((failure as AggregateError).errors.map(String)).toEqual([
+      'Error: original merge failure',
+      'Error: abort cleanup failure',
+    ]);
+    expect((failure as AggregateError).cause).toBe((failure as AggregateError).errors[0]);
+    expect(readFileSync(merges, 'utf8')).toBe('merge --no-edit refs/heads/dev\nmerge --abort\n');
+  } finally {
+    if (originalPath === undefined) delete process.env.PATH;
+    else process.env.PATH = originalPath;
     h.dispose();
   }
 });

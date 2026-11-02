@@ -5,6 +5,8 @@ import type { AttemptRef } from './contracts.ts';
 export const WORKER_CPU_WEIGHT = 50;
 export const WORKER_IO_WEIGHT = 50;
 export const WORKER_SLICE = 'rezics-workers.slice';
+/** Finite bound for systemctl configuration only; worker and systemd-run keep the caller's launch options. */
+export const WORKER_SLICE_PREPARATION_TIMEOUT_MS = 5_000;
 const GIB = 1024 ** 3;
 // Total GiB minus local check MemoryMax minus 14 GiB (10 GiB floor + 4 GiB for managers, control plane and containers), at least a quarter of total.
 const WORKER_MEMORY_RESERVE_GIB = 14;
@@ -37,6 +39,7 @@ export class WorkerSlice {
   constructor(
     private readonly run: Run = spawnSync,
     private readonly readMeminfo: ReadMeminfo = () => readFileSync('/proc/meminfo', 'utf8'),
+    private readonly preparationTimeoutMs = WORKER_SLICE_PREPARATION_TIMEOUT_MS,
   ) {}
 
   launch(
@@ -82,6 +85,11 @@ export class WorkerSlice {
   }
 
   private configure(options: SpawnSyncOptions): string | null {
+    const configuration: SpawnSyncOptions = {
+      ...options,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: this.preparationTimeoutMs,
+    };
     const env = options.env ?? process.env;
     const override = env.REZICS_WORKER_MEMORY_HIGH_GIB;
     let memoryHigh: number;
@@ -93,11 +101,9 @@ export class WorkerSlice {
     } else {
       const totalMatch = /^MemTotal:\s+(\d+)\s+kB$/m.exec(this.readMeminfo());
       const totalGiB = totalMatch ? Math.floor((Number(totalMatch[1]) * 1024) / GIB) : 0;
-      const check = this.run('systemctl', ['show', CHECK_SLICE, '-p', 'MemoryMax', '--value'], {
-        ...options,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-      const checkValue = check.status === 0 && !check.error ? check.stdout?.toString().trim() : '';
+      const check = this.run('systemctl', ['show', CHECK_SLICE, '-p', 'MemoryMax', '--value'], configuration);
+      if (check.error) return failure(check);
+      const checkValue = check.status === 0 ? check.stdout?.toString().trim() : '';
       const checkBytes = /^\d+$/.test(checkValue ?? '') ? Number(checkValue) : 0;
       const checkGiB = Math.floor(checkBytes / GIB);
       memoryHigh = Math.max(Math.ceil(totalGiB / 4), totalGiB - checkGiB - WORKER_MEMORY_RESERVE_GIB);
@@ -113,7 +119,7 @@ export class WorkerSlice {
         `IOWeight=${WORKER_IO_WEIGHT}`,
         `MemoryHigh=${memoryHigh}G`,
       ],
-      { ...options, stdio: ['ignore', 'pipe', 'pipe'] },
+      configuration,
     );
     return failure(result);
   }

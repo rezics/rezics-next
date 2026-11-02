@@ -372,6 +372,43 @@ test('concurrent first uses of the same key build one shared store', async () =>
   }
 });
 
+test('patch changes install current contents without changing a store held by another worktree', () => {
+  const h = fixture();
+  try {
+    const a = h.tree('a'),
+      b = h.tree('b'),
+      c = h.tree('c'),
+      stores = join(h.root, 'stores'),
+      patchPath = 'patches/target.patch';
+    const patchFor = (value: string) => `--- a/index.js\n+++ b/index.js\n@@ -1 +1 @@\n-before\n+${value}\n`;
+    for (const worktree of [a, b, c]) {
+      const manifest = JSON.parse(readFileSync(join(worktree, 'package.json'), 'utf8')) as Record<string, unknown>;
+      manifest.patchedDependencies = { 'unreferenced@1.0.0': patchPath };
+      writeFileSync(join(worktree, 'package.json'), JSON.stringify(manifest));
+      mkdirSync(join(worktree, 'patches'));
+      writeFileSync(join(worktree, patchPath), patchFor('first'));
+      const lock = Bun.spawnSync(['bun', 'install', '--lockfile-only'], { cwd: worktree });
+      if (lock.exitCode !== 0) throw new Error(new TextDecoder().decode(lock.stderr));
+    }
+    const initialKey = dependencyKey(c);
+    installShared(a, stores);
+    installShared(b, stores);
+    const priorStore = bunTarget(b);
+    expect(bunTarget(a)).toBe(priorStore);
+    writeFileSync(join(c, patchPath), patchFor('second'));
+    expect(dependencyKey(c)).not.toBe(initialKey);
+    installShared(c, stores);
+    expect(bunTarget(c)).not.toBe(priorStore);
+    expect(bunTarget(b)).toBe(priorStore);
+    expect(readFileSync(join(resolve(bunTarget(c), '../..'), patchPath), 'utf8')).toBe(patchFor('second'));
+    expect(readFileSync(join(resolve(priorStore, '../..'), patchPath), 'utf8')).toBe(patchFor('first'));
+    rmSync(join(c, patchPath));
+    expect(() => installShared(c, stores)).toThrow(`required patch ${patchPath} could not be read`);
+  } finally {
+    h.close();
+  }
+});
+
 test('dependency keys include all workspace manifests and the lockfile', () => {
   const h = fixture();
   try {

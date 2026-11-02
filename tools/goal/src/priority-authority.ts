@@ -96,13 +96,14 @@ function validGrant(value: unknown): value is PriorityGrant {
   );
 }
 
-function grantForTask(task: Task, actor: AuthenticatedManager): PriorityGrant | undefined {
+function grantForTask(task: Task, actor: AuthenticatedManager, parent: string): PriorityGrant | undefined {
   return (task.priorityGrants ?? [])
     .filter(
       (candidate): candidate is PriorityGrant =>
         validGrant(candidate) &&
         candidate.taskId === task.id &&
         candidate.grantee === actor.id &&
+        candidate.grantor === parent &&
         candidate.scope === 'critical-path' &&
         !candidate.consumedAt &&
         !candidate.revokedAt,
@@ -111,9 +112,9 @@ function grantForTask(task: Task, actor: AuthenticatedManager): PriorityGrant | 
 }
 
 function consumeGrant(db: Database, task: Task, actor: AuthenticatedManager, at: string): PriorityGrant {
-  const grant = grantForTask(task, actor);
   const parent = taskManagerParent(db, task.brief.manager);
-  if (!grant || !parent || grant.grantor !== parent)
+  const grant = parent ? grantForTask(task, actor, parent) : undefined;
+  if (!grant)
     throw new Error(
       "critical priority requires an active task-bound grant from the task manager's configured supermanager",
     );

@@ -19,12 +19,17 @@ test('retry evidence is a bounded manifest that names recoverable full evidence'
     git(root, 'init', '-q');
     git(root, 'config', 'user.email', 'goal@example.test');
     git(root, 'config', 'user.name', 'Goal test');
+    const changedName = '資料 whitespace\nline\t"tracked".ts';
+    const untrackedName = 'new 文件\nline with space.ts';
     writeFileSync(join(root, 'tracked.ts'), 'base\n');
-    git(root, 'add', 'tracked.ts');
+    writeFileSync(join(root, changedName), 'base\n');
+    git(root, 'add', '--', 'tracked.ts', changedName);
     git(root, 'commit', '-qm', 'base');
     const base = git(root, 'rev-parse', 'HEAD');
     writeFileSync(join(root, 'tracked.ts'), 'changed\n');
+    writeFileSync(join(root, changedName), 'changed\n');
     writeFileSync(join(root, 'new.ts'), 'new file\n');
+    writeFileSync(join(root, untrackedName), 'new file\n');
 
     const logPath = join(root, 'runs', '1.jsonl');
     mkdirSync(join(root, 'runs'));
@@ -68,6 +73,11 @@ test('retry evidence is a bounded manifest that names recoverable full evidence'
     expect(manifest).toContain('AssertionError: expected 2 to equal 1');
     expect(manifest).toContain('tracked.ts');
     expect(manifest).toContain('new.ts');
+    const retainedPaths = (manifest.split('Changed paths:\n')[1]?.split('\n\n')[0] ?? '')
+      .split('\n')
+      .map((path) => JSON.parse(path) as string)
+      .sort();
+    expect(retainedPaths).toEqual([changedName, 'new.ts', 'runs/1.jsonl', 'tracked.ts', untrackedName].sort());
     expect(manifest).toContain('the async teardown is racing');
     expect(manifest).toContain('Failure also occurs on base: no');
     expect(manifest).toContain(logPath);

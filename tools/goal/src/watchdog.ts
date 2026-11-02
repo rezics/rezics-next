@@ -19,6 +19,8 @@ const STABILIZE_BEHIND_MS = 30 * 60_000;
 const ALERT_EVERY_MS = 2 * 3_600_000;
 const FAILURE_WINDOW_MS = 30 * 60_000;
 const HOST_PROBE_EVERY_MS = 5 * 60_000;
+const HOST_PROBE_TIMEOUT_MS = 20_000;
+const HOST_PROBE_DIAGNOSTIC_LIMIT = 4 * 1024;
 const DEFAULT_ATTEMPT_LIMIT_MS = 2 * 60 * 60_000;
 const RECENT_COMMANDS = 10;
 
@@ -71,7 +73,12 @@ function invalidateRemovedProbeRuns(directory: string, retainedPaths: Set<string
   }
 }
 
-export function sshProbe(host: CheckHost, complete: (result: CheckHostProbeResult) => void, start = spawn): void {
+export function sshProbe(
+  host: CheckHost,
+  complete: (result: CheckHostProbeResult) => void,
+  start = spawn,
+  timeoutMs = HOST_PROBE_TIMEOUT_MS,
+): void {
   let child: ReturnType<typeof spawn>;
   try {
     child = start(
@@ -87,22 +94,51 @@ export function sshProbe(host: CheckHost, complete: (result: CheckHostProbeResul
   let stderr = '';
   let hasFirstLine = false;
   let spawnError = '';
+  let settled = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const settle = (result: CheckHostProbeResult) => {
+    if (settled) return;
+    settled = true;
+    if (timer !== undefined) clearTimeout(timer);
+    complete(result);
+  };
+  const fail = () =>
+    settle({
+      status: null,
+      stderr: firstLine(stderr) || spawnError || 'SSH probe failed',
+    });
   child.stderr?.on('data', (chunk: Buffer | string) => {
-    if (hasFirstLine) return;
+    if (settled || hasFirstLine) return;
     const text = chunk.toString();
     const newline = text.search(/[\r\n]/);
-    stderr += newline < 0 ? text : text.slice(0, newline);
-    hasFirstLine = newline >= 0;
+    const piece = newline < 0 ? text : text.slice(0, newline);
+    const remaining = HOST_PROBE_DIAGNOSTIC_LIMIT - stderr.length;
+    if (remaining <= 0) {
+      hasFirstLine = true;
+      return;
+    }
+    stderr += piece.length > remaining ? piece.slice(0, remaining) : piece;
+    hasFirstLine = newline >= 0 || stderr.length >= HOST_PROBE_DIAGNOSTIC_LIMIT;
   });
   child.once('error', (error) => {
+    if (settled) return;
     spawnError = error.message;
   });
   child.once('close', (status) => {
-    complete({
+    settle({
       status,
       stderr: firstLine(stderr) || spawnError || (status === null ? 'SSH probe failed' : ''),
     });
   });
+  timer = setTimeout(() => {
+    fail();
+    try {
+      child.kill();
+    } catch {
+      /* This probe's child may already have exited. */
+    }
+  }, timeoutMs);
+  timer.unref();
   child.unref();
 }
 

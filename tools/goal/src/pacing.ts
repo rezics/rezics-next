@@ -1,6 +1,7 @@
 import { agentAdapter } from './agents.ts';
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { effectiveReserve } from './allowance.ts';
 import type { Pool, PoolReading } from './types.ts';
@@ -15,13 +16,59 @@ export type CodexSchedule = { scheduledAt: string | null; latestResetAt: string 
 const SCHEDULE_FILE = 'codex-schedule.json';
 const SCHEDULE_REFRESH_MS = 30 * 60_000;
 
+function optionalTimestamp(value: unknown): string | null | undefined {
+  if (value === null) return null;
+  return typeof value === 'string' && Number.isFinite(Date.parse(value)) ? value : undefined;
+}
+
+function asCodexSchedule(value: unknown): CodexSchedule | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const record = value as { scheduledAt?: unknown; latestResetAt?: unknown; fetchedAt?: unknown };
+  const fetchedAt = optionalTimestamp(record.fetchedAt);
+  const scheduledAt = optionalTimestamp(record.scheduledAt);
+  const latestResetAt = optionalTimestamp(record.latestResetAt);
+  if (typeof fetchedAt !== 'string' || scheduledAt === undefined || latestResetAt === undefined) return undefined;
+  return { scheduledAt, latestResetAt, fetchedAt };
+}
+
+function isFresh(schedule: CodexSchedule, now: number): boolean {
+  const fetchedAt = Date.parse(schedule.fetchedAt);
+  if (!Number.isFinite(fetchedAt)) return false;
+  const age = now - fetchedAt;
+  return age >= 0 && age < SCHEDULE_REFRESH_MS;
+}
+
 export function readCodexSchedule(stateDirectory: string): CodexSchedule | undefined {
   try {
     const path = join(stateDirectory, SCHEDULE_FILE);
-    return existsSync(path) ? (JSON.parse(readFileSync(path, 'utf8')) as CodexSchedule) : undefined;
+    return existsSync(path) ? asCodexSchedule(JSON.parse(readFileSync(path, 'utf8'))) : undefined;
   } catch {
     return undefined;
   }
+}
+
+/** Publish a complete schedule through a unique temporary file so concurrent refreshes cannot share a write identity. */
+export function publishCodexSchedule(stateDirectory: string, schedule: CodexSchedule): void {
+  const path = join(stateDirectory, SCHEDULE_FILE);
+  const temp = `${path}.${process.pid}-${randomUUID()}.tmp`;
+  try {
+    writeFileSync(temp, JSON.stringify(schedule, null, 2));
+    renameSync(temp, path);
+  } catch (error) {
+    try {
+      unlinkSync(temp);
+    } catch {
+      /* Keep the last complete published schedule. */
+    }
+    throw error;
+  }
+}
+
+function fetchCodexStatus(): string | undefined {
+  const response = spawnSync('curl', ['-sf', '-m', '15', 'https://codex-resets.com/api/v1/status'], {
+    encoding: 'utf8',
+  });
+  return response.status === 0 ? response.stdout : undefined;
 }
 
 export function parseCodexStatus(body: string, now: number): CodexSchedule {
@@ -46,26 +93,27 @@ export function parseCodexStatus(body: string, now: number): CodexSchedule {
       : scheduled && (scheduled.status === undefined || scheduled.status === 'scheduled')
         ? (scheduled.scheduled_for ?? scheduled.scheduled_at ?? scheduled.at ?? null)
         : null;
+  const announcedAt = data.latest_reset?.announced_at;
   return {
     scheduledAt: scheduledAt && Number.isFinite(Date.parse(scheduledAt)) ? scheduledAt : null,
-    latestResetAt: data.latest_reset?.announced_at ?? null,
+    latestResetAt: typeof announcedAt === 'string' && Number.isFinite(Date.parse(announcedAt)) ? announcedAt : null,
     fetchedAt: new Date(now).toISOString(),
   };
 }
 
 /** Refresh the announced Codex schedule at most every half hour; returns the schedule now known. */
-export function refreshCodexSchedule(stateDirectory: string, now = Date.now()): CodexSchedule | undefined {
+export function refreshCodexSchedule(
+  stateDirectory: string,
+  now = Date.now(),
+  fetchStatus: () => string | undefined = fetchCodexStatus,
+): CodexSchedule | undefined {
   const current = readCodexSchedule(stateDirectory);
-  if (current && now - Date.parse(current.fetchedAt) < SCHEDULE_REFRESH_MS) return current;
-  const response = spawnSync('curl', ['-sf', '-m', '15', 'https://codex-resets.com/api/v1/status'], {
-    encoding: 'utf8',
-  });
-  if (response.status !== 0) return current;
+  if (current && isFresh(current, now)) return current;
+  const body = fetchStatus();
+  if (body === undefined) return current;
   try {
-    const schedule = parseCodexStatus(response.stdout, now);
-    const path = join(stateDirectory, SCHEDULE_FILE);
-    writeFileSync(`${path}.tmp`, JSON.stringify(schedule, null, 2));
-    renameSync(`${path}.tmp`, path);
+    const schedule = parseCodexStatus(body, now);
+    publishCodexSchedule(stateDirectory, schedule);
     return schedule;
   } catch {
     return current;

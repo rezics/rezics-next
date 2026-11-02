@@ -102,7 +102,15 @@ test('Launch a worker truthfully when host memory discovery is unavailable.', ()
     },
   );
   const launch = () =>
-    worker.launch('task', 1, 'true', [], { env: {} }, () => false, (message) => reports.push(message));
+    worker.launch(
+      'task',
+      1,
+      'true',
+      [],
+      { env: {} },
+      () => false,
+      (message) => reports.push(message),
+    );
   expect(launch().status).toBe(0);
   expect(launch().status).toBe(0);
   expect(reads).toBe(1);
@@ -361,5 +369,56 @@ describe('worker systemd slice', () => {
 
     expect(result.status).toBe(0);
     expect(reports[0]).toContain('systemd-run exited with status 1');
+  });
+
+  test('A stalled systemctl configuration operation finishes within the selected preparation bound and invokes the existing fallback once; a started worker is never duplicated or subjected to the configuration timeout.', () => {
+    const bound = 250;
+    const fake = fakeSystemd({
+      systemctl: `if [ "$1" = show ]; then printf '0\\n'; else exec sleep 8; fi`,
+    });
+    const reports: string[] = [];
+    const startedAt = Date.now();
+    const result = new WorkerSlice(spawnSync, () => 'MemTotal:       65011712 kB\n', bound).launch(
+      'task',
+      1,
+      'true',
+      [],
+      { env: fake.env, timeout: 60_000 },
+      () => false,
+      (line) => reports.push(line),
+    );
+    expect(Date.now() - startedAt).toBeLessThan(3_000);
+    expect(result.status).toBe(0);
+    expect(reports).toHaveLength(1);
+    expect(reports[0]).toContain('starting without a scope');
+    expect(() => readFileSync(fake.systemdRunCalls, 'utf8')).toThrow();
+
+    const calls: { command: string; timeout: number | undefined }[] = [];
+    const empty = Buffer.alloc(0);
+    const startedReports: string[] = [];
+    const started = new WorkerSlice(
+      (command, _args, options) => {
+        calls.push({ command, timeout: options.timeout });
+        const status = command === 'systemd-run' ? 1 : 0;
+        return { pid: 1, output: [null, empty, empty], stdout: empty, stderr: empty, status, signal: null };
+      },
+      () => 'MemTotal:       65011712 kB\n',
+      bound,
+    ).launch(
+      'task',
+      2,
+      'worker',
+      [],
+      { env: {}, timeout: 60_000 },
+      () => true,
+      (line) => startedReports.push(line),
+    );
+    expect(started.status).toBe(1);
+    expect(startedReports).toEqual([]);
+    expect(calls).toEqual([
+      { command: 'systemctl', timeout: bound },
+      { command: 'systemctl', timeout: bound },
+      { command: 'systemd-run', timeout: 60_000 },
+    ]);
   });
 });

@@ -1,4 +1,5 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { Buffer } from 'node:buffer';
 import { dirname, join } from 'node:path';
 import type { Pool, PoolReading } from './types.ts';
 import { agentAdapter } from './agents.ts';
@@ -77,8 +78,25 @@ export function assessUsageLimitRefusal(
 
 // A CLI that reports an exhausted balance, such as Grok's 402, has no usage reader; the control plane remembers the
 // observation so that routing skips the allowance for the pool's maxAgeMs instead of each new task failing on it once.
+function simpleAllowanceKey(allowanceKey: string): boolean {
+  return /^[\w.-]+$/.test(allowanceKey);
+}
+
 function exhaustionPath(stateDirectory: string, allowanceKey: string): string {
+  const directory = join(stateDirectory, 'exhausted');
+  // Keep existing simple-key paths; encode every code unit of other keys without normalization.
+  if (simpleAllowanceKey(allowanceKey)) return join(directory, `${allowanceKey}.json`);
+  const encodedKey = Buffer.from(allowanceKey, 'utf16le').toString('base64url');
+  return join(directory, 'by-key', `${encodedKey}.json`);
+}
+
+function legacyExhaustionPath(stateDirectory: string, allowanceKey: string): string {
   return join(stateDirectory, 'exhausted', `${allowanceKey.replace(/[^\w.-]/g, '_')}.json`);
+}
+
+function legacyKeyIsUnambiguous(allowanceKey: string): boolean {
+  // Legacy replacement can only introduce underscores, so other simple keys remain identifiable.
+  return simpleAllowanceKey(allowanceKey) && !allowanceKey.includes('_');
 }
 /** Remember an exhausted allowance, optionally with an explicit lifetime instead of the pool's normal maxAgeMs. */
 export function markExhausted(
@@ -92,6 +110,7 @@ export function markExhausted(
   writeFileSync(
     path,
     JSON.stringify({
+      allowanceKey,
       observedAt: new Date(now).toISOString(),
       ...(durationMs === undefined ? {} : { expiresAt: new Date(now + durationMs).toISOString() }),
     }),
@@ -103,17 +122,33 @@ export function withObservedExhaustion(
   stateDirectory: string,
   now = Date.now(),
 ): PoolReading {
-  try {
-    const { observedAt, expiresAt } = JSON.parse(
-      readFileSync(exhaustionPath(stateDirectory, pool.allowanceKey), 'utf8'),
-    ) as {
-      observedAt: string;
-      expiresAt?: string;
-    };
-    const expires = expiresAt ? Date.parse(expiresAt) : Date.parse(observedAt) + pool.policy.maxAgeMs;
-    if (!Number.isFinite(expires) || now >= expires) return reading;
-    return { ...reading, observedAt, exhausted: true };
-  } catch {
-    return reading;
+  const primaryPath = exhaustionPath(stateDirectory, pool.allowanceKey);
+  const legacyPath = legacyExhaustionPath(stateDirectory, pool.allowanceKey);
+  const paths = primaryPath === legacyPath ? [primaryPath] : [primaryPath, legacyPath];
+  const markers: { observedAt: string; observedTime: number }[] = [];
+  for (const path of paths) {
+    try {
+      const marker = JSON.parse(readFileSync(path, 'utf8')) as {
+        allowanceKey?: unknown;
+        observedAt?: unknown;
+        expiresAt?: unknown;
+      };
+      if (typeof marker.observedAt !== 'string') continue;
+      if (Object.prototype.hasOwnProperty.call(marker, 'allowanceKey')) {
+        if (marker.allowanceKey !== pool.allowanceKey) continue;
+      } else if (path !== legacyPath || !legacyKeyIsUnambiguous(pool.allowanceKey)) {
+        continue;
+      }
+      const observedTime = Date.parse(marker.observedAt);
+      const expires = marker.expiresAt ? Date.parse(String(marker.expiresAt)) : observedTime + pool.policy.maxAgeMs;
+      // An expired new marker cannot invalidate a still-live, exactly identified legacy observation.
+      if (!Number.isFinite(observedTime) || !Number.isFinite(expires) || now >= expires) continue;
+      markers.push({ observedAt: marker.observedAt, observedTime });
+    } catch {
+      // Missing or malformed markers do not make a quota observation unavailable.
+    }
   }
+  const marker = markers.sort((left, right) => right.observedTime - left.observedTime)[0];
+  if (!marker) return reading;
+  return { ...reading, observedAt: marker.observedAt, exhausted: true };
 }

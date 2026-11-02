@@ -117,6 +117,30 @@ test('incomplete lifecycle phases remain unknown instead of receiving inferred t
   expect(result.queues.find((q) => q.stage === 'check')).toMatchObject({ length: 1, tasks: ['t1'] });
 });
 
+test('retry and closure events cannot create timed intervals from unrelated endpoints', () => {
+  const events: any[] = [
+    { taskId: 't1', attempt: 0, stage: 'dispatch', action: 'dispatched', at: date(0) },
+    { taskId: 't1', attempt: 1, stage: 'start', action: 'requested', at: date(1) },
+    { taskId: 't1', attempt: 0, stage: 'worker', action: 'started', at: date(2) },
+    { taskId: 't1', attempt: 0, stage: 'check', action: 'requested', at: date(3) },
+    { taskId: 't1', attempt: 1, stage: 'worker', action: 'finished', at: date(5) },
+    { taskId: 't1', attempt: 1, stage: 'check', action: 'acquired', at: date(6) },
+    { taskId: 't1', attempt: 1, stage: 'check', action: 'released', at: date(7) },
+    { taskId: 't1', attempt: 2, stage: 'worker', action: 'started', at: date(8) },
+    { taskId: 't1', attempt: 2, stage: 'check', action: 'requested', at: date(8) },
+    { taskId: 't1', attempt: 2, stage: 'worker', action: 'closed', at: date(9) },
+    { taskId: 't1', attempt: 2, stage: 'check', action: 'closed', at: date(9) },
+    { taskId: 't1', attempt: 2, stage: 'worker', action: 'finished', at: date(12) },
+    { taskId: 't1', attempt: 2, stage: 'check', action: 'acquired', at: date(12) },
+    { taskId: 't1', attempt: 2, stage: 'check', action: 'released', at: date(13) },
+  ];
+  const report = flowReport(events, [task('t1')], Date.parse(date(20)));
+  expect(report.stages.find((stage) => stage.stage === 'dispatch')?.count).toBe(0);
+  expect(report.stages.find((stage) => stage.stage === 'worker')?.count).toBe(0);
+  expect(report.stages.find((stage) => stage.stage === 'check')?.count).toBe(0);
+  expect(report.tasks[0]?.workingMs).toBeNull();
+});
+
 test('the manager host evaluates absolute thresholds and sends one supermanager environment alarm per breached threshold per hour', () => {
   const db = openDb(':memory:');
   ensureFlow(db);
