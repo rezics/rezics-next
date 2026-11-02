@@ -55,14 +55,20 @@ const globals = {
   cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
 };
-const savedGlobals = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+const savedGlobals = new Map(
+  Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
+);
 for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 const { createRoot } = await import('react-dom/client');
 const { Route } = await import('../src/routes/boards/index');
 const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({ component: Outlet });
 const boardRoute = Route.update({ id: '/boards/', path: '/boards/', getParentRoute: () => rootRoute } as never);
-const awayRoute = createRoute({ getParentRoute: () => rootRoute, path: '/away', component: () => createElement('p', null, 'Away') });
+const awayRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/away',
+  component: () => createElement('p', null, 'Away'),
+});
 const routeTree = rootRoute.addChildren([boardRoute, awayRoute]);
 const cursor = 'signed:current/+opaque=';
 const subject = '01a17a3b-0884-721b-91ef-d7ffd7bb58e4';
@@ -147,10 +153,14 @@ test('focus, pointer use, request identity changes and navigation cancel a pendi
     try {
       await retryByKeyboard(view.host);
       if (cancel === 'focus') await act(async () => outside.focus());
-      if (cancel === 'pointer') await act(async () => outside.dispatchEvent(new window.Event('pointerdown', { bubbles: true })));
+      if (cancel === 'pointer')
+        await act(async () => outside.dispatchEvent(new window.Event('pointerdown', { bubbles: true })));
       if (cancel === 'identity')
         await act(async () =>
-          view.router.navigate({ to: '/boards', search: { purpose: 'reviews', cursor, subject, subjectTitle: 'Changed' } }),
+          view.router.navigate({
+            to: '/boards',
+            search: { purpose: 'reviews', cursor, subject, subjectTitle: 'Changed' },
+          }),
         );
       if (cancel === 'navigation') await act(async () => view.router.navigate({ to: '/away' }));
       await act(async () => pending.resolve({ state: 'unavailable' }));
