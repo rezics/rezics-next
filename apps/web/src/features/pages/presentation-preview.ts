@@ -154,6 +154,13 @@ export async function loadPresentationPreview(client: KernelClient, value: unkno
     // A self-consistent subject body alone cannot establish which subject was requested.
     if ('subject' in input.target) {
       if (page.subject !== input.target.subject) return { ok: false, reason: 'unavailable' };
+      // Context identity authorizes reads; population identity binds the requested Realm.
+      const population = page.context?.population;
+      if (
+        input.target.realm !== undefined &&
+        (population?.kind !== 'realm' || population.id !== input.target.realm)
+      )
+        return { ok: false, reason: 'unavailable' };
     } else if (page.subject !== null) {
       return { ok: false, reason: 'unavailable' };
     }
