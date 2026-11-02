@@ -82,14 +82,25 @@ test('both departure warnings follow the editor locale while ambient English dif
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
-  const window = new Window({ url: 'https://site.test/en/curate/presentation' });
+  const window = new Window({ url: 'https://site.test/en/curate/presentation', width: 1280, height: 900 });
   const globals = {
     window,
     document: window.document,
+    navigator: window.navigator,
+    localStorage: window.localStorage,
     HTMLElement: window.HTMLElement,
+    HTMLButtonElement: window.HTMLButtonElement,
+    HTMLAnchorElement: window.HTMLAnchorElement,
     Element: window.Element,
     Node: window.Node,
     Document: window.Document,
+    MutationObserver: window.MutationObserver,
+    ResizeObserver: window.ResizeObserver,
+    getComputedStyle: window.getComputedStyle.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    matchMedia: window.matchMedia.bind(window),
+    scrollTo: window.scrollTo.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -134,16 +145,27 @@ test('both departure warnings follow the editor locale while ambient English dif
       history: createMemoryHistory({ initialEntries: ['/search', '/curate/presentation'] }),
     });
   };
+  const settle = async (ready: () => boolean) => {
+    for (let count = 0; count < 150 && !ready(); count++)
+      await act(async () => {
+        await Bun.sleep(10);
+      });
+    expect(ready()).toBe(true);
+  };
   const leave = async (retainedPublication: boolean, warning: string, ambient: string) => {
     const router = show(retainedPublication);
     await router.load();
     await act(async () => root.render(createElement(RouterProvider, { router })));
+    await settle(() => !!host.querySelector('a'));
     await act(async () => {
-      (host.querySelector('a') as HTMLElement).click();
+      const link = host.querySelector('a') as HTMLElement;
+      link.focus();
+      link.click();
     });
-    const dialog = window.document.querySelector('[role="alertdialog"]');
-    expect(dialog?.textContent).toContain(warning);
-    expect(dialog?.textContent).not.toContain(ambient);
+    await settle(() => !!window.document.querySelector('[role="alertdialog"]'));
+    const dialog = window.document.querySelector('[role="alertdialog"]')!;
+    expect(dialog.textContent).toContain(warning);
+    expect(dialog.textContent).not.toContain(ambient);
   };
   try {
     await leave(false, m.curation_leave_warning({}, ja), m.curation_leave_warning());
