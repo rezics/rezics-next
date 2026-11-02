@@ -220,6 +220,11 @@ One More types control uses metadata continuation without excluding unshown kind
 attempted once on the initial query and retained across hit continuation; changed conditions start a new query.
 Later metadata can have unavailable counts. K_page=8 is a research proposal pending first native measurement,
 not a frozen output/engine allowance. Existing property/value facets and public totals remain count-free. Facet traversal belongs to the current refinement query; a repeated opaque cursor preserves accepted values, stops further paging and offers the existing restart action. Failed reads remain retryable.
+Result Type browsing keeps the initial eight options and one replaceable eight-option continuation window;
+selected off-window IDs submit once, and count evidence belongs only to the accepted initial options.
+A mounted query allows at most 32 successful continuation reads; cycles, duplicate progress and exhaustion offer
+an explicit return to its accepted initial directory, preserving selection and without claiming a fresh checkpoint.
+Local restart resets traversal history but does not renew that mounted query's 32-read budget.
 
 Every hit has a generic base sufficient to render/link without an additional read: canonical ID, registry kind
 and localized kind label, title label with actual BCP47 language, optional currently public image plus aspect

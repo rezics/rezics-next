@@ -25,17 +25,28 @@ export function DiscoveryKinds({
   hydrated: boolean;
   load: (cursor: string, signal: AbortSignal) => Promise<DiscoveryKindsState & { recovery?: SearchRecoveryState }>;
 }) {
-  const [pages, setPages] = useState([initial]);
+  const [continuation, setContinuation] = useState<Kinds>();
+  const [chosen, setChosen] = useState(() => new Set(selected));
+  const [stopped, setStopped] = useState(false);
+  const [refused, setRefused] = useState(false);
+  const [continuations] = useState(() => new KindContinuationLedger(initial.values.map((kind) => kind.id)));
   const [status, setStatus] = useState<DiscoveryKindsState['status']>();
   const [recovery, setRecovery] = useState<SearchRecoveryState>();
   const waiting = useSearchRetryWait(recovery && recovery.status !== 'ready' ? recovery.retryAt : undefined);
   const pending = useRef<AbortController | undefined>(undefined);
   useEffect(() => () => pending.current?.abort(), []);
-  const values = pages.flatMap((page) => page.values);
-  const next = pages.at(-1)?.next;
-  const continuations = useRef(new KindContinuationLedger());
+  const values = refused ? [] : [...initial.values, ...(continuation?.values ?? [])];
+  const next = continuation ? continuation.next : initial.next;
+  const restartable = !refused && (stopped || continuations.limited || next === null);
+  function restart() {
+    continuations.restart();
+    setContinuation(undefined);
+    setStopped(false);
+    setStatus(undefined);
+    setRecovery(undefined);
+  }
   async function more() {
-    if (!next || pending.current || waiting) return;
+    if (!next || pending.current || waiting || stopped || continuations.limited || refused) return;
     const controller = new AbortController();
     pending.current = controller;
     setStatus('loading');
@@ -45,18 +56,27 @@ export function DiscoveryKinds({
       if (controller.signal.aborted) return;
       setRecovery(result.recovery);
       if (result.status === 'ready') {
-        const seen = new Set(values.map((kind) => kind.id));
         if (
-          result.kinds.values.some((kind) => seen.has(kind.id)) ||
-          continuations.current.repeats(next, result.kinds.next)
-        )
-          setStatus('unavailable');
-        else {
-          continuations.current.consume(next);
-          setPages((pages) => [...pages, result.kinds]);
+          !continuations.accept(
+            next,
+            result.kinds.values.map((kind) => kind.id),
+            result.kinds.next,
+          )
+        ) {
+          setStopped(true);
+          setStatus(undefined);
+        } else {
+          setContinuation(result.kinds);
           setStatus(undefined);
         }
-      } else setStatus(result.status);
+      } else {
+        // Only transport outages retain an accepted directory for an exact-cursor retry.
+        const retryable =
+          result.status === 'unavailable' && (!result.recovery || result.recovery.status === 'unavailable');
+        setRefused(!retryable);
+        if (!retryable) setContinuation(undefined);
+        setStatus(result.status);
+      }
     } catch (error) {
       if (!controller.signal.aborted) setStatus('unavailable');
     } finally {
@@ -67,22 +87,22 @@ export function DiscoveryKinds({
     <section className="space-y-3" aria-label={m.search_result_kinds()}>
       <h2 className="font-medium">{m.search_result_kinds()}</h2>
       <p className="text-sm text-muted-foreground">{m.search_result_kinds_help()}</p>
-      {selected.length === 0 && (
+      {chosen.size === 0 && (
         <p role="status" className="text-sm">
           {m.search_all_kinds()}
         </p>
       )}
-      {selected
+      {[...chosen]
         .filter((id) => !values.some((kind) => kind.id === id))
         .map((id) => (
           <input key={id} type="hidden" name="kinds" value={id} />
         ))}
-      <details open={selected.length > 0}>
+      <details open={chosen.size > 0}>
         <summary className="cursor-pointer text-sm font-medium">{m.search_choose_kinds()}</summary>
         <ul className="space-y-2 pt-3">
           {values.map((kind) => {
             const label = localizedLabel(kind.labels, locale);
-            const count = kind.count;
+            const count = initial.values.find((value) => value.id === kind.id)?.count;
             const evidence =
               count && 'value' in count
                 ? `${new Intl.NumberFormat(locale).format(count.value)}${count.exact ? '' : '+'}`
@@ -94,9 +114,16 @@ export function DiscoveryKinds({
                     aria-label={m.search_kind_choice({ value: label.text || kind.id })}
                     name="kinds"
                     value={kind.id}
-                    defaultChecked={selected.includes(kind.id)}
+                    defaultChecked={chosen.has(kind.id)}
                     className="mt-0.5 size-4 shrink-0 accent-primary"
                     onChange={(event) => {
+                      const { value, checked } = event.currentTarget;
+                      setChosen((previous) => {
+                        const updated = new Set(previous);
+                        if (checked) updated.add(value);
+                        else updated.delete(value);
+                        return updated;
+                      });
                       if (hydrated) event.currentTarget.form?.requestSubmit();
                     }}
                   />
@@ -114,7 +141,21 @@ export function DiscoveryKinds({
         </p>
       )}
       {waiting && <p className="text-sm text-muted-foreground">{m.search_recovery_wait()}</p>}
-      {next && (
+      {restartable && (
+        <>
+          <p role="status" className="text-sm text-muted-foreground">
+            {stopped
+              ? m.result_kind_window_progress()
+              : continuations.limited
+                ? m.result_kind_window_limit()
+                : m.result_kind_window_end()}
+          </p>
+          <Button type="button" variant="outline" disabled={!hydrated || status === 'loading'} onClick={restart}>
+            {m.result_kind_window_restart()}
+          </Button>
+        </>
+      )}
+      {next && !restartable && !refused && (
         <Button type="button" variant="outline" disabled={!hydrated || status === 'loading' || waiting} onClick={more}>
           {m.discovery_more_kinds()}
         </Button>
