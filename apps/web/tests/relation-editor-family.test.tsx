@@ -861,9 +861,15 @@ test('Relation draft revisions retire retained input callbacks while current mou
   try {
     const fixture = relationFixture();
     const ready = await fixture.transport.read();
-    await render(h(RelationEditor, {
-      id: fixture.id, locale: 'en', initial: ready, transport: fixture.transport, search: async () => [],
-    }));
+    await render(
+      h(RelationEditor, {
+        id: fixture.id,
+        locale: 'en',
+        initial: ready,
+        transport: fixture.transport,
+        search: async () => [],
+      }),
+    );
     const scope = region();
     await select(scope, m.relation_property(), relationProperty);
     const sources = () => within(scope).getAllByRole('button', { name: m.relation_edit_existing() });
@@ -875,7 +881,10 @@ test('Relation draft revisions retire retained input callbacks while current mou
       const value = relationCallback(scalar(), 'onChange');
       const add = relationCallback(within(scope).getByRole('combobox', { name: m.relation_qualifier() }), 'onChange');
       const cite = relationCallback(citation(), 'onChange');
-      const attach = relationCallback(within(scope).getByRole('button', { name: m.relation_add_citation() }), 'onClick');
+      const attach = relationCallback(
+        within(scope).getByRole('button', { name: m.relation_add_citation() }),
+        'onClick',
+      );
       const stage = relationCallback(sources()[0]!, 'onClick');
       return () => {
         target([{ id: fixture.id, title: 'Retired target', types: [], typeLabel: '', cover: null }]);
@@ -890,12 +899,17 @@ test('Relation draft revisions retire retained input callbacks while current mou
     const oldSource = capture();
     await act(async () => user.click(sources()[2]!));
     await act(async () => oldSource());
-    expect((within(scope).getByRole('combobox', { name: m.relation_target() }) as HTMLInputElement).value).toBe('Kana Hanazawa');
+    expect((within(scope).getByRole('combobox', { name: m.relation_target() }) as HTMLInputElement).value).toBe(
+      'Kana Hanazawa',
+    );
     expect(scalar().value).toBe('Original credit');
     expect(citation().value).toBe('');
     expect(scope.querySelectorAll('button[aria-label^="' + m.relation_remove() + ':"]')).toHaveLength(2);
     const current = scalar();
-    await act(async () => { await user.clear(current); await user.type(current, 'Current credit'); });
+    await act(async () => {
+      await user.clear(current);
+      await user.type(current, 'Current credit');
+    });
     expect(scalar()).toBe(current);
     expect(current.value).toBe('Current credit');
     const oldQualifier = relationCallback(current, 'onChange');
@@ -914,9 +928,15 @@ test('Relation draft revisions retire retained input callbacks while current mou
 
     await render(null);
     fixture.publicRead.subject.type = 'schema:Person';
-    await render(h(RelationEditor, {
-      id: fixture.id, locale: 'en', initial: await fixture.transport.read(), transport: fixture.transport, search: async () => [],
-    }));
+    await render(
+      h(RelationEditor, {
+        id: fixture.id,
+        locale: 'en',
+        initial: await fixture.transport.read(),
+        transport: fixture.transport,
+        search: async () => [],
+      }),
+    );
     await select(region(), m.relation_property(), 'rezics:penNameOf');
     const consent = () => within(region()).getByRole('checkbox', { name: m.statement_consent_own() });
     const oldConsent = relationChildCallback(consent(), 'onCheckedChange');
