@@ -63,9 +63,7 @@ export function SubjectHeaderActions({
         {reactionRecovery && (reactionRecovery.failed || reactionRecovery.pending) ? (
           <div className="flex items-center gap-2">
             <p className="text-sm text-muted-foreground" role="status">
-              {reactionRecovery.pending
-                ? m.subject_reaction_recovery_pending()
-                : m.subject_reaction_recovery_failure()}
+              {reactionRecovery.pending ? m.subject_reaction_recovery_pending() : m.subject_reaction_recovery_failure()}
             </p>
             <button
               type="button"

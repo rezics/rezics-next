@@ -2,7 +2,9 @@ import { afterAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
 
-const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+);
 const window = new Window({ url: 'https://site.test/en/subjects/subject-one/overview' });
 const globals = {
   window,
@@ -87,10 +89,15 @@ function RecoverySurface({ id, zone }: { id: string; zone: boolean }) {
   return (
     <SubjectHeaderActions
       id={id}
-      reactions={{ counts: { like: 3, love: 2, laugh: 0, insightful: 1, sad: 0 }, value: reaction.ownReaction?.value ?? null }}
+      reactions={{
+        counts: { like: 3, love: 2, laugh: 0, insightful: 1, sad: 0 },
+        value: reaction.ownReaction?.value ?? null,
+      }}
       returnTo={`/en/${zone ? 'zones/zone/subjects' : 'subjects'}/${id}`}
       signedIn
-      personalReady={zone ? Boolean(reaction.ready && reaction.ownReaction?.reader === reaction.reader) : reaction.ready}
+      personalReady={
+        zone ? Boolean(reaction.ready && reaction.ownReaction?.reader === reaction.reader) : reaction.ready
+      }
       reactionOrigin={reaction.origin}
       reactionRecovery={{
         failed: reaction.recoveryFailed,
