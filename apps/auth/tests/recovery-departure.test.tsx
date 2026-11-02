@@ -1,5 +1,5 @@
 import { afterAll, expect, spyOn, test } from 'bun:test';
-import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from '@tanstack/react-router';
+import { createBrowserHistory, createRootRoute, createRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { createElement } from 'react';
 import { button, creationFixture, dom, fill, flush, open, send } from './creation-page-fixture';
 
@@ -19,9 +19,11 @@ async function setup(fragment = firstLink) {
   const root = createRootRoute();
   const recovery = Route.update({ id: '/recovery', path: '/recovery', getParentRoute: () => root } as never);
   const away = createRoute({ getParentRoute: () => root, path: '/away', component: () => 'Away' });
-  const router = createRouter({ history: createMemoryHistory({ initialEntries: ['/recovery'] }), routeTree: root.addChildren([recovery, away]) });
+  const history = createBrowserHistory({ window: dom });
+  const router = createRouter({ history, routeTree: root.addChildren([recovery, away]) });
   await router.load();
-  return { ...(await open(createElement(RouterProvider, { router }), {})), router };
+  const page = await open(createElement(RouterProvider, { router }), {});
+  return { ...page, router, async close() { await page.render(null); history.destroy(); } };
 }
 
 const unload = () => {
@@ -70,17 +72,22 @@ test('Stay keeps the current recovery attempt; replacing or leaving retires it a
     expect(assign).not.toHaveBeenCalled();
   } finally {
     assign.mockRestore();
+    await page.close();
   }
 });
 
 test('a completed recovery request can leave without another prompt', async () => {
   const page = await setup('');
-  await flush(() => fill(page.host.querySelector<HTMLInputElement>('input[name="email"]')!, 'reader@example.test'));
-  await flush(() => send(page.host));
-  page.calls[0]!.resolve(Response.json({ success: true }));
-  await flush(() => {});
-  expect(unload()).toBe(false);
-  await flush(() => void page.router.navigate({ to: '/away' }));
-  expect(page.router.history.location.pathname).toBe('/away');
-  expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+  try {
+    await flush(() => fill(page.host.querySelector<HTMLInputElement>('input[name="email"]')!, 'reader@example.test'));
+    await flush(() => send(page.host));
+    page.calls[0]!.resolve(Response.json({ success: true }));
+    await flush(() => {});
+    expect(unload()).toBe(false);
+    await flush(() => void page.router.navigate({ to: '/away' }));
+    expect(page.router.history.location.pathname).toBe('/away');
+    expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+  } finally {
+    await page.close();
+  }
 });
