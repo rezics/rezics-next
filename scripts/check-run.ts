@@ -582,18 +582,19 @@ export function readEnvironmentFile(file: string, workspace: string): Record<str
   for (const [name, item] of entries) {
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) || typeof item !== 'string' || item.includes('\0'))
       throw new Error(`--env-file has an invalid string value for ${name}`);
-    if (FORBIDDEN_REMOTE_ENVIRONMENT.has(name))
-      throw new CheckRunUnavailable(`check-run: environment value ${name} is host-local or placement authority`);
+    // Host-local, placement and session values never travel to the check host; they are dropped, not refused, so an
+    // inherited login environment cannot make a check unavailable.
     if (
+      FORBIDDEN_REMOTE_ENVIRONMENT.has(name) ||
       name.startsWith('KERNEL_CHECK_') ||
       name.startsWith('REMOTE_CHECK_') ||
       name.startsWith('REZICS_CHECK_') ||
       name.startsWith('REZICS_STACK_') ||
-      name.startsWith('BUN_')
+      name.startsWith('BUN_') ||
+      name.startsWith('GOAL_') ||
+      name.startsWith('CODEX_')
     )
-      throw new CheckRunUnavailable(`check-run: environment value ${name} is host-local or placement authority`);
-    if (name.startsWith('GOAL_') || name.startsWith('CODEX_'))
-      throw new CheckRunUnavailable(`check-run: environment value ${name} contains local task or session authority`);
+      continue;
     output[name] = item;
   }
   return output;
@@ -609,13 +610,12 @@ function relocateEnvironment(
   for (const [name, value] of Object.entries(relocated)) {
     if (!isAbsolute(value)) continue;
     const inside = relative(sourceWorkspace, resolve(value));
-    if (inside === '..' || inside.startsWith(`..${sep}`) || isAbsolute(inside))
-      throw new CheckRunUnavailable(`check-run: host-absolute environment dependency ${name} is unsupported`);
     const pathLike = name === 'GROWTH_PROFILE' || /(?:_FILE|_PATH|_DIR|_ROOT)$/.test(name);
-    if (!pathLike)
-      throw new CheckRunUnavailable(
-        `check-run: absolute environment dependency ${name} is not a declared workspace path`,
-      );
+    // A host path outside the workspace (EDITOR, nvm, debuginfod) means nothing on the check host: drop it.
+    if (inside === '..' || inside.startsWith(`..${sep}`) || isAbsolute(inside) || !pathLike) {
+      delete relocated[name];
+      continue;
+    }
     relocated[name] = relative(resolve(targetWorkspace, cwd), resolve(targetWorkspace, inside)) || '.';
   }
   return relocated;
