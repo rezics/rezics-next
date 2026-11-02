@@ -50,21 +50,9 @@ test('actual Sources retry returns focus locally and retires focus across reader
   const unavailable = { kind: 'unavailable' } as const;
   const tick = () => new Promise((done) => setTimeout(done, 0));
   try {
-    for (const mode of [
-      'empty',
-      'failed',
-      'denied',
-      'error',
-      'pointer',
-      'unfocused',
-      'moved',
-      'moved-back',
-      'tab',
-      'blur',
-      'canonical',
-      'reader',
-      'retired',
-    ]) {
+    for (const mode of 'empty failed denied error pointer unfocused moved moved-back tab blur canonical reader retired'.split(
+      ' ',
+    )) {
       reader = 'alice';
       calls.length = 0;
       read = async () => {
