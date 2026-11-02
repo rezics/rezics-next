@@ -556,7 +556,9 @@ function PeopleCreate({
                               read={{ release: read.release, public: { related: {} } }}
                               locale={locale}
                               feedback={{ id, address: 'fact', errors }}
-                              onChange={(value) => update(type, property, id, canEdit, (latest) => ({ ...latest, value }))}
+                              onChange={(value) =>
+                                update(type, property, id, canEdit, (latest) => ({ ...latest, value }))
+                              }
                             />
                           ) : (
                             <EditorFailure reason="stale" locale={locale} />

@@ -88,7 +88,10 @@ test('People removal retains scalar, citation and sibling correction identities 
   const submit = () => click(canvas().getByRole('button', { name: m.catalogue_create_submit() }));
   // Retain the handlers actually delivered to mounted controls, including their captured row.
   const props = (node: HTMLElement) =>
-    Reflect.get(node, Object.keys(node).find((key) => key.startsWith('__reactProps$'))!);
+    Reflect.get(
+      node,
+      Object.keys(node).find((key) => key.startsWith('__reactProps$'))!,
+    );
   const retain = (input: HTMLInputElement) => {
     const change = props(input).onChange as (event: ChangeEvent<HTMLInputElement>) => void;
     return (value: string) => change({ target: { value } } as ChangeEvent<HTMLInputElement>);
@@ -182,11 +185,14 @@ test('People removal retains scalar, citation and sibling correction identities 
     await act(async () =>
       user.selectOptions(canvas().getByRole('combobox', { name: m.catalogue_create_type() }), 'schema:Person'),
     );
-    expect([...row('schema:sameAs').querySelectorAll<HTMLInputElement>('input')].map((input) => input.value))
-      .toEqual(['https://current.test/', 'https://current.test/source']);
+    expect([...row('schema:sameAs').querySelectorAll<HTMLInputElement>('input')].map((input) => input.value)).toEqual([
+      'https://current.test/',
+      'https://current.test/source',
+    ]);
     await act(async () => editCitation!('https://retired-type.test/'));
-    expect(within(row('schema:sameAs')).getByRole('textbox', { name: m.relation_citation() }).value)
-      .toBe('https://current.test/source');
+    expect(within(row('schema:sameAs')).getByRole('textbox', { name: m.relation_citation() }).value).toBe(
+      'https://current.test/source',
+    );
     await click(remove('schema:sameAs'));
     await click(remove('schema:sameAs'));
     expect(inputs.map((input) => [input.id, input.value])).toEqual(snapshot);
@@ -240,13 +246,16 @@ test('People removal retains scalar, citation and sibling correction identities 
     const sealedInputs = [...sealed.querySelectorAll<HTMLInputElement>('input')];
     const lockedEdits = sealedInputs.map(retain);
     const sealedDraft = sealedInputs.map((input) => input.value);
-    const staleAdd = props(canvas().getByRole('button', {
-      name: m.people_profile_add_fact({ field: fixture.release.properties['schema:sameAs']!.labels.en! }),
-    })).onClick;
-    const deliverLocked = () => act(async () => {
-      lockedEdits.forEach((edit) => edit('https://locked.test/'));
-      staleAdd();
-    });
+    const staleAdd = props(
+      canvas().getByRole('button', {
+        name: m.people_profile_add_fact({ field: fixture.release.properties['schema:sameAs']!.labels.en! }),
+      }),
+    ).onClick;
+    const deliverLocked = () =>
+      act(async () => {
+        lockedEdits.forEach((edit) => edit('https://locked.test/'));
+        staleAdd();
+      });
     pending = true;
     await submit();
     const command = structuredClone(commands.at(-1));
