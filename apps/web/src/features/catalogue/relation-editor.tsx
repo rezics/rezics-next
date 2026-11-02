@@ -112,8 +112,8 @@ function RelationEditorLive({
   const restoreCloseFocus = useRef(false);
   const candidatePageBoundary = useRef<HTMLElement>(null);
   const candidatePageEmpty = useRef<HTMLParagraphElement>(null);
-  const candidateReadFailure = useRef<HTMLElement>(null);
-  const candidateReadFocus = useRef<'boundary' | 'failure'>();
+  const candidateReadFailure = useRef<HTMLDivElement>(null);
+  const candidateReadFocus = useRef<'boundary' | 'failure' | undefined>(undefined);
   const failedCandidateRead = useRef(false);
   const [result, setResult] = useState<Extract<RelationResult, { ok: true }>>();
   const [proposed, setProposed] = useState(false);
