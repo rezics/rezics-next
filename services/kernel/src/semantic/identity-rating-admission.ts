@@ -22,14 +22,12 @@ export async function admitIdentityRatingEffect(
 ): Promise<IdentityRatingAdmissionResult> {
   const requestedRoute = routeOf(input.requestedTargetId);
   const resolvedRoute = routeOf(input.resolvedTargetId);
-  if (requestedRoute === null || resolvedRoute === null)
-    return { status: 'pending', reason: 'source-pending' };
+  if (requestedRoute === null || resolvedRoute === null) return { status: 'pending', reason: 'source-pending' };
 
   const [row] = await admission.run(tx, { subject_id: input.resolvedTargetId });
   if (!row || row.subjectId !== input.resolvedTargetId || row.activeTerminal !== true)
     return { status: 'pending', reason: 'source-pending' };
-  if (row.redirect !== null)
-    return { status: 'pending', reason: 'redirect-chain' };
+  if (row.redirect !== null) return { status: 'pending', reason: 'redirect-chain' };
 
   const homes = [...new Set([partitionOf(requestedRoute), partitionOf(resolvedRoute)])].sort(
     (left, right) => left - right,
