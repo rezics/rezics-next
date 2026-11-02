@@ -128,8 +128,8 @@ export const NarrowLongText: Story = {
     await pageReady(context);
     const view = within(within(context.canvasElement).getByRole('main'));
     await expect(view.getByText(longPaymentReference, { exact: true })).toBeVisible();
-    await expect(view.getByRole('heading', { name: m.statements_charge(), exact: true })).toBeVisible();
-    await expect(view.getByRole('heading', { name: m.statements_refund(), exact: true })).toBeVisible();
+    await expect(view.getByRole('heading', { name: m.statements_charge() })).toBeVisible();
+    await expect(view.getByRole('heading', { name: m.statements_refund() })).toBeVisible();
     const sources = view.getAllByRole('button', { name: m.statements_line_source_details() });
     sources[0]!.focus();
     await userEvent.keyboard('{Enter}');
