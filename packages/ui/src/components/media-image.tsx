@@ -33,7 +33,10 @@ export interface MediaImageProps
   frame?: number;
 }
 
-type ImageCallbacks = Pick<MediaImageProps, 'onImageLoad' | 'onImageError'>;
+type ImageCallbacks = {
+  onImageLoad: MediaImageProps['onImageLoad'];
+  onImageError: MediaImageProps['onImageError'];
+};
 type ImageAttempt = { scope: object; element: HTMLImageElement; attached: boolean; completed: boolean };
 
 const positive = (value: number) => Number.isFinite(value) && value > 0;
