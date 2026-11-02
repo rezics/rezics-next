@@ -1,9 +1,16 @@
 import { describe, expect, test } from 'bun:test';
-import { createElement } from 'react';
+import { dirname } from 'node:path';
+import { act, createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { m } from '../src/paraglide/messages.js';
 import type { DocumentImagePresentation } from '../src/threads/document-media';
 import { NativeDocumentImage } from '../src/threads/document-media-image';
+
+const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+const window = new Window();
+for (const [key, value] of Object.entries({ window, document: window.document, navigator: window.navigator, Event: window.Event, IS_REACT_ACT_ENVIRONMENT: true }))
+  Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+const { createRoot } = await import('react-dom/client');
 
 const alt = `A charcoal field drawing of a mountain village, with a river crossing the foreground and a small bridge beside the old stone mill. ${'The artist marks the evening light across the rooftops. '.repeat(5)}`;
 const rightsHolder = `Mira Chen and the Regional Archive ${'Image Preservation Contributors '.repeat(3)}`;
@@ -78,5 +85,33 @@ describe('Document image attribution interface', () => {
     expect(html).not.toContain(rightsHolder);
     expect(html).not.toContain(viaUrl);
     expect(html).not.toContain('CC-BY-4.0');
+  });
+
+  test('retries a failed image after its id or digest changes and replaces its admitted source', async () => {
+    const host = window.document.createElement('div');
+    const root = createRoot(host);
+    const show = (next: DocumentImagePresentation) =>
+      act(async () => root.render(createElement(NativeDocumentImage, { image: next, alt, locale: 'en' })));
+    const fail = () => act(async () => host.querySelector('img')!.dispatchEvent(new window.Event('error')));
+    await show(image);
+    await fail();
+    expect(host.querySelector('figure')?.getAttribute('data-state')).toBe('unavailable');
+    expect(host.textContent).toContain(alt);
+    expect(host.querySelector('a')).toBeNull();
+
+    const replacement = { ...image, id: '0192f3a0-6c1e-7b2a-9d4e-000000000043', digest: 'b'.repeat(64), credit: { ...image.credit!, via: { name: 'New archive', url: viaUrl } } };
+    await show(replacement);
+    expect(host.querySelector('img')?.getAttribute('src')).toContain(replacement.id);
+    expect(host.querySelector('a')?.getAttribute('href')).toBe(viaUrl);
+    await show(image);
+    expect(host.querySelector('figure')?.getAttribute('data-state')).toBe('ready');
+
+    await fail();
+    const revised = { ...image, digest: 'c'.repeat(64), credit: { ...image.credit!, via: { name: 'Revised archive', url: 'https://images.example.test/revised' } } };
+    await show(revised);
+    expect(host.querySelector('figure')?.getAttribute('data-state')).toBe('ready');
+    expect(host.querySelector('a')?.getAttribute('href')).toBe('https://images.example.test/revised');
+    await act(async () => root.unmount());
+    await window.happyDOM.abort();
   });
 });

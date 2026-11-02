@@ -349,7 +349,7 @@ implement them in this stack.
 
 The variant and placeholder code lives in `media-image-sources.ts`, so `Cover` can import the same summary types and `srcset` writer.
 
-The content-owned `NativeDocumentImage` keeps its wrapper where derivative failure must stay bound to the native `id` plus digest identity and hide source credit when no derivative remains available.
+The content-owned `NativeDocumentImage` keeps its wrapper where derivative failure must stay bound to the native `id` plus digest identity and hide source credit when no derivative remains available. A changed `id` or digest clears that failure and remounts the admitted image so stale errors cannot suppress or reuse it.
 
 ## Entity picker
 

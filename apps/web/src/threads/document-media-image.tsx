@@ -13,13 +13,14 @@ export function NativeDocumentImage({
   alt: string;
   locale: string;
 }) {
-  const [failed, setFailed] = useState<string | null>(null);
+  const identity = image ? `${image.id}:${image.digest}` : null;
+  const [failure, setFailure] = useState({ identity, failed: false });
+  if (failure.identity !== identity) setFailure({ identity, failed: false });
   const options = { locale: locale as never };
   const unavailable = m.content_edition_image_unavailable({}, options);
-  const identity = image ? `${image.id}:${image.digest}` : null;
   const track = useCallback(
     (element: HTMLImageElement | null) => {
-      if (element?.complete && element.naturalWidth === 0) setFailed(identity);
+      if (element?.complete && element.naturalWidth === 0) setFailure({ identity, failed: true });
     },
     [identity],
   );
@@ -30,7 +31,7 @@ export function NativeDocumentImage({
     (largest, variant) => (!largest || variant.width > largest.width ? variant : largest),
     null,
   );
-  const available = image !== null && fallback !== null && failed !== identity;
+  const available = image !== null && fallback !== null && !failure.failed;
   const sizes = '(min-width: 48rem) 65ch, calc(100vw - 3.5rem)';
   const srcSet = (values: typeof variants) =>
     image
@@ -49,6 +50,7 @@ export function NativeDocumentImage({
         <picture>
           {avif.length ? <source type="image/avif" srcSet={srcSet(avif)} sizes={sizes} /> : null}
           <img
+            key={identity}
             ref={track}
             src={coverSrc(image.id, fallback.format, fallback.width)}
             srcSet={srcSet(webp.length ? webp : avif)}
@@ -59,7 +61,7 @@ export function NativeDocumentImage({
             loading="lazy"
             decoding="async"
             className="block h-auto max-w-full rounded-xl"
-            onError={() => setFailed(identity)}
+            onError={() => setFailure({ identity, failed: true })}
           />
         </picture>
       ) : (
