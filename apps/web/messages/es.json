@@ -2208,6 +2208,7 @@
   "realm_appearance_heading": "Apariencia y reglas del Realm",
   "realm_appearance_icon": "Icono",
   "realm_appearance_image_unavailable": "Imagen no disponible",
+  "realm_appearance_retry_image": "Reintentar imagen",
   "realm_appearance_intro": "Elige imágenes y reglas para esta comunidad. Los cambios se aplican al guardar.",
   "realm_appearance_media_id": "ID de medio",
   "realm_appearance_no_image": "No hay ninguna imagen seleccionada",

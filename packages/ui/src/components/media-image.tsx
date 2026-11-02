@@ -22,6 +22,10 @@ export interface MediaImageProps
   sizes: string;
   /** Load now with high fetch priority, for the largest image on the page; every other image loads lazily. */
   priority?: boolean;
+  /** Reports a successful browser image load without exposing the image element. */
+  onImageLoad?: () => void;
+  /** Reports a browser image failure without changing the admitted media source. */
+  onImageError?: () => void;
   /**
    * A fixed frame ratio (width ÷ height) for tiles that must align in a gallery. The image is then cropped to the
    * frame, and the frame fills its parent instead of stopping at the image's own width.
@@ -50,6 +54,8 @@ export function MediaImage({
   alt,
   sizes,
   priority = false,
+  onImageLoad,
+  onImageError,
   frame,
   className,
   style,
@@ -68,14 +74,22 @@ export function MediaImage({
   const track = useCallback(
     (element: HTMLImageElement | null) => {
       image.current = element;
-      if (element?.complete && element.currentSrc) lifetime.setValue(element.naturalWidth === 0);
+      if (element?.complete && element.currentSrc) {
+        const loaded = element.naturalWidth > 0;
+        lifetime.setValue(!loaded);
+        (loaded ? onImageLoad : onImageError)?.();
+      }
     },
-    [incarnation, lifetime.setValue],
+    [incarnation, lifetime.setValue, onImageError, onImageLoad],
   );
   useEffect(() => {
     const element = image.current;
-    if (element?.complete && element.currentSrc) lifetime.setValue(element.naturalWidth === 0);
-  }, [incarnation, lifetime.setValue]);
+    if (element?.complete && element.currentSrc) {
+      const loaded = element.naturalWidth > 0;
+      lifetime.setValue(!loaded);
+      (loaded ? onImageLoad : onImageError)?.();
+    }
+  }, [incarnation, lifetime.setValue, onImageError, onImageLoad]);
 
   return (
     <span
@@ -120,7 +134,15 @@ export function MediaImage({
             fetchPriority={priority ? 'high' : 'auto'}
             decoding="async"
             className="block size-full object-cover"
-            onError={() => lifetime.setValue(true)}
+            onLoad={(event) => {
+              const loaded = event.currentTarget.naturalWidth > 0;
+              lifetime.setValue(!loaded);
+              (loaded ? onImageLoad : onImageError)?.();
+            }}
+            onError={() => {
+              lifetime.setValue(true);
+              onImageError?.();
+            }}
           />
         </picture>
       )}

@@ -2208,6 +2208,7 @@
   "realm_appearance_heading": "Realm の外観とルール",
   "realm_appearance_icon": "アイコン",
   "realm_appearance_image_unavailable": "画像を利用できません",
+  "realm_appearance_retry_image": "画像を再試行",
   "realm_appearance_intro": "このコミュニティの画像とルールを選択します。変更は保存すると反映されます。",
   "realm_appearance_media_id": "メディア ID",
   "realm_appearance_no_image": "画像が選択されていません",

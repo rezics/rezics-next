@@ -2208,6 +2208,7 @@
   "realm_appearance_heading": "Realm 外观与规则",
   "realm_appearance_icon": "图标",
   "realm_appearance_image_unavailable": "图片不可用",
+  "realm_appearance_retry_image": "重试图片",
   "realm_appearance_intro": "为这个社区选择图片和规则。保存后更改才会生效。",
   "realm_appearance_media_id": "媒体 ID",
   "realm_appearance_no_image": "未选择图片",

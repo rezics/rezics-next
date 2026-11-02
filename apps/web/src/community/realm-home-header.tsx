@@ -45,10 +45,10 @@ export function RealmHomeHeader({
           ) : null}
         </header>
       ) : null}
-      <CommunityBanner banner={banner} />
+      <CommunityBanner banner={banner} realmId={realm.id} />
       <div className="min-w-0 space-y-4 px-4 pb-5 sm:px-6 sm:pb-6">
         <div className="flex min-w-0 flex-wrap items-end justify-between gap-3">
-          <CommunityAvatar avatar={avatar} name={name} />
+          <CommunityAvatar avatar={avatar} name={name} realmId={realm.id} />
           <div className="min-w-0 max-w-full pt-3 [&>*]:min-w-0 [&>*]:max-w-full [&_a]:h-auto [&_a]:min-h-11 [&_a]:max-w-full [&_a]:whitespace-normal [&_button]:h-auto [&_button]:min-h-11 [&_button]:max-w-full [&_button]:whitespace-normal">
             {participation}
           </div>

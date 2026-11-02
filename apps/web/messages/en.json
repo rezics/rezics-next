@@ -2873,6 +2873,7 @@
   "realm_appearance_no_image": "No image selected",
   "realm_appearance_preview_after_save": "Image uploaded and processed. Save to apply it and load its preview.",
   "realm_appearance_image_unavailable": "Image unavailable",
+  "realm_appearance_retry_image": "Retry image",
   "realm_appearance_no_rules": "No rules selected",
   "realm_appearance_rules_unavailable": "Rules unavailable",
   "realm_appearance_rules_help": "Write or revise rules in the existing post composer, then select the published post and its exact revision. Later edits are not adopted automatically.",

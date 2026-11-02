@@ -2208,6 +2208,7 @@
   "realm_appearance_heading": "Aussehen und Regeln des Realms",
   "realm_appearance_icon": "Icon",
   "realm_appearance_image_unavailable": "Bild nicht verfügbar",
+  "realm_appearance_retry_image": "Bild erneut laden",
   "realm_appearance_intro": "Wähle Bilder und Regeln für diese Community aus. Änderungen werden beim Speichern wirksam.",
   "realm_appearance_media_id": "Media-ID",
   "realm_appearance_no_image": "Kein Bild ausgewählt",

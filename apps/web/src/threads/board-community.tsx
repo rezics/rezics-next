@@ -48,10 +48,10 @@ export function BoardCommunity({
   return (
     <article className="w-full min-w-0 max-w-6xl space-y-6 text-foreground" data-slot="board-community">
       <header className="overflow-hidden rounded-3xl bg-card">
-        <CommunityBanner banner={banner} />
+        <CommunityBanner banner={banner} realmId={community?.realmId ?? realm?.id ?? board.realmId} />
         <div className="space-y-4 px-4 pb-5 sm:px-6 sm:pb-6">
           <div className="flex flex-wrap items-end justify-between gap-3">
-            <CommunityAvatar avatar={avatar} name={name} />
+            <CommunityAvatar avatar={avatar} name={name} realmId={community?.realmId ?? realm?.id ?? board.realmId} />
             <div className="flex max-w-full flex-wrap items-center gap-2 pt-3">
               {participation}
               {overflow ?? <BoardCommunityMenu boardId={board.id} />}
