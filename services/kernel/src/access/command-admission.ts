@@ -67,12 +67,15 @@ export function admittedCommandAccount(context: AccessContext, actor: AccountAct
 }
 
 type Admission = (actor: Actor, context: AccessContext) => Promise<Account | null>;
-const admissions = new WeakMap<Access, Admission>();
+// Native Access can register while the request/command modules are loading.
+// Do not replace that registration when this module finishes evaluating.
+var admissions: WeakMap<Access, Admission> | undefined;
 export function installCommandAdmission(access: Access, admission: Admission): void {
   const root = accessRoot(access);
   if (root !== access) throw new Error('Cannot install command admission on derived Access');
-  if (admissions.has(root)) throw new Error('Command admission already installed');
-  admissions.set(root, admission);
+  const registry = (admissions ??= new WeakMap());
+  if (registry.has(root)) throw new Error('Command admission already installed');
+  registry.set(root, admission);
 }
 
 /** Operator's additional domain prerequisites consume this same observation.
@@ -85,7 +88,7 @@ export async function actingCommandAccount(
   context: AccessContext,
 ): Promise<Account | null> {
   if (!accessCommandAttempt(context)) throw new TypeError('Command admission requires a live attempt');
-  const admission = admissions.get(accessRoot(access));
+  const admission = admissions?.get(accessRoot(access));
   if (!admission && context.work)
     context.work.unavailable('Access installed command admission native account producer');
   return admission
@@ -101,7 +104,7 @@ export async function actingCommandAccount(
  */
 export async function requireCommandAdmission(access: Access, actor: Actor, context: AccessContext): Promise<void> {
   if (!accessCommandAttempt(context)) throw new TypeError('Command admission requires a live attempt');
-  const admission = admissions.get(accessRoot(access));
+  const admission = admissions?.get(accessRoot(access));
   if (!admission || (actor.kind === 'account' && !(await admission(actor, context))))
     throw new Error('Command admission denied');
 }
