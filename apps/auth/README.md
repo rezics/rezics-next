@@ -238,6 +238,10 @@ Unsent attempts stop after an outstanding read or approval; submitted attempts r
 and finish reconciliation without changing a replacement review. An uncertain mutation requires explicit recovery,
 with current-account readback establishing success. The profile and step-up composition ports remain in `account-rename.ts`.
 
+## Operated session opening
+
+Read recovery keeps the selected human, subject, operator and original opening key; cached-document return discards private review state and restores only reads from the existing pending descriptor. Submitted openings retain their command for native session readback, and departure retires browser continuations before their next stage.
+
 ## Step-up
 
 A signed-in browser whose session is not fresh enough for `prompt=login` or `max_age` arrives at

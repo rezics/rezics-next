@@ -101,7 +101,9 @@ type ManagementApprovalResult =
 export async function approveManagementOperation(
   input: ManagementOperationInput,
   path: 'mutation' | 'opening' = 'mutation',
+  isCurrent: () => boolean = () => true,
 ): Promise<ManagementApprovalResult> {
+  if (!isCurrent()) return { kind: 'unavailable' };
   let snapshot: ManagementOperationInput;
   try {
     snapshot = JSON.parse(JSON.stringify(input)) as ManagementOperationInput;
@@ -128,6 +130,7 @@ export async function approveManagementOperation(
   )
     return { kind: 'refused' };
   const current = await loadManagementSession();
+  if (!isCurrent()) return { kind: 'unavailable' };
   if (current.kind === 'unavailable') return { kind: 'unavailable' };
   if (current.kind === 'signed-out') return { kind: 'step-up' };
   if (current.accountId !== snapshot.accountId) return { kind: 'refused' };

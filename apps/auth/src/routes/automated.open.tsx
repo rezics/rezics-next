@@ -1,5 +1,5 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { createFileRoute, useRouter } from '@tanstack/react-router';
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { AuthButton as Button } from '../button';
@@ -34,6 +34,43 @@ function message(kind: string) {
   return m.auth_opening_unavailable();
 }
 export function OperatorSessionOpeningPage() {
+  const { history } = useRouter();
+  const [page, setPage] = useState<{ key: number; isCurrent: () => boolean } | null>(null);
+  useLayoutEffect(() => {
+    let generation = 0;
+    let active = false;
+    const leave = () => {
+      active = false;
+      generation++;
+      setPage(null);
+    };
+    const enter = () => {
+      const key = ++generation;
+      active = true;
+      setPage({ key, isCurrent: () => active && generation === key });
+    };
+    const unsubscribe = history.subscribe(({ location }) => {
+      if (location.pathname === '/automated/open') enter();
+      else leave();
+    });
+    const restore = (event: PageTransitionEvent) => {
+      if (event.persisted && window.location.pathname === '/automated/open') enter();
+    };
+    window.addEventListener('pagehide', leave);
+    window.addEventListener('pageshow', restore);
+    enter();
+    return () => {
+      active = false;
+      generation++;
+      unsubscribe();
+      window.removeEventListener('pagehide', leave);
+      window.removeEventListener('pageshow', restore);
+    };
+  }, [history]);
+  return page ? <OpeningReview key={page.key} isCurrent={page.isCurrent} /> : null;
+}
+
+function OpeningReview({ isCurrent }: { isCurrent: () => boolean }) {
   const [accountId, setAccountId] = useState('');
   const [subjectId, setSubjectId] = useState('');
   const [operatorId, setOperatorId] = useState('');
@@ -48,9 +85,23 @@ export function OperatorSessionOpeningPage() {
   const feedback = useRef<HTMLDivElement>(null);
   const confirmation = useRef<HTMLHeadingElement>(null);
 
-  useEffect(() => {
-    let active = true;
-    async function restore() {
+  async function reconcile(saved: OpeningInput) {
+    const result = await readOpenedSession(saved);
+    if (!isCurrent()) return;
+    setOutcome(result);
+    setStatus(result.kind === 'opened' ? '' : 'unknown');
+  }
+
+  // Recovery repeats only reads. A local review keeps its original tuple/key;
+  // a submitted continuation always goes through native session readback.
+  async function restore(local: OpeningInput | null = null) {
+    if (!isCurrent() || lock.current) return;
+    lock.current = true;
+    setBusy(true);
+    setStatus('');
+    setMetadata(null);
+    setConfirmed(false);
+    try {
       const state = pendingManagementOperationStepUpState();
       if (
         state.kind === 'invalid' ||
@@ -61,54 +112,58 @@ export function OperatorSessionOpeningPage() {
             operation: state.value.operation,
           }))
       ) {
-        if (active) setStatus('refused');
+        setStatus('refused');
         return;
       }
-      if (state.kind === 'pending') {
-        const saved = {
-          accountId: state.value.accountId,
-          operationKey: state.value.operationKey,
-          operation: state.value.operation,
-        } as OpeningInput;
-        if (!active) return;
+      const saved =
+        state.kind === 'pending'
+          ? ({
+              accountId: state.value.accountId,
+              operationKey: state.value.operationKey,
+              operation: state.value.operation,
+            } as OpeningInput)
+          : local;
+      if (saved) {
         setAttempt(saved);
-        if (state.value.phase === 'submitted') {
+        if (state.kind === 'pending' && state.value.phase === 'submitted') {
           setTerminal(true);
-          const result = await readOpenedSession(saved);
-          if (active) {
-            setOutcome(result);
-            setStatus(result.kind === 'opened' ? '' : 'unknown');
-          }
+          await reconcile(saved);
           return;
         }
         const human = await loadManagementSession();
-        if (!active) return;
+        if (!isCurrent()) return;
+        if (human.kind === 'unavailable') {
+          setStatus('unavailable');
+          return;
+        }
         if (human.kind !== 'ready' || human.accountId !== saved.accountId) {
           setStatus('refused');
           return;
         }
         setAccountId(human.accountId);
-        if (state.value.phase !== 'returned' || !managementSessionMatches(human, saved)) {
+        if ((state.kind === 'pending' && state.value.phase !== 'returned') || !managementSessionMatches(human, saved)) {
           setStatus('step-up');
           return;
         }
         const read = await loadOpeningMetadata(saved);
-        if (active) {
-          if (read.kind === 'ready') setMetadata(read.metadata);
-          else setStatus('unavailable');
-        }
+        if (!isCurrent()) return;
+        if (read.kind === 'ready') setMetadata(read.metadata);
+        else setStatus('unavailable');
         return;
       }
       const human = await loadManagementSession();
-      if (active) {
-        if (human.kind === 'ready') setAccountId(human.accountId);
-        else setStatus(human.kind);
+      if (!isCurrent()) return;
+      if (human.kind === 'ready') setAccountId(human.accountId);
+      else setStatus(human.kind);
+    } finally {
+      if (isCurrent()) {
+        lock.current = false;
+        setBusy(false);
       }
     }
+  }
+  useEffect(() => {
     void restore();
-    return () => {
-      active = false;
-    };
   }, []);
   useEffect(() => {
     if (status) feedback.current?.focus();
@@ -119,7 +174,7 @@ export function OperatorSessionOpeningPage() {
 
   async function review(event: FormEvent) {
     event.preventDefault();
-    if (lock.current || attempt || !accountId) return;
+    if (!isCurrent() || lock.current || attempt || !accountId) return;
     const next: OpeningInput = {
       accountId,
       operationKey: crypto.randomUUID(),
@@ -133,32 +188,11 @@ export function OperatorSessionOpeningPage() {
       setStatus('refused');
       return;
     }
-    lock.current = true;
-    setBusy(true);
-    setConfirmed(false);
-    try {
-      setAttempt(next);
-      const human = await loadManagementSession();
-      if (human.kind !== 'ready' || human.accountId !== next.accountId) {
-        setStatus('refused');
-        return;
-      }
-      if (!managementSessionMatches(human, next)) {
-        setStatus('step-up');
-        return;
-      }
-      const read = await loadOpeningMetadata(next);
-      if (read.kind === 'ready') {
-        setMetadata(read.metadata);
-        setStatus('');
-      } else setStatus('unavailable');
-    } finally {
-      lock.current = false;
-      setBusy(false);
-    }
+    setAttempt(next);
+    await restore(next);
   }
   function stepUp(restart = false) {
-    if (!attempt || lock.current) return;
+    if (!isCurrent() || !attempt || lock.current) return;
     // Recovery is a deliberate new opening and always requires a native fresh
     // human login. No consumed approval, cached human proof or metadata survives.
     const next = restart ? { ...attempt, operationKey: crypto.randomUUID() } : attempt;
@@ -170,20 +204,23 @@ export function OperatorSessionOpeningPage() {
   }
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (lock.current || !attempt || !metadata || !confirmed || terminal) return;
+    if (!isCurrent() || lock.current || !attempt || !metadata || !confirmed || terminal) return;
     lock.current = true;
     setBusy(true);
     setConfirmed(false);
     setStatus('');
     try {
-      const result = await submitOperatorOpening(attempt);
+      const result = await submitOperatorOpening(attempt, isCurrent);
+      if (!isCurrent()) return;
       const state = pendingManagementOperationStepUpState();
       setTerminal(state.kind === 'pending' && state.value.phase === 'submitted');
       setOutcome(result);
       setStatus(result.kind === 'opened' ? '' : result.kind);
     } finally {
-      lock.current = false;
-      setBusy(false);
+      if (isCurrent()) {
+        lock.current = false;
+        setBusy(false);
+      }
     }
   }
   return (
@@ -194,6 +231,11 @@ export function OperatorSessionOpeningPage() {
           <ErrorAlert ref={feedback} tabIndex={-1}>
             {message(status)}
           </ErrorAlert>
+        ) : null}
+        {status === 'unavailable' && !metadata && !terminal ? (
+          <Button variant="outline" disabled={busy} onClick={() => void restore(attempt)}>
+            {m.auth_account_identity_retry()}
+          </Button>
         ) : null}
         {!attempt ? (
           <form className="auth-login-form" method="post" action="/automated/open" onSubmit={review}>
@@ -266,16 +308,16 @@ export function OperatorSessionOpeningPage() {
               variant="outline"
               disabled={busy}
               onClick={async () => {
-                if (lock.current) return;
+                if (!isCurrent() || lock.current) return;
                 lock.current = true;
                 setBusy(true);
                 try {
-                  const result = await readOpenedSession(attempt);
-                  setOutcome(result);
-                  setStatus(result.kind === 'opened' ? '' : 'unknown');
+                  await reconcile(attempt);
                 } finally {
-                  lock.current = false;
-                  setBusy(false);
+                  if (isCurrent()) {
+                    lock.current = false;
+                    setBusy(false);
+                  }
                 }
               }}
             >

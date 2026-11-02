@@ -270,9 +270,13 @@ export async function readOpenedSession(input: OpeningInput): Promise<OpeningOut
 }
 /** Explicit second submit only. The approval reference exists solely in this
  * request stack. Unlike mutations, ambiguous issuance is never retried. */
-export async function submitOperatorOpening(input: OpeningInput): Promise<OpeningOutcome> {
+export async function submitOperatorOpening(
+  input: OpeningInput,
+  isCurrent: () => boolean = () => true,
+): Promise<OpeningOutcome> {
   if (!isOpeningInput(input)) return { kind: 'refused' };
-  const approved = await approveManagementOperation(input, 'opening');
+  const approved = await approveManagementOperation(input, 'opening', isCurrent);
+  if (!isCurrent()) return { kind: 'unavailable' };
   if (approved.kind !== 'approved') return approved;
   const snapshot = approved.input;
   if (!isOpeningInput(snapshot)) return { kind: 'refused' };
