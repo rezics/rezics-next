@@ -95,6 +95,8 @@ export function ProfileAvatar({
   const { state, controller } = upload;
   const waiting = usePreferenceRetry(undefined, state.retryAt ?? 0);
   const local = !!state.url;
+  const selected = local || state.phase === 'preparing' || state.phase === 'original-only';
+  const localPreview = local && state.phase !== 'preparing' && state.phase !== 'original-only';
   const changed = avatarMedia(avatar) !== avatarMedia(known);
   const status = avatarStatus(state, avatar, changed);
   return (
@@ -103,9 +105,9 @@ export function ProfileAvatar({
         {m.settings_profile_avatar()}
       </p>
       <div className="flex items-center gap-4">
-        {local || !avatar || !('variants' in avatar) ? (
+        {localPreview || !avatar || !('variants' in avatar) ? (
           <Avatar className="size-20 shrink-0">
-            {state.url ? <AvatarImage src={state.url} alt={m.settings_profile_avatar_preview()} /> : null}
+            {localPreview && state.url ? <AvatarImage src={state.url} alt={m.settings_profile_avatar_preview()} /> : null}
             <AvatarFallback>
               <UserRound className="size-8" aria-hidden="true" />
             </AvatarFallback>
@@ -123,7 +125,7 @@ export function ProfileAvatar({
           </div>
         )}
         <div className="min-w-0 space-y-1 text-sm">
-          {local ? <p className="font-medium">{m.settings_profile_avatar_preview()}</p> : null}
+          {selected ? <p className="font-medium">{m.settings_profile_avatar_preview()}</p> : null}
           <p
             id={`${id}-status`}
             role={
@@ -165,7 +167,7 @@ export function ProfileAvatar({
             event.target.value = '';
           }}
         />
-        {local || state.phase === 'error' ? (
+        {selected || state.phase === 'error' ? (
           <Button
             type="button"
             variant="outline"
@@ -207,7 +209,7 @@ export function ProfileAvatar({
             {m.settings_profile_avatar_retry()}
           </Button>
         ) : null}
-        {avatar || local ? (
+        {avatar || selected ? (
           <Button
             type="button"
             variant="outline"

@@ -2,10 +2,10 @@ import { UploadRefusal } from '../threads/upload';
 import { preferenceRetryDeadline } from './preference-failure-retry';
 import type { ProfileValues } from './profile-data';
 import type { ProfileEditor } from './profile-write';
+import { readAvatarCropSource } from './profile-avatar-source';
 import {
   avatarCropSourceSupported,
   avatarUploadFailure,
-  canCropAvatar,
   constrainAvatarCrop,
   createCroppedAvatarFile,
   decodeAvatarCrop,
@@ -144,7 +144,7 @@ export class ProfileAvatarUpload {
       return;
     }
     const preparation = ++this.preparation;
-    this.update({ phase: 'preparing', url });
+    this.update({ phase: 'preparing', url: null });
     void this.prepare(selection, preparation);
   };
   setCrop = (patch: Partial<AvatarCropPosition>) => {
@@ -225,10 +225,10 @@ export class ProfileAvatarUpload {
   }
   private async prepare(selection: Selection, preparation: number) {
     try {
-      const cropable = await canCropAvatar(selection.file);
+      const source = await readAvatarCropSource(selection.file);
       if (!this.ownsPreparation(selection, preparation)) return;
-      if (!cropable) {
-        this.update({ phase: 'original-only', url: selection.url, cropIssue: 'unsupported' });
+      if (!source) {
+        this.update({ phase: 'original-only', url: null, cropIssue: 'unsupported' });
         return;
       }
       const bitmap = await decodeAvatarCrop(selection.file);
@@ -237,12 +237,12 @@ export class ProfileAvatarUpload {
         return;
       }
       if (!bitmap) {
-        this.update({ phase: 'original-only', url: selection.url, cropIssue: 'unsupported' });
+        this.update({ phase: 'original-only', url: null, cropIssue: 'unsupported' });
         return;
       }
       if (!avatarCropSourceSupported(bitmap)) {
         bitmap.close();
-        this.update({ phase: 'original-only', url: selection.url, cropIssue: 'unsupported' });
+        this.update({ phase: 'original-only', url: null, cropIssue: 'unsupported' });
         return;
       }
       selection.bitmap = bitmap;
@@ -255,7 +255,7 @@ export class ProfileAvatarUpload {
       });
     } catch {
       if (!this.ownsPreparation(selection, preparation)) return;
-      this.update({ phase: 'original-only', url: selection.url, cropIssue: 'decode' });
+      this.update({ phase: 'original-only', url: null, cropIssue: 'decode' });
     }
   }
   private async exportCrop(

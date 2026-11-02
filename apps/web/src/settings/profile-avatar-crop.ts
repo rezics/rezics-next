@@ -29,33 +29,6 @@ export function avatarUploadFailure(file: File): UploadRefusalReason | undefined
   return undefined;
 }
 
-/** GIF, WebP and AVIF can contain animation; keep them intact through the explicit original-file action. */
-export async function canCropAvatar(file: File): Promise<boolean> {
-  if (file.type === 'image/jpeg') return true;
-  if (file.type !== 'image/png') return false;
-  try {
-    const bytes = new DataView(await file.arrayBuffer());
-    if (bytes.byteLength < 8) return true;
-    for (let offset = 8; offset + 12 <= bytes.byteLength;) {
-      const size = bytes.getUint32(offset, false);
-      const type = String.fromCharCode(
-        bytes.getUint8(offset + 4),
-        bytes.getUint8(offset + 5),
-        bytes.getUint8(offset + 6),
-        bytes.getUint8(offset + 7),
-      );
-      if (type === 'acTL') return false;
-      if (type === 'IDAT') return true;
-      const next = offset + 12 + size;
-      if (!Number.isSafeInteger(next) || next <= offset || next > bytes.byteLength) return true;
-      offset = next;
-    }
-    return true;
-  } catch {
-    return true;
-  }
-}
-
 export function avatarCropSourceSupported(source: AvatarCropSource): boolean {
   return (
     Number.isSafeInteger(source.width) &&
