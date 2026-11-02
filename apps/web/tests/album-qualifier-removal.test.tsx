@@ -171,9 +171,9 @@ test('Album qualifier cancellation, stable correction targets, selective removal
       'https://example.test/source/newer',
     );
     await addQualifier(row, 'wdt:P3831');
-    expect(row.querySelector<HTMLElement>('[data-album-qualifier="wdt:P3831"]')!.contains(window.document.activeElement)).toBe(
-      false,
-    );
+    expect(
+      row.querySelector<HTMLElement>('[data-album-qualifier="wdt:P3831"]')!.contains(window.document.activeElement),
+    ).toBe(false);
     await choose(row, 'wdt:P3831', roleId);
     const role = within(row).getByRole('combobox', { name: name('wdt:P3831') });
     const oldRole = pickerChange(role);

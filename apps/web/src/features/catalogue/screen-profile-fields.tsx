@@ -189,10 +189,7 @@ function InitialStatement({
   const qualifiers = statement.qualifiers ?? [];
   const qualifierOptions =
     property?.qualifiers.filter(
-      (id) =>
-        !!release.properties[id] &&
-        qualifiers.length < 16 &&
-        !qualifiers.some((part) => part.property.id === id),
+      (id) => !!release.properties[id] && qualifiers.length < 16 && !qualifiers.some((part) => part.property.id === id),
     ) ?? [];
   const [qualifierChoice, setQualifierChoice] = useState('');
   const qualifierAllowed = qualifierOptions.includes(qualifierChoice);
