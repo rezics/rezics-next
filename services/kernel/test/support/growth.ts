@@ -19,6 +19,7 @@ import {
   GrowthSettleInfrastructureError,
   settle,
   trackGrow,
+  withGrowthCheck,
   type GrowthDatabase,
 } from './growth-capture.ts';
 import {
@@ -785,6 +786,10 @@ function operationBackends(
 }
 
 export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promise<GrowthReport> {
+  return withGrowthCheck(db, () => runGrowthCheck(db, check));
+}
+
+async function runGrowthCheck(db: GrowthDatabase, check: GrowthCheck): Promise<GrowthReport> {
   const growthRule = process.env.GROWTH_RULE;
   if (growthRule !== undefined && growthRule !== 'series')
     throw new TypeError(`${check.name}: GROWTH_RULE must be 'series' when set`);

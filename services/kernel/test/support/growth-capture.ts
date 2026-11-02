@@ -128,6 +128,7 @@ type Attribution = {
 type CaptureState = {
   lifecycle: ReturnType<typeof createGrowthDatabaseLifecycle>;
   active: ActiveCapture | undefined;
+  growthCheckActive: boolean;
   seeding: SeedingCount | undefined;
   setupError?: Error;
   setupTasks: Set<Promise<void>>;
@@ -141,6 +142,20 @@ const databasesByAdmin = new WeakMap<pg.Pool, GrowthDatabase>();
 const growing = new AsyncLocalStorage<Attribution | pg.Pool>();
 const liveCaptures = new Set<ActiveCapture>();
 const workflowAttributions = new Map<string, Attribution>();
+
+export async function withGrowthCheck<T>(database: GrowthDatabase, operation: () => Promise<T>): Promise<T> {
+  const state = states.get(database);
+  if (!state) throw new Error('Growth database was not opened by openGrowthDatabase');
+  state.lifecycle.assertOpen();
+  if (state.growthCheckActive) throw new Error('A growth check is already active for this database');
+  state.growthCheckActive = true;
+  try {
+    return await operation();
+  } finally {
+    state.growthCheckActive = false;
+  }
+}
+
 type BackendSet = Set<number> & { readonly transactions: Map<GrowthDatabase, Map<number, number>> };
 type RunCapture = Map<GrowthDatabase, Set<string>> & {
   readonly databases: Set<GrowthDatabase>;
@@ -833,6 +848,7 @@ export async function openGrowthDatabase(url = process.env.DATABASE_URL): Promis
     const state: CaptureState = {
       lifecycle,
       active: undefined,
+      growthCheckActive: false,
       seeding: undefined,
       setupTasks: new Set(),
       relatedDatabases: new Map(),

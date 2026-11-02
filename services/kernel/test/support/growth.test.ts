@@ -175,3 +175,48 @@ test('a linear-in-change operation passes linear and fails constant bounds', asy
     }),
   ).rejects.toBeInstanceOf(GrowthBoundError);
 });
+
+test('a growth check owns its database through hooks and releases ownership after failure', async () => {
+  const database = db!;
+  let startGrow!: () => void;
+  let releaseGrow!: () => void;
+  const started = new Promise<void>((resolve) => (startGrow = resolve));
+  const gate = new Promise<void>((resolve) => (releaseGrow = resolve));
+  let overlappingHookRan = false;
+  const makeCheck = (target: GrowthDatabase, grow: Parameters<typeof checkGrowth>[1]['grow']) =>
+    checkGrowth(target, {
+      name: 'growth ownership regression',
+      scales: [1, 8, 64],
+      repetitions: 1,
+      bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
+      grow,
+      operation: async () => {},
+    });
+  const first = makeCheck(database, async () => {
+    startGrow();
+    await gate;
+    throw new Error('first grow failed');
+  });
+  const firstFailure = expect(first).rejects.toThrow('first grow failed');
+  await started;
+
+  let independent: GrowthDatabase | undefined;
+  try {
+    await expect(makeCheck(database, async () => { overlappingHookRan = true; })).rejects.toThrow(
+      'A growth check is already active for this database',
+    );
+    independent = await openGrowthDatabase(databaseUrl);
+    await expect(makeCheck(independent, async () => { throw new Error('independent check ran'); })).rejects.toThrow(
+      'independent check ran',
+    );
+  } finally {
+    releaseGrow();
+    await independent?.close();
+  }
+
+  await firstFailure;
+  expect(overlappingHookRan).toBe(false);
+  await expect(makeCheck(database, async () => { throw new Error('ownership released'); })).rejects.toThrow(
+    'ownership released',
+  );
+}, 60_000);

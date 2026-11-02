@@ -592,8 +592,10 @@ check on rows, blocks and statements. After each scale's `grow`, it settles the 
 with ANALYZE, so planner statistics do not depend on autovacuum; seed in `grow`, not `operation`. A `GrowthDatabase`
 has one active capture: measured captures reject same-database nesting before the child callback runs. Explicit
 `captureWarmup` captures record warm-up writes and permit nested captures within that warm-up, but cannot replace an
-active measured capture. Captures on different databases can still nest. Each settle waits until
-no other connection in that database holds a transaction ID or snapshot older than the starting horizon, then runs
+active measured capture. Captures on different databases can still nest. `checkGrowth` holds ownership of its database
+across every scale and hook: another check on the same database rejects before its hooks run, while checks on
+independent databases can run concurrently. Each settle waits until no other connection in that database holds a
+transaction ID or snapshot older than the starting horizon, then runs
 `VACUUM (INDEX_CLEANUP ON)` on target relations and verifies every nonempty relation page is all-visible. If pages remain
 not all-visible, it repeats the horizon wait and vacuums up to two more times; later rounds use `FREEZE` and
 `DISABLE_PAGE_SKIPPING`. The last round uses `VERBOSE` and retains PostgreSQL INFO and WARNING notices. If verification
