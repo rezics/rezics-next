@@ -1,7 +1,7 @@
 import { afterAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import {
@@ -17,8 +17,41 @@ import { cancelCheckRunInvocation, getCheckRunStatus, readCheckRunPreparedDescri
 import type { RemoteCheck, RemotePhysicalRunReceipt } from './remote-check.ts';
 import type { RemoteCheckSettlement } from './remote-check.ts';
 
+import {
+  KERNEL_CLIENT_OUTPUT as PROFILE,
+  collectOutputTree,
+  encodeOutputTree,
+  outputTreeDigest,
+} from './check-output-tree.ts';
+
 const repository = resolve(import.meta.dir, '..');
 const temporary: string[] = [];
+
+test('the original launcher admits only the closed named output profile alongside ordinary schema returns', () => {
+  const args = [
+    '--hosts',
+    '/trusted/hosts.json',
+    '--workspace',
+    '/candidate',
+    '--cwd',
+    '.',
+    '--source-revision',
+    'a'.repeat(40),
+    '--env-file',
+    '/trusted/env',
+    '--output-tree',
+    PROFILE.profile,
+    '--returns',
+    'services/kernel/db/semantic/schema.sql',
+    '--',
+    'bun',
+    'scripts/typecheck.ts',
+  ];
+  expect(parseCheckRunArguments(args).returns).toEqual([PROFILE.transport, 'services/kernel/db/semantic/schema.sql']);
+  expect(() =>
+    parseCheckRunArguments(args.map((value) => (value === PROFILE.profile ? 'arbitrary-directory' : value))),
+  ).toThrow('unknown output profile');
+});
 
 function git(cwd: string, ...args: string[]): string {
   const result = spawnSync('git', ['-c', 'core.hooksPath=/dev/null', '-C', cwd, ...args], {
@@ -29,9 +62,11 @@ function git(cwd: string, ...args: string[]): string {
   return result.stdout.trim();
 }
 
-function candidate(options: { web?: boolean; output?: string } = {}) {
+function candidate(options: { web?: boolean; output?: string; tmpfs?: boolean } = {}) {
   mkdirSync(join(repository, '.temp'), { recursive: true });
-  const parent = mkdtempSync(join(repository, '.temp', `check-run-test-${randomUUID()}-`));
+  const parent = mkdtempSync(
+    options.tmpfs ? '/dev/shm/rezics-check-run-' : join(repository, '.temp', `check-run-test-${randomUUID()}-`),
+  );
   temporary.push(parent);
   const root = join(parent, 'candidate');
   mkdirSync(root);
@@ -1154,3 +1189,117 @@ test('changed candidate inputs and cancellation cannot spawn late or replace the
   expect(abandonedResult.snapshotCustody).toBe('removed');
   expect(existsSync(abandonedSnapshot!)).toBe(false);
 });
+
+test.each(['complete', 'wrong-source', 'wrong-run', 'corrupt', 'incomplete', 'failed'] as const)(
+  'original check-run terminal receiving validates the entire named tree and mixed schema return: %s',
+  async (mode) => {
+    const fixture = candidate({ tmpfs: true, output: `${PROFILE.root}/obsolete.d.ts` });
+    writeFileSync(join(fixture.root, 'packages/client/src/sibling.ts'), 'untouched');
+    const schema = 'services/kernel/db/semantic/schema.sql';
+    const returns = [PROFILE.transport, schema];
+    const finals: string[] = [];
+    let allocations = 0;
+    let retained: CandidateSnapshot | undefined;
+    let expected: ReturnType<typeof collectOutputTree>['members'] = [];
+    let actualSource = '';
+    const args = argsFor(
+      fixture,
+      ['bun', 'run', '--cwd', 'services/kernel', 'typecheck', '--emit-client', '--emit-schema=semantic'],
+      returns,
+    );
+    try {
+      const result = await runCheck(args, {
+        stateDirectory: fixture.parent,
+        settlementWriter: (line) => finals.push(line),
+        onRetainSnapshot: (snapshot) => {
+          retained = snapshot;
+        },
+        transport: async (options) => {
+          allocations++;
+          expect(options.returns).toEqual(returns);
+          actualSource = options.expectedSourceSha256!;
+          expect(actualSource).toMatch(/^[a-f0-9]{64}$/);
+          const native = receipt('a', mode === 'failed' ? 23 : 0);
+          await options.allocated?.({ host: native.host, run: native.run });
+          const producer = join(fixture.parent, 'producer');
+          for (let i = 0; i < 282; i++) {
+            const file = join(producer, PROFILE.root, `module${String(i).padStart(3, '0')}/query.sql.d.ts`);
+            mkdirSync(dirname(file), { recursive: true });
+            writeFileSync(file, `export declare const row${i}: ${i};\n`);
+          }
+          expected = collectOutputTree(producer).members;
+          const bytes = encodeOutputTree(producer, {
+            host: native.host,
+            run: mode === 'wrong-run' ? 'previous-physical-run' : native.run,
+            sourceSha256: mode === 'wrong-source' ? 'f'.repeat(64) : actualSource,
+          });
+          if (mode === 'corrupt') bytes[bytes.length - 1] = bytes[bytes.length - 1]! ^ 1;
+          for (const [path, content] of [
+            [PROFILE.transport, bytes],
+            [schema, Buffer.from('CREATE TABLE proof(id int);\n')],
+          ] as const) {
+            const file = join(options.workspace, path);
+            mkdirSync(dirname(file), { recursive: true });
+            writeFileSync(file, content);
+          }
+          const entries = returns.map((path) => {
+            const content = readFileSync(join(options.workspace, path));
+            return { path, size: content.length, sha256: outputTreeDigest(content), kind: 'file' as const };
+          });
+          options.completed?.(native);
+          options.settled?.(
+            remoteSettlement(options, native, {
+              returns: {
+                schema: 1,
+                status: mode === 'incomplete' ? 'missing' : 'complete',
+                entries: mode === 'incomplete' ? entries.slice(0, 1) : entries,
+                failures: [],
+                missing: mode === 'incomplete' ? [schema] : [],
+              },
+            }),
+          );
+          return native.exitCode;
+        },
+      });
+      expect(allocations).toBe(1);
+      const final = JSON.parse(finals[0]!);
+      expect(final.binding.sourceSha256).toBe(actualSource);
+      expect(final.physical).toEqual({ host: 'a', run: 'physical-run-1' });
+      if (mode === 'complete') {
+        expect(result).toBe(0);
+        expect(final.returns.status).toBe('restored');
+        expect(collectOutputTree(fixture.root).members).toEqual(expected);
+        expect(existsSync(join(fixture.root, PROFILE.root, 'obsolete.d.ts'))).toBe(false);
+        expect(readFileSync(join(fixture.root, schema), 'utf8')).toBe('CREATE TABLE proof(id int);\n');
+        const replay = await runCheck(
+          args,
+          {
+            stateDirectory: fixture.parent,
+            transport: async () => {
+              throw new Error('terminal replay must not allocate');
+            },
+          },
+          new AbortController().signal,
+          {
+            REMOTE_CHECK_RECEIPT_FD: '3',
+            REMOTE_CHECK_RECEIPT_NONCE: final.nonce,
+            REMOTE_CHECK_INVOCATION_ID: final.invocationId,
+          },
+        );
+        expect(replay).toBe(0);
+        expect(collectOutputTree(fixture.root).members).toEqual(expected);
+      } else {
+        expect(result).not.toBe(0);
+        if (mode === 'failed') expect(result).toBe(23);
+        expect(final.returns.status).not.toBe('restored');
+        expect(readFileSync(join(fixture.root, PROFILE.root, 'obsolete.d.ts'), 'utf8')).toBe(
+          'stale output must not reach the host\n',
+        );
+        expect(collectOutputTree(fixture.root).members).toHaveLength(1);
+      }
+      expect(readFileSync(join(fixture.root, 'packages/client/src/sibling.ts'), 'utf8')).toBe('untouched');
+    } finally {
+      if (retained) removeRetainedSnapshot(fixture, retained);
+    }
+  },
+);

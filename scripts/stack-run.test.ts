@@ -1040,3 +1040,36 @@ test('a worker cannot start a local stack container while a check host is reacha
   ).toBeNull();
   expect(hosted.events().filter((event) => event.kind === 'probe')).toEqual([]);
 }, 30_000);
+
+test('Kernel tree profile and mixed schema travel through real stack placement as bounded physical returns', async () => {
+  const { KERNEL_CLIENT_OUTPUT } = await import('./check-output-tree.ts');
+  const directory = workspace();
+  const physical = scenario({ a: {} });
+  for (const mixed of [false, true]) {
+    const returns = [KERNEL_CLIENT_OUTPUT.transport, ...(mixed ? ['services/kernel/db/semantic/schema.sql'] : [])];
+    let placements = 0;
+    const code = await runOnCheckHost(
+      {
+        label: 'kernel typecheck',
+        root: directory,
+        cwd: join(directory, 'services/kernel'),
+        command: ['bun', 'scripts/typecheck.ts', '--emit-client', ...(mixed ? ['--emit-schema=semantic'] : [])],
+        keepsFiles: true,
+        returns,
+      },
+      physical.env,
+      async (options) => {
+        placements++;
+        expect(options.returns).toEqual(returns);
+        expect(options.workspace).toBe(directory);
+        expect(options.cwd).toBe('services/kernel');
+        expect(options.command).toContain('--emit-client');
+        expect(options.allowedHosts).toEqual(['a', 'b']);
+        return 23;
+      },
+    );
+    expect(code).toBe(23);
+    expect(placements).toBe(1);
+    expect(physical.events()).toEqual([]);
+  }
+});

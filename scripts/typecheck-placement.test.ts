@@ -5,6 +5,7 @@ import { join, resolve } from 'node:path';
 import { runKernelTypecheck } from '../services/kernel/scripts/typecheck.ts';
 import { runAuthTypecheck } from '../services/auth/scripts/typecheck.ts';
 import { runOnCheckHost } from './stack-run.ts';
+import { KERNEL_CLIENT_OUTPUT } from './check-output-tree.ts';
 
 const repository = resolve(import.meta.dir, '..');
 const temporaryDirectories: string[] = [];
@@ -89,7 +90,7 @@ test.each([
 
 test.each([
   [[], ['bun', 'scripts/typecheck.ts'], [], false],
-  [['--emit-client'], ['bun', 'scripts/typecheck.ts', '--emit-client'], undefined, true],
+  [['--emit-client'], ['bun', 'scripts/typecheck.ts', '--emit-client'], [KERNEL_CLIENT_OUTPUT.transport], true],
   [
     ['--emit-schema=semantic'],
     ['bun', 'scripts/typecheck.ts', '--emit-schema=semantic'],
@@ -99,7 +100,7 @@ test.each([
   [
     ['--emit-schema=semantic', '--emit-client'],
     ['bun', 'scripts/typecheck.ts', '--emit-client', '--emit-schema=semantic'],
-    undefined,
+    [KERNEL_CLIENT_OUTPUT.transport, 'services/kernel/db/semantic/schema.sql'],
     true,
   ],
 ])(
@@ -131,6 +132,7 @@ test('admitted Kernel client emission preserves output modes without nested host
   for (const schema of [undefined, 'semantic']) {
     let databaseStarts = 0;
     let compilerRuns = 0;
+    let treeCaptures = 0;
     const databaseEnv = { DATABASE_URL: 'postgres://throwaway.test/db' };
     const status = await runKernelTypecheck(
       {
@@ -142,6 +144,11 @@ test('admitted Kernel client emission preserves output modes without nested host
       },
       {
         recognize,
+        outputTree: async (root, work) => {
+          expect(root).toBe(repository);
+          treeCaptures++;
+          return work();
+        },
         place: async () => {
           throw new Error('nested host discovery');
         },
@@ -162,6 +169,7 @@ test('admitted Kernel client emission preserves output modes without nested host
 
     expect(databaseStarts).toBe(1);
     expect(compilerRuns).toBe(1);
+    expect(treeCaptures).toBe(1);
     expect(status).toBe(23);
   }
 });
@@ -197,7 +205,7 @@ test('Kernel compiler placement returns only its genuinely required bounded outp
       args: ['--emit-client'],
       command: ['--emit-client'],
       keepsFiles: true,
-      returns: undefined,
+      returns: [KERNEL_CLIENT_OUTPUT.transport],
     },
     {
       args: ['--emit-schema=core'],
@@ -215,7 +223,7 @@ test('Kernel compiler placement returns only its genuinely required bounded outp
       args: ['--emit-schema=semantic', '--emit-client'],
       command: ['--emit-client', '--emit-schema=semantic'],
       keepsFiles: true,
-      returns: undefined,
+      returns: [KERNEL_CLIENT_OUTPUT.transport, 'services/kernel/db/semantic/schema.sql'],
     },
   ];
   // In-workspace configuration is an explicit argv input; disposable caches are never returned.
@@ -311,23 +319,42 @@ test('admitted explicit DATABASE_URL retains its SQL semantics without provision
   expect(receivedUrl).toBe('postgres://developer.test/db');
 });
 
-test('unreturnable client output and external projects are explicitly unavailable without local SQL execution', async () => {
+test('named client output is placed before SQL execution and external projects remain unavailable', async () => {
+  const hosts = join(temporaryDirectory(), 'hosts.json');
+  writeFileSync(
+    hosts,
+    JSON.stringify({
+      hosts: [
+        { name: 'a', address: 'ops@a.invalid', identity: '/key', memoryMaxGiB: 16, cpuQuotaPercent: 800, slots: 2 },
+      ],
+    }),
+  );
   for (const args of [['--emit-client'], ['--emit-client', '--emit-schema=semantic']]) {
-    await expect(
-      runKernelTypecheck(
-        {},
-        {
-          place: runOnCheckHost,
-          withThrowawayDatabase: async () => {
-            throw new Error('local database');
-          },
-          typecheck: async () => {
-            throw new Error('local compiler');
-          },
+    let placements = 0;
+    const status = await runKernelTypecheck(
+      { KERNEL_CHECK_REMOTE: hosts },
+      {
+        place: (run, env) =>
+          runOnCheckHost(run, env, async (options) => {
+            placements++;
+            expect(options.command).toEqual(['bun', 'scripts/typecheck.ts', ...args]);
+            expect(options.returns).toEqual([
+              KERNEL_CLIENT_OUTPUT.transport,
+              ...(args.length === 2 ? ['services/kernel/db/semantic/schema.sql'] : []),
+            ]);
+            return 23;
+          }),
+        withThrowawayDatabase: async () => {
+          throw new Error('local database');
         },
-        args,
-      ),
-    ).rejects.toThrow('the run keeps files it writes and declares no returns');
+        typecheck: async () => {
+          throw new Error('local compiler');
+        },
+      },
+      args,
+    );
+    expect(status).toBe(23);
+    expect(placements).toBe(1);
   }
   for (const REYLO_CONFIG of ['/external/project/.reylo.yaml', '../../../external/.reylo.yaml']) {
     const dependencies = {

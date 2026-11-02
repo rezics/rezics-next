@@ -20,6 +20,13 @@ import {
 } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { startPostgresContainer } from '../services/kernel/scripts/check.ts';
+import { currentCheckSourceManifest } from './check-run.ts';
+import {
+  KERNEL_CLIENT_OUTPUT as PROFILE,
+  collectOutputTree,
+  encodeOutputTree,
+  outputTreeDigest,
+} from './check-output-tree.ts';
 import { onCheckHost } from './stack-run.ts';
 import { remoteLifetimeInfrastructureCause } from './worker-check.ts';
 import { CHECK_ARTIFACTS_MAX_BYTES, CHECK_ARTIFACTS_MAX_FILES } from './check-artifacts.ts';
@@ -684,6 +691,9 @@ if (script.includes('/proc/loadavg')) {
   if (existsSync(receipt)) console.log('remote-check: infrastructure failure: remote run timed out ' + readFileSync(receipt, 'utf8'));
 } else if (script.includes('REMOTE_CHECK_PHYSICAL_RESOURCES')) {
   // These transport scenarios have no cgroup fixture; observation is explicitly unavailable.
+} else if (script.includes('REMOTE_CHECK_PREPARED_INPUTS')) {
+  if (!config.preparedInputs) process.exit(4);
+  console.log(JSON.stringify(config.preparedInputs));
 } else if (script.includes('REMOTE_CHECK_RETURNS')) {
   const paths = [...script.matchAll(/^# PATH (.*)$/gm)].map((match) => match[1]);
   log({ kind: 'returns', paths, slotHeld: slotHeld() });
@@ -695,16 +705,18 @@ if (script.includes('/proc/loadavg')) {
     await new Promise<void>(() => setInterval(() => {}, 1000));
   }
   const present = new Set(config.present ?? []);
-  for (const path of paths) console.log((present.has(path) ? 'PRESENT ' : 'ABSENT ') + path);
-  const contents = Buffer.from(config.returnedContent ?? 'fake returned artifact\\n');
+  for (const path of paths) {
+    const matched = [...present].filter(file => file === path || file.startsWith(path + '/'));
+    if (matched.length) for (const file of matched) console.log('PRESENT ' + file);
+    else console.log('ABSENT ' + path);
+  }
+  const contents = config.returnedBytesFile ? readFileSync(config.returnedBytesFile) : Buffer.from(config.returnedContent ?? 'fake returned artifact\\n');
   const manifest = [...present]
     .filter((path) => paths.some((declared) => path === declared || path.startsWith(declared + '/')))
-    .map((path) => ({
-      path,
-      size: contents.byteLength,
-      sha256: createHash('sha256').update(contents).digest('hex'),
-      kind: 'file',
-    }));
+    .map((path) => {
+      const bytes = config.returnedFiles?.[path] ? Buffer.from(config.returnedFiles[path], 'base64') : contents;
+      return { path, size: bytes.byteLength, sha256: createHash('sha256').update(bytes).digest('hex'), kind: 'file' };
+    });
   console.log('MANIFEST ' + Buffer.from(JSON.stringify(manifest)).toString('base64'));
 } else if (script.includes('REMOTE_CHECK_BASE_STATE')) {
   log({ kind: 'base', slotHeld: slotHeld() });
@@ -724,6 +736,32 @@ if (script.includes('/proc/loadavg')) {
   log({ kind: 'run', script, identity: args[args.indexOf('-i') + 1], fakeStartedAt, slotHeld: slotHeld(), releaseFile });
   const host = address.slice(address.indexOf('@') + 1).replace(/\\.test$/, '');
   const statusFile = dir + '/' + hostKey + '.status';
+  if (config.treeBundle) {
+    const physicalRun = script.match(/--unit=rezics-check-([a-z0-9-]+)/)![1];
+    const original = Buffer.from(config.treeBundle, 'base64');
+    const start = original.indexOf(10) + 1;
+    const end = original.indexOf(10, start);
+    const header = JSON.parse(original.subarray(start, end).toString('utf8'));
+    if (!config.treeWrongRun) header.run = physicalRun;
+    header.host = host;
+    const bytes = Buffer.concat([original.subarray(0, start), Buffer.from(JSON.stringify(header) + '\\n'), original.subarray(end + 1)]);
+    if (config.treeCorrupt) bytes[bytes.length - 1] ^= 1;
+    const returnedBytesFile = dir + '/' + hostKey + '.tree';
+    writeFileSync(returnedBytesFile, bytes);
+    if (config.treeArtifact) {
+      const transport = '.temp/check-output-tree/kernel-client-v1.bin';
+      const stage = '.temp/goal/checks/artifact-returns/' + config.treeArtifact;
+      const envelope = { version: 1, physicalRunId: config.treeArtifact, declarations: [transport], entries: [
+        { path: transport, status: 'returned', size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex'), file: 'files/000.bin' }
+      ] };
+      updateConfig({ returnedFiles: { [transport]: bytes.toString('base64'),
+        [stage + '/manifest.json']: Buffer.from(JSON.stringify(envelope)).toString('base64'),
+        [stage + '/files/000.bin']: bytes.toString('base64') },
+        present: [transport, stage + '/manifest.json', stage + '/files/000.bin'] });
+    }
+    updateConfig({ returnedBytesFile, preparedInputs: { schema: 1, host, run: physicalRun,
+      sourceSha256: config.treeSource, manifestSha256: 'a'.repeat(64), fileCount: 1, totalBytes: 12 } });
+  }
   if (runNumber < (config.transportFailures ?? 0)) {
     rmSync(statusFile, { force: true });
     process.exit(255);
@@ -861,13 +899,13 @@ if (progressMode === 'increasing' || progressMode === 'fragmented') {
 console.error('sent 1,234 bytes 10,000 bytes/sec');
 for (const file of config.vanishedFiles ?? []) console.error('rsync: [sender] file has vanished: ' + file);
 if (isBack) {
-  const contents = config.returnedContent ?? 'fake returned artifact\\n';
+  const contents = config.returnedBytesFile ? readFileSync(config.returnedBytesFile) : config.returnedContent ?? 'fake returned artifact\\n';
   const present = new Set(config.present ?? []);
   for (const file of input.split('\\0').filter(Boolean)) {
     if (!present.has(file)) continue;
     const target = join(args.at(-1), file);
     mkdirSync(dirname(target), { recursive: true });
-    writeFileSync(target, contents);
+    writeFileSync(target, config.returnedFiles?.[file] ? Buffer.from(config.returnedFiles[file], 'base64') : contents);
   }
 }
 process.exit(code);
@@ -955,6 +993,13 @@ type HostConfig = {
     | 'progress-then-stall';
   rsyncProgressIntervalMs?: number;
   returnedContent?: string;
+  returnedBytesFile?: string;
+  returnedFiles?: Record<string, string>;
+  treeArtifact?: string;
+  treeBundle?: string;
+  treeSource?: string;
+  treeWrongRun?: boolean;
+  treeCorrupt?: boolean;
   stallUpload?: boolean;
   stallReturnsCopy?: boolean;
   stallReturnsProbe?: boolean;
@@ -983,6 +1028,7 @@ type HostConfig = {
 };
 
 let root: string;
+const treeWorkspaces: string[] = [];
 let counter = 0;
 const inheritedCheckEnvironment = { ...process.env };
 
@@ -1027,6 +1073,7 @@ beforeAll(() => {
 });
 
 afterAll(() => {
+  for (const directory of treeWorkspaces) rmSync(directory, { recursive: true, force: true });
   rmSync(root, { recursive: true, force: true });
   for (const key of Object.keys(process.env)) {
     if (
@@ -1591,8 +1638,9 @@ test('a live landing head gets one bounded fitting opportunity, then native admi
   expect(existsSync(marker)).toBe(false);
 });
 
-function workspace(): string {
-  const directory = mkdtempSync(join(root, 'workspace-'));
+function workspace(tmpfs = false): string {
+  const directory = mkdtempSync(tmpfs ? '/dev/shm/rezics-remote-receive-' : join(root, 'workspace-'));
+  if (tmpfs) treeWorkspaces.push(directory);
   const git = (...args: string[]) => spawnSync('git', args, { cwd: directory, encoding: 'utf8' });
   git('init', '-q');
   mkdirSync(join(directory, 'src'));
@@ -7379,5 +7427,121 @@ test('lifecycle control uses the selected host run and recovers idempotently aft
     if (oldRuntimeDirectory === undefined) delete process.env.XDG_RUNTIME_DIR;
     else process.env.XDG_RUNTIME_DIR = oldRuntimeDirectory;
     rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test.each(['complete', 'wrong-source', 'wrong-run', 'corrupt', 'missing', 'failed'] as const)(
+  'the real remote return pipeline receives the named 282-member profile with physical source custody: %s',
+  async (mode) => {
+    const caller = workspace(true);
+    mkdirSync(join(caller, PROFILE.root), { recursive: true });
+    writeFileSync(join(caller, PROFILE.root, 'obsolete.d.ts'), 'old');
+    writeFileSync(join(caller, 'packages/client/src/sibling.ts'), 'untouched');
+    const source = await currentCheckSourceManifest(caller, [PROFILE.transport]);
+    const producer = mkdtempSync('/dev/shm/rezics-remote-tree-');
+    try {
+      for (let i = 0; i < 282; i++) {
+        const file = join(producer, PROFILE.root, `nested/query${String(i).padStart(3, '0')}.sql.d.ts`);
+        mkdirSync(dirname(file), { recursive: true });
+        writeFileSync(file, `export declare const query${i}: ${i};\n`);
+      }
+      const expected = collectOutputTree(producer).members;
+      const bytes = encodeOutputTree(producer, {
+        host: 'a',
+        run: 'template-run',
+        sourceSha256: mode === 'wrong-source' ? 'f'.repeat(64) : source.sourceSha256,
+      });
+      const physical = scenario({
+        a: {
+          treeBundle: bytes.toString('base64'),
+          treeSource: source.sourceSha256,
+          treeWrongRun: mode === 'wrong-run',
+          treeCorrupt: mode === 'corrupt',
+          exit: mode === 'failed' ? 23 : 0,
+          present: mode === 'missing' ? [] : [PROFILE.transport],
+        },
+      });
+      const result = await remote(
+        physical.env,
+        caller,
+        ['bun', 'run', '--cwd', 'services/kernel', 'typecheck', '--emit-client'],
+        ['--output-tree', PROFILE.profile],
+      );
+      expect(physical.events().filter((event) => event.kind === 'run')).toHaveLength(1);
+      expect(physical.events().filter((event) => event.kind === 'docker')).toHaveLength(0);
+      if (mode === 'complete') {
+        expect(result.code, result.stderr).toBe(0);
+        expect(collectOutputTree(caller).members).toEqual(expected);
+        expect(existsSync(join(caller, PROFILE.root, 'obsolete.d.ts'))).toBe(false);
+        for (let i = 0; i < 282; i++) {
+          const name = `nested/query${String(i).padStart(3, '0')}.sql.d.ts`;
+          expect(readFileSync(join(caller, PROFILE.root, name))).toEqual(
+            readFileSync(join(producer, PROFILE.root, name)),
+          );
+        }
+        const returned = readFileSync(join(caller, PROFILE.transport));
+        expect(outputTreeDigest(returned)).toHaveLength(64);
+        const header = JSON.parse(returned.toString('utf8').split('\n')[1]!);
+        expect(header.sourceSha256).toBe(source.sourceSha256);
+        expect(header.run).not.toBe('template-run');
+      } else {
+        if (mode === 'failed') expect(result.code).toBe(23);
+        else expect(result.code).not.toBe(0);
+        expect(readFileSync(join(caller, PROFILE.root, 'obsolete.d.ts'), 'utf8')).toBe('old');
+        expect(readdirSync(join(caller, PROFILE.root))).toEqual(['obsolete.d.ts']);
+      }
+      expect(readFileSync(join(caller, 'packages/client/src/sibling.ts'), 'utf8')).toBe('untouched');
+    } finally {
+      rmSync(producer, { recursive: true, force: true });
+    }
+  },
+);
+
+test('nested official placement admits the named profile and physically receives its artifact envelope before legacy replay', async () => {
+  const { artifactRunRelativePath, restoreArtifactReturns } = await import('./check-artifacts.ts');
+  const caller = workspace(true);
+  const producer = mkdtempSync('/dev/shm/rezics-remote-nested-');
+  try {
+    mkdirSync(join(caller, PROFILE.root), { recursive: true });
+    writeFileSync(join(caller, PROFILE.root, 'obsolete.d.ts'), 'old');
+    writeFileSync(join(caller, 'packages/client/src/sibling.ts'), 'untouched');
+    for (let i = 0; i < 282; i++) {
+      const file = join(producer, PROFILE.root, `nested/row${i}.d.ts`);
+      mkdirSync(dirname(file), { recursive: true });
+      writeFileSync(file, `export type Row${i} = ${i};\n`);
+    }
+    const physicalId = randomUUID();
+    const stage = artifactRunRelativePath(physicalId);
+    const source = await currentCheckSourceManifest(caller, [stage, PROFILE.transport]);
+    const bytes = encodeOutputTree(producer, { host: 'a', run: 'template-run', sourceSha256: source.sourceSha256 });
+    const physical = scenario({
+      a: { treeArtifact: physicalId, treeBundle: bytes.toString('base64'), treeSource: source.sourceSha256 },
+    });
+    const result = await remote(
+      physical.env,
+      caller,
+      [
+        'env',
+        `REZICS_CHECK_ARTIFACTS_DIR=${stage}`,
+        `REZICS_CHECK_ARTIFACTS_PHYSICAL_RUN_ID=${physicalId}`,
+        'bun',
+        'run',
+        '--cwd',
+        'services/kernel',
+        'typecheck',
+        '--emit-client',
+      ],
+      ['--returns', stage],
+    );
+    expect(result.code, result.stderr).toBe(0);
+    expect(physical.events().filter((event) => event.kind === 'run')).toHaveLength(1);
+    expect(collectOutputTree(caller).members).toEqual(collectOutputTree(producer).members);
+    const restored = restoreArtifactReturns(caller, stage, physicalId);
+    expect(restored.rejected).toEqual([]);
+    expect(restored.restored).toHaveLength(1);
+    expect(existsSync(join(caller, PROFILE.root, 'obsolete.d.ts'))).toBe(false);
+    expect(readFileSync(join(caller, 'packages/client/src/sibling.ts'), 'utf8')).toBe('untouched');
+  } finally {
+    rmSync(producer, { recursive: true, force: true });
   }
 });

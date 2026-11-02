@@ -1,3 +1,4 @@
+import { KERNEL_CLIENT_OUTPUT, withKernelClientOutput } from '../../../scripts/check-output-tree.ts';
 import { statSync } from 'node:fs';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,9 +26,6 @@ function returnedPaths(
   emitClient: boolean,
   emitSchema: string | undefined,
 ): string[] | undefined {
-  // Client declarations exceed the bounded return contract. Undefined makes relocation unavailable.
-  if (emitClient) return undefined;
-
   // External projects cannot be represented by the workspace-relative placement contract.
   const projectDirectory = env.REYLO_CONFIG ? dirname(resolve(directory, env.REYLO_CONFIG)) : directory;
   if (workspacePath(resolve(projectDirectory, '.reylo')) === undefined) return undefined;
@@ -36,7 +34,7 @@ function returnedPaths(
   // analyses before placement returns. The caller consumes only their status and
   // requested generated outputs. Release analyses are generated separately by analyse.ts;
   // returning this cache would recursively include entries from unrelated databases/runs.
-  const paths: string[] = [];
+  const paths: string[] = emitClient ? [KERNEL_CLIENT_OUTPUT.transport] : [];
   if (emitSchema === 'core') paths.push('services/kernel/db/schema.sql');
   if (
     emitSchema !== undefined &&
@@ -91,6 +89,7 @@ export async function runKernelTypecheck(
   dependencies: CompilerPlacementDependencies & {
     typecheck?: typeof typecheck;
     withThrowawayDatabase?: typeof withThrowawayDatabase;
+    outputTree?: typeof withKernelClientOutput;
   } = {},
   args: readonly string[] = process.argv.slice(2),
 ): Promise<number> {
@@ -133,8 +132,10 @@ export async function runKernelTypecheck(
     Array.from(new Bun.Glob('db/**/migrations/*.sql').scanSync({ cwd: directory })),
     new Date(),
   );
-  if (env.DATABASE_URL) return compile(env);
-  return withDatabase(compile);
+  const run = () => (env.DATABASE_URL ? compile(env) : withDatabase(compile));
+  return emitClient
+    ? (dependencies.outputTree ?? withKernelClientOutput)(repository, run, { returns: returns ?? [] })
+    : run();
 }
 
 if (import.meta.main) {

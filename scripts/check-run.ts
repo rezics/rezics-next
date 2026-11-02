@@ -49,6 +49,15 @@ import {
   clearDeclaredArtifacts,
   validateArtifactDeclarations,
 } from './check-artifacts.ts';
+import {
+  KERNEL_CLIENT_OUTPUT,
+  outputTreeInputExclusions,
+  outputTreeProfile,
+  outputTreeTransportCandidates,
+  receiveOutputTrees,
+  safeOutputTreePath,
+  type OutputTreeBinding,
+} from './check-output-tree.ts';
 import { environmentCommandIsSafe, PERFORMANCE_HOST_NAMES, performanceHosts } from './check-placement.ts';
 import {
   allocateCheckRunPhysical,
@@ -344,6 +353,7 @@ async function inputFingerprint(
   files = workspaceFiles(root),
   excludedPaths: readonly string[] = [],
 ): Promise<string> {
+  excludedPaths = outputTreeInputExclusions(excludedPaths);
   const hash = createHash('sha256');
   for (const file of [...files].sort()) {
     if (excludedPaths.some((path) => file === path || file.startsWith(`${path}/`))) continue;
@@ -472,6 +482,7 @@ export async function prepareCandidateSnapshot(
   excludedInputs: readonly string[] = [],
   allocation?: { workspace: string; scratch: string },
 ): Promise<CandidateSnapshot> {
+  excludedInputs = outputTreeInputExclusions(excludedInputs);
   const root = resolve(workspace);
   const repositoryRoot = resolve(git(root, ['rev-parse', '--show-toplevel']));
   if (repositoryRoot !== root)
@@ -692,6 +703,10 @@ export function parseCheckRunArguments(argv: readonly string[]): CheckRunArgumen
   const result: Partial<CheckRunArguments> = { returns: [] };
   while (args[0]?.startsWith('--') && args[0] !== '--') {
     const flag = args.shift()!;
+    if (flag === '--output-tree') {
+      result.returns!.push(outputTreeProfile(args.shift() ?? '').transport);
+      continue;
+    }
     if (flag === '--returns') {
       const value = args.shift();
       if (!value) throw new Error('--returns requires a workspace-relative path');
@@ -748,6 +763,11 @@ async function copyReturnedOutputs(
   stageRoot: string,
   physicalRunId: string,
   returns: readonly string[],
+  authenticated?: {
+    manifest: RemoteReturnManifest;
+    terminal: OutputTreeBinding & { exitCode: number };
+    validateSource?: () => Promise<void>;
+  },
 ): Promise<ReturnedOutputResult> {
   const result: ReturnedOutputResult = { missing: [], rejected: [], entries: [] };
   if (returns.length === 0) return result;
@@ -762,6 +782,7 @@ async function copyReturnedOutputs(
     examinedEntries += 1;
     if (examinedEntries > CHECK_ARTIFACTS_MAX_FILES * 1024)
       throw new Error('returned output exceeds the traversal bound');
+    safeOutputTreePath(sourceRoot, stagePath);
     const stats = lstatSync(source);
     if (sensitivePath(stagePath)) throw new Error('credential or host-local data in returned output');
     if (stats.isSymbolicLink()) throw new Error('symlink in returned output');
@@ -780,7 +801,7 @@ async function copyReturnedOutputs(
       for (const child of children) await copyTree(join(source, child), `${stagePath}/${child}`);
       return;
     }
-    if (!stats.isFile()) throw new Error('special file in returned output');
+    if (!stats.isFile() || stats.nlink !== 1) throw new Error('special or hard-linked file in returned output');
     if (hasPrivateKeyMaterial(source)) throw new Error('private key material in returned output');
     totalFiles += 1;
     totalBytes += stats.size;
@@ -804,6 +825,26 @@ async function copyReturnedOutputs(
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') result.missing.push(path);
       else result.rejected.push(`${path}: ${error instanceof Error ? error.message : String(error)}`);
     }
+  }
+
+  if (
+    returns.includes(KERNEL_CLIENT_OUTPUT.transport) ||
+    outputTreeTransportCandidates(sourceRoot, { status: 'complete', entries: result.entries }, returns).length
+  ) {
+    if (!authenticated)
+      throw new CheckRunUnavailable('check-run: tree receiving requires authenticated terminal custody');
+    await authenticated.validateSource?.();
+    const order = (items: RemoteReturnManifest['entries']) =>
+      items
+        .map(({ path, size, sha256, kind }) => ({ path, size, sha256, kind }))
+        .sort((left, right) => (left.path < right.path ? -1 : left.path > right.path ? 1 : 0));
+    if (
+      authenticated.manifest.status !== 'complete' ||
+      JSON.stringify(order(authenticated.manifest.entries)) !== JSON.stringify(order(result.entries))
+    )
+      throw new CheckRunUnavailable('check-run: entire returned catalogue differs from physical custody');
+    if (!result.missing.length && !result.rejected.length)
+      receiveOutputTrees(sourceRoot, destinationRoot, authenticated.manifest, authenticated.terminal, returns);
   }
 
   for (const path of staged) {
@@ -901,7 +942,7 @@ async function stopUnretainedTransportChild(child: ReturnType<typeof Bun.spawn>)
 }
 
 function isDeclaredOutput(file: string, returns: readonly string[]): boolean {
-  return returns.some((path) => file === path || file.startsWith(`${path}/`));
+  return outputTreeInputExclusions(returns).some((path) => file === path || file.startsWith(`${path}/`));
 }
 
 async function buildCandidateSourceManifest(
@@ -962,6 +1003,19 @@ async function buildCandidateSourceManifest(
   if (Buffer.byteLength(JSON.stringify(manifest)) > 8 * 1024 * 1024)
     throw new CheckRunUnavailable('check-run: source manifest exceeds its byte bound');
   return manifest;
+}
+
+/** Direct placement uses the same fingerprint/catalogue algorithm as frozen check-run admission. */
+export async function currentCheckSourceManifest(
+  root: string,
+  returns: readonly string[] = [],
+): Promise<CandidateSourceManifest> {
+  const inputFiles = workspaceFiles(root);
+  const sourceHash = await inputFingerprint(root, inputFiles, returns);
+  return buildCandidateSourceManifest(
+    { workspace: root, inputFiles, sourceHash, indexTree: git(root, ['write-tree']), scratch: '' },
+    returns,
+  );
 }
 
 async function trustedProducerClosureHash(trustedRoot: string): Promise<string> {
@@ -1299,6 +1353,7 @@ async function runCheckLegacy(
   const receiptNonce = receiptChannel?.nonce;
   const writeReceipt = dependencies.receiptWriter ?? receiptChannel?.write;
   let receivedReceipt: RemotePhysicalRunReceipt | undefined;
+  let legacySettlement: RemoteCheckSettlement | undefined;
   let receiptForwardFailure: unknown;
   let outcome = REMOTE_TRANSPORT_FAILURE;
   let runFailure: unknown;
@@ -1346,6 +1401,11 @@ async function runCheckLegacy(
       command: ['env', ...Object.entries(overlay).map(([name, value]) => `${name}=${value}`), ...frozenArgs],
       returns,
       ...(preparation.length === 0 ? {} : { prepare: preparation }),
+      expectedSourceSha256: snapshot.sourceHash,
+      expectedSourceManifest: await buildCandidateSourceManifest(snapshot, returns),
+      settled: (settlement) => {
+        legacySettlement = settlement;
+      },
       ...(cancellation === undefined ? {} : { cancellation }),
       ...(requestedPriority === undefined ? {} : { priority: requestedPriority }),
       started: (host) => {
@@ -1387,6 +1447,28 @@ async function runCheckLegacy(
           join(snapshot.scratch, 'returns'),
           receivedReceipt.run,
           returns,
+          legacySettlement?.native?.run === receivedReceipt.run &&
+            legacySettlement.native.host === receivedReceipt.host &&
+            legacySettlement.native.exitCode === receivedReceipt.exitCode &&
+            legacySettlement.preparedInputs?.sourceSha256 === snapshot.sourceHash
+            ? {
+                manifest: legacySettlement.returns,
+                terminal: {
+                  host: receivedReceipt.host,
+                  run: receivedReceipt.run,
+                  sourceSha256: snapshot.sourceHash,
+                  exitCode: receivedReceipt.exitCode,
+                },
+                validateSource: async () => {
+                  if (
+                    (await inputFingerprint(candidateRoot, workspaceFiles(candidateRoot), returns)) !==
+                      snapshot.sourceHash ||
+                    (await inputFingerprint(snapshot.workspace, snapshot.inputFiles, returns)) !== snapshot.sourceHash
+                  )
+                    throw new CheckRunUnavailable('check-run: source changed before tree receiving');
+                },
+              }
+            : undefined,
         );
         if (returned.missing.length || returned.rejected.length) {
           returnFailure = new CheckRunUnavailable('check-run: one or more declared outputs were not restored');
@@ -1929,6 +2011,25 @@ async function runCheckWithFinalSettlement(
       join(snapshot.scratch, 'returns'),
       receivedReceipt.run,
       returns,
+      {
+        manifest: remoteSettlement.returns,
+        terminal: {
+          host: receivedReceipt.host,
+          run: receivedReceipt.run,
+          sourceSha256: snapshot.sourceHash,
+          exitCode: receivedReceipt.exitCode,
+        },
+        validateSource: async () => {
+          if (
+            preparedInputs.status !== 'verified' ||
+            preparedInputs.sourceSha256 !== snapshot.sourceHash ||
+            runFailure ||
+            (await inputFingerprint(candidateRoot, workspaceFiles(candidateRoot), returns)) !== snapshot.sourceHash ||
+            (await inputFingerprint(snapshot.workspace, snapshot.inputFiles, returns)) !== snapshot.sourceHash
+          )
+            throw new CheckRunUnavailable('check-run: source or physical custody changed before publication');
+        },
+      },
     );
   } catch (error) {
     returnFailure = error;
@@ -2544,6 +2645,7 @@ export async function reconcileRegisteredCheckRun(
         physical,
         workspace: record.snapshot.workspace,
         returns: record.returns,
+        expectedSourceSha256: record.binding.sourceSha256,
         allowedHosts: [...PERFORMANCE_HOST_NAMES],
       });
       const originalTransportIdentity = record.transportChild
@@ -2582,6 +2684,19 @@ export async function reconcileRegisteredCheckRun(
             stage,
             physical.run,
             record.returns,
+            {
+              manifest: remote.returns,
+              terminal: {
+                host: physical.host,
+                run: physical.run,
+                sourceSha256: record.binding.sourceSha256,
+                exitCode: remote.native.exitCode,
+              },
+              validateSource: async () => {
+                if (remote.preparedInputs?.sourceSha256 !== record.binding.sourceSha256)
+                  throw new CheckRunUnavailable('check-run: reconciled tree lacks matching physical prepared custody');
+              },
+            },
           );
         } catch (error) {
           returnFailure = error;

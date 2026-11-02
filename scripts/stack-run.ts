@@ -28,6 +28,7 @@ import {
   type RemoteCheck,
   validateEstimateMs,
 } from './remote-check.ts';
+import { hasOutputTreeReturn, outputTreeProfile, withKernelClientOutput } from './check-output-tree.ts';
 import { withStackSlot } from './stack-lease.ts';
 import {
   captureArtifactReturns,
@@ -323,20 +324,26 @@ export async function stackRun(
       await registerArtifactDeclarations(run.root, stageDirectory, physicalRunId, returned);
       handoff = true;
     } catch (error) {
+      if (hasOutputTreeReturn(returned)) throw error;
       console.error(`stack-run: artifact handoff unavailable: ${error instanceof Error ? error.message : error}`);
     }
   }
-  let code: number;
+  let code: number | undefined;
   try {
     code = await withStackSlot(run.label, (leaseEnv) => {
       const intent = executionCancellation(cancellation);
-      return intent ? Promise.resolve(128 + intent.signal) : local(leaseEnv);
+      return intent
+        ? Promise.resolve(128 + intent.signal)
+        : hasOutputTreeReturn(returned)
+          ? withKernelClientOutput(run.root, () => local(leaseEnv), { returns: returned })
+          : local(leaseEnv);
     });
   } finally {
     if (handoff && stageDirectory !== undefined && physicalRunId !== undefined) {
       try {
         await captureArtifactReturns(run.root, stageDirectory, physicalRunId, returned);
       } catch (error) {
+        if (hasOutputTreeReturn(returned) && (code === undefined || code === 0)) throw error;
         console.error(`stack-run: could not stage declared outputs: ${error instanceof Error ? error.message : error}`);
       }
     }
@@ -348,7 +355,7 @@ export async function stackRun(
       console.error(`stack-run: could not record declared outputs: ${error instanceof Error ? error.message : error}`);
     }
   }
-  return code;
+  return code!;
 }
 
 if (import.meta.main) {
@@ -362,7 +369,10 @@ if (import.meta.main) {
   while (rest[0]?.startsWith('--') && rest[0] !== '--') {
     const flag = rest.shift();
     if (flag === '--keeps-files') keepsFiles = true;
-    else if (flag === '--returns' && rest.length > 0) {
+    else if (flag === '--output-tree') {
+      returns ??= [];
+      returns.push(outputTreeProfile(rest.shift() ?? '').transport);
+    } else if (flag === '--returns' && rest.length > 0) {
       returns ??= [];
       returns.push(rest.shift()!);
     } else if (flag === '--slots' && rest.length > 0) slots = Number(rest.shift());

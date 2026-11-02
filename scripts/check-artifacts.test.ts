@@ -4,14 +4,23 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, truncateSync
 import { dirname, join } from 'node:path';
 import {
   CHECK_ARTIFACTS_MAX_BYTES,
+  CHECK_ARTIFACTS_MAX_FILES,
   artifactRunRelativePath,
   captureArtifactReturns,
   cleanupArtifactRun,
   prepareArtifactRun,
+  parseArtifactManifest,
   registerArtifactDeclarations,
   restoreArtifactReturns,
   validateArtifactDeclarations,
 } from './check-artifacts.ts';
+
+import {
+  KERNEL_CLIENT_OUTPUT as PROFILE,
+  encodeOutputTree,
+  outputTreeDigest,
+  receiveOutputTrees,
+} from './check-output-tree.ts';
 
 const roots: string[] = [];
 
@@ -157,4 +166,120 @@ test('directory declarations return bounded child files and leave unrelated work
   expect(restored.rejected).toEqual([]);
   for (const [name, bytes] of expected) expect(readFileSync(join(root, directory, name))).toEqual(bytes);
   expect(readFileSync(unrelated, 'utf8')).toBe('unchanged');
+});
+
+test('ordinary declarations and directory returns retain the exact 64/65 file bound', async () => {
+  expect(CHECK_ARTIFACTS_MAX_FILES).toBe(64);
+  expect(validateArtifactDeclarations(Array.from({ length: 64 }, (_, i) => `f${i}`))).toHaveLength(64);
+  expect(() => validateArtifactDeclarations(Array.from({ length: 65 }, (_, i) => `f${i}`))).toThrow('at most 64');
+  const root = mkdtempSync('/dev/shm/rezics-artifact-bound-');
+  roots.push(root);
+  const physical = randomUUID();
+  const stage = prepareArtifactRun(root, physical);
+  await registerArtifactDeclarations(root, stage, physical, ['outputs']);
+  mkdirSync(join(root, 'outputs'));
+  for (let i = 0; i < 64; i++) writeFileSync(join(root, `outputs/f${i}`), String(i));
+  await captureArtifactReturns(root, stage, physical, ['outputs']);
+  expect(restoreArtifactReturns(root, stage, physical).restored).toHaveLength(64);
+  writeFileSync(join(root, 'outputs/overflow'), '65');
+  await captureArtifactReturns(root, stage, physical, ['outputs']);
+  const rejected = restoreArtifactReturns(root, stage, physical);
+  expect(rejected.rejected.length).toBeGreaterThan(0);
+});
+
+test('nested physical artifact envelopes carry the complete named tree and retain schema 1 compatibility', async () => {
+  const root = mkdtempSync('/dev/shm/rezics-nested-tree-');
+  roots.push(root);
+  const physical = randomUUID();
+  const binding = { host: 'a', run: 'native-physical-run', sourceSha256: 'a'.repeat(64) };
+  const stage = prepareArtifactRun(root, physical);
+  await registerArtifactDeclarations(root, stage, physical, [PROFILE.transport, 'schema.sql']);
+  for (let i = 0; i < 282; i++) {
+    const file = join(root, PROFILE.root, `nested/f${i}.d.ts`);
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, `export type Value${i} = ${i};\n`);
+  }
+  const bundle = encodeOutputTree(root, binding);
+  mkdirSync(dirname(join(root, PROFILE.transport)), { recursive: true });
+  writeFileSync(join(root, PROFILE.transport), bundle);
+  writeFileSync(join(root, 'schema.sql'), 'CREATE TABLE proof(id int);\n');
+  await captureArtifactReturns(root, stage, physical, [PROFILE.transport, 'schema.sql']);
+  const relative = artifactRunRelativePath(physical);
+  const envelope = JSON.parse(readFileSync(join(root, relative, 'manifest.json'), 'utf8'));
+  expect(envelope.version).toBe(1);
+  expect(envelope.entries).toHaveLength(2);
+  const paths = [
+    `${relative}/manifest.json`,
+    ...envelope.entries.map((entry: { file: string }) => `${relative}/${entry.file}`),
+  ];
+  const entries = paths.map((path) => {
+    const bytes = readFileSync(join(root, path));
+    return { path, size: bytes.length, sha256: outputTreeDigest(bytes), kind: 'file' as const };
+  });
+  rmSync(join(root, PROFILE.root), { recursive: true });
+  mkdirSync(join(root, PROFILE.root));
+  writeFileSync(join(root, PROFILE.root, 'obsolete.d.ts'), 'obsolete');
+  writeFileSync(join(root, 'packages/client/src/sibling.ts'), 'untouched');
+  // The old receiver cannot promote a bundle without the physical terminal publication.
+  expect(restoreArtifactReturns(root, stage, physical).rejected.join('\n')).toContain(PROFILE.transport);
+  expect(readFileSync(join(root, PROFILE.root, 'obsolete.d.ts'), 'utf8')).toBe('obsolete');
+  receiveOutputTrees(root, root, { status: 'complete', entries }, { ...binding, exitCode: 0 }, [relative]);
+  const restored = restoreArtifactReturns(root, stage, physical);
+  expect(restored.rejected).toEqual([]);
+  expect(restored.restored).toHaveLength(2);
+  expect(readFileSync(join(root, PROFILE.root, 'nested/f281.d.ts'), 'utf8')).toBe('export type Value281 = 281;\n');
+  expect(() => readFileSync(join(root, PROFILE.root, 'obsolete.d.ts'))).toThrow();
+  expect(readFileSync(join(root, 'packages/client/src/sibling.ts'), 'utf8')).toBe('untouched');
+});
+
+test('nested mixed emission validates the complete authenticated schema catalogue before tree publication', async () => {
+  const root = mkdtempSync('/dev/shm/rezics-nested-invalid-');
+  roots.push(root);
+  const physical = randomUUID();
+  const binding = { host: 'a', run: 'native-mixed-run', sourceSha256: 'a'.repeat(64) };
+  const stage = prepareArtifactRun(root, physical);
+  await registerArtifactDeclarations(root, stage, physical, [PROFILE.transport, 'schema.sql']);
+  mkdirSync(join(root, PROFILE.root), { recursive: true });
+  writeFileSync(join(root, PROFILE.root, 'new.d.ts'), 'export type Fresh = true;\n');
+  const bundle = encodeOutputTree(root, binding);
+  mkdirSync(dirname(join(root, PROFILE.transport)), { recursive: true });
+  writeFileSync(join(root, PROFILE.transport), bundle);
+  writeFileSync(join(root, 'schema.sql'), 'CREATE TABLE proof(id int);\n');
+  await captureArtifactReturns(root, stage, physical, [PROFILE.transport, 'schema.sql']);
+  const relative = artifactRunRelativePath(physical);
+  const manifestPath = join(root, relative, 'manifest.json');
+  const original = readFileSync(manifestPath);
+  const envelope = parseArtifactManifest(original, physical)!;
+  rmSync(join(root, PROFILE.root), { recursive: true });
+  mkdirSync(join(root, PROFILE.root));
+  writeFileSync(join(root, PROFILE.root, 'obsolete.d.ts'), 'old');
+  for (const mode of ['missing', 'failed', 'wrong-hash', 'duplicate-file', 'undeclared'] as const) {
+    const changed = structuredClone(envelope);
+    const schema = changed.entries.find((entry) => entry.path === 'schema.sql')!;
+    if (mode === 'missing') changed.entries = changed.entries.filter((entry) => entry !== schema);
+    if (mode === 'failed') schema.status = 'missing';
+    if (mode === 'wrong-hash') schema.sha256 = 'f'.repeat(64);
+    if (mode === 'duplicate-file')
+      schema.file = changed.entries.find((entry) => entry.path === PROFILE.transport)!.file;
+    if (mode === 'undeclared') schema.path = 'unowned.sql';
+    writeFileSync(manifestPath, JSON.stringify(changed));
+    const paths = [`${relative}/manifest.json`, ...envelope.entries.map((entry) => `${relative}/${entry.file!}`)];
+    const entries = paths.map((path) => {
+      const bytes = readFileSync(join(root, path));
+      return { path, size: bytes.length, sha256: outputTreeDigest(bytes), kind: 'file' as const };
+    });
+    expect(() =>
+      receiveOutputTrees(root, root, { status: 'complete', entries }, { ...binding, exitCode: 0 }, [relative]),
+    ).toThrow();
+    expect(readFileSync(join(root, PROFILE.root, 'obsolete.d.ts'), 'utf8')).toBe('old');
+    expect(() => readFileSync(join(root, PROFILE.root, 'new.d.ts'))).toThrow();
+  }
+  // Pre-extension ordinary schema-1 manifests remain readable without optional hashes/declarations.
+  const old = {
+    version: 1,
+    physicalRunId: physical,
+    entries: [{ path: 'ordinary.txt', status: 'returned', file: 'files/000.bin', size: 3 }],
+  };
+  expect(parseArtifactManifest(Buffer.from(JSON.stringify(old)), physical)?.entries).toEqual(old.entries);
+  expect(parseArtifactManifest(Buffer.alloc(256 * 1024 + 1), physical)).toBeUndefined();
 });

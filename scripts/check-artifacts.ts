@@ -12,6 +12,12 @@ import {
 } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
+import {
+  KERNEL_CLIENT_OUTPUT,
+  readOutputTreeFile,
+  safeOutputTreePath,
+  verifyPublishedOutputTree,
+} from './check-output-tree.ts';
 import { withCheckFence } from './check-custody.ts';
 
 export const CHECK_ARTIFACTS_VERSION = 1 as const;
@@ -49,7 +55,9 @@ export function artifactRelativePath(value: string): string {
   if (
     typeof value !== 'string' ||
     value.length === 0 ||
-    value.length > 1024 ||
+    Buffer.byteLength(value) > 1024 ||
+    value.includes('\\') ||
+    value.split('/').some((part) => part === '') ||
     value.startsWith('/') ||
     /^[A-Za-z]:/.test(value) ||
     /[\0\r\n]/.test(value) ||
@@ -135,7 +143,8 @@ function enumerateDeclaredFiles(root: string, path: string): DeclaredFile[] {
   let total = 0;
   const addFile = (file: string): void => {
     const stats = lstatSync(file);
-    if (stats.isSymbolicLink() || !stats.isFile()) throw new Error(`check-artifacts: unsafe declared output: ${file}`);
+    if (stats.isSymbolicLink() || !stats.isFile() || stats.nlink !== 1)
+      throw new Error(`check-artifacts: unsafe declared output: ${file}`);
     const filePath = relative(rootAbsolute, file).split(sep).join('/');
     artifactRelativePath(filePath);
     total += stats.size;
@@ -171,13 +180,12 @@ function manifestPath(stage: string): string {
   return join(stage, 'manifest.json');
 }
 
-function readManifest(stage: string, physicalRunId: string): CheckArtifactManifest | undefined {
+/** Shared bounded schema-1 parser; old ordinary manifests may omit declarations and hashes. */
+export function parseArtifactManifest(bytes: Buffer, physicalRunId: string): CheckArtifactManifest | undefined {
+  if (bytes.length > 256 * 1024) return undefined;
   try {
-    const manifestFile = manifestPath(stage);
-    const stats = lstatSync(manifestFile);
-    if (stats.isSymbolicLink() || !stats.isFile()) return undefined;
-    const raw = readFileSync(manifestFile, 'utf8');
-    if (raw.length > 256 * 1024) return undefined;
+    const raw = bytes.toString('utf8');
+    if (!Buffer.from(raw).equals(bytes)) return undefined;
     const manifest = JSON.parse(raw) as CheckArtifactManifest;
     if (
       manifest.version !== CHECK_ARTIFACTS_VERSION ||
@@ -212,6 +220,14 @@ function readManifest(stage: string, physicalRunId: string): CheckArtifactManife
       if (!manifest.declarations?.includes(path)) return undefined;
     }
     return manifest;
+  } catch {
+    return undefined;
+  }
+}
+
+function readManifest(stage: string, physicalRunId: string): CheckArtifactManifest | undefined {
+  try {
+    return parseArtifactManifest(readOutputTreeFile(stage, 'manifest.json', 256 * 1024), physicalRunId);
   } catch {
     return undefined;
   }
@@ -318,7 +334,7 @@ export async function captureArtifactReturns(
         entries.set(path, { path, status: 'oversize', size });
         return;
       }
-      const bytes = readFileSync(source);
+      const bytes = readOutputTreeFile(root, path, CHECK_ARTIFACTS_MAX_BYTES);
       if (bytes.length !== size) {
         entries.set(path, { path, status: 'unsafe' });
         return;
@@ -393,7 +409,7 @@ export async function captureArtifactReturns(
 }
 
 function ensureSafeDestination(root: string, path: string): string {
-  const absolute = containedPath(root, path);
+  const absolute = safeOutputTreePath(root, path, true);
   const rootReal = realpathSync(root);
   let parent = dirname(absolute);
   const missing: string[] = [];
@@ -478,12 +494,13 @@ export function restoreArtifactReturns(
       const filesStats = lstatSync(dirname(source));
       if (filesStats.isSymbolicLink() || !filesStats.isDirectory()) throw new Error('unsafe staging files directory');
       const stats = lstatSync(source);
-      if (stats.isSymbolicLink() || !stats.isFile() || stats.size !== entry.size) {
+      if (stats.isSymbolicLink() || !stats.isFile() || stats.nlink !== 1 || stats.size !== entry.size) {
         throw new Error('staged file identity or size mismatch');
       }
       total += stats.size;
       if (total > CHECK_ARTIFACTS_MAX_BYTES) throw new Error('total returned bytes exceed the bound');
-      const bytes = readFileSync(source);
+      const bytes = readOutputTreeFile(stage, sourceRelative, CHECK_ARTIFACTS_MAX_BYTES);
+      if (path === KERNEL_CLIENT_OUTPUT.transport) verifyPublishedOutputTree(root, bytes);
       const sha256 = createHash('sha256').update(bytes).digest('hex');
       if (entry.sha256 !== undefined && sha256 !== entry.sha256) throw new Error('staged file digest mismatch');
       const destination = ensureSafeDestination(root, path);

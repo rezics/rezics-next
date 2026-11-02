@@ -9,6 +9,61 @@ The command runs TypeScript plus construct on an approved check host against one
 An explicit `DATABASE_URL` requires an already admitted physical run. Unavailable placement fails closed;
 TypeScript diagnostics and exit status are preserved.
 
+## Client declaration output placement
+
+`typecheck --emit-client` declares `KERNEL_CLIENT_OUTPUT` from
+[`scripts/check-output-tree.ts`](../../scripts/check-output-tree.ts): the closed `kernel-client-v1` profile owns exactly
+`packages/client/src/kernel`. Combined `--emit-schema=` also declares its existing schema file. The official generator
+runs once after physical admission, migration validation and prepared-source custody; compiler/database placement and
+exit codes retain the compiler contract. `.reylo` caches are never returned. External `REYLO_CONFIG` stays unsupported.
+
+The profile admits 512 regular members, 32 MiB decoded total, 2 MiB per member, 16 relative path components and
+1024 UTF-8 path bytes. Paths must be normalized NFC, collision-free under case folding, and free of traversal,
+backslashes, control characters and ambiguous trailing dots/spaces. Links, multiple hard links and special files,
+including symlink ancestors at capture, staging or destination, refuse the whole result. Empty directories are not
+members. Capture enumerates at most `1 + 512 * 16` directories.
+
+The deterministic uncompressed version 1 format is a 21-byte magic line, a JSON header line of at most 1024 bytes,
+at most 512 ordered JSON member lines of at most `6 * 1024 + 160 = 6304` bytes each, then the exact raw member bytes.
+Line bounds include newlines. Thus the complete manifest is at most 3,228,672 bytes and the complete transport at
+most 36,783,125 bytes. Count/encoded bounds precede catalogue parsing and content allocation; each member's size,
+SHA-256, aggregate size and the ordered catalogue SHA-256 must agree. Unknown versions/profiles refuse explicitly;
+there is no general archive extractor or arbitrary profile registration.
+
+The real transport file is `.temp/check-output-tree/kernel-client-v1.bin`. The ordinary `returns: string[]` API and
+schema 1 artifact/physical return manifests remain compatible, with their unchanged 64-file, 256-MiB and path bounds.
+`stack-run`, `remote-check` and `check-run` additionally accept `--output-tree kernel-client-v1`, which selects that
+exact transport declaration before admission. Frozen original invocations must declare the profile while freezing
+source. Nested official emitters using an ordinary physical artifact envelope reserve the same named transport before
+upload; the artifact envelope and bundle both pass normal inventory/hash validation. Combined emissions capture the
+schema alongside the bundle. A legacy artifact receiver only replays a bundle after the physical receiver has already
+published it, checking the retained publication receipt and every current member.
+
+`withKernelClientOutput` recognizes the actual confined process and reads its fixed host prepared-input receipt;
+`encodeOutputTree` binds host/run/source, profile/root and the full ordered catalogue. `currentCheckSourceManifest`
+uses check-run's existing exact source fingerprint/catalogue for direct placement, excluding only declared outputs
+and the profile's fixed staging area. The physical return receiver supplies `OutputTreeAuthority` from its own native
+receipt, prepared-source evidence and authenticated transport SHA-256. A bundle's claimed identity cannot supply this
+authority. `receiveOutputTrees` verifies all inventory and bytes, then `restoreOutputTree` publishes; original check-run
+terminal receiving and reconciliation repeat these checks against their frozen source and original physical result.
+`parseArtifactManifest(bytes, physicalRunId)` is the shared bounded schema 1 parser for ordinary and nested envelopes;
+old ordinary manifests may omit declarations/hashes, while a nested tree requires a complete declared, hashed catalogue.
+A source change, mixed source/attempt/profile, missing/incomplete bundle or nonzero command cannot publish or allow a
+successful downstream client/Web compiler continuation. Failed commands retain their native status and may return
+ordinary diagnostic artifacts. A zero-member replacement requires successful official completion and an authenticated
+complete empty bundle; a missing bundle never requests deletion.
+
+Publication stages validated bytes under the fixed owned sibling `packages/client/src/.kernel-output-tree` and takes
+an exclusive process-identity lock. It durably journals the exact source/run/bundle authority before staging, fsyncs
+files/directories, renames the prior owned tree to `backup`, then the candidate to `kernel`. Only this owned tree is
+replaced; obsolete members disappear and unrelated siblings remain intact. A successful publication receipt precedes
+backup cleanup. Validation failures leave the prior tree intact. An interruption between renames retains the prior
+backup; only receiving the same authenticated terminal result may recover it, finish publication and clean up. A
+published candidate is revalidated before completing interrupted cleanup. A live owner or a different interrupted
+result refuses concurrent receiving. Missing/malformed lock custody fails closed. Repeating the same terminal result
+checks the receipt and entire current catalogue without replacing it. The original foreground command, cancellation,
+parent-group closure, receiving fence and cleanup retain their existing lifetime; this profile adds no retry/launcher.
+
 ## Development database
 
 Run `bun run db up` from `services/kernel` to create or start the local PostgreSQL database, apply migrations, and write

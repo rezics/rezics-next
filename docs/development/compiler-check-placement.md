@@ -33,10 +33,10 @@ Repository-relative `REYLO_CONFIG` is a bounded explicit `--reylo-config=` argv 
 entrypoint. Paths resolve from each selected SQL workspace and must remain inside the checkout. External/absolute
 projects are explicitly unsupported. Kernel's core or existing module `--emit-schema=` modes declare their bounded
 schema.sql returns. Disposable compiler analyses are consumed within the same run, not returned recursively.
-`--emit-client` has no bounded declaration-tree return contract: an unadmitted caller receives the existing explicit
-file-retention refusal rather than successful artifact preservation or local execution. An already admitted run may
-consume its own emitted files. No new arbitrary absolute path, credential forwarding or unbounded return support is
-introduced.
+`--emit-client` declares the closed [Kernel client output profile](../../services/kernel/README.md#client-declaration-output-placement).
+Its bounded versioned bundle uses the existing physical return pipeline. Source, attempt and complete byte custody
+must validate before whole-tree publication, including deletions. Already admitted direct execution and nested placement
+use that same profile; external projects remain unsupported.
 
 ## Authored acceptance and execution receipts
 

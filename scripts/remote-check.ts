@@ -51,7 +51,23 @@ import {
 } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { stageCheckGit } from './check-git.ts';
-import { CHECK_ARTIFACTS_MAX_BYTES, CHECK_ARTIFACTS_MAX_FILES } from './check-artifacts.ts';
+import {
+  CHECK_ARTIFACTS_MAX_BYTES,
+  CHECK_ARTIFACTS_MAX_FILES,
+  validateArtifactDeclarations,
+} from './check-artifacts.ts';
+import {
+  KERNEL_CLIENT_OUTPUT,
+  OUTPUT_TREE_TRANSPORT_BYTES,
+  hasOutputTreeReturn,
+  outputTreeInputExclusions,
+  outputTreeProfile,
+  outputTreeTransportCandidates,
+  receiveOutputTrees,
+  readOutputTreeFile,
+  safeOutputTreePath,
+  type OutputTreeBinding,
+} from './check-output-tree.ts';
 import {
   CHECK_HOST_SUPERVISOR_MARKER_SCHEMA,
   checkHostRunSliceUnitName,
@@ -4724,9 +4740,17 @@ def visit(full, path, info, selected):
         digest = hashlib.sha256(b'directory\\0').hexdigest()
     elif stat.S_ISREG(info.st_mode):
         size = info.st_size
+        if info.st_nlink != 1:
+            raise ValueError('hard-linked return')
+        if size > max_bytes or total + size > max_bytes:
+            raise Oversize()
         kind = 'file'
         value = hashlib.sha256()
-        with open(full, 'rb') as source:
+        descriptor = os.open(full, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        with os.fdopen(descriptor, 'rb') as source:
+            opened = os.fstat(source.fileno())
+            if (opened.st_dev, opened.st_ino, opened.st_size, opened.st_nlink) != (info.st_dev, info.st_ino, info.st_size, 1):
+                raise ValueError('returned file identity changed')
             for block in iter(lambda: source.read(1024 * 1024), b''):
                 value.update(block)
         digest = value.hexdigest()
@@ -4785,6 +4809,7 @@ async function copyReturns(
   connectionId: string,
   options: Pick<RemoteCheck, 'workspace' | 'returns' | 'transferTimeoutMs'>,
   signal: AbortSignal,
+  terminal?: OutputTreeBinding & { exitCode: number },
 ): Promise<RemoteReturnManifest> {
   const paths = options.returns ?? [];
   if (paths.length === 0) return { schema: 1, status: 'empty', entries: [], missing: [], failures: [] };
@@ -4824,6 +4849,8 @@ async function copyReturns(
       console.error(`remote-check: ${missingMatch[1]} is not on ${host.name}, skipping`);
     } else if (manifestLine) {
       if (manifest) throw new Error(`remote-check: duplicate returns manifest from ${host.name}`);
+      if (manifestLine[1]!.length > 4 * Math.ceil((256 * 1024) / 3))
+        throw new Error('remote-check: returns manifest exceeds its encoded bound');
       const bytes = Buffer.from(manifestLine[1]!, 'base64');
       if (bytes.byteLength > 256 * 1024) throw new Error('remote-check: returns manifest exceeds its bound');
       const parsed: unknown = JSON.parse(bytes.toString('utf8'));
@@ -4854,10 +4881,18 @@ async function copyReturns(
     if (!seen.has(path)) throw new Error(`remote-check: returns probe omitted declared output on ${host.name}`);
   }
   if (!manifest) throw new Error(`remote-check: returns probe omitted its manifest from ${host.name}`);
+  if (manifest.reduce((total, entry) => total + entry.size, 0) > CHECK_ARTIFACTS_MAX_BYTES)
+    throw new Error('remote-check: aggregate returned bytes exceed the bound');
+  if (
+    manifest.some((entry) => entry.path === KERNEL_CLIENT_OUTPUT.transport && entry.size > OUTPUT_TREE_TRANSPORT_BYTES)
+  )
+    throw new Error('remote-check: named output transport exceeds its encoded bound');
   if (new Set(manifest.map(({ path }) => path)).size !== manifest.length)
     throw new Error(`remote-check: duplicate returned manifest path from ${host.name}`);
   if (JSON.stringify([...present].sort()) !== JSON.stringify(manifest.map(({ path }) => path).sort()))
     throw new Error(`remote-check: returns manifest does not match present paths from ${host.name}`);
+  if (present.length === 0 && hasOutputTreeReturn(paths) && terminal?.exitCode === 0)
+    throw new Error('remote-check: successful command omitted the declared output tree bundle');
   if (present.length === 0)
     return {
       schema: 1,
@@ -4866,6 +4901,13 @@ async function copyReturns(
       missing,
       failures: [],
     };
+  for (const path of present) {
+    const destination = safeOutputTreePath(options.workspace, path, true);
+    if (existsSync(destination)) {
+      const info = lstatSync(destination);
+      if (info.isFile() && info.nlink !== 1) throw new Error('remote-check: hard-linked return destination');
+    }
+  }
   const started = performance.now();
   const sync = Bun.spawn(
     [
@@ -4889,27 +4931,48 @@ async function copyReturns(
   if (signal.aborted) throw new Aborted();
   if (synced === 24) reportVanishedFiles('from', host.name, vanishedFiles);
   else if (synced !== 0) throw new RemoteTransportError(host.name, 'returns copy', synced, false);
-  for (const item of manifest) {
-    const destination = resolve(options.workspace, item.path);
-    const stats = lstatSync(destination);
-    if (stats.isSymbolicLink()) throw new Error(`remote-check: returned output became a symlink: ${item.path}`);
-    if (item.kind === 'directory') {
-      if (!stats.isDirectory() || readdirSync(destination).length !== 0)
-        throw new Error(`remote-check: returned empty directory differs from its manifest: ${item.path}`);
-    } else {
-      if (!stats.isFile() || stats.size !== item.size)
-        throw new Error(`remote-check: returned file differs from its manifest: ${item.path}`);
-      const digest = createHash('sha256').update(readFileSync(destination)).digest('hex');
-      if (digest !== item.sha256) throw new Error(`remote-check: returned file digest mismatch: ${item.path}`);
-    }
-  }
-  return {
+  const result: RemoteReturnManifest = {
     schema: 1,
     status: missing.length ? 'missing' : 'complete',
     entries: manifest,
     missing,
     failures: [],
   };
+  let candidates: ReturnType<typeof outputTreeTransportCandidates>;
+  try {
+    candidates = outputTreeTransportCandidates(options.workspace, result, paths);
+  } catch (error) {
+    if (terminal && terminal.exitCode !== 0) return { ...result, status: 'failed', failures: [String(error)] };
+    throw error;
+  }
+  for (const item of manifest) {
+    const destination = resolve(options.workspace, item.path);
+    const stats = lstatSync(destination);
+    safeOutputTreePath(options.workspace, item.path);
+    if (stats.isSymbolicLink() || (stats.isFile() && stats.nlink !== 1))
+      throw new Error(`remote-check: returned output became a link: ${item.path}`);
+    if (item.kind === 'directory') {
+      if (!stats.isDirectory() || readdirSync(destination).length !== 0)
+        throw new Error(`remote-check: returned empty directory differs from its manifest: ${item.path}`);
+    } else {
+      if (!stats.isFile() || stats.size !== item.size)
+        throw new Error(`remote-check: returned file differs from its manifest: ${item.path}`);
+      const digest = createHash('sha256')
+        .update(readOutputTreeFile(options.workspace, item.path, item.size))
+        .digest('hex');
+      if (digest !== item.sha256) throw new Error(`remote-check: returned file digest mismatch: ${item.path}`);
+    }
+  }
+  const treeReturn = hasOutputTreeReturn(paths) || candidates.length > 0;
+  if (terminal && terminal.exitCode !== 0 && treeReturn)
+    return { ...result, status: 'failed', failures: ['failed physical command cannot publish a tree'] };
+  if (terminal && treeReturn) {
+    const { currentCheckSourceManifest } = await import('./check-run.ts');
+    if ((await currentCheckSourceManifest(options.workspace, paths)).sourceSha256 !== terminal.sourceSha256)
+      throw new Error('remote-check: source changed before output tree receiving');
+    receiveOutputTrees(options.workspace, options.workspace, result, terminal, paths);
+  } else if (!terminal && treeReturn) throw new Error('remote-check: tree return lacks physical source custody');
+  return result;
 }
 
 type PreparedRun = {
@@ -4933,6 +4996,13 @@ async function uploadRun(
 ): Promise<PreparedRun> {
   const directory = `${ROOT}/runs/${id}`;
   const transferLimit = transferTimeout(options);
+  if (hasOutputTreeReturn(options.returns ?? []))
+    files = files.filter(
+      (path) =>
+        !outputTreeInputExclusions(options.returns ?? []).some(
+          (excluded) => path === excluded || path.startsWith(`${excluded}/`),
+        ),
+    );
   validateCandidateUploadPaths(files);
   if ((options.expectedSourceSha256 === undefined) !== (options.expectedSourceManifest === undefined))
     throw new Error('remote-check: generic source evidence requires both its fingerprint and manifest');
@@ -5207,6 +5277,7 @@ export async function reconcileRemoteRun(
     physical: { host: string; run: string };
     workspace: string;
     returns?: string[];
+    expectedSourceSha256?: string;
     allowedHosts?: string[];
     transferTimeoutMs?: number;
     controlProbeTimeoutMs?: number;
@@ -5337,6 +5408,11 @@ print(json.dumps({'native':read('physical-run-status.json'),'preparedInputs':rea
           ...(options.transferTimeoutMs === undefined ? {} : { transferTimeoutMs: options.transferTimeoutMs }),
         },
         signal,
+        native &&
+          preparedInputs &&
+          (!options.expectedSourceSha256 || preparedInputs.sourceSha256 === options.expectedSourceSha256)
+          ? { host: native.host, run: native.run, exitCode: native.exitCode, sourceSha256: preparedInputs.sourceSha256 }
+          : undefined,
       );
     } catch (error) {
       returns = {
@@ -5579,7 +5655,16 @@ async function runLeased(
       primaryFailure ??= error;
     }
     try {
-      returnManifest = await copyReturns(host, directory, connectionId, options, signal);
+      returnManifest = await copyReturns(
+        host,
+        directory,
+        connectionId,
+        options,
+        signal,
+        preparedInputs && preparedInputs.sourceSha256 === options.expectedSourceSha256
+          ? { host: native.host, run: native.run, exitCode: native.exitCode, sourceSha256: preparedInputs.sourceSha256 }
+          : undefined,
+      );
     } catch (error) {
       assertExecutionAllowed(options, signal);
       const reason = error instanceof Error ? error.message.slice(0, 512) : 'unknown returns failure';
@@ -5661,7 +5746,32 @@ async function runLeased(
   return code;
 }
 
+async function withOutputTreeSource(options: RemoteCheck): Promise<RemoteCheck> {
+  let declarations = validateArtifactDeclarations(options.returns ?? []);
+  const nested = declarations.some((path) => /^\.temp\/goal\/checks\/artifact-returns\/[a-f0-9-]{36}$/.test(path));
+  const requested =
+    hasOutputTreeReturn(declarations) ||
+    (nested &&
+      options.command.some(
+        (argument) => argument === '--emit-client' || /(?:^|\s)--emit-client(?:\s|$)/.test(argument),
+      ));
+  if (!requested) return options;
+  if (!hasOutputTreeReturn(declarations)) {
+    // A nested official emitter must reserve the same closed profile before upload/admission.
+    // An already frozen caller must have declared it when freezing its source.
+    if (options.expectedSourceManifest)
+      throw new Error('remote-check: frozen emitter lacks the named output declaration');
+    declarations = validateArtifactDeclarations([...declarations, KERNEL_CLIENT_OUTPUT.transport]);
+    options = { ...options, returns: declarations };
+  }
+  if (options.expectedSourceManifest) return options;
+  const { currentCheckSourceManifest } = await import('./check-run.ts');
+  const manifest = await currentCheckSourceManifest(options.workspace, declarations);
+  return { ...options, expectedSourceSha256: manifest.sourceSha256, expectedSourceManifest: manifest };
+}
+
 export async function remoteCheck(options: RemoteCheck, signal: AbortSignal): Promise<number> {
+  options = await withOutputTreeSource(options);
   effectiveRunLifetimeMs(options.estimateMs, options.maxMs);
   assertExecutionAllowed(options, signal);
   getPinnedBun(); // Local runtime verification precedes placement/upload/admission, never a held host slot.
@@ -5804,6 +5914,7 @@ async function runWithTransportRetries(
 
 /** Compatibility entry point that now fails closed instead of handing unavailable work to a local caller. */
 export async function remoteCheckUnlessUnreachable(options: RemoteCheck, signal: AbortSignal): Promise<number> {
+  options = await withOutputTreeSource(options);
   effectiveRunLifetimeMs(options.estimateMs, options.maxMs);
   assertExecutionAllowed(options, signal);
   getPinnedBun();
@@ -5821,6 +5932,7 @@ export async function tryRemoteCheck(options: RemoteCheck, signal: AbortSignal):
 }
 
 async function tryRemoteCheckOwned(options: RemoteCheck, signal: AbortSignal): Promise<TryOnce> {
+  options = await withOutputTreeSource(options);
   effectiveRunLifetimeMs(options.estimateMs, options.maxMs);
   assertExecutionAllowed(options, signal);
   getPinnedBun();
@@ -5919,6 +6031,11 @@ function parse(argv: string[]): RemoteCheck {
   const rest = [...argv];
   while (rest[0]?.startsWith('--') && rest[0] !== '--') {
     const flag = rest.shift();
+    if (flag === '--output-tree') {
+      returns ??= [];
+      returns.push(outputTreeProfile(rest.shift() ?? '').transport);
+      continue;
+    }
     if (flag === '--returns') {
       const value = rest.shift();
       if (!value) throw new Error('--returns needs a path');
