@@ -44,6 +44,7 @@ function fixture() {
       sessionStorage: {
         getItem: (key: string) => stored.get(key) ?? null,
         setItem: (key: string, value: string) => stored.set(key, value),
+        removeItem: (key: string) => stored.delete(key),
       },
       location: { assign: (url: string) => navigations.push(url) },
     },
