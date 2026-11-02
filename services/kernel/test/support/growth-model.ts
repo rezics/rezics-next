@@ -56,7 +56,8 @@ function medianCost(values: readonly number[]): number {
 function validatePoints(points: readonly SeriesPoint[], bound: GrowthModelBound): void {
   if (bound !== 'constant' && bound !== 'logarithmic' && bound !== 'linear')
     throw new TypeError(`Unknown growth bound: ${String(bound)}`);
-  if (points.length < 3) throw new TypeError('Growth classification requires at least three scales');
+  if (points.length < 3 || points.length > 5)
+    throw new TypeError('Growth classification requires three to five scales');
   requireDenseArray(points, 'Growth points');
 
   let previousScale = 0;

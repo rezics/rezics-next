@@ -151,6 +151,15 @@ test('series classification rejects non-finite measurements before fitting', () 
   ).toThrow(/finite number/);
 });
 
+test('series classification requires three to five scales before fitting or staircase elimination', () => {
+  for (const points of [
+    series([1, 4], [10, 20]),
+    series([1, 4, 16, 64, 256, 1024], [10, 20, 30, 40, 50, 60]),
+  ]) {
+    expect(() => classifySeries(points, 'linear', 2)).toThrow(/three to five scales/);
+  }
+});
+
 test('series classification refuses overflowed intervals, coordinates and regression fits', () => {
   const maximum = Number.MAX_VALUE;
   expect(() => classifySeries(series([1, 4, 16], [maximum, maximum, maximum], maximum), 'constant')).toThrow(
