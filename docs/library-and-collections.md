@@ -179,6 +179,8 @@ current-subject reads, detail, cursor navigation and read-only retry
 without a CSRF token; commands require the actual current token, while uncertain retries retain their original
 credential, sender, key and operands and token arrival never submits them automatically. Private follow-count
 payloads retire with their session/exposure observation and require a fresh authorized read after renewal.
+Decision: Malformed follow-count context offers accessible GET correction for existing subject, Collection or Space UUID
+targets, while clearing returns to own outgoing counts; native authorization still decides target disclosure.
 
 Copies admits only a UUID subject selector and an opaque page cursor of at most 2048 characters; an empty selector
 means all copies. Invalid nonempty selectors or malformed/oversized page positions retain the requested URL and

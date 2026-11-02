@@ -5,6 +5,7 @@ import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
 import { privateFollowCountsHref } from './private-follow-counts-link';
+import { FollowCountContextRecovery } from './follow-count-context-recovery';
 import {
   followCountsSearch,
   privateFollowCountsQuery,
@@ -115,7 +116,7 @@ export function PrivateFollowCountsPageView({
           {m.library_follow_counts_target()}
         </h2>
         {context.invalidContext ? (
-          <p role="status">{m.library_follow_counts_invalid_context()}</p>
+          <FollowCountContextRecovery />
         ) : context.targetType && context.targetId ? (
           <>
             <p className="text-sm text-muted-foreground">
