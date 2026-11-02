@@ -196,9 +196,7 @@ test('profile calibration refuses over-capacity work after bounded admission', (
     name: `run-${index + 1}`,
     text: profile,
   }));
-  expect(() =>
-    growthCalibrationReport(calibration, { name: 'coverage', text: profile }),
-  ).toThrow(
+  expect(() => growthCalibrationReport(calibration, { name: 'coverage', text: profile })).toThrow(
     `Calibration check ${JSON.stringify(['test/growth.test.ts', 'heavy-run'])} exceeds the ${GROWTH_CALIBRATION_LIMITS.runsPerCheck} run capacity (${calibration.length} runs)`,
   );
 });
