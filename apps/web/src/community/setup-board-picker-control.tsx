@@ -120,7 +120,9 @@ export function SetupBoardPicker({
                   className="flex h-auto min-h-12 w-full min-w-0 max-w-full cursor-pointer items-center gap-3 whitespace-normal rounded-xl border border-border p-3 text-start has-[[data-checked]]:border-primary has-[[data-checked]]:bg-primary/5 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-solid has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ring"
                 >
                   <RadioGroupItem id={`${id}-${index}`} value={choice.id} />
-                  <span className="min-w-0 flex-1 whitespace-normal text-sm leading-relaxed [overflow-wrap:anywhere]">{choice.label}</span>
+                  <span className="min-w-0 flex-1 whitespace-normal text-sm leading-relaxed [overflow-wrap:anywhere]">
+                    {choice.label}
+                  </span>
                 </FieldLabel>
               ))}
             </RadioGroup>

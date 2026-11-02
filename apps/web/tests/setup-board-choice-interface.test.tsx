@@ -10,15 +10,24 @@ const { Window } = await import(
 );
 const window = new Window({ url: 'https://site.test/en/realms/new' });
 const globals = {
-  window, document: window.document, navigator: window.navigator, location: window.location,
-  HTMLElement: window.HTMLElement, HTMLInputElement: window.HTMLInputElement,
-  HTMLButtonElement: window.HTMLButtonElement, Element: window.Element, Node: window.Node,
-  Document: window.Document, DocumentFragment: window.DocumentFragment,
-  MutationObserver: window.MutationObserver, ResizeObserver: window.ResizeObserver,
+  window,
+  document: window.document,
+  navigator: window.navigator,
+  location: window.location,
+  HTMLElement: window.HTMLElement,
+  HTMLInputElement: window.HTMLInputElement,
+  HTMLButtonElement: window.HTMLButtonElement,
+  Element: window.Element,
+  Node: window.Node,
+  Document: window.Document,
+  DocumentFragment: window.DocumentFragment,
+  MutationObserver: window.MutationObserver,
+  ResizeObserver: window.ResizeObserver,
   getComputedStyle: window.getComputedStyle.bind(window),
   requestAnimationFrame: window.requestAnimationFrame.bind(window),
   cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
-  matchMedia: window.matchMedia.bind(window), IS_REACT_ACT_ENVIRONMENT: true,
+  matchMedia: window.matchMedia.bind(window),
+  IS_REACT_ACT_ENVIRONMENT: true,
 };
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
 for (const [key, value] of Object.entries(globals))
@@ -49,16 +58,22 @@ function props(extra: Partial<Props> = {}): Props {
   return { kind: 'concept', schemeId, source, value: null, disabled: false, onChange: mock(), ...extra };
 }
 async function tick(milliseconds = 0) {
-  await act(async () => { await new Promise((resolve) => setTimeout(resolve, milliseconds)); });
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, milliseconds));
+  });
 }
 async function paint(input: Props) {
   setLocale('en', { reload: false });
   root ??= createRoot(host);
-  await act(async () => { root!.render(<SetupBoardPicker {...input} />); });
+  await act(async () => {
+    root!.render(<SetupBoardPicker {...input} />);
+  });
   await tick();
 }
 async function click(node: HTMLElement) {
-  await act(async () => { node.click(); });
+  await act(async () => {
+    node.click();
+  });
   await tick();
 }
 async function edit(value: string) {
@@ -70,22 +85,31 @@ async function edit(value: string) {
   await tick();
 }
 function button(text: string) {
-  const found = [...host.querySelectorAll<HTMLButtonElement>('button')].find((node) => node.textContent?.trim() === text);
+  const found = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+    (node) => node.textContent?.trim() === text,
+  );
   expect(found).toBeDefined();
   return found!;
 }
-function radios() { return [...host.querySelectorAll<HTMLElement>('[role="radio"]')]; }
+function radios() {
+  return [...host.querySelectorAll<HTMLElement>('[role="radio"]')];
+}
 function inline(text: string) {
   expect(host.textContent).toContain(text);
   expect(host.querySelector('details')).toBeNull();
 }
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((yes) => { resolve = yes; });
+  const promise = new Promise<T>((yes) => {
+    resolve = yes;
+  });
   return { promise, resolve };
 }
 afterEach(async () => {
-  if (root) await act(async () => { root!.unmount(); });
+  if (root)
+    await act(async () => {
+      root!.unmount();
+    });
   root = undefined;
   host.removeAttribute('dir');
   host.removeAttribute('style');
@@ -196,11 +220,15 @@ test('loading and each refusal keep the selected value and hints inline rather t
   inline(m.space_setup_loading());
   expect(host.querySelector('[aria-busy="true"]')).not.toBeNull();
   const cases = [
-    ['denied', 403, m.space_setup_denied()], ['stale', 410, m.space_setup_board_choice_stale()],
-    ['invalid', 400, m.space_setup_invalid()], ['unavailable', 503, m.space_setup_board_choice_unavailable()],
+    ['denied', 403, m.space_setup_denied()],
+    ['stale', 410, m.space_setup_board_choice_stale()],
+    ['invalid', 400, m.space_setup_invalid()],
+    ['unavailable', 503, m.space_setup_board_choice_unavailable()],
   ] as const;
   for (const [reason, status, text] of cases) {
-    const concepts = mock(async () => { throw new BoardChoiceError(reason, status); });
+    const concepts = mock(async () => {
+      throw new BoardChoiceError(reason, status);
+    });
     await paint(props({ value: choices[0]!, source: { ...source, concepts } }));
     await tick(280);
     inline(text);
@@ -252,7 +280,9 @@ test('disabled search, selected Clear, ready choices, Next and Retry cannot disp
   await click(button(m.space_setup_board_choice_next()));
   expect(onChange).not.toHaveBeenCalled();
   expect(concepts).toHaveBeenCalledTimes(1);
-  const refused = mock(async () => { throw new BoardChoiceError('unavailable', 503); });
+  const refused = mock(async () => {
+    throw new BoardChoiceError('unavailable', 503);
+  });
   const refusedInput = { ...input, source: { ...source, concepts: refused } };
   await paint(refusedInput);
   await tick(280);
@@ -265,9 +295,12 @@ test('disabled search, selected Clear, ready choices, Next and Retry cannot disp
 test('source replacement and ABA retirement discard late results and detached choice/Next controls', async () => {
   const pending = deferred<Awaited<ReturnType<BoardChoiceSource['schemes']>>>();
   let reads = 0;
-  const schemes = mock(async () => ++reads === 1 ? pending.promise : { schemes: choices, next: cursor });
+  const schemes = mock(async () => (++reads === 1 ? pending.promise : { schemes: choices, next: cursor }));
   const first = { ...source, schemes };
-  const replacement = { ...source, schemes: mock(async () => ({ schemes: [{ ...choices[0]!, label: 'Replacement' }], next: cursor })) };
+  const replacement = {
+    ...source,
+    schemes: mock(async () => ({ schemes: [{ ...choices[0]!, label: 'Replacement' }], next: cursor })),
+  };
   const onChange = mock();
   await paint(props({ kind: 'scheme', source: first, onChange }));
   await tick(280);
@@ -291,7 +324,9 @@ test('source replacement and ABA retirement discard late results and detached ch
 test('changed scheme and query mask old results immediately and unmount retires pending reads', async () => {
   const old = deferred<Awaited<ReturnType<BoardChoiceSource['concepts']>>>();
   const current = deferred<Awaited<ReturnType<BoardChoiceSource['concepts']>>>();
-  const concepts = mock((input: Parameters<BoardChoiceSource['concepts']>[0]) => input.schemeId === schemeId ? old.promise : current.promise);
+  const concepts = mock((input: Parameters<BoardChoiceSource['concepts']>[0]) =>
+    input.schemeId === schemeId ? old.promise : current.promise,
+  );
   const input = props({ source: { ...source, concepts } });
   await paint(input);
   await tick(280);
@@ -311,7 +346,12 @@ test('changed scheme and query mask old results immediately and unmount retires 
   const currentQuery = deferred<SchemePage>();
   const retiredQuery = deferred<SchemePage>();
   const schemes = mock((input: Parameters<BoardChoiceSource['schemes']>[0]) =>
-    input.query === '' ? previousQuery.promise : input.query === 'new supplied query' ? currentQuery.promise : retiredQuery.promise);
+    input.query === ''
+      ? previousQuery.promise
+      : input.query === 'new supplied query'
+        ? currentQuery.promise
+        : retiredQuery.promise,
+  );
   const schemeInput = props({ kind: 'scheme', source: { ...source, schemes } });
   await paint(schemeInput);
   await edit('');
@@ -332,7 +372,9 @@ test('changed scheme and query mask old results immediately and unmount retires 
   await click(retiredNext);
   await tick(280);
   expect(schemes).toHaveBeenLastCalledWith({ query: 'retired query' });
-  await act(async () => { root!.unmount(); });
+  await act(async () => {
+    root!.unmount();
+  });
   root = undefined;
   retiredQuery.resolve({ schemes: choices, next: cursor });
   await tick();

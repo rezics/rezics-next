@@ -23,8 +23,15 @@ const cursor = 'opaque:/sparse+window?token=%2F==';
 type Mode = 'ready' | 'empty' | 'sparse' | 'updating' | 'loading' | BoardChoiceFailure;
 
 function BoardChoiceExample({
-  kind = 'concept', mode = 'ready', long = false, selected = false, disabled = false,
-  direction = 'ltr', replaceable = false, onChange, onRead,
+  kind = 'concept',
+  mode = 'ready',
+  long = false,
+  selected = false,
+  disabled = false,
+  direction = 'ltr',
+  replaceable = false,
+  onChange,
+  onRead,
 }: {
   kind?: 'scheme' | 'concept';
   mode?: Mode;
@@ -36,26 +43,36 @@ function BoardChoiceExample({
   onChange(value: SetupChoice | null): void;
   onRead(input: BoardChoiceRead): void;
 }) {
-  const [value, setValue] = useState<SetupChoice | null>(selected ? { ...supplied[0]!, label: long ? longLabel : supplied[0]!.label } : null);
+  const [value, setValue] = useState<SetupChoice | null>(
+    selected ? { ...supplied[0]!, label: long ? longLabel : supplied[0]!.label } : null,
+  );
   const [sourceRevision, setSourceRevision] = useState(0);
   const [scheme, setScheme] = useState(schemeId);
   const source = useMemo<BoardChoiceSource>(() => {
     // Supplied display contracts only: no catalogue, membership or command admission is inferred.
     const choices = supplied.map((choice, index) => ({
       ...choice,
-      label: sourceRevision ? `Replacement supplied choice ${index + 1}` : long ? `${longLabel} ${index + 1}` : choice.label,
+      label: sourceRevision
+        ? `Replacement supplied choice ${index + 1}`
+        : long
+          ? `${longLabel} ${index + 1}`
+          : choice.label,
     }));
     async function read(input: BoardChoiceRead) {
       onRead(input);
       if (mode === 'loading') return new Promise<never>(() => {});
       if (mode === 'denied' || mode === 'stale' || mode === 'invalid' || mode === 'unavailable')
-        throw new BoardChoiceError(mode, mode === 'denied' ? 403 : mode === 'stale' ? 410 : mode === 'invalid' ? 400 : 503);
+        throw new BoardChoiceError(
+          mode,
+          mode === 'denied' ? 403 : mode === 'stale' ? 410 : mode === 'invalid' ? 400 : 503,
+        );
       return {
-        choices: mode === 'empty' || (mode === 'sparse' && input.cursor === undefined)
-          ? []
-          : input.kind === 'scheme'
-            ? choices.filter((choice) => choice.label.toLowerCase().includes(input.query.toLowerCase()))
-            : choices,
+        choices:
+          mode === 'empty' || (mode === 'sparse' && input.cursor === undefined)
+            ? []
+            : input.kind === 'scheme'
+              ? choices.filter((choice) => choice.label.toLowerCase().includes(input.query.toLowerCase()))
+              : choices,
         next: mode === 'sparse' && input.cursor === undefined ? cursor : null,
         ...(mode === 'updating'
           ? { freshness: { consistency: 'eventual', target_seconds: 10, caught_up: false } as const }
@@ -78,12 +95,28 @@ function BoardChoiceExample({
     <div dir={direction} className="mx-auto flex w-full min-w-0 max-w-3xl flex-col gap-6 p-6 text-foreground">
       {replaceable ? (
         <div className="flex flex-wrap gap-3">
-          <Button className="h-auto min-h-11 whitespace-normal" onClick={() => setSourceRevision((value) => value + 1)}>Replace display source</Button>
-          <Button className="h-auto min-h-11 whitespace-normal" onClick={() => setScheme((value) => value === schemeId ? otherSchemeId : schemeId)}>Change supplied scheme</Button>
+          <Button className="h-auto min-h-11 whitespace-normal" onClick={() => setSourceRevision((value) => value + 1)}>
+            Replace display source
+          </Button>
+          <Button
+            className="h-auto min-h-11 whitespace-normal"
+            onClick={() => setScheme((value) => (value === schemeId ? otherSchemeId : schemeId))}
+          >
+            Change supplied scheme
+          </Button>
         </div>
       ) : null}
-      <SetupBoardPicker kind={kind} schemeId={scheme} source={source} value={value} disabled={disabled}
-        onChange={(choice) => { setValue(choice); onChange(choice); }} />
+      <SetupBoardPicker
+        kind={kind}
+        schemeId={scheme}
+        source={source}
+        value={value}
+        disabled={disabled}
+        onChange={(choice) => {
+          setValue(choice);
+          onChange(choice);
+        }}
+      />
     </div>
   );
 }
@@ -94,7 +127,12 @@ const meta = {
   args: { onChange: fn(), onRead: fn() },
   parameters: {
     layout: 'fullscreen',
-    docs: { description: { component: 'Actual setup picker with bounded BoardChoiceSource display fixtures. All play observations are authored UNRUN. Review these IDs at phone390/desktop1280, all locale and theme globals, and RTL. Native authorization, full acceptance and physical/browser review remain owed.' } },
+    docs: {
+      description: {
+        component:
+          'Actual setup picker with bounded BoardChoiceSource display fixtures. All play observations are authored UNRUN. Review these IDs at phone390/desktop1280, all locale and theme globals, and RTL. Native authorization, full acceptance and physical/browser review remain owed.',
+      },
+    },
   },
 } satisfies Meta<typeof BoardChoiceExample>;
 export default meta;
@@ -114,14 +152,20 @@ export const ConceptSelection: Story = {
     const view = within(canvasElement);
     await userEvent.click(await view.findByRole('radio', { name: supplied[0]!.label }));
     await expect(args.onChange).toHaveBeenLastCalledWith(supplied[0]);
-    await expect(view.getByRole('searchbox')).toHaveAccessibleDescription(`${m.space_setup_concept_hint()} ${m.space_setup_board_choice_local_hint()}`);
+    await expect(view.getByRole('searchbox')).toHaveAccessibleDescription(
+      `${m.space_setup_concept_hint()} ${m.space_setup_board_choice_local_hint()}`,
+    );
   },
 };
 
 async function observeGeometry(canvasElement: HTMLElement) {
   const view = within(canvasElement);
   await view.findAllByRole('radio');
-  const targets = [view.getByRole('searchbox'), ...view.queryAllByRole('button'), ...view.getAllByRole('radio').map((radio) => radio.closest('label')!)];
+  const targets = [
+    view.getByRole('searchbox'),
+    ...view.queryAllByRole('button'),
+    ...view.getAllByRole('radio').map((radio) => radio.closest('label')!),
+  ];
   for (const target of targets) {
     const rect = target.getBoundingClientRect();
     await expect(rect.height).toBeGreaterThanOrEqual(44);
@@ -223,16 +267,28 @@ async function observeRefusal(canvasElement: HTMLElement, text: string) {
   await expect(retry.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
   await expect(retry.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
 }
-export const Denied: Story = { args: { mode: 'denied' }, play: async ({ canvasElement }) => observeRefusal(canvasElement, m.space_setup_denied()) };
-export const Stale: Story = { args: { mode: 'stale' }, play: async ({ canvasElement, args }) => {
-  await observeRefusal(canvasElement, m.space_setup_board_choice_stale());
-  await expect(args.onRead).toHaveBeenCalledTimes(1);
-  await userEvent.click(within(canvasElement).getByRole('button', { name: m.space_setup_retry() }));
-  await expect(await within(canvasElement).findByText(m.space_setup_board_choice_stale())).toBeVisible();
-  await expect(args.onRead).toHaveBeenLastCalledWith({ kind: 'concept', schemeId, query: '' });
-} };
-export const Invalid: Story = { args: { mode: 'invalid' }, play: async ({ canvasElement }) => observeRefusal(canvasElement, m.space_setup_invalid()) };
-export const Unavailable: Story = { args: { mode: 'unavailable' }, play: async ({ canvasElement }) => observeRefusal(canvasElement, m.space_setup_board_choice_unavailable()) };
+export const Denied: Story = {
+  args: { mode: 'denied' },
+  play: async ({ canvasElement }) => observeRefusal(canvasElement, m.space_setup_denied()),
+};
+export const Stale: Story = {
+  args: { mode: 'stale' },
+  play: async ({ canvasElement, args }) => {
+    await observeRefusal(canvasElement, m.space_setup_board_choice_stale());
+    await expect(args.onRead).toHaveBeenCalledTimes(1);
+    await userEvent.click(within(canvasElement).getByRole('button', { name: m.space_setup_retry() }));
+    await expect(await within(canvasElement).findByText(m.space_setup_board_choice_stale())).toBeVisible();
+    await expect(args.onRead).toHaveBeenLastCalledWith({ kind: 'concept', schemeId, query: '' });
+  },
+};
+export const Invalid: Story = {
+  args: { mode: 'invalid' },
+  play: async ({ canvasElement }) => observeRefusal(canvasElement, m.space_setup_invalid()),
+};
+export const Unavailable: Story = {
+  args: { mode: 'unavailable' },
+  play: async ({ canvasElement }) => observeRefusal(canvasElement, m.space_setup_board_choice_unavailable()),
+};
 export const SelectedClear: Story = {
   args: { selected: true },
   play: async ({ canvasElement, args }) => {
