@@ -2387,6 +2387,10 @@ cleanup uses only the original rollback/cleanup children, also on body failure o
 the group. Failed work remains charged and errors expose the original parent's receipt. Native registration,
 Source authority, result production and mounted dispatch remain separate required runtime work.
 
+Decision: mixed reservation batches preserve their exact reused episodes while evicting the least recently read
+other live headers; reuse never touches LRU time. Unbound `readWorkDefinition` returns null until Source supplies
+its complete native binding, independently of successful reservation and exact step admission.
+
 The existing Collection POST/PATCH accept optional `presentationKind` and `coverMediaId`; PATCH keeps its numeric
 revision CAS. Omission preserves a choice, null clears it. `collection-presentation.ts` validates a new exact TypeId
 against the active definitions release, without changing members or accepted personal profile pins. Stored choices

@@ -1,8 +1,82 @@
-import { expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import { preparationDefinitionBases, restorePreparationDefinition } from '../../src/library/members-preparation.ts';
-import { definition } from './support/members-preparation-runtime.ts';
+import { runOperationalTransaction } from '../../src/command/operational.ts';
+import { partitionOf } from '../../src/route/route.ts';
+import { definition, membersPreparationRuntime, retainEpisodes } from './support/members-preparation-runtime.ts';
+
+let native: Awaited<ReturnType<typeof membersPreparationRuntime>>;
+beforeAll(async () => {
+  native = await membersPreparationRuntime();
+}, 120000);
+afterAll(async () => {
+  await native?.close();
+});
+
+test('mixed admission at quota returns live reused episodes without rewriting their LRU time', async () => {
+  const f = await native.fixture();
+  for (const start of [0, 16])
+    await f.store.reserve(f.actor, f.collectionId, Array.from({ length: 16 }, (_, i) => definition(start + i)));
+  const initial = (await native.rows(f.owner)).sort(
+    (a, b) =>
+      new Date(a.last_read_at).getTime() - new Date(b.last_read_at).getTime() ||
+      String(a.episode_id).localeCompare(String(b.episode_id)),
+  );
+  const reused = initial.slice(0, 2);
+  await retainEpisodes(
+    native.db,
+    {
+      route: reused[0]!.route,
+      ownerAccountId: f.owner.accountId,
+      collectionId: f.collectionId,
+      episodeId: reused[0]!.episode_id,
+    },
+    64,
+    { headers: true, queued: false },
+  );
+  native.advance(1);
+  const result = await f.store.reserve(f.actor, f.collectionId, [
+    ...reused.map((row) => ({ ...definition(), filter: JSON.parse(row.canonical_basis)[3] })),
+    definition(32),
+    definition(33),
+  ]);
+  expect(result.episodes.slice(0, 2).map((e) => e.locator.episodeId)).toEqual(reused.map((r) => r.episode_id));
+  expect(result.intent!.input.episodes).toHaveLength(2);
+  expect(result.intent!.input.cleanup.map((e) => e.episodeId).sort()).toEqual(
+    initial.slice(2, 4).map((r) => r.episode_id).sort(),
+  );
+  const saved = await native.rows(f.owner);
+  expect(saved).toHaveLength(98);
+  expect(saved.filter((row) => row.state === 'live')).toHaveLength(32);
+  for (const previous of reused) {
+    const row = saved.find((r) => r.episode_id === previous.episode_id)!;
+    expect(row.state).toBe('live');
+    expect(row.last_read_at).toEqual(previous.last_read_at);
+  }
+  for (const episode of result.episodes) expect(await native.step(episode.locator)).toBe(true);
+});
+
+test('a positive native reservation and admitted step supply no unbound Source definition', async () => {
+  const f = await native.fixture();
+  const { episodes } = await f.store.reserve(f.actor, f.collectionId, [definition()]);
+  const locator = episodes[0]!.locator;
+  const result = await runOperationalTransaction(
+    native.db.pool,
+    {
+      mode: 'work-step',
+      partition: partitionOf(locator.route),
+      kind: 'library.membersPreparation.step',
+      accounts: [locator.ownerAccountId],
+      workClient: native.workClient,
+    },
+    async (tx) => {
+      expect(await f.store.admitStep(tx, locator)).toBe(true);
+      return f.store.readWorkDefinition(tx, locator);
+    },
+  );
+  expect(result).toBeNull();
+});
 
 test('preparation keys deduplicate only identical accepted owner definitions', () => {
   const owner = '0192f3a0-6c1e-7b2a-9d4e-000000000001';

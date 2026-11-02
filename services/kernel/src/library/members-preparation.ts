@@ -458,12 +458,17 @@ export function createMembersPreparation(config: {
           const newKeys = requestOrder.filter((key) => !found.has(key));
           const need = Math.max(0, liveCount + newKeys.length - LIVE_LIMIT);
           if (need) {
+            // A mixed batch must not evict an episode it is about to return. Duplicates remain
+            // read-only: protecting them for this admission does not advance their LRU time.
+            // The owner has at most 32 live headers, so skipping these exact keys remains bounded.
+            const retainedIds = [...found.values()].map((row) => row.episode_id);
             const lru = (
               await tx.query<{ episode_id: string }>(
                 `SELECT episode_id::text FROM library.members_preparation
                  WHERE route=$1 AND owner_account_id=$2 AND state='live'
+                   AND NOT (episode_id=ANY($4::uuid[]))
                  ORDER BY last_read_at ASC,episode_id ASC LIMIT $3 FOR UPDATE`,
-                [route, actor.accountId, need],
+                [route, actor.accountId, need, retainedIds],
               )
             ).rows;
             if (lru.length !== need) throw new ProblemError('dependency_unavailable');
@@ -750,7 +755,7 @@ export function createMembersPreparation(config: {
       if (!(await service.readRetainedDefinition(tx, locator))) return null;
       // Source owns the complete native declaration and physical execution authority. Until its producer is
       // connected here, a retained reservation never becomes a fabricated ready definition.
-      throw new ProblemError('dependency_unavailable');
+      return null;
     },
   };
   return service;

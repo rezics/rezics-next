@@ -293,8 +293,8 @@ export async function retainEpisodes(
   const workflowIds = ids.map((id) => `library:members-preparation:${anchor.route}:${anchor.ownerAccountId}:${id}`);
   if (options.headers)
     await db.admin.query(
-      `INSERT INTO library.members_preparation(route,owner_account_id,collection_id,episode_id,canonical_basis,basis_digest,state,last_read_at,workflow_id)
-    SELECT h.route,h.owner_account_id,h.collection_id,retained.id,h.canonical_basis,h.basis_digest,'retired',h.last_read_at,retained.workflow
+      `INSERT INTO library.members_preparation(route,owner_account_id,collection_id,episode_id,canonical_basis,basis_digest,state,last_read_at,workflow_id,reserved_incarnation,reserved_generation)
+    SELECT h.route,h.owner_account_id,h.collection_id,retained.id,h.canonical_basis,h.basis_digest,'retired',h.last_read_at,retained.workflow,h.reserved_incarnation,h.reserved_generation
     FROM library.members_preparation h CROSS JOIN unnest($4::uuid[],$5::text[]) AS retained(id,workflow)
     WHERE h.route=$1 AND h.owner_account_id=$2 AND h.collection_id=$3 AND h.episode_id=$6`,
       [anchor.route, anchor.ownerAccountId, anchor.collectionId, ids, workflowIds, anchor.episodeId],
