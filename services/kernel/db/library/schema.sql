@@ -6666,6 +6666,90 @@ ALTER TABLE ONLY library.type_preparation_slot
 
 
 --
+-- Name: members_preparation_owner; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.members_preparation_owner (
+    route integer NOT NULL,
+    owner_account_id uuid NOT NULL,
+    live_count integer DEFAULT 0 NOT NULL,
+    CONSTRAINT members_preparation_owner_live_count_check CHECK (((live_count >= 0) AND (live_count <= 32))),
+    CONSTRAINT members_preparation_owner_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT members_preparation_owner_identity_check CHECK ((route = ((get_byte(uuid_send(owner_account_id), 10) * 256) + get_byte(uuid_send(owner_account_id), 11))))
+);
+
+CREATE UNIQUE INDEX members_preparation_owner_pkey ON library.members_preparation_owner USING btree (route, owner_account_id);
+
+--
+-- Name: members_preparation; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.members_preparation (
+    route integer NOT NULL,
+    owner_account_id uuid NOT NULL,
+    collection_id uuid NOT NULL,
+    episode_id uuid NOT NULL,
+    canonical_basis text NOT NULL,
+    basis_digest bytea NOT NULL,
+    state text NOT NULL,
+    last_read_at timestamp with time zone NOT NULL,
+    workflow_id text NOT NULL,
+    progress_version bigint DEFAULT 0 NOT NULL,
+    checkpoint text,
+    observation jsonb,
+    source_incarnation text,
+    source_generation text,
+    reserved_incarnation text NOT NULL,
+    reserved_generation text NOT NULL,
+    complete boolean DEFAULT false NOT NULL,
+    result_count integer DEFAULT 0 NOT NULL,
+    failure_code text,
+    CONSTRAINT members_preparation_state_check CHECK ((state = ANY (ARRAY['live'::text, 'retired'::text]))),
+    CONSTRAINT members_preparation_canonical_basis_check CHECK ((octet_length(canonical_basis) <= 196608)),
+    CONSTRAINT members_preparation_basis_digest_check CHECK ((octet_length(basis_digest) = 32)),
+    CONSTRAINT members_preparation_progress_version_check CHECK ((progress_version >= 0)),
+    CONSTRAINT members_preparation_result_count_check CHECK ((result_count >= 0)),
+    CONSTRAINT members_preparation_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT members_preparation_owner_identity_check CHECK ((route = ((get_byte(uuid_send(owner_account_id), 10) * 256) + get_byte(uuid_send(owner_account_id), 11)))),
+    CONSTRAINT members_preparation_collection_identity_check CHECK ((route = ((get_byte(uuid_send(collection_id), 10) * 256) + get_byte(uuid_send(collection_id), 11)))),
+    CONSTRAINT members_preparation_episode_identity_check CHECK ((route = ((get_byte(uuid_send(episode_id), 10) * 256) + get_byte(uuid_send(episode_id), 11)))),
+    CONSTRAINT members_preparation_incarnation_check CHECK (((source_incarnation IS NULL) OR (octet_length(source_incarnation) <= 256))),
+    CONSTRAINT members_preparation_reserved_incarnation_check CHECK ((octet_length(reserved_incarnation) <= 256)),
+    CONSTRAINT members_preparation_reserved_generation_check CHECK ((octet_length(reserved_generation) <= 256)),
+    CONSTRAINT members_preparation_complete_check CHECK (((NOT complete) OR (failure_code IS NULL)))
+);
+
+CREATE UNIQUE INDEX members_preparation_pkey ON library.members_preparation USING btree (route, owner_account_id, collection_id, episode_id);
+CREATE UNIQUE INDEX members_preparation_live_digest ON library.members_preparation USING btree (route, owner_account_id, basis_digest) WHERE (state = 'live'::text);
+CREATE INDEX members_preparation_live_lru ON library.members_preparation USING btree (route, owner_account_id, last_read_at, episode_id) WHERE (state = 'live'::text);
+CREATE INDEX members_preparation_retired_cleanup ON library.members_preparation USING btree (route, owner_account_id, collection_id, episode_id) WHERE (state = 'retired'::text);
+
+--
+-- Name: members_preparation_result; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.members_preparation_result (
+    route integer NOT NULL,
+    owner_account_id uuid NOT NULL,
+    collection_id uuid NOT NULL,
+    episode_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    sort_key text NOT NULL,
+    CONSTRAINT members_preparation_result_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT members_preparation_result_owner_identity_check CHECK ((route = ((get_byte(uuid_send(owner_account_id), 10) * 256) + get_byte(uuid_send(owner_account_id), 11)))),
+    CONSTRAINT members_preparation_result_collection_identity_check CHECK ((route = ((get_byte(uuid_send(collection_id), 10) * 256) + get_byte(uuid_send(collection_id), 11)))),
+    CONSTRAINT members_preparation_result_episode_identity_check CHECK ((route = ((get_byte(uuid_send(episode_id), 10) * 256) + get_byte(uuid_send(episode_id), 11)))),
+    CONSTRAINT members_preparation_result_subject_identity_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11))))
+);
+
+CREATE UNIQUE INDEX members_preparation_result_pkey ON library.members_preparation_result USING btree (route, owner_account_id, collection_id, episode_id, subject_id);
+CREATE UNIQUE INDEX members_preparation_result_episode_sort_key_key ON library.members_preparation_result USING btree (route, owner_account_id, collection_id, episode_id, sort_key, subject_id);
+CREATE INDEX members_preparation_result_page ON library.members_preparation_result USING btree (route, owner_account_id, collection_id, episode_id, sort_key, subject_id);
+
+ALTER TABLE ONLY library.members_preparation_result
+    ADD CONSTRAINT members_preparation_result_episode_fkey FOREIGN KEY (route, owner_account_id, collection_id, episode_id) REFERENCES library.members_preparation(route, owner_account_id, collection_id, episode_id);
+
+--
 -- PostgreSQL database dump complete
 --
 
