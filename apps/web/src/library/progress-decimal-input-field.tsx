@@ -10,7 +10,7 @@ export function ProgressInputError({
 }: {
   id: string;
   issue: ProgressInputIssue | null;
-  rules?: ProgressDecimalRules;
+  rules?: ProgressDecimalRules | undefined;
 }) {
   if (!issue) return null;
   const message = {
@@ -21,7 +21,11 @@ export function ProgressInputError({
     precision: () => m.library_progress_decimal_input_precision({ places: progressDecimalPlaces(rules.step!) }),
     locator: () => m.library_progress_decimal_input_locator(),
   }[issue]();
-  return <p id={id} role="alert" className="text-sm text-destructive">{message}</p>;
+  return (
+    <p id={id} role="alert" className="text-sm text-destructive">
+      {message}
+    </p>
+  );
 }
 
 /** Text keeps invalid drafts and exact decimals intact; the form validates native rules before capture. */
@@ -31,7 +35,7 @@ export function ProgressDecimalInput({
   ...props
 }: Omit<ComponentProps<typeof Input>, 'type' | 'inputMode'> & {
   issue: ProgressInputIssue | null;
-  rules?: ProgressDecimalRules;
+  rules?: ProgressDecimalRules | undefined;
 }) {
   const errorId = useId();
   return (
