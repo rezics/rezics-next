@@ -2,6 +2,7 @@ import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useQuery } from '@tanstack/react-query';
 import { useId, useRef, useState } from 'react';
 import { pickText } from '@rezics/composition';
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
@@ -224,113 +225,136 @@ function MangaCreate({
   }
   if (created)
     return (
-      <section className="space-y-4">
-        <p role="status">{m.manga_created({}, o)}</p>
-        <p className="break-all font-mono text-sm">{created.id}</p>
-        {created.reader.state === 'ready' ? (
-          <a className={buttonVariants()} href={created.reader.href}>
-            {m.candidate_view_public({}, o)}
-          </a>
-        ) : (
-          <>
-            <p>
-              {created.reader.state === 'concealed'
-                ? m.catalogue_create_concealed({}, o)
-                : m.catalogue_create_reader_unavailable({}, o)}
-            </p>
-            <Button
-              disabled={busy}
-              onClick={async () => {
-                if (!lifetime.active()) return;
-                if (running.current) return;
-                running.current = true;
-                setBusy(true);
-                try {
-                  const reader = await transport.read(created.id);
-                  if (!lifetime.active()) return;
-                  setCreated({ ...created, reader });
-                } catch {
-                  if (!lifetime.active()) return;
-                  setCreated({ ...created, reader: { state: 'unavailable' } });
-                } finally {
-                  if (!lifetime.active()) return;
-                  running.current = false;
-                  setBusy(false);
-                }
-              }}
+      <section className="min-w-0 [overflow-wrap:anywhere]">
+        <ContentItemFrame as="div" className="min-w-0 space-y-4 py-4">
+          <ContentItemHeading className="font-sans text-xl font-semibold">
+            <span role="status">{m.manga_created({}, o)}</span>
+          </ContentItemHeading>
+          <p className="break-all font-mono text-sm">{created.id}</p>
+          {created.reader.state === 'ready' ? (
+            <a
+              className={buttonVariants({ className: 'h-auto min-h-11 max-w-full whitespace-normal text-start' })}
+              href={created.reader.href}
             >
-              {m.correction_retry({}, o)}
-            </Button>
-          </>
-        )}
+              {m.candidate_view_public({}, o)}
+            </a>
+          ) : (
+            <>
+              <p>
+                {created.reader.state === 'concealed'
+                  ? m.catalogue_create_concealed({}, o)
+                  : m.catalogue_create_reader_unavailable({}, o)}
+              </p>
+              <Button
+                className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+                disabled={busy}
+                onClick={async () => {
+                  if (!lifetime.active()) return;
+                  if (running.current) return;
+                  running.current = true;
+                  setBusy(true);
+                  try {
+                    const reader = await transport.read(created.id);
+                    if (!lifetime.active()) return;
+                    setCreated({ ...created, reader });
+                  } catch {
+                    if (!lifetime.active()) return;
+                    setCreated({ ...created, reader: { state: 'unavailable' } });
+                  } finally {
+                    if (!lifetime.active()) return;
+                    running.current = false;
+                    setBusy(false);
+                  }
+                }}
+              >
+                {m.correction_retry({}, o)}
+              </Button>
+            </>
+          )}
+        </ContentItemFrame>
       </section>
     );
   return (
     <>
       <a
-        className={buttonVariants({ variant: 'outline' })}
+        className={buttonVariants({
+          variant: 'outline',
+          className:
+            'h-auto min-h-11 max-w-full whitespace-normal text-start focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+        })}
         href={`/${locale}/search${terms[0]?.label.trim() ? `?q=${encodeURIComponent(terms[0].label.trim())}` : ''}`}
       >
         {m.catalogue_create_search({}, o)}
       </a>
       <form
-        className="space-y-6"
+        className="min-w-0 space-y-8 [overflow-wrap:anywhere] [&_label]:whitespace-normal [&_label]:text-start [&_input]:min-w-0 [&_textarea]:min-w-0"
         onSubmit={(event) => {
           event.preventDefault();
           void submit();
         }}
         aria-busy={busy}
       >
-        <fieldset disabled={locked} className="space-y-4">
-          <Field>
-            <FieldLabel htmlFor="manga-type">{m.manga_grain({}, o)}</FieldLabel>
-            <NativeSelect
-              id="manga-type"
-              value={type}
-              onChange={(event) => {
-                setType(event.target.value as MangaType);
-                setFailure(undefined);
-              }}
-            >
-              {!read?.release.types[type] && (
-                <NativeSelectOption value="" disabled>
-                  {m.correction_choose({}, o)}
-                </NativeSelectOption>
-              )}
-              {mangaTypes
-                .filter((id) => read?.release.types[id])
-                .map((id) => {
-                  const text = definitionText(read!.release.types[id]!.labels, locale);
-                  return (
-                    <NativeSelectOption key={id} value={id} lang={text.lang ?? undefined}>
-                      {text.text}
-                    </NativeSelectOption>
-                  );
-                })}
-            </NativeSelect>
-          </Field>
-          <p className="text-sm text-muted-foreground">{m.manga_grain_help({}, o)}</p>
-          {read?.release.types[type] && (
-            <DefinitionGuideLink locale={locale} address={{ type, returnTo: `/${locale}/catalogue/manga` }} />
-          )}
-          {type === 'schema:PublicationVolume' && (
-            <Field orientation="horizontal">
-              <Checkbox
-                id="manga-independent"
-                checked={independent}
-                onCheckedChange={(value) => setIndependent(value === true)}
-              />
-              <FieldLabel htmlFor="manga-independent">{m.manga_independent({}, o)}</FieldLabel>
+        <fieldset disabled={locked} className="min-w-0 space-y-4">
+          <legend className="mb-3 max-w-full">
+            <ContentItemHeading className="font-sans text-xl font-semibold">{m.manga_grain({}, o)}</ContentItemHeading>
+          </legend>
+          <ContentItemFrame as="div" className="min-w-0 space-y-4 py-3 sm:py-4">
+            <Field className="min-w-0">
+              <FieldLabel htmlFor="manga-type">{m.manga_grain({}, o)}</FieldLabel>
+              <NativeSelect
+                className="w-full min-w-0"
+                id="manga-type"
+                value={type}
+                onChange={(event) => {
+                  setType(event.target.value as MangaType);
+                  setFailure(undefined);
+                }}
+              >
+                {!read?.release.types[type] && (
+                  <NativeSelectOption value="" disabled>
+                    {m.correction_choose({}, o)}
+                  </NativeSelectOption>
+                )}
+                {mangaTypes
+                  .filter((id) => read?.release.types[id])
+                  .map((id) => {
+                    const text = definitionText(read!.release.types[id]!.labels, locale);
+                    return (
+                      <NativeSelectOption key={id} value={id} lang={text.lang ?? undefined}>
+                        {text.text}
+                      </NativeSelectOption>
+                    );
+                  })}
+              </NativeSelect>
             </Field>
-          )}
+            <p className="text-sm text-muted-foreground">{m.manga_grain_help({}, o)}</p>
+            {read?.release.types[type] && (
+              <DefinitionGuideLink locale={locale} address={{ type, returnTo: `/${locale}/catalogue/manga` }} />
+            )}
+            {type === 'schema:PublicationVolume' && (
+              <Field orientation="horizontal">
+                <Checkbox
+                  id="manga-independent"
+                  checked={independent}
+                  onCheckedChange={(value) => setIndependent(value === true)}
+                />
+                <FieldLabel htmlFor="manga-independent">{m.manga_independent({}, o)}</FieldLabel>
+              </Field>
+            )}
+          </ContentItemFrame>
         </fieldset>
-        <fieldset disabled={locked} className="space-y-5">
-          <legend className="mb-3 text-lg font-semibold">{m.catalogue_create_terms({}, o)}</legend>
+        <fieldset disabled={locked} className="min-w-0 space-y-5">
+          <legend className="mb-3 max-w-full">
+            <ContentItemHeading className="font-sans text-xl font-semibold">
+              {m.catalogue_create_terms({}, o)}
+            </ContentItemHeading>
+          </legend>
           {terms.map((term, index) => (
-            <div
+            <ContentItemFrame
+              as="div"
               key={term.id}
               id={`${termsId}-row-${term.id}`}
-              className="grid gap-3 rounded-xl border p-4 sm:grid-cols-2"
+              className="grid min-w-0 gap-4 py-3 sm:grid-cols-2 sm:py-4"
             >
               {(['language', 'label', 'description', 'aliases'] as const).map((field) => {
                 const label = {
@@ -350,7 +374,7 @@ function MangaCreate({
                   },
                 };
                 return (
-                  <Field key={field}>
+                  <Field key={field} className="min-w-0">
                     <FieldLabel htmlFor={props.id}>{label}</FieldLabel>
                     {field === 'aliases' ? <Textarea {...props} /> : <Input {...props} />}
                   </Field>
@@ -369,9 +393,10 @@ function MangaCreate({
                   }}
                 />
               )}
-            </div>
+            </ContentItemFrame>
           ))}
           <Button
+            className="h-auto min-h-11 max-w-full whitespace-normal text-start"
             id={`${termsId}-add-language`}
             type="button"
             variant="outline"
@@ -387,53 +412,63 @@ function MangaCreate({
             {m.catalogue_create_add_language({}, o)}
           </Button>
         </fieldset>
-        <div id="manga-fields" tabIndex={-1} className="space-y-6">
+        <div
+          id="manga-fields"
+          tabIndex={-1}
+          className="min-w-0 space-y-8 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
           {read &&
             groups &&
             Object.entries(groups)
               .filter(([, fields]) => fields.length)
               .map(([group, fields]) => (
-                <section key={group} className="space-y-4">
-                  <h2 className="font-sans text-xl font-semibold">{labels[group as keyof typeof labels]}</h2>
-                  {group === 'membership' && (
-                    <p className="text-sm text-muted-foreground">{m.manga_order_help({}, o)}</p>
-                  )}
-                  {rows
-                    .filter((row) => fields.includes(row.statement.property.id))
-                    .map((row) => (
-                      <MangaInitialField
-                        key={row.id}
-                        row={row}
-                        read={read}
-                        type={type}
-                        locale={locale}
-                        search={search}
+                <section key={group} className="min-w-0">
+                  <ContentItemFrame as="div" className="min-w-0 space-y-4 py-3 sm:py-4">
+                    <ContentItemHeading className="font-sans text-xl font-semibold">
+                      {labels[group as keyof typeof labels]}
+                    </ContentItemHeading>
+                    <div data-content-item-slot="preview" className="min-w-0 space-y-4">
+                      {group === 'membership' && (
+                        <p className="text-sm text-muted-foreground">{m.manga_order_help({}, o)}</p>
+                      )}
+                      {rows
+                        .filter((row) => fields.includes(row.statement.property.id))
+                        .map((row) => (
+                          <MangaInitialField
+                            key={row.id}
+                            row={row}
+                            read={read}
+                            type={type}
+                            locale={locale}
+                            search={search}
+                            disabled={locked}
+                            onChange={(next) => changeRows(rows.map((item) => (item.id === row.id ? next : item)))}
+                            onRemove={() => changeRows(rows.filter((item) => item.id !== row.id))}
+                          />
+                        ))}
+                      <AddField
+                        label={labels[group as keyof typeof labels]}
                         disabled={locked}
-                        onChange={(next) => changeRows(rows.map((item) => (item.id === row.id ? next : item)))}
-                        onRemove={() => changeRows(rows.filter((item) => item.id !== row.id))}
+                        fields={fields.filter(
+                          (id) =>
+                            read.release.properties[id]!.multivalued ||
+                            !rows.some((row) => row.statement.property.id === id),
+                        )}
+                        name={(id) => pickText(read.release.properties[id]!.labels, locale)}
+                        onAdd={(property) =>
+                          changeRows([
+                            ...rows,
+                            {
+                              id: crypto.randomUUID(),
+                              statement: blankMangaStatement(property),
+                              label: pickText(read.release.properties[property]!.labels, locale),
+                            },
+                          ])
+                        }
+                        locale={locale}
                       />
-                    ))}
-                  <AddField
-                    label={labels[group as keyof typeof labels]}
-                    disabled={locked}
-                    fields={fields.filter(
-                      (id) =>
-                        read.release.properties[id]!.multivalued ||
-                        !rows.some((row) => row.statement.property.id === id),
-                    )}
-                    name={(id) => pickText(read.release.properties[id]!.labels, locale)}
-                    onAdd={(property) =>
-                      changeRows([
-                        ...rows,
-                        {
-                          id: crypto.randomUUID(),
-                          statement: blankMangaStatement(property),
-                          label: pickText(read.release.properties[property]!.labels, locale),
-                        },
-                      ])
-                    }
-                    locale={locale}
-                  />
+                    </div>
+                  </ContentItemFrame>
                 </section>
               ))}
           {read &&
@@ -445,23 +480,35 @@ function MangaCreate({
                   key={row.id}
                   id={`manga-row-${row.id}`}
                   tabIndex={-1}
-                  className="space-y-3 rounded-xl border p-4"
+                  className="min-w-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 >
-                  <h3 lang={row.label?.lang ?? undefined}>{row.label?.text || m.correction_invalid_part({}, o)}</h3>
-                  <p role="alert">{m.correction_stale({}, o)}</p>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={locked}
-                    onClick={() => changeRows(rows.filter((item) => item.id !== row.id))}
-                  >
-                    {m.recipe_remove_field({}, o)}
-                  </Button>
+                  <ContentItemFrame as="div" className="min-w-0 space-y-3 py-3 sm:py-4">
+                    <ContentItemHeading
+                      level={3}
+                      className="font-sans text-lg font-semibold"
+                      lang={row.label?.lang ?? undefined}
+                    >
+                      {row.label?.text || m.correction_invalid_part({}, o)}
+                    </ContentItemHeading>
+                    <p role="alert">{m.correction_stale({}, o)}</p>
+                    <Button
+                      className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+                      type="button"
+                      variant="outline"
+                      disabled={locked}
+                      onClick={() => changeRows(rows.filter((item) => item.id !== row.id))}
+                    >
+                      {m.recipe_remove_field({}, o)}
+                    </Button>
+                  </ContentItemFrame>
                 </section>
               ))}
         </div>
         {failure && (
-          <div className="space-y-3 rounded-xl border border-destructive/50 p-4">
+          <ContentItemFrame
+            as="div"
+            className="min-w-0 space-y-3 py-4 [&_a]:inline-flex [&_a]:min-h-11 [&_a]:items-center [&_a]:focus-visible:outline-2 [&_a]:focus-visible:outline-offset-2 [&_a]:focus-visible:outline-ring"
+          >
             <EditorFailure locale={locale} reason={failure.reason} />
             {!!failure.errors?.length && (
               <ul className="list-disc ps-5">
@@ -485,6 +532,7 @@ function MangaCreate({
             )}
             {failure.reason === 'conflict' && (
               <Button
+                className="h-auto min-h-11 max-w-full whitespace-normal text-start"
                 type="button"
                 variant="outline"
                 onClick={() => {
@@ -495,9 +543,10 @@ function MangaCreate({
                 {m.catalogue_create_review_new({}, o)}
               </Button>
             )}
-          </div>
+          </ContentItemFrame>
         )}
         <Button
+          className="h-auto min-h-11 max-w-full whitespace-normal text-start"
           type="submit"
           disabled={busy || disabled || !read?.release.types[type] || failure?.reason === 'conflict'}
         >
@@ -524,12 +573,17 @@ function AddField({
   locale: string;
 }) {
   const [property, setProperty] = useState('');
+  const selectId = useId();
   const o = { locale: locale as never };
   return (
-    <div className="flex flex-wrap items-end gap-3">
-      <Field className="min-w-0 flex-1">
-        <FieldLabel>{label}</FieldLabel>
+    <div className="flex min-w-0 flex-wrap items-end gap-3">
+      <Field className="min-w-0 basis-full sm:basis-48 sm:flex-1">
+        <FieldLabel htmlFor={selectId} className="whitespace-normal [overflow-wrap:anywhere]">
+          {label}
+        </FieldLabel>
         <NativeSelect
+          id={selectId}
+          className="w-full min-w-0"
           aria-label={label}
           value={fields.includes(property) ? property : ''}
           disabled={disabled}
@@ -544,6 +598,7 @@ function AddField({
         </NativeSelect>
       </Field>
       <Button
+        className="h-auto min-h-11 max-w-full whitespace-normal text-start"
         type="button"
         variant="outline"
         disabled={disabled || !fields.includes(property)}

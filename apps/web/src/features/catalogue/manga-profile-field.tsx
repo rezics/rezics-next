@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { pickText } from '@rezics/composition';
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { RichTextEditor } from '@rezics/ui/rich-text-editor';
 import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -47,6 +48,7 @@ export function MangaInitialField({
   const property = read.release.properties[row.statement.property.id]!;
   const title = pickText(property.labels, locale);
   const [qualifier, setQualifier] = useState('');
+  const qualifierId = useId();
   const citationPart = row.statement.references?.[0]?.parts.find((part) => part.property.id === 'schema:url');
   const citation =
     citationPart?.value.type === 'value' && typeof citationPart.value.content === 'string'
@@ -87,136 +89,151 @@ export function MangaInitialField({
       id={`manga-row-${row.id}`}
       tabIndex={-1}
       aria-label={title.text}
-      className="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-5"
+      className="min-w-0 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
     >
-      <h3 className="font-sans text-lg font-semibold" lang={title.lang ?? undefined}>
-        {title.text}
-      </h3>
-      <fieldset disabled={disabled} className="min-w-0 space-y-4">
-        {property.datatype === 'document' ? (
-          <>
-            <p className="text-sm text-muted-foreground">{m.authored_citation_hint({}, o)}</p>
-            <Field>
-              <FieldLabel htmlFor={`language-${row.id}`}>{m.authored_language({}, o)}</FieldLabel>
-              <Input
-                id={`language-${row.id}`}
-                value={authored.language}
-                onChange={(event) => updateAuthored({ ...authored, language: event.target.value })}
+      <ContentItemFrame as="div" className="min-w-0 space-y-4 py-3 sm:py-4">
+        <ContentItemHeading level={3} className="font-sans text-lg font-semibold" lang={title.lang ?? undefined}>
+          {title.text}
+        </ContentItemHeading>
+        <fieldset
+          disabled={disabled}
+          data-content-item-slot="preview"
+          className="min-w-0 space-y-4 [&_label]:whitespace-normal [&_label]:text-start"
+        >
+          {property.datatype === 'document' ? (
+            <>
+              <p className="text-sm text-muted-foreground">{m.authored_citation_hint({}, o)}</p>
+              <Field className="min-w-0">
+                <FieldLabel htmlFor={`language-${row.id}`}>{m.authored_language({}, o)}</FieldLabel>
+                <Input
+                  id={`language-${row.id}`}
+                  value={authored.language}
+                  onChange={(event) => updateAuthored({ ...authored, language: event.target.value })}
+                />
+              </Field>
+              <Field className="min-w-0">
+                <FieldLabel htmlFor={`licence-${row.id}`}>{m.authored_licence({}, o)}</FieldLabel>
+                <Input
+                  id={`licence-${row.id}`}
+                  value={authored.licence}
+                  onChange={(event) => updateAuthored({ ...authored, licence: event.target.value })}
+                />
+              </Field>
+              <RichTextEditor
+                label={title.text}
+                labels={editorLabels()}
+                lang={authored.language}
+                value={authored.document}
+                disabled={disabled}
+                onChange={(document) => updateAuthored({ ...authored, document })}
               />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor={`licence-${row.id}`}>{m.authored_licence({}, o)}</FieldLabel>
-              <Input
-                id={`licence-${row.id}`}
-                value={authored.licence}
-                onChange={(event) => updateAuthored({ ...authored, licence: event.target.value })}
-              />
-            </Field>
-            <RichTextEditor
-              label={title.text}
-              labels={editorLabels()}
-              lang={authored.language}
-              value={authored.document}
-              disabled={disabled}
-              onChange={(document) => updateAuthored({ ...authored, document })}
-            />
-            <Field orientation="horizontal">
-              <Checkbox
-                id={`original-${row.id}`}
-                checked={row.original ?? false}
-                onCheckedChange={(value) => onChange({ ...row, original: value === true })}
-              />
-              <FieldLabel htmlFor={`original-${row.id}`}>{m.authored_original({}, o)}</FieldLabel>
-            </Field>
-          </>
-        ) : (
-          control(row.statement, (value) => ({ ...row.statement, value }))
-        )}
-        {(row.statement.qualifiers ?? []).map((part, index) => (
-          <div key={index} className="space-y-2 border-s-2 ps-3">
-            <h4
-              className="text-sm font-medium"
-              lang={pickText(read.release.properties[part.property.id]?.labels ?? {}, locale).lang ?? undefined}
-            >
-              {name(part.property.id)}
-            </h4>
-            {control(part, (value) => ({
-              ...row.statement,
-              qualifiers: row.statement.qualifiers!.map((snak, at) => (at === index ? { ...snak, value } : snak)),
-            }))}
-          </div>
-        ))}
-        {!!property.qualifiers.filter(
-          (id) =>
-            read.release.properties[id]?.datatype === 'wikibase-item' || editableScalar(read.release.properties[id]),
-        ).length && (
-          <div className="flex flex-wrap items-end gap-3">
-            <Field className="min-w-0 flex-1">
-              <FieldLabel>{m.correction_add_qualifier({}, o)}</FieldLabel>
-              <NativeSelect
-                aria-label={m.correction_add_qualifier({}, o)}
-                value={qualifier}
-                onChange={(event) => setQualifier(event.target.value)}
+              <Field orientation="horizontal">
+                <Checkbox
+                  id={`original-${row.id}`}
+                  checked={row.original ?? false}
+                  onCheckedChange={(value) => onChange({ ...row, original: value === true })}
+                />
+                <FieldLabel htmlFor={`original-${row.id}`}>{m.authored_original({}, o)}</FieldLabel>
+              </Field>
+            </>
+          ) : (
+            control(row.statement, (value) => ({ ...row.statement, value }))
+          )}
+          {(row.statement.qualifiers ?? []).map((part, index) => (
+            <div key={index} className="min-w-0 space-y-2 border-s-2 ps-3">
+              <ContentItemHeading
+                level={4}
+                className="font-sans text-sm font-medium"
+                lang={pickText(read.release.properties[part.property.id]?.labels ?? {}, locale).lang ?? undefined}
               >
-                <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
-                {property.qualifiers
-                  .filter(
-                    (id) =>
-                      (read.release.properties[id]?.datatype === 'wikibase-item' ||
-                        editableScalar(read.release.properties[id])) &&
-                      !(row.statement.qualifiers ?? []).some((part) => part.property.id === id),
-                  )
-                  .map((id) => (
-                    <NativeSelectOption
-                      key={id}
-                      value={id}
-                      lang={pickText(read.release.properties[id]?.labels ?? {}, locale).lang ?? undefined}
-                    >
-                      {name(id)}
-                    </NativeSelectOption>
-                  ))}
-              </NativeSelect>
-            </Field>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={!qualifier}
-              onClick={() => {
+                {name(part.property.id)}
+              </ContentItemHeading>
+              {control(part, (value) => ({
+                ...row.statement,
+                qualifiers: row.statement.qualifiers!.map((snak, at) => (at === index ? { ...snak, value } : snak)),
+              }))}
+            </div>
+          ))}
+          {!!property.qualifiers.filter(
+            (id) =>
+              read.release.properties[id]?.datatype === 'wikibase-item' || editableScalar(read.release.properties[id]),
+          ).length && (
+            <div className="flex min-w-0 flex-wrap items-end gap-3">
+              <Field className="min-w-0 basis-full sm:basis-48 sm:flex-1">
+                <FieldLabel htmlFor={qualifierId}>{m.correction_add_qualifier({}, o)}</FieldLabel>
+                <NativeSelect
+                  id={qualifierId}
+                  className="w-full min-w-0"
+                  aria-label={m.correction_add_qualifier({}, o)}
+                  value={qualifier}
+                  onChange={(event) => setQualifier(event.target.value)}
+                >
+                  <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
+                  {property.qualifiers
+                    .filter(
+                      (id) =>
+                        (read.release.properties[id]?.datatype === 'wikibase-item' ||
+                          editableScalar(read.release.properties[id])) &&
+                        !(row.statement.qualifiers ?? []).some((part) => part.property.id === id),
+                    )
+                    .map((id) => (
+                      <NativeSelectOption
+                        key={id}
+                        value={id}
+                        lang={pickText(read.release.properties[id]?.labels ?? {}, locale).lang ?? undefined}
+                      >
+                        {name(id)}
+                      </NativeSelectOption>
+                    ))}
+                </NativeSelect>
+              </Field>
+              <Button
+                className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+                type="button"
+                variant="outline"
+                disabled={!qualifier}
+                onClick={() => {
+                  update({
+                    ...row.statement,
+                    qualifiers: [
+                      ...(row.statement.qualifiers ?? []),
+                      { property: { id: qualifier }, value: { type: 'value', content: '' } },
+                    ],
+                  });
+                  setQualifier('');
+                }}
+              >
+                {m.relation_add_qualifier({}, o)}
+              </Button>
+            </div>
+          )}
+          <Field className="min-w-0">
+            <FieldLabel htmlFor={`citation-${row.id}`}>{m.relation_citation({}, o)}</FieldLabel>
+            <Input
+              type="url"
+              id={`citation-${row.id}`}
+              value={citation}
+              onChange={(event) => {
+                const url = event.target.value;
                 update({
                   ...row.statement,
-                  qualifiers: [
-                    ...(row.statement.qualifiers ?? []),
-                    { property: { id: qualifier }, value: { type: 'value', content: '' } },
-                  ],
+                  references: url.trim()
+                    ? [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: url.trim() } }] }]
+                    : [],
                 });
-                setQualifier('');
               }}
-            >
-              {m.relation_add_qualifier({}, o)}
-            </Button>
-          </div>
-        )}
-        <Field>
-          <FieldLabel htmlFor={`citation-${row.id}`}>{m.relation_citation({}, o)}</FieldLabel>
-          <Input
-            type="url"
-            id={`citation-${row.id}`}
-            value={citation}
-            onChange={(event) => {
-              const url = event.target.value;
-              update({
-                ...row.statement,
-                references: url.trim()
-                  ? [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: url.trim() } }] }]
-                  : [],
-              });
-            }}
-          />
-        </Field>
-        <Button type="button" variant="ghost" onClick={onRemove}>
-          {m.recipe_remove_field({}, o)}
-        </Button>
-      </fieldset>
+            />
+          </Field>
+          <Button
+            className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+            type="button"
+            variant="ghost"
+            onClick={onRemove}
+          >
+            {m.recipe_remove_field({}, o)}
+          </Button>
+        </fieldset>
+      </ContentItemFrame>
     </section>
   );
 }
