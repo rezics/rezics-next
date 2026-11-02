@@ -42,11 +42,9 @@ test('Screen citation removal preserves private drafts, stable targets, focus an
       qualifiers: [snak('schema:position', '2')],
       references: [
         {
-          parts: [
-            snak('schema:url', ''),
-            snak('schema:url', 'https://example.org/selected'),
-            snak('schema:name', 'Source'),
-          ],
+          parts: ['', 'https://example.org/selected']
+            .map((url) => snak('schema:url', url))
+            .concat(snak('schema:name', 'Source')),
         },
         { parts: [snak('schema:name', 'Unrelated source')] },
         { parts: [snak('schema:url', 'https://example.org/survivor')] },
@@ -57,37 +55,31 @@ test('Screen citation removal preserves private drafts, stable targets, focus an
   let rows = [initial, sibling],
     disabled = false,
     changes = 0;
-  const paint = () =>
-    root.render(
-      <ScreenInitialFields
-        type="schema:Movie"
-        rows={rows}
-        release={release}
-        locale="en"
-        search={async () => []}
-        disabled={disabled}
-        change={(next) => {
-          rows = next;
-          changes++;
-          paint();
-        }}
-      />,
-    );
+  const props = { type: 'schema:Movie', release, locale: 'en', search: async () => [] };
+  const change = (next: ScreenRow[]) => {
+    rows = next;
+    changes++;
+    paint();
+  };
+  const paint = () => root.render(<ScreenInitialFields {...props} rows={rows} disabled={disabled} change={change} />);
   const render = () => act(async () => paint());
-  const citations = () => [...host.querySelectorAll<HTMLElement>('[data-screen-citation]')];
   const remove = (scope: HTMLElement) => within(scope).getByRole('button', { name: m.relation_remove() });
   const click = (element: HTMLElement) => act(async () => user.click(element));
   const address = (path: string) =>
     screenCreationControl(`/statements/schema:inLanguage/0${path}`, rows, release, 'en')!.id;
   try {
     await render();
-    const [empty, selected, survivor] = citations() as [HTMLElement, HTMLElement, HTMLElement];
-    const selectedId = address('/references/0/parts/1/value/content');
-    const survivorId = address('/references/2/parts/0/value/content');
-    const qualifierId = address('/qualifiers/0/value/content');
+    const [empty, selected, survivor] = [...host.querySelectorAll<HTMLElement>('[data-screen-citation]')] as [
+      HTMLElement,
+      HTMLElement,
+      HTMLElement,
+    ];
+    const selectedId = address('/references/0/parts/1/value/content'),
+      survivorId = address('/references/2/parts/0/value/content'),
+      qualifierId = address('/qualifiers/0/value/content');
     const selectedInput = window.document.getElementById(selectedId)! as unknown as HTMLInputElement;
-    const survivorInput = window.document.getElementById(survivorId);
-    const qualifierInput = window.document.getElementById(qualifierId);
+    const survivorInput = window.document.getElementById(survivorId),
+      qualifierInput = window.document.getElementById(qualifierId);
     await click(remove(selected));
     const cancel = within(selected).getByRole('button', { name: m.candidate_cancel() });
     expect(window.document.activeElement).toBe(cancel);
