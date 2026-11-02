@@ -405,7 +405,9 @@ An object walks the chain over its entries that hold text. After the chain it of
 reader's language (in code-unit order), then the `original` language when the caller knows it (the language of the
 subject's original title or `schema:inLanguage`), then English, then the first key in code-unit order. For an
 English reader the original follows English. `lang` is the key chosen. `pickLanguage(languages, locale,
-original?)` is the same choice over bare language keys, for values that are not strings, such as alias lists.
+original?)` is the same choice over bare language keys, for values that are not strings, such as alias lists. Tags
+match without regard to casing; when equivalent keys coexist, an exact fallback spelling wins, then existing keys
+use code-unit order.
 
 Localized text multiplies a text property's size by at most 16 entries, and the document
 stays inside `MAX_COMPOSITION_BYTES`. `pickText` is one pass over at most 16 keys and

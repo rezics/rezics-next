@@ -89,7 +89,16 @@ export function localizedText(options: { maxLength: number }) {
 
 function primarySubtag(tag: string): string {
   const dash = tag.indexOf('-');
-  return dash === -1 ? tag : tag.slice(0, dash);
+  return (dash === -1 ? tag : tag.slice(0, dash)).toLowerCase();
+}
+
+function sameLanguageTag(left: string, right: string): boolean {
+  return left.toLowerCase() === right.toLowerCase();
+}
+
+function matchingLanguage(available: Set<string>, preferred: string): string | undefined {
+  if (available.has(preferred)) return preferred;
+  return [...available].filter((tag) => sameLanguageTag(tag, preferred)).sort()[0];
 }
 
 /** Traditional-script Chinese: the script subtag or one of the regions that write it. */
@@ -104,12 +113,12 @@ function traditional(tag: string): boolean {
 export function localeChain(locale: string): string[] {
   const primary = primarySubtag(locale);
   const chain = [locale];
-  if (primary !== locale) chain.push(primary);
+  if (!sameLanguageTag(primary, locale)) chain.push(primary);
   if (primary === 'zh') {
     const scripts = traditional(locale) ? ['zh-Hant', 'zh-Hans'] : ['zh-Hans', 'zh-Hant'];
-    for (const script of scripts) if (!chain.includes(script)) chain.push(script);
+    for (const script of scripts) if (!chain.some((tag) => sameLanguageTag(tag, script))) chain.push(script);
   }
-  if (!chain.includes('en')) chain.push('en');
+  if (!chain.some((tag) => sameLanguageTag(tag, 'en'))) chain.push('en');
   return chain;
 }
 
@@ -125,7 +134,12 @@ export function pickLanguage(languages: Iterable<string>, locale: string, origin
   const primary = primarySubtag(locale);
   const english = primary === 'en' ? [] : ['en'];
   const lead = primary === 'en' ? chain : chain.slice(0, -1);
-  const related = [...available].filter((tag) => primarySubtag(tag) === primary && !chain.includes(tag)).sort();
+  const related = [...available]
+    .filter(
+      (tag) =>
+        primarySubtag(tag) === primary && !chain.some((preferred) => sameLanguageTag(preferred, tag)),
+    )
+    .sort();
   const origins =
     original === undefined
       ? []
@@ -134,7 +148,10 @@ export function pickLanguage(languages: Iterable<string>, locale: string, origin
           primarySubtag(original),
           ...[...available].filter((tag) => primarySubtag(tag) === primarySubtag(original)).sort(),
         ];
-  for (const tag of [...lead, ...related, ...origins, ...english]) if (available.has(tag)) return tag;
+  for (const tag of [...lead, ...related, ...origins, ...english]) {
+    const match = matchingLanguage(available, tag);
+    if (match !== undefined) return match;
+  }
   return [...available].sort()[0];
 }
 
