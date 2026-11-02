@@ -131,7 +131,7 @@ export async function previewCollectionBulk(
     const frozen = JSON.parse(json(target, TARGET_BYTES)) as CollectionBulkTarget;
     return { ...frozen, operationId: input.operationId, ordinal: String(ordinal) };
   });
-  const sourceDigest = digest(json({ request: intent, targets, initiator: input.initiator }, 4_300_000));
+  const sourceDigest = digest(json({ request: intent, targets, initiator: input.initiator, creationReceipt: receipt }, 4_300_000));
   const created = await tx.query(`INSERT INTO library.bulk_operation
     (route,operation_id,account_id,request,initiator,creation_receipt,source_digest,target_count,phase,
       admitted_at,expires_at,results_expire_at)
@@ -225,6 +225,8 @@ export async function applyCollectionBulkTarget(
   const row = found.rows[0];
   if (!row) return null;
   if (row.state !== 'pending') return { state: row.state, reason: row.reason, resultingMemberId: row.resultingMemberId };
+  if (row.target.kind === 'occurrence' && routeOf(row.target.collectionId) !== input.route)
+    throw new RangeError('Remote occurrences require native receipt reconciliation in the Library worker');
   const outcome: CollectionBulkOutcome = Date.parse(input.now) >= Date.parse(operation.expiresAt)
     ? { state: 'cancelled', reason: 'execution_expired' } : await apply(tx, operation, row);
   if (!['applied','no_effect','conflict','denied','failed','cancelled'].includes(outcome.state))

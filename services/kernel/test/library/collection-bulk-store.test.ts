@@ -60,6 +60,9 @@ test('confirmation and recovery use the persisted preview, skip a changed entry 
     expect((await previewCollectionBulk(tx, input)).phase).toBe('completed');
     await tx.query('COMMIT');
     expect((await readCollectionBulk(db.admin, input))?.phase).toBe('completed');
+    expect((await applyCollectionBulkTarget(db.admin, { ...input, ordinal: 0 }, async () => {
+      throw new Error('A committed effect was repeated after navigation');
+    }))?.state).toBe('applied');
   } finally { await tx.query('ROLLBACK'); tx.release(); }
 });
 
