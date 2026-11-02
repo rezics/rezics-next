@@ -52,7 +52,9 @@ function makeProps(query: string, initial: ReturnType<typeof ready>, load: Props
   return {
     data: {
       key: query,
-      properties: [{ property: 'schema:genre', labels: { en: 'Genre' }, mode: 'values' }] as Props['data']['properties'],
+      properties: [
+        { property: 'schema:genre', labels: { en: 'Genre' }, mode: 'values' },
+      ] as Props['data']['properties'],
       initial,
     },
     conditions: {
@@ -132,10 +134,12 @@ test('failed reads retry and a cyclic continuation keeps accepted values and off
   expect(host.textContent).toContain('accepted two');
   expect(host.textContent).not.toContain('discarded page');
   expect(host.textContent).toContain(m.refinement_restart());
-  expect([...host.querySelectorAll('button')].some((node) => node.textContent?.trim() === m.refinement_more_values())).toBe(
-    false,
+  expect(
+    [...host.querySelectorAll('button')].some((node) => node.textContent?.trim() === m.refinement_more_values()),
+  ).toBe(false);
+  expect([...host.querySelectorAll('a')].some((node) => node.textContent?.trim() === m.search_facet_retry())).toBe(
+    true,
   );
-  expect([...host.querySelectorAll('a')].some((node) => node.textContent?.trim() === m.search_facet_retry())).toBe(true);
 });
 
 test('a query change resets pagination and an older response cannot replace its values', async () => {
