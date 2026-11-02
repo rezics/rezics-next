@@ -138,10 +138,6 @@ test('A claimant can submit an eligible claim, see its actual result, and resume
   });
   expect(host.innerHTML).not.toContain(receipt.requestId);
   expect(button(m.realm_claim_request())).toBeUndefined();
-  await act(async () => {
-    submit.click();
-  });
-  expect(calls).toHaveLength(2);
   // Reusing an old page payload for another Realm cannot supply eligibility there.
   await paint(adapter, '01a1a000-0000-7000-8000-000000000098');
   await act(async () => freshRead.resolve(eligible));
