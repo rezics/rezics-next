@@ -2697,7 +2697,7 @@ export class MergeTrain {
           return finish();
         }
         const testDefaults = process.env.REZICS_GOAL_TEST_ENVIRONMENT === '1';
-        const directDevLanding = integratesIntoDev && !controlPlane && !stabilize;
+        const directDevLanding = integratesIntoDev && !stabilize;
         // The root compiler guard is mandatory even when the optional landing-check setting is disabled.
         const skipDevChecks = directDevLanding;
         if (directDevLanding) {

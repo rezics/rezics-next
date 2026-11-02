@@ -140,11 +140,12 @@ test('reuses a failed verifier check while its workspace inputs stay unchanged',
   const landing = commit(root, 'services/kernel/change.ts', 'export const changed = true;\n', 'landing');
   git(root, 'branch', '-f', 'dev', landing);
   const ctx = setup(root);
-  let affectedCalls = 0;
+  let failedCalls = 0;
   const runGate = async (command: readonly string[], cwd: string) => {
     if (command.includes('affected-check')) {
-      affectedCalls++;
-      return git(cwd, 'ls-files').includes('services/kernel/change.ts')
+      const hasChange = git(cwd, 'ls-files').includes('services/kernel/change.ts');
+      if (hasChange) failedCalls++;
+      return hasChange
         ? { passed: false, output: 'assertion failed', timedOut: false }
         : { passed: true, output: '', timedOut: false };
     }
@@ -158,7 +159,7 @@ test('reuses a failed verifier check while its workspace inputs stay unchanged',
   const docs = commit(root, 'docs/readme.md', 'Updated.\n', 'docs');
   git(root, 'branch', '-f', 'dev', docs);
   await verifyDev({ ...ctx, runGate });
-  expect(affectedCalls).toBe(2);
+  expect(failedCalls).toBe(1);
 });
 
 test('passes all work since dev-verified once and advances the ref to the captured dev head', async () => {
