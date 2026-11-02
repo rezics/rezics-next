@@ -488,7 +488,7 @@ function CharacterProfileCreateLive({
                 <DraftRemoval
                   locale={locale}
                   label={m.recipe_remove_field({}, o)}
-                  description={`${m.recipe_remove_field({}, o)} · ${m.character_create_correction_fact({ number: index + 1 }, o)} · ${name.text || fact.property.id}`}
+                  description={`${m.recipe_remove_field({}, o)} · ${m.character_create_correction_fact({ number: index + 1 }, o)} · ${name.text || m.candidate_value_unavailable({}, o)}`}
                   disabled={locked}
                   onRemove={() => {
                     if (!lifetime.active() || locked || running.current || pending.current) return;
