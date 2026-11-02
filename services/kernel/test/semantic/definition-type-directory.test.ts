@@ -205,6 +205,15 @@ test('mounted current Type pages and descriptors span releases, survive staging 
     expect((await call(`/v1/definitionTypes/${encodeURIComponent(longId)}`)).body.typeId).toBe(longId);
     const current = await call('/v1/definitionTypes?query=Shared');
     expect(current.body.types).toHaveLength(20);
+    const all = current.body.types.map((type: any) => type.typeId);
+    let next = current.body.next;
+    while (next) {
+      const page = await call(`/v1/definitionTypes?query=Shared&cursor=${encodeURIComponent(next)}`);
+      expect(page.status).toBe(200);
+      all.push(...page.body.types.map((type: any) => type.typeId));
+      next = page.body.next;
+    }
+    expect(all).toEqual(shards.flatMap((release) => Object.keys(release.types)).sort());
     expect((await call(`/v1/definitions/releases/${legacyDigest}`)).body.release).toEqual(shards[0]);
     // At both catalogue sizes, the actual next-edge plan uses a range index and a fixed lookahead.
     for (const catalogue of [first.rootDigest, grown.rootDigest]) {
