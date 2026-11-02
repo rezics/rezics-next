@@ -36,9 +36,16 @@ test('receipt retains separate customer currency and bounds unrelated financial 
       amountTotalMinor: 1647,
     });
     expect(orderReceiptMoney({ ...expected!.order, settlement: 'failed' }, null, null).recordedPresentment).toBeNull();
-    expect(orderReceiptMoney(expected!.order, null, JSON.stringify({
-      moneyUnit: null, amounts: { presentment_currency: 'cad', presentment_amount: 1647 },
-    })).recordedPresentment).toBeNull();
+    expect(
+      orderReceiptMoney(
+        expected!.order,
+        null,
+        JSON.stringify({
+          moneyUnit: null,
+          amounts: { presentment_currency: 'cad', presentment_amount: 1647 },
+        }),
+      ).recordedPresentment,
+    ).toBeNull();
     for (const count of [1, 8, 64]) {
       await f.pool.query(
         `INSERT INTO commerce.money_observation

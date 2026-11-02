@@ -61,7 +61,9 @@ test('Buyer receipt shows recorded charge and truthful payment/access state', as
     ...receiptStoryMoney,
     contentEdition: fixedEditionTerms,
     recordedPresentment: {
-      currency: 'cad', moneyUnit: receiptStoryMoney.moneyUnit!, amountTotalMinor: 1647,
+      currency: 'cad',
+      moneyUnit: receiptStoryMoney.moneyUnit!,
+      amountTotalMinor: 1647,
     } as OrderMoney['recordedPresentment'],
   };
   let current: unknown = {
