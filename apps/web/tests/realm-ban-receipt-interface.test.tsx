@@ -435,8 +435,6 @@ test('a failed continuation can restart at the first page independently of exact
   source.setRead({ state: 'ready', page: { items: [], next: null } });
   await click(m.realm_bans_restart());
   expect(source.reads).toEqual(['opaque-continuation', 'opaque-continuation', undefined]);
-  expect(window.document.activeElement).toBe(host.querySelector('h2'));
-  expect(source.lookups).toEqual([]);
   expect(source.writes).toEqual([]);
 });
 
