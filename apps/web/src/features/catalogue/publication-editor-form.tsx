@@ -34,7 +34,8 @@ import {
   type PublicationTransport,
 } from './publication-editor';
 import { ScalarControl } from './statement-editor-view';
-import type { SnakInput } from './statement-editor';
+import type { SnakInput, StatementInput } from './statement-editor';
+import { controlId, presentStatementViolations } from './statement-validation-presentation';
 import { usePublicationEditorNavigation } from './publication-editor-navigation';
 
 // Caller sizing preserves dense fine-pointer desktops and lets translated actions wrap.
@@ -48,6 +49,23 @@ const linkClassName =
   'inline-flex min-h-11 min-w-11 max-w-full items-center underline [overflow-wrap:anywhere] md:pointer-fine:min-h-8';
 const actionLinkClassName = cn(buttonVariants(), actionClassName);
 const outlineLinkClassName = cn(buttonVariants({ variant: 'outline' }), actionClassName);
+
+function pointerSegments(pointer: string): string[] | undefined {
+  if (!pointer.startsWith('/')) return;
+  const segments = pointer.slice(1).split('/');
+  if (segments.some((segment) => /~(?![01])/.test(segment))) return;
+  return segments.map((segment) => segment.replace(/~1/g, '/').replace(/~0/g, '~'));
+}
+
+function pointerFrom(segments: string[]): string {
+  return `/${segments.map((segment) => segment.replace(/~/g, '~0').replace(/\//g, '~1')).join('/')}`;
+}
+
+function statementAddress(pointer: string) {
+  const segments = pointerSegments(pointer);
+  if (segments?.[0] !== 'statements' || !segments[1]) return;
+  return { property: segments[1], index: segments[2], path: segments.slice(3) };
+}
 
 function hasFactContent(value: unknown): boolean {
   if (typeof value === 'string') return !!value.trim();
@@ -269,7 +287,7 @@ function PublicationEditorLive({
   const factNeedsReview = (property: string) =>
     unsupportedFact(property) ||
     (property === 'schema:publisher' && unsupportedPublisher) ||
-    reviewErrors.some((error) => error.pointer.startsWith(`/statements/${property}`));
+    reviewErrors.some((error) => statementAddress(error.pointer)?.property === property);
   const correctionsRequired =
     !currentProfile ||
     unsupportedRelation ||
@@ -316,24 +334,217 @@ function PublicationEditorLive({
     command.current = null;
     setFailure(undefined);
   }
-  const invalid = (pointer: string) => failure?.errors?.some((error) => error.pointer.startsWith(pointer)) === true;
-  function errorControl(pointer: string) {
-    if (pointer.includes('/references/')) return { id: `${id}-citation`, label: m.relation_citation({}, o) };
-    if (pointer.startsWith('/statements/')) {
-      const property = pointer.split('/')[2] ?? '';
-      return property === relation
-        ? { id: `${id}-relation`, label: m.relation_property({}, o) }
-        : {
-            id: `${id}-fact-${encodeURIComponent(property)}`,
-            label: name(property) || m.publication_field({}, o),
-          };
+  function scalarEntries(property: string) {
+    return (failure?.errors ?? []).flatMap((error) => {
+      const address = statementAddress(error.pointer);
+      if (
+        address?.property !== property ||
+        address.index !== '0' ||
+        address.path.length === 0 ||
+        address.path[0] === 'references'
+      )
+        return [];
+      return [{ error, path: address.path, pointer: pointerFrom(['statement', ...address.path]) }];
+    });
+  }
+  function scalarFeedback(property: string) {
+    const feedbackId = `${id}-scalar-${encodeURIComponent(property)}`;
+    const part: StatementInput = {
+      property: { id: property },
+      value: facts[property] ?? { type: 'novalue' },
+      qualifiers: [],
+      references: [],
+      rank: 'normal',
+    };
+    const entries = scalarEntries(property);
+    const errors = controlRead
+      ? presentStatementViolations(
+          entries.map(({ error, pointer }) => ({ pointer, code: error.code })),
+          part,
+          controlRead.release,
+          locale,
+          feedbackId,
+        )
+      : [];
+    return { feedback: { id: feedbackId, address: 'fact', errors }, entries };
+  }
+  function linkedError(target: string, label: string, instruction = m.catalogue_create_invalid_field({}, o)) {
+    return { target, summaryId: `${target}-error`, label, instruction, unique: false };
+  }
+  function generalError(error: NonNullable<CreateFailure['errors']>[number], index: number) {
+    const summaryId = `${id}-general-error-${index}`;
+    const diagnostic = controlRead
+      ? presentStatementViolations(
+          [{ pointer: '/unsupported', code: error.code }],
+          {
+            property: { id: '' },
+            value: { type: 'novalue' },
+            qualifiers: [],
+            references: [],
+            rank: 'normal',
+          },
+          controlRead.release,
+          locale,
+          summaryId,
+        )[0]
+      : undefined;
+    return {
+      target: undefined,
+      summaryId,
+      label: diagnostic?.label ?? m.catalogue_create_invalid_field({}, o),
+      instruction: diagnostic?.instruction ?? '',
+      unique: false,
+    };
+  }
+  function errorControl(error: NonNullable<CreateFailure['errors']>[number], index: number) {
+    const languageValue = language.trim();
+    const languageValid = /^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(languageValue);
+    const segments = pointerSegments(error.pointer);
+    if (error.pointer === '/independent')
+      return linkedError(`${id}-independent`, m.publication_independent({}, o));
+    if (error.pointer === '/type' || error.pointer === '/relation')
+      return linkedError(`${id}-relation`, m.relation_property({}, o));
+    if (error.pointer === '/language') return linkedError(`${id}-language`, m.catalogue_create_language({}, o));
+    if (segments?.[0] === 'labels') {
+      const target =
+        segments.length === 1
+          ? `${id}-label`
+          : segments.length === 2 && segments[1] === languageValue
+            ? languageValid
+              ? `${id}-label`
+              : `${id}-language`
+            : undefined;
+      if (target)
+        return linkedError(
+          target,
+          target === `${id}-language` ? m.catalogue_create_language({}, o) : m.catalogue_create_label({}, o),
+        );
     }
-    if (pointer === '/independent') return { id: `${id}-independent`, label: m.publication_independent({}, o) };
-    if (pointer === '/type' || pointer === '/relation')
-      return { id: `${id}-relation`, label: m.relation_property({}, o) };
-    if (!/^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(language.trim()))
-      return { id: `${id}-language`, label: m.catalogue_create_language({}, o) };
-    return { id: `${id}-label`, label: m.catalogue_create_label({}, o) };
+    const address = statementAddress(error.pointer);
+    if (address) {
+      const { property, index: statementIndex, path } = address;
+      const currentStatement = property === relation || Object.hasOwn(facts, property);
+      const citationVisible = !!controlRead?.release.properties['schema:url'] || !!citation;
+      const citationPath =
+        (path.length === 1 && path[0] === 'references') ||
+        (path.join('/') === 'references/0/parts/0/value/content' && !!citation.trim());
+      if (currentStatement && citationVisible && statementIndex === '0' && citationPath) {
+        const value =
+          property === relation
+            ? { type: 'value' as const, content: read?.public.subject.id ?? '' }
+            : (facts[property] ?? { type: 'novalue' as const });
+        const part: StatementInput = {
+          property: { id: property },
+          value,
+          qualifiers: [],
+          references: citation.trim()
+            ? [
+                {
+                  parts: [
+                    {
+                      property: { id: 'schema:url' },
+                      value: { type: 'value', content: citation.trim() },
+                    },
+                  ],
+                },
+              ]
+            : [],
+          rank: 'normal',
+        };
+        const [presented] = controlRead
+          ? presentStatementViolations(
+              [{ pointer: pointerFrom(['statement', ...path]), code: error.code }],
+              part,
+              controlRead.release,
+              locale,
+              `${id}-citation-feedback`,
+            )
+          : [];
+        return linkedError(
+          `${id}-citation`,
+          m.relation_citation({}, o),
+          presented?.instruction ?? m.catalogue_create_invalid_field({}, o),
+        );
+      }
+      const propertyRoot = statementIndex === undefined || (statementIndex === '0' && path.length === 0);
+      if (currentStatement && property === relation && propertyRoot)
+        return linkedError(`${id}-relation`, m.relation_property({}, o));
+      if (currentStatement && property !== relation && propertyRoot) {
+        const fieldset = `${id}-fact-${encodeURIComponent(property)}`;
+        const label = name(property);
+        if (label) return linkedError(fieldset, label);
+      }
+      if (
+        Object.hasOwn(facts, property) &&
+        property !== 'schema:publisher' &&
+        statementIndex === '0' &&
+        path.length > 0 &&
+        !unsupportedFact(property)
+      ) {
+        const { feedback, entries } = scalarFeedback(property);
+        const scalarIndex = entries.findIndex((entry) => entry.error === error);
+        const presented = feedback.errors[scalarIndex];
+        const scalarFields = [
+          'state',
+          'value',
+          'date',
+          'amount',
+          'unit',
+          'lowerBound',
+          'upperBound',
+          'text',
+          'language',
+        ];
+        if (presented && scalarFields.some((field) => presented.target === controlId(feedback.id, 'fact', field))) {
+          const precision = path.join('/') === 'value/content/precision';
+          return {
+            target:
+              precision && controlRead?.release.properties[property]?.datatype === 'time'
+                ? controlId(feedback.id, 'fact', 'precision')
+                : presented.target,
+            summaryId: presented.id,
+            label: precision ? `${presented.label} · ${m.correction_precision({}, o)}` : presented.label,
+            instruction: presented.instruction,
+            unique: true,
+          };
+        }
+      }
+    }
+    return generalError(error, index);
+  }
+  const errorRows = (() => {
+    const rows = (failure?.errors ?? []).map(errorControl);
+    const grouped: typeof rows = [];
+    const byTarget = new Map<string, (typeof rows)[number]>();
+    for (const row of rows) {
+      if (!row.target || row.unique) {
+        grouped.push(row);
+        continue;
+      }
+      const existing = byTarget.get(row.target);
+      if (existing) {
+        existing.instruction = [existing.instruction, row.instruction].filter(Boolean).join(' ');
+      } else {
+        byTarget.set(row.target, row);
+        grouped.push(row);
+      }
+    }
+    return grouped;
+  })();
+  const hasControlError = (target: string) => errorRows.some((error) => error.target === target);
+  const controlErrorId = (target: string) => errorRows.find((error) => error.target === target)?.summaryId;
+  function reviewErrorLabel(pointer: string) {
+    if (pointer.includes('/references/')) return m.relation_citation({}, o);
+    const address = statementAddress(pointer);
+    if (address) return address.property === relation ? m.relation_property({}, o) : name(address.property) || m.publication_field({}, o);
+    if (pointer === '/independent') return m.publication_independent({}, o);
+    if (pointer === '/type' || pointer === '/relation') return m.relation_property({}, o);
+    const segments = pointerSegments(pointer);
+    if (segments?.[0] === 'labels')
+      return /^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(language.trim())
+        ? m.catalogue_create_label({}, o)
+        : m.catalogue_create_language({}, o);
+    return m.catalogue_create_invalid_field({}, o);
   }
 
   async function submit(event: FormEvent) {
@@ -557,7 +768,7 @@ function PublicationEditorLive({
                   {!currentProfile && <p>{m.publication_empty({}, o)}</p>}
                   {reviewErrors.length > 0 && (
                     <ul className="list-inside list-disc">
-                      {[...new Set(reviewErrors.map((error) => errorControl(error.pointer).label))].map((label) => (
+                      {[...new Set(reviewErrors.map((error) => reviewErrorLabel(error.pointer)))].map((label) => (
                         <li key={label}>
                           {label}: {m.catalogue_create_invalid_field({}, o)}
                         </li>
@@ -629,22 +840,18 @@ function PublicationEditorLive({
                       )}
                     </FieldDescription>
                   )}
-                  <Field data-invalid={invalid('/labels') || undefined}>
+                  <Field data-invalid={hasControlError(`${id}-label`) || undefined}>
                     <FieldLabel className={labelClassName} htmlFor={`${id}-label`}>
                       {m.catalogue_create_label({}, o)}
                     </FieldLabel>
                     <Input
                       className={inputClassName}
                       id={`${id}-label`}
-                      aria-describedby={
-                        failure?.errors?.some((error) => errorControl(error.pointer).id === `${id}-label`)
-                          ? `${id}-label-error`
-                          : undefined
-                      }
+                      aria-describedby={controlErrorId(`${id}-label`)}
                       value={label}
                       required
                       maxLength={250}
-                      aria-invalid={invalid('/labels')}
+                      aria-invalid={hasControlError(`${id}-label`) || undefined}
                       onChange={(e) => edit(() => setLabel(e.target.value))}
                     />
                   </Field>
@@ -657,7 +864,8 @@ function PublicationEditorLive({
                       id={`${id}-language`}
                       value={language}
                       maxLength={64}
-                      aria-describedby={`${id}-language-help${failure?.errors?.some((error) => errorControl(error.pointer).id === `${id}-language`) ? ` ${id}-language-error` : ''}`}
+                      aria-describedby={`${id}-language-help${controlErrorId(`${id}-language`) ? ` ${controlErrorId(`${id}-language`)}` : ''}`}
+                      aria-invalid={hasControlError(`${id}-language`) || undefined}
                       onChange={(e) => edit(() => setLanguage(e.target.value))}
                     />
                     <FieldDescription id={`${id}-language-help`} className="text-start">
@@ -671,11 +879,8 @@ function PublicationEditorLive({
                     <NativeSelect
                       className={selectClassName}
                       id={`${id}-relation`}
-                      aria-describedby={
-                        failure?.errors?.some((error) => errorControl(error.pointer).id === `${id}-relation`)
-                          ? `${id}-relation-error`
-                          : undefined
-                      }
+                      aria-describedby={controlErrorId(`${id}-relation`)}
+                      aria-invalid={hasControlError(`${id}-relation`) || undefined}
                       value={relation}
                       onChange={(e) => edit(() => setRelation(e.target.value))}
                     >
@@ -692,18 +897,17 @@ function PublicationEditorLive({
                     </NativeSelect>
                     {unsupportedRelation && <FieldError>{m.publication_choice_review({}, o)}</FieldError>}
                   </Field>
-                  <Field orientation="horizontal" data-invalid={invalid('/independent') || undefined}>
+                  <Field
+                    orientation="horizontal"
+                    data-invalid={hasControlError(`${id}-independent`) || undefined}
+                  >
                     <Checkbox
                       nativeButton
                       render={<button type="button" />}
                       id={`${id}-independent`}
-                      aria-describedby={
-                        failure?.errors?.some((error) => errorControl(error.pointer).id === `${id}-independent`)
-                          ? `${id}-independent-error`
-                          : undefined
-                      }
+                      aria-describedby={controlErrorId(`${id}-independent`)}
                       checked={independent}
-                      aria-invalid={invalid('/independent')}
+                      aria-invalid={hasControlError(`${id}-independent`) || undefined}
                       onCheckedChange={(value) => edit(() => setIndependent(value))}
                     />
                     <FieldLabel
@@ -721,13 +925,8 @@ function PublicationEditorLive({
                     id={`${id}-fact-${encodeURIComponent(property)}`}
                     disabled={disabled}
                     tabIndex={-1}
-                    aria-describedby={
-                      failure?.errors?.some(
-                        (error) => errorControl(error.pointer).id === `${id}-fact-${encodeURIComponent(property)}`,
-                      )
-                        ? `${id}-fact-${encodeURIComponent(property)}-error`
-                        : undefined
-                    }
+                    aria-describedby={controlErrorId(`${id}-fact-${encodeURIComponent(property)}`)}
+                    aria-invalid={hasControlError(`${id}-fact-${encodeURIComponent(property)}`) || undefined}
                     className="min-w-0 gap-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                   >
                     <FieldLegend className="max-w-full">
@@ -779,11 +978,9 @@ function PublicationEditorLive({
                         definition={controlRead?.release.properties[property]}
                         read={controlRead!}
                         locale={locale}
+                        feedback={scalarFeedback(property).feedback}
                         onChange={(next) => edit(() => setFacts({ ...facts, [property]: next }))}
                       />
-                    )}
-                    {invalid(`/statements/${property}`) && (
-                      <FieldError>{m.catalogue_create_invalid_field({}, o)}</FieldError>
                     )}
                     <PublicationFactRemoval
                       property={property}
@@ -877,7 +1074,8 @@ function PublicationEditorLive({
                       <Input
                         className={inputClassName}
                         id={`${id}-citation`}
-                        aria-describedby={`${id}-citation-help${failure?.errors?.some((error) => errorControl(error.pointer).id === `${id}-citation`) ? ` ${id}-citation-error` : ''}`}
+                        aria-describedby={`${id}-citation-help${controlErrorId(`${id}-citation`) ? ` ${controlErrorId(`${id}-citation`)}` : ''}`}
+                        aria-invalid={hasControlError(`${id}-citation`) || undefined}
                         type="url"
                         value={citation}
                         maxLength={1500}
@@ -911,20 +1109,18 @@ function PublicationEditorLive({
                             ? m.catalogue_create_invalid({}, o)
                             : m.catalogue_create_uncertain({}, o)}
                   </ContentItemHeading>
-                  {failure.errors?.length ? (
+                  {errorRows.length ? (
                     <ul className="list-inside list-disc">
-                      {[
-                        ...new Map(
-                          failure.errors.map((error) => {
-                            const control = errorControl(error.pointer);
-                            return [control.id, control] as const;
-                          }),
-                        ).values(),
-                      ].map((control) => (
-                        <li key={control.id} id={`${control.id}-error`}>
-                          <a className={linkClassName} href={`#${encodeURIComponent(control.id)}`}>
-                            {control.label}
-                          </a>
+                      {errorRows.map((error) => (
+                        <li key={error.summaryId} id={error.summaryId}>
+                          {error.target ? (
+                            <a className={linkClassName} href={`#${encodeURIComponent(error.target)}`}>
+                              {error.label}
+                            </a>
+                          ) : (
+                            error.label
+                          )}
+                          {error.instruction && <> — {error.instruction}</>}
                         </li>
                       ))}
                     </ul>

@@ -326,6 +326,93 @@ test('independent publication creation, local corrections, immutable recovery an
     expect(article().querySelector('form')).toBeNull();
     await associations(0);
 
+    // A definite refusal points to the exact scalar and citation controls while preserving every other fact.
+    const correction = tracked();
+    const submitNative = correction.transport.submit;
+    const refusal: CreateFailure = {
+      ok: false,
+      reason: 'invalid',
+      errors: [
+        { pointer: '/statements/schema:numberOfPages/0/value/content/amount', code: 'out_of_range' },
+        { pointer: '/statements/schema:datePublished/0/value/content/precision', code: 'unsupported' },
+        { pointer: '/statements/schema:exampleOfWork/0/references', code: 'required' },
+      ],
+    };
+    let firstRefusal = true;
+    correction.transport = {
+      ...correction.transport,
+      submit: async (command) => {
+        if (firstRefusal) {
+          firstRefusal = false;
+          correction.commands.push(structuredClone(command));
+          return refusal;
+        }
+        return submitNative(command);
+      },
+    };
+    await mount(correction);
+    await ready();
+    await add('schema:datePublished');
+    const precision = scope().getByRole('combobox', { name: m.correction_precision() }) as HTMLSelectElement;
+    await act(async () => user.selectOptions(precision, '10'));
+    await replace(input(m.correction_year()), '2026');
+    await replace(scope().getByRole('spinbutton', { name: m.correction_month() }), '10');
+    await add('schema:numberOfPages');
+    const amount = input(m.correction_amount());
+    await replace(amount, '+240');
+    await act(async () =>
+      user.selectOptions(scope().getByRole('combobox', { name: m.correction_unit() }), '1'),
+    );
+    await add('schema:publisher');
+    const publisherLabel = correction.fixture.release.properties['schema:publisher']!.labels.en!;
+    await act(async () => user.type(scope().getByRole('combobox', { name: publisherLabel }), 'Press'));
+    const correctionBody = within(window.document.body as unknown as HTMLElement);
+    await act(async () =>
+      user.click(await correctionBody.findByRole('option', { name: /Supplied publisher/ })),
+    );
+    await click(m.publication_submit());
+    await scope().findByRole('heading', { name: m.catalogue_create_invalid(), level: 2 });
+    const citation = input(m.relation_citation());
+    const targetFor = (control: HTMLElement) =>
+      [...article().querySelectorAll<HTMLAnchorElement>('a[href^="#"]')].find(
+        (link) => decodeURIComponent(link.hash.slice(1)) === control.id,
+      );
+    expect(targetFor(amount)).toBeDefined();
+    expect(targetFor(precision)).toBeDefined();
+    expect(targetFor(citation)).toBeDefined();
+    expect(amount.getAttribute('aria-invalid')).toBe('true');
+    expect(precision.getAttribute('aria-invalid')).toBe('true');
+    expect(citation.getAttribute('aria-invalid')).toBe('true');
+    expect(article().textContent).toContain(m.correction_citation_hint());
+    expect(input(m.correction_amount()).value).toBe('+240');
+    expect(precision.value).toBe('10');
+    expect(article().textContent).toContain('Supplied publisher');
+    await associations(0);
+
+    await replace(amount, '+241');
+    await act(async () => user.selectOptions(precision, '9'));
+    await replace(citation, 'https://publisher.example/edition');
+    await click(m.publication_submit());
+    await scope().findByRole('link', { name: m.catalogue_create_open() });
+    expect(correction.commands).toHaveLength(2);
+    expect(correction.commands[1]!.key).not.toBe(correction.commands[0]!.key);
+    expect(correction.commands[1]!.item.statements['schema:numberOfPages']![0]!.value).toEqual({
+      type: 'value',
+      content: { amount: '+241', unit: '1' },
+    });
+    expect(correction.commands[1]!.item.statements['schema:datePublished']![0]!.value).toMatchObject({
+      type: 'value',
+      content: { precision: 9 },
+    });
+    expect(correction.commands[1]!.item.statements['schema:publisher']![0]!.value).toEqual({
+      type: 'value',
+      content: publisherId,
+    });
+    expect(correction.commands[1]!.item.statements['schema:exampleOfWork']![0]!.references[0]!.parts[0]!.value).toEqual({
+      type: 'value',
+      content: 'https://publisher.example/edition',
+    });
+
     for (const scenario of ['reader-unavailable', 'reader-concealed'] as const) {
       const result = tracked(scenario);
       await mount(result);
@@ -486,12 +573,19 @@ test('independent publication creation, local corrections, immutable recovery an
     const collision = tracked();
     const suppliedCollision = await collision.fixture.transport.load();
     if (!suppliedCollision.ok) throw new Error('Expected supplied profile');
+    const escapedProperty = 'schema:custom/~edition';
     suppliedCollision.release.properties['schema-isbn'] = structuredClone(
       suppliedCollision.release.properties['schema:isbn']!,
     );
     suppliedCollision.release.properties['schema-isbn']!.labels.en = 'A distinct property with a similar spelling';
+    suppliedCollision.release.properties[escapedProperty] = structuredClone(
+      suppliedCollision.release.properties['schema:isbn']!,
+    );
+    suppliedCollision.release.properties[escapedProperty]!.labels.en = 'Escaped property';
     suppliedCollision.profiles[0]!.fields.push('schema-isbn');
+    suppliedCollision.profiles[0]!.fields.push(escapedProperty);
     suppliedCollision.release.types['bf:Instance']!.properties.push('schema-isbn');
+    suppliedCollision.release.types['bf:Instance']!.properties.push(escapedProperty);
     const errors: CreateFailure = {
       ok: false,
       reason: 'invalid',
@@ -499,6 +593,7 @@ test('independent publication creation, local corrections, immutable recovery an
         { pointer: '/statements/schema:isbn/0/value/content', code: 'invalid_format' },
         { pointer: '/statements/schema-isbn/0/value/content', code: 'invalid_format' },
         { pointer: '/statements/schema:exampleOfWork/0/references/0/parts/0/value/content', code: 'invalid_format' },
+        { pointer: '/statements/schema:custom~1~0edition/0/value/content', code: 'invalid_format' },
         { pointer: '/relation', code: 'unsupported' },
         { pointer: '/independent', code: 'required' },
         { pointer: '/labels/en', code: 'invalid_format' },
@@ -511,12 +606,18 @@ test('independent publication creation, local corrections, immutable recovery an
     await replace(input(m.correction_value()), '978-0-140-44430-8');
     await add('schema-isbn');
     await replace(scope().getAllByRole('textbox', { name: m.correction_value() })[1]!, '978-0-140-44430-8');
+    await add(escapedProperty);
+    const escapedInput = scope().getAllByRole('textbox', { name: m.correction_value() })[2] as HTMLInputElement;
+    await replace(escapedInput, 'escaped value');
     await click(m.publication_submit());
     await scope().findByRole('heading', { name: m.catalogue_create_invalid() });
     const fragments = [...article().querySelectorAll<HTMLAnchorElement>('a[href^="#"]')];
     expect(fragments).toHaveLength(6);
+    expect(fragments.some((link) => link.textContent?.includes(m.relation_citation()))).toBe(false);
+    expect(article().textContent).toContain(m.correction_error_uneditable());
     const targets = fragments.map((link) => decodeURIComponent(link.hash.slice(1)));
     expect(new Set(targets).size).toBe(6);
+    expect(targets).toContain(escapedInput.id);
     expect(new Set(ids()).size).toBe(ids().length);
     await associations(0);
     await associations(1);

@@ -145,6 +145,8 @@ the entered name's data language is independent. Optional ISBN, identifier, date
 use their released schema. ISBN text is retained without guessed normalization, date precision and quantity units
 are explicit, and publisher selection uses existing discovery summaries and real subject IDs. An entered citation
 supports the work link and entered facts. Work credits, word count and progress are never copied.
+Creation error links address exact current scalar parts and the editable citation; unsupported or retired addresses
+remain general diagnostics.
 Populated optional publication facts require local removal confirmation with Cancel; empty scaffolding may remove immediately, Cancel restores trigger focus, and confirmation focuses the next usable control or a preceding survivor while preserving sibling facts, publisher summaries, terms, independence and the shared citation under the current command lock.
 
 The form uses the same generated `POST /v1/subjects`, session BFF and CSRF path as generic creation. Native creation
