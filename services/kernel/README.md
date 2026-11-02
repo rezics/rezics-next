@@ -695,8 +695,10 @@ returned profile is merged. Write failures are best-effort by default: `checkGro
 returns the growth report, so the growth verdict is unchanged. Each destination keeps its own warning.
 Set `GROWTH_PROFILE_REQUIRED=1` when calibration must have the artifact; any other set value is a configuration error.
 Required export applies only when `GROWTH_PROFILE` names a destination, and then a missing, oversized or incomplete JSONL
-record fails as `GrowthProfileExportError` with that destination and the original error. Each appended line is fully
-serialized before write and must stay within the reader's 2 MiB physical line limit.
+record fails as `GrowthProfileExportError` with that destination and the original error. Each appended line is encoded in
+one pass before write: at most 64 nested containers, 1,048,576 visited objects and enumerable slots, and 2 MiB of UTF-8
+including the trailing newline, matching the reader's physical line limit. Getters and `toJSON` run once; over-budget,
+cyclic or unsupported values fail without a partial line.
 The `GROWTH_PROFILE` JSON line includes `statements`, with each scale's complete statement list and median rows,
 blocks and count across measured repetitions.
 Newly exported lines carry `measurement` `{version, indexProbes, source}`: version 1, the check's index-probe

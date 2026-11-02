@@ -79,3 +79,109 @@ test('an oversized record is refused before any bytes are written', () => {
   );
   expect(existsSync(destination)).toBe(false);
 });
+
+test('supported native values round-trip with JSON.stringify bytes', async () => {
+  const destination = join(directory, 'round-trip.jsonl');
+  const inner = { shared: 1 };
+  const records: unknown[] = [
+    { omit: undefined, keep: null, skipFn: () => {}, skipSym: Symbol('s'), later: 2 },
+    [undefined, null, 1, 'x'],
+    { text: '"\\\n\t\u0001', cafe: 'café', grin: '😀', lone: '\uD800', pair: '\uD800\uDC00' },
+    { n: [0, -0, 1.5, 1e21, Number.NaN, Infinity, -Infinity] },
+    { toJSON: () => ({ ok: true, key: '' }) },
+    new Date('2020-01-01T00:00:00.000Z'),
+    { n: Object(5), s: Object('a'), b: Object(false) },
+    { a: inner, b: inner },
+    (() => {
+      const extra = [1] as number[] & { foo: number };
+      extra.foo = 2;
+      return extra;
+    })(),
+    Array(2),
+  ];
+  for (const record of records) appendGrowthProfile({ destination, record, mode: 'required' });
+  expect(await readFile(destination)).toEqual(Buffer.from(`${records.map((record) => JSON.stringify(record)).join('\n')}\n`));
+});
+
+test('a near-boundary record writes and a one-byte overflow does not', async () => {
+  const destination = join(directory, 'boundary.jsonl');
+  const wrapper = Buffer.byteLength('{"payload":""}\n', 'utf8');
+  const payload = 'x'.repeat(GROWTH_PROFILE_OUTPUT_LIMITS.lineBytes - wrapper);
+  const first = appendGrowthProfile({ destination, record: { payload }, mode: 'required' });
+  expect(first?.bytes).toBe(GROWTH_PROFILE_OUTPUT_LIMITS.lineBytes);
+  expect(JSON.parse((await readFile(destination, 'utf8')).slice(0, -1))).toEqual({ payload });
+  expect(() =>
+    appendGrowthProfile({ destination, record: { payload: `${payload}x` }, mode: 'required' }),
+  ).toThrow(`exceeds the ${GROWTH_PROFILE_OUTPUT_LIMITS.lineBytes} byte profile line limit`);
+  expect((await readFile(destination)).byteLength).toBe(GROWTH_PROFILE_OUTPUT_LIMITS.lineBytes);
+});
+
+test('serialization admission stops before later getters and never writes a partial line', () => {
+  const destination = join(directory, 'admitted.jsonl');
+  let later = 0;
+  const oversized: Record<string, unknown> = { huge: 'x'.repeat(GROWTH_PROFILE_OUTPUT_LIMITS.lineBytes) };
+  Object.defineProperty(oversized, 'later', {
+    enumerable: true,
+    get() {
+      later++;
+      return 1;
+    },
+  });
+  expect(() => appendGrowthProfile({ destination, record: oversized, mode: 'required' })).toThrow(
+    `exceeds the ${GROWTH_PROFILE_OUTPUT_LIMITS.lineBytes} byte profile line limit`,
+  );
+  expect(later).toBe(0);
+
+  let nest: unknown = 1;
+  for (let depth = 0; depth < GROWTH_PROFILE_OUTPUT_LIMITS.depth; depth++) nest = { nest };
+  appendGrowthProfile({ destination: join(directory, 'depth-ok.jsonl'), record: nest, mode: 'required' });
+  expect(() =>
+    appendGrowthProfile({ destination, record: { nest }, mode: 'required' }),
+  ).toThrow(`exceeds the ${GROWTH_PROFILE_OUTPUT_LIMITS.depth} profile serialization depth limit`);
+
+  const wide = new Proxy([] as object[], {
+    get(_target, property) {
+      if (property === 'length') return GROWTH_PROFILE_OUTPUT_LIMITS.values;
+      if (typeof property === 'string' && property !== 'toJSON' && /^\d+$/.test(property)) return {};
+      return undefined;
+    },
+  });
+  expect(() => appendGrowthProfile({ destination, record: wide, mode: 'required' })).toThrow(
+    `exceeds the ${GROWTH_PROFILE_OUTPUT_LIMITS.values} profile serialization value limit`,
+  );
+
+  const cyclic: Record<string, unknown> = { a: 1 };
+  cyclic.self = cyclic;
+  try {
+    appendGrowthProfile({ destination, record: cyclic, mode: 'required' });
+    throw new Error('expected cyclic export to throw');
+  } catch (error) {
+    expect(error).toBeInstanceOf(GrowthProfileExportError);
+    if (!(error instanceof GrowthProfileExportError)) throw error;
+    expect(error.destination).toBe(destination);
+    expect(error.cause).toBeInstanceOf(TypeError);
+    expect((error.cause as Error).message).toBe('JSON.stringify cannot serialize cyclic structures.');
+  }
+
+  const warn = spyOn(console, 'warn').mockImplementation(() => {});
+  try {
+    expect(appendGrowthProfile({ destination, record: { n: 1n } })).toBeUndefined();
+    expect(warn.mock.calls[0]![0]).toContain('JSON.stringify cannot serialize BigInt.');
+  } finally {
+    warn.mockRestore();
+  }
+  expect(existsSync(destination)).toBe(false);
+
+  let toJSONCalls = 0;
+  appendGrowthProfile({
+    destination: join(directory, 'tojson.jsonl'),
+    record: {
+      toJSON() {
+        toJSONCalls++;
+        return { once: true };
+      },
+    },
+    mode: 'required',
+  });
+  expect(toJSONCalls).toBe(1);
+});
