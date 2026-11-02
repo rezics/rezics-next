@@ -1,4 +1,4 @@
-import { useId, type Ref } from 'react';
+import { useId, type MouseEventHandler, type Ref } from 'react';
 import { ContextNavigation, contextHref } from '../pages/context-navigation';
 import { Button } from '@rezics/ui/shadcn/button';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
@@ -14,7 +14,7 @@ import type { SourcePart, SourcesPageData, SourcesResult } from './subject-sourc
 type Props = {
   result: SourcesResult | { kind: 'loading' };
   locale: string;
-  onRetry?: () => void;
+  onRetry?: MouseEventHandler<HTMLButtonElement>;
   busy?: boolean;
   headingRef?: Ref<HTMLHeadingElement>;
 };
@@ -75,7 +75,7 @@ export function SubjectSourcesPage({ result, locale, onRetry, busy = false, head
             variant="outline"
             className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere]"
             disabled={busy}
-            onClick={() => onRetry()}
+            onClick={onRetry}
           >
             {m.sources_retry({}, o)}
           </Button>

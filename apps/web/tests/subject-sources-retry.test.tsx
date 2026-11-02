@@ -50,7 +50,21 @@ test('actual Sources retry returns focus locally and retires focus across reader
   const unavailable = { kind: 'unavailable' } as const;
   const tick = () => new Promise((done) => setTimeout(done, 0));
   try {
-    for (const mode of ['empty', 'failed', 'error', 'moved', 'canonical', 'reader', 'retired']) {
+    for (const mode of [
+      'empty',
+      'failed',
+      'denied',
+      'error',
+      'pointer',
+      'unfocused',
+      'moved',
+      'moved-back',
+      'tab',
+      'blur',
+      'canonical',
+      'reader',
+      'retired',
+    ]) {
       reader = 'alice';
       calls.length = 0;
       read = async () => {
@@ -93,15 +107,22 @@ test('actual Sources retry returns focus locally and retires focus across reader
         });
         read = () => held;
         await act(async () => {
-          opener.focus();
+          if (mode !== 'unfocused') opener.focus();
+          opener.dispatchEvent(new window.MouseEvent('click', { bubbles: true, detail: mode === 'pointer' ? 1 : 0 }));
           opener.click();
-          opener.click();
+          if (mode === 'moved-back') {
+            outside.focus();
+            opener.focus();
+          }
           await tick();
         });
         expect(calls).toHaveLength(2);
         expect(calls[1]).toEqual({ id: page.id, locale: 'en', realm: 'realm-a', reader: 'alice' });
         expect(host.querySelector('article')?.getAttribute('aria-busy')).toBe('true');
         if (mode === 'moved') outside.focus();
+        if (mode === 'tab') document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+        if (mode === 'blur') window.dispatchEvent(new window.Event('blur'));
+        if (['moved-back', 'tab', 'blur'].includes(mode)) opener.blur();
         if (mode === 'retired') {
           await act(async () => root.unmount());
           mounted = false;
@@ -125,8 +146,8 @@ test('actual Sources retry returns focus locally and retires focus across reader
                   sourcesHref: page.sourcesHref.replace(/\/[^/]+\/sources$/, '/renamed/sources'),
                 },
               }
-            : mode === 'failed'
-              ? unavailable
+            : mode === 'failed' || mode === 'denied'
+              ? ({ kind: mode === 'denied' ? 'denied' : 'unavailable' } as const)
               : ready;
         read = async () => returned;
         await act(async () => {
@@ -138,7 +159,7 @@ test('actual Sources retry returns focus locally and retires focus across reader
           expect(host.textContent).toContain(m.sources_empty());
           expect(document.activeElement).toBe(host.querySelector('[data-slot="view-heading"] h1'));
           expect(host.querySelector('button')).toBeNull();
-        } else if (mode === 'failed') {
+        } else if (mode === 'failed' || mode === 'denied') {
           expect(document.activeElement).toBe(
             opener.isConnected ? opener : host.querySelector('[data-slot="view-heading"] h1'),
           );
@@ -146,6 +167,9 @@ test('actual Sources retry returns focus locally and retires focus across reader
         } else {
           expect(document.activeElement).not.toBe(host.querySelector('[data-slot="view-heading"] h1'));
           if (mode === 'moved' || mode === 'retired') expect(document.activeElement).toBe(outside);
+          if (mode === 'pointer' || ['moved-back', 'tab', 'blur'].includes(mode))
+            expect(document.activeElement).toBe(document.body);
+          if (mode === 'unfocused') expect(document.activeElement).toBe(outside);
         }
         if (mode === 'canonical') {
           expect(router.state.location.pathname).toEndWith('/renamed/sources');

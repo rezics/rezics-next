@@ -364,7 +364,10 @@ Composition view template. It uses the ordinary anonymous `GET /v1/subjects/{id}
 current disclosure and one-hop merge handling. Stale identities redirect to the current subject and retain the
 query and fragment. Missing and hidden subjects use the same concealed not-found state. Denied, invalid, changed
 selection and unavailable responses remain failures; retry reads the same address again.
-An explicit Sources retry keeps focus on a surviving recovery button or moves it to the returned Sources heading; moving focus away, navigation, locale or Context-reader changes retire that focus intent, and pending retries issue only one read.
+Only an explicit keyboard Sources retry from the focused Retry button keeps focus on that surviving control or
+moves it to the current Sources heading when the control disappears; pointer retry performs the same read quietly.
+Decision: use the focused Retry click's zero detail to admit keyboard intent; moving away and back, Tab, window blur,
+navigation, locale or Context-reader changes retire that intent, and pending retries issue only one read.
 
 The page groups the currently disclosed selected facts by field, using emitted property labels and released Type
 labels with the existing locale fallback. It follows the overview's selected rank, summary-language and safe spoiler

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useSyncExternalStore } from 'react';
+import { useLayoutEffect, useRef, useSyncExternalStore, type MouseEvent } from 'react';
 import { useRouter, useRouterState } from '@tanstack/react-router';
 import { subjectReaderPartition } from '../pages/context-reader';
 import { useSession } from '../../session/query';
@@ -89,26 +89,40 @@ export function useSourcesRetry({
     }
   });
 
-  const onRetry = () => {
+  const onRetry = (event: MouseEvent<HTMLButtonElement>) => {
     if (retry.pending || busy || loading) return;
     retire();
     const document = headingRef.current?.ownerDocument;
     if (!document) return;
-    const opener = document.activeElement;
+    const opener = event.currentTarget;
     const intent: Intent = {
       scope,
       opener,
-      focus: opener?.tagName === 'BUTTON' && headingRef.current?.closest('article')?.contains(opener) === true,
+      focus:
+        event.detail === 0 &&
+        document.activeElement === opener &&
+        headingRef.current?.closest('article')?.contains(opener) === true,
       dispose: () => {},
     };
     const moved = (event: FocusEvent) => {
       if (event.target !== opener && event.target !== document.body) intent.focus = false;
     };
+    // Losing focus to body during replacement is expected; deliberate departure is final.
+    const cancelFocus = () => {
+      intent.focus = false;
+    };
+    const tabbed = (event: KeyboardEvent) => {
+      if (event.key === 'Tab') cancelFocus();
+    };
     const leave = router.subscribe('onBeforeNavigate', retire);
     document.addEventListener('focusin', moved);
+    document.addEventListener('keydown', tabbed, true);
+    document.defaultView?.addEventListener('blur', cancelFocus);
     intent.dispose = () => {
       leave();
       document.removeEventListener('focusin', moved);
+      document.removeEventListener('keydown', tabbed, true);
+      document.defaultView?.removeEventListener('blur', cancelFocus);
     };
     retry.intent = intent;
     retry.pending = true;
