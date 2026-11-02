@@ -154,15 +154,16 @@ test('ordered language selections stay distinct through local sync and resume wi
       return { ok: true, value: { id, revision, lastUsed } };
     },
   };
-  const makeAdapter = () => createRecentSearchSyncAdapter({
-    accountId,
-    bucket,
-    currentBucket: () => bucket,
-    storage,
-    onRemote: (next) => {
-      visible = next;
-    },
-  });
+  const makeAdapter = () =>
+    createRecentSearchSyncAdapter({
+      accountId,
+      bucket,
+      currentBucket: () => bucket,
+      storage,
+      onRemote: (next) => {
+        visible = next;
+      },
+    });
   let adapter = makeAdapter();
   local(storage, entries);
   await adapter.sync(entries, signal());
@@ -210,7 +211,11 @@ test('ordered language selections stay distinct through local sync and resume wi
   await adapter.sync(readRecentHistory(storage, bucket), signal());
   expect(writes.filter((write) => write.change.kind === 'use')).toHaveLength(3);
   const removed = stored.find((entry) => entry.languages?.[0] === 'fr')!;
-  local(storage, readRecentHistory(storage, bucket).filter((entry) => entry.id !== removed.id), [removed.id]);
+  local(
+    storage,
+    readRecentHistory(storage, bucket).filter((entry) => entry.id !== removed.id),
+    [removed.id],
+  );
   await adapter.sync(readRecentHistory(storage, bucket), signal());
   expect(writes.filter((write) => write.change.kind === 'remove')).toHaveLength(1);
   expect(
