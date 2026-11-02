@@ -10,20 +10,9 @@ const { Window } = await import(
 const window = new Window({ url: 'https://site.test/en/spaces/shelf' });
 const globals = {
   ...Object.fromEntries(
-    [
-      'document',
-      'navigator',
-      'location',
-      'HTMLElement',
-      'Element',
-      'Node',
-      'Document',
-      'DocumentFragment',
-      'HTMLButtonElement',
-      'HTMLFormElement',
-      'MutationObserver',
-      'ResizeObserver',
-    ].map((key) => [key, window[key as keyof typeof window]]),
+    'document navigator location HTMLElement Element Node Document DocumentFragment HTMLButtonElement HTMLFormElement MutationObserver ResizeObserver'
+      .split(' ')
+      .map((key) => [key, window[key as keyof typeof window]]),
   ),
   window,
   getComputedStyle: window.getComputedStyle.bind(window),
@@ -73,13 +62,7 @@ const page: SpacePageData = {
     credentialMode: 'session',
   },
 };
-function deferred() {
-  let resolve!: (value: ShelfPage<ReturnType<typeof added>>) => void;
-  const promise = new Promise<ShelfPage<ReturnType<typeof added>>>((yes) => {
-    resolve = yes;
-  });
-  return { resolve, promise };
-}
+const deferred = () => Promise.withResolvers<ShelfPage<ReturnType<typeof added>>>();
 const reads = {
   boards: [] as ReturnType<typeof deferred>[],
   publications: [] as ReturnType<typeof deferred>[],
@@ -179,19 +162,36 @@ async function accept(kind: 'boards' | 'publications', items: ReturnType<typeof 
 const announcement = (kind: string) => section(kind).querySelector('.sr-only[role="status"]')!.textContent;
 const kinds = ['boards', 'publications'] as const;
 
-test('each keyboard Next admits one page and hands focus to its named new portion independently', async () => {
+const name = (kind: string) => (kind === 'boards' ? m.realm_boards_heading() : m.realm_published_heading());
+test('independent keyboard continuation names new entries and sparse boundaries without counting duplicates or hidden rows', async () => {
   await mount();
   for (const kind of kinds) {
     await activate(kind);
-    await accept(kind, [added(kind, kind === 'boards' ? 'original-board' : 'original-publication'), added(kind)]);
-    expect(document.activeElement?.textContent).toContain('new-entry');
-    expect(document.activeElement?.getAttribute('aria-label')).toContain(
-      kind === 'boards' ? m.realm_boards_heading() : m.realm_published_heading(),
+    await accept(
+      kind,
+      [added(kind, kind === 'boards' ? 'original-board' : 'original-publication'), added(kind)],
+      'sparse-next',
     );
-    expect(announcement(kind)).toContain('1');
+    expect(document.activeElement?.textContent).toContain('new-entry');
+    expect(document.activeElement?.getAttribute('aria-label')).toContain(name(kind));
+    expect(announcement(kind)).toBe(m.realm_shelf_added({ shelf: name(kind), count: 1 }));
+    for (const next of ['sparse-next', null]) {
+      await activate(kind);
+      await accept(kind, next ? [] : [added(kind)], next);
+      expect(document.activeElement).toBe(section(kind).querySelector('h2'));
+      expect(announcement(kind)).toBe(m.realm_shelf_sparse({ shelf: name(kind) }));
+    }
     expect(section(kind).querySelector('button')).toBeNull();
+    expect(reads[kind]).toHaveLength(3);
   }
-  expect(cursors).toEqual(['boards-next', 'publications-next']);
+  expect(cursors).toEqual([
+    'boards-next',
+    'sparse-next',
+    'sparse-next',
+    'publications-next',
+    'sparse-next',
+    'sparse-next',
+  ]);
 });
 
 test('failure keeps recovery focused; retry preserves the cursor and reload replaces the denied or stale window', async () => {
@@ -211,20 +211,6 @@ test('failure keeps recovery focused; retry preserves the cursor and reload repl
       expect(section(kind).textContent?.includes(`original-${kind === 'boards' ? 'board' : 'publication'}`)).toBe(
         failure === 'unavailable',
       );
-    }
-});
-
-test('duplicate-only and sparse pages focus the named boundary without counting unavailable rows', async () => {
-  for (const kind of kinds)
-    for (const next of [null, 'sparse-next']) {
-      await mount();
-      await activate(kind);
-      await accept(kind, [added(kind, kind === 'boards' ? 'original-board' : 'original-publication')], next);
-      expect(document.activeElement).toBe(section(kind).querySelector('h2'));
-      expect(announcement(kind)).toBe(
-        m.realm_shelf_sparse({ shelf: kind === 'boards' ? m.realm_boards_heading() : m.realm_published_heading() }),
-      );
-      expect(reads[kind]).toHaveLength(1);
     }
 });
 
