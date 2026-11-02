@@ -960,8 +960,7 @@ export type RelatedState = {
   labels: Item['labels'];
 };
 
-type RelatedCache = { ids: string[]; pending: Promise<Map<string, RelatedState>> };
-const relatedLoads = new WeakMap<object, RelatedCache>();
+type RelatedEpisode = { ids: string[]; pending?: Promise<Map<string, RelatedState>> };
 
 async function queryRelated(client: Queryable, ids: readonly string[]): Promise<Map<string, RelatedState>> {
   const states = new Map<string, RelatedState>();
@@ -978,10 +977,15 @@ async function queryRelated(client: Queryable, ids: readonly string[]): Promise<
   return states;
 }
 
-/** One statement per partition for visibility, eligibility, labels and redirects. Repeated calls on the same client reuse a superset. */
-export function loadRelated(client: object, ids: readonly string[]): Promise<Map<string, RelatedState>> {
+/** One statement per partition for visibility, eligibility, labels and redirects. */
+function loadRelatedInEpisode(
+  client: object,
+  ids: readonly string[],
+  episode: RelatedEpisode,
+): Promise<Map<string, RelatedState>> {
   assertBatch(ids, 'A related read accepts at most 256 ids');
-  const known = relatedLoads.get(client);
+  const known =
+    episode.pending === undefined ? null : { ids: episode.ids, pending: episode.pending };
   if (known && ids.every((id) => known.ids.includes(id))) return known.pending;
   const pending = queryRelated(client as Queryable, ids).then(async (fetched) => {
     const prior = known ? await known.pending : new Map<string, RelatedState>();
@@ -989,19 +993,27 @@ export function loadRelated(client: object, ids: readonly string[]): Promise<Map
     for (const [id, state] of fetched) merged.set(id, state);
     return merged;
   });
-  relatedLoads.set(client, { ids: [...new Set([...(known?.ids ?? []), ...ids])], pending });
+  episode.ids = [...new Set([...(known?.ids ?? []), ...ids])];
+  episode.pending = pending;
   return pending;
+}
+
+/** Loads current related state; callers may reuse it only within their bounded read episode. */
+export function loadRelated(client: object, ids: readonly string[]): Promise<Map<string, RelatedState>> {
+  assertBatch(ids, 'A related read accepts at most 256 ids');
+  return queryRelated(client as Queryable, ids);
 }
 
 function isPool(value: Pool | PoolClient): value is Pool {
   return typeof (value as Pool).connect === 'function' && typeof (value as PoolClient).release !== 'function';
 }
 
-/** Labels of the requested ids, following one redirect, from the shared related read. */
+/** Labels of the requested ids, following one redirect, from this related-read episode. */
 export async function readRelated(db: Pool | PoolClient, ids: readonly string[]) {
   assertBatch(ids, 'A related read accepts at most 256 ids');
   const assemble = async (client: PoolClient) => {
-    const states = await loadRelated(client, ids);
+    const episode: RelatedEpisode = { ids: [] };
+    const states = await loadRelatedInEpisode(client, ids, episode);
     const targets = [
       ...new Set(
         ids.flatMap((id) => {
@@ -1010,7 +1022,7 @@ export async function readRelated(db: Pool | PoolClient, ids: readonly string[])
         }),
       ),
     ];
-    const targetStates = targets.length > 0 ? await loadRelated(client, targets) : states;
+    const targetStates = targets.length > 0 ? await loadRelatedInEpisode(client, targets, episode) : states;
     const related: Record<string, { labels: Item['labels']; redirect?: string }> = {};
     for (const id of ids) {
       const state = states.get(id);
