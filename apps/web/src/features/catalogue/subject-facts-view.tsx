@@ -7,7 +7,7 @@ import {
 } from './editor-lifetime';
 import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import type { ReactNode, RefObject } from 'react';
+import type { ReactNode, RefObject, Ref } from 'react';
 import {
   AuthoringDepartureBoundary,
   useAuthoringDeparture,
@@ -581,6 +581,7 @@ function SubjectFactsLive({
   review,
   initialReview,
   profile,
+  profileHeadingRef,
   profileIntro,
   profileRelations,
   embedded = false,
@@ -592,6 +593,7 @@ function SubjectFactsLive({
   review: (property: string, session?: string) => CandidateTransport;
   initialReview?: ReviewAddress | undefined;
   profile?: FactsProfile | undefined;
+  profileHeadingRef?: Ref<HTMLHeadingElement> | undefined;
   profileIntro?: ReactNode;
   profileRelations?: ReactNode;
   embedded?: boolean;
@@ -737,7 +739,13 @@ function SubjectFactsLive({
       {!embedded && (
         <header className="space-y-3">
           {profile ? (
-            <h1 className="font-sans text-2xl font-semibold">{profile.title}</h1>
+            <h1
+              ref={profileHeadingRef}
+              tabIndex={profileHeadingRef ? -1 : undefined}
+              className="font-sans text-2xl font-semibold"
+            >
+              {profile.title}
+            </h1>
           ) : (
             <h1 className="text-2xl font-semibold">{m.facts_title({}, o)}</h1>
           )}

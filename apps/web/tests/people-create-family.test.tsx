@@ -47,7 +47,9 @@ test('whole Person and Organization creation families retain exact facts, indepe
   const { PeopleProfileEditor } = await import('../src/features/catalogue/people-profile-view');
   const { peopleProfiles } = await import('../src/features/catalogue/people-profile');
   const { definitionText } = await import('../src/features/catalogue/definition-guide');
-  const { peopleProfileFixture, peopleCreatedId } = await import('../src/kernel/fake/catalogue-people-profile');
+  const { peopleProfileFixture, peopleCreatedId, peoplePersonId } = await import(
+    '../src/kernel/fake/catalogue-people-profile'
+  );
   const { m } = await import('../src/paraglide/messages.js');
   const { getLocale, setLocale } = await import('../src/paraglide/runtime.js');
   const testing = createRequire(require.resolve('storybook/test'));
@@ -100,9 +102,10 @@ test('whole Person and Organization creation families retain exact facts, indepe
     });
   }
   type Fixture = ReturnType<typeof peopleProfileFixture>;
-  function editor(fixture: Fixture, transport = fixture.transport, session: Session = 'signed-in') {
+  function editor(fixture: Fixture, transport = fixture.transport, session: Session = 'signed-in', id?: string) {
     return (
       <PeopleProfileEditor
+        id={id}
         locale="en"
         session={session}
         transport={transport}
@@ -759,6 +762,84 @@ test('whole Person and Organization creation families retain exact facts, indepe
           .sort(),
       ).toEqual(['catalogue-create', 'people-profile']);
     }
+    const deferredRead = () => {
+      let resolve!: (result: PeopleRead) => void;
+      return { promise: new Promise<PeopleRead>((done) => (resolve = done)), resolve };
+    };
+    const retryFixture = peopleProfileFixture();
+    const freshMetadata = await retryFixture.transport.load();
+    if (!freshMetadata.ok) throw new Error('Expected fresh People creation metadata');
+    const firstRead = deferredRead();
+    const retriedRead = deferredRead();
+    let retryLoads = 0;
+    const retryTransport: PeopleTransport = {
+      ...retryFixture.transport,
+      load: async () => {
+        const attempt = ++retryLoads;
+        return attempt === 1
+          ? firstRead.promise
+          : attempt === 2
+            ? retriedRead.promise
+            : freshMetadata;
+      },
+    };
+    await render(editor(retryFixture, retryTransport));
+    expect(canvas().queryByRole('button', { name: m.catalogue_create_retry() })).toBeNull();
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+    const initialFocus = window.document.activeElement;
+    await act(async () => firstRead.resolve({ ok: false, reason: 'unavailable' }));
+    const retryButton = await waitFor(() => canvas().getByRole('button', { name: m.catalogue_create_retry() }));
+    expect(window.document.activeElement).toBe(initialFocus);
+    retryButton.focus();
+    await act(async () => user.keyboard('{Enter}'));
+    await waitFor(() => expect(retryButton.getAttribute('aria-disabled')).toBe('true'));
+    expect(canvas().getByRole('status').textContent).toContain(m.catalogue_create_loading());
+    await act(async () => retryButton.dispatchEvent(new window.MouseEvent('click', { bubbles: true })));
+    expect(retryLoads).toBe(2);
+    await act(async () => retriedRead.resolve({ ok: false, reason: 'denied' }));
+    await waitFor(() => expect(host.textContent).toContain(m.correction_denied()));
+    await waitFor(() => expect(window.document.activeElement).toBe(retryButton));
+    await act(async () => user.keyboard('{Enter}'));
+    await waitFor(() => canvas().getByRole('combobox', { name: m.catalogue_create_type() }));
+    await waitFor(() => expect(window.document.activeElement).toBe(host.querySelector('h1')));
+    expect(initialFocus).toBe(window.document.body);
+    await choose('schema:Person');
+    expect(host.querySelector('#create-label-0')).not.toBeNull();
+
+    const retiredFixture = peopleProfileFixture();
+    const personFixture = peopleProfileFixture('ready', 'en', 'person');
+    const personRead = await personFixture.transport.load();
+    if (!personRead.ok) throw new Error('Expected matching People profile metadata');
+    const retiredCompletion = deferredRead();
+    let retiredLoads = 0;
+    const retiredTransport: PeopleTransport = {
+      ...retiredFixture.transport,
+      read: personFixture.transport.read,
+      load: async () => {
+        const attempt = ++retiredLoads;
+        return attempt === 1
+          ? { ok: false, reason: 'unavailable' }
+          : attempt === 2
+            ? retiredCompletion.promise
+            : personRead;
+      },
+    };
+    await render(editor(retiredFixture, retiredTransport));
+    const retiredRetry = await waitFor(() => canvas().getByRole('button', { name: m.catalogue_create_retry() }));
+    retiredRetry.focus();
+    await act(async () => user.keyboard('{Enter}'));
+    await waitFor(() => expect(retiredRetry.getAttribute('aria-disabled')).toBe('true'));
+    await render(editor(personFixture, retiredTransport, 'signed-in', peoplePersonId), 'signed-in', false);
+    await waitFor(() => expect(host.textContent).toContain('Mira Sato'));
+    const profileHeading = await waitFor(() => host.querySelector('h1') as HTMLHeadingElement);
+    profileHeading.focus();
+    await act(async () => {
+      retiredCompletion.resolve({ ok: false, reason: 'denied' });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(window.document.activeElement).toBe(profileHeading);
+    expect(host.textContent).not.toContain(m.correction_denied());
+    expect(canvas().queryByRole('combobox', { name: m.catalogue_create_type() })).toBeNull();
     expect(extraReads).toEqual([]);
   } finally {
     await act(async () => root.unmount());

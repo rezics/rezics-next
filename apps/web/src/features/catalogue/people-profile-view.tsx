@@ -1,6 +1,6 @@
 import { CatalogueCurrentReading, catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, type Ref } from 'react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Field, FieldError, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -8,7 +8,7 @@ import { ContentItemFrame, ContentItemHeading, ContentItemTitleLink } from '@rez
 import { m } from '../../paraglide/messages.js';
 import { subjectHref } from '../../subject/subject-href';
 import type { CandidateTransport } from '../../subject/candidate-review';
-import { ViewHeadingActions } from '../pages/view-heading';
+import { ViewHeading, ViewHeadingActions } from '../pages/view-heading';
 import { CreateSubjectForm } from './create-subject-form';
 import { definitionText } from './definition-guide';
 import { EditorFailure, ScalarControl } from './statement-editor-view';
@@ -324,6 +324,7 @@ function PeopleCreate({
   session,
   transport,
   onNavigate,
+  headingRef,
 }: {
   read: Current;
   current: boolean;
@@ -335,6 +336,7 @@ function PeopleCreate({
   session: Session;
   transport: PeopleTransport;
   onNavigate: (href: string) => void;
+  headingRef: Ref<HTMLHeadingElement>;
 }) {
   const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
@@ -399,7 +401,12 @@ function PeopleCreate({
   }
   return (
     <section className="mx-auto min-w-0 w-full max-w-3xl space-y-6 [overflow-wrap:anywhere]">
-      <ViewHeadingActions label={m.people_profile_title({}, o)} headingClassName="font-sans" />
+      <ViewHeading
+        label={m.people_profile_title({}, o)}
+        headingClassName="font-sans"
+        headingRef={headingRef}
+        headingTabIndex={-1}
+      />
       {current && <ProfileIntro read={read} locale={locale} />}
       {created && (
         <p role="status">
@@ -629,6 +636,12 @@ function PeopleProfileEditorLive({
   const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
   const client = useQueryClient();
+  const retryHeading = useRef<HTMLHeadingElement>(null);
+  const retryButton = useRef<HTMLButtonElement>(null);
+  const nextRetryOrigin = useRef(0);
+  const retryInFlight = useRef(false);
+  const [retryOrigin, setRetryOrigin] = useState(0);
+  const [retryCompleted, setRetryCompleted] = useState(0);
   // Retained metadata supports private holders; only an admitted query supplies public authority.
   const retained = useRef<Current | undefined>(undefined);
   function matching(next: PeopleRead): PeopleRead {
@@ -681,6 +694,24 @@ function PeopleProfileEditorLive({
   const read = query.isError || (id && (query.isFetching || refreshing)) ? undefined : observed;
   const current = !!read?.ok && !query.isFetching;
   if (current && read?.ok) retained.current = read;
+  const retryPending = retryOrigin !== 0 && (retryCompleted !== retryOrigin || query.isFetching);
+  function retryInitialRead() {
+    if (!lifetime.active() || retryInFlight.current || query.isFetching) return;
+    const origin = ++nextRetryOrigin.current;
+    retryInFlight.current = true;
+    setRetryOrigin(origin);
+    void query.refetch().finally(() => {
+      if (!lifetime.active()) return;
+      retryInFlight.current = false;
+      setRetryCompleted(origin);
+    });
+  }
+  useEffect(() => {
+    if (!retryOrigin || retryCompleted !== retryOrigin || query.isFetching || !lifetime.active()) return;
+    if (read?.ok) retryHeading.current?.focus();
+    else retryButton.current?.focus();
+    setRetryOrigin((currentOrigin) => (currentOrigin === retryOrigin ? 0 : currentOrigin));
+  }, [lifetime, query.dataUpdatedAt, query.errorUpdatedAt, query.isFetching, read?.ok, retryCompleted, retryOrigin]);
   if (id && session === 'signed-in' && retained.current?.public) {
     const privateRead = retained.current;
     const visible = current;
@@ -722,6 +753,7 @@ function PeopleProfileEditorLive({
                 peopleProfiles(current.release, locale).find((profile) => profile.id === current.public.subject.type)
                   ?.fields ?? [],
             }}
+          profileHeadingRef={retryHeading}
             profileIntro={<ProfileIntro read={privateRead} locale={locale} />}
             transport={{
               propose,
@@ -767,28 +799,41 @@ function PeopleProfileEditorLive({
         session={session}
         transport={transport}
         onNavigate={onNavigate}
+        headingRef={retryHeading}
       />
     );
   if (!read?.ok)
     return (
       <article className="mx-auto w-full min-w-0 max-w-4xl space-y-4 p-4 sm:p-6 [overflow-wrap:anywhere]">
         <ViewHeadingActions label={m.people_profile_title({}, o)} headingClassName="font-sans" />
-        {query.isPending ? (
+        {query.isPending || retryPending ? (
           <p role="status">{m.catalogue_create_loading({}, o)}</p>
         ) : (
-          <>
-            <EditorFailure reason={read && !read.ok ? read.reason : 'unavailable'} locale={locale} />
-            <Button type="button" variant="outline" className={peopleActionTarget} onClick={() => void query.refetch()}>
-              {m.catalogue_create_retry({}, o)}
-            </Button>
-          </>
+          <EditorFailure reason={read && !read.ok ? read.reason : 'unavailable'} locale={locale} />
+        )}
+        {!query.isPending && (
+          <Button
+            ref={retryButton}
+            type="button"
+            variant="outline"
+            className={peopleActionTarget}
+            aria-disabled={retryPending}
+            onClick={retryInitialRead}
+          >
+            {m.catalogue_create_retry({}, o)}
+          </Button>
         )}
       </article>
     );
   if (session !== 'signed-in')
     return (
       <article className="mx-auto w-full min-w-0 max-w-4xl space-y-4 p-4 sm:p-6 [overflow-wrap:anywhere]">
-        <ViewHeadingActions label={m.people_profile_title({}, o)} headingClassName="font-sans" />
+        <ViewHeading
+          label={m.people_profile_title({}, o)}
+          headingClassName="font-sans"
+          headingRef={retryHeading}
+          headingTabIndex={-1}
+        />
         <ProfileIntro read={read} locale={locale} />
         <p role="status">
           {session === 'signed-out'
