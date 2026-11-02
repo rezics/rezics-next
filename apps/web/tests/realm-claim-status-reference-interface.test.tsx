@@ -230,7 +230,9 @@ test('current and earlier pending/approved episodes retain visible outcomes, war
             expect(host.textContent).toContain(
               row.state === 'approved'
                 ? m.realm_claim_status_approved_help()
-                : currentEpisode ? m.realm_claim_review_help() : m.realm_claim_status_old_pending(),
+                : currentEpisode
+                  ? m.realm_claim_review_help()
+                  : m.realm_claim_status_old_pending(),
             );
             expect(host.textContent?.includes(m.realm_claim_status_old_episode())).toBe(!currentEpisode);
             expect(host.querySelectorAll('time')).toHaveLength(row.approvedAt ? 3 : 2);
@@ -305,7 +307,9 @@ test('withheld projections remove all receipt material from the DOM, including a
           ? m.realm_claim_status_signed_out()
           : kind === 'denied'
             ? m.realm_claim_status_denied()
-            : kind === 'closed' ? m.realm_claim_status_closed() : m.realm_claim_status_unavailable(),
+            : kind === 'closed'
+              ? m.realm_claim_status_closed()
+              : m.realm_claim_status_unavailable(),
       );
     }
     await render(own(approved), { ready: false });
