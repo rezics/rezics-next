@@ -347,8 +347,15 @@ function codexEvent(event: Record<string, any>, hasRollout: boolean): AgentEvent
       },
     ];
   }
-  if (item.type === 'agent_message') result.answer = item.text ?? '';
-  if (payload.type === 'message' && payload.role === 'assistant')
+  // Only a completed message is an answer: a started or streamed item, or a rollout event_msg echo, carries partial or
+  // no text, and replacing the answer with it lost a worker's final report.
+  if (item.type === 'agent_message' && event.type === 'item.completed')
+    result.answer = typeof item.text === 'string' ? item.text : '';
+  if (
+    payload.type === 'message' &&
+    payload.role === 'assistant' &&
+    (event.type === 'response_item' || event === payload)
+  )
     result.answer = (payload.content ?? []).map((part: { text?: string }) => part.text ?? '').join('\n');
   return Object.keys(result).length ? result : null;
 }

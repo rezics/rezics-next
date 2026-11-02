@@ -43,7 +43,13 @@ import { evidenceBundle } from './evidence.ts';
 import { consult } from './consult.ts';
 import { makeRecord, readMeasurement, readLogTail, reportedApproaches, CHECK_HOST_TRANSPORT } from './records.ts';
 import { readRouting } from './routing.ts';
-import { isSqliteContention, settle, SETTLEMENT_CONTENTION_BACKOFF_MS } from './settle.ts';
+import {
+  FINAL_REPORT_PROMPT,
+  finalReportPending,
+  isSqliteContention,
+  settle,
+  SETTLEMENT_CONTENTION_BACKOFF_MS,
+} from './settle.ts';
 import { firstFailure } from './merge.ts';
 import {
   canonicalConflictPaths,
@@ -466,6 +472,7 @@ export class WorkerJob implements GateOutcomeSink {
       if (observed.status === 'running') return null;
       return `Original proof result: ${JSON.stringify(observed)}`;
     }
+    if (finalReportPending(this.tasks.store, attempt)) return FINAL_REPORT_PROMPT;
     const checks = attempt.checks ?? [];
     if (!checks.length) return 'The waiting attempt has no saved check ids; resume and report this recovery issue.';
     const directory = join(task.worktree, '.temp/goal/checks');
@@ -631,19 +638,23 @@ export class WorkerJob implements GateOutcomeSink {
           'wake',
           currentAttempt.escalation === 'import' ? 'adopted-legacy' : 'managed',
         );
-        const prompt = [
-          workerPrompt(
-            currentTask,
-            canResume ? undefined : currentAttempt.evidencePath,
-            undefined,
-            [],
-            this.tasks.settings.mainCheckout,
-            context,
-            this.tasks.settings.stateDirectory,
-          ),
-          `The checks you started have finished or could not be found. ${message}`,
-          'Continue the same task. Do not wait or poll for these checks again. Finish with the required exit object.',
-        ].join('\n\n');
+        // A report-only continuation needs the session's own context, not the contract again.
+        const prompt =
+          message === FINAL_REPORT_PROMPT && canResume
+            ? FINAL_REPORT_PROMPT
+            : [
+                workerPrompt(
+                  currentTask,
+                  canResume ? undefined : currentAttempt.evidencePath,
+                  undefined,
+                  [],
+                  this.tasks.settings.mainCheckout,
+                  context,
+                  this.tasks.settings.stateDirectory,
+                ),
+                `The checks you started have finished or could not be found. ${message}`,
+                'Continue the same task. Do not wait or poll for these checks again. Finish with the required exit object.',
+              ].join('\n\n');
         worker = await launch(
           this.tasks.store,
           currentTask,

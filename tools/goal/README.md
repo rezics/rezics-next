@@ -138,6 +138,12 @@ previous turn's `waiting` result. Attempt measurements still include the availab
 up to three resume launch attempts; if all fail before opening a session, Goal stops the attempt and sends one
 environment notice with the launch error line to the supermanager.
 
+Only a completed agent message is a Codex answer; started or streamed items and rollout echoes never replace it. A
+worker that exits 0 with a resumable session but without its exit object is asked for it once, in the same session and
+attempt: settlement leaves the attempt waiting with a `final-report-requested` event, and the host resumes it like a
+check wake with only a short report-only prompt (no edits, commands or checks). If that run still gives no report, the
+attempt ends as an ordinary missing-report failure.
+
 Every fresh launch, retry, held-task release and check wake renders a bounded controller launch context from the current
 task generation under its lease. It records the current contract hash and path, task base and worktree identity, and one
 line for each declared `after:` dependency: integrated in the task's base at its commit, or not in the base, so the

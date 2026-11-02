@@ -23,6 +23,19 @@ export function isSqliteContention(error: unknown): boolean {
     (error instanceof Error && SQLITE_CONTENTION.test(error.message))
   );
 }
+/** The one same-session request for the exit object of a worker that exited 0 without it. */
+export const FINAL_REPORT_REQUESTED = 'final-report-requested';
+export const FINAL_REPORT_PROMPT =
+  'Your last run ended without the required JSON exit object. Do not edit, commit, run commands or checks, or repeat any work. Reply with only the exit object (status, summary, blocker, checks, approaches) for the work this session has already done: success with an empty checks array when your outcome is complete, otherwise blocked with the real blocker.';
+/** Whether the attempt waits for its report-only continuation: requested, and no run started since. */
+export function finalReportPending(store: WorkerTasks['store'], ref: { taskId: string; attempt: number }): boolean {
+  return (
+    store
+      .events(ref.taskId, ref.attempt)
+      .findLast((event) => event.kind === FINAL_REPORT_REQUESTED || event.kind === 'worker-run-started')?.kind ===
+    FINAL_REPORT_REQUESTED
+  );
+}
 /** Pauses between settlement write tries; each try already waits the store's busy timeout. */
 export const SETTLEMENT_CONTENTION_BACKOFF_MS = [500, 1_000, 2_000, 4_000, 8_000];
 
@@ -197,6 +210,32 @@ export async function settle(
           attempt.exitCode = code;
           attempt.session = measurement.session ?? attempt.session;
         });
+        return;
+      }
+      // A worker that exited 0 without its exit object is asked for it once, in the same session and attempt, instead
+      // of spending another attempt that repeats its checks. The host resumes it like a check wake.
+      const adapter = agentAdapter(current.profile.cli);
+      const session = measurement.session ?? current.session;
+      if (
+        code === 0 &&
+        !proofTask &&
+        session &&
+        adapter.canResume &&
+        !measurement.failureKind &&
+        !measurement.blocker &&
+        !reportsSuccess(measurement.result, adapter) &&
+        !store.events(ref.taskId, ref.attempt).some((event) => event.kind === FINAL_REPORT_REQUESTED)
+      ) {
+        store.updateAttempt(ref, (attempt) => {
+          attempt.state = 'waiting';
+          attempt.checks = [];
+          attempt.process = null;
+          attempt.driver = null;
+          attempt.exitCode = code;
+          attempt.session = session;
+          attempt.result = measurement.result;
+        });
+        store.event(ref, FINAL_REPORT_REQUESTED, { result: measurement.result.slice(-2000) });
         return;
       }
       const attempt = store.updateAttempt(ref, (a) => {
