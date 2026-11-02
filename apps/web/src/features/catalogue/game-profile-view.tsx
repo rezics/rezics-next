@@ -489,9 +489,16 @@ function GameCorrection({
               review={transport.review}
             />
           </details>
-          {!!groups.classification.length && (
-            <details hidden={!visible} className="min-w-0 max-w-full space-y-4 rounded-xl border border-border p-4">
-              {visible && (
+          <details
+            hidden={!visible}
+            open={groups.classification.length ? undefined : true}
+            className={
+              groups.classification.length
+                ? 'min-w-0 max-w-full space-y-4 rounded-xl border border-border p-4'
+                : 'contents'
+            }
+          >
+              {visible && !!groups.classification.length && (
                 <summary className={`${gameDisclosureSummaryClass} font-sans font-semibold`}>
                   {m.game_profile_classification({}, o)}
                 </summary>
@@ -503,8 +510,7 @@ function GameCorrection({
                 transport={transport.classifications}
                 review={transport.classificationReview}
               />
-            </details>
-          )}
+          </details>
           {!!fields.length && (
             <details hidden={!visible} className="min-w-0 max-w-full rounded-xl border border-border p-4">
               {visible && (

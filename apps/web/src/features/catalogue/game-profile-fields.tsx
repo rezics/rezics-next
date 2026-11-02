@@ -473,13 +473,16 @@ function GameClassificationsLive({
 }) {
   const lifetime = useEditorLifetime();
   const visible = useCurrentReadingVisible();
+  const context = { ...read, source: null };
+  const fields = gameGroups(read.release, read.public.subject.type).classification;
   const [drafts, setDrafts] = useState<FactDraft[]>([]);
+  const [draftReleases, setDraftReleases] = useState<Record<string, Release>>({});
   const [busy, setBusy] = useState(false);
   const running = useRef(false);
   const holder = useRef<HTMLElement>(null);
   const focusAfterDiscard = useRef<FactDraft | null>(null);
-  const current = useRef({ drafts, busy, lifetime });
-  current.current = { drafts, busy, lifetime };
+  const current = useRef({ drafts, busy, lifetime, fields, read });
+  current.current = { drafts, busy, lifetime, fields, read };
   const canDiscard = (row: FactDraft) =>
     current.current.lifetime.active() &&
     !running.current &&
@@ -500,8 +503,8 @@ function GameClassificationsLive({
   const [address, setAddress] = useState<{ property: string; candidate: string; session?: string | undefined }>();
   const [comparison, setComparison] = useState<CandidateTransport>();
   const o = { locale: locale as never };
-  const context = { ...read, source: null };
-  const fields = gameGroups(read.release, read.public.subject.type).classification;
+  const withdrawnDrafts = drafts.filter((row) => !fields.includes(row.property));
+  const properties = [...fields, ...withdrawnDrafts.map((row) => row.property)];
   const wasVisible = useRef(visible);
   if (wasVisible.current !== visible) {
     wasVisible.current = visible;
@@ -516,36 +519,52 @@ function GameClassificationsLive({
     }
   }
   async function submit() {
-    if (!lifetime.active() || running.current) return;
+    const active = current.current;
+    if (!active.lifetime.active() || active.read !== read || running.current) return;
+    const pending = active.drafts.filter((row) => active.fields.includes(row.property));
+    if (!pending.some((row) => factChanged(row) && !row.result?.ok)) return;
     running.current = true;
     setBusy(true);
-    const sealed = sealFacts(read.public.subject.id, read.release, drafts);
-    setDrafts(sealed);
+    const sealed = sealFacts(read.public.subject.id, read.release, pending);
+    const sealedByProperty = new Map(sealed.map((row) => [row.property, row]));
+    setDrafts(active.drafts.map((row) => sealedByProperty.get(row.property) ?? row));
     try {
       await sendFacts(
         sealed,
         transport.propose,
         (property, result) =>
           lifetime.active() &&
+          current.current.read === read &&
+          current.current.fields.includes(property) &&
           setDrafts((rows) => rows.map((row) => (row.property === property ? { ...row, result } : row))),
       );
     } finally {
-      if (!lifetime.active()) return;
+      if (!lifetime.active() || current.current.read !== read) return;
       running.current = false;
       setBusy(false);
     }
   }
-  const content = visible ? (
+  const content = visible && (fields.length > 0 || withdrawnDrafts.length > 0) ? (
     <section ref={holder} className="min-w-0 max-w-full space-y-5" aria-busy={busy}>
       <h2 className="font-sans text-xl font-semibold">{m.game_profile_classification({}, o)}</h2>
       <p className="text-sm text-muted-foreground">{m.facts_separate_results({}, o)}</p>
-      {fields.map((property) => {
-        const label = pickText(read.release.properties[property]!.labels, locale);
-        const selected = read.public.subject.statements[property] ?? [];
+      {properties.map((property) => {
+        const admitted = fields.includes(property);
         const draft = drafts.find((row) => row.property === property);
+        const editorRelease = admitted ? read.release : draftReleases[property];
+        const definition = editorRelease?.properties[property];
+        const label = definition ? pickText(definition.labels, locale) : { text: property, lang: undefined };
+        const selected = admitted ? (read.public.subject.statements[property] ?? []) : [];
+        const editorContext = editorRelease ? { ...context, release: editorRelease } : context;
         const stage = (source: (typeof selected)[number] | null) => {
-          if (!lifetime.active()) return;
+          if (
+            !current.current.lifetime.active() ||
+            current.current.read !== read ||
+            !current.current.fields.includes(property)
+          )
+            return;
           const baseline = source ? statementInput(source) : null;
+          setDraftReleases((rows) => ({ ...rows, [property]: read.release }));
           setDrafts((rows) => [
             ...rows,
             {
@@ -623,14 +642,17 @@ function GameClassificationsLive({
               )}
               {draft && (
                 <>
-                  <fieldset className="space-y-4" disabled={busy || factLocked(draft) || !!draft.command}>
+                  <fieldset className="space-y-4" disabled={busy || !admitted || factLocked(draft) || !!draft.command}>
                     <GameStatementFields
                       statement={draft.statement}
-                      context={context}
+                      context={editorContext}
                       locale={locale}
                       search={search}
                       change={(statement) =>
                         lifetime.active() &&
+                        current.current.read === read &&
+                        current.current.fields.includes(property) &&
+                        current.current.drafts.includes(draft) &&
                         setDrafts((rows) =>
                           rows.map((row) =>
                             row.property === property
@@ -650,9 +672,17 @@ function GameClassificationsLive({
                       if (!canDiscard(row)) return;
                       focusAfterDiscard.current = row;
                       setDrafts((rows) => rows.filter((item) => item !== row));
+                      setDraftReleases((rows) => {
+                        const next = { ...rows };
+                        delete next[row.property];
+                        return next;
+                      });
                     }}
                   />
-                  {draft.result && !draft.result.ok && <EditorFailure reason={draft.result.reason} locale={locale} />}
+                  {!admitted && <p role="status">{m.game_profile_support({}, o)}</p>}
+                  {admitted && draft.result && !draft.result.ok && (
+                    <EditorFailure reason={draft.result.reason} locale={locale} />
+                  )}
                   {draft.result?.ok && (
                     <div role="status">
                       <p>{m.correction_proposed({}, o)}</p>
@@ -670,7 +700,7 @@ function GameClassificationsLive({
                       </Button>
                     </div>
                   )}
-                  {draft.command && draft.result && !draft.result.ok && !factLocked(draft) && (
+                  {admitted && draft.command && draft.result && !draft.result.ok && !factLocked(draft) && (
                     <Button
                       className={gameActionClass}
                       type="button"
@@ -698,8 +728,11 @@ function GameClassificationsLive({
         type="button"
         disabled={
           busy ||
-          drafts.some((row) => row.result && !row.result.ok && row.result.reason === 'stale') ||
-          !drafts.some((row) => factChanged(row) && !row.result?.ok)
+          drafts.some(
+            (row) =>
+              fields.includes(row.property) && row.result && !row.result.ok && row.result.reason === 'stale',
+          ) ||
+          !drafts.some((row) => fields.includes(row.property) && factChanged(row) && !row.result?.ok)
         }
         onClick={() => void submit()}
       >

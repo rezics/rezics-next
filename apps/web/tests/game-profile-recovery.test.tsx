@@ -62,13 +62,20 @@ test('Game retires refused readings, privately retains exact corrections, and re
     deliver = resolve;
   });
   let held = true;
+  let loseNextResponse = false;
+  const sentCommands: Parameters<typeof fixture.transport.classifications.propose>[0][] = [];
   const transport = {
     ...fixture.transport,
     classifications: {
       ...fixture.transport.classifications,
       propose: async (command: Parameters<typeof fixture.transport.classifications.propose>[0]) => {
+        sentCommands.push(structuredClone(command));
         const result = await fixture.transport.classifications.propose(command);
         if (held) await delivery;
+        if (loseNextResponse) {
+          loseNextResponse = false;
+          throw new Error('simulated lost response');
+        }
         return result;
       },
     },
@@ -216,6 +223,102 @@ test('Game retires refused readings, privately retains exact corrections, and re
     await status(m.game_profile_current());
     expect(within(host).queryByRole('textbox', { name: m.correction_value() })).toBeNull();
     expect(host.textContent).not.toContain(m.correction_proposed());
+
+    const language = 'schema:inLanguage';
+    const platform = 'schema:gamePlatform';
+    const without = (property: string, removeDefinition = true): GameRead => {
+      const next = structuredClone(initial);
+      if (!next.ok || !next.public) throw new Error('Expected an existing Game');
+      const typeId = next.public.subject.type;
+      const type = next.release.types[typeId]!;
+      next.release.types[typeId] = {
+        ...type,
+        properties: type.properties.filter((item) => item !== property),
+      };
+      if (removeDefinition) delete next.release.properties[property];
+      return next;
+    };
+    const field = (property: string) =>
+      host.querySelector<HTMLElement>(`[data-classification-property="${property}"]`);
+    const fieldInput = (property: string) =>
+      within(field(property)!).getByRole('textbox', { name: m.correction_value() }) as HTMLInputElement;
+    const classification = () =>
+      [...host.querySelectorAll<HTMLElement>('summary')].find(
+        (node) => node.textContent === m.game_profile_classification(),
+      )!;
+    const ensureClassificationOpen = async () => {
+      const summary = classification();
+      if (!summary.closest('details')!.open) await click(summary);
+    };
+    const edit = async (property: string) => {
+      await ensureClassificationOpen();
+      await click(within(field(property)!).getAllByRole('button', { name: m.facts_edit_field() })[0]!);
+      return fieldInput(property);
+    };
+    const write = async (input: HTMLInputElement, value: string) =>
+      act(async () => {
+        await user.clear(input);
+        await user.type(input, value);
+      });
+    const submitClassifications = () =>
+      within(classification().closest('details')!).getByRole('button', { name: m.facts_submit() });
+
+    let input = await edit(language);
+    await write(input, 'fr');
+    input = await edit(platform);
+    await write(input, 'fr');
+    const beforeAdmission = sentCommands.length;
+    outcome = without(language, false);
+    await click(refresh());
+    await status(m.game_profile_current());
+    expect(fieldInput(language).value).toBe('fr');
+    expect(fieldInput(language).closest('fieldset')?.disabled).toBe(true);
+    expect(host.textContent).toContain(m.game_profile_support());
+    await click(submitClassifications());
+    await waitFor(() => expect(sentCommands).toHaveLength(beforeAdmission + 1));
+    expect(sentCommands[beforeAdmission]!.statement.property.id).toBe(platform);
+    expect(fieldInput(language).value).toBe('fr');
+    const withheld = field(language)!;
+    await click(within(withheld).getByRole('button', { name: m.recipe_remove_field() }));
+    await click(within(withheld).getByRole('button', { name: m.candidate_cancel() }));
+    expect(fieldInput(language).value).toBe('fr');
+    await click(within(withheld).getByRole('button', { name: m.recipe_remove_field() }));
+    expect(field(language)).toBeNull();
+
+    outcome = structuredClone(initial);
+    await render('admission-replay-session');
+    await status(m.game_profile_current());
+    input = await edit(platform);
+    await write(input, 'fr');
+    const beforeUncertain = sentCommands.length;
+    loseNextResponse = true;
+    await click(submitClassifications());
+    await waitFor(() => expect(sentCommands).toHaveLength(beforeUncertain + 1));
+    const originalPlatformCommand = structuredClone(sentCommands[beforeUncertain]!);
+    expect(originalPlatformCommand.statement.property.id).toBe(platform);
+    await status(m.correction_unavailable());
+    input = await edit(language);
+    await write(input, 'fr');
+
+    outcome = without(platform);
+    await click(refresh());
+    await status(m.game_profile_current());
+    expect(fieldInput(platform).value).toBe('fr');
+    expect(fieldInput(platform).closest('fieldset')?.disabled).toBe(true);
+    const beforeValidSibling = sentCommands.length;
+    await click(submitClassifications());
+    await waitFor(() => expect(sentCommands).toHaveLength(beforeValidSibling + 1));
+    expect(sentCommands[beforeValidSibling]!.statement.property.id).toBe(language);
+    expect(sentCommands[beforeValidSibling]).not.toEqual(originalPlatformCommand);
+
+    outcome = structuredClone(initial);
+    await click(refresh());
+    await status(m.game_profile_current());
+    expect(fieldInput(platform).value).toBe('fr');
+    const beforeReplay = sentCommands.length;
+    await click(submitClassifications());
+    await waitFor(() => expect(sentCommands).toHaveLength(beforeReplay + 1));
+    expect(sentCommands[beforeReplay]).toEqual(originalPlatformCommand);
   } finally {
     await act(async () => root.unmount());
     client.clear();
