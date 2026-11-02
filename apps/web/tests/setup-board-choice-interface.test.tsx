@@ -250,7 +250,8 @@ for (const kind of ['scheme', 'concept'] as const)
   for (const reason of ['stale', 'invalid', 'unavailable'] as const)
     test(`${kind} ${reason} continuation recovers explicitly without readmitting the selected ID`, async () => {
       const read = mock(async (input: { query: string; cursor?: string }) => {
-        if (input.cursor !== undefined) throw new BoardChoiceError(reason, reason === 'stale' ? 410 : reason === 'invalid' ? 400 : 503);
+        if (input.cursor !== undefined)
+          throw new BoardChoiceError(reason, reason === 'stale' ? 410 : reason === 'invalid' ? 400 : 503);
         return { schemes: choices, concepts: choices, next: cursor };
       });
       const input = props({ kind, value: choices[1]!, source: { ...source, schemes: read, concepts: read } });
@@ -261,7 +262,13 @@ for (const kind of ['scheme', 'concept'] as const)
       const first = { query: 'reading', ...(kind === 'concept' ? { schemeId } : {}) };
       const before = read.mock.calls.length;
       await click(button(m.space_setup_board_choice_next()));
-      inline(reason === 'stale' ? m.space_setup_board_choice_stale() : reason === 'invalid' ? m.space_setup_invalid() : m.space_setup_board_choice_unavailable());
+      inline(
+        reason === 'stale'
+          ? m.space_setup_board_choice_stale()
+          : reason === 'invalid'
+            ? m.space_setup_invalid()
+            : m.space_setup_board_choice_unavailable(),
+      );
       if (reason !== 'stale') {
         await click(button(m.space_setup_retry()));
         expect(read).toHaveBeenLastCalledWith({ ...first, cursor });
