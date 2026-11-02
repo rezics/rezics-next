@@ -4,12 +4,42 @@ import { act, type ReactNode } from 'react';
 import { profileSession } from '../src/kernel/fake/progress-profiles';
 import type { ProgressIndex } from '../src/library/progress-reads';
 
-const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+);
 const window = new Window({ url: 'https://rezics.test/en/library/progress' });
-const keys = ['document', 'navigator', 'HTMLElement', 'HTMLInputElement', 'HTMLButtonElement', 'Element', 'Node', 'NodeFilter', 'Document', 'ShadowRoot', 'DocumentFragment', 'MutationObserver', 'ResizeObserver', 'Event', 'MouseEvent', 'PointerEvent', 'KeyboardEvent', 'FocusEvent', 'CSS'] as const;
-const globals = { window, ...Object.fromEntries(keys.map(key => [key, window[key]])), getComputedStyle: window.getComputedStyle.bind(window), requestAnimationFrame: window.requestAnimationFrame.bind(window), cancelAnimationFrame: window.cancelAnimationFrame.bind(window), IS_REACT_ACT_ENVIRONMENT: true };
-const previous = new Map(Object.keys(globals).map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-for (const [key, value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+const keys = [
+  'document',
+  'navigator',
+  'HTMLElement',
+  'HTMLInputElement',
+  'HTMLButtonElement',
+  'Element',
+  'Node',
+  'NodeFilter',
+  'Document',
+  'ShadowRoot',
+  'DocumentFragment',
+  'MutationObserver',
+  'ResizeObserver',
+  'Event',
+  'MouseEvent',
+  'PointerEvent',
+  'KeyboardEvent',
+  'FocusEvent',
+  'CSS',
+] as const;
+const globals = {
+  window,
+  ...Object.fromEntries(keys.map((key) => [key, window[key]])),
+  getComputedStyle: window.getComputedStyle.bind(window),
+  requestAnimationFrame: window.requestAnimationFrame.bind(window),
+  cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+  IS_REACT_ACT_ENVIRONMENT: true,
+};
+const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+for (const [key, value] of Object.entries(globals))
+  Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 afterAll(async () => {
   mock.restore();
   for (const [key, descriptor] of previous) {
@@ -22,28 +52,43 @@ afterAll(async () => {
 const operations = new Set<string>();
 mock.module('../src/kernel/exposure', () => ({
   useOperation: (operation: string) => operations.has(operation),
-  Exposure: ({ operation, children }: { operation: string; children: ReactNode }) => operations.has(operation) ? children : null,
+  Exposure: ({ operation, children }: { operation: string; children: ReactNode }) =>
+    operations.has(operation) ? children : null,
 }));
 mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('@tanstack/react-start', () => import('../.storybook/react-start'));
 mock.module('@tanstack/react-start/server', () => import('../.storybook/react-start'));
 mock.module('@rezics/ui/entity-picker', () => ({ EntityPicker: () => null }));
-const request = mock(() => { throw new Error('Opening a disclosed destination must not request data'); });
-mock.module('../src/library/progress-server', () => ({ startProgressSession: request, finishProgressSession: request, readProgressChoices: request, readCurrentViewerProgressIndex: request }));
+const request = mock(() => {
+  throw new Error('Opening a disclosed destination must not request data');
+});
+mock.module('../src/library/progress-server', () => ({
+  startProgressSession: request,
+  finishProgressSession: request,
+  readProgressChoices: request,
+  readCurrentViewerProgressIndex: request,
+}));
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { createRoot } = await import('react-dom/client');
-const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } = await import('@tanstack/react-router');
+const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } =
+  await import('@tanstack/react-router');
 const { ProgressIndexPage } = await import('../src/library/progress-page');
 const { m } = await import('../src/paraglide/messages.js');
 const { setLocale } = await import('../src/paraglide/runtime.js');
 const { subjectHref } = await import('../src/subject/subject-href');
 const { within, userEvent } = await import('storybook/test');
-const tick = (run: () => unknown) => act(async () => { await run(); });
+const tick = (run: () => unknown) =>
+  act(async () => {
+    await run();
+  });
 
 test('disclosed Subject navigation survives read-only active and completed rows; actions and detail keep separate admission', async () => {
   setLocale('en', { reload: false });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const router = createRouter({ routeTree: createRootRoute(), history: createMemoryHistory({ initialEntries: ['/en/library/progress'] }) });
+  const router = createRouter({
+    routeTree: createRootRoute(),
+    history: createMemoryHistory({ initialEntries: ['/en/library/progress'] }),
+  });
   await router.load();
   const host = document.createElement('main');
   document.body.append(host);
@@ -51,10 +96,25 @@ test('disclosed Subject navigation survives read-only active and completed rows;
   const view = within(host);
   const user = userEvent.setup({ document });
   const subject = { ...profileSession.subject, typeLabel: 'Journey' };
-  const page: ProgressIndex = { signedIn: true, subjectId: '', selectedSubject: null, sessions: [], next: null, idempotencyKey: crypto.randomUUID() };
+  const page: ProgressIndex = {
+    signedIn: true,
+    subjectId: '',
+    selectedSubject: null,
+    sessions: [],
+    next: null,
+    idempotencyKey: crypto.randomUUID(),
+  };
   const render = async (state: 'active' | 'completed', disclosed = true) => {
     const session = { ...profileSession, state, subject: disclosed ? subject : null };
-    await tick(() => root.render(<QueryClientProvider client={client}><RouterContextProvider router={router}><ProgressIndexPage page={{ ...page, sessions: [session] }} /></RouterContextProvider></QueryClientProvider>));
+    await tick(() =>
+      root.render(
+        <QueryClientProvider client={client}>
+          <RouterContextProvider router={router}>
+            <ProgressIndexPage page={{ ...page, sessions: [session] }} />
+          </RouterContextProvider>
+        </QueryClientProvider>,
+      ),
+    );
   };
   const menu = () => view.queryByRole('button', { name: m.library_collection_actions(), exact: true });
   const open = async () => {
@@ -73,8 +133,12 @@ test('disclosed Subject navigation survives read-only active and completed rows;
       await open();
       const destination = within(document.body).getByRole('menuitem', { name: m.library_progress_open_subject() });
       expect(destination.getAttribute('href')).toBe(subjectHref({ id: subject.id, label: subject.label }, 'en').href);
-      expect(within(document.body).queryByRole('menuitem', { name: m.library_progress_complete(), exact: true })).toBeNull();
-      expect(within(document.body).queryByRole('menuitem', { name: m.library_progress_abandon(), exact: true })).toBeNull();
+      expect(
+        within(document.body).queryByRole('menuitem', { name: m.library_progress_complete(), exact: true }),
+      ).toBeNull();
+      expect(
+        within(document.body).queryByRole('menuitem', { name: m.library_progress_abandon(), exact: true }),
+      ).toBeNull();
       await close();
     }
     await render('active', false);
@@ -87,7 +151,9 @@ test('disclosed Subject navigation survives read-only active and completed rows;
       expect(host.querySelector(`a[href="/en/library/progress/${profileSession.id}"]`)).not.toBeNull();
       await open();
       const items = within(document.body).getAllByRole('menuitem');
-      expect(items.map(item => item.textContent)).toEqual([action === 'complete' ? m.library_progress_complete() : m.library_progress_abandon()]);
+      expect(items.map((item) => item.textContent)).toEqual([
+        action === 'complete' ? m.library_progress_complete() : m.library_progress_abandon(),
+      ]);
       await close();
       await render('completed', false);
       expect(menu()).toBeNull();

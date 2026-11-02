@@ -964,11 +964,7 @@ function SessionRow({
             </>
           ) : null}
           {confirming ? (
-            <Exposure
-              operation={
-                confirming === 'abandon' ? 'progress_session.abandon' : 'progress_session.complete'
-              }
-            >
+            <Exposure operation={confirming === 'abandon' ? 'progress_session.abandon' : 'progress_session.complete'}>
               <ListRowControl className="flex flex-wrap gap-2">
                 <Button
                   disabled={
