@@ -177,7 +177,6 @@ export const ReaderUnavailable: Story = {
 };
 export const Proposed: Story = {
   args: { correction: true },
-  globals: { viewport: { value: 'phone390', isRotated: false } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const name = m.game_profile_classification();

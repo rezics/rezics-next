@@ -356,7 +356,6 @@ export const PendingSelection: Story = { args: { scenario: 'pending', existing: 
 // Illustrative production compositions only. All added play assertions are authored UNRUN.
 export const LongWorkReference: Story = {
   args: { existing: true, work: true, workLabel: 'long' },
-  globals: { viewport: { value: 'phone390', isRotated: false } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByRole('button', { name: m.fictional_work_choose_another() });
