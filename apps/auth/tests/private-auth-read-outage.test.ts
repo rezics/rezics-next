@@ -120,7 +120,7 @@ test('failed passkeys keep sessions usable and offer a read-only reload of the c
     await fixture.flush(() => fixture.button(page.host, m.auth_inventory_reload())!.click());
     expect(passkeys).toHaveBeenCalledTimes(1);
     expect(page.calls).toHaveLength(0);
-    expect(page.host.textContent).toContain('Unavailable');
+    expect(page.host.textContent).toContain(m.auth_security_passkeys_failed());
     expect(page.host.querySelector('#security-sessions-heading')).not.toBeNull();
   } finally {
     passkeys.mockRestore();
