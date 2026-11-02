@@ -126,6 +126,7 @@ A successful refresh that withdraws a selected additional Recipe field identifie
 The subject header and compact view frame link to `/{locale}/subjects/{id}/{slug}/terms`. This private companion
 editor follows the [multilingual terms browser flow](catalogue-editing.md#browser-flow-multilingual-subject-terms),
 keeping the exact native subject, explicit per-language changes and recoverable drafts through conflicts.
+Rejected term edits offer at most twelve distinct language/field correction routes from exact known pointers to retained drafts; each selects that language and focuses its replacement input or mode with associated guidance, while malformed or unknown pointers remain general failures and raw detail remains secondary.
 
 ## Add an edition or release
 

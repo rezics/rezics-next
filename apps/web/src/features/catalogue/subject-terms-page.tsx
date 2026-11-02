@@ -128,6 +128,13 @@ function SubjectTermsPageLive({
   const cancelDecision = useRef<HTMLButtonElement>(null);
   const languageRef = useRef(language);
   languageRef.current = language;
+  const controls = useRef<Record<string, { focus: () => void } | null>>({});
+  const [correction, setCorrection] = useState<{
+    failure: TermsFailure;
+    drafts: TermsDraft;
+    tag: string;
+    control: string;
+  }>();
   const base =
     saved?.reader.state === 'ready'
       ? saved.reader.snapshot
@@ -303,6 +310,22 @@ function SubjectTermsPageLive({
       document.getElementById(domId('language'))?.focus();
     }
   }, [language, addedLanguages]);
+  // Old rendered correction actions must never address a replacement draft or reading.
+  const currentCorrection = useRef({ failure, drafts, locked });
+  currentCorrection.current = { failure, drafts, locked };
+  useLayoutEffect(() => {
+    if (!correction) return;
+    setCorrection(undefined);
+    if (
+      !lifetime.active() ||
+      locked ||
+      correction.failure !== failure ||
+      correction.drafts !== drafts ||
+      correction.tag !== language
+    )
+      return;
+    controls.current[correction.control]?.focus();
+  }, [correction, failure, drafts, language, locked, lifetime]);
   const fieldLabel = (field: TermField) =>
     field === 'labels'
       ? m.catalogue_create_label({}, options)
@@ -448,7 +471,47 @@ function SubjectTermsPageLive({
   const canRemoveLanguage = !storedLanguage && addedLanguages.includes(language);
   const typeLabel = base ? typeLabels?.[base.subject.type] : undefined;
   const errors = failure?.errors ?? [];
-  const guidance = (field: TermField) => (row ? termsFieldGuidance(errors, field, language, row[field], locale) : []);
+  function correctionTarget(pointer: string) {
+    // Only exact known field/language pointers can name a control. Array indices must exist.
+    const match = /^\/(labels|descriptions|aliases)\/([a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*)(?:\/(0|[1-9][0-9]*))?$/.exec(
+      pointer,
+    );
+    if (!match) return;
+    const [, fieldName, tag, index] = match;
+    const field = fieldName as TermField;
+    const draft = drafts[tag!];
+    if (
+      !draft ||
+      (index !== undefined &&
+        (field !== 'aliases' ||
+          draft.aliases.mode !== 'set' ||
+          Number(index) >= draft.aliases.value.split('\n').length))
+    )
+      return;
+    return { tag: tag!, field, control: draft[field].mode === 'set' ? field : `${field}-mode` };
+  }
+  const fieldErrors = errors.filter(
+    (error) => (error.pointer === '/labels' && error.code === 'required') || correctionTarget(error.pointer),
+  );
+  const guidance = (field: TermField) =>
+    row ? termsFieldGuidance(fieldErrors, field, language, row[field], locale) : [];
+  const corrections = new Map<string, { tag: string; field: TermField; control: string; messages: string[] }>();
+  if (failure?.reason === 'invalid') {
+    for (const error of errors) {
+      const target = correctionTarget(error.pointer);
+      if (!target) continue;
+      const { tag, field } = target;
+      const key = `${tag}/${field}`;
+      const messages = termsFieldGuidance([error], field, tag, drafts[tag]![field], locale);
+      const previous = corrections.get(key);
+      if (previous) previous.messages = [...new Set([...previous.messages, ...messages])];
+      else if (corrections.size < 12)
+        corrections.set(key, {
+          ...target,
+          messages,
+        });
+    }
+  }
 
   return (
     <article className="mx-auto flex min-w-0 w-full max-w-3xl flex-col gap-6 text-foreground [overflow-wrap:anywhere]">
@@ -702,7 +765,10 @@ function SubjectTermsPageLive({
                               {m.catalogue_terms_action({}, options)}
                             </FieldLabel>
                             <NativeSelect
-                              className={selectClassName}
+                              className={`${selectClassName} [&_select:focus]:outline-2 [&_select:focus]:outline-offset-2 [&_select:focus]:outline-ring`}
+                              ref={(element) => {
+                                controls.current[`${field}-mode`] = element;
+                              }}
                               id={domId(`${field}-mode`)}
                               value={row[field].mode}
                               aria-invalid={invalid}
@@ -727,7 +793,10 @@ function SubjectTermsPageLive({
                               <FieldLabel htmlFor={domId(field)}>{fieldLabel(field)}</FieldLabel>
                               {field === 'aliases' ? (
                                 <Textarea
-                                  className="min-w-0 [overflow-wrap:anywhere]"
+                                  className="min-w-0 [overflow-wrap:anywhere] focus:outline-2 focus:outline-offset-2 focus:outline-ring"
+                                  ref={(element) => {
+                                    controls.current[field] = element;
+                                  }}
                                   id={domId(field)}
                                   lang={language}
                                   value={row[field].value}
@@ -738,7 +807,10 @@ function SubjectTermsPageLive({
                                 />
                               ) : (
                                 <Input
-                                  className={inputClassName}
+                                  className={`${inputClassName} focus:outline-2 focus:outline-offset-2 focus:outline-ring`}
+                                  ref={(element) => {
+                                    controls.current[field] = element;
+                                  }}
                                   id={domId(field)}
                                   lang={language}
                                   value={row[field].value}
@@ -790,7 +862,35 @@ function SubjectTermsPageLive({
               {failure && (
                 <ContentItemFrame as="div" role="alert" className={frameClassName}>
                   <p>{failureText(failure.reason)}</p>
-                  {failure.detail && <p>{failure.detail}</p>}
+                  {corrections.size > 0 && (
+                    <ul className="flex flex-col gap-2">
+                      {[...corrections].map(([key, target]) => (
+                        <li key={key}>
+                          <Button
+                            className={actionClassName}
+                            type="button"
+                            variant="outline"
+                            disabled={locked}
+                            onClick={() => {
+                              const current = currentCorrection.current;
+                              if (
+                                !lifetime.active() ||
+                                current.locked ||
+                                current.failure !== failure ||
+                                current.drafts !== drafts
+                              )
+                                return;
+                              chooseLanguage(target.tag);
+                              setCorrection({ failure, drafts, tag: target.tag, control: target.control });
+                            }}
+                          >
+                            {target.tag}: {fieldLabel(target.field)} — {target.messages.join(' ')}
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {failure.detail && <p className="text-sm text-muted-foreground">{failure.detail}</p>}
                   {failure.reason === 'denied' && base.profileHref && (
                     <a href={base.profileHref} className={linkClassName}>
                       {m.catalogue_terms_profile({}, options)}

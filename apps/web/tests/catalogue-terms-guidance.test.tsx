@@ -42,6 +42,7 @@ test('Multilingual terms show actionable field-specific corrections without chan
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+  let retiredCorrection: (() => unknown) | undefined;
 
   try {
     // Data language and interface language are independent in the actual default page.
@@ -167,6 +168,19 @@ test('Multilingual terms show actionable field-specific corrections without chan
         expect(control(id).getAttribute('aria-invalid')).toBe('true');
         expect(described(id)).toContain(message);
       };
+      const queued = (element: object) => {
+        const key = Object.keys(element).find((key) => key.startsWith('__reactProps$'))!;
+        const props = Reflect.get(element, key) as { onClick: (event: unknown) => unknown };
+        return () => props.onClick({ currentTarget: element, preventDefault() {} });
+      };
+      if (retiredCorrection) {
+        const focused = window.document.activeElement;
+        await act(async () => {
+          retiredCorrection!();
+        });
+        expect(control('terms-language').value).toBe(locale);
+        expect(window.document.activeElement).toBe(focused);
+      }
 
       await replace('terms-new-language', 'english!');
       await click(m.catalogue_create_add_language({}, options));
@@ -305,6 +319,77 @@ test('Multilingual terms show actionable field-specific corrections without chan
       await language('en');
       await mode('labels', 'set');
       expect(control('terms-labels').value).toBe('Corrected title');
+
+      // English stays open when a different language's aliases fail admission.
+      await language('ja');
+      await mode('aliases', 'set');
+      await replace('terms-aliases', 'Same\nSame');
+      await language('en');
+      await save();
+      const aliasMessage = m.catalogue_terms_validation_alias_unique({}, options);
+      const route = button(`ja: ${m.catalogue_create_aliases({}, options)} — ${aliasMessage}`);
+      expect(route).toBeDefined();
+      expect(control('terms-aliases').getAttribute('aria-invalid')).toBe('false');
+      await act(async () => {
+        await user.click(route);
+      });
+      expect(control('terms-language').value).toBe('ja');
+      expect(window.document.activeElement).toBe(control('terms-aliases'));
+      correction('terms-aliases', aliasMessage);
+      expect(control('terms-aliases').className).toContain('focus:outline-2');
+      const replacedCorrection = queued(route);
+      await replace('terms-aliases', '別名改');
+      await language('en');
+      const focused = window.document.activeElement;
+      await act(async () => {
+        replacedCorrection();
+      });
+      expect(control('terms-language').value).toBe('en');
+      expect(window.document.activeElement).toBe(focused);
+      expect(control('terms-labels').value).toBe('Corrected title');
+      serverFailure = {
+        ok: false,
+        reason: 'invalid',
+        detail: 'Native diagnostic',
+        errors: [
+          { pointer: '/aliases/ja/0', code: 'unsupported' },
+          { pointer: '/labels/ja', code: 'unsupported' },
+          ...[
+            '/aliases/ja/99',
+            '/aliases/ja/00',
+            '/aliases/ja/0/extra',
+            '/labels/ja/extra',
+            '/other/ja',
+            '/aliases/xx',
+            '/aliases/~2ja',
+          ].map((pointer) => ({ pointer, code: 'invalid_format' as const })),
+        ],
+      };
+      await save();
+      expect(host.querySelector('[role="alert"]')?.querySelectorAll('button')).toHaveLength(2);
+      expect(host.querySelector('[role="alert"]')?.textContent).toContain('Native diagnostic');
+      const unsupported = m.catalogue_terms_validation_unsupported({}, options);
+      await click(`ja: ${m.catalogue_create_label({}, options)} — ${unsupported}`);
+      expect(window.document.activeElement).toBe(control('terms-labels-mode'));
+      correction('terms-labels-mode', unsupported);
+      const aliasRoute = button(`ja: ${m.catalogue_create_aliases({}, options)} — ${unsupported}`);
+      retiredCorrection = queued(aliasRoute);
+      await act(async () => {
+        await user.click(aliasRoute);
+      });
+      expect(window.document.activeElement).toBe(control('terms-aliases'));
+      expect(control('terms-aliases').value).toBe('別名改');
+      expect(control('terms-descriptions').value).toBe('日本語の草稿');
+      await mode('aliases', 'keep');
+      await language('en');
+      serverFailure = {
+        ok: false,
+        reason: 'invalid',
+        errors: [{ pointer: '/labels/en/extra', code: 'invalid_format' }],
+      };
+      await save();
+      expect(host.querySelector('[role="alert"]')?.querySelectorAll('button')).toHaveLength(0);
+      expect(control('terms-labels').getAttribute('aria-invalid')).toBe('false');
 
       // Do not reinterpret an unsupported or unexplained server reason as a local text error.
       for (const [code, message] of [
