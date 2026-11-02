@@ -4678,5 +4678,9 @@
   "library_owned_collections_address_previews": "Vistas previas",
   "library_owned_collections_address_correct": "Abrir página corregida",
   "library_owned_collections_address_restart": "Volver a la primera página",
-  "library_owned_collections_address_restart_rows": "Abrir la primera página en filas"
+  "library_owned_collections_address_restart_rows": "Abrir la primera página en filas",
+  "payment_reference_draft_navigation_title": "¿Descartar esta referencia de pago externo sin enviar?",
+  "payment_reference_draft_navigation_description": "Esta referencia aún no se ha enviado. Quédate aquí para seguir editándola o descártala para continuar.",
+  "payment_reference_draft_navigation_stay": "Quedarme",
+  "payment_reference_draft_navigation_discard": "Descartar"
 }

@@ -4678,5 +4678,9 @@
   "library_owned_collections_address_previews": "미리보기",
   "library_owned_collections_address_correct": "수정한 페이지 열기",
   "library_owned_collections_address_restart": "첫 페이지로 돌아가기",
-  "library_owned_collections_address_restart_rows": "행 보기로 첫 페이지 열기"
+  "library_owned_collections_address_restart_rows": "행 보기로 첫 페이지 열기",
+  "payment_reference_draft_navigation_title": "아직 제출하지 않은 외부 결제 참조를 버릴까요?",
+  "payment_reference_draft_navigation_description": "이 참조는 아직 제출되지 않았습니다. 여기에 머물러 계속 편집하거나 버리고 계속 진행하세요.",
+  "payment_reference_draft_navigation_stay": "머물기",
+  "payment_reference_draft_navigation_discard": "버리기"
 }

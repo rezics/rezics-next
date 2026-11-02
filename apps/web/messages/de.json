@@ -4678,5 +4678,9 @@
   "library_owned_collections_address_previews": "Vorschauen",
   "library_owned_collections_address_correct": "Korrigierte Seite öffnen",
   "library_owned_collections_address_restart": "Erste Seite öffnen",
-  "library_owned_collections_address_restart_rows": "Erste Seite als Zeilen öffnen"
+  "library_owned_collections_address_restart_rows": "Erste Seite als Zeilen öffnen",
+  "payment_reference_draft_navigation_title": "Diese noch nicht gesendete externe Zahlungsreferenz verwerfen?",
+  "payment_reference_draft_navigation_description": "Diese Referenz wurde noch nicht gesendet. Bleiben Sie hier, um sie weiter zu bearbeiten, oder verwerfen Sie sie und fahren Sie fort.",
+  "payment_reference_draft_navigation_stay": "Bleiben",
+  "payment_reference_draft_navigation_discard": "Verwerfen"
 }

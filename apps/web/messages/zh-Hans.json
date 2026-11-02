@@ -4678,5 +4678,9 @@
   "library_owned_collections_address_previews": "预览",
   "library_owned_collections_address_correct": "打开修正后的页面",
   "library_owned_collections_address_restart": "返回第一页",
-  "library_owned_collections_address_restart_rows": "以行布局打开第一页"
+  "library_owned_collections_address_restart_rows": "以行布局打开第一页",
+  "payment_reference_draft_navigation_title": "要放弃尚未提交的外部付款参考吗？",
+  "payment_reference_draft_navigation_description": "此参考尚未提交。留在此处可继续编辑，放弃后可继续操作。",
+  "payment_reference_draft_navigation_stay": "留在此处",
+  "payment_reference_draft_navigation_discard": "放弃"
 }

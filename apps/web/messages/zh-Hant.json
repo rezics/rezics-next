@@ -4678,5 +4678,9 @@
   "library_owned_collections_address_previews": "預覽",
   "library_owned_collections_address_correct": "開啟修正後的頁面",
   "library_owned_collections_address_restart": "返回第一頁",
-  "library_owned_collections_address_restart_rows": "以列版面開啟第一頁"
+  "library_owned_collections_address_restart_rows": "以列版面開啟第一頁",
+  "payment_reference_draft_navigation_title": "要捨棄尚未送出的外部付款參照嗎？",
+  "payment_reference_draft_navigation_description": "此參照尚未送出。留在此處可繼續編輯，捨棄後即可繼續。",
+  "payment_reference_draft_navigation_stay": "留下",
+  "payment_reference_draft_navigation_discard": "捨棄"
 }

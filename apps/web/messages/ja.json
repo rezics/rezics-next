@@ -4678,5 +4678,9 @@
   "library_owned_collections_address_previews": "プレビュー",
   "library_owned_collections_address_correct": "修正したページを開く",
   "library_owned_collections_address_restart": "最初のページに戻る",
-  "library_owned_collections_address_restart_rows": "行表示で最初のページを開く"
+  "library_owned_collections_address_restart_rows": "行表示で最初のページを開く",
+  "payment_reference_draft_navigation_title": "未送信の外部決済参照を破棄しますか？",
+  "payment_reference_draft_navigation_description": "この参照はまだ送信されていません。ここに留まって編集を続けるか、破棄して続行してください。",
+  "payment_reference_draft_navigation_stay": "ここに留まる",
+  "payment_reference_draft_navigation_discard": "破棄"
 }

@@ -14,6 +14,10 @@ import {
   type PaymentAttestationInput,
   type PaymentAttestationResult,
 } from './creator-payment-attestation-state';
+import {
+  hasUnsentPaymentReference,
+  PaymentReferenceDraftNavigation,
+} from './payment-reference-draft-navigation';
 
 /** This region shares the statement reader's current origin; it starts no parallel reader. */
 export function CreatorPaymentAttestation({
@@ -41,6 +45,7 @@ export function CreatorPaymentAttestation({
   const [refreshing, setRefreshing] = useState(false);
   const [refreshFailed, setRefreshFailed] = useState(false);
   const active = useRef(false);
+  const referenceField = useRef<HTMLInputElement>(null);
   useEffect(() => {
     active.current = true;
     return () => {
@@ -102,6 +107,7 @@ export function CreatorPaymentAttestation({
           <Field>
             <FieldLabel htmlFor={fieldId}>{m.statements_paid_reference()}</FieldLabel>
             <Input
+              ref={referenceField}
               id={fieldId}
               name="paidReference"
               value={reference}
@@ -181,6 +187,13 @@ export function CreatorPaymentAttestation({
           )}
           {refreshFailed && <p role="alert">{m.payment_attestation_refresh_failed()}</p>}
         </form>
+      )}
+      {(statement.state === 'open' || attempt.request) && (
+        <PaymentReferenceDraftNavigation
+          active={hasUnsentPaymentReference(reference, !!attempt.request)}
+          isCurrent={() => guard.isCurrent()}
+          focus={() => referenceField.current}
+        />
       )}
     </div>
   );
