@@ -122,9 +122,7 @@ export function PresentationPreviewPanel({ locale, read, initial }: Presentation
   );
   const [realm, setRealm] = useState(initial?.ok && 'subject' in initial.target ? (initial.target.realm ?? '') : '');
   const [inspection, setInspection] = useState<PreviewInspection>(() =>
-    initial
-      ? { status: 'complete', context: { locale, read }, result: initial }
-      : { status: 'idle' },
+    initial ? { status: 'complete', context: { locale, read }, result: initial } : { status: 'idle' },
   );
   const request = useRef(0);
   const mounted = useRef(false);
@@ -174,9 +172,7 @@ export function PresentationPreviewPanel({ locale, read, initial }: Presentation
       locale: context.locale,
     };
     const isCurrent = () =>
-      mounted.current &&
-      serial === request.current &&
-      samePreviewRequestContext(requestContext.current, context);
+      mounted.current && serial === request.current && samePreviewRequestContext(requestContext.current, context);
     try {
       const next = await context.read(input);
       if (isCurrent()) setInspection({ status: 'complete', context, result: next });
