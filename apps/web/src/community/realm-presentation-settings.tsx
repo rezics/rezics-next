@@ -428,11 +428,7 @@ export function RealmAppearanceSettings({
     if (!request) return;
     focusRequest.current = null;
     if (!focusRequestIsCurrent(request)) return;
-    if (
-      request.kind !== 'return' &&
-      document.activeElement !== request.expected
-    )
-      return;
+    if (request.kind !== 'return' && document.activeElement !== request.expected) return;
     if (
       request.kind === 'return' &&
       document.activeElement !== request.expected &&

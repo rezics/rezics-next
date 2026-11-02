@@ -40,7 +40,12 @@ function candidate(choice: RealmAppearanceChoice): RealmAppearanceSelection {
   return choice.kind === 'rules'
     ? {
         kind: 'rules',
-        rules: { postId: choice.postId, revisionId: choice.revisionId, title: 'Community rules', summary: 'Local rules.' },
+        rules: {
+          postId: choice.postId,
+          revisionId: choice.revisionId,
+          title: 'Community rules',
+          summary: 'Local rules.',
+        },
       }
     : { kind: 'image', image: { ...image, id: choice.mediaId, containerId: choice.realmId } };
 }
@@ -61,9 +66,10 @@ window.document.body.append(host);
 const user = userEvent.setup({ document: window.document as unknown as Document });
 let root: Root | undefined;
 const paint = (initial: RealmAppearanceRead = { kind: 'ready', snapshot: available }) =>
-  act(async () => root!.render(createElement(RealmAppearanceSettings, { realmId: available.realmId, initial, adapter })));
-const selector = (index: number) =>
-  within(host).getAllByRole('button', { name: m.realm_appearance_choose() })[index]!;
+  act(async () =>
+    root!.render(createElement(RealmAppearanceSettings, { realmId: available.realmId, initial, adapter })),
+  );
+const selector = (index: number) => within(host).getAllByRole('button', { name: m.realm_appearance_choose() })[index]!;
 
 afterAll(async () => {
   if (root) await act(async () => root!.unmount());
@@ -143,8 +149,10 @@ test('a selection retired by a newer head cannot steal deliberately moved focus 
   const rulesButton = within(host).getByRole('button', { name: m.realm_appearance_select_rules() });
   rulesButton.focus();
   await user.keyboard('{Enter}');
-  await user.type(within(host).getByRole('textbox', { name: m.realm_appearance_rules_link() }),
-    `/posts/${image.id}/revisions/${revisionId}`);
+  await user.type(
+    within(host).getByRole('textbox', { name: m.realm_appearance_rules_link() }),
+    `/posts/${image.id}/revisions/${revisionId}`,
+  );
   await user.click(within(host).getByRole('button', { name: m.realm_appearance_preview() }));
   outside.focus();
   await paint({ kind: 'ready', snapshot: { ...available, head: '0192f3a0-6c1e-7b2a-9d4e-9a2b3c4d0099' } });
