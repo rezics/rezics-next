@@ -23,17 +23,18 @@ test('resolves stable termspaces sessions and registers and unregisters only its
 test('Preserve a manager session when its window status is unavailable', () => {
   const replacements = (calls: string[][]) =>
     calls.some((argv) => argv.includes('apply') || argv.includes('respawn-pane') || argv.includes('new-window'));
-  for (const failure of [
+  const failures: Array<Error & { code?: string }> = [
     Object.assign(new Error('spawnSync tmux ETIMEDOUT'), { code: 'ETIMEDOUT' }),
     new Error('error connecting to /socket (Permission denied)'),
     Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' }),
-  ]) {
+  ];
+  for (const failure of failures) {
     const calls: string[][] = [];
     const windows = new TermspacesWindows({ socket: '/socket', session: 'stable' }, (_executable, argv) => {
       calls.push(argv);
       throw failure;
     });
-    const cause = String(failure.code ?? 'Permission denied');
+    const cause = failure.code ?? 'Permission denied';
     for (const action of [
       () => windows.alive('manager'),
       () => windows.register('manager', ['claude'], '/cwd'),
