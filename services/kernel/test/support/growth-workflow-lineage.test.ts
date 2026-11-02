@@ -59,7 +59,10 @@ test('only workflows launched by the operation count as foreground, independent 
   const measuredStatement = 'SELECT 1 AS operation_scheduled_spelling';
   const generatedStatement = 'SELECT 1 AS operation_generated_workflow';
 
-  const ordinary = await DBOS.startWorkflow(unrelatedWorkflow!, { workflowID: ordinaryID, queueName })('release', ordinaryStatement);
+  const ordinary = await DBOS.startWorkflow(unrelatedWorkflow!, { workflowID: ordinaryID, queueName })(
+    'release',
+    ordinaryStatement,
+  );
   const scheduled = await DBOS.startWorkflow(unrelatedWorkflow!, { workflowID: scheduledID, queueName })(
     'release',
     scheduledStatement,
@@ -76,7 +79,5 @@ test('only workflows launched by the operation count as foreground, independent 
   expect(result.capture.statements).toHaveLength(2);
   expect(result.capture.statements).toEqual(expect.arrayContaining([measuredStatement, generatedStatement]));
   expect(result.capture.backgroundStatements).toHaveLength(2);
-  expect(result.capture.backgroundStatements).toEqual(
-    expect.arrayContaining([ordinaryStatement, scheduledStatement]),
-  );
+  expect(result.capture.backgroundStatements).toEqual(expect.arrayContaining([ordinaryStatement, scheduledStatement]));
 }, 60_000);

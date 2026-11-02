@@ -139,10 +139,7 @@ function currentWorkflowAttribution(): Attribution | undefined {
   return workflowID === undefined ? undefined : workflowAttribution(workflowID);
 }
 
-function instrumentWorkflowInvocation(
-  invocation: Function,
-  workflowID: string | undefined,
-): Function {
+function instrumentWorkflowInvocation(invocation: Function, workflowID: string | undefined): Function {
   return new Proxy(invocation, {
     apply(target, thisArg, args: unknown[]) {
       const attribution = currentWorkflowAttribution();
@@ -162,7 +159,9 @@ function instrumentWorkflowInvocation(
       return Promise.resolve(result).then(
         (handle: unknown) => {
           const id =
-            typeof handle === 'object' && handle !== null && 'workflowID' in handle &&
+            typeof handle === 'object' &&
+            handle !== null &&
+            'workflowID' in handle &&
             typeof handle.workflowID === 'string'
               ? handle.workflowID
               : workflowID;
