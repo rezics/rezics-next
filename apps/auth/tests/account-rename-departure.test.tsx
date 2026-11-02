@@ -83,7 +83,6 @@ async function mount(initial: RenameSource) {
     createRoute({ getParentRoute: () => rootRoute, path: '/step-up', component: () => <p>Step-up</p> }),
   ]);
   const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/account/rename'] }) });
-  await router.load();
   const host = document.createElement('div');
   document.body.append(host);
   const root = createRoot(host);
