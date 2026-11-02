@@ -121,6 +121,7 @@ function CharacterProfileCreateLive({
   const [definitions, setDefinitions] = useState<{ source: Release; value: Release }>();
   const release = definitions?.source === suppliedRelease ? definitions.value : suppliedRelease;
   const [refreshFailed, setRefreshFailed] = useState(false);
+  const [definitionsRequired, setDefinitionsRequired] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const refreshRunning = useRef(false);
   const nextTermId = useRef(1);
@@ -186,11 +187,11 @@ function CharacterProfileCreateLive({
     'aria-invalid': associated.has(target) ? (true as const) : undefined,
     'aria-describedby': associated.get(target)?.join(' '),
   });
-  function reportFailure(next: CreateFailure) {
+  function reportFailure(next: CreateFailure, currentRelease = release) {
     setFailure(next);
     setCorrections(
       next.reason === 'invalid'
-        ? characterCreateCorrections(next.errors ?? [], terms, addressedFacts, release, locale, termsId)
+        ? characterCreateCorrections(next.errors ?? [], terms, addressedFacts, currentRelease, locale, termsId)
         : [],
     );
   }
@@ -206,6 +207,14 @@ function CharacterProfileCreateLive({
       const next = await onRefreshDefinitions();
       if (!lifetime.active()) return;
       setDefinitions({ source: suppliedRelease, value: next });
+      // Reconcile private input against the admitted release without sending a command.
+      const draft = characterDraft(next, terms, facts);
+      if (draft.errors.length) reportFailure({ ok: false, reason: 'invalid', errors: draft.errors }, next);
+      else {
+        setFailure(undefined);
+        setCorrections([]);
+      }
+      setDefinitionsRequired(false);
       setRefreshFailed(false);
     } catch {
       // A metadata failure does not turn a known rejection into an uncertain creation.
@@ -219,6 +228,8 @@ function CharacterProfileCreateLive({
     if (!lifetime.active()) return;
     if (running.current || refreshRunning.current || failure?.reason === 'conflict') return;
     if (!pending.current) {
+      // A known rejection requires fresh metadata; an unresolved command keeps its exact replay.
+      if (definitionsRequired) return;
       const draft = characterDraft(release, terms, facts);
       if (draft.errors.length) {
         reportFailure({ ok: false, reason: 'invalid', errors: draft.errors });
@@ -236,7 +247,10 @@ function CharacterProfileCreateLive({
         onCreated(result);
       } else {
         reportFailure(result);
-        if (result.reason !== 'unavailable' && result.reason !== 'conflict') pending.current = null;
+        if (result.reason !== 'unavailable' && result.reason !== 'conflict') {
+          pending.current = null;
+          if (result.refreshDefinitions) setDefinitionsRequired(true);
+        }
         if (result.refreshDefinitions) await refreshDefinitions();
       }
     } catch {
@@ -588,7 +602,11 @@ function CharacterProfileCreateLive({
           )}
         </ContentItemFrame>
       )}
-      <Button className={actionClassName} type="submit" disabled={busy || refreshing || failure?.reason === 'conflict'}>
+      <Button
+        className={actionClassName}
+        type="submit"
+        disabled={busy || refreshing || failure?.reason === 'conflict' || (definitionsRequired && !pending.current)}
+      >
         {busy
           ? m.catalogue_create_saving({}, o)
           : pending.current
