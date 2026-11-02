@@ -147,6 +147,7 @@ test('Creator Offer shared items preserve admitted destinations independent cont
       {
         data: {
           operation: 'reprice',
+          expectedRevision: first.revision,
           offerId: first.id,
           unitAmountMinor: 1325,
           idempotencyKey: data.keys[first.id]!.reprice,
@@ -175,13 +176,19 @@ test('Creator Offer shared items preserve admitted destinations independent cont
     result = { kind: 'rejected' };
     await act(async () => user.click(button(delistRow, m.creator_delist())));
     expect(calls[2]).toEqual({
-      data: { operation: 'delist', offerId: second.id, idempotencyKey: data.keys[second.id]!.delist },
+      data: {
+        operation: 'delist',
+        expectedRevision: second.revision,
+        offerId: second.id,
+        idempotencyKey: data.keys[second.id]!.delist,
+      },
       headers: { 'X-CSRF-Token': data.csrfToken },
     });
     result = { kind: 'retry' };
     await act(async () => user.click(button(delistRow, m.creator_delist())));
     expect(calls[3]!.data).toEqual({
       operation: 'delist',
+      expectedRevision: second.revision,
       offerId: second.id,
       idempotencyKey: expect.stringMatching(/^[0-9a-f-]{36}$/i),
     });

@@ -391,6 +391,7 @@ describe('Creator offer editing recovery retains real drafts without extending p
       expect(p.writes[1]!.data).toEqual(p.writes[0]!.data);
       expect(p.writes[1]!.data).toEqual({
         operation: 'reprice',
+        expectedRevision: creatorOfferFixture.revision,
         offerId: creatorOfferFixture.id,
         unitAmountMinor: 1299,
         idempotencyKey: id(11),
@@ -407,6 +408,47 @@ describe('Creator offer editing recovery retains real drafts without extending p
       await p.click(m.creator_retry());
       expect(p.writes[3]!.data).toEqual(p.writes[2]!.data);
     }));
+
+  for (const operation of ['reprice', 'delist'] as const)
+    test(`stale ${operation} preserves the draft until explicit review and a separate new action`, async () =>
+      workspace(async (p) => {
+        await p.show();
+        await p.fill('price', '13.25');
+        if (operation === 'reprice') await p.submit();
+        else await p.click(m.creator_delist());
+        expect(p.writes[0]!.data).toMatchObject({ expectedRevision: creatorOfferFixture.revision });
+        const oldSubmit = p.submitCallback();
+        await p.settle(p.writes[0]!.work, { kind: 'conflict' });
+        await act(async () => oldSubmit({ preventDefault() {} }));
+        expect(p.listReads).toHaveLength(0);
+        expect(p.input('price').value).toBe('13.25');
+        await p.submit();
+        await p.click(m.creator_delist());
+        expect(p.writes).toHaveLength(1);
+        // Background data is not consent to use a new revision.
+        const latest = list();
+        if (latest.data.page.kind !== 'ready') throw new Error('Expected seller page');
+        Object.assign(latest.data.page.offers[0]!, {
+          revision: creatorOfferFixture.revision + 1,
+          unitAmountMinor: 1500,
+        });
+        await p.refresh();
+        await p.settle(p.listReads.at(-1)!, latest);
+        expect(p.input('price').disabled).toBe(true);
+        await p.click(m.offer_review_terms());
+        await p.settle(p.listReads.at(-1)!, new Error('Review unavailable'));
+        expect(p.input('price').value).toBe('13.25');
+        expect(p.writes).toHaveLength(1);
+        await p.click(m.offer_review_terms());
+        await p.settle(p.listReads.at(-1)!, latest);
+        expect(p.host.textContent).toContain('$15.00');
+        expect(p.input('price').value).toBe('13.25');
+        expect(p.writes).toHaveLength(1);
+        if (operation === 'reprice') await p.submit();
+        else await p.click(m.creator_delist());
+        expect(p.writes[1]!.data).toMatchObject({ operation, expectedRevision: creatorOfferFixture.revision + 1 });
+        expect(p.writes[1]!.data.idempotencyKey).not.toBe(p.writes[0]!.data.idempotencyKey);
+      }));
 
   for (const operation of ['reprice', 'delist'] as const)
     test(`confirmed ${operation} refreshes availability without replaying a saved command`, async () =>

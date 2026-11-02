@@ -467,7 +467,7 @@ describe('Creator offer list creation reprice and delist accept only their actua
       await page.render({ initial: { ...refreshed }, session: viewer(A, 'csrf-rotated'), locale: 'de' });
       await act(async () => retryFromOldRender({ preventDefault() {} }));
       expect(page.writes[1]!.data).toEqual(page.writes[0]!.data);
-      expect(page.writes[1]!.csrf).toBe('csrf-rotated');
+      expect(page.writes[1]!.csrf).toBe(page.writes[0]!.csrf);
       expect(page.writes[1]!.data).toMatchObject({
         operation: 'reprice',
         unitAmountMinor: 1299,
@@ -481,7 +481,7 @@ describe('Creator offer list creation reprice and delist accept only their actua
       await page.render({ initial: list(), session: viewer(A, 'csrf-third') });
       await page.click(page.m.creator_retry());
       expect(page.writes[3]!.data).toEqual(page.writes[2]!.data);
-      expect(page.writes[3]!.csrf).toBe('csrf-third');
+      expect(page.writes[3]!.csrf).toBe(page.writes[2]!.csrf);
     }));
 
   test('create keeps immutable edition/schema/key on retry and retires retained editions, callbacks and writes', async () =>

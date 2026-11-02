@@ -201,7 +201,11 @@ export async function startNativePurchasesFixture(): Promise<NativePurchasesFixt
       async delistOffer() {
         const response = await stack!.kernel(
           `/v1/offers/${offer.id}:delist`,
-          { method: 'POST', headers: { 'idempotency-key': idempotencyKey() } },
+          {
+            method: 'POST',
+            headers: { 'idempotency-key': idempotencyKey(), 'content-type': 'application/json' },
+            body: JSON.stringify({ expectedRevision: 1 }),
+          },
           'alice',
         );
         await expectStatus(response, 200, 'Delist the captured offer');

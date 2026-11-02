@@ -216,6 +216,7 @@ test('Pending, uncertain and saved reprice outcomes stay open with the exact ori
     const original = writes[0]!;
     expect(original.data).toEqual({
       operation: 'reprice',
+      expectedRevision: p.first.revision,
       offerId: p.first.id,
       unitAmountMinor: 1325,
       idempotencyKey: id(1),
@@ -259,7 +260,12 @@ test('Delist is discoverable without a price draft; rejection and uncertain orig
     expect(p.toggle().textContent).toBe(m.creator_offer_controls_manage());
     await p.click(p.toggle());
     await p.click(p.button(m.creator_delist()));
-    expect(writes[0]!.data).toEqual({ operation: 'delist', offerId: p.first.id, idempotencyKey: id(2) });
+    expect(writes[0]!.data).toEqual({
+      operation: 'delist',
+      expectedRevision: p.first.revision,
+      offerId: p.first.id,
+      idempotencyKey: id(2),
+    });
     await p.settle(0, { kind: 'rejected' });
     await p.click(p.toggle());
     expect(p.panel().hidden).toBe(false);

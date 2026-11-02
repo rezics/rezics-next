@@ -2249,11 +2249,16 @@ recovery. They never replay the saved command. A confirmed active row permits an
 confirmed delisted row removes the public offer link while preserving history and the recorded result.
 Existing sales keep their accepted terms and benefits; these controls change future availability only.
 
-Decision: use a fresh owned-list read after a confirmed write to reconcile availability; the current native seller
-mutation contract has no revision precondition, so atomic revision-bound seller changes require a native follow-up.
-No public offer read or Web preflight substitutes for that precondition. Missing Content sale authority remains
-unavailable. Sources for this increment: the Commerce owner contract, seller routes/commands, current-origin
-controls and their focused recovery tests. No external reference source applies.
+Seller changes now submit the reviewed `expectedRevision` for both price and withdrawal. A native revision
+conflict preserves the price draft and original request, disables mutations and offers explicit reload/review.
+That action fetches the current permitted owned-offer row without a mutation credential requirement. Only a newer
+matching row ends review; failed or absent reads preserve the conflict. Review retains the typed price, allocates
+new command keys and requires a separate action against the displayed revision. Background refreshes never rebase
+an uncertain or conflicted command. Uncertain retries retain the original CSRF token as well as key and operands;
+current-origin admission and a current mutation credential remain required.
+
+Decision: preserve trusted native command compatibility with optional preconditions internally, while both seller
+HTTP operations require the revision reviewed by the creator. No Web preflight replaces the native row lock.
 
 ### Checkout start (`POST /checkout`)
 

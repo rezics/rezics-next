@@ -342,7 +342,8 @@ export function createCommerceCommands(config: {
       },
     );
   }
-  async function delistOffer(actor: Actor, id: string, requestKey: string) {
+  async function delistOffer(actor: Actor, id: string, requestKey: string, expectedRevision?: number) {
+    validateExpectedRevision(expectedRevision);
     const r = route(id);
     const authorization = await accessCommandAuthorization(
       access,
@@ -355,12 +356,17 @@ export function createCommerceCommands(config: {
     return runCommand(
       pool,
       {
-        ...options(actor, r, 'commerce.offer.delist', requestKey, { id }),
+        ...options(actor, r, 'commerce.offer.delist', requestKey, {
+          id,
+          ...(expectedRevision === undefined ? {} : { expectedRevision }),
+        }),
         authorization,
       },
       async (tx, command) => {
-        const offer = await store.readOffer(tx, r, id);
+        const offer = await store.lockOffer(tx, r, id);
         if (!offer) throw new GrantDeniedError();
+        if (expectedRevision !== undefined && offer.revision !== expectedRevision)
+          throw new OfferRevisionConflictError();
         await declareCommerceCommandHistory(tx, 'commerce.offer.delist', offer);
         const value = await store.setOfferState(tx, r, id, 'delisted', {
           transactionId: command.transactionId,
@@ -373,7 +379,18 @@ export function createCommerceCommands(config: {
       },
     );
   }
-  async function reviseOffer(actor: Actor, id: string, body: Pick<Offer, 'unitAmountMinor'>, requestKey: string) {
+  // Existing trusted native callers may omit the precondition; seller HTTP always requires it.
+  function validateExpectedRevision(revision: number | undefined) {
+    if (revision !== undefined && (!Number.isSafeInteger(revision) || revision < 1))
+      throw new TypeError('Invalid expected offer revision');
+  }
+  async function reviseOffer(
+    actor: Actor,
+    id: string,
+    body: Pick<Offer, 'unitAmountMinor'> & { expectedRevision?: number },
+    requestKey: string,
+  ) {
+    validateExpectedRevision(body.expectedRevision);
     const r = route(id);
     const authorization = await accessCommandAuthorization(
       access,
@@ -383,7 +400,11 @@ export function createCommerceCommands(config: {
       context(),
       () => new GrantDeniedError(),
     );
-    const input = { offerId: id, unitAmountMinor: body.unitAmountMinor };
+    const input = {
+      offerId: id,
+      unitAmountMinor: body.unitAmountMinor,
+      ...(body.expectedRevision === undefined ? {} : { expectedRevision: body.expectedRevision }),
+    };
     if (!Number.isSafeInteger(input.unitAmountMinor) || input.unitAmountMinor <= 0)
       throw new TypeError('Invalid offer');
     return runCommand(
@@ -395,6 +416,8 @@ export function createCommerceCommands(config: {
       async (tx, command) => {
         const current = await store.lockOffer(tx, r, id);
         if (!current) throw new GrantDeniedError();
+        if (input.expectedRevision !== undefined && current.revision !== input.expectedRevision)
+          throw new OfferRevisionConflictError();
         if (current.state !== 'active') throw new OfferUnavailableError();
         const money = validateOfferAmount(
           { currency: current.currency, amountMinor: input.unitAmountMinor },

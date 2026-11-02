@@ -218,7 +218,7 @@ test('Bounded real subject-to-offer discovery with current positive confirmation
     await pool.query("UPDATE core.partition SET write_state='active' WHERE partition_no=$1", [home]);
   }
 
-  await value(wire(`/v1/offers/${offer.id}:delist`, 'POST', {}), 200);
+  await value(wire(`/v1/offers/${offer.id}:delist`, 'POST', { expectedRevision: 1 }), 200);
   // A stale listed reference is rejected before outbox delivery; rejects still advance raw cursor.
   const stale = await value<SubjectOffersPage>(wire(`${path()}?limit=1`, 'GET', undefined, null), 200);
   expect(stale.offers).toEqual([]);

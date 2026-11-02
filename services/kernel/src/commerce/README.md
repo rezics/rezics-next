@@ -677,6 +677,29 @@ Slot and order-disposition metadata have buyer-leading native locators in Commer
 Bounded terminal minimization removes private slot keys alongside entitlements; financial disposition remains with
 its existing order under the pending financial field/expiry policy and custody obligations.
 
+### Revision-bound seller changes
+
+Seller `PATCH /v1/offers/:offerId` requires a positive safe-integer `expectedRevision` beside `unitAmountMinor`.
+Withdrawal `POST /v1/offers/:offerId:delist` requires `{ expectedRevision }`. Both bodies are closed. The revision
+is the private owned-offer revision the creator reviewed, never a server-inferred replacement. Invalid or omitted
+preconditions return `400 invalid_request`. No current terms appear in a conflict problem.
+
+After current authorization and exact receipt replay, both commands lock the selected native offer row in their
+command transaction, compare the submitted revision and mutate under that same lock. A mismatch returns
+`409 offer_revision_conflict` before business mutation, history, events or receipts. The digest includes the target,
+expected revision and price operand where applicable; changed intent under an existing key conflicts. Exact
+authorized replay returns the original result even after later edits or withdrawal. Accepted orders and captured
+benefits remain immutable. These operations touch one offer, one keyed receipt and the existing bounded event work.
+
+The connected creator controls retain the reviewed offer, price draft, submitted CSRF credential, key and operands
+through uncertainty. A conflict keeps the draft and disables mutation until an explicit review fetches current
+permitted private terms. Failed, absent or older reads retain the conflict. Successful review displays the newer
+row, preserves the typed price and allocates new keys; a separate deliberate action submits the new intent.
+Review is a private read and remains available without CSRF; every mutation still needs a current credential.
+
+Decision: require revision preconditions on both seller HTTP operations while preserving existing trusted native
+command signatures through optional preconditions; new seller callers always submit them.
+
 ### Existing command identities
 
 Use shared native command receipts, scoped by partition, verified principal kind/ID, command kind and key.

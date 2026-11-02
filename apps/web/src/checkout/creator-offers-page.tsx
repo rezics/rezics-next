@@ -79,6 +79,7 @@ type ChangeIntent = {
   observed: CreatorOffer;
   text: string;
   pending: CreatorOfferMutation | null;
+  csrfToken?: string | undefined;
   keys: CreatorOffersPageData['keys'][string] | undefined;
   rule: NonNullable<CreatorOffersPageData['schema']>['configuredSaleCurrencies'][number] | undefined;
   result: CreatorOfferResult | null;
@@ -114,6 +115,7 @@ function OfferCommands({
   const [open, setOpen] = useState(false);
   const controlsId = useId();
   const pending = useRef<CreatorOfferMutation | null>(resume?.pending ?? null);
+  const submittedCsrf = useRef(resume?.csrfToken);
   const locked = useRef(resume?.result?.kind === 'saved');
   const keys = useRef(resume ? resume.keys : data.keys[observed.id]);
   if (!draft) keys.current = data.keys[offer.id];
@@ -131,7 +133,8 @@ function OfferCommands({
   const isCurrent = () => mounted.current.active && guard.isCurrent();
   const csrf = () => guard.csrfToken();
   const uncertain = result?.kind === 'retry';
-  const frozen = busy || uncertain || (result?.kind === 'saved' && !confirmed);
+  const conflicted = result?.kind === 'conflict';
+  const frozen = busy || uncertain || conflicted || (result?.kind === 'saved' && !confirmed);
   const editable = observed.state === 'active' && data.selling && !!csrf() && !!keys.current && guard.isCurrent();
   // Disclosure never hides an edited intent or an operation's recovery/result. Authority
   // withdrawal still belongs to the current-origin boundary that mounts these controls.
@@ -142,7 +145,7 @@ function OfferCommands({
     setDraft(next);
     retain(observed);
   }
-  async function refreshSaved() {
+  async function refreshSaved(review = false) {
     if (!confirmOffer || reading.current || !isCurrent()) return;
     const lifetime = mounted.current;
     reading.current = true;
@@ -153,7 +156,25 @@ function OfferCommands({
       const current = await confirmOffer(observed.id);
       if (!lifetime.active || !guard.isCurrent() || !current || current.revision <= observed.revision) return;
       pending.current = null;
+      submittedCsrf.current = undefined;
       keys.current = { reprice: crypto.randomUUID(), delist: crypto.randomUUID() };
+      if (review) {
+        // Only this explicit review can adopt newer terms; preserve the typed price.
+        const next: ChangeIntent = {
+          observed: current,
+          text,
+          pending: null,
+          keys: keys.current,
+          rule: data.schema?.configuredSaleCurrencies.find((row) => row.currency === current.currency),
+          result: null,
+        };
+        memory.value = next;
+        setDraft(next);
+        retain(current);
+        setResult(null);
+        locked.current = false;
+        return;
+      }
       delete memory.value;
       setDraft(undefined);
       setText('');
@@ -171,41 +192,66 @@ function OfferCommands({
     const lifetime = mounted.current;
     const owns = () => lifetime.active && guard.isCurrent();
     const csrfToken = csrf();
-    if (!isCurrent() || !csrfToken || locked.current || !editable) return;
+    if (!isCurrent() || !csrfToken || locked.current || conflicted || !editable) return;
     if (!pending.current) {
       const key = keys.current?.[operation];
       if (!key) return;
       const amount = parsedPrice(text, rule);
       if (operation === 'reprice' && amount === null) return;
+      submittedCsrf.current = csrfToken;
       pending.current =
         operation === 'delist'
-          ? { operation, offerId: observed.id, idempotencyKey: key }
-          : { operation, offerId: observed.id, idempotencyKey: key, unitAmountMinor: amount! };
+          ? { operation, offerId: observed.id, expectedRevision: observed.revision, idempotencyKey: key }
+          : {
+              operation,
+              offerId: observed.id,
+              expectedRevision: observed.revision,
+              idempotencyKey: key,
+              unitAmountMinor: amount!,
+            };
       const execute = manageCreatorOffer;
       sender.value = (data) => execute({ data, headers: { 'X-CSRF-Token': csrfToken } });
     }
-    keepDraft({ observed, text, pending: pending.current, keys: keys.current, rule, result: { kind: 'retry' } });
+    keepDraft({
+      observed,
+      text,
+      pending: pending.current,
+      csrfToken: submittedCsrf.current,
+      keys: keys.current,
+      rule,
+      result: { kind: 'retry' },
+    });
     locked.current = true;
     setConfirmed(false);
     setResult(null);
     setBusy(true);
     let saved = false;
+    let conflictedResult = false;
     try {
       const next = await sender.value!(pending.current);
       if (!owns()) return;
       saved = next.kind === 'saved';
+      conflictedResult = next.kind === 'conflict';
       setResult(next);
-      if (next.kind !== 'retry' && next.kind !== 'saved') {
+      if (next.kind !== 'retry' && next.kind !== 'saved' && next.kind !== 'conflict') {
         pending.current = null;
         keys.current = { reprice: crypto.randomUUID(), delist: crypto.randomUUID() };
       }
-      memory.value = { observed, text, pending: pending.current, keys: keys.current, rule, result: next };
+      memory.value = {
+        observed,
+        text,
+        pending: pending.current,
+        csrfToken: submittedCsrf.current,
+        keys: keys.current,
+        rule,
+        result: next,
+      };
       if (saved) void refreshSaved();
     } catch {
       if (owns()) setResult({ kind: 'retry' });
     } finally {
       if (owns()) {
-        locked.current = saved;
+        locked.current = saved || conflictedResult;
         setBusy(false);
       }
     }
@@ -315,15 +361,15 @@ function OfferCommands({
           </form>
         )}
         {result && <p role={result.kind === 'saved' ? 'status' : 'alert'}>{creatorNotice(result.kind)}</p>}
-        {result?.kind === 'saved' && !confirmed && confirmOffer && (
+        {(conflicted || (result?.kind === 'saved' && !confirmed)) && confirmOffer && (
           <Button
             type="button"
             variant="outline"
             className="min-h-11"
             disabled={checking}
-            onClick={() => void refreshSaved()}
+            onClick={() => void refreshSaved(conflicted)}
           >
-            {checking ? m.creator_offers_preparing() : m.creator_offers_refresh()}
+            {checking ? m.creator_offers_preparing() : conflicted ? m.offer_review_terms() : m.creator_offers_refresh()}
           </Button>
         )}
       </div>

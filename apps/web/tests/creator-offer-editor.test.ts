@@ -134,24 +134,49 @@ describe('Creator offer publication consumes exact native terms and existing own
         client,
         request(),
         {},
-        { operation: 'reprice', offerId: id(9), unitAmountMinor: 1299, idempotencyKey: id(10) },
+        { operation: 'reprice', offerId: id(9), expectedRevision: 3, unitAmountMinor: 1299, idempotencyKey: id(10) },
       ),
     ).toEqual({ kind: 'saved', id: id(9) });
     expect(calls[0]!.method).toBe('PATCH');
-    expect(await calls[0]!.json()).toEqual({ unitAmountMinor: 1299 });
+    expect(await calls[0]!.json()).toEqual({ unitAmountMinor: 1299, expectedRevision: 3 });
     expect(
-      await submitCreatorOffer(client, request(), {}, { operation: 'delist', offerId: id(9), idempotencyKey: id(11) }),
+      await submitCreatorOffer(
+        client,
+        request(),
+        {},
+        { operation: 'delist', offerId: id(9), expectedRevision: 3, idempotencyKey: id(11) },
+      ),
     ).toEqual({ kind: 'saved', id: id(9) });
     expect(new URL(calls[1]!.url).pathname).toBe(`/v1/offers/${id(9)}:delist`);
     expect(calls[1]!.method).toBe('POST');
+    expect(await calls[1]!.json()).toEqual({ expectedRevision: 3 });
     expect(() =>
       validateCreatorOfferMutation({
         operation: 'reprice',
         offerId: id(9),
+        expectedRevision: 3,
         unitAmountMinor: 1299,
         idempotencyKey: id(10),
         currency: 'eur',
       }),
     ).toThrow();
   });
+});
+
+test('seller changes require reviewed revisions and expose native conflicts for explicit review', async () => {
+  const client = createKernelClient('https://kernel.test', {
+    fetch: (async () => Response.json({ code: 'offer_revision_conflict' }, { status: 409 })) as typeof fetch,
+  });
+  for (const operation of ['reprice', 'delist'] as const) {
+    const terms = {
+      operation,
+      offerId: id(9),
+      idempotencyKey: id(10),
+      ...(operation === 'reprice' ? { unitAmountMinor: 1299 } : {}),
+    };
+    const change = validateCreatorOfferMutation({ ...terms, expectedRevision: 3 });
+    expect(await submitCreatorOffer(client, request(), {}, change)).toEqual({ kind: 'conflict' });
+    for (const expectedRevision of [undefined, null, 0, -1, 1.5, '3', Number.MAX_SAFE_INTEGER + 1])
+      expect(() => validateCreatorOfferMutation({ ...terms, expectedRevision })).toThrow();
+  }
 });

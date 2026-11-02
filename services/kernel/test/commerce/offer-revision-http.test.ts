@@ -224,8 +224,12 @@ test('seller price revision through HTTP binds target intent preserves captured 
       client.release();
     }
   }
-  const patch = (bearer: string, id: string, body: unknown = { unitAmountMinor: 2400 }, key = requestKey) =>
-    f.send(bearer, 'PATCH', `/v1/offers/${id}`, body, key);
+  const patch = (
+    bearer: string,
+    id: string,
+    body: unknown = { unitAmountMinor: 2400, expectedRevision: a.value.revision },
+    key = requestKey,
+  ) => f.send(bearer, 'PATCH', `/v1/offers/${id}`, body, key);
   const get = (id: string) => f.send('anonymous', 'GET', `/v1/offers/${id}`);
   const before = await inspect();
   expect(before.entitlements).toHaveLength(1);
@@ -301,16 +305,37 @@ test('seller price revision through HTTP binds target intent preserves captured 
   await unchanged(() => replay());
   await unchanged(async () => {
     await problem(await patch(seller.bearer, b.value.id), 422, 'idempotency_conflict');
-    await problem(await patch(seller.bearer, a.value.id, { unitAmountMinor: 2500 }), 422, 'idempotency_conflict');
+    await problem(
+      await patch(seller.bearer, a.value.id, { unitAmountMinor: 2500, expectedRevision: a.value.revision }),
+      422,
+      'idempotency_conflict',
+    );
   });
-  const later = await patch(seller.bearer, a.value.id, { unitAmountMinor: 3600 }, laterKey);
+  const later = await patch(
+    seller.bearer,
+    a.value.id,
+    { unitAmountMinor: 3600, expectedRevision: a.value.revision + 1 },
+    laterKey,
+  );
   expect({ status: later.status, body: await later.json() }).toEqual({ status: 200, body: view(a.value, 3600) });
   expect((await inspect()).offers[0]!.row.revision).toBe(a.value.revision + 2);
   await unchanged(() => replay());
   const refreshed = await accountToken({ ...seller.actor, scopes });
   await unchanged(() => replay(refreshed));
   expect((await (await get(a.value.id)).json()).offer.unitAmountMinor).toBe(3600);
-  const second = await patch(seller.bearer, b.value.id, { unitAmountMinor: 2400 }, secondKey);
+  await unchanged(async () => {
+    await problem(
+      await patch(seller.bearer, a.value.id, { unitAmountMinor: 2400, expectedRevision: a.value.revision }, entryKey()),
+      409,
+      'offer_revision_conflict',
+    );
+  });
+  const second = await patch(
+    seller.bearer,
+    b.value.id,
+    { unitAmountMinor: 2400, expectedRevision: a.value.revision },
+    secondKey,
+  );
   expect({ status: second.status, body: await second.json() }).toEqual({
     status: 200,
     body: view(b.value, 2400, null),
@@ -319,6 +344,11 @@ test('seller price revision through HTTP binds target intent preserves captured 
   await unchanged(async () => {
     for (const body of [
       {},
+      { unitAmountMinor: 2400 },
+      ...[0, -1, 1.5, '1', null, Number.MAX_SAFE_INTEGER + 1].map((expectedRevision) => ({
+        unitAmountMinor: 2400,
+        expectedRevision,
+      })),
       null,
       [],
       '2400',
@@ -338,14 +368,36 @@ test('seller price revision through HTTP binds target intent preserves captured 
     const hidden = await problem(await patch(seller.bearer, f.unknownSubject()), 404, 'not_found');
     for (const key of [requestKey, deniedKey]) {
       expect(
-        await problem(await patch(bob.bearer, a.value.id, { unitAmountMinor: 2400 }, key), 404, 'not_found'),
+        await problem(
+          await patch(bob.bearer, a.value.id, { unitAmountMinor: 2400, expectedRevision: a.value.revision }, key),
+          404,
+          'not_found',
+        ),
       ).toEqual(hidden);
       expect(
-        await problem(await patch(seller.bearer, foreign.value.id, { unitAmountMinor: 2400 }, key), 404, 'not_found'),
+        await problem(
+          await patch(
+            seller.bearer,
+            foreign.value.id,
+            { unitAmountMinor: 2400, expectedRevision: a.value.revision },
+            key,
+          ),
+          404,
+          'not_found',
+        ),
       ).toEqual(hidden);
-      await problem(await patch(unscoped, a.value.id, { unitAmountMinor: 2400 }, key), 403, 'forbidden');
+      await problem(
+        await patch(unscoped, a.value.id, { unitAmountMinor: 2400, expectedRevision: a.value.revision }, key),
+        403,
+        'forbidden',
+      );
       for (const bearer of ['anonymous', 'invalid.token.bytes']) {
-        const response = await patch(bearer, a.value.id, { unitAmountMinor: 2400 }, key);
+        const response = await patch(
+          bearer,
+          a.value.id,
+          { unitAmountMinor: 2400, expectedRevision: a.value.revision },
+          key,
+        );
         expect(response.headers.get('www-authenticate')).toBe(
           bearer === 'anonymous' ? 'Bearer' : 'Bearer error="invalid_token"',
         );
@@ -362,7 +414,12 @@ test('seller price revision through HTTP binds target intent preserves captured 
   await f.revokeIdentity(seller.actor.accountId);
   await unchanged(async () => {
     for (const key of [requestKey, deniedKey]) {
-      const response = await patch(seller.bearer, a.value.id, { unitAmountMinor: 2400 }, key);
+      const response = await patch(
+        seller.bearer,
+        a.value.id,
+        { unitAmountMinor: 2400, expectedRevision: a.value.revision },
+        key,
+      );
       expect(response.headers.get('www-authenticate')).toBe('Bearer error="invalid_token"');
       await problem(response, 401, 'invalid_credentials');
     }

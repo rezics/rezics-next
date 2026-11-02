@@ -106,9 +106,9 @@ export type CreatorOfferMutation =
       unitAmountMinor: number;
       taxCode: string;
     }
-  | { operation: 'reprice'; idempotencyKey: string; offerId: string; unitAmountMinor: number }
-  | { operation: 'delist'; idempotencyKey: string; offerId: string };
-export type CreatorOfferResult = { kind: 'saved'; id: string } | CreatorFailure | { kind: 'retry' };
+  | { operation: 'reprice'; idempotencyKey: string; offerId: string; expectedRevision: number; unitAmountMinor: number }
+  | { operation: 'delist'; idempotencyKey: string; offerId: string; expectedRevision: number };
+export type CreatorOfferResult = { kind: 'saved'; id: string } | CreatorFailure | { kind: 'retry' | 'conflict' };
 
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid creator offer input');
@@ -307,18 +307,30 @@ export function validateCreatorOfferMutation(value: unknown): CreatorOfferMutati
     (operation !== 'reprice' && operation !== 'delist') ||
     typeof input.offerId !== 'string' ||
     !UUID.test(input.offerId) ||
+    !Number.isSafeInteger(input.expectedRevision) ||
+    (input.expectedRevision as number) < 1 ||
     Object.keys(input).some(
       (key) =>
-        !['operation', 'idempotencyKey', 'offerId', ...(operation === 'reprice' ? ['unitAmountMinor'] : [])].includes(
-          key,
-        ),
+        ![
+          'operation',
+          'idempotencyKey',
+          'offerId',
+          'expectedRevision',
+          ...(operation === 'reprice' ? ['unitAmountMinor'] : []),
+        ].includes(key),
     ) ||
     (operation === 'reprice' && !validAmount)
   )
     throw new Error('Invalid offer change');
   return operation === 'delist'
-    ? { operation, idempotencyKey, offerId: input.offerId }
-    : { operation, idempotencyKey, offerId: input.offerId, unitAmountMinor: raw as number };
+    ? { operation, idempotencyKey, offerId: input.offerId, expectedRevision: input.expectedRevision as number }
+    : {
+        operation,
+        idempotencyKey,
+        offerId: input.offerId,
+        expectedRevision: input.expectedRevision as number,
+        unitAmountMinor: raw as number,
+      };
 }
 
 /** Only exact Content metadata; ID shape, author labels and public posts cannot establish sale rights. */
@@ -365,6 +377,11 @@ export async function submitCreatorOffer(
     const authorization = viewerCredential(request);
     if (stale || !authorization) return { kind: 'denied' };
     const headers = { authorization, 'idempotency-key': input.idempotencyKey };
+    // Keep the complete wire body while controller generation updates the client declaration.
+    const repriceBody =
+      input.operation === 'reprice'
+        ? { unitAmountMinor: input.unitAmountMinor, expectedRevision: input.expectedRevision }
+        : undefined;
     const result =
       input.operation === 'create'
         ? await client.offers.post(
@@ -378,13 +395,14 @@ export async function submitCreatorOffer(
             { headers },
           )
         : input.operation === 'reprice'
-          ? await client
+          ? await client.offers({ offerId: input.offerId }).patch(repriceBody!, { headers })
+          : await client
               .offers({ offerId: input.offerId })
-              .patch({ unitAmountMinor: input.unitAmountMinor }, { headers })
-          : await client.offers({ offerId: input.offerId }).$delist.post(undefined, { headers });
+              .$delist.post({ expectedRevision: input.expectedRevision }, { headers });
     if (result.error) {
       if (isPlatformClosedProblem(result.status, result.error.value)) return { kind: 'closed' };
       if ([401, 403, 404].includes(result.status)) return { kind: 'denied' };
+      if (input.operation !== 'create' && result.status === 409) return { kind: 'conflict' };
       if ([400, 409, 422].includes(result.status)) return { kind: 'rejected' };
       return { kind: 'retry' };
     }

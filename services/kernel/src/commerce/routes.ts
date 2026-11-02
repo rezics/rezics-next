@@ -667,14 +667,20 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
       {
         params: t.Object({ offerId: id }),
         headers,
-        body: t.Object({ unitAmountMinor: t.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }) }, object),
+        body: t.Object(
+          {
+            unitAmountMinor: t.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
+            expectedRevision: t.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
+          },
+          object,
+        ),
         response: {
           200: offerResponse,
           400: problemSchema('invalid_request'),
           401: unauthorized,
           403: problemSchema('forbidden', 'platform_closed'),
           404: problemSchema('not_found'),
-          409: problemSchema('offer_unavailable'),
+          409: problemSchema('offer_unavailable', 'offer_revision_conflict'),
           422: problemSchema('idempotency_conflict'),
           503: unavailable,
         },
@@ -716,17 +722,19 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
       {
         params: t.Object({ offerId: id }),
         headers,
+        body: t.Object({ expectedRevision: t.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }) }, object),
         response: {
           200: offerResponse,
           400: problemSchema('invalid_request'),
           401: unauthorized,
           404: problemSchema('not_found'),
+          409: problemSchema('offer_revision_conflict'),
           422: problemSchema('idempotency_conflict'),
           503: unavailable,
         },
         detail: detail('offer.delist', 'offer:manage', 'gate:selling'),
       },
-      async ({ params, headers, actor, admission, job, session }) => {
+      async ({ params, body, headers, actor, admission, job, session }) => {
         requireAccount(actor);
         if (routeOf(params.offerId) === null) throw new ProblemError('not_found');
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
@@ -737,6 +745,7 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
                 actor,
                 params.offerId,
                 key,
+                body.expectedRevision,
               ),
             'not_found',
           ),

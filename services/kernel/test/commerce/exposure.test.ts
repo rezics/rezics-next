@@ -315,7 +315,7 @@ test('after the purchases and selling groups are opened by data the offer and ch
   const entitlements = await request('GET', '/v1/entitlements', 'buyer');
   expect(entitlements.status).toBe(200);
   expect(await entitlements.json()).toEqual({ entitlements: [], next: null });
-  const delisted = await request('POST', `/v1/offers/${offer.id}:delist`, 'seller', {});
+  const delisted = await request('POST', `/v1/offers/${offer.id}:delist`, 'seller', { expectedRevision: 1 });
   expect(delisted.status).toBe(200);
   expect((await delisted.json()).offer).toMatchObject({ id: offer.id, state: 'delisted' });
 });

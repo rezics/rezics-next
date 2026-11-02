@@ -19,8 +19,10 @@ import {
   type CreatorOfferResult,
 } from './creator-offers';
 
-export function creatorNotice(kind: CreatorFailure['kind'] | 'retry' | 'saved'): string {
+export function creatorNotice(kind: CreatorFailure['kind'] | 'retry' | 'saved' | 'conflict'): string {
   switch (kind) {
+    case 'conflict':
+      return m.container_lifecycle_conflict();
     case 'denied':
       return m.creator_denied();
     case 'closed':

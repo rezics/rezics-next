@@ -294,7 +294,7 @@ test('unknown offers are hidden and delisted offers conflict, while existing ord
   const selling = await offer(),
     requestKey = key();
   const created = await order(selling.id, requestKey);
-  const delist = await request(`/v1/offers/${selling.id}:delist`, seller, {});
+  const delist = await request(`/v1/offers/${selling.id}:delist`, seller, { expectedRevision: 1 });
   expect(delist.status).toBe(200);
   expect((await delist.json()).offer.state).toBe('delisted');
   const refused = await request('/v1/orders', buyer, { offerId: selling.id, expectedOfferRevision: 1 });
@@ -342,7 +342,7 @@ test('delisted public offers are concealed as unknown while captured purchases a
     revokeReason: null,
   });
 
-  const delisted = await request(`/v1/offers/${selling.id}:delist`, seller, {});
+  const delisted = await request(`/v1/offers/${selling.id}:delist`, seller, { expectedRevision: 1 });
   expect(delisted.status).toBe(200);
   expect((await delisted.json()).offer).toMatchObject({ id: selling.id, state: 'delisted' });
   const unknownId = newId(routeOf(selling.id)!);

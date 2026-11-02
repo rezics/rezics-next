@@ -4,7 +4,7 @@ This contract owns the HTTP transport for the existing [`reviseOffer`](commands.
 [native HTTP acceptance](../../test/commerce/offer-revision-http.test.ts). It adopts the minimal seller price
 revision surface mounted by [`routes.ts`](routes.ts). The [Commerce README](README.md) continues to own purchase,
 settlement and entitlement behavior. Its historical target-digest defect description is superseded for this
-operation by the implemented command's `{ offerId, unitAmountMinor }` intent and the unchanged
+operation by the implemented command's `{ offerId, expectedRevision, unitAmountMinor }` intent and the
 [native target-replay regression](../../test/commerce/revise-offer-target-replay.test.ts).
 
 ## Request and result
@@ -13,9 +13,9 @@ operation by the implemented command's `{ offerId, unitAmountMinor }` intent and
 ordinary bearer/Access identity, the existing `gate:selling` exposure, existing `offer:manage` action and ordinary
 quoted `Idempotency-Key` header. There is no new action, grant, permission formula or provider dependency.
 
-The JSON body is a closed object containing exactly `unitAmountMinor`, a positive safe integer. Missing amounts,
+The JSON body is a closed object containing exactly `unitAmountMinor` and `expectedRevision`, both positive safe integers. Missing amounts or revisions,
 zero, negative, fractional, unsafe or nonnumeric values and extra fields return `400 invalid_request` without
-effects. In particular, there is no `revision`, expected revision or CAS input: the native command takes none.
+effects. The submitted revision is compared under the offer row lock in the same transaction as mutation, after exact authorized replay. A stale fresh request returns `409 offer_revision_conflict` without business effects or current terms.
 Existing native storage constraints continue to apply; the safe-integer transport range does not expand them.
 
 Success is `200 { "offer": ... }`, using precisely the existing POST/delist `offerSchema` in
@@ -42,7 +42,7 @@ Authenticate and check the current exposure/scope and target authorization befor
 receipt. Unknown, malformed or unauthorized targets return concealed `404 not_found`; another seller's target
 must not expose offer or receipt data. Missing or invalid bearer credentials return `401` using the ordinary
 native authentication problem. An active caller missing the current `offer:manage` scope returns `403 forbidden`.
-A closed selling gate returns the existing `403 platform_closed`. A delisted target returns the existing
+A closed selling gate returns the existing `403 platform_closed`. A stale revision returns `409 offer_revision_conflict`; a matching revision on a delisted target returns
 `409 offer_unavailable` for a fresh authorized revision.
 
 Native suspension increments the authentication floor and sets `authn_fenced = true`; the authenticator rejects
@@ -53,7 +53,7 @@ tests actual revoked bearer `401` separately and does not forge an unfenced susp
 authentication policy.
 
 Receipts retain the native principal/partition/command/key identity. The digest binds the complete intent,
-including the path's `offerId` and body amount. With one seller owning two offers in the same partition, reusing
+including the path's `offerId`, expected revision and body amount. With one seller owning two offers in the same partition, reusing
 the first offer's key and amount for the second is `422 idempotency_conflict`, with no second-offer change.
 Changing the amount under that key also returns the existing native `422 idempotency_conflict` problem.
 
