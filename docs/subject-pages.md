@@ -718,6 +718,7 @@ the existing subject picker, or edit one of the public reader's existing relatio
 in descriptive-field review. Qualifiers use released property meanings and item pickers for roles and declared
 keys. Existing qualifiers, original names and reference parts survive replacement proposals. Citations are attached
 to the immutable statement submitted through native candidate proposal, not to a presentation document.
+Relation draft edits synchronously retire their callback lifetime before advancing its revision; retained target, qualifier, staging, citation and consent callbacks cannot restore a replaced property/source or removed qualifier, while current callbacks keep editing mounted controls.
 
 Review addresses exactly the property plus target, or an existing unresolved `sameAs` IRI, and the declared item
 qualifier key when present. Target and `sameAs` are mutually exclusive. Twenty candidates and their continuation

@@ -839,3 +839,94 @@ test('relation editor keeps an edited proposal on Stay and leaves only after an 
     await ui.close();
   }
 }, 60_000);
+
+// Retain callbacks from the real mounted controls, including composite picker/consent props.
+function relationControlProps(node: Element): Record<string, unknown> {
+  const key = Object.keys(node).find((key) => key.startsWith('__reactProps'))!;
+  return Reflect.get(node, key);
+}
+function relationCallback(node: Element, event: string): (value?: unknown) => void {
+  return relationControlProps(node)[event] as (value?: unknown) => void;
+}
+function relationChildCallback(node: Element, event: string): (value: unknown) => void {
+  const children = relationControlProps(node.closest('[data-slot="field"]')!).children as {
+    props?: Record<string, (value: unknown) => void>;
+  }[];
+  return children.find((child) => typeof child.props?.[event] === 'function')!.props![event]!;
+}
+
+test('Relation draft revisions retire retained input callbacks while current mounted controls keep editing', async () => {
+  const ui = await mounted();
+  const { render, select, click, region, within, user, RelationEditor, relationFixture, relationProperty, m } = ui;
+  try {
+    const fixture = relationFixture();
+    const ready = await fixture.transport.read();
+    await render(h(RelationEditor, {
+      id: fixture.id, locale: 'en', initial: ready, transport: fixture.transport, search: async () => [],
+    }));
+    const scope = region();
+    await select(scope, m.relation_property(), relationProperty);
+    const sources = () => within(scope).getAllByRole('button', { name: m.relation_edit_existing() });
+    await act(async () => user.click(sources()[0]!));
+    const scalar = () => scope.querySelector('input[id*="-qualifier-"]') as HTMLInputElement;
+    const citation = () => within(scope).getByRole('textbox', { name: m.relation_citation() }) as HTMLInputElement;
+    const capture = () => {
+      const target = relationChildCallback(scope.querySelector('[data-slot="entity-picker"]')!, 'onValueChange');
+      const value = relationCallback(scalar(), 'onChange');
+      const add = relationCallback(within(scope).getByRole('combobox', { name: m.relation_qualifier() }), 'onChange');
+      const cite = relationCallback(citation(), 'onChange');
+      const attach = relationCallback(within(scope).getByRole('button', { name: m.relation_add_citation() }), 'onClick');
+      const stage = relationCallback(sources()[0]!, 'onClick');
+      return () => {
+        target([{ id: fixture.id, title: 'Retired target', types: [], typeLabel: '', cover: null }]);
+        value({ target: { value: 'Retired qualifier' } });
+        add({ target: { value: 'wdt:P1932' } });
+        cite({ target: { value: 'https://retired.test' } });
+        attach();
+        stage();
+      };
+    };
+    await act(async () => user.type(citation(), 'https://example.org/unsent'));
+    const oldSource = capture();
+    await act(async () => user.click(sources()[2]!));
+    await act(async () => oldSource());
+    expect((within(scope).getByRole('combobox', { name: m.relation_target() }) as HTMLInputElement).value).toBe('Kana Hanazawa');
+    expect(scalar().value).toBe('Original credit');
+    expect(citation().value).toBe('');
+    expect(scope.querySelectorAll('button[aria-label^="' + m.relation_remove() + ':"]')).toHaveLength(2);
+    const current = scalar();
+    await act(async () => { await user.clear(current); await user.type(current, 'Current credit'); });
+    expect(scalar()).toBe(current);
+    expect(current.value).toBe('Current credit');
+    const oldQualifier = relationCallback(current, 'onChange');
+    await act(async () => user.click(scope.querySelector('button[aria-label^="' + m.relation_remove() + ':"]')!));
+    await act(async () => oldQualifier({ target: { value: 'Retired shifted qualifier' } }));
+    expect(scalar().value).toBe('Current credit');
+    expect(scope.querySelectorAll('button[aria-label^="' + m.relation_remove() + ':"]')).toHaveLength(1);
+    const oldProperty = capture();
+    await select(scope, m.relation_property(), '');
+    await select(scope, m.relation_property(), relationProperty);
+    await act(async () => oldProperty());
+    expect(scope.querySelector('input[id*="-qualifier-"]')).toBeNull();
+    expect((within(scope).getByRole('combobox', { name: m.relation_target() }) as HTMLInputElement).value).toBe('');
+    expect(citation().value).toBe('');
+    expect(fixture.calls.filter((call) => call.method === 'POST')).toHaveLength(0);
+
+    await render(null);
+    fixture.publicRead.subject.type = 'schema:Person';
+    await render(h(RelationEditor, {
+      id: fixture.id, locale: 'en', initial: await fixture.transport.read(), transport: fixture.transport, search: async () => [],
+    }));
+    await select(region(), m.relation_property(), 'rezics:penNameOf');
+    const consent = () => within(region()).getByRole('checkbox', { name: m.statement_consent_own() });
+    const oldConsent = relationChildCallback(consent(), 'onCheckedChange');
+    await select(region(), m.relation_property(), '');
+    await select(region(), m.relation_property(), 'rezics:penNameOf');
+    await act(async () => oldConsent(true));
+    expect(consent().getAttribute('aria-checked')).toBe('false');
+    await act(async () => user.click(consent()));
+    expect(consent().getAttribute('aria-checked')).toBe('true');
+  } finally {
+    await ui.close();
+  }
+});
