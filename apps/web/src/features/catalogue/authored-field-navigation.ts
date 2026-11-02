@@ -54,15 +54,7 @@ export function AuthoredFieldNavigation({
   return router ? createElement(RouterAuthoredDeparture, { dirty, pending, protect }) : null;
 }
 
-function RouterAuthoredDeparture({
-  dirty,
-  pending,
-  protect,
-}: {
-  dirty: boolean;
-  pending: boolean;
-  protect: boolean;
-}) {
+function RouterAuthoredDeparture({ dirty, pending, protect }: { dirty: boolean; pending: boolean; protect: boolean }) {
   const returnFocus = useRef<HTMLElement | null>(null);
   const stayButton = useRef<HTMLButtonElement>(null);
   const resolved = useRef(false);
@@ -115,8 +107,7 @@ function RouterAuthoredDeparture({
       AlertDialogContent,
       {
         initialFocus: stayButton,
-        finalFocus: () =>
-          leaving.current ? false : returnFocus.current?.isConnected ? returnFocus.current : false,
+        finalFocus: () => (leaving.current ? false : returnFocus.current?.isConnected ? returnFocus.current : false),
       },
       createElement(
         AlertDialogHeader,

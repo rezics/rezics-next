@@ -56,8 +56,20 @@ test('same-tab and browser-back departures can stay with every retained field or
   const { AuthoredFieldNavigation } = await import('../src/features/catalogue/authored-field-navigation');
   const { m } = await import('../src/paraglide/messages.js');
   const drafts = {
-    first: draft({ document: fromPlainText('First original').snapshot, language: 'en', licence: 'CC0-1.0', citation: 'source 1', original: true }),
-    second: draft({ document: fromPlainText('Second original').snapshot, language: 'ja', licence: 'CC-BY-4.0', citation: 'source 2', original: true }),
+    first: draft({
+      document: fromPlainText('First original').snapshot,
+      language: 'en',
+      licence: 'CC0-1.0',
+      citation: 'source 1',
+      original: true,
+    }),
+    second: draft({
+      document: fromPlainText('Second original').snapshot,
+      language: 'ja',
+      licence: 'CC-BY-4.0',
+      citation: 'source 2',
+      original: true,
+    }),
   };
   let visits = 0;
   function Editor() {
