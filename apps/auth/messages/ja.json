@@ -13,6 +13,7 @@
   "auth_account_delete_erased_profile": "プロフィール、名前、ハンドル、アバター。",
   "auth_account_delete_finality": "アカウントの削除は確定後に取り消せません。",
   "auth_account_delete_heading": "アカウントを削除",
+  "auth_account_delete_departure_heading": "アカウント削除を中断して離れますか？",
   "auth_account_delete_no_automated_accounts": "削除前に、このアカウントが運用する自動アカウントをなくしてください。",
   "auth_account_delete_no_pending_transfer": "削除前に、保留中の移管をすべて解決してください。",
   "auth_account_delete_not_last_owner": "削除前に、各組織に別の所有者がいることを確認してください。",

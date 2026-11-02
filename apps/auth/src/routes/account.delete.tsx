@@ -1,8 +1,17 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useBlocker, useRouter } from '@tanstack/react-router';
 import { AuthButton as Button } from '../button';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from '@rezics/ui/shadcn/alert-dialog';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Field, FieldError, FieldLabel } from '@rezics/ui/shadcn/field';
-import { useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { m } from '../paraglide/messages.js';
 import { AuthPage } from '../frame';
 import { useAccountIdentity, type AccountIdentitySource } from '../account-identity';
@@ -46,6 +55,56 @@ function DeleteAccountPage() {
   return <DeleteAccountContent privacyContact={privacyContact} />;
 }
 
+function DeletionDeparture({
+  shouldWarn,
+  leave,
+  focus,
+}: {
+  shouldWarn: () => boolean;
+  leave: () => void;
+  focus: () => void;
+}) {
+  const blocker = useBlocker({ shouldBlockFn: shouldWarn, enableBeforeUnload: false, withResolver: true });
+  useLayoutEffect(() => {
+    if (blocker.status === 'blocked' && !shouldWarn()) blocker.proceed();
+  });
+  const stay = () => {
+    if (blocker.status === 'blocked') blocker.reset();
+  };
+  return (
+    <AlertDialog
+      open={blocker.status === 'blocked'}
+      onOpenChange={(open) => {
+        if (!open) stay();
+      }}
+    >
+      <AlertDialogContent
+        finalFocus={() => {
+          focus();
+          return false;
+        }}
+      >
+        <AlertDialogTitle>{m.auth_account_delete_departure_heading()}</AlertDialogTitle>
+        <AlertDialogDescription>
+          {m.auth_organization_departure_description()} {m.auth_account_operation_leave_notice()}
+        </AlertDialogDescription>
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={stay}>{m.auth_organization_departure_stay()}</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              if (blocker.status !== 'blocked') return;
+              leave();
+              blocker.proceed();
+            }}
+          >
+            {m.auth_organization_departure_leave()}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 export function DeleteAccountContent({
   privacyContact,
   initial,
@@ -75,6 +134,10 @@ export function DeleteAccountContent({
   const [deleted, setDeleted] = useState(false);
   const [identityVisible, setIdentityVisible] = useState(true);
   const submitting = useRef(false);
+  const router = useRouter({ warn: false });
+  const review = useRef<HTMLFormElement>(null);
+  const confirmationValue = useRef('');
+  const unresolved = useRef(false);
   const alert = useRef<HTMLDivElement>(null);
   const confirmationInput = useRef<HTMLInputElement>(null);
   const authorityGeneration = useRef(0);
@@ -90,11 +153,74 @@ export function DeleteAccountContent({
     identitySource,
   );
 
+  const shouldWarn = useCallback(
+    () =>
+      Boolean(activeAccount.current) &&
+      !accepted.current &&
+      Boolean(confirmationValue.current.trim() || unresolved.current),
+    [],
+  );
+  const page = (content: ReactNode) => (
+    <>
+      {router ? (
+        <DeletionDeparture
+          shouldWarn={shouldWarn}
+          leave={() => clearAuthority('denied')}
+          focus={() => {
+            if (confirmationInput.current && !confirmationInput.current.disabled) confirmationInput.current.focus();
+            else review.current?.focus();
+          }}
+        />
+      ) : null}
+      {content}
+    </>
+  );
+
+  useLayoutEffect(() => {
+    const unload = (event: BeforeUnloadEvent) => {
+      if (!shouldWarn()) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    const follow = (event: MouseEvent) => {
+      if (
+        !router ||
+        !shouldWarn() ||
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      )
+        return;
+      const link = event.target instanceof Element ? event.target.closest('a[href]') : null;
+      if (
+        !(link instanceof HTMLElement) ||
+        link.hasAttribute('download') ||
+        (link.getAttribute('target') && link.getAttribute('target') !== '_self')
+      )
+        return;
+      const url = new URL(link.getAttribute('href')!, window.location.href);
+      if (url.origin !== window.location.origin || link.getAttribute('href')?.startsWith('#')) return;
+      event.preventDefault();
+      void router.navigate({ href: `${url.pathname}${url.search}${url.hash}` });
+    };
+    window.addEventListener('beforeunload', unload);
+    document.addEventListener('click', follow);
+    return () => {
+      window.removeEventListener('beforeunload', unload);
+      document.removeEventListener('click', follow);
+    };
+  }, [router, shouldWarn]);
+
   function clearAuthority(kind: 'signed-out' | 'denied') {
     authorityGeneration.current++;
     activeAccount.current = '';
+    unresolved.current = false;
     submitting.current = false;
     setAccountId('');
+    confirmationValue.current = '';
     setConfirmation('');
     setConfirmationError(false);
     setPending(false);
@@ -147,6 +273,7 @@ export function DeleteAccountContent({
           intendedAccount.current = result.accountId;
           activeAccount.current = result.accountId;
           setAccountId(result.accountId);
+          unresolved.current = Boolean(pendingOperation);
           setReturned(Boolean(pendingOperation));
           const expected = accountOperationProfile('delete');
           setNeedsProfile(
@@ -222,6 +349,7 @@ export function DeleteAccountContent({
       setPending(false);
       return;
     }
+    unresolved.current = true;
     continuation = JSON.stringify(pendingAccountOperationStepUpState());
     let result = await runAccountOperation(operationKey, operation, { isCurrent, retryUncertain: true });
     if (!isCurrent()) return;
@@ -250,10 +378,14 @@ export function DeleteAccountContent({
     }
     submitting.current = false;
     setPending(false);
+    confirmationValue.current = '';
     setConfirmation('');
     if (result.reason === 'denied') {
       // A denied operation cannot preserve the previous person's display context.
       // Keep the original operation key and the existing prerequisite explanation.
+      authorityGeneration.current++;
+      activeAccount.current = '';
+      unresolved.current = false;
       setIdentityVisible(false);
       setMessage(m.auth_account_delete_denied());
     } else if (result.reason === 'platform-closed') {
@@ -276,17 +408,17 @@ export function DeleteAccountContent({
   }
 
   if (loadState === 'signed-out')
-    return (
+    return page(
       <AuthPage returnToSecurity heading={m.auth_account_delete_heading()}>
         <div className="auth-login-form">
           <p>{m.auth_account_operation_sign_in_required()}</p>
           <a href="/login">{m.auth_security_sign_in()}</a>
         </div>
-      </AuthPage>
+      </AuthPage>,
     );
 
   if (loadState === 'failure')
-    return (
+    return page(
       <AuthPage returnToSecurity heading={m.auth_account_delete_heading()}>
         <div className="auth-login-form">
           <ErrorAlert>{loadMessage}</ErrorAlert>
@@ -295,11 +427,11 @@ export function DeleteAccountContent({
           </Button>
           <a href="/login">{m.auth_security_sign_in()}</a>
         </div>
-      </AuthPage>
+      </AuthPage>,
     );
 
   if (loadState === 'loading')
-    return (
+    return page(
       <AuthPage
         returnToSecurity
         heading={m.auth_account_delete_heading()}
@@ -308,11 +440,11 @@ export function DeleteAccountContent({
         }
       >
         <p role="status">{m.auth_inventory_loading()}</p>
-      </AuthPage>
+      </AuthPage>,
     );
 
   if (deleted)
-    return (
+    return page(
       <AuthPage heading={m.auth_account_delete_heading()}>
         <Alert role="status" className="mt-8">
           <AlertDescription>
@@ -321,10 +453,10 @@ export function DeleteAccountContent({
             <p>{m.auth_account_delete_finality()}</p>
           </AlertDescription>
         </Alert>
-      </AuthPage>
+      </AuthPage>,
     );
 
-  return (
+  return page(
     <AuthPage
       returnToSecurity
       heading={m.auth_account_delete_heading()}
@@ -409,7 +541,15 @@ export function DeleteAccountContent({
           onSessionEnded={() => clearAuthority('signed-out')}
         />
       </div>
-      <form className="auth-login-form" method="post" action="/account-operations/approve" noValidate onSubmit={submit}>
+      <form
+        ref={review}
+        tabIndex={-1}
+        className="auth-login-form"
+        method="post"
+        action="/account-operations/approve"
+        noValidate
+        onSubmit={submit}
+      >
         {returned ? (
           <Alert role="status">
             <AlertDescription>{m.auth_account_operation_reconfirm()}</AlertDescription>
@@ -432,6 +572,7 @@ export function DeleteAccountContent({
             value={confirmation}
             onChange={(event) => {
               const value = event.target.value;
+              confirmationValue.current = value;
               setConfirmation(value);
               if (normalizeConfirmation(value) === normalizeConfirmation(confirmationPhrase))
                 setConfirmationError(false);
@@ -469,6 +610,6 @@ export function DeleteAccountContent({
           {m.auth_account_delete_submit()}
         </Button>
       </form>
-    </AuthPage>
+    </AuthPage>,
   );
 }

@@ -223,6 +223,8 @@ Unavailable session reads offer Retry for the intended account, without submitti
 restoration require fresh typed confirmation, and departure retires callbacks while preserving the original command
 for explicit reconciliation. An accepted deletion remains a confirmation of acceptance with cleanup still pending.
 
+Decision: protect nonblank typed confirmation and unresolved deletion in memory with Stay/Leave and unload warnings; Stay keeps the exact review and focus, while Leave retires callbacks and preserves the original reconciliation identity. Authority loss and intended reauthentication release the guard immediately.
+
 ## Delete organization
 
 `/organizations/delete?organization_id=<UUID>` reviews only the selected organization through the private native

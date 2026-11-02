@@ -13,6 +13,7 @@
   "auth_account_delete_erased_profile": "Dein Profil, Name, Handle und Avatar.",
   "auth_account_delete_finality": "Die Löschung ist endgültig und kann nicht rückgängig gemacht werden.",
   "auth_account_delete_heading": "Konto löschen",
+  "auth_account_delete_departure_heading": "Kontolöschung verlassen?",
   "auth_account_delete_no_automated_accounts": "Stelle vor der Löschung sicher, dass dieses Konto keine automatisierten Konten mehr betreibt.",
   "auth_account_delete_no_pending_transfer": "Schließe vor der Löschung alle ausstehenden Übertragungen ab.",
   "auth_account_delete_not_last_owner": "Stelle vor der Löschung sicher, dass jede Organisation einen weiteren Inhaber hat.",

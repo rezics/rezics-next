@@ -13,6 +13,7 @@
   "auth_account_delete_erased_profile": "Tu perfil, nombre, identificador y avatar.",
   "auth_account_delete_finality": "La eliminación es definitiva y no se puede deshacer.",
   "auth_account_delete_heading": "Eliminar tu cuenta",
+  "auth_account_delete_departure_heading": "¿Salir de la eliminación de la cuenta?",
   "auth_account_delete_no_automated_accounts": "Antes de eliminar la cuenta, asegúrate de que no opere ninguna cuenta automatizada.",
   "auth_account_delete_no_pending_transfer": "Resuelve todas las transferencias pendientes antes de eliminar la cuenta.",
   "auth_account_delete_not_last_owner": "Antes de eliminar la cuenta, asegúrate de que cada organización tenga otro propietario.",

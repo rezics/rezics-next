@@ -13,6 +13,7 @@
   "auth_account_delete_erased_profile": "你的個人資料、姓名、帳號識別名稱和頭像。",
   "auth_account_delete_finality": "帳號一經刪除便無法復原。",
   "auth_account_delete_heading": "刪除你的帳戶",
+  "auth_account_delete_departure_heading": "離開帳戶刪除頁面？",
   "auth_account_delete_no_automated_accounts": "刪除前，請確保此帳戶不再營運任何自動化帳戶。",
   "auth_account_delete_no_pending_transfer": "刪除前，請處理所有待完成的轉移。",
   "auth_account_delete_not_last_owner": "刪除前，請確保每個組織都另有擁有者。",

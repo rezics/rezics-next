@@ -13,6 +13,7 @@
   "auth_account_delete_erased_profile": "프로필, 이름, 핸들, 아바타.",
   "auth_account_delete_finality": "계정을 삭제하면 되돌릴 수 없습니다.",
   "auth_account_delete_heading": "계정 삭제",
+  "auth_account_delete_departure_heading": "계정 삭제 페이지를 나가시겠습니까?",
   "auth_account_delete_no_automated_accounts": "삭제 전에 이 계정이 운영하는 자동화 계정이 없도록 하세요.",
   "auth_account_delete_no_pending_transfer": "삭제 전에 대기 중인 이전을 모두 처리하세요.",
   "auth_account_delete_not_last_owner": "삭제 전에 각 조직에 다른 소유자가 있는지 확인하세요.",

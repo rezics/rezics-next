@@ -13,6 +13,7 @@
   "auth_account_delete_erased_profile": "你的个人资料、姓名、账号标识和头像。",
   "auth_account_delete_finality": "账号一经删除便无法恢复。",
   "auth_account_delete_heading": "删除你的账户",
+  "auth_account_delete_departure_heading": "离开账户删除页面？",
   "auth_account_delete_no_automated_accounts": "删除前，请确保此账户不再运营任何自动化账户。",
   "auth_account_delete_no_pending_transfer": "删除前，请处理所有待完成的转移。",
   "auth_account_delete_not_last_owner": "删除前，请确保每个组织都另有所有者。",

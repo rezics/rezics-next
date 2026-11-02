@@ -13,6 +13,7 @@
   "auth_account_delete_erased_profile": "Your profile, name, handle and avatar.",
   "auth_account_delete_finality": "Deletion is final and cannot be undone.",
   "auth_account_delete_heading": "Delete your account",
+  "auth_account_delete_departure_heading": "Leave account deletion?",
   "auth_account_delete_no_automated_accounts": "Before deletion, ensure that no automated accounts are operated by this account.",
   "auth_account_delete_no_pending_transfer": "Before deletion, ensure that no transfer is pending.",
   "auth_account_delete_not_last_owner": "Before deletion, ensure that you are not the last owner of any organization.",

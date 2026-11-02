@@ -13,6 +13,7 @@
   "auth_account_delete_erased_profile": "Votre profil, votre nom, votre identifiant et votre avatar.",
   "auth_account_delete_finality": "La suppression est définitive et irréversible.",
   "auth_account_delete_heading": "Supprimer votre compte",
+  "auth_account_delete_departure_heading": "Quitter la suppression du compte ?",
   "auth_account_delete_no_automated_accounts": "Avant la suppression, assurez-vous que ce compte ne gère plus aucun compte automatisé.",
   "auth_account_delete_no_pending_transfer": "Réglez tous les transferts en attente avant la suppression.",
   "auth_account_delete_not_last_owner": "Avant la suppression, assurez-vous que chaque organisation a un autre propriétaire.",
