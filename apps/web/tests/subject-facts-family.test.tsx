@@ -95,7 +95,7 @@ function include(region: Element) {
   return { control, input, label };
 }
 
-test('Complete Subject facts family: same-property mounted FactFields keep independent source, draft and inclusion controls', async () => {
+test('Complete Subject facts family: same-property mounted FactFields keep independent source, draft and discard decisions', async () => {
   await mounted(async ({ host, render, choose, enter }) => {
     const { FactField } = await import('../src/features/catalogue/subject-facts-view');
     const { stageFact } = await import('../src/features/catalogue/subject-facts');
@@ -133,12 +133,16 @@ test('Complete Subject facts family: same-property mounted FactFields keep indep
     const initialCalls = structuredClone(fixture.calls);
     const stages: (string | null)[][] = [[], []];
     const edits: FactDraft[][] = [[], []];
+    let currentDrafts: (FactDraft | undefined)[] = [];
+    let replaceDrafts!: (next: (FactDraft | undefined)[]) => void;
     let deliver!: () => void;
     function Pair({ mode = 'normal' }: { mode?: string }) {
       const [drafts, setDrafts] = useState<(FactDraft | undefined)[]>([
         mode === 'initial' ? stageFact(read, property, first.id)! : undefined,
         undefined,
       ]);
+      currentDrafts = drafts;
+      replaceDrafts = setDrafts;
       const [phase, setPhase] = useState('current');
       deliver = () => setDrafts([stageFact(read, property, first.id)!, undefined]);
       return (
@@ -170,6 +174,13 @@ test('Complete Subject facts family: same-property mounted FactFields keep indep
                 edits[index]!.push(next);
                 setDrafts((previous) => previous.map((draft, slot) => (slot === index ? next : draft)));
               }}
+              onDiscard={(original) =>
+                setDrafts((previous) =>
+                  previous.map((draft, slot) =>
+                    slot === index && draft === original && !draft.command ? undefined : draft,
+                  ),
+                )
+              }
             />
           ))}
         </CatalogueCurrentReading>
@@ -245,6 +256,43 @@ test('Complete Subject facts family: same-property mounted FactFields keep indep
     await act(async () => controls[0]!.label.click());
     expect(include(fields[0]!).control.getAttribute('aria-checked')).toBe('false');
     expect(include(fields[1]!).control.getAttribute('aria-checked')).toBe('false');
+    const targetDraft = currentDrafts[1]!;
+    const changedSibling = structuredClone(currentDrafts[0]!);
+    changedSibling.included = true;
+    changedSibling.statement.value = { type: 'value', content: 'https://catalogue.example/unresolved-sibling' };
+    const lockedSibling = {
+      ...sealFacts(read.public.subject.id, read.release, [changedSibling])[0]!,
+      result: { ok: false, reason: 'uncertain' } as const,
+    };
+    const siblingCommand = lockedSibling.command!;
+    await act(async () => replaceDrafts([lockedSibling, targetDraft]));
+    const remove = m.album_remove_draft({ field: read.release.properties[property]!.labels.en });
+    const clickHandler = (element: HTMLElement) => {
+      const key = Object.getOwnPropertyNames(element).find((name) => name.startsWith('__reactProps$'))!;
+      return (element as unknown as Record<string, { onClick: () => void }>)[key]!.onClick;
+    };
+    await act(async () => button(fields[1]!, remove).click());
+    const firstQuestion = fields[1]!.querySelector('[role="group"]')!;
+    const staleCancel = clickHandler(button(firstQuestion, m.candidate_cancel()));
+    const staleConfirm = clickHandler(button(firstQuestion, remove));
+    await act(async () => button(firstQuestion, m.candidate_cancel()).click());
+    await act(async () => button(fields[1]!, remove).click());
+    const replacementQuestion = fields[1]!.querySelector('[role="group"]')!;
+    await act(async () => staleCancel());
+    expect(fields[1]!.querySelector('[role="group"]')).toBe(replacementQuestion);
+    await act(async () => staleConfirm());
+    expect(fields[1]!.querySelector('[role="group"]')).toBe(replacementQuestion);
+    expect(currentDrafts[1]).toBe(targetDraft);
+    expect(currentDrafts[0]).toBe(lockedSibling);
+    expect(currentDrafts[0]!.command).toBe(siblingCommand);
+    await act(async () => button(replacementQuestion, m.candidate_cancel()).click());
+    expect(currentDrafts[1]).toBe(targetDraft);
+    expect(currentDrafts[0]!.command).toBe(siblingCommand);
+    await act(async () => button(fields[1]!, remove).click());
+    await act(async () => button(fields[1]!.querySelector('[role="group"]')!, remove).click());
+    expect(currentDrafts[1]).toBeUndefined();
+    expect(currentDrafts[0]).toBe(lockedSibling);
+    expect(currentDrafts[0]!.command).toBe(siblingCommand);
     expect(read.public).toEqual(before);
     expect(fixture.calls).toEqual(initialCalls);
     for (const mode of ['add', 'pointer', 'rejected', 'moved', 'retired', 'replaced', 'initial']) {
