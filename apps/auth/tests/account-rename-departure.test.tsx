@@ -28,7 +28,7 @@ const previous = new Map(
 for (const [name, value] of Object.entries(globals))
   Object.defineProperty(globalThis, name, { value, configurable: true, writable: true });
 const { readRenameContinuation, saveRenameContinuation, RENAME_PROFILE } = await import('../src/account-rename');
-const { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } = await import(
+const { createBrowserHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } = await import(
   '@tanstack/react-router'
 );
 const { createRoot } = await import('react-dom/client');
@@ -83,17 +83,19 @@ async function mount(initial: RenameSource) {
     createRoute({ getParentRoute: () => rootRoute, path: '/next', component: () => <p>Next</p> }),
     createRoute({ getParentRoute: () => rootRoute, path: '/step-up', component: () => <p>Step-up</p> }),
   ]);
-  const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/account/rename'] }) });
+  window.history.replaceState(null, '', '/account/rename');
+  const history = createBrowserHistory({ window: dom });
+  const router = createRouter({ routeTree, history });
   await router.load();
   const host = document.createElement('div');
   document.body.append(host);
   const root = createRoot(host);
   await flush(() => root.render(<RouterProvider router={router} />));
   await tick();
-  console.log('router-state', router.state.location.pathname, router.state.matches.length, host.innerHTML);
   close = async () => {
     await flush(() => root.unmount());
     host.remove();
+    history.destroy();
   };
   return { host, router, replaceSource: (next: RenameSource) => flush(() => replaceSource(next)) };
 }
