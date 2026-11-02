@@ -37,7 +37,8 @@ async function setup(query = signInQuery) {
   const assign = spyOn(window.location, 'assign').mockImplementation(() => {});
   const page = await mount(<RouterProvider router={router} />, {});
   const navigate = (href: string) => flush(() => void router.navigate({ href }));
-  const choose = (label: string) => flush(() => button(document.body, label)!.click());
+  const choose = (label: 'Stay' | 'Leave') =>
+    flush(() => document.querySelector<HTMLButtonElement>(`[role=alertdialog] [data-${label.toLowerCase()}]`)!.click());
   const unload = () => {
     const event = new dom.Event('beforeunload', { cancelable: true });
     window.dispatchEvent(event as unknown as Event);

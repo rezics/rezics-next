@@ -346,8 +346,12 @@ function StepUpForm({ journey }: { journey: ConfirmationJourney }) {
             <AlertDialogTitle>{m.auth_step_up_departure_heading()}</AlertDialogTitle>
             <AlertDialogDescription>{m.auth_step_up_departure_description()}</AlertDialogDescription>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={stay}>{m.auth_organization_departure_stay()}</AlertDialogCancel>
-              <AlertDialogAction onClick={leave}>{m.auth_organization_departure_leave()}</AlertDialogAction>
+              <AlertDialogCancel data-stay onClick={stay}>
+                {m.auth_organization_departure_stay()}
+              </AlertDialogCancel>
+              <AlertDialogAction data-leave onClick={leave}>
+                {m.auth_organization_departure_leave()}
+              </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
