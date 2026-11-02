@@ -151,7 +151,7 @@ async function observeLayout(canvasElement: HTMLElement, protectedBoard = false)
     }
     const heading = article.querySelector('h2[data-content-item-slot="title"]');
     if (heading) {
-      const primary = view.getByRole('link', { name: title, exact: true });
+      const primary = view.getByRole('link', { name: title });
       const action = article.querySelector<HTMLElement>('[data-content-item-slot="actions"] a')!;
       const metadata = article.querySelector<HTMLElement>('[data-content-item-slot="metadata"]')!;
       await expect(heading.textContent).toBe(title);
@@ -177,7 +177,6 @@ async function observeContribution(canvasElement: HTMLElement, purpose: BoardDir
       purpose === 'reviews'
         ? m.board_directory_review_named({ title, subject: contribution.subjectTitle })
         : m.board_directory_discuss_named({ title, subject: contribution.subjectTitle }),
-    exact: true,
   });
   const destination = new URL(action.getAttribute('href')!, window.location.origin);
   await expect(destination.pathname).toBe(`/${getLocale()}/boards/${boardId}/new`);
@@ -188,7 +187,6 @@ async function observeContribution(canvasElement: HTMLElement, purpose: BoardDir
   await expect(
     view.getByRole('link', {
       name: purpose === 'reviews' ? m.board_directory_reviews() : m.board_directory_discussion(),
-      exact: true,
     }),
   ).toHaveAttribute('aria-current', 'page');
   await observeLayout(canvasElement);
@@ -207,13 +205,13 @@ export const SuppliedProtectedFacts: Story = {
     // Defensive presentation of a supplied DTO is not evidence that the native directory discloses it.
     await observeLayout(canvasElement, true);
     const view = within(canvasElement);
-    await expect(
-      view.getByRole('link', { name: m.board_directory_open_named({ title }), exact: true }),
-    ).toHaveAttribute('href', `/${getLocale()}/boards/${boardId}`);
+    await expect(view.getByRole('link', { name: m.board_directory_open_named({ title }) })).toHaveAttribute(
+      'href',
+      `/${getLocale()}/boards/${boardId}`,
+    );
     await expect(
       view.queryByRole('link', {
         name: m.board_directory_review_named({ title, subject: contribution.subjectTitle }),
-        exact: true,
       }),
     ).toBeNull();
     await expect(args.onRead).not.toHaveBeenCalled();
@@ -247,10 +245,7 @@ export const KeyboardDestinations: Story = {
       await userEvent.tab();
       await expect(control).toHaveFocus();
     }
-    await expect(view.getByRole('link', { name: title, exact: true })).toHaveAttribute(
-      'href',
-      `/${getLocale()}/boards/${boardId}`,
-    );
+    await expect(view.getByRole('link', { name: title })).toHaveAttribute('href', `/${getLocale()}/boards/${boardId}`);
   },
 };
 
@@ -258,7 +253,7 @@ function directoryDestination(link: HTMLElement) {
   return new URL(link.getAttribute('href')!, window.location.origin);
 }
 async function observePageControl(canvasElement: HTMLElement, name: string, cursor: string) {
-  const link = within(canvasElement).getByRole('link', { name, exact: true });
+  const link = within(canvasElement).getByRole('link', { name });
   const url = directoryDestination(link);
   await expect(url.pathname).toBe(`/${getLocale()}/boards`);
   await expect(Object.fromEntries(url.searchParams)).toEqual({ purpose: 'reviews', cursor, ...contribution });
@@ -292,7 +287,7 @@ export const NextPage: Story = {
 export const CurrentPurpose: Story = {
   play: async ({ canvasElement, args }) => {
     const view = within(canvasElement);
-    const discussion = view.getByRole('link', { name: m.board_directory_discussion(), exact: true });
+    const discussion = view.getByRole('link', { name: m.board_directory_discussion() });
     await expect(Object.fromEntries(directoryDestination(discussion).searchParams)).toEqual({
       purpose: 'discussion',
       ...contribution,
@@ -301,7 +296,7 @@ export const CurrentPurpose: Story = {
     await expect(await view.findByText(m.board_directory_unavailable())).toBeVisible();
     await expect(args.onRead).toHaveBeenCalledTimes(1);
     await expect(args.onRead).toHaveBeenLastCalledWith({ purpose: 'discussion', limit: 20 });
-    await expect(view.getByRole('link', { name: m.board_directory_discussion(), exact: true })).toHaveAttribute(
+    await expect(view.getByRole('link', { name: m.board_directory_discussion() })).toHaveAttribute(
       'aria-current',
       'page',
     );
