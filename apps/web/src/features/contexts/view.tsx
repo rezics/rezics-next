@@ -150,6 +150,20 @@ export function ContextDirectoryView({
   const searchId = useId();
   const page = data?.page;
   const canCreate = data && admits(data.creation, 'create');
+  const emptyTitle =
+    page?.kind === 'ready' && page.value.next
+      ? m.ctxw_empty_page({}, o)
+      : input.cursor
+        ? m.ctxw_empty_final_page({}, o)
+        : input.query
+          ? m.ctxw_no_matches({}, o)
+          : m.ctxw_empty({}, o);
+  const emptyHelp =
+    page?.kind === 'ready' && page.value.next
+      ? m.ctxw_empty_page_help({}, o)
+      : input.cursor
+        ? m.ctxw_empty_final_page_help({}, o)
+        : m.ctxw_empty_help({}, o);
   return (
     <article className={width} aria-busy={!data}>
       <header className="space-y-3">
@@ -199,8 +213,8 @@ export function ContextDirectoryView({
       ) : page.value.contexts.length === 0 ? (
         <Empty>
           <EmptyHeader>
-            <EmptyTitle>{input.query ? m.ctxw_no_matches({}, o) : m.ctxw_empty({}, o)}</EmptyTitle>
-            <EmptyDescription>{m.ctxw_empty_help({}, o)}</EmptyDescription>
+            <EmptyTitle>{emptyTitle}</EmptyTitle>
+            <EmptyDescription>{emptyHelp}</EmptyDescription>
           </EmptyHeader>
         </Empty>
       ) : (

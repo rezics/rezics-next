@@ -489,6 +489,8 @@ catalogue or substituting sample rows. `/{locale}/my/contexts/new` accepts a nam
 the generated native Context creation method. Optional settings/defaults are omitted until a released choice can
 be supplied. The returned Context DTO is not an Item.
 
+Empty directory pages with continuation use page-local copy; exhausted later pages offer restart with the same search and filter, while only an exhausted first page uses directory-empty or no-matches copy.
+
 `/{locale}/my/contexts/{id}` reads the native Context and read-only settings/defaults. A disclosed subject picker
 links to the existing subject Context review with the selected Context; reading grants no acceptance or adoption.
 Creation is offered only from native `viewerActions` on the Global `semantic.context` parent. Community deletion

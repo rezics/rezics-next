@@ -344,6 +344,42 @@ test('Context summaries expose supplied multilingual headings and exact navigati
     render(empty, directoryInput({ query: '旅' }));
     expect(document.body.textContent).toContain(m.ctxw_no_matches({}, o));
     expect(document.querySelector('ul')).toBeNull();
+    for (const cursor of [undefined, 'previous+/==']) {
+      for (const next of [null, 'next+/==']) {
+        for (const query of [undefined, '旅 & Readers']) {
+          for (const deleted of [false, true]) {
+            const selection = directoryInput({ query, cursor, deleted });
+            render({ ...empty, page: { kind: 'ready', value: { contexts: [], next } } }, selection);
+            const title = next
+              ? m.ctxw_empty_page({}, o)
+              : cursor
+                ? m.ctxw_empty_final_page({}, o)
+                : query
+                  ? m.ctxw_no_matches({}, o)
+                  : m.ctxw_empty({}, o);
+            expect(document.querySelector('[data-slot="empty-title"]')?.textContent).toBe(title);
+            expect(document.querySelector('[data-slot="empty-description"]')?.textContent).toBe(
+              next
+                ? m.ctxw_empty_page_help({}, o)
+                : cursor
+                  ? m.ctxw_empty_final_page_help({}, o)
+                  : m.ctxw_empty_help({}, o),
+            );
+            const links = [...document.querySelectorAll('a')];
+            for (const [label, destination] of [
+              [m.ctxw_next({}, o), next ? directoryHref('en', { ...selection, cursor: next }) : null],
+              [m.ctxw_restart({}, o), cursor ? directoryHref('en', { ...selection, cursor: undefined }) : null],
+            ]) {
+              expect(links.find((link) => link.textContent === label)?.getAttribute('href') ?? null).toBe(destination);
+            }
+            expect(links.some((link) => link.getAttribute('href') === `${directoryHref('en')}/new`)).toBe(
+              admits(empty.creation, 'create'),
+            );
+            expect(document.querySelector('ul')).toBeNull();
+          }
+        }
+      }
+    }
   } finally {
     await window.happyDOM.abort();
   }
