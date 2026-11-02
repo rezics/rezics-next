@@ -27,11 +27,13 @@ for (const [key, value] of Object.entries(globals))
 
 const create = mock(async (_input: unknown): Promise<unknown> => ({ ok: false, reason: 'unavailable' }));
 const update = mock(async (_input: unknown): Promise<unknown> => ({ ok: false, reason: 'unavailable' }));
+const deletion = mock(async (_input: unknown): Promise<unknown> => ({ ok: false, reason: 'unavailable' }));
+const detail = mock(async (_id: string): Promise<any> => ({ ok: false, reason: 'unavailable' }));
 mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('../src/library/copies-actions', () => ({
   createCopy: create,
   updateCopy: update,
-  deleteCopy: async () => ({ ok: false, reason: 'unavailable' }),
+  deleteCopy: deletion,
   readCopyDetail() {},
   readCopySubject() {},
   undoCopy() {},
@@ -101,7 +103,7 @@ const profile = {
 const originating = {
   isCurrent: () => true,
   headers: () => ({ 'x-csrf-token': 'current' }),
-  readDetail: async () => ({ ok: false as const, reason: 'unavailable' as const }),
+  readDetail: detail,
   readSubject: async () => ({ state: 'unavailable' as const }),
 };
 
@@ -163,7 +165,7 @@ afterAll(async () => {
   }
 });
 beforeEach(() => {
-  for (const fn of [create, update, created, saved, closed]) fn.mockClear();
+  for (const fn of [create, update, deletion, detail, created, saved, closed]) fn.mockClear();
 });
 
 const form = () => host.querySelector('form')!;
@@ -286,4 +288,96 @@ test('pending and uncertain updates keep their exact intent until resolution', a
   expect(saved).toHaveBeenCalledTimes(1);
   expect(host.querySelector('form')).toBeNull();
   expect(beforeUnloadIsBlocked()).toBe(false);
+});
+
+for (const operation of ['update', 'delete'] as const) {
+  test(`${operation} conflict reviews without writing, protects the draft once and requires a separate new command`, async () => {
+    await mount('edit');
+    const send = operation === 'update' ? update : deletion;
+    const command = async () => {
+      if (operation === 'delete') {
+        await click(m.library_copy_delete());
+        await click(m.library_copy_delete_confirm());
+      } else await click(m.library_copy_save());
+    };
+    await click(m.library_copy_more());
+    await changeInput(m.library_copy_note(), 'My draft');
+    send.mockResolvedValueOnce({ ok: false, reason: 'conflict' });
+    await command();
+    const refused = send.mock.calls[0]![0];
+    await click(m.library_copy_save());
+    expect(send).toHaveBeenCalledTimes(1);
+    const current = { ...copy, revision: 10, note: 'Current note', status: 'historic', statusLabel: 'Stored status' };
+    detail.mockResolvedValueOnce({ ok: true, copy: current });
+    await click(m.library_copy_conflict_review_open());
+    expect(detail).toHaveBeenCalledWith(copy.id);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(field(m.library_copy_note()).value).toBe('My draft');
+    expect(host.textContent).toContain('Current note');
+    expect(host.textContent).toContain('Stored status');
+    await click(m.library_copy_conflict_review_accept());
+    expect(host.querySelectorAll('[role="alertdialog"]')).toHaveLength(1);
+    await click(m.library_copy_draft_navigation_stay());
+    expect(field(m.library_copy_note()).value).toBe('My draft');
+    await click(m.library_copy_conflict_review_accept());
+    await click(m.library_copy_draft_navigation_discard());
+    expect(closed).not.toHaveBeenCalled();
+    expect(field(m.library_copy_note()).value).toBe('Current note');
+    expect(beforeUnloadIsBlocked()).toBe(false);
+    expect(send).toHaveBeenCalledTimes(1);
+    await command();
+    const next = send.mock.calls[1]![0] as { data: { revision: number; idempotencyKey: string } };
+    expect(next.data.revision).toBe(10);
+    expect(next.data.idempotencyKey).not.toBe((refused as typeof next).data.idempotencyKey);
+    expect(saved).not.toHaveBeenCalled();
+  });
+}
+
+test('conflict review retries failed reads and conceals deletion/denial without offering acceptance', async () => {
+  await mount('edit');
+  update.mockResolvedValueOnce({ ok: false, reason: 'conflict' });
+  await click(m.library_copy_save());
+  for (const result of [
+    { ok: false, reason: 'unavailable' },
+    { ok: true, copy: { ...copy, id: 'other-copy' } },
+    { ok: false, reason: 'forbidden' },
+  ]) {
+    detail.mockResolvedValueOnce(result);
+    await click(m.library_copy_conflict_review_open());
+    expect(host.textContent).toContain(result.reason === 'forbidden'
+      ? m.library_copy_detail_forbidden() : m.library_copy_detail_unavailable());
+    expect([...host.querySelectorAll('button')].some(b => b.textContent === m.library_copy_conflict_review_accept())).toBe(false);
+    expect(form().dataset.idempotencyKey).toBe(copy.idempotencyKey);
+  }
+  expect(update).toHaveBeenCalledTimes(1);
+});
+
+test('an uncertain update cannot enter conflict review and retries its original command after draft edits', async () => {
+  await mount('edit');
+  await click(m.library_copy_save());
+  expect([...host.querySelectorAll('button')].some(b => b.textContent === m.library_copy_conflict_review_open())).toBe(false);
+  await click(m.library_copy_more());
+  await changeInput(m.library_copy_note(), 'Changed after lost response');
+  await click(m.library_copy_save());
+  expect(update.mock.calls[1]![0]).toEqual(update.mock.calls[0]![0]);
+  expect(detail).not.toHaveBeenCalled();
+});
+
+test('read-only conflict review works without command headers and ignores a response after editor closure', async () => {
+  await mount('edit');
+  update.mockResolvedValueOnce({ ok: false, reason: 'conflict' });
+  await click(m.library_copy_save());
+  let finish!: (result: unknown) => void;
+  detail.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  const headers = originating.headers;
+  originating.headers = () => null as unknown as ReturnType<typeof headers>;
+  try {
+    await click(m.library_copy_conflict_review_open());
+    expect(detail).toHaveBeenCalledTimes(1);
+    await click(m.library_copy_cancel());
+    await act(async () => finish({ ok: true, copy: { ...copy, note: 'Late current data' } }));
+    expect(host.querySelector('form')).toBeNull();
+    expect(host.textContent).not.toContain('Late current data');
+    expect(saved).not.toHaveBeenCalled();
+  } finally { originating.headers = headers; }
 });

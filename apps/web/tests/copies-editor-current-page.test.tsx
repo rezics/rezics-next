@@ -325,7 +325,16 @@ describe('Late Copy editor and Undo responses cannot modify a replacement page o
     await settle(latest('update'), { ok: false, reason: 'conflict' });
     await render(page);
     await submit();
-    expect(latest('update').input).toEqual(payload);
+    expect(calls.update).toHaveLength(1);
+    await click(m.library_copy_conflict_review_open(), form());
+    await settle(latest('detail'), { ok: true, copy });
+    await click(m.library_copy_conflict_review_accept(), form());
+    await click(m.library_copy_draft_navigation_discard(), window.document);
+    await click(m.library_copy_more(), form());
+    await text(m.library_copy_note(), 'Saved');
+    await submit();
+    expect(latest('update').input).toMatchObject({ data: { ...payload.data, idempotencyKey: expect.any(String) } });
+    expect((latest('update').input as typeof payload).data.idempotencyKey).not.toBe(copy.idempotencyKey);
     const saved = { ...copy, note: 'Saved', revision: 4, idempotencyKey: crypto.randomUUID() };
     await settle(latest('update'), { ok: true, copy: saved });
     expect(row('Saved').textContent).toContain('Accepted status');
