@@ -306,12 +306,17 @@ function InitialStatement({
                       if (found) return { ...current, references };
                       if (
                         activePlaceholder() &&
-                        !current.references.some((reference) => reference.parts.some((part) => part.property.id === 'schema:url'))
+                        !current.references.some((reference) =>
+                          reference.parts.some((part) => part.property.id === 'schema:url'),
+                        )
                       )
                         return url
                           ? {
                               ...current,
-                              references: [...current.references, { parts: [partValue(citation.part, { type: 'value', content: url })] }],
+                              references: [
+                                ...current.references,
+                                { parts: [partValue(citation.part, { type: 'value', content: url })] },
+                              ],
                             }
                           : current;
                     },

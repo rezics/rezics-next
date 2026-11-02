@@ -2,7 +2,12 @@ import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement, useState } from 'react';
 import type { EntityPickerSubject } from '@rezics/ui/entity-picker';
-import type { CreateResult, CreateSubjectCommand, CreateTransport, InitialSubject } from '../src/features/catalogue/create-subject';
+import type {
+  CreateResult,
+  CreateSubjectCommand,
+  CreateTransport,
+  InitialSubject,
+} from '../src/features/catalogue/create-subject';
 import type { StatementInput } from '../src/features/catalogue/statement-editor';
 import type { ScreenRow } from '../src/features/catalogue/screen-profile-fields';
 
@@ -529,7 +534,12 @@ test('Creation corrections lead with current human fields, disclose exact failur
           type: 'schema:Episode',
           readOnlyType: true,
           fields: (_type, disabled) => createElement(ScreenFields, { disabled }),
-          prepare: (item) => screenInitialFacts(read.release, item, currentRows.map((row) => row.statement)),
+          prepare: (item) =>
+            screenInitialFacts(
+              read.release,
+              item,
+              currentRows.map((row) => row.statement),
+            ),
         },
       }),
     );
@@ -566,8 +576,9 @@ test('Creation corrections lead with current human fields, disclose exact failur
       await user.click(canvas.getByRole('button', { name: m.catalogue_create_submit() }));
     });
     const sealed = structuredClone(screenCommands[0]!);
-    const sealedStatements = (screenCommands[0]!.item as InitialSubject & { statements: Record<string, StatementInput[]> })
-      .statements;
+    const sealedStatements = (
+      screenCommands[0]!.item as InitialSubject & { statements: Record<string, StatementInput[]> }
+    ).statements;
     expect(sealedStatements['schema:isPartOf']![0]!.value).toEqual({ type: 'value', content: partChoice.id });
     expect(sealedStatements['wdt:P725']![0]!.value).toEqual({ type: 'value', content: creditChoice.id });
     expect(canvas.getByRole('button', { name: creditLabel }).hasAttribute('disabled')).toBe(true);
