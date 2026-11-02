@@ -178,3 +178,43 @@ test('pending receiving registration rejects an incorrect native Source or barri
     await f.close();
   }
 }, 120_000);
+
+// UNRUN receiving regression: a valid account is not enough to admit a caller
+// supplied, stale erasure version into the durable native obligation set.
+test('stale receiving barrier registration rolls back without creating an obligation', async () => {
+  const f = await nativeFixture();
+  try {
+    const deleted = await f.person('receiving-stale-barrier');
+    expect((await f.delete(deleted)).status).toBe(200);
+    const ports = f.bindings.trustedAccess;
+    const barrier = await ports.readAuthErasureBarrier!(deleted.accountId);
+    if (!barrier) throw new Error('Missing genuine native deletion barrier');
+    const stale = { ...barrier, version: barrier.version + 1 };
+    await expect(
+      ports.registerAuthReceivingClosure!({ barrier: stale, deadline: Date.now() + 5000 }),
+    ).rejects.toThrow();
+
+    const route = f.routeOf(deleted.accountId)!;
+    expect(
+      (
+        await f.kernel.query(
+          'SELECT 1 FROM access.auth_receiving_obligation WHERE route=$1 AND account_id=$2',
+          [route, deleted.accountId],
+        )
+      ).rowCount,
+    ).toBe(0);
+    expect(
+      await ports.registerAuthReceivingClosure!({ barrier, deadline: Date.now() + 5000 }),
+    ).toEqual({ state: 'pending', reason: 'physical-owner-unavailable' });
+    expect(
+      (
+        await f.kernel.query<{ version: number }>(
+          'SELECT version FROM access.auth_receiving_obligation WHERE route=$1 AND account_id=$2',
+          [route, deleted.accountId],
+        )
+      ).rows,
+    ).toEqual([{ version: barrier.version }]);
+  } finally {
+    await f.close();
+  }
+}, 120_000);
