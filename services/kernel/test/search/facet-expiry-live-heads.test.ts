@@ -5,7 +5,10 @@ import type { Pool, QueryResult, QueryResultRow } from 'pg';
 import { createPool } from '../../src/database/pool.ts';
 import { createFacetDiscoveryStorage } from '../../src/search/facet-discovery-storage.ts';
 
-const hash = (value: unknown) => createHash('sha256').update(canonicalize(value) ?? '').digest('hex');
+const hash = (value: unknown) =>
+  createHash('sha256')
+    .update(canonicalize(value) ?? '')
+    .digest('hex');
 const cost = () => ({
   inputKeys: 0,
   candidates: 0,
@@ -21,7 +24,8 @@ const cost = () => ({
 test('facet preparation expires only indexed live heads across retired history', async () => {
   const native = createPool(process.env.DATABASE_URL!);
   const queries: { sql: string; values: unknown[] }[] = [];
-  const track = (execute: (sql: string, values: unknown[]) => Promise<QueryResult>) =>
+  const track =
+    (execute: (sql: string, values: unknown[]) => Promise<QueryResult>) =>
     async <R extends QueryResultRow = QueryResultRow>(sql: string, values: unknown[] = []) => {
       queries.push({ sql, values });
       return execute(sql, values) as Promise<QueryResult<R>>;
