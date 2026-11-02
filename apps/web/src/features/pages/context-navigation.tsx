@@ -5,11 +5,7 @@ const recoveryLinkClass =
   'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-md border border-border px-3 py-2 text-left whitespace-normal text-primary underline underline-offset-4 [overflow-wrap:anywhere] hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary';
 
 /** Keep subject navigation in its population and reset continuation when changing selection. */
-export function contextHref(
-  href: string,
-  realm?: string,
-  options: { resetSelection?: boolean } = {},
-): string {
+export function contextHref(href: string, realm?: string, options: { resetSelection?: boolean } = {}): string {
   if ((!realm && !options.resetSelection) || !/^\/[^/]+\/subjects\//.test(href)) return href;
   const url = new URL(href, 'https://rezics.invalid');
   if (options.resetSelection) {
