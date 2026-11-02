@@ -15,7 +15,14 @@ import { ContentItem } from '@rezics/ui/content-item';
 import { ListRowControl } from '@rezics/ui/list-row';
 import { Menu } from '@rezics/ui/menu';
 import { Link, useRouter } from '@tanstack/react-router';
-import { useId, useRef, useState, useSyncExternalStore, type FormEvent, type MouseEvent as ReactMouseEvent } from 'react';
+import {
+  useId,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type FormEvent,
+  type MouseEvent as ReactMouseEvent,
+} from 'react';
 import { CancelledError, useQuery, useQueryClient } from '@tanstack/react-query';
 import { personalRead } from '../kernel/query';
 import {
@@ -392,8 +399,8 @@ function ProgressIndexPageContent({
   function protectNavigation(event: ReactMouseEvent<HTMLElement>) {
     const target = event.target;
     if (!(target instanceof Element)) return;
-    const link = target.closest('a');
-    if (!(link instanceof HTMLAnchorElement)) return;
+    const link = target.closest('a') as HTMLAnchorElement | null;
+    if (!link) return;
     if (replayingNavigation.current === link) {
       replayingNavigation.current = null;
       return;
