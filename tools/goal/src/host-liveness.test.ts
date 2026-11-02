@@ -158,7 +158,8 @@ test('restart failures preserve the exact cause and durable backoff through dama
     expect(times[1]! - times[0]!).toBeGreaterThanOrEqual(140);
     expect(readFileSync(join(dir.path, 'manager-host.log'), 'utf8')).toContain('fixture host startup cause');
 
-    const malformedDiagnostics = () => diagnostics.filter((message) => message.includes('Malformed manager host retry journal'));
+    const malformedDiagnostics = () =>
+      diagnostics.filter((message) => message.includes('Malformed manager host retry journal'));
     writeFileSync(retryStatePath, '{');
     await until(() => supervisorFailure !== undefined || malformedDiagnostics().length >= 1);
     expect(supervisorFailure).toBeUndefined();
@@ -172,8 +173,7 @@ test('restart failures preserve the exact cause and durable backoff through dama
     expect(malformedDiagnostics()).toHaveLength(2);
     expect(
       malformedDiagnostics().every(
-        (message) =>
-          message.includes(retryStatePath) && message.includes('maximum backoff') && message.length < 500,
+        (message) => message.includes(retryStatePath) && message.includes('maximum backoff') && message.length < 500,
       ),
     ).toBe(true);
     expect(JSON.parse(readFileSync(hostStatePath, 'utf8'))).toEqual(originalHostState);
