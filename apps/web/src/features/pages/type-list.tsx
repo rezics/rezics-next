@@ -46,9 +46,7 @@ function nativeCover(value: unknown): value is NonNullable<Exclude<SubjectSummar
     !Array.isArray(value.variants) ||
     !value.variants.every(
       (variant) =>
-        isRecord(variant) &&
-        (variant.format === 'avif' || variant.format === 'webp') &&
-        positiveInteger(variant.width),
+        isRecord(variant) && (variant.format === 'avif' || variant.format === 'webp') && positiveInteger(variant.width),
     ) ||
     !(
       value.focalPoint === null ||
@@ -82,9 +80,7 @@ function nativeSummary(value: unknown, id: string, type: string): value is Exclu
     value.types.every(nativeType) &&
     value.types.includes(type) &&
     (value.label === null ||
-      (isRecord(value.label) &&
-        typeof value.label.value === 'string' &&
-        typeof value.label.language === 'string')) &&
+      (isRecord(value.label) && typeof value.label.value === 'string' && typeof value.label.language === 'string')) &&
     typeof value.creativeWork === 'boolean' &&
     (value.cover === null || nativeCover(value.cover))
   );
@@ -137,8 +133,7 @@ export function TypeList(props: Record<string, unknown>) {
     ...(hit.summary !== null ? { summary: hit.summary } : {}),
   }));
   const href = target ? typeListHref(value.locale, target, id) : undefined;
-  const next =
-    page?.next && target ? typeListHref(value.locale, target, id, page.next) : undefined;
+  const next = page?.next && target ? typeListHref(value.locale, target, id, page.next) : undefined;
   return (
     <section data-slot="type-list" aria-labelledby={`${id}-title`} className="min-w-0 space-y-4">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
