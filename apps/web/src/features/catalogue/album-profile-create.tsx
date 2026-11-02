@@ -81,7 +81,7 @@ function AlbumProfileCreateLive({
   const pending = useRef<AlbumCommand | null>(null);
   const running = useRef(false);
   const fields = albumFields(release);
-  const choices = [...fields.scalar, ...fields.relations, ...fields.classifications];
+  const choices = metadataReady ? [...fields.scalar, ...fields.relations, ...fields.classifications] : [];
   const locked = busy || !!pending.current || !enabled || !metadataReady;
   const definiteFailure = failure && failure.reason !== 'unavailable';
 
@@ -467,7 +467,7 @@ function AlbumInitialField({
   // inspectable, including qualifiers and citations, until it can be reconciled deliberately.
   if (!metadataReady || !definition || !release.types[albumType]?.properties.includes(statement.property.id))
     return (
-      <fieldset id={`album-row-${row.id}`} disabled={disabled} className="min-w-0 space-y-3">
+      <fieldset id={`album-row-${row.id}`} tabIndex={-1} disabled={disabled} className="min-w-0 space-y-3">
         <legend>{statement.property.id}</legend>
         <p role="status">{m.correction_preserved({}, o)}</p>
         <pre className="whitespace-pre-wrap break-all text-sm" dir="ltr">

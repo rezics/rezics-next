@@ -199,6 +199,7 @@ test('Album recovery retires every current surface and retains private drafts an
     const creation = albumFixture();
     creation.release.types['schema:MusicAlbum']!.labels.en = 'Original Album authority';
     creation.release.properties['schema:inLanguage']!.labels.en = 'Original language authority';
+    creation.release.properties['schema:contributor']!.labels.en = 'Private contributor field';
     const admitted: AlbumRead = { ok: true, release: creation.release, public: null };
     let metadata: AlbumRead | Error = admitted;
     const submitted: AlbumCommand[] = [];
@@ -276,7 +277,7 @@ test('Album recovery retires every current surface and retains private drafts an
     await type(text(m.correction_value(), scalar), 'fr');
     await type(text(m.relation_citation(), scalar), 'https://private.test/citation');
     const contributor = await addFact('schema:contributor');
-    await type(within(contributor).getByRole('combobox'), 'Private');
+    await type(within(contributor).getByRole('combobox', { name: 'Private contributor field' }), 'Private');
     await settle();
     await act(async () =>
       user.click(
