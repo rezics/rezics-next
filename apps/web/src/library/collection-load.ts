@@ -381,6 +381,7 @@ export async function loadEditableCollectionPage(
     const following = authorization ? await readCollectionFollow(client, collection.id, authorization) : null;
     const filterFields = {
       provenance,
+      ...collectionPresentationOf(collectionEnvelope.collection),
       ...(collection.revision === undefined ? {} : { revision: collection.revision }),
       ...(collection.curatorAccountId === undefined ? {} : { curatorAccountId: collection.curatorAccountId }),
       ...(input.filter ? { filter: input.filter } : {}),

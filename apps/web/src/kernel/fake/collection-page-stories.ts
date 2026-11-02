@@ -49,7 +49,11 @@ const importedCover: NonNullable<CollectionPresentationData['cover']> = {
     variant.format === 'avif' || variant.format === 'webp' ? [{ format: variant.format, width: variant.width }] : [],
   ),
 };
-const baseCollection = clone(collection.collection);
+const baseCollection: Omit<typeof collection.collection, keyof CollectionPresentationData> &
+  CollectionPresentationData = {
+  ...clone(collection.collection),
+  presentationKindSource: 'mixed',
+};
 let editedCollection: typeof baseCollection & CollectionPresentationData & { coverMediaId?: string | null } =
   clone(baseCollection);
 let editedMembers = clone(members);
@@ -141,7 +145,7 @@ function collectionResponse(request?: Request) {
     collection: {
       ...value,
       presentationKind: value.presentationKind ?? null,
-      presentationKindSource: value.presentationKind ? 'owner' : value.memberCount === 0 ? 'empty' : 'pending',
+      presentationKindSource: value.presentationKind ? 'owner' : 'mixed',
       coverSource: value.cover ? 'owner' : value.memberCount === 0 ? 'none' : 'pending',
     },
   };

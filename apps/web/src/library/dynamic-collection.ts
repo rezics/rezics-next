@@ -1,6 +1,6 @@
 import { m } from '../paraglide/messages.js';
 import type { LibrarySubject } from './reads';
-import type { CollectionListPresentations } from './collection-presentation';
+import type { CollectionListPresentations, CollectionPresentationData } from './collection-presentation';
 import type { FilterDocument } from '@rezics/filter';
 import type { CollectionFilterProperty } from './collection-filters';
 import type { CollectionFilterParams } from './collection-filter-params';
@@ -40,7 +40,7 @@ export type DynamicMemberRead = {
   facts?: CollectionMember['facts'];
 };
 export type DynamicMembersPage = { members: DynamicMemberRead[]; next: string | null };
-export type DynamicCollectionPage = {
+export type DynamicCollectionPage = CollectionPresentationData & {
   id: string;
   title: string;
   builtinKind?: DynamicBuiltinKind | undefined;

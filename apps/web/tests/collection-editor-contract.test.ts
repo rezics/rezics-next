@@ -121,6 +121,7 @@ test('one loaded-revision DELETE consumes native receipt headers and Undo replay
 
 test('current list/detail presentation stays bounded and public projection conceals editor and hidden-member data without fabricating producers', async () => {
   const calls: Request[] = [];
+  let dynamic = false;
   const native = {
     ...collection.collection,
     presentationKind: null,
@@ -136,6 +137,7 @@ test('current list/detail presentation stays bounded and public projection conce
       calls.push(request);
       const path = new URL(request.url).pathname;
       if (path === '/v1/collections') return Response.json({ collections: [native], next: null });
+      if (dynamic && path.endsWith('/members')) return Response.json({}, { status: 202 });
       if (path.endsWith('/members'))
         return Response.json({
           members: [
@@ -149,7 +151,7 @@ test('current list/detail presentation stays bounded and public projection conce
           ],
           next: 'next-page',
         });
-      return Response.json({ collection: native });
+      return Response.json({ collection: { ...native, ...(dynamic ? { membershipKind: 'dynamic' } : {}) } });
     },
   });
   const page = await loadEditableCollectionPage(
@@ -190,4 +192,8 @@ test('current list/detail presentation stays bounded and public projection conce
       },
     ),
   ).toBe('1:1');
+  dynamic = true;
+  expect(
+    await loadEditableCollectionPage(client, new Request('https://site.test'), {}, { id: collectionId }, 'anonymous'),
+  ).toMatchObject({ preparing: true, presentationKind: null, presentationKindSource: 'mixed', coverSource: 'owner' });
 });
