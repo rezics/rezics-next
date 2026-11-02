@@ -310,6 +310,8 @@
   "auth_signup_turnstile_loading": "Sicherheitsprüfung wird geladen…",
   "auth_signup_turnstile_required": "Schließen Sie die Sicherheitsprüfung ab, bevor Sie ein Konto erstellen.",
   "auth_signup_turnstile_retry": "Sicherheitsprüfung erneut versuchen",
+  "auth_step_up_departure_description": "Beim Verlassen werden die hier eingegebenen Werte gelöscht. Browserdialoge werden nach Möglichkeit geschlossen; eine bereits gesendete Anmeldung läuft im Hintergrund weiter.",
+  "auth_step_up_departure_heading": "Identitätsbestätigung verlassen?",
   "auth_step_up_explanation": "Deine Sitzung ist für diese Anfrage nicht aktuell genug, bitte gib deine E-Mail-Adresse und dein Passwort ein, um fortzufahren.",
   "auth_step_up_heading": "Identität bestätigen",
   "auth_step_up_passkey": "Mit einem Passkey bestätigen",

@@ -310,6 +310,8 @@
   "auth_signup_turnstile_loading": "正在載入安全驗證…",
   "auth_signup_turnstile_required": "請先完成安全驗證，再建立帳戶。",
   "auth_signup_turnstile_retry": "重試安全驗證",
+  "auth_step_up_departure_description": "離開後，此處輸入的內容會清除。瀏覽器提示會在可行時關閉；已送出的登入請求會在背景繼續處理。",
+  "auth_step_up_departure_heading": "離開身分驗證？",
   "auth_step_up_explanation": "這次請求需要更新的登入狀態，請輸入電子郵件和密碼以繼續。",
   "auth_step_up_heading": "驗證身分",
   "auth_step_up_passkey": "使用密碼金鑰驗證",

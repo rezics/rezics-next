@@ -315,6 +315,8 @@ A signed-in browser whose session is not fresh enough for `prompt=login` or `max
 needed. The form asks for email (`autocomplete="username"`) and password
 (`autocomplete="current-password"`).
 
+Decision: departure is protected when the email has non-whitespace text, the password is nonempty, or a confirmation is pending; leaving clears local input and retires callbacks while any dispatched sign-in continues.
+
 `src/step-up.ts` reuses `signIn` and `signInTarget`. Confirmation is one browser `POST /signin` with
 the same `client_id` and `scope` as sign-in. On success, Auth replaces the previous session. The
 browser then resumes at `/authorize` with that query, removing every `sig`, `exp` and `prompt` and

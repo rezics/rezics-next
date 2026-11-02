@@ -310,6 +310,8 @@
   "auth_signup_turnstile_loading": "Loading the security check…",
   "auth_signup_turnstile_required": "Complete the security check before creating your account.",
   "auth_signup_turnstile_retry": "Retry security check",
+  "auth_step_up_departure_description": "Leaving clears values entered here. Browser prompts are stopped where possible; a sign-in already sent continues in the background.",
+  "auth_step_up_departure_heading": "Leave identity confirmation?",
   "auth_step_up_explanation": "Your session is not recent enough for this request, so enter your email and password to continue.",
   "auth_step_up_heading": "Verify your identity",
   "auth_step_up_passkey": "Verify with a passkey",

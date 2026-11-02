@@ -310,6 +310,8 @@
   "auth_signup_turnstile_loading": "セキュリティチェックを読み込んでいます…",
   "auth_signup_turnstile_required": "アカウントを作成する前にセキュリティチェックを完了してください。",
   "auth_signup_turnstile_retry": "セキュリティチェックを再試行",
+  "auth_step_up_departure_description": "ページを離れると、ここに入力した値は消去されます。可能な場合はブラウザーの確認画面を閉じます。送信済みのサインイン処理はバックグラウンドで続行します。",
+  "auth_step_up_departure_heading": "本人確認を中断しますか？",
   "auth_step_up_explanation": "このリクエストにはより新しいセッションが必要なので、続けるにはメールアドレスとパスワードを入力してください。",
   "auth_step_up_heading": "本人確認",
   "auth_step_up_passkey": "パスキーで確認",

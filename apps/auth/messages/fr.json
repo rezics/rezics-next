@@ -310,6 +310,8 @@
   "auth_signup_turnstile_loading": "Chargement de la vérification de sécurité…",
   "auth_signup_turnstile_required": "Effectuez la vérification de sécurité avant de créer votre compte.",
   "auth_signup_turnstile_retry": "Réessayer la vérification de sécurité",
+  "auth_step_up_departure_description": "En quittant cette page, les valeurs saisies ici seront effacées. Les fenêtres du navigateur seront fermées si possible ; toute connexion déjà envoyée continuera en arrière-plan.",
+  "auth_step_up_departure_heading": "Quitter la confirmation d’identité ?",
   "auth_step_up_explanation": "Votre session n’est pas assez récente pour cette demande, saisissez donc votre adresse e-mail et votre mot de passe pour continuer.",
   "auth_step_up_heading": "Vérifier votre identité",
   "auth_step_up_passkey": "Vérifier avec une clé d’accès",

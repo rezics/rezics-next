@@ -310,6 +310,8 @@
   "auth_signup_turnstile_loading": "Cargando la comprobación de seguridad…",
   "auth_signup_turnstile_required": "Completa la comprobación de seguridad antes de crear tu cuenta.",
   "auth_signup_turnstile_retry": "Reintentar la comprobación de seguridad",
+  "auth_step_up_departure_description": "Al salir se borrarán los datos introducidos aquí. Los avisos del navegador se cerrarán cuando sea posible; cualquier inicio de sesión ya enviado continuará en segundo plano.",
+  "auth_step_up_departure_heading": "¿Salir de la confirmación de identidad?",
   "auth_step_up_explanation": "Tu sesión no es lo bastante reciente para esta solicitud, así que introduce tu correo electrónico y tu contraseña para continuar.",
   "auth_step_up_heading": "Verificar tu identidad",
   "auth_step_up_passkey": "Verificar con una llave de acceso",

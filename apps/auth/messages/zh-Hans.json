@@ -310,6 +310,8 @@
   "auth_signup_turnstile_loading": "正在加载安全验证…",
   "auth_signup_turnstile_required": "请先完成安全验证，再创建账户。",
   "auth_signup_turnstile_retry": "重试安全验证",
+  "auth_step_up_departure_description": "离开后，此处输入的内容会被清除。浏览器提示会在可行时关闭；已发送的登录请求会在后台继续处理。",
+  "auth_step_up_departure_heading": "离开身份验证？",
   "auth_step_up_explanation": "这次请求需要更新的登录状态，请输入电子邮箱和密码以继续。",
   "auth_step_up_heading": "验证身份",
   "auth_step_up_passkey": "使用通行密钥验证",
