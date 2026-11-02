@@ -670,6 +670,43 @@ export function CopyForm({
 
 const hasUnresolvedHistory = (copy: CopyItem) => copy.meaning !== 'known' || !copy.kindLabel || !copy.statusLabel;
 
+function CopyTextReader({
+  label,
+  value,
+  expandLabel,
+  collapseLabel,
+}: {
+  label: string;
+  value: string;
+  expandLabel: string;
+  collapseLabel: string;
+}) {
+  const id = useId();
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div role="group" aria-labelledby={`${id}-label`} className="min-w-0 max-w-full text-sm text-muted-foreground">
+      <p id={`${id}-label`} className="font-medium">
+        {label}
+      </p>
+      <p
+        id={id}
+        className={`min-w-0 max-w-full whitespace-break-spaces [overflow-wrap:anywhere] ${expanded ? '' : 'line-clamp-2'}`}
+      >
+        {value}
+      </p>
+      <button
+        type="button"
+        aria-expanded={expanded}
+        aria-controls={id}
+        className="min-h-11 max-w-full cursor-pointer rounded-md py-2 text-left whitespace-normal text-primary underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        onClick={() => setExpanded((value) => !value)}
+      >
+        {expanded ? collapseLabel : expandLabel}
+      </button>
+    </div>
+  );
+}
+
 function CopyRow({ copy, onEdit, ratio }: { copy: CopyItem; onEdit: () => void; ratio: CoverRatio }) {
   const pageLocale = locale();
   const localizedTitle = copy.subject ? displayLibraryTitle(copy.subject.label, pageLocale) : null;
@@ -695,7 +732,7 @@ function CopyRow({ copy, onEdit, ratio }: { copy: CopyItem; onEdit: () => void; 
         </div>
       }
       metadata={
-        <div className="min-w-0">
+        <div className="w-full min-w-0">
           <p className="text-sm text-muted-foreground">
             <MetaLine
               items={[
@@ -711,15 +748,36 @@ function CopyRow({ copy, onEdit, ratio }: { copy: CopyItem; onEdit: () => void; 
               <span className="whitespace-nowrap">{dateText(copy.acquiredOn)}</span>
             </p>
           ) : null}
-          {copy.location ? <p className="text-sm text-muted-foreground">{copy.location}</p> : null}
-          {copy.source ? <p className="text-sm text-muted-foreground">{copy.source}</p> : null}
+          {copy.location ? (
+            <CopyTextReader
+              label={m.library_copy_location()}
+              value={copy.location}
+              expandLabel={m.library_copy_note_reader_expand_location()}
+              collapseLabel={m.library_copy_note_reader_collapse_location()}
+            />
+          ) : null}
+          {copy.source ? (
+            <CopyTextReader
+              label={m.library_copy_source()}
+              value={copy.source}
+              expandLabel={m.library_copy_note_reader_expand_source()}
+              collapseLabel={m.library_copy_note_reader_collapse_source()}
+            />
+          ) : null}
           {copy.disposedOn ? (
             <p className="text-sm text-muted-foreground">
               <span>{m.library_copy_disposed()}: </span>
               <span className="whitespace-nowrap">{dateText(copy.disposedOn)}</span>
             </p>
           ) : null}
-          {copy.note ? <p className="line-clamp-2 text-sm text-muted-foreground">{copy.note}</p> : null}
+          {copy.note ? (
+            <CopyTextReader
+              label={m.library_copy_note()}
+              value={copy.note}
+              expandLabel={m.library_copy_note_reader_expand_note()}
+              collapseLabel={m.library_copy_note_reader_collapse_note()}
+            />
+          ) : null}
           {hasUnresolvedHistory(copy) ? (
             <div className="mt-2">
               <details className="text-sm">
