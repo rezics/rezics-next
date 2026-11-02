@@ -126,9 +126,12 @@ test('clean navigation is quiet; Stay preserves the proposed handle and confirma
   await setHandle(ui.host, 'after');
   await confirm(ui.host);
   const navigation = await startNavigation(ui.router, '/next');
+  console.log('draft:dialog', ui.host.querySelector('[role="alertdialog"]')?.textContent);
   expect(ui.host.querySelector('[role="alertdialog"]')).not.toBeNull();
   await flush(() => ui.host.querySelector<HTMLButtonElement>('[data-stay]')!.click());
+  console.log('draft:stay-clicked');
   await flush(() => navigation);
+  console.log('draft:navigation-settled');
   const input = ui.host.querySelector<HTMLInputElement>('#rename-handle')!;
   expect(input.value).toBe('after');
   expect(ui.host.querySelector<HTMLInputElement>('#rename-confirm')!.checked).toBe(true);
@@ -140,8 +143,11 @@ test('Leave clears an unsent review before navigation', async () => {
   await setHandle(ui.host, 'after');
   await confirm(ui.host);
   const navigation = await startNavigation(ui.router, '/next');
+  console.log('leave:dialog', ui.host.querySelector('[role="alertdialog"]')?.textContent);
   await flush(() => ui.host.querySelector<HTMLButtonElement>('[data-leave]')!.click());
+  console.log('leave:clicked');
   await flush(() => navigation);
+  console.log('leave:navigation-settled');
   expect(readRenameContinuation()).toBeNull();
   await flush(() => ui.router.navigate({ to: '/account/rename' } as never));
   expect(ui.host.querySelector<HTMLInputElement>('#rename-handle')!.value).toBe('');
