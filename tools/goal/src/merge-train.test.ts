@@ -499,7 +499,7 @@ describe('control-plane launch smoke gate', () => {
       }).run();
       expect(smokeRuns).toBe(0);
       expect(s.outcomes[0]?.passed).toBe(true);
-      expect(git(s.main, 'show', 'dev:tools/goal/src/dev-change.ts')).toBe('candidate\n');
+      expect(git(s.main, 'show', 'dev:tools/goal/src/dev-change.ts')).toBe('candidate');
       expect(readFileSync(join(s.main, 'tools/goal/src/dev-change.ts'), 'utf8')).toBe('base\n');
     } finally {
       s.goalDb.close();
