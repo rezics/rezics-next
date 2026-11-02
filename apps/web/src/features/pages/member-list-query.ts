@@ -18,6 +18,7 @@ import { requestLanguages } from '../../kernel/languages';
 import { isRecord } from './shared';
 import { validatePageNode, validatePageRealm, validateViewCursor } from './view-cursor';
 import type { PageRepresentation, Section } from './overview';
+import { admitMemberRetryAfter } from './member-retry-admission';
 
 export type MemberPageTarget = ({ subject: string; realm?: string } | { account: string } | { route: string }) & {
   view?: View;
@@ -88,7 +89,8 @@ export async function readMemberList(
       ...(authorization ? { headers: { authorization } } : {}),
     },
   );
-  if (response.status !== 200 || !response.data) return { ok: false, status: response.status };
+  if (response.status !== 200 || !response.data)
+    return failedMemberRead(response.status, 'headers' in response ? response.headers : undefined);
   const page = response.data;
   const contextId = page.context?.id ?? PAGE_GLOBAL_CONTEXT;
   const population = page.context?.population;
@@ -148,7 +150,16 @@ export async function readMemberList(
   if (!read || (read.kind !== 'members' && read.kind !== 'search')) return { ok: false, status: 400 };
   return result?.status === 200 && isRecord(result.body)
     ? { ok: true, read, body: result.body }
-    : { ok: false, status: result?.status };
+    : failedMemberRead(result?.status, isRecord(result) ? result.headers : undefined);
+}
+
+function failedMemberRead(status: number | undefined, headers: unknown): Section {
+  const retryAfter = admitMemberRetryAfter(headers);
+  return {
+    ok: false,
+    ...(status === undefined ? {} : { status }),
+    ...(retryAfter === undefined ? {} : { retryAfter }),
+  };
 }
 
 function targetOf(value: unknown): MemberPageTarget {

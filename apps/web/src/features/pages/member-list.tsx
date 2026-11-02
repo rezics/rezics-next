@@ -13,6 +13,8 @@ import { isRecord, pageText } from './shared';
 import { loadMemberList, type MemberListRequest, type MemberPageTarget } from './member-list-query';
 import { useListReaderAdmission, type ListReaderSession } from './list-reader-admission';
 import { createMemberPageProgress, memberPageCursor } from './member-page-progress';
+import { admitMemberRetry, memberRetryAt } from './member-retry-admission';
+import { useSearchRetryWait } from '../../search/search-recovery-retry';
 
 const emptySection: Section = { ok: false };
 
@@ -282,6 +284,8 @@ export function MemberList({
   const [restart, setRestart] = useState(false);
   const progress = useRef(createMemberPageProgress(section.ok ? memberPageCursor(section.body) : undefined));
   const [error, setError] = useState<Section>();
+  const [retryAt, setRetryAt] = useState(() => (section.ok ? undefined : memberRetryAt(section.retryAfter)));
+  const waiting = useSearchRetryWait(retryAt);
   const [pending, setPending] = useState(false);
   const [completion, setCompletion] = useState<{
     generation: number;
@@ -341,7 +345,15 @@ export function MemberList({
   const unique = new Map<string, Item>();
   for (const item of items) if (!unique.has(item.id)) unique.set(item.id, item);
   async function more(event: MouseEvent<HTMLButtonElement>) {
-    if (!continuationEnabled || !target || active.current || !admission.current(incarnation)) return;
+    if (
+      !continuationEnabled ||
+      !target ||
+      active.current ||
+      !admission.current(incarnation) ||
+      waiting ||
+      !admitMemberRetry(retryAt)
+    )
+      return;
     const generation = lifetime.generation();
     const isCurrent = () => lifetime.current(generation) && admission.current(incarnation);
     if (!isCurrent()) return;
@@ -349,6 +361,7 @@ export function MemberList({
     active.current = true;
     setPending(true);
     setError(undefined);
+    setRetryAt(undefined);
     setCompletion(undefined);
     const request: MemberListRequest = {
       target,
@@ -380,6 +393,7 @@ export function MemberList({
       if (!isCurrent()) return;
       if (!next.ok) {
         setError((previous) => (isCurrent() ? next : previous));
+        setRetryAt((previous) => (isCurrent() ? memberRetryAt(next.retryAfter) : previous));
         if ([401, 403, 404, 409].includes(next.status ?? 0)) {
           setPage((previous) => (isCurrent() ? next : previous));
           progress.current = createMemberPageProgress();
@@ -411,6 +425,7 @@ export function MemberList({
       }
     } catch {
       setError((previous) => (isCurrent() ? { ok: false as const } : previous));
+      setRetryAt((previous) => (isCurrent() ? undefined : previous));
     } finally {
       if (isCurrent()) {
         if (activeQueryKey.current === queryKey) activeQueryKey.current = undefined;
@@ -425,6 +440,7 @@ export function MemberList({
     <section
       data-slot="member-list"
       data-node={node}
+      data-retry-after={!failed?.ok ? failed?.retryAfter : undefined}
       aria-labelledby={`${instance}-title`}
       aria-busy={pending}
       className="min-w-0 space-y-4"
@@ -456,9 +472,11 @@ export function MemberList({
       >
         {pending
           ? m.subject_relation_loading({}, options)
-          : failed?.status === 202
-            ? m.collection_filter_preparing({}, options)
-            : completion
+          : waiting
+            ? m.search_recovery_wait({}, options)
+            : failed?.status === 202
+              ? m.collection_filter_preparing({}, options)
+              : completion
               ? completion.exhausted
                 ? m.subject_relation_completed_end({ label: title, count: completion.added }, options)
                 : m.subject_relation_completed_more({ label: title, count: completion.added }, options)
@@ -478,7 +496,7 @@ export function MemberList({
         <button
           type="button"
           onClick={more}
-          aria-disabled={pending}
+          aria-disabled={pending || waiting}
           aria-describedby={`${instance}-status`}
           className={cn(
             buttonVariants({ variant: 'outline' }),
