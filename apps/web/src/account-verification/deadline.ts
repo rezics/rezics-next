@@ -1,8 +1,8 @@
 import { managedReadTimeout } from '../settings/managed-read-deadline';
 
 // Session preparation plus two parallel read phases, with room for the BFF round trip.
-export const verificationPageTimeout = 35_000;
-export const verificationCommandTimeout = 25_000;
+export const verificationPageTimeout = 3 * managedReadTimeout + 5_000;
+export const verificationCommandTimeout = 2 * managedReadTimeout + 5_000;
 
 /** Bound headers and decoding even when a transport ignores abort. Command cancellation is uncertain. */
 export async function withVerificationDeadline<T>(
