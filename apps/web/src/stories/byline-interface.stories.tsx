@@ -21,7 +21,7 @@ const carol = {
   operatorId: null,
 } satisfies PageAuthor;
 const avatar = {
-  ...subject.subject.cover,
+  ...subject.summary.cover,
   variants: [{ format: 'webp' as const, width: 320 }],
   credit: null,
 };
