@@ -327,6 +327,8 @@ function executeDiscoverySearch(
       let retained = false;
       let failed = false;
       try {
+        if (kindPhysical !== undefined && kindPhysical !== canonicalize(queried.consumer))
+          throw new ProblemError('search_restart_required');
         for (let round = 0; round < 3; round++) {
           const batch = await coverage.queryDiscovery(queried, refill);
           if (batch.status !== 'queried') {
