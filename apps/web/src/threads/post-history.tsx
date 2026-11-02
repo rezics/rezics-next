@@ -155,8 +155,7 @@ function HistoryDisclosure({
     if (
       pending.connection !== connection ||
       !lifetime.ownsConnection(connection) ||
-      pending.intent !== continuationIntent.current ||
-      document.activeElement !== pending.intent.element
+      pending.intent !== continuationIntent.current
     ) {
       continuationBoundary.current = undefined;
       continuationIntent.current = undefined;
@@ -179,9 +178,11 @@ function HistoryDisclosure({
     continuationIntent.current = undefined;
     continuationBoundary.current = undefined;
     setContinuationStatus(null);
+    const keyboardOwner =
+      cursor !== undefined && keyboardElement && document.activeElement === keyboardElement ? keyboardElement : undefined;
     const request = lifetime.begin(connection, source, postId, cursor, locale, credentialMode, viewerId);
     if (!request) return;
-    const intent = cursor !== undefined && keyboardElement ? { connection, element: keyboardElement } : undefined;
+    const intent = keyboardOwner ? { connection, element: keyboardOwner } : undefined;
     continuationIntent.current = intent;
     lifetime.update(connection, (view) => ({ ...view, loading: true }));
     try {
@@ -231,7 +232,6 @@ function HistoryDisclosure({
         cursor !== undefined &&
         intent &&
         continuationIntent.current === intent &&
-        document.activeElement === intent.element &&
         lifetime.snapshot().open &&
         lifetime.ownsConnection(connection)
       ) {
