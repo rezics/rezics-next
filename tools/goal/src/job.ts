@@ -884,12 +884,7 @@ export class WorkerJob implements GateOutcomeSink {
         !settledAttempt.failureKind &&
         reportsSuccess(settledAttempt.result, agentAdapter(settledAttempt.profile.cli))
       ) {
-        const resolved = resolveToolIncidentsAfterAttempt(
-          store,
-          ref,
-          store.task(ref.taskId),
-          settledAttempt,
-        );
+        const resolved = resolveToolIncidentsAfterAttempt(store, ref, store.task(ref.taskId), settledAttempt);
         if (resolved.length) this.resumePendingRetries();
       }
       if (silenceFailure && store.attempt(ref).state === 'exited') {
@@ -1570,8 +1565,7 @@ export class WorkerJob implements GateOutcomeSink {
         attempt = store.attempt(ref),
         kind = attempt.failureKind;
       if (kind) {
-        releasedIncidents =
-          resolveToolIncidentsAfterAttempt(store, ref, task, attempt).length > 0 || releasedIncidents;
+        releasedIncidents = resolveToolIncidentsAfterAttempt(store, ref, task, attempt).length > 0 || releasedIncidents;
         const detail = `${attempt.result ?? ''}\n${attempt.blocker ?? ''}`;
         capacity = kind === 'tool' && Boolean(agentAdapter(attempt.profile.cli).signals?.(detail).capacity);
         if (kind === 'tool' && !capacity)

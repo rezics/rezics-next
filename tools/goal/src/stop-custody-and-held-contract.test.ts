@@ -91,7 +91,11 @@ test('normal stop ends exactly its owned detached check process tree with honest
 
     recoveryStore = new WorkerStore(openDb(join(h.settings.stateDirectory, 'goal.sqlite')));
     const recoverySettings = { ...h.settings, terminationGraceMs: 50 };
-    const recovery = new WorkerJob(new WorkerTasks(recoverySettings, recoveryStore), { enqueue() {} }, { deliver() {} });
+    const recovery = new WorkerJob(
+      new WorkerTasks(recoverySettings, recoveryStore),
+      { enqueue() {} },
+      { deliver() {} },
+    );
     await recovery.recoverOrphans();
     await h.tasks.stop(task.id);
 
@@ -102,7 +106,9 @@ test('normal stop ends exactly its owned detached check process tree with honest
     expect(sameProcess(peerIdentity!)).toBe(true);
     expect(h.store.attempts(task.id)).toHaveLength(1);
     expect(h.store.events(task.id, ref.attempt).filter((event) => event.kind === 'stopped')).toHaveLength(1);
-    expect(h.store.events(task.id, ref.attempt).filter((event) => event.kind === 'termination-requested')).toHaveLength(1);
+    expect(h.store.events(task.id, ref.attempt).filter((event) => event.kind === 'termination-requested')).toHaveLength(
+      1,
+    );
     expect(h.store.retryIntent(ref)).toMatchObject({ status: 'abandoned', abandonedBy: 'stop' });
   } finally {
     if (controllerIdentity && sameProcess(controllerIdentity)) process.kill(controllerIdentity.pid, 'SIGKILL');
@@ -146,7 +152,9 @@ test('unstarted held retry --brief preserves task identity, attempt 0, work, dep
     expect(h.store.attempts(task.id)).toEqual([]);
 
     const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
-    h.store.updateTask({ taskId: oldDependency.id, attempt: 0 }, (current) => { current.state = 'merged'; });
+    h.store.updateTask({ taskId: oldDependency.id, attempt: 0 }, (current) => {
+      current.state = 'merged';
+    });
     await job.recoverOrphans();
     expect(h.store.task(task.id)).toMatchObject({ state: 'held', currentAttempt: 0 });
     h.store.updateTask({ taskId: newDependency.id, attempt: 0 }, (current) => {
@@ -154,7 +162,12 @@ test('unstarted held retry --brief preserves task identity, attempt 0, work, dep
     });
     await job.recoverOrphans();
     await job.recoverOrphans();
-    expect(h.store.task(task.id)).toMatchObject({ id: task.id, currentAttempt: 1, branch: task.branch, worktree: task.worktree });
+    expect(h.store.task(task.id)).toMatchObject({
+      id: task.id,
+      currentAttempt: 1,
+      branch: task.branch,
+      worktree: task.worktree,
+    });
     expect(h.store.events(task.id).filter((event) => event.kind === 'held-task-released')).toHaveLength(1);
     expect(readFileSync(work, 'utf8')).toBe('keep this work\n');
   } finally {
@@ -162,45 +175,62 @@ test('unstarted held retry --brief preserves task identity, attempt 0, work, dep
   }
 });
 
-test.each(['stop', 'cancel'] as const)('%s recovery commits the saved disposition before allowing replacement', async (operation) => {
-  const h = harness('#!/usr/bin/env bun\n');
-  try {
-    const task = h.tasks.dispatch(h.briefFile), worker = await h.tasks.retry(task.id), ref = worker.attempt;
-    await worker.exited;
-    h.store.beginTermination(ref, operation);
-    expect(() => h.store.updateTask(ref, (value) => { value.state = 'landing'; })).toThrow(StaleAttemptError);
-    h.store.finishTermination(ref);
-    expect(() => h.tasks.queueRetry(task.id)).toThrow(StaleAttemptError);
-    await expect(h.tasks.retry(task.id)).rejects.toThrow(StaleAttemptError);
-    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
-    await job.recoverOrphans({ adoptRunning: false });
-    await job.recoverOrphans({ adoptRunning: false });
-    const state = operation === 'cancel' ? 'cancelled' : 'stopped';
-    expect(h.store.task(task.id).state).toBe(state);
-    expect(h.store.record(ref)?.outcome).toBe(state);
-    expect(h.store.events(task.id).filter((event) => event.kind === state)).toHaveLength(1);
-    if (operation === 'stop') {
-      h.tasks.queueRetry(task.id);
+test.each(['stop', 'cancel'] as const)(
+  '%s recovery commits the saved disposition before allowing replacement',
+  async (operation) => {
+    const h = harness('#!/usr/bin/env bun\n');
+    try {
+      const task = h.tasks.dispatch(h.briefFile),
+        worker = await h.tasks.retry(task.id),
+        ref = worker.attempt;
+      await worker.exited;
+      h.store.beginTermination(ref, operation);
+      expect(() =>
+        h.store.updateTask(ref, (value) => {
+          value.state = 'landing';
+        }),
+      ).toThrow(StaleAttemptError);
+      h.store.finishTermination(ref);
+      expect(() => h.tasks.queueRetry(task.id)).toThrow(StaleAttemptError);
+      await expect(h.tasks.retry(task.id)).rejects.toThrow(StaleAttemptError);
+      const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
       await job.recoverOrphans({ adoptRunning: false });
-      expect(h.store.task(task.id).state).toBe('ready');
-      const next = await h.tasks.retry(task.id);
-      await next.exited;
-      expect(h.store.attempts(task.id)).toHaveLength(2);
+      await job.recoverOrphans({ adoptRunning: false });
+      const state = operation === 'cancel' ? 'cancelled' : 'stopped';
+      expect(h.store.task(task.id).state).toBe(state);
+      expect(h.store.record(ref)?.outcome).toBe(state);
+      expect(h.store.events(task.id).filter((event) => event.kind === state)).toHaveLength(1);
+      if (operation === 'stop') {
+        h.tasks.queueRetry(task.id);
+        await job.recoverOrphans({ adoptRunning: false });
+        expect(h.store.task(task.id).state).toBe('ready');
+        const next = await h.tasks.retry(task.id);
+        await next.exited;
+        expect(h.store.attempts(task.id)).toHaveLength(2);
+      }
+    } finally {
+      await h.disposeAsync();
     }
-  } finally { await h.disposeAsync(); }
-});
+  },
+);
 
 test('a stop with unknown process identity remains explicit and fences replacement', async () => {
   const h = harness('#!/usr/bin/env bun\n');
   try {
-    const task = h.tasks.dispatch(h.briefFile), worker = await h.tasks.retry(task.id), ref = worker.attempt;
+    const task = h.tasks.dispatch(h.briefFile),
+      worker = await h.tasks.retry(task.id),
+      ref = worker.attempt;
     await worker.exited;
-    h.store.updateAttempt(ref, (value) => { value.process = null; });
+    h.store.updateAttempt(ref, (value) => {
+      value.process = null;
+    });
     await expect(h.tasks.stop(task.id)).rejects.toThrow('unknown process identity');
     await new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} }).recoverOrphans({ adoptRunning: false });
     expect(h.store.attempt(ref).terminationIntent).toMatchObject({ state: 'unknown', processIdentity: 'unknown' });
     expect(h.store.task(task.id).state).toBe('running');
     expect(h.store.record(ref)).toBeUndefined();
     expect(() => h.tasks.queueRetry(task.id)).toThrow(StaleAttemptError);
-  } finally { await h.disposeAsync(); }
+  } finally {
+    await h.disposeAsync();
+  }
 });
