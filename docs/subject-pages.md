@@ -245,6 +245,8 @@ reloads that public statement and body; a receipt or the editor draft never beco
 continues to the actual canonical public reader. Story states live under `Pages/Catalogue/Authored text` and use the
 shared locale, theme and viewport globals.
 
+Explicit current-text reloads and field changes retire current public text before I/O, preserve private replacement drafts and exact unresolved proposals, and permanently fence preceding callbacks and results; a current-only reload retains an independently read comparison while pending, but refusal removes it until explicit review after recovery.
+
 ### Identity and navigation
 
 The [native subject reader](../services/kernel/src/semantic/http/subjects.ts) owns merges, disclosure and the
