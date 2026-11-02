@@ -7,6 +7,7 @@ import { IDENTITY_EPOCH_PROGRESS } from '../../src/semantic/events.ts';
 import { stepIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap.ts';
 import { readIdentityMappings } from '../../src/semantic/identity-epoch-read.ts';
 import { admitIdentityTerminalCapture, runIdentityTerminalCommand } from '../../src/semantic/identity-terminal-closure-command.ts';
+import { IdentityTerminalClaimReleaseError } from '../../src/semantic/identity-terminal-closure-errors.ts';
 import { home, seedLegacyRoot } from './support/identity-epoch.ts';
 import { appendEdge, assertRetained, atBoundary, historicalEdge, isolatedDeployment, seedChain, settle, sourceHead,
   type Boundary } from './support/identity-terminal-closure.ts';
@@ -241,3 +242,57 @@ test('rolled-back capture retains the old edge and never publishes its uncommitt
     expect((await settle(db, ids, a, 256)).observed).toMatchObject({ state: 'mapped', original: a, terminal });
   } finally { await writer.end(); await db.close(); }
 });
+
+for (const failRelease of [false, true]) {
+  test(`partial group acquisition releases earlier claims${failRelease ? ' despite a failed release home' : ''}`, async () => {
+    const db = await isolatedDeployment();
+    try {
+      const pairs = [];
+      for (let index = 0; index < 3; index++) {
+        const original = await seedLegacyRoot(db, 0x7410);
+        const terminal = await seedLegacyRoot(db, 0x7420 + index * 16);
+        await historicalEdge(db, original, terminal);
+        pairs.push({ original, terminal });
+      }
+      // The production command acquires groups in native UUID order.
+      pairs.sort((a, b) => a.terminal < b.terminal ? -1 : 1);
+      const [first, second, third] = pairs as [typeof pairs[number], typeof pairs[number], typeof pairs[number]];
+      const ids = pairs.flatMap(pair => [pair.original, pair.terminal]);
+      await db.install();
+      for (const pair of pairs)
+        expect((await settle(db, ids, pair.original, 256)).observed).toMatchObject({ state: 'mapped', terminal: pair.terminal });
+      const acquisitionFailure = new Error('test fails the third native group close');
+      const releaseFailure = new Error('test fails one native source release');
+      const acquire = () => atBoundary(db, 'close', 'before', async () => { throw acquisitionFailure; },
+        () => runIdentityTerminalCommand(db.pool, { partition: home(first.original) }, async tx => {
+          await admitIdentityTerminalCapture(tx, pairs.map(pair => pair.original));
+          throw new Error('source attempt must not pass partial acquisition');
+        }), home(third.terminal));
+      const operation = failRelease ? () => atBoundary(db, 'claim-release', 'before',
+        async () => { throw releaseFailure; }, acquire, home(first.original), first.original) : acquire;
+      let failure: unknown;
+      try { await operation(); } catch (error) { failure = error; }
+      if (failRelease) {
+        expect(failure).toBeInstanceOf(IdentityTerminalClaimReleaseError);
+        if (!(failure instanceof IdentityTerminalClaimReleaseError)) throw failure;
+        expect(failure.code).toBe('identity_epoch_unavailable');
+        expect(failure.cause).toBe(acquisitionFailure);
+        expect(failure.errors).toEqual([acquisitionFailure, releaseFailure]);
+      } else expect(failure).toBe(acquisitionFailure);
+      // The second completed group is released even if the first release fails.
+      // No scheduler run or synthetic source acknowledgement intervenes here.
+      const secondSource = (await db.admin.query(`SELECT closure_state,closure_claim FROM semantic.identity_epoch_mapping
+        WHERE route=$1 AND original=$2`, [routeOf(second.original), second.original])).rows[0];
+      expect(secondSource).toEqual({ closure_state: 'withdrawn', closure_claim: null });
+      expect((await db.admin.query(`SELECT count(*)::integer n FROM semantic.identity_epoch_original
+        WHERE partition_no=$1 AND terminal=$2 AND closure_release_transaction IS NULL`,
+      [home(second.terminal), second.terminal])).rows).toEqual([{ n: 0 }]);
+      const firstClaim = (await db.admin.query(`SELECT closure_claim FROM semantic.identity_epoch_mapping
+        WHERE route=$1 AND original=$2`, [routeOf(first.original), first.original])).rows[0]?.closure_claim;
+      if (failRelease) expect(firstClaim).toEqual(expect.any(String));
+      else expect(firstClaim).toBeNull();
+      expect((await db.admin.query(`SELECT closure_state FROM semantic.identity_epoch_group
+        WHERE partition_no=$1 AND terminal=$2`, [home(third.terminal), third.terminal])).rows).toEqual([{ closure_state: 'open' }]);
+    } finally { await db.close(); }
+  });
+}

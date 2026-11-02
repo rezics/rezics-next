@@ -9,6 +9,7 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { IdentityEpochStoreError } from './identity-epoch-store.ts';
 import { bindIdentityTerminalMutation, cancelUnregisteredIdentityTerminalCapture, drainIdentityTerminalClosure, releaseIdentityTerminalClaim } from './identity-terminal-closure.ts';
 import { requireIdentityTerminalExecutor } from './identity-terminal-closure-cost.ts';
+import { IdentityTerminalClaimReleaseError } from './identity-terminal-closure-errors.ts';
 
 type Drain = NonNullable<Awaited<ReturnType<typeof drainIdentityTerminalClosure>>>;
 type Scope = { pool: Pool; deadline: number; drained: Map<string, Drain> };
@@ -81,6 +82,10 @@ export async function runIdentityTerminalCommand<T>(pool: Pool, options: LegacyO
     // delivered no-effect quote and never execute these bodies then roll back.
     if ('principal' in options || options.basis || options.receipt || options.authorization || options.clock)
       requireIdentityTerminalExecutor('runIdentityTerminalCommand', 'principal-authorization-receipt');
+    // Receipt-free platform producers still run source capture, mutation events
+    // and native callbacks. Omitting principal options does not turn their real
+    // source command into the supported no-effect executor profile.
+    requireIdentityTerminalExecutor('runIdentityTerminalCommand source discovery/attempt', 'mutation-events-native-callbacks');
     return scopes.run(scope, () => withSingleCommandAttempt(() => {
       const selected = { ...options, deadline: scope.deadline };
       return 'principal' in selected ? runCommand(pool, selected, body) : runCommand(pool, selected, body);
@@ -88,22 +93,37 @@ export async function runIdentityTerminalCommand<T>(pool: Pool, options: LegacyO
   };
   try { return await attempt(); } catch (error) {
     if (!(error instanceof NeedsDrain) || error.scope !== scope) throw error;
-    for (const terminal of error.terminals) {
-      let drained: Drain | null = null;
-      // 4096 directory members, page100: at most41 advancing native pages.
-      for (let page = 0; page < 41 && !drained; page++) {
-        if (Date.now() >= scope.deadline) throw unavailable();
-        drained = await withRequestDeadline(scope.deadline, () => drainIdentityTerminalClosure(pool, terminal, error.claim));
+    let failed = false;
+    let primary: unknown;
+    try {
+      for (const terminal of error.terminals) {
+        let drained: Drain | null = null;
+        // 4096 directory members, page100: at most41 advancing native pages.
+        for (let page = 0; page < 41 && !drained; page++) {
+          if (Date.now() >= scope.deadline) throw unavailable();
+          drained = await withRequestDeadline(scope.deadline, () => drainIdentityTerminalClosure(pool, terminal, error.claim));
+        }
+        if (!drained) throw unavailable();
+        scope.drained.set(terminal, drained);
       }
-      if (!drained) throw unavailable();
-      scope.drained.set(terminal, drained);
-    }
-    try { return await attempt(); } finally {
+      return await attempt();
+    } catch (failure) {
+      failed = true;
+      primary = failure;
+      throw failure;
+    } finally {
       // This is bounded retained cleanup. If the request deadline has expired,
       // native bootstrap recovery advances the same seal and source claims.
+      // The same bounded release phase also covers partial group acquisition.
+      // One failed home must not suppress another home's already-owed release.
+      const failures: unknown[] = [];
       for (const drained of scope.drained.values()) {
-        if (Date.now() < scope.deadline) await withRequestDeadline(scope.deadline, () => releaseIdentityTerminalClaim(pool, drained));
+        if (Date.now() >= scope.deadline) break;
+        try { await withRequestDeadline(scope.deadline, () => releaseIdentityTerminalClaim(pool, drained)); }
+        catch (failure) { failures.push(failure); }
       }
+      if (failures.length) throw new IdentityTerminalClaimReleaseError(
+        failed ? [primary, ...failures] : failures, failed ? primary : failures[0]);
     }
   }
 }

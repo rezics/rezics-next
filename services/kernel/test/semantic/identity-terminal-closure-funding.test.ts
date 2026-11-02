@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { Pool } from 'pg';
 import { stepIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap.ts';
 import { drainIdentityTerminalClosure, cleanIdentityTerminalClosure, releaseIdentityTerminalClaim } from '../../src/semantic/identity-terminal-closure.ts';
 import { home } from './support/identity-epoch.ts';
@@ -19,6 +20,24 @@ import { recordIdentityTerminalOriginalMaintenance, withIdentityTerminalMaintena
   cleanupIdentityTerminalMaintenanceOriginal, type IdentityTerminalMaintenanceOriginal } from '../../src/semantic/identity-terminal-closure-maintenance.ts';
 import { IDENTITY_TERMINAL_MAINTENANCE_PLAN, IDENTITY_TERMINAL_MAINTENANCE_TOTAL } from '../../src/semantic/identity-terminal-closure-maintenance-cost.ts';
 import { reserveIdentityTerminalClosure } from '../../src/semantic/identity-epoch-mapping.ts';
+import { runIdentityTerminalCommand } from '../../src/semantic/identity-terminal-closure-command.ts';
+
+test('receipt-free source commands refuse the missing executor profile before checkout or body IO', async () => {
+  const pool = new Pool();
+  let entered = false;
+  try {
+    await expect(runIdentityTerminalCommand(pool, { partition: 1 }, async () => {
+      entered = true;
+      return { value: null, events: [] };
+    })).rejects.toMatchObject({ code: 'identity_epoch_unavailable', operand: {
+      owner: 'Core', callable: 'withCommandDispatchLifetime', profile: 'mutation-events-native-callbacks',
+      producer: 'runIdentityTerminalCommand source discovery/attempt',
+    } });
+    expect(entered).toBe(false);
+    expect(pool.totalCount).toBe(0);
+    expect(pool.waitingCount).toBe(0);
+  } finally { await pool.end(); }
+});
 
 async function inventory(db: Awaited<ReturnType<typeof isolatedDeployment>>) {
   const rows = (await db.admin.query(`SELECT partition_no,slot,generation,closure_copies

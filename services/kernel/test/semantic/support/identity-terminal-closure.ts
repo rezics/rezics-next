@@ -13,6 +13,7 @@ import { home, identityEpochDatabase, seedLegacyRoot } from './identity-epoch.ts
 
 export type Deployment = Awaited<ReturnType<typeof identityEpochDatabase>>;
 export type Boundary = 'export' | 'hold' | 'receive' | 'install' | 'promote' | 'ack' | 'withdraw'
+  | 'close' | 'claim-release'
   | 'original-admission' | 'original-debit' | 'original-owner-read'
   | 'maintenance-grant' | 'maintenance-admission' | 'maintenance-debit' | 'maintenance-cleanup';
 const boundarySQL: Record<Boundary, RegExp> = {
@@ -23,6 +24,8 @@ const boundarySQL: Record<Boundary, RegExp> = {
   promote: /UPDATE semantic\.identity_epoch_original SET closure_state='installed'/,
   ack: /SET closure_state='active',closure_ack_transaction=/,
   withdraw: /SET source_revision=\$5,closure_state='withdrawn'/,
+  close: /SET closure_state='closing',closure_claim=/,
+  'claim-release': /SET closure_claim=NULL,closure_mutation_xid=NULL/,
   'original-admission': /INSERT INTO semantic\.identity_terminal_closure_original\(/,
   'original-debit': /UPDATE semantic\.identity_terminal_closure_original SET ordinal=1,/,
   'original-owner-read': /AND o\.original_id=\$3 AND o\.source_epoch=p\.epoch AND o\.deadline=\$4 AND o\.ordinal=1/,
@@ -164,7 +167,7 @@ export async function atBoundary<T>(
       const sql = typeof args[0] === 'string' ? args[0] : (args[0] as { text?: string })?.text ?? '';
       if (/^BEGIN\b/.test(sql)) matched = false;
       const parameters = args[1] as unknown[] | undefined;
-      const nativePartition = boundary === 'install' || boundary === 'ack' || boundary === 'hold' || boundary === 'withdraw'
+      const nativePartition = boundary === 'install' || boundary === 'ack' || boundary === 'hold' || boundary === 'withdraw' || boundary === 'claim-release'
         ? Math.floor(Number(parameters?.[0]) / 16) : parameters?.[0];
       const matchesSource = (sourcePartition === undefined || nativePartition === sourcePartition) &&
         (original === undefined || parameters?.includes(original));

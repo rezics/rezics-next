@@ -263,8 +263,9 @@ Principal source commands additionally require Core's authorization, receipt,
 basis and source-association profile. These operations cannot use the no-effect
 quote. `IdentityTerminalCompositionError` carries the exact owner/callable/
 profile/producer operand, rather than a zero vector or invented successful
-parent. Known bootstrap native phases and principal source dispatches refuse
-before their unsupported body/checkout. The retained driver source and its
+parent. Known bootstrap native phases and all source dispatches refuse
+before their unsupported body/checkout, including receipt-free platform source
+commands. The retained driver source and its
 ordering remain present for receiving a supported profile.
 
 The following owned work is still incomplete: literal inclusive compositions
@@ -272,9 +273,15 @@ for all directory SQL bodies and initial-discovery/drain/second-source/claim
 release phases; authentic original admission/private transfer for all subject,
 bulk, merge, account birth, mapping member, workflow and Access delivery
 producers; and the complete combined physical schedule. The supported owner-read original
-cannot fund those independent operations. Existing receipt-free legacy wrapper
-calls are not claimed as funded receiving. No new dependency receipt, native
-pass or whole-product completion is asserted.
+cannot fund those independent operations.
+
+The source driver's release phase covers partial acquisition as well as the
+second source attempt. A later group failure does not skip releases for earlier
+completed drains. Each completed group receives its one bounded release-page
+attempt while the original deadline remains live. Release failures are collected
+across homes and preserve the source/acquisition error as the cause. Unfinished
+pages and failed homes retain their native claims for the existing recovery
+driver; an exception does not release their physical reservations.
 
 ## Source and verification disposition
 
@@ -312,25 +319,6 @@ cover old ordinals 0/1/2, unchanged predecessor price/spent, lost native-grant a
 admission/debit/cleanup commit replies, expired admission, failed effect rollback,
 fresh-native replacement, refusal to evict an unspent custodian, exact actual
 owner-query revocation, and four full cohome slots.
-
-The sole permitted compiler for this changed source,
-`bun run --cwd services/kernel typecheck --emit-schema=semantic`, ran from the
-worktree root at source commit `c6aa69596da467c1aa583c2e6129c581c7ae6aae` with the
-supported placement. Its actual foreground session terminated with exit 75 and:
-
-```text
-remote-check: retrying transport failure on b with code 75
-error: script "typecheck" exited with code 75
-```
-
-No terminal compiler diagnostics or successful typing receipt were returned, and
-no generated snapshot change was returned to the worktree. The Semantic snapshot
-contains the authored forward DDL. Typing remains unverified; the prior typed-CTE
-correction has no passing receipt either. No second compiler, transport repair,
-native/unit/growth/full acceptance or other check was started. The transport
-failure blocks required typing. Independently, the exact Core executor operands
-and owned compositions listed above remain unresolved; this source is not
-whole-feature or Goal completion.
 
 ## Reference sources
 
