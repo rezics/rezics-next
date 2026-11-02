@@ -10,6 +10,7 @@ import { m } from '../../../paraglide/messages.js';
 import type { NavigationSession } from '../../../shell/navigation';
 import { copyStarter, starterChoices } from './starters';
 import { invalidLabels, zonePaths, type CommandOutcome, type CreateCommand } from './model';
+import { CreateNavigationGuard } from './create-navigation';
 import { ZoneFeedback } from './feedback';
 import { hasValidOwnerCsrfToken, type OwnerCapture, type OwnerLifetime } from '../editor/owner-lifetime';
 
@@ -38,25 +39,31 @@ export function CreateZone(props: CreateProps) {
 function CreateVisit({ locale, session, owner, onCreate, onNavigate }: CreateProps) {
   const starterId = useId();
   const options = { locale: locale as never };
+  const initialLanguage = UI_LOCALES.find((language) => language === locale) ?? 'en';
   const [starter, setStarter] = useState('');
   const [labels, setLabels] = useState<ZoneConfiguration['labels'] | null>(null);
-  const [primaryLanguage, setPrimaryLanguage] = useState<ZoneLanguage>(
-    UI_LOCALES.find((language) => language === locale) ?? 'en',
-  );
+  const [primaryLanguage, setPrimaryLanguage] = useState<ZoneLanguage>(initialLanguage);
   const [command, setCommand] = useState<CreateCommand | null>(null);
   const [result, setResult] = useState<CommandOutcome | null>(null);
   const [busy, setBusy] = useState(false);
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
   const inFlight = useRef(false);
   const retained = useRef<CreateCommand | null>(null);
+  const creationSucceeded = useRef(false);
+  const leftVisit = useRef(false);
+  const clearBlockedDeparture = useRef<(() => void) | null>(null);
   const alert = useRef<HTMLDivElement>(null);
   const choose = useRef<HTMLSelectElement>(null);
   const capture = owner?.capture();
+  const isCurrent = (admission: OwnerCapture | null | undefined) =>
+    sessionRef.current === 'signed-in' && (!owner || owner.isCurrent(admission));
   const canWrite = session === 'signed-in' && (!owner || hasValidOwnerCsrfToken(capture?.csrfToken));
   const frozen = busy || command !== null;
 
   async function send(input: CreateCommand) {
     const admission = capture;
-    if (owner && !owner.isCurrent(admission)) return;
+    if (!isCurrent(admission)) return;
     if (owner && (!admission || !hasValidOwnerCsrfToken(admission.csrfToken))) return;
     if (inFlight.current || (retained.current && retained.current !== input)) return;
     // The original command and credentials belong to this rendered admission.
@@ -73,14 +80,13 @@ function CreateVisit({ locale, session, owner, onCreate, onNavigate }: CreatePro
       saved = { kind: 'unavailable' };
       received = false;
     }
-    const ownerCurrent = !owner || owner.isCurrent(admission);
     const responseMatches =
       !owner ||
       !received ||
       (!!admission &&
         saved.ownerObservation?.reader === admission.observation.reader &&
         saved.ownerObservation?.admission === admission.observation.admission);
-    if (!ownerCurrent || !responseMatches) {
+    if (!isCurrent(admission) || !responseMatches) {
       owner?.retire(admission ?? undefined);
       return;
     }
@@ -92,16 +98,20 @@ function CreateVisit({ locale, session, owner, onCreate, onNavigate }: CreatePro
     setBusy(false);
     inFlight.current = false;
     if (saved.kind === 'saved') {
-      if (!owner || owner.isCurrent(admission)) onNavigate(zonePaths(locale, saved.zone.id).edit);
+      if (isCurrent(admission)) {
+        creationSucceeded.current = true;
+        clearBlockedDeparture.current?.();
+        if (!leftVisit.current) onNavigate(zonePaths(locale, saved.zone.id).edit);
+      }
     } else
       requestAnimationFrame(() => {
-        if (!owner || owner.isCurrent(admission)) alert.current?.focus();
+        if (isCurrent(admission)) alert.current?.focus();
       });
   }
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    if (frozen || !canWrite || (owner && !owner.isCurrent(capture))) return;
+    if (frozen || !canWrite || !isCurrent(capture)) return;
     if (!starter || !labels) {
       setResult({ kind: 'invalid' });
       choose.current?.focus();
@@ -125,16 +135,33 @@ function CreateVisit({ locale, session, owner, onCreate, onNavigate }: CreatePro
       <p role="status">{m.zones_owner_loading({}, options)}</p>
     );
   const invalid = result?.kind === 'invalid';
+  const hasEffectiveDraft =
+    starter !== '' ||
+    primaryLanguage !== initialLanguage ||
+    Object.values(labels ?? {}).some((name) => name.length > 0);
+  const requestMayComplete = busy || inFlight.current || result?.kind === 'unavailable';
   return (
     <article
       onClickCapture={(event) => {
-        if (owner && !owner.isCurrent(capture)) {
+        if (!isCurrent(capture)) {
           event.preventDefault();
           event.stopPropagation();
         }
       }}
       className="mx-auto w-full max-w-3xl min-w-0 space-y-6 break-words text-foreground"
     >
+      <CreateNavigationGuard
+        locale={locale}
+        session={session}
+        owner={owner}
+        capture={capture}
+        needsDecision={() => !creationSucceeded.current && (hasEffectiveDraft || requestMayComplete)}
+        requestMayComplete={requestMayComplete}
+        onLeave={() => {
+          leftVisit.current = true;
+        }}
+        clearBlockedDeparture={clearBlockedDeparture}
+      />
       <a
         className={`inline-flex items-center rounded-md px-2 underline ${actionClassName}`}
         href={zonePaths(locale).list}
@@ -187,7 +214,7 @@ function CreateVisit({ locale, session, owner, onCreate, onNavigate }: CreatePro
                 aria-invalid={invalid && !starter}
                 aria-describedby={`${starterId}-zone-starter-help`}
                 onChange={(event) => {
-                  if (owner && !owner.isCurrent(capture)) return;
+                  if (!isCurrent(capture)) return;
                   const id = event.target.value;
                   setStarter(id);
                   setLabels((current) => current ?? (copyStarter(id) ? {} : null));
@@ -221,7 +248,7 @@ function CreateVisit({ locale, session, owner, onCreate, onNavigate }: CreatePro
                 disabled={frozen}
                 errors={invalid ? result.fields : undefined}
                 onChange={(names) => {
-                  if (owner && !owner.isCurrent(capture)) return;
+                  if (!isCurrent(capture)) return;
                   setLabels(names.labels);
                   setPrimaryLanguage(names.primaryLanguage);
                   setResult(null);
@@ -248,7 +275,7 @@ function CreateVisit({ locale, session, owner, onCreate, onNavigate }: CreatePro
                   variant="outline"
                   className={actionClassName}
                   onClick={() => {
-                    if (owner && !owner.isCurrent(capture)) return;
+                    if (!isCurrent(capture)) return;
                     retained.current = null;
                     setCommand(null);
                     setResult(null);

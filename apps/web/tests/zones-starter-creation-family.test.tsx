@@ -4,6 +4,14 @@
 import { afterAll, expect, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute as defineRoute,
+  createRouter,
+  Outlet,
+  RouterProvider,
+} from '@tanstack/react-router';
 import { pickText, pickZoneName, UI_LOCALES } from '@rezics/composition';
 import type { CreateProps } from '../src/features/zones/manage/create';
 import type { CommandOutcome, CreateCommand } from '../src/features/zones/manage/model';
@@ -89,6 +97,51 @@ async function mount(props: Partial<CreateProps> = {}) {
     native,
     navigations,
     render: (next: Partial<CreateProps>) => settle(() => root.render(<CreateZone {...input} {...next} />)),
+    close: async () => {
+      await settle(() => root.unmount());
+      host.remove();
+      frames.length = 0;
+    },
+  };
+}
+async function mountRouted(props: Partial<CreateProps> = {}) {
+  const native = zonesFixture();
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  const arrivals: string[] = [];
+  const navigations: string[] = [];
+  const input: CreateProps = {
+    locale: 'en',
+    session: 'signed-in',
+    onCreate: native.create,
+    onNavigate: (href) => navigations.push(href),
+    ...props,
+  };
+  const rootRoute = createRootRoute({ component: Outlet });
+  const createRoute = defineRoute({
+    getParentRoute: () => rootRoute,
+    path: '/create',
+    component: () => <CreateZone {...input} />,
+  });
+  const awayRoute = defineRoute({
+    getParentRoute: () => rootRoute,
+    path: '/away',
+    onEnter: () => arrivals.push('/away'),
+    component: () => <p>Destination</p>,
+  });
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([createRoute, awayRoute]),
+    history: createMemoryHistory({ initialEntries: ['/create'] }),
+  });
+  await router.load();
+  await settle(() => root.render(<RouterProvider router={router} />));
+  return {
+    host,
+    native,
+    router,
+    arrivals,
+    navigations,
     close: async () => {
       await settle(() => root.unmount());
       host.remove();
@@ -251,6 +304,91 @@ test('primary language and optional translations preserve authored drafts, revea
     });
     expect(pickZoneName({ primaryLanguage: 'ja', labels }, 'fr')).toEqual({ text: '私の本棚', lang: 'ja' });
     expect(copyStarter('manga')!.labels).not.toEqual(labels);
+  } finally {
+    await visit.close();
+  }
+});
+
+test('creation departure keeps the multilingual draft on Stay, leaves once on choice, and ignores an empty reverted starter', async () => {
+  const visit = await mountRouted();
+  try {
+    await choose(visit.host);
+    await name(visit.host, 'My shelf');
+    const german = new Intl.DisplayNames(['en'], { type: 'language' }).of('de')!;
+    await settle(() => change(byLabel(visit.host, m.zone_name_add()), 'de'));
+    await settle(() => change(byLabel(visit.host, german), 'Mein Regal'));
+    await settle(() => change(byLabel<HTMLSelectElement>(visit.host, m.zone_name_language()), 'de'));
+    const unload = new window.Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(true);
+
+    await settle(() => void visit.router.navigate({ to: '/away' }));
+    expect(visit.host.textContent).toContain(m.zone_editor_leave());
+    await settle(() => button(visit.host, m.zone_editor_stay()).click());
+    expect([
+      starter(visit.host).value,
+      byLabel<HTMLInputElement>(visit.host, m.zone_name_primary()).value,
+      byLabel<HTMLInputElement>(visit.host, 'English').value,
+      byLabel<HTMLSelectElement>(visit.host, m.zone_name_language()).value,
+    ]).toEqual(['book', 'Mein Regal', 'My shelf', 'de']);
+
+    await settle(() => void visit.router.navigate({ to: '/away' }));
+    await settle(() => button(visit.host, m.zone_editor_discard()).click());
+    expect(visit.arrivals).toHaveLength(1);
+
+    await settle(() => void visit.router.navigate({ to: '/create' }));
+    await choose(visit.host);
+    await choose(visit.host, '');
+    await settle(() => void visit.router.navigate({ to: '/away' }));
+    expect(visit.host.textContent).not.toContain(m.zone_editor_leave());
+    expect(visit.arrivals).toHaveLength(2);
+
+    await settle(() => void visit.router.navigate({ to: '/create' }));
+    await choose(visit.host);
+    await name(visit.host, 'Confirmed site');
+    await submit(visit.host);
+    expect(visit.navigations).toHaveLength(1);
+    expect(visit.host.textContent).not.toContain(m.zone_editor_leave());
+  } finally {
+    await visit.close();
+  }
+});
+
+test('an unresolved create warns on departure and Stay keeps the sealed command for an exact retry', async () => {
+  const first = deferred<CommandOutcome>();
+  const second = deferred<CommandOutcome>();
+  const commands: CreateCommand[] = [];
+  const visit = await mountRouted({
+    onCreate: (command) => {
+      commands.push(structuredClone(command));
+      return commands.length === 1 ? first.promise : second.promise;
+    },
+  });
+  try {
+    await choose(visit.host);
+    await name(visit.host, 'Pending creation');
+    await submit(visit.host);
+    await settle(() => void visit.router.navigate({ to: '/away' }));
+    expect(visit.host.textContent).toContain(m.zone_editor_leave());
+    expect(visit.host.textContent).toContain(m.zones_create_uncertain());
+    await settle(() => button(visit.host, m.zone_editor_stay()).click());
+
+    first.resolve({ kind: 'unavailable' });
+    await settle(async () => first.promise);
+    await settle(() => button(visit.host, m.zones_owner_retry()).click());
+    expect(commands).toHaveLength(2);
+    expect(commands[1]).toEqual(commands[0]);
+
+    await settle(() => void visit.router.navigate({ to: '/away' }));
+    expect(visit.host.textContent).toContain(m.zones_create_uncertain());
+    await settle(() => button(visit.host, m.zone_editor_discard()).click());
+    expect(visit.router.state.location.pathname).toBe('/away');
+    expect(visit.arrivals).toHaveLength(1);
+    expect(commands).toHaveLength(2);
+    second.resolve({ kind: 'saved', zone: fixtureZone });
+    await settle(async () => second.promise);
+    expect(visit.navigations).toHaveLength(0);
+    expect(visit.arrivals).toHaveLength(1);
   } finally {
     await visit.close();
   }

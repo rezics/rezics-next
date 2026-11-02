@@ -69,6 +69,7 @@ Creation copies the selected `packages/definitions/presentation/*/zone.json` int
 command, retaining its pages and saved scopes, empty mounts and private visibility. The owner authors a primary
 name in a selected supported language; translations are optional and are never filled from starter labels. No label translation, source data or grants are synthesized. Later releases never instantiate
 or rewrite the saved site. A confirmed create navigates to its returned ID's configuration destination;
+an owner who deliberately leaves while creation is unresolved is not redirected back if that request later succeeds.
 source-dependent starter pages remain subject to current source Access, feature admission and readiness.
 The form does not promise that creating the resource makes those reads available.
 
