@@ -111,15 +111,15 @@ test('unavailable item labels retain their localized categories without inventin
   ]);
   for (const id of [undefined, null, 12, '', ' \t']) {
     expect(qualifiedNotes(item, { [role]: { id, label: { value: 'Disclosed label' } } }, 'en')).toEqual([
-      { property: 'wdt:P3831', text: 'Role: Disclosed label' },
+      { property: 'wdt:P3831', text: 'Role: Unlabelled subject' },
     ]);
   }
-  // The supplied canonical summary, rather than the qualifier's lookup key, owns the link identity.
-  expect(qualifiedNotes(item, { [role]: { id: character, label: { value: '  Disclosed label  ' } } }, 'en')).toEqual([
+  // A matching summary keeps its supplied label and links to the requested target.
+  expect(qualifiedNotes(item, { [role]: { id: role, label: { value: '  Disclosed label  ', language: 'en' } } }, 'en')).toEqual([
     {
       property: 'wdt:P3831',
       text: 'Role:   Disclosed label  ',
-      subject: { id: character, label: '  Disclosed label  ' },
+      subject: { id: role, label: '  Disclosed label  ' },
     },
   ]);
   expect(qualifiedNotes(item, { [role]: { id: role, label: 'Readable string label' } }, 'en')).toEqual([

@@ -108,7 +108,7 @@ test('qualified rows preserve unknown values and quantity bounds, retain unavail
     snak('schema:position', 'quantity', { amount: '+2', unit: customUnit }),
   ]);
   const disclosedUnit = {
-    [customUnit]: { id: 'unit', type: 'skos:Concept', label: { value: 'measures', language: 'en' } },
+    [customUnit]: { id: customUnit, type: 'skos:Concept', label: { value: 'measures', language: 'en' } },
   };
   expect(qualifiedNotes(measured, disclosedUnit, 'en')[0]!.quantity?.presentation.unitLabel).toBe('measures');
   expect(qualifiedNotes(measured, {}, 'en')[0]!.quantity?.presentation.unitLabel).toBeNull();

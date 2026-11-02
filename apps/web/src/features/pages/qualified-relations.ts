@@ -1,4 +1,3 @@
-import type { SubjectSummary } from '../../media/summary';
 import { m } from '../../paraglide/messages.js';
 import { quantityPresentation } from '../../subject/quantity-presentation';
 import type { Related } from '../../subject/types';
@@ -18,6 +17,29 @@ export type QualifiedNote = {
   quantity?: QualifiedQuantity;
 };
 
+function disclosedSummary(related: Record<string, unknown>, target: string): Record<string, unknown> | undefined {
+  if (!target.trim() || !Object.hasOwn(related, target)) return undefined;
+  const summary = related[target];
+  return isRecord(summary) && Object.hasOwn(summary, 'id') && summary.id === target ? summary : undefined;
+}
+
+function summaryLabel(summary: Record<string, unknown> | undefined): { value: string; language?: string } | undefined {
+  if (!summary || !Object.hasOwn(summary, 'label')) return undefined;
+  const label = summary.label;
+  if (typeof label === 'string' && label.trim()) return { value: label };
+  if (
+    isRecord(label) &&
+    Object.hasOwn(label, 'value') &&
+    Object.hasOwn(label, 'language') &&
+    Object.keys(label).length === 2 &&
+    typeof label.value === 'string' &&
+    label.value.trim() &&
+    typeof label.language === 'string'
+  )
+    return { value: label.value, language: label.language };
+  return undefined;
+}
+
 /** Preserve one statement's qualifiers. Item labels come only from this response's disclosed related projection. */
 export function qualifiedNotes(statement: Stmt, related: unknown, locale: string): QualifiedNote[] {
   const options = { locale: locale as never };
@@ -30,7 +52,7 @@ export function qualifiedNotes(statement: Stmt, related: unknown, locale: string
     'schema:character': m.subject_credit_character({}, options),
     'wdt:P518': m.subject_credit_part({}, options),
   };
-  const disclosed = isRecord(related) ? (related as Related) : {};
+  const disclosed = isRecord(related) ? related : {};
   return statement.qualifiers.flatMap((snak): QualifiedNote[] => {
     if (!Object.hasOwn(labels, snak.property.id)) return [];
     const prefix = labels[snak.property.id]!;
@@ -47,23 +69,14 @@ export function qualifiedNotes(statement: Stmt, related: unknown, locale: string
     if (snak.value.type !== 'value') return [];
     const content = snak.value.content;
     if (snak.property.data_type === 'wikibase-item' && typeof content === 'string') {
-      const summary = Object.hasOwn(disclosed, content)
-        ? (disclosed[content] as SubjectSummary | undefined)
-        : undefined;
-      const suppliedLabel =
-        typeof summary?.label === 'string'
-          ? summary.label
-          : summary?.label && typeof summary.label === 'object'
-            ? summary.label.value
-            : undefined;
-      const label = typeof suppliedLabel === 'string' && suppliedLabel.trim() ? suppliedLabel : undefined;
-      const id = typeof summary?.id === 'string' && summary.id.trim() ? summary.id : undefined;
+      const summary = disclosedSummary(disclosed, content);
+      const label = summaryLabel(summary)?.value;
       // A missing human label does not disclose the target or erase the qualifier's category.
       return [
         {
           property,
           text: `${prefix}: ${label ?? m.subject_value_unlabelled({}, options)}`,
-          ...(label && id ? { subject: { id, label } } : {}),
+          ...(label ? { subject: { id: content, label } } : {}),
         },
       ];
     }
@@ -82,10 +95,10 @@ export function qualifiedNotes(statement: Stmt, related: unknown, locale: string
     if (snak.property.data_type === 'quantity') {
       // Relation reads disclose summaries, while the shared presenter reads localized label maps.
       const units: Related = {};
-      if (isRecord(content) && typeof content.unit === 'string' && Object.hasOwn(disclosed, content.unit)) {
-        const summary = disclosed[content.unit] as SubjectSummary | undefined;
-        const label = summary?.label;
-        if (label && typeof label === 'object') units[content.unit] = { labels: { [label.language]: label.value } };
+      if (isRecord(content) && typeof content.unit === 'string') {
+        const label = summaryLabel(disclosedSummary(disclosed, content.unit));
+        if (label?.language !== undefined)
+          units[content.unit] = { labels: { [label.language]: label.value } };
       }
       const presentation = quantityPresentation(content, units, locale);
       return presentation && isRecord(content)
