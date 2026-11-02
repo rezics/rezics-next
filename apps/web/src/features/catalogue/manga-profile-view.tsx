@@ -217,6 +217,9 @@ function MangaCreate({
     'schema:ComicSeries': [],
     'schema:PublicationVolume': [],
   });
+  const latestDrafts = useRef(drafts);
+  const currentType = useRef(type);
+  const typeActivation = useRef(0);
   const [independent, setIndependent] = useState(false);
   const [failure, setFailure] = useState<CreateFailure>();
   const [created, setCreated] = useState<Extract<CreateResult, { ok: true }>>();
@@ -255,18 +258,53 @@ function MangaCreate({
   );
   const locked = disabled || busy || !!request.current || !read;
   const rows = drafts[type];
+  const activeTypeActivation = typeActivation.current;
   const groups = read ? mangaGroups(read.release, type, locale) : undefined;
   const labels = mangaGroupLabels(locale);
   const feedback = mangaCreateFeedback(failure?.errors ?? [], rows, terms, read, locale, termsId, type);
   const removalEpoch = useRef(0);
   const epoch = removalEpoch.current;
+  const currentLocked = useRef(locked);
+  currentLocked.current = locked;
   const removalAllowed = () =>
-    lifetime.active() && epoch === removalEpoch.current && !locked && !running.current && !request.current;
-  function changeRows(next: MangaRow[]) {
-    if (removalAllowed()) {
-      setDrafts({ ...drafts, [type]: next });
-      setFailure(undefined);
-    }
+    lifetime.active() && epoch === removalEpoch.current && !currentLocked.current && !running.current && !request.current;
+  function editAllowed(expectedType: MangaType, activation: number) {
+    return expectedType === currentType.current && activation === typeActivation.current && removalAllowed();
+  }
+  function updateRows(expectedType: MangaType, activation: number, update: (rows: MangaRow[]) => MangaRow[]) {
+    if (!editAllowed(expectedType, activation)) return;
+    const current = latestDrafts.current;
+    const currentRows = current[expectedType];
+    const nextRows = update(currentRows);
+    if (nextRows === currentRows) return;
+    const next = { ...current, [expectedType]: nextRows };
+    latestDrafts.current = next;
+    setDrafts(next);
+    setFailure(undefined);
+  }
+  function changeRow(expectedType: MangaType, activation: number, row: MangaRow, next: MangaRow) {
+    updateRows(expectedType, activation, (current) => {
+      const index = current.indexOf(row);
+      if (index < 0) return current;
+      const rows = current.slice();
+      rows[index] = next;
+      return rows;
+    });
+  }
+  function removeRow(expectedType: MangaType, activation: number, row: MangaRow) {
+    updateRows(expectedType, activation, (current) => {
+      const index = current.indexOf(row);
+      return index < 0 ? current : current.filter((_, at) => at !== index);
+    });
+  }
+  function addRow(expectedType: MangaType, activation: number, row: MangaRow) {
+    updateRows(expectedType, activation, (current) =>
+      current.some((item) => item.id === row.id) ||
+      (!read?.release.properties[row.statement.property.id]?.multivalued &&
+        current.some((item) => item.statement.property.id === row.statement.property.id))
+        ? current
+        : [...current, row],
+    );
   }
   async function submit() {
     if (!lifetime.active()) return;
@@ -403,7 +441,10 @@ function MangaCreate({
                 id="manga-type"
                 value={type}
                 onChange={(event) => {
-                  setType(event.target.value as MangaType);
+                  const nextType = event.target.value as MangaType;
+                  if (nextType !== currentType.current) typeActivation.current++;
+                  currentType.current = nextType;
+                  setType(nextType);
                   setFailure(undefined);
                 }}
               >
@@ -563,8 +604,8 @@ function MangaCreate({
                               id: `manga-row-${row.id}`,
                               errors: feedback,
                             }}
-                            onChange={(next) => changeRows(rows.map((item) => (item.id === row.id ? next : item)))}
-                            onRemove={() => changeRows(rows.filter((item) => item.id !== row.id))}
+                            onChange={(next) => changeRow(type, activeTypeActivation, row, next)}
+                            onRemove={() => removeRow(type, activeTypeActivation, row)}
                           />
                         ))}
                       <AddField
@@ -577,14 +618,11 @@ function MangaCreate({
                         )}
                         name={(id) => pickText(read.release.properties[id]!.labels, locale)}
                         onAdd={(property) =>
-                          changeRows([
-                            ...rows,
-                            {
-                              id: crypto.randomUUID(),
-                              statement: blankMangaStatement(property),
-                              label: pickText(read.release.properties[property]!.labels, locale),
-                            },
-                          ])
+                          addRow(type, activeTypeActivation, {
+                            id: crypto.randomUUID(),
+                            statement: blankMangaStatement(property),
+                            label: pickText(read.release.properties[property]!.labels, locale),
+                          })
                         }
                         locale={locale}
                       />
@@ -624,7 +662,7 @@ function MangaCreate({
                       disabled={locked}
                       populated={retiredMangaRowPopulated(row)}
                       removalAllowed={removalAllowed}
-                      onRemove={() => changeRows(rows.filter((item) => item !== row))}
+                      onRemove={() => removeRow(type, activeTypeActivation, row)}
                     />
                   </ContentItemFrame>
                 </section>

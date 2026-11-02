@@ -120,11 +120,11 @@ test('complete Manga creation keeps series and volume drafts, independent contro
     });
     return { promise, resolve };
   };
-  const callback = (button: HTMLElement) =>
-    Reflect.get(
-      button,
-      Object.keys(button).find((key) => key.startsWith('__reactProps$'))!,
-    ).onClick as () => void;
+  const reactProps = (element: HTMLElement) =>
+    Reflect.get(element, Object.keys(element).find((key) => key.startsWith('__reactProps$'))!);
+  const callback = (button: HTMLElement) => reactProps(button).onClick as () => void;
+  const inputChange = (element: HTMLElement) =>
+    reactProps(element).onChange as (event: { target: { value: string }; currentTarget: { value: string } }) => void;
   const longName = `The Paper Observatory — ${'Full multilingual name 紙の天文台 '.repeat(8)}`;
   const longAlias = `Alternative ${'unbrokenalias'.repeat(20)}`;
   try {
@@ -276,6 +276,19 @@ test('complete Manga creation keeps series and volume drafts, independent contro
     expect(within(a).queryByRole('region', { name: title(series, 'schema:inLanguage') })).toBeNull();
     await select(a, m.manga_grain(), 'schema:ComicSeries');
     expect(input(row(a, title(series, 'schema:inLanguage')), m.correction_value()).value).toBe('ja');
+    const retiredLanguage = await add(a, m.manga_publication(), 'schema:inLanguage', title(series, 'schema:inLanguage'));
+    const retiredEdit = inputChange(input(retiredLanguage, m.correction_value()));
+    await click(retiredLanguage, m.recipe_remove_field());
+    await select(a, m.manga_grain(), 'schema:PublicationVolume');
+    const volumeLanguage = await add(a, m.manga_publication(), 'schema:inLanguage', title(volume, 'schema:inLanguage'));
+    await replace(input(volumeLanguage, m.correction_value()), 'fr');
+    await act(async () => retiredEdit({ target: { value: 'retired' }, currentTarget: { value: 'retired' } }));
+    await select(a, m.manga_grain(), 'schema:ComicSeries');
+    expect(input(row(a, title(series, 'schema:inLanguage')), m.correction_value()).value).toBe('ja');
+    expect(within(a).getAllByRole('region', { name: title(series, 'schema:inLanguage') })).toHaveLength(1);
+    await select(a, m.manga_grain(), 'schema:PublicationVolume');
+    expect(input(row(a, title(volume, 'schema:inLanguage')), m.correction_value()).value).toBe('fr');
+    await select(a, m.manga_grain(), 'schema:ComicSeries');
     const authored = await add(a, m.authored_title(), 'schema:abstract', title(series, 'schema:abstract'));
     expect(authored.textContent).toContain(m.authored_citation_hint());
     expect(authored.textContent).toContain(m.authored_original());
