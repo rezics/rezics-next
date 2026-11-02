@@ -25,7 +25,17 @@ export const Route = createFileRoute('/creator/statements/$id')({
   gcTime: 0,
   head: ({ match }) =>
     pageHead({ title: m.statements_detail_heading(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
-  pendingComponent: () => <CreatorStatementPage page={{ kind: 'preparing' }} id="" locale={getLocale()} />,
+  pendingComponent: function CreatorStatementPending() {
+    const search = Route.useSearch();
+    return (
+      <CreatorStatementPage
+        page={{ kind: 'preparing' }}
+        id={Route.useParams().id}
+        locale={getLocale()}
+        {...search}
+      />
+    );
+  },
   component: function CreatorStatementRoute() {
     const { cursor, from } = Route.useSearch();
     return (

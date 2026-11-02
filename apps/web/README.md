@@ -106,6 +106,27 @@ No public offer read or Web preflight substitutes for that precondition. Missing
 unavailable. Sources for this increment: the Commerce owner contract, seller routes/commands, current-origin
 controls and their focused recovery tests. No external reference source applies.
 
+## Creator statement recovery
+
+Creator statement list/detail pages use the private owner-self payout statement APIs, with at most 20 rows per
+page and no per-line enrichment. The point read precedes the line read; refusal of either conceals the inspector.
+Recorded money units, signed amounts and zero remain unchanged. Missing unit facts render amounts unavailable.
+The delivered external-payment evidence consists only of the statement's recorded reference and time; it does
+not establish receipt, provider bank payout, reserves or payability. Richer payment attestations remain unavailable.
+
+Recovery discards only the cursor explicitly rejected by its paginated API; point-read failures and pending
+navigation retain the original line cursor and list return cursor. An `invalid_cursor` (400) or `stale_cursor` (409)
+restarts that list or line page. Other failures retry the exact requested page. Line restart preserves `from`,
+and Back uses it only as the statement-list cursor. Pending detail navigation carries the same statement ID and
+return address. No recovery follows a provider redirect or refreshes a cursor automatically.
+
+Source contracts: the Commerce owner README's financial-evidence and recorded-display sections, payout route DTOs,
+the generated payout client and existing statement fixtures/pages. No external reference source applies.
+Focused recovery acceptance lives in `tests/creator-statement-current-read.test.ts` and `tests/creator-statements.test.ts`.
+
+Decision: statement recovery uses the shared creator read and command admission contract above; healthy reads require
+no CSRF, and payment mutations retain their original credential, operands and request identity.
+
 ## Testing
 
 For a focused fake, component, route-loader or story-render test that does not need native services, run it locally:

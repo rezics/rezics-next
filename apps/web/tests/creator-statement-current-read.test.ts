@@ -125,7 +125,7 @@ test('default private statement reads use current credentials without caching or
           headers: { location: 'https://another-principal.test/private' },
         },
       );
-    expect(await readCreatorStatements({ data: {} })).toEqual({ kind: 'error' });
+    expect(await readCreatorStatements({ data: {} })).toEqual({ kind: 'unavailable' });
     expect(calls).toHaveLength(7);
     respond = (call) =>
       new URL(call.url).pathname.endsWith('/lines')
@@ -144,6 +144,19 @@ test('default private statement reads use current credentials without caching or
     expect(calls.every((call) => new URL(call.url).origin === 'https://kernel.test')).toBe(true);
     expect(responseHeaders.get('cache-control')).toBe('private, no-store');
     expect(responseHeaders.get('x-robots-tag')).toBe('noindex, nofollow');
+    for (const [status, code, kind] of [[400, 'invalid_cursor', 'error'], [409, 'stale_cursor', 'stale']] as const) {
+      respond = () => Response.json({ code }, { status });
+      const point = await readCreatorStatement({ data: { id: statement.id, cursor: 'signed/line+page' } });
+      expect(point).toEqual({ kind: 'unavailable' });
+      const html = await render(createElement(CreatorStatementPage, {
+        page: point, id: statement.id, locale: 'en', cursor: 'signed/line+page', from: 'signed/list+page',
+      }));
+      expect(html).toContain(`href="/en/creator/statements/${statement.id}?cursor=signed%2Fline%2Bpage&amp;from=signed%2Flist%2Bpage"`);
+      respond = (call) => new URL(call.url).pathname.endsWith('/lines') ? Response.json({ code }, { status }) : healthy(call);
+      expect(await readCreatorStatement({ data: { id: statement.id, cursor: 'signed/line+page' } })).toEqual({
+        kind: 'ready', statement, lines: { kind },
+      });
+    }
   } finally {
     transport.mockRestore();
   }
@@ -155,6 +168,20 @@ async function render(page: ReactElement): Promise<string> {
   await router.load();
   return renderToString(createElement(RouterProvider, { router }));
 }
+
+test('pending detail keeps the requested statement and exact list return page', async () => {
+  const { Route } = await import('../src/routes/creator/statements/$id');
+  const search = spyOn(Route, 'useSearch').mockReturnValue({ cursor: 'signed/line+page', from: 'signed/list+page' });
+  const params = spyOn(Route, 'useParams').mockReturnValue({ id: statement.id });
+  try {
+    const html = await render(createElement(Route.options.pendingComponent!));
+    expect(html).toContain('href="/en/creator/statements?cursor=signed%2Flist%2Bpage"');
+    expect(html).not.toContain('signed/line+page');
+  } finally {
+    search.mockRestore();
+    params.mockRestore();
+  }
+});
 
 test('healthy captured USD/EUR and negative lines format while historical money stays unavailable with external-payment evidence intact', async () => {
   const list = await render(

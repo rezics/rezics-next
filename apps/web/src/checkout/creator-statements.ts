@@ -101,11 +101,14 @@ function detailInput(value: unknown): { id: string; cursor?: string } {
   return { id: input.id, ...statementSearch(input) };
 }
 
-function failure(status: number): StatementFailure {
+function failure(status: number, problem: unknown, paginated = false): StatementFailure {
   if (status === 401 || status === 403 || status === 404) return { kind: 'denied' };
-  if (status === 409) return { kind: 'stale' };
-  if (status >= 500) return { kind: 'unavailable' };
-  return { kind: 'error' };
+  // Only the API that consumed a cursor can reject it. A point-read failure must
+  // never discard the as-yet unread line page or the list return address.
+  const code = problem && typeof problem === 'object' && 'code' in problem ? problem.code : null;
+  if (paginated && status === 400 && code === 'invalid_cursor') return { kind: 'error' };
+  if (paginated && status === 409 && code === 'stale_cursor') return { kind: 'stale' };
+  return { kind: 'unavailable' };
 }
 
 const amounts = ['grossMinor', 'taxMinor', 'feeMinor', 'disputeFeeMinor', 'netReceiptsMinor'] as const;
@@ -192,7 +195,7 @@ async function loadStatementsBody(
       headers: { authorization },
       fetch: { cache: 'no-store', redirect: 'manual' },
     });
-    if (result.error) return finish(failure(result.status));
+    if (result.error) return finish(failure(result.status, result.error.value, true));
     const page = result.data;
     if (
       !page ||
@@ -238,7 +241,7 @@ async function loadStatementBody(
       headers: { authorization },
       fetch: { cache: 'no-store', redirect: 'manual' },
     });
-    if (result.error) return finish(failure(result.status));
+    if (result.error) return finish(failure(result.status, result.error.value));
     const statement = result.data?.statement;
     if (
       !statement ||
@@ -255,7 +258,7 @@ async function loadStatementBody(
         fetch: { cache: 'no-store', redirect: 'manual' },
       });
       if (result.error) {
-        lines = failure(result.status);
+        lines = failure(result.status, result.error.value, true);
         // A permission change between the two reads must conceal the entire inspector.
         if (lines.kind === 'denied') return finish(lines);
       } else {

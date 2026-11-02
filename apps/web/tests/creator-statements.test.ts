@@ -191,7 +191,8 @@ describe('Creators can inspect private royalty statements, source lines and exte
       [409, 'stale'],
       [503, 'unavailable'],
     ] as const) {
-      const api = fixture(() => Response.json({ code: 'problem' }, { status }));
+      const code = status === 400 ? 'invalid_cursor' : status === 409 ? 'stale_cursor' : 'overloaded';
+      const api = fixture(() => Response.json({ code }, { status }));
       expect(await loadCreatorStatements(api.client, request(), {}, {})).toEqual({ kind });
     }
     const empty = fixture(() => Response.json({ payoutStatements: [], next: null }));
