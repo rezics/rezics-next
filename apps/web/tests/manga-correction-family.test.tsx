@@ -914,7 +914,6 @@ test('initial Manga recovery is single-flight, focuses its matching result, and 
   });
 });
 
-
 test('Manga withdrawn correction recovery preserves siblings, captured discard and exact uncertain commands', async () => {
   await mounted(async (ui) => {
     const { MangaCorrections } = await import('../src/features/catalogue/manga-profile-corrections');
@@ -922,29 +921,40 @@ test('Manga withdrawn correction recovery preserves siblings, captured discard a
     const { readMangaProfile } = await import('../src/features/catalogue/manga-profile');
     const { m } = await import('../src/paraglide/messages.js');
     const property = 'schema:numberOfPages';
-    const callback = (node: Element) => Reflect.get(node,
-      Object.keys(node).find((key) => key.startsWith('__reactProps$'))!).onClick as () => void;
+    const callback = (node: Element) =>
+      Reflect.get(
+        node,
+        Object.keys(node).find((key) => key.startsWith('__reactProps$'))!,
+      ).onClick as () => void;
     for (const state of ['unsent', 'uncertain', 'pending', 'confirmed'] as const) {
       const read = await readMangaProfile(mangaFixture().client, mangaVolumeId);
       if (!read.ok || !read.public) throw new Error('Expected current Manga volume');
       const withdrawn = structuredClone(read);
-      withdrawn.release.types[read.public.subject.type]!.properties =
-        withdrawn.release.types[read.public.subject.type]!.properties.filter((id) => id !== property);
+      withdrawn.release.types[read.public.subject.type]!.properties = withdrawn.release.types[
+        read.public.subject.type
+      ]!.properties.filter((id) => id !== property);
       const commands: FactCommand[] = [];
       const late = deferred<import('../src/features/catalogue/subject-facts').FactResult>();
       const ports: MangaCorrectionPorts = {
-        facts: { read: async () => ({ ...read, public: read.public!, source: null }), propose: async (command) => {
-          commands.push(command);
-          if (state === 'pending' && commands.length === 1) return late.promise;
-          return state === 'confirmed'
-            ? { ok: true, candidate: 'confirmed', revision: 2 }
-            : { ok: false, reason: commands.length === 1 ? 'uncertain' : 'invalid' };
-        } },
-        review: () => { throw new Error('Recovery must not invent a review'); },
-        relations: null, authored: null,
+        facts: {
+          read: async () => ({ ...read, public: read.public!, source: null }),
+          propose: async (command) => {
+            commands.push(command);
+            if (state === 'pending' && commands.length === 1) return late.promise;
+            return state === 'confirmed'
+              ? { ok: true, candidate: 'confirmed', revision: 2 }
+              : { ok: false, reason: commands.length === 1 ? 'uncertain' : 'invalid' };
+          },
+        },
+        review: () => {
+          throw new Error('Recovery must not invent a review');
+        },
+        relations: null,
+        authored: null,
       };
-      const page = (current = read) => <MangaCorrections read={current} locale="en" disabled={false}
-        ports={ports} reload={async () => {}} />;
+      const page = (current = read) => (
+        <MangaCorrections read={current} locale="en" disabled={false} ports={ports} reload={async () => {}} />
+      );
       await ui.render(page());
       await ui.click(button(field(ui.host, 'number of pages'), m.facts_edit_field()));
       await ui.input(amount(field(ui.host, 'number of pages'), m.correction_amount()), '+241');

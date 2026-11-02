@@ -100,7 +100,7 @@ function MangaCorrectionsLive({ read, locale, disabled, ports, reload }: Correct
   const running = useRef(false);
   const subject = read?.public?.subject;
   const current = useMemo(
-    () => read?.public ? { ok: true as const, release: read.release, public: read.public, source: null } : undefined,
+    () => (read?.public ? { ok: true as const, release: read.release, public: read.public, source: null } : undefined),
     [read],
   );
   const label = subject ? pickText(subject.labels, locale) : undefined;
@@ -122,8 +122,11 @@ function MangaCorrectionsLive({ read, locale, disabled, ports, reload }: Correct
   }
   const admitted = new Set(
     Object.entries(groups ?? {}).flatMap(([group, fields]) =>
-      group === 'writing' ? [] : fields.filter((property) =>
-        !!current && !!subject && correctionProperty(current.release, subject.type, property)),
+      group === 'writing'
+        ? []
+        : fields.filter(
+            (property) => !!current && !!subject && correctionProperty(current.release, subject.type, property),
+          ),
     ),
   );
   const excluded = drafts.filter((draft) => !admitted.has(draft.property));
@@ -161,7 +164,15 @@ function MangaCorrectionsLive({ read, locale, disabled, ports, reload }: Correct
   discardState.current = { read, disabled, ports, busy };
   function discard(original: FactDraft) {
     const now = discardState.current;
-    if (!active() || !now.read?.public || now.read !== read || now.disabled || !now.ports || now.busy || running.current)
+    if (
+      !active() ||
+      !now.read?.public ||
+      now.read !== read ||
+      now.disabled ||
+      !now.ports ||
+      now.busy ||
+      running.current
+    )
       return;
     setDrafts((previous) => previous.filter((item) => item !== original || !!item.command || factLocked(item)));
   }
@@ -336,7 +347,10 @@ function MangaCorrectionsLive({ read, locale, disabled, ports, reload }: Correct
                         if (!active()) return;
                         const next = stageFact(current, property, source);
                         if (next)
-                          draftLabels.current.set(property, pageText(current.release.properties[property]!.labels, locale));
+                          draftLabels.current.set(
+                            property,
+                            pageText(current.release.properties[property]!.labels, locale),
+                          );
                         if (next)
                           active() &&
                             setDrafts((previous) => (previous.length < factLimit ? [...previous, next] : previous));
