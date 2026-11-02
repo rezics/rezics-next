@@ -626,10 +626,10 @@ function RecipeEditorLive({
                 >
                   <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
                   {offeredAdditionalFields.map((field) => (
-                      <NativeSelectOption key={field} value={field}>
-                        {name(field)}
-                      </NativeSelectOption>
-                    ))}
+                    <NativeSelectOption key={field} value={field}>
+                      {name(field)}
+                    </NativeSelectOption>
+                  ))}
                 </NativeSelect>
               </Field>
               {withdrawnChoice && (

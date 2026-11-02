@@ -59,9 +59,7 @@ test('a withdrawn additional Recipe choice stays local until a current field is 
     act(async () =>
       root.render(
         <QueryClientProvider client={client}>
-          <CandidateReaderBoundary>
-            <RecipeEditor locale="en" session="signed-in" transport={fixture.transport} search={async () => []} />
-          </CandidateReaderBoundary>
+          <CandidateReaderBoundary>{node}</CandidateReaderBoundary>
         </QueryClientProvider>,
       ),
     );
@@ -74,7 +72,7 @@ test('a withdrawn additional Recipe choice stays local until a current field is 
   const click = async (name: string) => act(async () => user.click(within(host).getByRole('button', { name })));
   const select = async (field: string) => act(async () => user.selectOptions(chooser(), field));
   try {
-    await show(<></>);
+    await show(<RecipeEditor locale="en" session="signed-in" transport={fixture.transport} search={async () => []} />);
     await until(() => !!within(host).queryByRole('combobox', { name: m.character_add_fact() }));
     const terms = within(host).getByRole('group', { name: m.catalogue_create_terms() });
     const primary = within(within(terms).getAllByRole('group', { name: m.catalogue_create_language() })[0]!);
@@ -118,7 +116,6 @@ test('a withdrawn additional Recipe choice stays local until a current field is 
     expect(fixture.calls.filter((call) => call.method === 'POST')).toHaveLength(0);
   } finally {
     await show(null);
-    root.unmount();
     client.clear();
     mock.restore();
     for (const [key, descriptor] of previous)
