@@ -343,7 +343,9 @@ function PeopleCreate({
                             <EditorFailure reason="stale" locale={locale} />
                           )}
                           <Field>
-                            <FieldLabel htmlFor={`people-citation-${property}`}>{m.relation_citation({}, o)}</FieldLabel>
+                            <FieldLabel htmlFor={`people-citation-${property}`}>
+                              {m.relation_citation({}, o)}
+                            </FieldLabel>
                             <Input
                               id={`people-citation-${property}`}
                               className={peopleInputTarget}
