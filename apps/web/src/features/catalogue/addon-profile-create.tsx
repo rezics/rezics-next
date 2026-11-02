@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import type { EntityPickerSearch } from '@rezics/ui/entity-picker';
+import { ContentItemFrame } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import { pageText } from '../pages/data';
@@ -37,6 +38,7 @@ export function AddonProfileCreate({
   const [release, setRelease] = useState(read.release);
   useEffect(() => setRelease(read.release), [read.release]);
   const [facts, setFacts] = useState<InitialFact[]>([]);
+  const factsId = useId();
   return (
     <CreateSubjectForm
       locale={locale}
@@ -61,7 +63,7 @@ export function AddonProfileCreate({
         hideHeading: true,
         labelLanguage: (type) => pageText(release.types[type]?.labels, locale).lang,
         descriptionLanguage: (type) => pageText(release.types[type]?.descriptions, locale).lang,
-        control: (pointer) => (pointer.startsWith('/statements') ? 'addon-initial-facts' : undefined),
+        control: (pointer) => (pointer.startsWith('/statements') ? factsId : undefined),
         prepare: (initial) =>
           addonInitialDraft(
             release,
@@ -69,7 +71,15 @@ export function AddonProfileCreate({
             facts.map((row) => row.statement),
           ),
         fields: (_type, disabled) => (
-          <div id="addon-initial-facts" className="space-y-5">
+          <ContentItemFrame
+            as="div"
+            id={factsId}
+            data-slot="addon-initial-facts"
+            role="group"
+            aria-label={m.game_profile_initial({}, o)}
+            tabIndex={-1}
+            className="min-w-0 max-w-full space-y-5 py-3 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:py-4"
+          >
             {read.work &&
               !facts.some(
                 (row) =>
@@ -80,6 +90,7 @@ export function AddonProfileCreate({
                 <Button
                   type="button"
                   variant="outline"
+                  className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8 md:pointer-fine:min-w-8 md:pointer-fine:py-1"
                   disabled={disabled || !addonFields(release).includes(addonBase)}
                   onClick={() =>
                     setFacts((rows) => [
@@ -109,7 +120,7 @@ export function AddonProfileCreate({
               disabled={disabled}
               change={setFacts}
             />
-          </div>
+          </ContentItemFrame>
         ),
       }}
     />
