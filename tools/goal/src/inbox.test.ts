@@ -245,8 +245,7 @@ test('a worker info message is read at the next wake but never wakes the manager
 test('inbox read pages unacknowledged events, marks only the page read, and continues without dropping later work', () => {
   const s = setup();
   try {
-    for (let n = 1; n <= 5; n++)
-      s.inbox.deliver({ managerId: 'manager', kind: 'instruction', summary: `Event ${n}` });
+    for (let n = 1; n <= 5; n++) s.inbox.deliver({ managerId: 'manager', kind: 'instruction', summary: `Event ${n}` });
     expect(() => s.inbox.readPage('manager', { limit: 0 })).toThrow(/between 1 and 100/);
     expect(() => s.inbox.readPage('manager', { limit: 101 })).toThrow(/between 1 and 100/);
     const first = s.inbox.readPage('manager', { limit: 2 });
@@ -261,7 +260,10 @@ test('inbox read pages unacknowledged events, marks only the page read, and cont
     s.inbox.deliver({ managerId: 'manager', kind: 'decision', summary: 'Late' });
     const second = s.inbox.readPage('manager', { limit: 2, cursor: first.nextCursor! });
     expect(second.entries.map((entry) => entry.event.summary)).toEqual(['Event 3', 'Event 4']);
-    s.inbox.acknowledge('manager', first.entries.map((entry) => entry.id));
+    s.inbox.acknowledge(
+      'manager',
+      first.entries.map((entry) => entry.id),
+    );
     expect(s.inbox.read('manager', { limit: 2 }).map((entry) => entry.event.summary)).toEqual(['Event 3', 'Event 4']);
     s.inbox.acknowledge('manager');
     const rest = s.inbox.readPage('manager');
@@ -276,8 +278,7 @@ test('inbox read pages unacknowledged events, marks only the page read, and cont
 test('wait returns one bounded page and a later wait still exposes remaining unread events', async () => {
   const s = setup();
   try {
-    for (let n = 1; n <= 51; n++)
-      s.inbox.deliver({ managerId: 'manager', kind: 'instruction', summary: `Event ${n}` });
+    for (let n = 1; n <= 51; n++) s.inbox.deliver({ managerId: 'manager', kind: 'instruction', summary: `Event ${n}` });
     const first = await s.inbox.wait('manager');
     expect(first.map((entry) => entry.event.summary)).toEqual(
       Array.from({ length: 50 }, (_, index) => `Event ${index + 1}`),
@@ -294,10 +295,12 @@ test('wait returns one bounded page and a later wait still exposes remaining unr
 test('a multi-line summary is delivered folded onto one line', () => {
   const s = setup();
   try {
-    s.inbox.deliver({ managerId: 'manager', kind: 'instruction', summary: 'Worker result:\n  first part\r\nsecond part' });
-    expect(s.inbox.pending('manager')).toMatchObject([
-      { event: { summary: 'Worker result: first part second part' } },
-    ]);
+    s.inbox.deliver({
+      managerId: 'manager',
+      kind: 'instruction',
+      summary: 'Worker result:\n  first part\r\nsecond part',
+    });
+    expect(s.inbox.pending('manager')).toMatchObject([{ event: { summary: 'Worker result: first part second part' } }]);
   } finally {
     s.close();
   }
