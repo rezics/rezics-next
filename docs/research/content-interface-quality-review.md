@@ -45,21 +45,21 @@ The remaining measurement is explicit for every route group. In this table, **mi
 at any of `phone390` light/dark or `desktop1280` light/dark; it does not mean the Page or state fails to render.
 The existing owner-bar table supplies the authority for each row.
 
-| Integrated Page group | Capture handoff / owner bar still to observe | Evidence status |
-| --- | --- | --- |
-| Board directory, board and new thread | Purpose and ranking, sparse Next, empty/long draft and departure protection | Missing |
-| Thread, history, exact revision and author-erasure operation | Reply/revision provenance, unavailable history and concealed protected bodies | Missing |
-| Addressed Space/Realm home and setup | Attention, participation and authority on one home; setup refusal/recovery | Missing |
-| Appearance and publications | Current authority, pending/conflict preservation and disclosure | Missing |
-| Membership, follow, lifecycle, bans and claims | Independent follow/member state, protected access and lifecycle outcomes | Missing |
-| Private My Realms | Private navigation, sparse/empty/unavailable results and current identity | Missing |
-| Subject rating and review integration | Web frame handoff; private vote versus population, freshness and exact citation | Missing shared frame and supplied region |
-| Report entry and receipt | Submitted reference/reason versus current target; long evidence and unavailable target | Missing |
-| Board and catalogue queues | Content board Pages and Web catalogue frame; selection, sparse continuation and current disclosure | Missing; catalogue frame handoff outstanding |
-| Decision and appeal | Legible reason, independent appeal outcome, deadline and unavailable target | Missing; runtime appeals exports unconfirmed |
-| Private Inbox | Performance images only; private recipient, unavailable links and explicit seen retry | Missing shared capture; no Content recapture |
-| Settings notification region | Accounts frame and supplied region; mandatory outcomes versus optional preferences | Missing shared capture; no second Settings writer |
-| Mixed Home | Content capture, then provenance handoff to Web; one mixed stream and bounded controls | Missing; no captured artifacts to hand off |
+| Integrated Page group                                        | Capture handoff / owner bar still to observe                                                       | Evidence status                                   |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| Board directory, board and new thread                        | Purpose and ranking, sparse Next, empty/long draft and departure protection                        | Missing                                           |
+| Thread, history, exact revision and author-erasure operation | Reply/revision provenance, unavailable history and concealed protected bodies                      | Missing                                           |
+| Addressed Space/Realm home and setup                         | Attention, participation and authority on one home; setup refusal/recovery                         | Missing                                           |
+| Appearance and publications                                  | Current authority, pending/conflict preservation and disclosure                                    | Missing                                           |
+| Membership, follow, lifecycle, bans and claims               | Independent follow/member state, protected access and lifecycle outcomes                           | Missing                                           |
+| Private My Realms                                            | Private navigation, sparse/empty/unavailable results and current identity                          | Missing                                           |
+| Subject rating and review integration                        | Web frame handoff; private vote versus population, freshness and exact citation                    | Missing shared frame and supplied region          |
+| Report entry and receipt                                     | Submitted reference/reason versus current target; long evidence and unavailable target             | Missing                                           |
+| Board and catalogue queues                                   | Content board Pages and Web catalogue frame; selection, sparse continuation and current disclosure | Missing; catalogue frame handoff outstanding      |
+| Decision and appeal                                          | Legible reason, independent appeal outcome, deadline and unavailable target                        | Missing; runtime appeals exports unconfirmed      |
+| Private Inbox                                                | Performance images only; private recipient, unavailable links and explicit seen retry              | Missing shared capture; no Content recapture      |
+| Settings notification region                                 | Accounts frame and supplied region; mandatory outcomes versus optional preferences                 | Missing shared capture; no second Settings writer |
+| Mixed Home                                                   | Content capture, then provenance handoff to Web; one mixed stream and bounded controls             | Missing; no captured artifacts to hand off        |
 
 For every row, long/populated, empty, loading, unavailable and error states and applicable reader, author, member,
 moderator, owner, banned and suspended personas remain uncovered. Locale coverage, hierarchy, density, legibility,
