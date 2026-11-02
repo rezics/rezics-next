@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import type { Release } from '@rezics/definitions';
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
@@ -82,13 +83,18 @@ function InitialValue({
       />
     );
   return (
-    <ScalarControl
-      part={part}
-      definition={definition}
-      read={{ release, public: { related: {} } }}
-      locale={locale}
-      onChange={change}
-    />
+    <div className="flex min-w-0 flex-col gap-3">
+      <ScalarControl
+        part={part}
+        definition={definition}
+        read={{ release, public: { related: {} } }}
+        locale={locale}
+        onChange={change}
+      />
+      <p className="min-w-0 max-w-full text-sm text-muted-foreground empty:hidden [overflow-wrap:anywhere]">
+        {content}
+      </p>
+    </div>
   );
 }
 function InitialStatement({
@@ -112,7 +118,7 @@ function InitialStatement({
   const citation = statement.references[0]?.parts.find((part) => part.property.id === 'schema:url')?.value;
   if (!property) return <p role="status">{m.correction_preserved({}, o)}</p>;
   return (
-    <div className="min-w-0 space-y-4">
+    <div className="min-w-0 space-y-4 [overflow-wrap:anywhere]">
       <InitialValue
         part={statement}
         release={release}
@@ -203,6 +209,9 @@ function InitialStatement({
               });
             }}
           />
+          <p className="min-w-0 max-w-full text-sm text-muted-foreground empty:hidden [overflow-wrap:anywhere]">
+            {citation?.type === 'value' && typeof citation.content === 'string' ? citation.content : ''}
+          </p>
         </Field>
       )}
     </div>
@@ -228,6 +237,7 @@ export function ScreenInitialFields({
   disabled: boolean;
 }) {
   const o = { locale: locale as never };
+  const propertySelectId = useId();
   const [property, setProperty] = useState('');
   const groups = screenGroups(release, type);
   const fields = Object.entries(groups)
@@ -237,15 +247,17 @@ export function ScreenInitialFields({
   const name = (id: string) => screenName(release, id, locale);
   return (
     <fieldset disabled={disabled} className="min-w-0 space-y-5">
-      <legend className="text-lg font-semibold">{m.screen_initial_facts({}, o)}</legend>
+      <legend className="min-w-0 max-w-full text-lg font-semibold [overflow-wrap:anywhere]">
+        {m.screen_initial_facts({}, o)}
+      </legend>
       <p className="text-sm text-muted-foreground">{m.screen_native_help({}, o)}</p>
       <Field className="min-w-0">
-        <FieldLabel className={screenLabelClassName} htmlFor="screen-add-field">
+        <FieldLabel className={screenLabelClassName} htmlFor={propertySelectId}>
           {m.character_add_fact({}, o)}
         </FieldLabel>
         <NativeSelect
           className={screenSelectClassName}
-          id="screen-add-field"
+          id={propertySelectId}
           value={fields.includes(property) ? property : ''}
           onChange={(event) => setProperty(event.target.value)}
         >
@@ -296,39 +308,42 @@ export function ScreenInitialFields({
       >
         {m.correction_add({}, o)}
       </Button>
+      {/* Keep each error anchor's heading a direct child of its native section. */}
       {rows.map((row) => (
-        <section
-          key={row.key}
-          id={
-            rows.find((item) => item.statement.property.id === row.statement.property.id)?.key === row.key
-              ? screenFactId(row.statement.property.id)
-              : undefined
-          }
-          className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4"
-        >
-          <h3
-            lang={name(row.statement.property.id).lang ?? undefined}
-            className="min-w-0 max-w-full font-sans font-semibold [overflow-wrap:anywhere]"
+        <ContentItemFrame as="div" key={row.key} className="min-w-0 py-4 sm:py-5">
+          <section
+            id={
+              rows.find((item) => item.statement.property.id === row.statement.property.id)?.key === row.key
+                ? screenFactId(row.statement.property.id)
+                : undefined
+            }
+            className="min-w-0 space-y-4 [overflow-wrap:anywhere]"
           >
-            {name(row.statement.property.id).text}
-          </h3>
-          <InitialStatement
-            row={row}
-            release={release}
-            locale={locale}
-            search={search}
-            disabled={disabled}
-            change={(statement) => change(rows.map((item) => (item.key === row.key ? { ...item, statement } : item)))}
-          />
-          <Button
-            className={screenActionClassName}
-            type="button"
-            variant="ghost"
-            onClick={() => change(rows.filter((item) => item.key !== row.key))}
-          >
-            {m.relation_remove({}, o)}
-          </Button>
-        </section>
+            <ContentItemHeading
+              level={3}
+              lang={name(row.statement.property.id).lang ?? undefined}
+              className="min-w-0 max-w-full font-sans font-semibold [overflow-wrap:anywhere]"
+            >
+              {name(row.statement.property.id).text}
+            </ContentItemHeading>
+            <InitialStatement
+              row={row}
+              release={release}
+              locale={locale}
+              search={search}
+              disabled={disabled}
+              change={(statement) => change(rows.map((item) => (item.key === row.key ? { ...item, statement } : item)))}
+            />
+            <Button
+              className={screenActionClassName}
+              type="button"
+              variant="ghost"
+              onClick={() => change(rows.filter((item) => item.key !== row.key))}
+            >
+              {m.relation_remove({}, o)}
+            </Button>
+          </section>
+        </ContentItemFrame>
       ))}
       <p className="text-sm text-muted-foreground">{m.screen_authored_after({}, o)}</p>
     </fieldset>
