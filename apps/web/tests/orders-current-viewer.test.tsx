@@ -3,6 +3,7 @@ import { dirname } from 'node:path';
 import { act, StrictMode } from 'react';
 import * as start from '../.storybook/react-start';
 import type { BuyerOrder, BuyerOrdersCurrentRead } from '../src/checkout/orders';
+import type { OrderHistorySearch } from '../src/checkout/order-history-address';
 import type { SessionEnv } from '../src/session/client';
 import paid from '../src/kernel/recorded/order-paid.json';
 
@@ -246,9 +247,9 @@ test('The actual Orders history route retires replaced-buyer history and rejects
   const shell = await import('../src/shell/shell');
   const { requireSignedIn } = await import('../src/session/guard');
   expect(Route.options.beforeLoad).toBe(requireSignedIn);
-  const validate = Route.options.validateSearch as (search: Record<string, unknown>) => { cursor?: string };
+  const validate = Route.options.validateSearch as (search: Record<string, unknown>) => OrderHistorySearch;
   expect(validate({ cursor: 'signed/+?=' })).toEqual({ cursor: 'signed/+?=' });
-  expect(() => validate({ cursor: 'x'.repeat(4097) })).toThrow();
+  expect(validate({ cursor: 'x'.repeat(4097) }).cursor).toBe('x'.repeat(4097));
   expect(Route.options.loaderDeps!({ search: { cursor: 'opaque' } } as never)).toEqual({ cursor: 'opaque' });
 
   const historical = document.createElement('section');
@@ -294,14 +295,27 @@ test('The actual Orders history route retires replaced-buyer history and rejects
   const load = Route.options.loader as (input: { deps: { cursor?: string } }) => Promise<BuyerOrdersCurrentRead>;
   let initial: BuyerOrdersCurrentRead;
   try {
+    for (const cursor of [null, 42, false, ['opaque'], { cursor: 'opaque' }, 'x'.repeat(4097)]) {
+      const search = validate({ cursor, ordersCursor: 'return-only', entitlementsCursor: 'benefits/+?=' });
+      const deps = Route.options.loaderDeps!({ search } as never);
+      expect(await load({ deps } as never)).toBeNull();
+    }
+    expect(native).not.toHaveBeenCalled();
+    const suffix = '/+?= &%#購入';
+    const opaque = 'x'.repeat(4096 - suffix.length) + suffix;
+    expect(validate(Object.fromEntries(new URLSearchParams({ cursor: opaque }))).cursor).toBe(opaque);
+    await load({ deps: { cursor: opaque } });
+    const input = native.mock.calls[0]![0];
+    const dispatched = new URL(input instanceof Request ? input.url : String(input));
+    expect(dispatched.searchParams.get('cursor')).toBe(opaque);
     initial = await load({ deps: {} });
     expect(initial.sessionSubject).toBe('A');
-    expect(native).toHaveBeenCalledTimes(1);
+    expect(native).toHaveBeenCalledTimes(2);
   } finally {
     native.mockRestore();
   }
   const Page = Route.options.component!;
-  let search: { cursor?: string } = {};
+  let search: OrderHistorySearch = {};
   const loader = spyOn(Route, 'useLoaderData').mockImplementation(() => initial);
   const address = spyOn(Route, 'useSearch').mockImplementation(() => search);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -377,6 +391,12 @@ test('The actual Orders history route retires replaced-buyer history and rejects
     expect(html).toContain('Captured purchase A');
     expect(html).toContain('$1,234.56');
     expect(html).toContain(encodeURIComponent(response('A').page.next!));
+    search = { cursor: ['malformed'], entitlementsCursor: 'benefits/+?= &%#所有' };
+    const recovery = renderToString(tree());
+    expect(recovery).toContain(m.buyer_orders_address_heading());
+    expect(recovery).not.toContain('Captured purchase A');
+    expect(recovery).toContain('aria-labelledby="buyer-orders-address-heading"');
+    search = {};
     const certified = initial;
     initial = { ...initial, sessionSubject: null };
     expect(renderToString(tree())).not.toContain('Captured purchase A');
@@ -402,9 +422,20 @@ test('The actual Orders history route retires replaced-buyer history and rejects
     expect(host.textContent).toContain('Captured purchase B');
     expect(host.textContent).toContain('$789.01');
     absent('A'); // B is usable while A's native continuation is still pending.
+    const beforeMalformed = reads.length;
+    search = { cursor: null };
+    show(viewer('B'));
+    absent('B');
+    await tick();
     await settle(oldA, response('A'));
-    expect(host.textContent).toContain('Captured purchase B');
     absent('A');
+    absent('B');
+    expect(reads).toHaveLength(beforeMalformed);
+    search = {};
+    show(viewer('B'));
+    await tick();
+    await settle(reads.at(-1)!, response('B'));
+    expect(host.textContent).toContain('Captured purchase B');
 
     show(viewer('A'));
     absent('A'); // ABA cannot resurrect the original loader or A's settled cache entry.
@@ -476,6 +507,22 @@ test('The actual Orders history route retires replaced-buyer history and rejects
     expect([...host.querySelectorAll('button')].some((b) => b.textContent === m.status_retry())).toBe(true);
     expect(retry).toBeDefined();
     const obsoleteRetry = retry!;
+    const beforeRepair = reads.length;
+    search = { cursor: 42, ordersCursor: 'return-only', entitlementsCursor: 'benefits/+?= &%#所有' };
+    show(viewer('B'));
+    act(() => obsoleteRetry());
+    await tick();
+    expect(reads).toHaveLength(beforeRepair);
+    expect(host.textContent).toContain(m.buyer_orders_address_explanation());
+    const restart = host.querySelector('a')!;
+    expect(restart.textContent).toBe(m.buyer_orders_address_restart());
+    const target = new URL(restart.getAttribute('href')!, 'https://site.test');
+    expect(target.searchParams.has('cursor')).toBe(false);
+    expect(target.searchParams.has('ordersCursor')).toBe(false);
+    expect(target.searchParams.get('entitlementsCursor')).toBe(search.entitlementsCursor);
+    show(viewer('A'));
+    await tick();
+    expect(reads).toHaveLength(beforeRepair);
     search = { cursor: 'cursor-address' };
     show(viewer('B'));
     await tick();
@@ -511,6 +558,12 @@ test('The actual Orders history route retires replaced-buyer history and rejects
     await tick();
     unknown();
     expect(host.textContent).toContain(m.not_found_heading());
+    search = { cursor: 'empty-later-page' };
+    show(viewer('B'));
+    await tick();
+    await settle(reads.at(-1)!, { ...response('B', 'empty-later-page'), page: { orders: [], next: null } });
+    expect(host.textContent).toContain(m.orders_page_empty());
+    expect(host.textContent).not.toContain(m.buyer_orders_address_heading());
     search = {};
     show(viewer('B'));
     await tick();

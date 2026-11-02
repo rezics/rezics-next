@@ -1,4 +1,5 @@
-import type { PurchaseHistoryPosition } from './purchase-return';
+import { purchaseHistorySearch, type PurchaseHistoryPosition } from './purchase-return';
+import { orderHistoryAddress, OrderHistoryAddressPage, type OrderHistorySearch } from './order-history-address';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { isNotFound } from '@tanstack/react-router';
@@ -10,7 +11,7 @@ import { OrdersPage } from './orders-page';
 import { useBuyerCurrentOrigin, type BuyerCurrentOrigin } from './buyer-current-origin';
 
 function matches(
-  value: BuyerOrdersCurrentRead | undefined,
+  value: BuyerOrdersCurrentRead | null | undefined,
   subject: string,
   address: BuyerOrdersAddress,
 ): value is BuyerOrdersCurrentRead {
@@ -27,15 +28,18 @@ export function OrdersCurrent({
   search,
   locale,
 }: {
-  initial: BuyerOrdersCurrentRead;
-  search: { cursor?: string } & PurchaseHistoryPosition;
+  initial: BuyerOrdersCurrentRead | null;
+  search: OrderHistorySearch;
   locale: string;
 }) {
-  const address = { cursor: search.cursor || null, locale };
-  const session = useBuyerCurrentOrigin('order.list', JSON.stringify(address));
+  const position = orderHistoryAddress(search.cursor);
+  const address = { cursor: position.kind === 'ready' ? position.cursor : null, locale };
+  const session = useBuyerCurrentOrigin('order.list', JSON.stringify([locale, search]));
   const { hydrated, admitted, origin } = session;
-  const subject = hydrated ? (session.state === 'signed-in' ? session.subject : null) : initial.sessionSubject;
+  const subject = hydrated ? (session.state === 'signed-in' ? session.subject : null) : initial?.sessionSubject;
   const allowed = !hydrated || admitted;
+  if (position.kind === 'malformed')
+    return <OrderHistoryAddressPage locale={locale} history={purchaseHistorySearch(search)} />;
   if (!subject) {
     if (hydrated && session.state === 'signed-out') return <NotFoundPage />;
     if (hydrated && session.state === 'unavailable') return <ErrorPage />;
@@ -67,7 +71,7 @@ function CurrentOrdersRead({
 }: {
   subject: string;
   address: BuyerOrdersAddress;
-  initial: BuyerOrdersCurrentRead;
+  initial: BuyerOrdersCurrentRead | null;
   seed: boolean;
   hydrated: boolean;
   origin: BuyerCurrentOrigin;
