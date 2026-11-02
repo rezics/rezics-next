@@ -427,15 +427,22 @@ test('reader replacement and ABA retire delayed reload, publication and preview 
     await act(async () => control!.click());
   };
   const inspectPreview = async (route: string) => {
+    const preview = [...host.querySelectorAll('section[aria-labelledby]')].find(
+      (section) =>
+        window.document.getElementById(section.getAttribute('aria-labelledby')!)?.textContent ===
+        m.presentation_preview_title(),
+    )!;
+    const labeledControl = (name: string) => {
+      const label = [...preview.querySelectorAll('label')].find((item) => item.textContent === name)!;
+      return window.document.getElementById(label.htmlFor)!;
+    };
     await act(async () => {
-      const kind = host.querySelector('#presentation-preview-kind') as InstanceType<typeof window.HTMLSelectElement>;
+      const kind = labeledControl(m.presentation_preview_target()) as InstanceType<typeof window.HTMLSelectElement>;
       kind.value = 'route';
       kind.dispatchEvent(new window.Event('change', { bubbles: true }));
     });
     await act(async () => {
-      const address = host.querySelector('#presentation-preview-address') as InstanceType<
-        typeof window.HTMLInputElement
-      >;
+      const address = labeledControl(m.presentation_preview_address()) as InstanceType<typeof window.HTMLInputElement>;
       Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(address, route);
       address.dispatchEvent(new window.Event('input', { bubbles: true }));
     });

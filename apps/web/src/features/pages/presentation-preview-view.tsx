@@ -3,7 +3,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
-import { createContext, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { createContext, useId, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { AnonymousSessionContext } from '../../session/query';
 import { FeatureSlotsProvider } from '../../shell/feature-slots';
@@ -75,8 +75,11 @@ function PreviewFailure({ result, locale }: { result: Exclude<PresentationPrevie
     <div role="alert" className="space-y-2 rounded-lg border border-border bg-muted/40 p-4">
       <p>{text({}, { locale: locale as never })}</p>
       {result.reason === 'redirect' && (
-        <a className="break-all text-primary underline underline-offset-4" href={accountHref(locale, result.handle)}>
-          @{result.handle}
+        <a
+          className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm py-2 text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          href={accountHref(locale, result.handle)}
+        >
+          <span className="min-w-0 break-all wrap-anywhere">@{result.handle}</span>
         </a>
       )}
     </div>
@@ -84,6 +87,25 @@ function PreviewFailure({ result, locale }: { result: Exclude<PresentationPrevie
 }
 
 export function PresentationPreviewPanel({ locale, read, initial }: PresentationPreviewProps) {
+  const instance = useId();
+  const titleId = `${instance}-title`;
+  const helpId = `${instance}-help`;
+  const kindId = `${instance}-kind`;
+  const addressId = `${instance}-address`;
+  const addressHelpId = `${instance}-address-help`;
+  const realmId = `${instance}-realm`;
+  const realmHelpId = `${instance}-realm-help`;
+  const headId = `${instance}-head`;
+  const headHelpId = `${instance}-head-help`;
+  const profileId = `${instance}-profile`;
+  const templateId = `${instance}-template`;
+  const subjectId = `${instance}-subject`;
+  const contextId = `${instance}-context`;
+  const documentId = `${instance}-document`;
+  const summaryClassName =
+    'list-item list-inside min-h-11 min-w-11 max-w-full cursor-pointer rounded-sm py-3 whitespace-normal wrap-anywhere focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  const referenceClassName =
+    'min-w-0 rounded-sm break-all select-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
   const [kind, setKind] = useState<'subject' | 'route'>(initial?.ok && 'route' in initial.target ? 'route' : 'subject');
   const [address, setAddress] = useState(
     initial?.ok ? ('subject' in initial.target ? initial.target.subject : initial.target.route) : '',
@@ -143,27 +165,30 @@ export function PresentationPreviewPanel({ locale, read, initial }: Presentation
   };
   return (
     <section
-      aria-labelledby="presentation-preview-title"
+      aria-labelledby={titleId}
+      aria-describedby={helpId}
       className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6"
     >
       <header className="space-y-2">
-        <h2 id="presentation-preview-title" className="text-xl font-semibold">
+        <h2 id={titleId} className="text-xl font-semibold wrap-anywhere">
           {m.presentation_preview_title({}, o)}
         </h2>
-        <p className="text-sm text-muted-foreground">{m.presentation_preview_help({}, o)}</p>
-        <details className="text-sm">
-          <summary className="cursor-pointer text-muted-foreground">
+        <p id={helpId} className="text-sm text-muted-foreground wrap-anywhere">
+          {m.presentation_preview_help({}, o)}
+        </p>
+        <details className="min-w-0 text-sm">
+          <summary className={`${summaryClassName} text-muted-foreground`}>
             {m.presentation_editor_resolver_details({}, o)}
           </summary>
-          <p className="mt-2 text-muted-foreground">{m.presentation_preview_precedence({}, o)}</p>
+          <p className="mt-2 text-muted-foreground wrap-anywhere">{m.presentation_preview_precedence({}, o)}</p>
         </details>
       </header>
       <form onSubmit={inspect} className="space-y-3" aria-busy={busy}>
         <div className="flex flex-wrap items-end gap-3">
           <Field className="w-full sm:w-44">
-            <FieldLabel htmlFor="presentation-preview-kind">{m.presentation_preview_target({}, o)}</FieldLabel>
+            <FieldLabel htmlFor={kindId}>{m.presentation_preview_target({}, o)}</FieldLabel>
             <NativeSelect
-              id="presentation-preview-kind"
+              id={kindId}
               value={kind}
               onChange={(event) => {
                 clear();
@@ -176,16 +201,16 @@ export function PresentationPreviewPanel({ locale, read, initial }: Presentation
               <NativeSelectOption value="route">{m.presentation_preview_route({}, o)}</NativeSelectOption>
             </NativeSelect>
           </Field>
-          <Field className="min-w-0 flex-1">
-            <FieldLabel htmlFor="presentation-preview-address">{m.presentation_preview_address({}, o)}</FieldLabel>
+          <Field className="min-w-0 flex-1 basis-full sm:basis-0">
+            <FieldLabel htmlFor={addressId}>{m.presentation_preview_address({}, o)}</FieldLabel>
             <Input
-              id="presentation-preview-address"
+              id={addressId}
               value={address}
               required
               autoComplete="off"
               spellCheck={false}
               maxLength={kind === 'subject' ? 36 : 256}
-              aria-describedby="presentation-preview-address-help"
+              aria-describedby={addressHelpId}
               onChange={(event) => {
                 clear();
                 setAddress(event.target.value);
@@ -201,25 +226,25 @@ export function PresentationPreviewPanel({ locale, read, initial }: Presentation
             </Button>
           )}
         </div>
-        <p id="presentation-preview-address-help" className="text-sm text-muted-foreground">
+        <p id={addressHelpId} className="text-sm text-muted-foreground wrap-anywhere">
           {m.presentation_preview_address_help({}, o)}
         </p>
         {kind === 'subject' && (
           <Field>
-            <FieldLabel htmlFor="presentation-preview-realm">{m.presentation_preview_realm({}, o)}</FieldLabel>
+            <FieldLabel htmlFor={realmId}>{m.presentation_preview_realm({}, o)}</FieldLabel>
             <Input
-              id="presentation-preview-realm"
+              id={realmId}
               value={realm}
               autoComplete="off"
               spellCheck={false}
               maxLength={36}
-              aria-describedby="presentation-preview-realm-help"
+              aria-describedby={realmHelpId}
               onChange={(event) => {
                 clear();
                 setRealm(event.target.value);
               }}
             />
-            <p id="presentation-preview-realm-help" className="text-sm text-muted-foreground">
+            <p id={realmHelpId} className="text-sm text-muted-foreground wrap-anywhere">
               {m.presentation_preview_realm_help({}, o)}
             </p>
           </Field>
@@ -229,7 +254,7 @@ export function PresentationPreviewPanel({ locale, read, initial }: Presentation
       {result?.ok && (
         <div className="min-w-0 space-y-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h3 className="font-semibold">{m.presentation_editor_preview_current({}, o)}</h3>
+            <h3 className="font-semibold wrap-anywhere">{m.presentation_editor_preview_current({}, o)}</h3>
             <Button type="button" variant="outline" onClick={clear}>
               {m.presentation_preview_close({}, o)}
             </Button>
@@ -241,27 +266,45 @@ export function PresentationPreviewPanel({ locale, read, initial }: Presentation
             />
           </div>
           <details className="min-w-0 rounded-lg border border-border p-3">
-            <summary className="cursor-pointer font-medium">{m.presentation_editor_preview_details({}, o)}</summary>
+            <summary className={`${summaryClassName} font-medium`}>
+              {m.presentation_editor_preview_details({}, o)}
+            </summary>
             <dl className="mt-3 grid min-w-0 gap-x-4 gap-y-2 text-sm sm:grid-cols-[auto_minmax(0,1fr)]">
-              <dt className="text-muted-foreground">{m.presentation_preview_head({}, o)}</dt>
-              <dd>{result.head}</dd>
-              <dt className="text-muted-foreground">{m.presentation_preview_profile({}, o)}</dt>
-              <dd className="break-all font-mono">{result.page.profile}</dd>
-              <dt className="text-muted-foreground">{m.presentation_preview_template({}, o)}</dt>
-              <dd className="break-all">
+              <dt id={headId} className="text-muted-foreground wrap-anywhere">
+                {m.presentation_preview_head({}, o)}
+              </dt>
+              <dd tabIndex={0} aria-labelledby={headId} aria-describedby={headHelpId} className={referenceClassName}>
+                {result.head}
+              </dd>
+              <dt id={profileId} className="text-muted-foreground wrap-anywhere">
+                {m.presentation_preview_profile({}, o)}
+              </dt>
+              <dd tabIndex={0} aria-labelledby={profileId} className={`${referenceClassName} font-mono`}>
+                {result.page.profile}
+              </dd>
+              <dt id={templateId} className="text-muted-foreground wrap-anywhere">
+                {m.presentation_preview_template({}, o)}
+              </dt>
+              <dd tabIndex={0} aria-labelledby={templateId} className={referenceClassName}>
                 {scopes[result.page.template.scope]({}, o)}
                 {result.page.template.key ? `: ${result.page.template.key}` : ''}
               </dd>
               {result.page.subject && (
                 <>
-                  <dt className="text-muted-foreground">{m.presentation_preview_terminal({}, o)}</dt>
-                  <dd className="break-all font-mono">{result.page.subject}</dd>
+                  <dt id={subjectId} className="text-muted-foreground wrap-anywhere">
+                    {m.presentation_preview_terminal({}, o)}
+                  </dt>
+                  <dd tabIndex={0} aria-labelledby={subjectId} className={`${referenceClassName} font-mono`}>
+                    {result.page.subject}
+                  </dd>
                 </>
               )}
               {result.page.context && (
                 <>
-                  <dt className="text-muted-foreground">{m.presentation_preview_context({}, o)}</dt>
-                  <dd className="break-all">
+                  <dt id={contextId} className="text-muted-foreground wrap-anywhere">
+                    {m.presentation_preview_context({}, o)}
+                  </dt>
+                  <dd tabIndex={0} aria-labelledby={contextId} className={referenceClassName}>
                     {result.page.context.population.kind === 'realm'
                       ? `${result.page.context.population.title} · `
                       : ''}
@@ -270,11 +313,19 @@ export function PresentationPreviewPanel({ locale, read, initial }: Presentation
                 </>
               )}
             </dl>
-            <p className="mt-3 text-sm text-muted-foreground">{m.presentation_preview_head_help({}, o)}</p>
+            <p id={headHelpId} className="mt-3 text-sm text-muted-foreground wrap-anywhere">
+              {m.presentation_preview_head_help({}, o)}
+            </p>
           </details>
           <details className="min-w-0 rounded-lg border border-border p-3">
-            <summary className="cursor-pointer font-medium">{m.presentation_preview_document({}, o)}</summary>
-            <pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap break-all text-xs">
+            <summary id={documentId} className={`${summaryClassName} font-medium`}>
+              {m.presentation_preview_document({}, o)}
+            </summary>
+            <pre
+              tabIndex={0}
+              aria-labelledby={documentId}
+              className={`mt-3 max-h-80 overflow-auto whitespace-pre-wrap text-xs ${referenceClassName}`}
+            >
               {JSON.stringify(result.page.document, null, 2)}
             </pre>
           </details>
