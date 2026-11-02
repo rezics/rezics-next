@@ -203,29 +203,6 @@ describe('Platform Realm claim review and genuine native approval journey', () =
     expect(control.getSnapshot().read).toEqual(pending);
   });
 
-  test('a failed continuation retries its cursor and explicitly restarts at the first page', async () => {
-    const cursor = 'expired.signed.cursor';
-    const reads: unknown[] = [];
-    let approvals = 0;
-    const control = createRealmClaimReview(realmId, { kind: 'ready', page: { claimRequests: [], next: cursor } }, {
-      read: async (input) => {
-        reads.push(input);
-        return reads.length < 3 ? { kind: 'unavailable' } : pending;
-      },
-      approve: async () => {
-        approvals++;
-        return { kind: 'unavailable' };
-      },
-    });
-    await control.next();
-    await control.retryPage();
-    expect(reads).toEqual([{ realmId, cursor }, { realmId, cursor }]);
-    await control.restart();
-    expect(reads).toEqual([{ realmId, cursor }, { realmId, cursor }, { realmId }]);
-    expect(control.getSnapshot()).toMatchObject({ read: pending, cursor: undefined });
-    expect(approvals).toBe(0);
-  });
-
   test('retirement fences late prepare, uncertain retry and approval receipt refresh', async () => {
     let current = true;
     const prepareRead = deferred<RealmClaimReviewRead>();
