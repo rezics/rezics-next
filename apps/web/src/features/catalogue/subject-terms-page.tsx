@@ -163,6 +163,32 @@ function SubjectTermsPageLive({
   const [submitting, setSubmitting] = useState(false);
   const [localDecision, setLocalDecision] = useState<LocalTermsDecision | null>(null);
   const running = useRef(false);
+  const readScope = useMemo(() => ({}), [id, locale, session, transport, lifetime]);
+  const currentReadScope = useRef(readScope);
+  currentReadScope.current = readScope;
+  const readResult = useRef<HTMLDivElement>(null);
+  const readIntent = useRef<{
+    scope: object;
+    opener: HTMLButtonElement;
+    completed: boolean;
+    cancel: () => void;
+  } | null>(null);
+  useLayoutEffect(() => () => readIntent.current?.cancel(), [readScope]);
+  // Reuse the catalogue read-recovery rule: keep a usable opener, otherwise orient
+  // only the completed explicit keyboard read whose visit and focus intent survived.
+  useLayoutEffect(() => {
+    const intent = readIntent.current;
+    if (!intent) return;
+    if (intent.scope !== readScope || !lifetime.active()) return intent.cancel();
+    if (busy || !intent.completed) return;
+    const document = intent.opener.ownerDocument;
+    const active = document.activeElement;
+    intent.cancel();
+    if (active === intent.opener && intent.opener.isConnected && !intent.opener.disabled) return;
+    if (active !== intent.opener && active !== document.body && active !== document.documentElement) return;
+    const target = intent.opener.isConnected && !intent.opener.disabled ? intent.opener : readResult.current;
+    target?.focus();
+  }, [busy, saved, comparison, readScope, lifetime]);
   const pending = useRef<TermsCommand | null>(null);
   const localDecisionRef = useRef<LocalTermsDecision | null>(null);
   const decisionFocus = useRef<{ decision: LocalTermsDecision; target: HTMLElement; language?: string } | null>(null);
@@ -516,22 +542,46 @@ function SubjectTermsPageLive({
     }
   }
 
-  async function reread() {
+  async function reread(event: MouseEvent<HTMLButtonElement>) {
     if (!lifetime.active()) return;
     if (!base || running.current) return;
+    readIntent.current?.cancel();
+    const opener = event.currentTarget;
+    const document = opener.ownerDocument;
+    if (event.detail === 0 && document.activeElement === opener && opener.isConnected) {
+      const cancel = () => {
+        document.removeEventListener('focusin', moved, true);
+        document.removeEventListener('pointerdown', cancel, true);
+        document.removeEventListener('keydown', tabbed, true);
+        document.defaultView?.removeEventListener('blur', cancel);
+        if (readIntent.current?.cancel === cancel) readIntent.current = null;
+      };
+      const moved = (event: FocusEvent) => {
+        if (event.target !== opener) cancel();
+      };
+      const tabbed = (event: KeyboardEvent) => {
+        if (event.key === 'Tab') cancel();
+      };
+      readIntent.current = { scope: readScope, opener, completed: false, cancel };
+      document.addEventListener('focusin', moved, true);
+      document.addEventListener('pointerdown', cancel, true);
+      document.addEventListener('keydown', tabbed, true);
+      document.defaultView?.addEventListener('blur', cancel);
+    }
     running.current = true;
     setBusy(true);
     try {
       const result = saved ? await transport.read(saved.id, saved.session) : await transport.read(id, base.session);
-      if (!lifetime.active()) return;
+      if (!lifetime.active() || currentReadScope.current !== readScope) return;
       if (saved) setSaved({ ...saved, reader: result });
       else setComparison(result);
     } catch {
-      if (!lifetime.active()) return;
+      if (!lifetime.active() || currentReadScope.current !== readScope) return;
       if (saved) setSaved({ ...saved, reader: { state: 'unavailable' } });
       else setComparison({ state: 'unavailable' });
     } finally {
       if (!lifetime.active()) return;
+      if (readIntent.current?.scope === readScope) readIntent.current.completed = true;
       running.current = false;
       setBusy(false);
     }
@@ -730,8 +780,17 @@ function SubjectTermsPageLive({
             </p>
           )}
           {saved ? (
-            <ContentItemFrame as="div" role="status" className={frameClassName}>
-              <ContentItemHeading className="font-semibold">{m.catalogue_terms_saved({}, options)}</ContentItemHeading>
+            <ContentItemFrame
+              as="div"
+              ref={readResult}
+              role="status"
+              tabIndex={-1}
+              aria-labelledby={domId('saved')}
+              className={`${frameClassName} rounded-sm focus:outline-2 focus:outline-offset-4 focus:outline-ring`}
+            >
+              <ContentItemHeading id={domId('saved')} className="font-semibold">
+                {m.catalogue_terms_saved({}, options)}
+              </ContentItemHeading>
               {saved.reader.state === 'ready' ? (
                 <>
                   {values(saved.reader.snapshot, termLanguages(saved.reader.snapshot))}
@@ -748,7 +807,7 @@ function SubjectTermsPageLive({
                         ? m.catalogue_result_read_denied({}, options)
                         : m.catalogue_terms_reader_unavailable({}, options)}
                   </p>
-                  <Button className={actionClassName} disabled={busy} onClick={() => void reread()}>
+                  <Button className={actionClassName} disabled={busy} onClick={(event) => void reread(event)}>
                     {m.catalogue_retry_loading_result({}, options)}
                   </Button>
                 </>
@@ -1025,7 +1084,7 @@ function SubjectTermsPageLive({
                       type="button"
                       variant="outline"
                       disabled={busy}
-                      onClick={() => void reread()}
+                      onClick={(event) => void reread(event)}
                     >
                       {m.catalogue_terms_compare({}, options)}
                     </Button>
@@ -1033,8 +1092,15 @@ function SubjectTermsPageLive({
                 </ContentItemFrame>
               )}
               {comparison && (
-                <ContentItemFrame as="div" className={frameClassName} aria-live="polite">
-                  <ContentItemHeading className="font-semibold">
+                <ContentItemFrame
+                  as="div"
+                  ref={readResult}
+                  tabIndex={-1}
+                  aria-labelledby={domId('comparison')}
+                  className={`${frameClassName} rounded-sm focus:outline-2 focus:outline-offset-4 focus:outline-ring`}
+                  aria-live="polite"
+                >
+                  <ContentItemHeading id={domId('comparison')} className="font-semibold">
                     {m.catalogue_terms_latest({}, options)}
                   </ContentItemHeading>
                   {comparison.state === 'ready' ? (

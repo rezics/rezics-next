@@ -335,6 +335,100 @@ test('independent Terms forms retain stable associations, multilingual drafts an
     associations(a);
     associations(b);
 
+    // Explicit read recovery retains its own credentials, command and keyboard intent.
+    const { CatalogueCurrentReading } = await import('../src/features/catalogue/editor-lifetime');
+    const initial = await catalogueTermsFixture().transport.read(termsSubjectId);
+    if (initial.state !== 'ready') throw new Error('Expected initial Terms');
+    const outside = document.createElement('button');
+    document.body.append(outside);
+    for (const mode of [
+      'denied', 'concealed', 'failure', 'ready', 'moved', 'returned', 'pointer', 'pointed', 'tab',
+      'session', 'transport', 'locale', 'route', 'workspace', 'comparison',
+    ]) {
+      const reads: [string, string | undefined][] = [];
+      const commands: import('../src/features/catalogue/subject-terms').TermsCommand[] = [];
+      let finish!: (read: import('../src/features/catalogue/subject-terms').TermsRead) => void;
+      let reject!: (error: Error) => void;
+      const delayed = new Promise<import('../src/features/catalogue/subject-terms').TermsRead>((resolve, fail) => {
+        finish = resolve;
+        reject = fail;
+      });
+      const transport: import('../src/features/catalogue/subject-terms').TermsTransport = {
+        read: async (id, session) => {
+          reads.push([id, session]);
+          return reads.length === 1 ? initial : delayed;
+        },
+        submit: async (command) => {
+          commands.push(structuredClone(command));
+          return mode === 'comparison'
+            ? { ok: false, reason: 'stale' }
+            : { ok: true, id: 'confirmed-subject', revision: 8, session: 'confirmed-session', reader: { state: 'unavailable' } };
+        },
+      };
+      let visit = { id: termsSubjectId, locale: 'en', session: 'signed-in' as 'signed-in' | 'signed-out', transport };
+      let admitted = true;
+      const showRecovery = () => root.render(
+        <QueryClientProvider client={client}>
+          <CatalogueCurrentReading visible={admitted} ready={admitted} revision={String(admitted)}>
+            <SubjectTermsPage key={mode} {...visit} />
+          </CatalogueCurrentReading>
+        </QueryClientProvider>,
+      );
+      await act(async () => showRecovery());
+      await settle(() => !!host.querySelector('fieldset'));
+      const page = host.querySelector('article')!;
+      expect(document.activeElement).not.toBe(page.querySelector('[tabindex="-1"]'));
+      const name = fieldset(page, m.catalogue_create_label());
+      await select(name, m.catalogue_terms_action(), 'set');
+      await replace(name, m.catalogue_create_label(), 'Private recovery draft');
+      await click(page, m.catalogue_terms_save());
+      expect(commands).toHaveLength(1);
+      expect(document.activeElement).not.toBe(page.querySelector('[role="status"]'));
+      const command = structuredClone(commands[0]);
+      const opener = button(page, mode === 'comparison' ? m.catalogue_terms_compare() : m.catalogue_retry_loading_result());
+      opener.focus();
+      if (mode === 'pointer') await act(async () => user.click(opener));
+      else await act(async () => user.keyboard('{Enter}'));
+      expect(opener.disabled).toBe(true);
+      expect(reads[1]).toEqual(mode === 'comparison'
+        ? [termsSubjectId, initial.snapshot.session]
+        : ['confirmed-subject', 'confirmed-session']);
+      if (mode === 'moved' || mode === 'returned') outside.focus();
+      if (mode === 'returned') opener.focus();
+      if (mode === 'pointed') outside.dispatchEvent(new window.PointerEvent('pointerdown', { bubbles: true }));
+      if (mode === 'tab') await act(async () => user.keyboard('{Tab}'));
+      if (mode === 'session') visit = { ...visit, session: 'signed-out' };
+      if (mode === 'transport') visit = { ...visit, transport: { ...transport } };
+      if (mode === 'locale') visit = { ...visit, locale: 'ja' };
+      if (mode === 'route') visit = { ...visit, id: 'replacement-subject' };
+      if (mode === 'workspace') admitted = false;
+      await act(async () => showRecovery());
+      const before = document.activeElement;
+      await act(async () => {
+        if (mode === 'failure') reject(new Error('Read failed'));
+        else finish(mode === 'denied' || mode === 'concealed' ? { state: mode } : initial);
+      });
+      if (mode === 'ready') {
+        expect(document.activeElement).toBe(page.querySelector('[role="status"]'));
+        expect(document.activeElement?.textContent).toContain('Original film');
+      } else if (['denied', 'concealed', 'failure', 'comparison'].includes(mode)) {
+        expect(document.activeElement).toBe(opener);
+        expect(opener.disabled).toBe(false);
+        expect(page.textContent).toContain(mode === 'denied' ? m.catalogue_result_read_denied()
+          : mode === 'concealed' ? m.catalogue_create_concealed()
+            : mode === 'failure' ? m.catalogue_terms_reader_unavailable() : m.catalogue_terms_confirm_help());
+      } else {
+        expect(document.activeElement).not.toBe(host.querySelector('[role="status"]'));
+        if (mode === 'moved') expect(document.activeElement).toBe(before);
+      }
+      expect(commands).toEqual([command]);
+      if (mode === 'comparison') {
+        expect(control(name, m.catalogue_create_label()).value).toBe('Private recovery draft');
+        expect(button(page, m.catalogue_terms_confirm()).disabled).toBe(false);
+      }
+    }
+    outside.remove();
+
     const { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } =
       await import('@tanstack/react-router');
     const { CreateSubjectForm } = await import('../src/features/catalogue/create-subject-form');
