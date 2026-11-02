@@ -71,18 +71,39 @@ test('Label-shelf table respects supported selected columns, assignment identity
   };
   const entries: LabelShelfEntry[] = [
     {
-      id: id(1202), labelId: label.id, subjectId: id(1101), revision: 9, removeKey: id(2202), subject,
-      state: 'in_progress', stateLabel: 'Recorded state',
+      id: id(1202),
+      labelId: label.id,
+      subjectId: id(1101),
+      revision: 9,
+      removeKey: id(2202),
+      subject,
+      state: 'in_progress',
+      stateLabel: 'Recorded state',
       activeProgressSession: {
-        mode: 'scalar_amount', unit: 'percent', dimension: 'percent', amount: '0', total: null,
-        completedUnitCount: 0, locator: null,
+        mode: 'scalar_amount',
+        unit: 'percent',
+        dimension: 'percent',
+        amount: '0',
+        total: null,
+        completedUnitCount: 0,
+        locator: null,
       },
     },
     {
-      id: id(1201), labelId: label.id, subjectId: id(1101), revision: 3, removeKey: id(2201), subject,
+      id: id(1201),
+      labelId: label.id,
+      subjectId: id(1101),
+      revision: 3,
+      removeKey: id(2201),
+      subject,
       activeProgressSession: {
-        mode: 'cursor_position', unit: 'page', amount: null, total: null,
-        completedUnitCount: 0, locator: 'Recorded location', position: null,
+        mode: 'cursor_position',
+        unit: 'page',
+        amount: null,
+        total: null,
+        completedUnitCount: 0,
+        locator: 'Recorded location',
+        position: null,
       },
     },
     { id: id(1203), labelId: label.id, subjectId: id(1199), revision: 5, removeKey: id(2203), subject: null },
@@ -95,10 +116,19 @@ test('Label-shelf table respects supported selected columns, assignment identity
   let selection: string | undefined;
   const render = async (rows = entries) => {
     await act(async () => {
-      root.render(createElement(LabelShelfEntries, {
-        key: mountKey, entries: rows, label, locale: 'en', layout: 'table', size: 'm',
-        ...(selection ? { columns: selection } : {}), csrfToken: 'original-csrf', isCurrent: () => current,
-      }));
+      root.render(
+        createElement(LabelShelfEntries, {
+          key: mountKey,
+          entries: rows,
+          label,
+          locale: 'en',
+          layout: 'table',
+          size: 'm',
+          ...(selection ? { columns: selection } : {}),
+          csrfToken: 'original-csrf',
+          isCurrent: () => current,
+        }),
+      );
     });
   };
   const headers = () => [...host.querySelectorAll('th')].map((node) => node.textContent);
@@ -111,15 +141,19 @@ test('Label-shelf table respects supported selected columns, assignment identity
     });
     return window.document.querySelector<HTMLFormElement>('form[method="post"]')!;
   };
-  const fields = (form: HTMLFormElement) => Object.fromEntries(
-    [...form.querySelectorAll<HTMLInputElement>('input[name]')].map((input) => [input.name, input.value]),
-  );
+  const fields = (form: HTMLFormElement) =>
+    Object.fromEntries(
+      [...form.querySelectorAll<HTMLInputElement>('input[name]')].map((input) => [input.name, input.value]),
+    );
   try {
     // Default supported facts: one table, no date/sort promises, zero distinct from unknown progress.
     await render();
     expect(host.querySelectorAll('table')).toHaveLength(1);
     expect(headers()).toEqual([
-      m.library_column_cover(), m.library_column_title(), m.library_column_type(), m.library_label_table_status_progress(),
+      m.library_column_cover(),
+      m.library_column_title(),
+      m.library_column_type(),
+      m.library_label_table_status_progress(),
     ]);
     expect(host.querySelector('thead button, th[aria-sort], time')).toBeNull();
     expect(rows()).toHaveLength(3);
@@ -136,16 +170,19 @@ test('Label-shelf table respects supported selected columns, assignment identity
     const title = '日本語の長い題名';
     expect(links.map((link) => link.textContent)).toEqual([title, title]);
     expect(links.map((link) => link.getAttribute('lang'))).toEqual(['ja', 'ja']);
-    expect(links.map((link) => link.getAttribute('href'))).toEqual(Array(2).fill(
-      subjectHref({ id: subject.id, label: title }, 'en').href,
-    ));
+    expect(links.map((link) => link.getAttribute('href'))).toEqual(
+      Array(2).fill(subjectHref({ id: subject.id, label: title }, 'en').href),
+    );
 
     // Hidden facts stay hidden even though the independent action cell remains reachable.
     for (const [columns, expected] of [
       ['title', [m.library_column_title(), m.library_column_actions()]],
       ['title,type', [m.library_column_title(), m.library_column_type(), m.library_column_actions()]],
       ['title,added,finished,lastActivity', [m.library_column_title(), m.library_column_actions()]],
-      ['cover,title,status', [m.library_column_cover(), m.library_column_title(), m.library_label_table_status_progress()]],
+      [
+        'cover,title,status',
+        [m.library_column_cover(), m.library_column_title(), m.library_label_table_status_progress()],
+      ],
     ] as const) {
       selection = columns;
       await render();
@@ -169,8 +206,13 @@ test('Label-shelf table respects supported selected columns, assignment identity
       const form = await open(index);
       const entry = entries[index]!;
       expect(fields(form)).toEqual({
-        intent: 'unassign', subjectId: entry.subjectId, labelId: entry.labelId, assignmentId: entry.id,
-        idempotencyKey: entry.removeKey!, revision: String(entry.revision), csrf_token: 'original-csrf',
+        intent: 'unassign',
+        subjectId: entry.subjectId,
+        labelId: entry.labelId,
+        assignmentId: entry.id,
+        idempotencyKey: entry.removeKey!,
+        revision: String(entry.revision),
+        csrf_token: 'original-csrf',
       });
       expect(new URL(form.action).searchParams.get('label')).toBe(label.id);
       expect(new URL(form.action).searchParams.get('columns')).toBe('title');
@@ -187,12 +229,16 @@ test('Label-shelf table respects supported selected columns, assignment identity
     const original = fields(retained);
     current = false;
     const staleSubmit = new window.Event('submit', { bubbles: true, cancelable: true });
-    await act(async () => { retained.dispatchEvent(staleSubmit); });
+    await act(async () => {
+      retained.dispatchEvent(staleSubmit);
+    });
     expect(staleSubmit.defaultPrevented).toBe(true);
     expect(fields(retained)).toEqual(original);
     current = true;
     const currentSubmit = new window.Event('submit', { bubbles: true, cancelable: true });
-    await act(async () => { retained.dispatchEvent(currentSubmit); });
+    await act(async () => {
+      retained.dispatchEvent(currentSubmit);
+    });
     expect(currentSubmit.defaultPrevented).toBe(false);
 
     // Operation retirement removes controls and forms, without suppressing readable facts/tombstones.

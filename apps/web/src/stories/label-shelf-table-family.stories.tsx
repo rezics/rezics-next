@@ -33,29 +33,50 @@ type Story = StoryObj<typeof meta>;
 
 function fixtures(longText: boolean): LabelShelfEntry[] {
   const recorded = recording.libraryEntries[0]!;
-  const stateLabel = libraryStateLabel(
-    definitions.release as unknown as Release, recorded.subject.type, recorded.state, getLocale(),
-  )?.text ?? m.library_other();
+  const stateLabel =
+    libraryStateLabel(definitions.release as unknown as Release, recorded.subject.type, recorded.state, getLocale())
+      ?.text ?? m.library_other();
   const subject = {
     ...recorded.subject,
-    ...(longText ? { label: { value: '日本語の長い題名と読書記録：何度も読み返したい物語とその続き'.repeat(3), language: 'ja' } } : {}),
+    ...(longText
+      ? { label: { value: '日本語の長い題名と読書記録：何度も読み返したい物語とその続き'.repeat(3), language: 'ja' } }
+      : {}),
   };
   return [
     {
-      id: '0192f3a0-6c1e-7b2a-9d4e-000000001202', labelId: label.id, subjectId: recorded.subjectId,
-      revision: 9, removeKey: '0192f3a0-6c1e-7b2a-9d4e-000000002202', subject,
-      state: recorded.state, stateLabel,
+      id: '0192f3a0-6c1e-7b2a-9d4e-000000001202',
+      labelId: label.id,
+      subjectId: recorded.subjectId,
+      revision: 9,
+      removeKey: '0192f3a0-6c1e-7b2a-9d4e-000000002202',
+      subject,
+      state: recorded.state,
+      stateLabel,
       activeProgressSession: {
-        mode: 'scalar_amount', unit: 'percent', dimension: 'percent', amount: '0', total: null,
-        completedUnitCount: 0, locator: null,
+        mode: 'scalar_amount',
+        unit: 'percent',
+        dimension: 'percent',
+        amount: '0',
+        total: null,
+        completedUnitCount: 0,
+        locator: null,
       },
     },
     {
-      id: '0192f3a0-6c1e-7b2a-9d4e-000000001201', labelId: label.id, subjectId: recorded.subjectId,
-      revision: 3, removeKey: '0192f3a0-6c1e-7b2a-9d4e-000000002201', subject,
+      id: '0192f3a0-6c1e-7b2a-9d4e-000000001201',
+      labelId: label.id,
+      subjectId: recorded.subjectId,
+      revision: 3,
+      removeKey: '0192f3a0-6c1e-7b2a-9d4e-000000002201',
+      subject,
       activeProgressSession: {
-        mode: 'cursor_position', unit: 'page', amount: null, total: null,
-        completedUnitCount: 0, locator: 'Chapter 4', position: null,
+        mode: 'cursor_position',
+        unit: 'page',
+        amount: null,
+        total: null,
+        completedUnitCount: 0,
+        locator: 'Chapter 4',
+        position: null,
       },
     },
   ];
@@ -73,11 +94,15 @@ function TablePattern({
   retired?: boolean;
 }) {
   const entries = fixtures(longText);
-  if (unavailable) entries.splice(1, 0, {
-    id: '0192f3a0-6c1e-7b2a-9d4e-000000001203', labelId: label.id,
-    subjectId: '0192f3a0-6c1e-7b2a-9d4e-000000001199', revision: 5,
-    removeKey: '0192f3a0-6c1e-7b2a-9d4e-000000002203', subject: null,
-  });
+  if (unavailable)
+    entries.splice(1, 0, {
+      id: '0192f3a0-6c1e-7b2a-9d4e-000000001203',
+      labelId: label.id,
+      subjectId: '0192f3a0-6c1e-7b2a-9d4e-000000001199',
+      revision: 5,
+      removeKey: '0192f3a0-6c1e-7b2a-9d4e-000000002203',
+      subject: null,
+    });
   return (
     <PatternStory visitor="Signed In" path={`/library?label=${label.id}&layout=table`}>
       <section className="mx-auto w-full max-w-6xl space-y-4 p-4" aria-label={label.name}>
@@ -126,7 +151,9 @@ export const NarrowLongText: Story = {
     await expect(trigger).toBeEnabled();
     trigger.focus();
     await userEvent.keyboard('{Enter}');
-    await expect(await within(document.body).findByRole('button', { name: m.library_label_shelf_remove() })).toBeVisible();
+    await expect(
+      await within(document.body).findByRole('button', { name: m.library_label_shelf_remove() }),
+    ).toBeVisible();
   },
 };
 
@@ -147,7 +174,8 @@ export const TitleOnlyActions: Story = {
   play: async ({ canvasElement }) => {
     const table = await tableReady(canvasElement, 2);
     await expect([...table.querySelectorAll('th')].map((node) => node.textContent)).toEqual([
-      m.library_column_title(), m.library_column_actions(),
+      m.library_column_title(),
+      m.library_column_actions(),
     ]);
     await expect(table.querySelector('[data-slot="progress-row"]')).toBeNull();
   },
