@@ -1811,6 +1811,19 @@ conflict and read-only states, with shared locale/theme/viewport globals and the
 - **Growth check:** `tests/moderation-reports.test.ts` pages repeated targets and confirms one target read per distinct identity and preserves the cursor. `tests/native/native-moderation.host.test.ts` fixes the appeal page and target while adding 1, 8 and 64 unrelated posts; the page still makes one appeal request, one target read and no decision reads.
 - **Visual check:** Report stories cover open and resolved reports in English and Simplified Chinese. Appeal stories cover a pending native appeal in all launch locales and the empty queue in English and Simplified Chinese; use light and dark themes at 390 and 1280 pixels.
 
+### Catalogue moderation reports (`/moderation/catalogue`)
+
+Decision: use one private catalogue queue at `/moderation/catalogue`; `/moderation/reports/<id>` remains the
+reporter's own receipt. This is the consumer of Content's Subject-report contract, not another native producer.
+The existing native Subject-report owner supplies `subject_report.list` and `catalogue_report.list`; the
+interface follows that delivery. Catalogue inspection requires `moderation:read_reports` on the Global Context.
+Use newest-first native keyset pages of at most 50 reports, without board traversal or browser refill.
+Keep submitted evidence separate from currently readable Subject content. Reuse native dismissal and Semantic's
+existing Subject visibility/takedown operations; never offer a Content appeal for a catalogue sanction.
+An actioned report stays actioned after restoration. Private-reader retirement clears evidence and action drafts
+on viewer or credential replacement; uncertain writes retain their original intent and idempotency key for
+explicit recovery. A denied queue stays concealed and a dependency failure offers explicit retry.
+
 ### Exact recorded revision (`/posts/{id}/revisions/{revisionId}`)
 
 History version links address the returned post and revision IDs. The read-only page uses that exact native GET,
