@@ -43,13 +43,27 @@ export function typeListHref(locale: string, target: TypeListTarget, node: strin
   return `/${encodeURIComponent(locale)}/search/list?${params}`;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isNode(value: unknown): value is CompositionNode {
+  return (
+    isRecord(value) && typeof value.type === 'string' && isRecord(value.props) && typeof value.props.id === 'string'
+  );
+}
+
 export function findTypeList(document: PageDocument, id: string): CompositionNode | undefined {
   const components = new Map(platformRegistry.components.map((component) => [component.type, component]));
-  const visit = (nodes: readonly CompositionNode[]): CompositionNode | undefined => {
-    for (const node of nodes) {
-      if (node.type === 'TypeList' && node.props.id === id) return node;
-      for (const slot of components.get(node.type)?.slots ?? []) {
-        const found = visit(node.props[slot] as CompositionNode[]);
+  const visit = (nodes: unknown): CompositionNode | undefined => {
+    if (!Array.isArray(nodes)) return;
+    for (const item of nodes) {
+      if (!isNode(item)) continue;
+      const component = components.get(item.type);
+      if (!component) continue;
+      if (item.type === 'TypeList' && item.props.id === id) return item;
+      for (const slot of component.slots) {
+        const found = visit(item.props[slot]);
         if (found) return found;
       }
     }
