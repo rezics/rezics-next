@@ -917,9 +917,7 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
         await settlePending();
         if (check.prepare) {
           const prepare = check.prepare;
-          absorbUnmeasured(
-            await captureMeasuredRun(() => captureWarmup(db, () => prepare(db, scale, repetition))),
-          );
+          absorbUnmeasured(await captureMeasuredRun(() => captureWarmup(db, () => prepare(db, scale, repetition))));
           await settlePending();
         }
         const captured = await captureMeasuredRun(() =>
