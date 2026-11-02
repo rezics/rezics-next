@@ -101,9 +101,14 @@ afterAll(async () => {
 for (const clear of [false, true])
   test(`lost ${clear ? 'clear' : 'replace'} retries its exact intent and reads past an older receipt`, async () => {
     const refreshed: unknown[] = [];
+    let finishRefresh!: () => void;
+    const refresh = new Promise<void>((resolve) => {
+      finishRefresh = resolve;
+    });
     await paint({
       onMutation: async (kind) => {
         refreshed.push(kind);
+        await refresh;
       },
     });
     await click(clear ? m.reaction_like() : m.reaction_love());
@@ -128,6 +133,11 @@ for (const clear of [false, true])
     expect(button(m.reaction_like()).getAttribute('aria-pressed')).toBe('true');
     expect(button(m.reaction_love()).textContent).toBe(`${m.reaction_love()}9`);
     expect(refreshed).toEqual(['like']);
+    expect(button(m.reaction_like()).disabled).toBe(true);
+    await act(async () => {
+      finishRefresh();
+    });
+    expect(button(m.reaction_like()).disabled).toBe(false);
     expect(host.querySelector('[role="status"]')).toBeNull();
   });
 

@@ -307,10 +307,15 @@ function ReactionCaller({
       flushSync(() => {
         setRecovery(null);
         setFailed(null);
+        setRecovering(true);
         setResolved({ snapshot, sourceCounts: controlled.current.counts, sourceValue: controlled.current.value });
       });
       if (!current()) return;
-      await onMutation?.(snapshot.value);
+      try {
+        await onMutation?.(snapshot.value);
+      } finally {
+        if (current()) setRecovering(false);
+      }
       return;
     }
     try {
@@ -349,7 +354,7 @@ function ReactionCaller({
       <Reactions
         key={generation}
         counts={resolved?.snapshot.counts ?? counts}
-        disabled={disabled || recovery !== null}
+        disabled={disabled || recovery !== null || recovering}
         {...(target.kind === 'subject' ? { kinds: subjectReactionKinds, collapse: 2 } : {})}
         labels={reactionLabels(failed)}
         locale={getLocale()}
