@@ -1,12 +1,15 @@
 import { expect, test } from 'bun:test';
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, isAbsolute, join } from 'node:path';
 import { workerTestCommands } from './affected-tests.ts';
 import { completeContinuation, continuesItself } from './continuation.ts';
 import { parseBrief, readRiskOwnership } from './briefs.ts';
+import { attemptProgress, noProgressTwice } from './attempt-progress.ts';
+import { openDb } from './db.ts';
 import { WorkerJob } from './job.ts';
 import { renderLaunchContext, type LaunchContext } from './launch-context.ts';
 import { workerPrompt } from './launch.ts';
+import { WorkerStore } from './store.ts';
 import { git } from './tasks.ts';
 import type { Task } from './types.ts';
 import { brief, harness, markdown, temporaryDirectory } from './test-support.ts';
@@ -297,3 +300,74 @@ test('environment retries of dev product work keep the same model and session, w
     }
   }
 }, 60_000);
+
+function progressStore(attempt = 1) {
+  const directory = temporaryDirectory();
+  const worktree = join(directory.path, 'tree');
+  mkdirSync(worktree);
+  git(worktree, ['init', '-q', '-b', 'worker/t']);
+  git(worktree, ['config', 'user.email', 'f@x.invalid']);
+  git(worktree, ['config', 'user.name', 'F']);
+  writeFileSync(join(worktree, 'f.txt'), '1\n');
+  git(worktree, ['add', '.']);
+  git(worktree, ['commit', '-qm', 'b']);
+  const store = new WorkerStore(openDb(join(directory.path, 'g.sqlite')));
+  const id = 't';
+  store.db.query('INSERT INTO worker_tasks(id, sequence, current_attempt, body) VALUES (?,?,?,?)').run(
+    id,
+    1,
+    attempt,
+    JSON.stringify({ id, currentAttempt: attempt, state: 'running', worktree, branch: 'worker/t' }),
+  );
+  for (let n = 1; n <= attempt; n++)
+    store.db
+      .query('INSERT INTO worker_attempts(task_id, attempt, body) VALUES (?,?,?)')
+      .run(id, n, JSON.stringify({ taskId: id, attempt: n, state: 'exited' }));
+  const task = { id, worktree, branch: 'worker/t' } as Task;
+  const ref = { taskId: id, attempt };
+  store.event(ref, 'worker-run-started', { branchHead: git(worktree, ['rev-parse', 'HEAD']) });
+  return { directory, store, task, ref, worktree, close: () => (store.db.close(), directory.close()) };
+}
+
+function hideGitStatus(worktree: string) {
+  const index = git(worktree, ['rev-parse', '--git-path', 'index']);
+  const path = isAbsolute(index) ? index : join(worktree, index);
+  rmSync(path, { force: true });
+  mkdirSync(path);
+}
+
+test('Keep an unreadable Git status from stopping wanted work.', () => {
+  const clean = progressStore();
+  try {
+    expect(attemptProgress(clean.store, clean.task, clean.ref)).toBe(false);
+    const head = git(clean.worktree, ['rev-parse', 'HEAD']);
+    writeFileSync(join(clean.worktree, 'f.txt'), '2\n');
+    git(clean.worktree, ['add', '.']);
+    git(clean.worktree, ['commit', '-qm', 'rebase']);
+    expect(git(clean.worktree, ['rev-parse', 'HEAD'])).not.toBe(head);
+    expect(attemptProgress(clean.store, clean.task, clean.ref)).toBe(false);
+  } finally {
+    clean.close();
+  }
+  const unknown = progressStore(2);
+  try {
+    unknown.store.db
+      .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
+      .run('t', 1, 'attempt-progress', new Date().toISOString(), JSON.stringify({ progress: null }));
+    hideGitStatus(unknown.worktree);
+    expect(attemptProgress(unknown.store, unknown.task, unknown.ref)).toBe(null);
+    expect(noProgressTwice(unknown.store, unknown.task, unknown.ref)).toBe(false);
+  } finally {
+    unknown.close();
+  }
+  const moved = progressStore();
+  try {
+    writeFileSync(join(moved.worktree, 'f.txt'), '3\n');
+    git(moved.worktree, ['add', '.']);
+    git(moved.worktree, ['commit', '-qm', 'progress']);
+    hideGitStatus(moved.worktree);
+    expect(attemptProgress(moved.store, moved.task, moved.ref)).toBe(true);
+  } finally {
+    moved.close();
+  }
+});

@@ -40,6 +40,17 @@ function uncommittedWork(worktree: string): boolean | null {
   return result.status === 0 ? result.stdout.trim().length > 0 : null;
 }
 
+/** True when the head moved or work is uncommitted; null when a needed Git observation failed. */
+function observedProgress(
+  startHead: string | null,
+  endHead: string | null,
+  uncommitted: boolean | null,
+): boolean | null {
+  if (!startHead || !endHead) return null;
+  if (startHead !== endHead || uncommitted === true) return true;
+  return uncommitted === false ? false : null;
+}
+
 function parse(body: string): Record<string, unknown> {
   try {
     const value = JSON.parse(body) as unknown;
@@ -59,7 +70,8 @@ export function recordedProgress(store: WorkerStore, ref: AttemptRef): boolean |
 /**
  * Whether the attempt changed its branch: the branch head moved since the attempt's first prompt, or work is left
  * uncommitted (the next attempt commits it). Measured once, when the attempt's failure is classified, and recorded,
- * because a retry rebases the branch afterwards. Null when either head is unknown.
+ * because a retry rebases the branch afterwards. Null when either head is unknown, or heads match and git status
+ * failed.
  */
 export function attemptProgress(store: WorkerStore, task: Task, ref: AttemptRef): boolean | null {
   if (store.events(ref.taskId, ref.attempt).some((event) => event.kind === 'attempt-progress'))
@@ -69,7 +81,7 @@ export function attemptProgress(store: WorkerStore, task: Task, ref: AttemptRef)
   const startHead = typeof recordedStart === 'string' ? recordedStart : null;
   const endHead = branchHead(task);
   const uncommitted = startHead && endHead ? uncommittedWork(task.worktree) : null;
-  const progress = startHead && endHead ? startHead !== endHead || uncommitted === true : null;
+  const progress = observedProgress(startHead, endHead, uncommitted);
   store.event(ref, 'attempt-progress', { startHead, endHead, uncommitted, progress });
   return progress;
 }
