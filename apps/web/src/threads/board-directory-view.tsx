@@ -2,6 +2,7 @@ import type { MouseEvent } from 'react';
 import { ContentItem } from '@rezics/ui/content-item';
 import { MetaLine } from '@rezics/ui/meta-line';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
@@ -24,6 +25,9 @@ type Props = {
   onRetry: () => void;
 };
 
+const actionClassName =
+  'h-auto min-h-11 min-w-11 max-w-full shrink whitespace-normal px-4 py-2 text-center [overflow-wrap:anywhere]';
+
 /** Shared directory region for the route and its Patterns/Pages stories. Listing never grants creation. */
 export function BoardDirectory({ request, contribution, result, previous, onNavigate, onRetry }: Props) {
   const locale = getLocale();
@@ -40,8 +44,8 @@ export function BoardDirectory({ request, contribution, result, previous, onNavi
     sameBoardContribution(previous.contribution, contribution);
   const next = result.state === 'ready' && result.next !== request.cursor ? result.next : null;
   return (
-    <article className="max-w-4xl space-y-6 text-foreground">
-      <header className="space-y-3">
+    <article className="min-w-0 w-full max-w-4xl space-y-6 text-foreground [overflow-wrap:anywhere]">
+      <header className="min-w-0 space-y-3">
         <p className="text-sm font-medium text-muted-foreground">{m.board_directory_global()}</p>
         <PageHeading>{m.board_directory_heading()}</PageHeading>
         <p className="max-w-2xl text-muted-foreground">{m.board_directory_description()}</p>
@@ -56,7 +60,10 @@ export function BoardDirectory({ request, contribution, result, previous, onNavi
               href={boardDirectoryHref(destination, locale, contribution)}
               onClick={navigate(destination)}
               aria-current={request.purpose === purpose ? 'page' : undefined}
-              className={buttonVariants({ variant: request.purpose === purpose ? 'secondary' : 'ghost', size: 'lg' })}
+              className={cn(
+                buttonVariants({ variant: request.purpose === purpose ? 'secondary' : 'ghost', size: 'lg' }),
+                actionClassName,
+              )}
             >
               {purposeLabel(purpose)}
             </a>
@@ -68,7 +75,7 @@ export function BoardDirectory({ request, contribution, result, previous, onNavi
         {result.state === 'unavailable' ? (
           <div role="status" className="space-y-3">
             <p>{m.board_directory_unavailable()}</p>
-            <Button variant="outline" size="lg" onClick={onRetry}>
+            <Button variant="outline" size="lg" className={actionClassName} onClick={onRetry}>
               {m.board_directory_retry()}
             </Button>
           </div>
@@ -100,9 +107,10 @@ export function BoardDirectory({ request, contribution, result, previous, onNavi
                     title={title}
                     headingLevel={2}
                     href={href}
+                    className="min-h-[52px] [&>div]:sm:block [&_[data-content-item-slot=title]]:line-clamp-none [&_[data-content-item-slot=actions]]:max-w-full"
                     metadata={
                       <MetaLine
-                        className="text-sm text-muted-foreground"
+                        className="min-w-0 text-sm text-muted-foreground [overflow-wrap:anywhere]"
                         items={[
                           m.board_directory_global(),
                           purposeLabel(board.purpose),
@@ -124,7 +132,7 @@ export function BoardDirectory({ request, contribution, result, previous, onNavi
                               : m.board_directory_discuss_named({ title, subject: contribution.subjectTitle })
                             : m.board_directory_open_named({ title })
                         }
-                        className={buttonVariants({ variant: 'outline' })}
+                        className={cn(buttonVariants({ variant: 'outline' }), actionClassName)}
                       >
                         {write ? writeLabel : m.board_directory_open()}
                       </a>
@@ -146,7 +154,7 @@ export function BoardDirectory({ request, contribution, result, previous, onNavi
             <a
               href={boardDirectoryHref(previous.request, locale, contribution)}
               onClick={navigate(previous.request)}
-              className={buttonVariants({ variant: 'outline', size: 'lg' })}
+              className={cn(buttonVariants({ variant: 'outline', size: 'lg' }), actionClassName)}
             >
               {m.board_directory_previous()}
             </a>
@@ -155,7 +163,7 @@ export function BoardDirectory({ request, contribution, result, previous, onNavi
             <a
               href={boardDirectoryHref({ ...request, cursor: next }, locale, contribution)}
               onClick={navigate({ ...request, cursor: next })}
-              className={buttonVariants({ variant: 'outline', size: 'lg' })}
+              className={cn(buttonVariants({ variant: 'outline', size: 'lg' }), actionClassName)}
             >
               {m.board_directory_next()}
             </a>
