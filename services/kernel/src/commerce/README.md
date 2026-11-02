@@ -320,6 +320,15 @@ mounting the endpoint; the unused standalone `creator-sales.d.ts` is not an alte
 constructed Web responses and permitted workspace typing establish no native, privacy, browser, physical or
 promoted-main acceptance. Original acceptance remains required after integration.
 
+A current refresh that returns a different viewer or address is unavailable. It replaces the accepted page and
+continuation, including the retained same-viewer workspace, so a later healthy credential renewal cannot revive
+the old sale. Initial loader data seeds the query once; it is never a fallback after a completed refresh.
+
+The canonical compiler's `typecheck --emit-client` composes mounted native routes into the generated client using
+the same admitted compiler database. This is declaration emission, not a substitute transport or a second DTO.
+The existing Web acceptance assertion that rejects `selling` for `commerce_sale.list` conflicts with this owner's
+`gate:selling` contract; preserve that assertion for cross-Goal reconciliation rather than changing the gate.
+
 ### Adopted native Content edition and delivery state
 
 The first target is native `content.edition`, action `edition:read`, naming an actual authored Content post revision

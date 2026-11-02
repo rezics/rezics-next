@@ -90,18 +90,18 @@ function CurrentSalesRead({
     enabled: hydrated && origin.isCurrent() && personalRead.enabled,
     queryFn: async () => {
       if (!origin.isCurrent()) return null;
+      const unavailable: CreatorSalesCurrentRead = {
+        sessionSubject: subject,
+        requested: { cursor: cursor ?? null },
+        selling: true,
+        page: { kind: 'unavailable' },
+      };
       try {
         const value = await readCreatorSalesCurrent({ data: cursor ? { cursor } : {} });
-        return origin.isCurrent() && matches(value, subject, cursor ?? null) ? value : null;
+        if (!origin.isCurrent()) return null;
+        return matches(value, subject, cursor ?? null) ? value : unavailable;
       } catch {
-        return origin.isCurrent()
-          ? {
-              sessionSubject: subject,
-              requested: { cursor: cursor ?? null },
-              selling: true,
-              page: { kind: 'unavailable' },
-            }
-          : null;
+        return origin.isCurrent() ? unavailable : null;
       }
     },
     ...(initialData ? { initialData } : {}),
@@ -111,12 +111,12 @@ function CurrentSalesRead({
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
-  const value = query.data ?? initialData;
+  const value = query.data;
   if (hydrated && !origin.isCurrent())
     return (
       <CreatorSalesPage page={{ kind: 'loading' }} locale={locale} {...(cursor === undefined ? {} : { cursor })} />
     );
-  if (value && origin.isCurrent()) origin.workspace.read = value;
+  if (origin.isCurrent()) origin.workspace.read = value;
   const page: CreatorSalesData = value?.page ?? { kind: 'loading' };
   return <CreatorSalesPage page={page} locale={locale} {...(cursor === undefined ? {} : { cursor })} />;
 }

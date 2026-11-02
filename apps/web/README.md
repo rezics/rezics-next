@@ -3216,6 +3216,8 @@ does not become an empty sales page.
 The shared current-origin observer retires viewer, admission and locale/cursor replacements synchronously,
 including ABA before React commits. A healthy credential renewal may retain accepted same-viewer data while
 retiring its in-flight read. No caller-selected creator, token or CSRF value enters the returned page envelope.
+A completed refresh for a different viewer or cursor replaces the prior page with unavailable and clears its
+continuation. Initial loader data cannot become a fallback after that refresh or a healthy credential renewal.
 
 The endpoint DTO owns the sanitized boundary: captured amounts and historic unknowns, separate currencies,
 preparing versus complete empty, and genuine denied/error/stale/unavailable states. There are no buyer details,
@@ -3233,4 +3235,6 @@ Cost: current sales read
 - Growth check: `creator-sales-native.test.ts`, `creator-sales-current-outcomes.test.ts` and
   `creator-sales-current-viewer.test.tsx` author default transport, current preparation, genuine exposure failures,
   healthy rotation, delayed viewer/admission/address ABA and foreign-empty rejection.
+  `creator-sales-current-refresh.test.tsx` covers replacement of a seeded page after a foreign refresh and
+  subsequent healthy rotation.
   These source cases are UNRUN; native/browser/visual/full acceptance remains controller-owned after integration.
