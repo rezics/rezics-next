@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { spawn } from 'node:child_process';
-import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdirSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { acquireDirectoryLease } from './lease.ts';
 import { processIdentity, sameProcess, stopProcessesUnder, terminateProcessGroup, waitForProcess } from './process.ts';
@@ -54,7 +54,8 @@ test('PID start time and boot identity fence PID reuse; SIGKILL removes an uncoo
 test('a server that left its group is stopped by its working directory, and processes elsewhere are spared', async () => {
   const root = tempDirectory(),
     inside = join(root, 'worktree', 'apps', 'web'),
-    outside = join(root, 'other');
+    outside = join(root, 'other'),
+    proc = join(root, 'proc');
   mkdirSync(inside, { recursive: true });
   mkdirSync(outside, { recursive: true });
   const start = async (cwd: string, script: string) => {
@@ -73,11 +74,23 @@ test('a server that left its group is stopped by its working directory, and proc
   const stubborn = await start(inside, "process.on('SIGTERM', () => {})");
   const elsewhere = await start(outside, '');
   try {
-    expect(await stopProcessesUnder(join(root, 'worktree'), 100)).toBe(2);
+    const bootFile = join(proc, 'sys/kernel/random/boot_id');
+    mkdirSync(join(proc, 'sys/kernel/random'), { recursive: true });
+    writeFileSync(bootFile, server.boot);
+    for (const [identity, cwd] of [[server, inside], [stubborn, inside], [elsewhere, outside]] as const) {
+      const entry = join(proc, String(identity.pid));
+      mkdirSync(entry);
+      symlinkSync(cwd, join(entry, 'cwd'));
+      const fields = ['S', '1', String(identity.group), ...Array(16).fill('0'), identity.start];
+      writeFileSync(join(entry, 'stat'), `${identity.pid} (owned) ${fields.join(' ')}`);
+    }
+    expect(await stopProcessesUnder(join(root, 'worktree'), 100, proc)).toBe(2);
     expect(sameProcess(server)).toBe(false);
     expect(sameProcess(stubborn)).toBe(false);
     expect(sameProcess(elsewhere)).toBe(true);
-    expect(await stopProcessesUnder(join(root, 'worktree'), 100)).toBe(0);
+    rmSync(join(proc, String(server.pid)), { recursive: true });
+    rmSync(join(proc, String(stubborn.pid)), { recursive: true });
+    expect(await stopProcessesUnder(join(root, 'worktree'), 100, proc)).toBe(0);
   } finally {
     for (const identity of [server, stubborn, elsewhere]) await terminateProcessGroup(identity, 20);
     rmSync(root, { recursive: true, force: true });
