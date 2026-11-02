@@ -1,9 +1,23 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { expect, test } from 'bun:test';
+import { expect, expectTypeOf, test } from 'bun:test';
+import type { KernelClient } from '@rezics/client';
 import { clientDeclarationCacheDirectory, clientDeclarations, withOrderReconcileAuthorization } from './client.ts';
 
 const repository = resolve(import.meta.dir, '../../..');
+
+const reconcileOrder = (client: KernelClient) =>
+  client.orders({ orderId: 'order-id' }).$reconcile.post({}, {
+    headers: { authorization: 'Bearer session', 'idempotency-key': 'reconciliation-key' },
+  });
+
+test('generated KernelClient exposes typed order reconciliation', () => {
+  type ReconciliationResponse = Awaited<ReturnType<typeof reconcileOrder>>;
+  expectTypeOf<NonNullable<ReconciliationResponse['data']>>().toMatchTypeOf<{
+    orderId: string;
+    reconciliation: 'queued';
+  }>();
+});
 
 test('incremental client declarations match a clean emit after one source file changes', () => {
   mkdirSync(resolve(repository, '.temp'), { recursive: true });
