@@ -4,12 +4,12 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
-import { collectionRequestVariant, loadEditableCollectionPage, type CollectionReadAddress } from './collection-load';
+import { collectionRequestVariant, loadEditableCollectionPage } from './collection-load';
 import type { CollectionPublicContext } from './collection-public-document';
 import { finishCollectionExport, validateCollectionExportCapture, type CollectionExportCapture } from './collection-export-request';
 
 /** Reconstruct the exact addressed read; later pages and malformed address claims cannot silently restart. */
-function exportAddress(capture: CollectionExportCapture): CollectionReadAddress {
+function exportAddress(capture: CollectionExportCapture): { id: string; editor: boolean; search: Record<string, string | string[]> } {
   const [kind, id, cursor, editor, entries] = JSON.parse(capture.provenance.request);
   if (kind !== 'page' || id !== capture.id || cursor !== null || typeof editor !== 'boolean' || !Array.isArray(entries))
     throw new Error('Invalid Collection export address');

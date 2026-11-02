@@ -82,11 +82,16 @@ test('a replacement public Collection export stays usable while retired clipboar
   let page = pageA;
   let context: CollectionPublicContext = { origin: 'https://rezics.com', locale: 'en' };
   let laterPage = false;
+  let preparation: ReturnType<typeof deferred> | null = null;
   const render = async (visible = true) => {
     await act(async () => {
       root.render(
         <StrictMode>
-          {visible ? <CollectionExport page={page} context={context} laterPage={laterPage} request={async () => ({ state: 'complete', file: collectionPublicDocument(page, context)! })} /> : null}
+          {visible ? <CollectionExport page={page} context={context} laterPage={laterPage} request={async () => {
+            const file = collectionPublicDocument(page, context)!;
+            if (preparation) await preparation.promise;
+            return { state: 'complete', file };
+          }} /> : null}
         </StrictMode>,
       );
     });
@@ -145,6 +150,15 @@ test('a replacement public Collection export stays usable while retired clipboar
 
   try {
     await render();
+    preparation = deferred();
+    await act(async () => download().click());
+    expectPending();
+    const cancel = [...host.querySelectorAll('button')].find((button) => button.textContent === m.library_collection_cancel())!;
+    await act(async () => cancel.click());
+    expectReady();
+    await act(async () => preparation!.resolve());
+    expect(blobs).toHaveLength(0);
+    preparation = null;
     const a = await copyCurrent();
     expect(blobs).toHaveLength(0);
     context = { ...context };

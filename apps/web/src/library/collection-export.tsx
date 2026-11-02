@@ -68,16 +68,18 @@ export function CollectionExport({
   const { origin, locale } = context;
   const capture = captureCollectionExport(page as CollectionPageResult);
   const available = capture !== null && collectionPublicDocument(page, context, laterPage) !== null;
-  const [lifetime, setLifetime] = useState({ page, origin, locale, laterPage, available, key: 0 });
+  const signature = capture ? JSON.stringify(capture) : null;
+  const [lifetime, setLifetime] = useState({ page, origin, locale, laterPage, available, signature, key: 0 });
   if (
     lifetime.page !== page ||
     lifetime.origin !== origin ||
     lifetime.locale !== locale ||
     lifetime.laterPage !== laterPage ||
-    lifetime.available !== available
+    lifetime.available !== available ||
+    lifetime.signature !== signature
   ) {
     // Reset before committing the replacement view, including a return to an earlier payload.
-    setLifetime({ page, origin, locale, laterPage, available, key: lifetime.key + 1 });
+    setLifetime({ page, origin, locale, laterPage, available, signature, key: lifetime.key + 1 });
   }
 
   if (!available || !capture) return null;
