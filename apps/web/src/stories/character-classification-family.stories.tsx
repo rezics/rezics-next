@@ -168,7 +168,7 @@ async function readable(canvasElement: HTMLElement, width: number) {
   await expect(bounds.left).toBeGreaterThanOrEqual(0);
   await expect(bounds.right).toBeLessThanOrEqual(width);
   await expect(section.scrollWidth).toBeLessThanOrEqual(section.clientWidth + 1);
-  const actions = [
+  const actions: string[] = [
     m.facts_edit_field(),
     m.facts_add_value(),
     m.correction_submit(),
