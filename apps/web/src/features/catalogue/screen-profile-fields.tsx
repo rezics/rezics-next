@@ -264,7 +264,7 @@ function InitialStatement({
           const id = controlId(`${screenRowId(row)}-${partKey(citation.part)}`, 'fact', 'value');
           const value = citation.part.value;
           return (
-            <Field key={partKey(citation.part)} className="min-w-0">
+            <Field key={partKey(citation.part)} data-screen-citation className="min-w-0">
               <FieldLabel className={screenLabelClassName} htmlFor={id}>
                 {m.relation_citation({}, o)}
               </FieldLabel>
@@ -302,28 +302,143 @@ function InitialStatement({
                 {value?.type === 'value' && typeof value.content === 'string' ? value.content : ''}
               </p>
               {citation.group >= 0 && (
-                <Button
-                  className={screenActionClassName}
-                  type="button"
-                  variant="ghost"
-                  onClick={() => {
+                <ScreenCitationRemove
+                  part={citation.part}
+                  disabled={disabled}
+                  locale={locale}
+                  onRemove={() => {
+                    const key = partKey(citation.part);
                     emptyCitation.current = { property: { id: 'schema:url' }, value: { type: 'value', content: '' } };
                     change({
                       ...statement,
-                      references: statement.references.flatMap((reference, group) => {
-                        if (group !== citation.group) return [reference];
-                        const parts = reference.parts.filter((_, index) => index !== citation.index);
+                      references: statement.references.flatMap((reference) => {
+                        if (!reference.parts.some((part) => partKey(part) === key)) return [reference];
+                        const parts = reference.parts.filter((part) => partKey(part) !== key);
                         return parts.length ? [{ ...reference, parts }] : [];
                       }),
                     });
                   }}
-                >
-                  {m.relation_remove({}, o)}
-                </Button>
+                />
               )}
             </Field>
           );
         })}
+    </div>
+  );
+}
+
+/** Keep the URL mounted and address the pending removal by its private part identity. */
+function ScreenCitationRemove({
+  part,
+  disabled,
+  locale,
+  onRemove,
+}: {
+  part: SnakInput;
+  disabled: boolean;
+  locale: string;
+  onRemove: () => void;
+}) {
+  const o = { locale: locale as never };
+  const key = partKey(part);
+  const holder = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const cancel = useRef<HTMLButtonElement>(null);
+  const restoreFocus = useRef(false);
+  const [pending, setPending] = useState<string>();
+  const confirming = pending === key;
+  const current = useRef({ disabled, key, onRemove });
+  current.current = { disabled, key, onRemove };
+  const editable = () =>
+    !current.current.disabled &&
+    current.current.key === key &&
+    !!holder.current?.isConnected &&
+    !holder.current.closest('fieldset:disabled, [inert]');
+  useLayoutEffect(() => {
+    if (disabled) return;
+    if (confirming) cancel.current?.focus();
+    else if (restoreFocus.current) {
+      trigger.current?.focus();
+      restoreFocus.current = false;
+    }
+  }, [confirming, disabled]);
+  const cancelRemoval = () => {
+    restoreFocus.current = true;
+    setPending(undefined);
+  };
+  const remove = () => {
+    if (!editable()) return;
+    const citation = holder.current!.closest('[data-screen-citation]')!;
+    const parent = citation.parentElement!;
+    const siblings = [...parent.querySelectorAll<HTMLElement>('[data-screen-citation]')];
+    const index = siblings.indexOf(citation as HTMLElement);
+    const controls = 'input, select, textarea, button, [tabindex="0"], [contenteditable="true"]';
+    const candidates = [...siblings.slice(index + 1), ...siblings.slice(0, index).reverse(), parent].flatMap(
+      (region) => [...region.querySelectorAll<HTMLElement>(controls)],
+    );
+    candidates
+      .find(
+        (control) =>
+          !citation.contains(control) &&
+          !control.matches(':disabled, [aria-disabled="true"], [type="hidden"]') &&
+          !control.closest('[hidden], [inert]'),
+      )
+      ?.focus();
+    current.current.onRemove();
+  };
+  const populated =
+    part.value.type !== 'value' || typeof part.value.content !== 'string' || !!part.value.content.trim();
+  return (
+    <div ref={holder}>
+      {confirming ? (
+        <div
+          role="group"
+          aria-label={m.candidate_confirm_title({ action: m.relation_remove({}, o) }, o)}
+          className="space-y-2"
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              cancelRemoval();
+            }
+          }}
+        >
+          <p>{m.candidate_confirm_title({ action: m.relation_remove({}, o) }, o)}</p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              ref={cancel}
+              className={screenActionClassName}
+              type="button"
+              variant="outline"
+              disabled={disabled}
+              onClick={cancelRemoval}
+            >
+              {m.candidate_cancel({}, o)}
+            </Button>
+            <Button
+              className={screenActionClassName}
+              type="button"
+              variant="destructive"
+              disabled={disabled}
+              onClick={remove}
+            >
+              {m.relation_remove({}, o)}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <Button
+          ref={trigger}
+          className={screenActionClassName}
+          type="button"
+          variant="ghost"
+          disabled={disabled}
+          onClick={() => {
+            if (editable()) populated ? setPending(key) : remove();
+          }}
+        >
+          {m.relation_remove({}, o)}
+        </Button>
+      )}
     </div>
   );
 }
