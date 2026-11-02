@@ -332,6 +332,7 @@ function SpaceSetupFormVisit({
     contextPicker.getSnapshot,
   );
   const context = contextState.selected?.phase === 'ready' ? contextState.selected.choice : null;
+  const contextSelectionVersion = contextPicker.selectionVersion();
   useCallerLayoutEffect(() => contextPicker.connect(), [contextPicker]);
   useCallerLayoutEffect(() => {
     void contextPicker.current(snapshot.realm?.contextId ?? null, snapshot.realm?.head);
@@ -419,10 +420,17 @@ function SpaceSetupFormVisit({
   }
   async function submit(draft: SetupDraftCommand) {
     if (inFlight.current || !loaded || (needsRefresh && !pending) || !commandReady || !caller.current()) return;
+    const command = setupAttempt(pending, draft, crypto.randomUUID());
+    // Pending retries replay their immutable command; new writes require the live picker choice.
+    if (
+      !pending &&
+      (command.step === 'realm' || command.step === 'settings') &&
+      !contextPicker.selection(command.contextId, contextSelectionVersion)
+    )
+      return;
     const ticket = caller.ticket();
     const request = ++operation.current;
     inFlight.current = true;
-    const command = setupAttempt(pending, draft, crypto.randomUUID());
     setPending(command);
     setBusy(true);
     setProblem(null);

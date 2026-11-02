@@ -440,6 +440,27 @@ test('StrictMode page retires current, search and exact Context resolutions on s
   expect(choices).toHaveLength(0);
 });
 
+test('an admitted manager submits only the live Context choice, including a reference edit before React renders', async () => {
+  await mount(<PageFrame initial={{ ...existing }} spaceId={spaceId} />);
+  for (const choice of choices) await settle(choice.pending, authenticated({ id: contextId, label: 'Reading' }));
+  await click(m.space_setup_realm());
+  await click(m.setup_context_use_current());
+  await settle(choices.at(-1)!.pending, authenticated({ id: contextId, label: 'Reading' }));
+  const reference = host.querySelector<HTMLInputElement>('input[id$="-reference"]')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(reference, id(9));
+    reference.dispatchEvent(new window.Event('input', { bubbles: true }));
+    host.querySelector('form')!.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+  });
+  expect(commands).toHaveLength(0);
+  await click(m.space_setup_resolve());
+  await settle(choices.at(-1)!.pending, authenticated({ id: id(9), label: 'Chosen replacement' }));
+  await submit();
+  expect(commands).toHaveLength(1);
+  expect(commands[0]!.data).toMatchObject({ step: 'settings', realmId, contextId: id(9) });
+  expect(commands[0]!.headers).toEqual({ 'X-CSRF-Token': 'csrf-one' });
+});
+
 test('production setup form fences late Board source and text pages after concept query changes', async () => {
   const retiredSource = deferred<{ concepts: readonly SetupChoice[]; next: string | null }>();
   const retiredText = deferred<{ concepts: readonly SetupChoice[]; next: string | null }>();

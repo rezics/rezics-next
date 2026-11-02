@@ -5,6 +5,8 @@ import { ContextChoiceError, unavailableContextChoiceSource, type ContextChoiceS
 import type { SetupChoice, SetupFailure } from './space-setup';
 
 type DirectoryGet = KernelClient['contexts']['get'];
+/** The producer admits at most 100; this consumer asks for one twenty-entry page without refill. */
+export const SETUP_CONTEXT_DIRECTORY_LIMIT = 20;
 export type ContextDirectoryPage = NonNullable<Awaited<ReturnType<DirectoryGet>>['data']>;
 export type ContextDirectoryEntry = ContextDirectoryPage['contexts'][number];
 
@@ -18,7 +20,7 @@ const directoryEntrySchema = v.strictObject({
   purgeAfter: v.nullable(v.string()),
 });
 const directoryPageSchema = v.strictObject({
-  contexts: v.pipe(v.array(directoryEntrySchema), v.maxLength(20)),
+  contexts: v.pipe(v.array(directoryEntrySchema), v.maxLength(SETUP_CONTEXT_DIRECTORY_LIMIT)),
   next: v.nullable(v.string()),
 }) satisfies v.GenericSchema<ContextDirectoryPage>;
 export type ContextDirectoryResult = ContextDirectoryPage | { kind: 'denied' | 'unavailable' };
@@ -31,7 +33,7 @@ export const setupContextDirectorySchema = v.strictObject({
 /** Only the declared active, currently readable directory; never a catalogue or lifecycle writer. */
 export type NativeContextDirectory = {
   get(options: {
-    query: { query?: string; limit: 20; cursor?: string; deleted: false };
+    query: { query?: string; limit: typeof SETUP_CONTEXT_DIRECTORY_LIMIT; cursor?: string; deleted: false };
     headers: { authorization: string };
     fetch?: { signal: AbortSignal };
   }): Promise<{ data: ContextDirectoryPage | null; error: unknown; status: number }>;
@@ -57,7 +59,7 @@ export async function readSetupContextDirectory(
     const result = await directory.get({
       query: {
         ...(query ? { query } : {}),
-        limit: 20,
+        limit: SETUP_CONTEXT_DIRECTORY_LIMIT,
         ...(input.cursor !== undefined ? { cursor: input.cursor } : {}),
         deleted: false,
       },

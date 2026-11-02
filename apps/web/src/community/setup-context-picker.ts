@@ -63,6 +63,7 @@ export function createSetupContextPicker(source: ContextChoiceSource, reference 
   let searchRequest: AbortController | undefined;
   let searchGeneration = 0;
   let selectionGeneration = 0;
+  let selectionCurrentRead: number | null = null;
   let currentGeneration = 0;
   let referenceGeneration = 0;
   let currentVersion: string | undefined;
@@ -84,10 +85,14 @@ export function createSetupContextPicker(source: ContextChoiceSource, reference 
   function search(query: string, cursor?: string, delay = 0) {
     if (!active()) return;
     cancelSearch();
-    if (state.selected?.phase === 'loading') selectionGeneration++;
+    const interrupted = state.selected?.phase === 'loading';
+    if (interrupted) {
+      selectionGeneration++;
+      selectionCurrentRead = null;
+    }
     const generation = searchGeneration;
     const page = { phase: 'loading' as const, contexts: [], next: null, ...(cursor !== undefined ? { cursor } : {}) };
-    update({ ...state, query, page });
+    update({ ...state, query, page, selected: interrupted ? null : state.selected });
     timer = setTimeout(async () => {
       timer = undefined;
       if (!active() || generation !== searchGeneration) return;
@@ -126,6 +131,7 @@ export function createSetupContextPicker(source: ContextChoiceSource, reference 
   async function choose(id: string) {
     if (!active()) return;
     cancelSearch();
+    selectionCurrentRead = null;
     const generation = ++selectionGeneration;
     update({
       ...state,
@@ -140,8 +146,19 @@ export function createSetupContextPicker(source: ContextChoiceSource, reference 
     if (!retry && state.current?.id === id && currentVersion === version) return;
     currentVersion = version;
     const generation = ++currentGeneration;
+    // A newer current read can replace a recheck, but cannot take over an independent choice.
+    const selected = selectionCurrentRead !== null && state.selected?.id !== id ? null : state.selected;
+    const recheckSelection =
+      !!id && selected?.id === id && (selected.phase !== 'loading' || selectionCurrentRead !== null);
+    selectionCurrentRead = recheckSelection ? generation : null;
+    if (recheckSelection) selectionGeneration++;
     const selectionAtRead = selectionGeneration;
-    update({ ...state, current: id ? { id, phase: 'loading', choice: null } : null });
+    const loading = id ? { id, phase: 'loading' as const, choice: null } : null;
+    update({
+      ...state,
+      current: loading,
+      selected: recheckSelection ? loading : selected,
+    });
     if (!id) return;
     const resolved = await resolve(id);
     if (active() && generation === currentGeneration)
@@ -149,10 +166,11 @@ export function createSetupContextPicker(source: ContextChoiceSource, reference 
         ...state,
         current: resolved,
         selected:
-          selectionAtRead === selectionGeneration && state.selected?.id === id && state.selected.phase !== 'loading'
+          recheckSelection && selectionAtRead === selectionGeneration && state.selected?.id === id
             ? resolved
             : state.selected,
       });
+    if (selectionCurrentRead === generation) selectionCurrentRead = null;
   }
   return {
     getSnapshot: () => state,
@@ -279,6 +297,13 @@ export function createSetupContextPicker(source: ContextChoiceSource, reference 
     selectionVersion() {
       return selectionGeneration;
     },
+    /** A queued submit must still own the exact selection observed by its render. */
+    selection(expectedId: string, expectedVersion: number): SetupChoice | null {
+      if (!active() || expectedVersion !== selectionGeneration) return null;
+      const selected = state.selected;
+      if (selected?.phase !== 'ready' || selected.id !== expectedId || selected.choice?.id !== expectedId) return null;
+      return selected.choice;
+    },
     retryCurrent(expectedId?: string, expectedVersion?: string) {
       return active() &&
         state.current?.id &&
@@ -293,6 +318,7 @@ export function createSetupContextPicker(source: ContextChoiceSource, reference 
       if (expectedVersion !== undefined && expectedVersion !== referenceGeneration) return;
       referenceGeneration++;
       cancelSearch();
+      selectionCurrentRead = null;
       selectionGeneration++;
       update({ ...state, reference: value, selected: null, page: { phase: 'idle', contexts: [], next: null } });
     },
@@ -300,6 +326,7 @@ export function createSetupContextPicker(source: ContextChoiceSource, reference 
       if (!active()) return;
       if (expectedId !== undefined && state.selected?.id !== expectedId) return;
       if (expectedVersion !== undefined && expectedVersion !== selectionGeneration) return;
+      selectionCurrentRead = null;
       selectionGeneration++;
       update({ ...state, selected: null });
     },

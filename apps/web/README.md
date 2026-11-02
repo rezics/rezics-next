@@ -2414,7 +2414,9 @@ Both directory labels and independently verified selection labels use the shared
 ending with the exact ID when there is no label. A match in another language never replaces the canonical label.
 The page memoizes the source for its viewer and locale; a changed session disposes old searches and resolutions.
 Selection still uses the authenticated `resolveSpaceSetupChoice` point reader, never the directory's cached label
-or a cached permission verdict. The shared EntityPicker was inspected: it requires subject
+or a cached permission verdict. New submissions require the same live selection generation; reference edits and
+current-Context rechecks invalidate queued submits, interrupted choices clear, and settled name-search choices remain
+explicit until replaced. Uncertain retries retain their original command. The shared EntityPicker was inspected: it requires subject
 types/covers, hides IDs and has no continuation, so this Context region reuses shared Field/Input/Button controls.
 Known-reference loading remains optional recovery alongside name search.
 

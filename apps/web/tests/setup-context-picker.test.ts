@@ -90,7 +90,10 @@ test('Guided Realm setup chooses an actually readable current Context', async ()
     const denied = await commandSetup(client, 'Bearer creator', intent);
     expect(denied).toEqual({ kind: 'failure', reason: 'denied', status: 403 });
     readable = false;
-    await picker.retryCurrent();
+    const version = picker.selectionVersion();
+    const recheck = picker.retryCurrent();
+    expect(picker.selection(contextId, version)).toBeNull();
+    await Promise.all([recheck, picker.current(contextId, 'refreshed-head')]);
     expect(picker.getSnapshot().current).toEqual({ id: contextId, phase: 'denied', choice: null });
     expect(picker.getSnapshot().selected?.phase).toBe('denied');
     expect(await readSetup(client, 'Bearer creator', spaceRecording.space.spaceId)).toEqual({
@@ -191,6 +194,8 @@ test('disconnected and disposed Context callbacks cannot start fresh search, exa
   picker.search('reading');
   await new Promise((resolve) => setTimeout(resolve, 270));
   const oldResolution = picker.choose(contextId);
+  picker.search('replacement');
+  expect(picker.getSnapshot().selected).toBeNull();
   const disconnect = picker.connect();
   disconnect();
   picker.dispose();
@@ -276,6 +281,13 @@ test('Context exact, current, and page callbacks expire when query or reference 
   await picker.current(contextId, 'head-two');
   await picker.chooseCurrent(contextId, priorCurrent);
   expect(resolutions).toBe(2);
+  await picker.choose(contextId);
+  const selectedVersion = picker.selectionVersion();
+  expect(picker.selection(contextId, selectedVersion)?.id).toBe(contextId);
+  picker.reference(otherId);
+  picker.reference(contextId);
+  await picker.choose(contextId);
+  expect(picker.selection(contextId, selectedVersion)).toBeNull();
   picker.dispose();
 });
 
@@ -531,6 +543,7 @@ test('The existing setup Context picker reads the actual installed native direct
   let credentials = 0;
   const responseHeaders = new Headers();
   const sessionHeaders = { cookie: `__Host-rezics_session=${'a'.repeat(43)}` };
+  const reader = { kind: 'session' as const, subject: 'setup-viewer' };
   let request = new Request('https://site.test/en/realms/new', { headers: sessionHeaders });
   mock.module('@tanstack/react-start', () => start);
   mock.module('@tanstack/react-start/server', () => ({
@@ -630,7 +643,7 @@ test('The existing setup Context picker reads the actual installed native direct
     });
     expect(picker.getSnapshot().page).toMatchObject({ phase: 'ready', contexts: [], next: null });
     await picker.choose(contextId);
-    expect(picker.getSnapshot().selected?.choice).toEqual({ id: contextId, label: 'Current label' });
+    expect(picker.getSnapshot().selected?.choice).toEqual({ id: contextId, label: 'Current label', reader });
     expect(requests).toHaveLength(3);
     expect(new URL(requests[2]!.url).pathname).toBe(`/v1/contexts/${contextId}`);
     readable = false;
@@ -648,7 +661,7 @@ test('The existing setup Context picker reads the actual installed native direct
     expect(picker.getSnapshot().page).toMatchObject({ phase: 'unavailable', contexts: [], next: null });
     directoryStatus = 200;
     directoryBody = { contexts: [], next: null, preparing: true };
-    expect(await searchSpaceSetupContexts({ data: { query: '' } })).toEqual({ kind: 'unavailable' });
+    expect(await searchSpaceSetupContexts({ data: { query: '' } })).toEqual({ kind: 'unavailable', reader });
     expect(new URL(requests.at(-1)!.url).searchParams.has('query')).toBe(false);
 
     const cancellation = new AbortController();
@@ -658,11 +671,14 @@ test('The existing setup Context picker reads the actual installed native direct
     cancellation.abort();
     expect(nativeSignal.aborted).toBe(true);
     late.resolve(Response.json({ contexts: [entry], next: 'prior-viewer-cursor' }));
-    expect(await pending).toEqual({ kind: 'unavailable' });
+    expect(await pending).toEqual({ kind: 'unavailable', reader });
 
     const count = requests.length;
     request = new Request(request.url);
-    await expect(searchSpaceSetupContexts({ data: { query: '' } })).rejects.toThrow('Sign in to set up a community');
+    expect(await searchSpaceSetupContexts({ data: { query: '' } })).toEqual({
+      kind: 'denied',
+      reader: { kind: 'unbound' },
+    });
     expect(requests).toHaveLength(count);
     expect(requests.every((native) => native.method === 'GET')).toBe(true);
   } finally {
