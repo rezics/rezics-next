@@ -8,19 +8,19 @@ const actionClass = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break
 
 type SubjectViewRecoveryRouter = {
   invalidate: () => Promise<unknown>;
-  state: { location: { key: string }; matches: readonly { status: string }[] };
+  state: { location: object; matches: readonly { status: string }[] };
 };
 
 export function createSubjectViewRecovery() {
-  let active: { visit: string; promise: Promise<void> } | null = null;
-  return (router: SubjectViewRecoveryRouter, visit: string, reset: () => void) => {
+  let active: { visit: object; promise: Promise<void> } | null = null;
+  return (router: SubjectViewRecoveryRouter, visit: object, reset: () => void) => {
     if (active?.visit === visit) return active.promise;
     let attempt: { visit: string; promise: Promise<void> };
     const promise = Promise.resolve()
       .then(() => router.invalidate())
       .then(() => {
         if (
-          router.state.location.key === visit &&
+          router.state.location === visit &&
           router.state.matches.every((match) => match.status === 'success')
         )
           reset();
@@ -40,11 +40,11 @@ export function SubjectViewError({ reset }: ErrorComponentProps) {
   const router = useRouter();
   const headingId = useId();
   const recovery = useRef<ReturnType<typeof createSubjectViewRecovery> | null>(null);
-  const [retryingVisit, setRetryingVisit] = useState<string | null>(null);
+  const [retryingVisit, setRetryingVisit] = useState<object | null>(null);
   recovery.current ??= createSubjectViewRecovery();
-  const retrying = retryingVisit === location.key;
+  const retrying = retryingVisit === location;
   const retry = async () => {
-    const visit = location.key;
+    const visit = location;
     setRetryingVisit(visit);
     try {
       await recovery.current!(router, visit, reset);

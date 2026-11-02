@@ -105,12 +105,13 @@ test('retry invalidates failed view data, coalesces clicks, and stays available 
 });
 
 test('a completed recovery cannot reset a different subject visit', async () => {
-  const state = { location: { key: 'subject-a' }, matches: [{ status: 'success' }] };
+  const state = { location: {}, matches: [{ status: 'success' }] };
   let finish!: () => void;
   let resets = 0;
   const router = { state, invalidate: () => new Promise<void>((resolve) => (finish = resolve)) };
-  const pending = createSubjectViewRecovery()(router, 'subject-a', () => resets++);
-  state.location.key = 'subject-b';
+  const visit = state.location;
+  const pending = createSubjectViewRecovery()(router, visit, () => resets++);
+  state.location = {};
   finish();
   await pending;
   expect(resets).toBe(0);
