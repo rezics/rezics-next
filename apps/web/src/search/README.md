@@ -15,11 +15,23 @@ Safe-area padding and the active visual viewport bound the surface while its dis
 Viewport listeners exist only for the active search owner, with cleanup on dismissal; no result gains requests
 or listeners. Crossing the compact breakpoint while editing preserves the input and query.
 
+Result-kind traversal is keyed by the query, locale and initial discovery checkpoint (`as_of`); a changed checkpoint
+starts a fresh traversal. Global search accepts drafts up to 512 UTF-8 bytes; scoped inputs keep their existing
+256 UTF-16-unit cap, and typeahead keeps its independent 64-code-point prefix bound.
+
 Filters stays at the left of the composer's second row. `HeaderSearchFilterProvider` and
 `useRegisterHeaderSearchFilters` connect it to the current route's actual editor and active count. Search owns
 result filters; Collection's dialog remains a separate delivery slice. No new filter state or backend operation
 is introduced here. Scope labels require a supported scoped action and suggestion loader; otherwise they remain
 explicitly unavailable until removed, without falling back to global search.
+
+Filters edits result-language preferences as an ordered list of at most eight: add from supported locales, preserve
+existing valid authored tags verbatim, remove or move individual entries, and use the page-language default only
+when the user clears the list.
+
+The Revert edits action appears at the bottom of Filters only when condition or ordered-language drafts differ from
+the committed search; it restores those drafts, clears draft validation, and focuses a status announcement in the
+active surface.
 
 Range controls show a localized Remove range link only for a committed property range; drafts stay local and blank
 bounds remain invalid on Apply.
@@ -28,22 +40,20 @@ Property changes preserve values only when released datatypes and value definiti
 definitions support the selected unit, and statement qualifiers only when both properties allow the same released
 qualifier; incompatible nonempty operands require confirmation before reset to a fresh draft.
 
+Refinement property lookup searches case-insensitive substrings of the current localized name or exact case-sensitive
+identifiers; options with colliding names include their property IDs.
+
+Native GET sort submission uses an empty `sort` value for Relevance, parsed as the default; `rating` is the only
+explicit sort value.
+
+Recent history keeps failed local writes in its memory fallback until a write succeeds; observed durable removals and
+`localStorage.clear()` invalidate cached durable buckets, including inactive ones, while account labels remain
+native-hydrated. Keyboard removal focuses the next available row action, then the previous action, and falls back to
+the labeled history region; explicit clear focuses that region and announces completion.
+
 The [canonical stories](../stories/header-search/README.md) cover resting, focused discovery, suggestions,
 filter entry and phone interaction. `tests/header-search-composition.test.tsx` exercises the existing routed
 Search page and default shell across desktop/phone, English/Simplified Chinese and light/dark. It protects actual
 geometry, surface paint, focused controls, registered filter entry and retained phone drafts. Execution of that
 acceptance and native/browser evidence is deferred under the current delivery policy; workspace typing alone
 does not establish those outcomes.
-
-Recent history keeps failed local writes in its memory fallback until a write succeeds; observed durable removals and `localStorage.clear()` invalidate cached durable values, while account labels remain native-hydrated. Keyboard removal focuses the next available row action, then the previous action, and falls back to the labeled history region; explicit clear focuses that region and announces completion.
-Filters edits result-language preferences as an ordered list of at most eight: add from supported locales, preserve existing valid authored tags verbatim, remove or move individual entries, and use the page-language default only when the user clears the list.
-
-The Revert edits action appears at the bottom of Filters only when condition or ordered-language drafts differ from the committed search; it restores those drafts, clears draft validation, and focuses a status announcement in the active surface.
-
-Native GET sort submission uses an empty `sort` value for Relevance, parsed as the default; `rating` is the only explicit sort value.
-
-Result-kind traversal is keyed by the query, locale and initial discovery checkpoint (`as_of`); a changed checkpoint starts a fresh traversal.
-
-Global search accepts drafts up to 512 UTF-8 bytes; scoped inputs keep their existing 256 UTF-16-unit cap, and typeahead keeps its independent 64-code-point prefix bound.
-
-Refinement property lookup searches case-insensitive substrings of the current localized name or exact case-sensitive identifiers; options with colliding names include their property IDs.

@@ -53,10 +53,10 @@ export function observeRecentHistoryStorageEvent(
   event: StorageEvent,
   bucket: string | null,
 ): boolean {
-  if (!bucket || !isLocalStorageEvent(event)) return false;
-  if (event.key !== null && event.key !== recentHistoryKey(bucket)) return false;
+  if (!isLocalStorageEvent(event)) return false;
+  if (event.key !== null && !event.key.startsWith(recentHistoryKey(''))) return false;
   storage.observe(event);
-  return true;
+  return bucket !== null && (event.key === null || event.key === recentHistoryKey(bucket));
 }
 
 function isLocalStorageEvent(event: StorageEvent): boolean {
