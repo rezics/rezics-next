@@ -203,9 +203,7 @@ test('Remembered scoped queries retain the ordered language controls used by the
     onNavigate: (href) => resumedNav.push(href),
   });
   await act(async () => recent.input.focus());
-  const select = [...recent.host.querySelectorAll('button')].find((button) =>
-    button.textContent?.includes('Prince'),
-  )!;
+  const select = [...recent.host.querySelectorAll('button')].find((button) => button.textContent?.includes('Prince'))!;
   await act(async () => select.click());
   expect(recent.remembered).toEqual([['Prince', scoped, ['ja', 'en']]]);
   expect(resumedNav).toEqual(['/ja/library?collection=reading&q=Prince&language=ja&language=en']);
