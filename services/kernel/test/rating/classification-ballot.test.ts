@@ -67,6 +67,11 @@ beforeAll(async () => {
     [routeOf(accounts.voter0), accounts.voter0],
   );
   console.info('classification ballot auth probe', accountProbe.rows[0]);
+  console.info(
+    'classification ballot credential probe',
+    Buffer.from(realAccess.bearer('voter0').split('.')[1]!, 'base64url').toString(),
+    new Date().toISOString(),
+  );
 });
 
 afterAll(async () => {
