@@ -12,6 +12,7 @@ import {
 } from './historical-reader-provenance';
 import { historySessionReady, PostHistoryLifetime, postHistorySessionSource } from './post-history-lifetime';
 
+import { HistoryCurrentContext } from './post-history-current-context';
 import { RevisionHistoryNavigation } from './revision-history-navigation';
 export { RevisionEntry } from './revision-history-entry';
 
@@ -20,6 +21,8 @@ type ContinuationBoundary = { connection: number; revisionId: string | null; int
 
 type PostHistoryProps = {
   postId: string;
+  threadId?: string;
+  exposure?: unknown;
   viewerId?: string;
   readAuthority?: object;
   review?: boolean;
@@ -32,7 +35,7 @@ const serverRevision = () => 0;
 
 /** A disclosure belongs to its original caller and actual browser session cache lifetime. */
 export function PostHistory(props: PostHistoryProps) {
-  const { postId, viewerId, readAuthority } = props;
+  const { postId, threadId, exposure, viewerId, readAuthority } = props;
   const client = useContext(QueryClientContext);
   const source = client && typeof window !== 'undefined' ? postHistorySessionSource(client) : undefined;
   const observation = source?.read();
@@ -49,8 +52,8 @@ export function PostHistory(props: PostHistoryProps) {
         ? 'session'
         : 'anonymous';
   const binding = useMemo(
-    () => ({ postId, viewerId, readAuthority, source, revision, locale, credentialMode }),
-    [postId, viewerId, readAuthority, source, revision, locale, credentialMode],
+    () => ({ postId, threadId, exposure, viewerId, readAuthority, source, revision, locale, credentialMode }),
+    [postId, threadId, exposure, viewerId, readAuthority, source, revision, locale, credentialMode],
   );
   const current = useRef(binding);
   current.current = binding;
@@ -85,6 +88,7 @@ export function PostHistory(props: PostHistoryProps) {
 /** A bounded, cursor-paged view of the immutable revisions returned by the native post history API. */
 function HistoryDisclosure({
   postId,
+  threadId,
   viewerId,
   review = false,
   className = 'mt-3',
@@ -120,12 +124,14 @@ function HistoryDisclosure({
     next,
     now,
     pageGeneration,
+    context,
     cursor: admittedCursor,
   } = useSyncExternalStore(lifetime.subscribe, lifetime.snapshot, lifetime.snapshot);
   const connection = lifetime.ticket();
   const pageFailed = failedCursor !== undefined;
-  const retryPage = !available || pageFailed;
-  const showHistoryAction = available ? next !== null || pageFailed : loaded;
+  const retryContext = context?.retry.state === 'same_cursor';
+  const retryPage = !available || pageFailed || retryContext;
+  const showHistoryAction = available ? next !== null || pageFailed || retryContext : loaded;
 
   useLayoutEffect(() => {
     const cancel = () => {
@@ -222,6 +228,10 @@ function HistoryDisclosure({
         return;
       }
       const page = result.data;
+      if (threadId && page.context && page.context.conversation.id !== threadId) {
+        lifetime.failPage(request);
+        return;
+      }
       if (cursor !== undefined && page.revisions.length > 0 && lifetime.snapshot().open) {
         setAdditionStatus(m.thread_history_page_loaded());
       }
@@ -294,6 +304,7 @@ function HistoryDisclosure({
         <ContentItemHeading level={3} className="text-base font-semibold">
           {m.thread_history_heading()}
         </ContentItemHeading>
+        {available && context ? <HistoryCurrentContext context={context} authors={authors} now={now} /> : null}
         {loading && !loaded ? (
           <p role="status" className="text-sm text-muted-foreground">
             {m.thread_history_loading()}
@@ -319,7 +330,7 @@ function HistoryDisclosure({
             subjects={subjects}
             reviewVotes={reviewVotes}
             viewerId={viewerId}
-            review={review}
+            review={context ? context.conversation.kind === 'review' : review}
             hasMore={next !== null}
             isCurrent={() => lifetime.ownsPage(connection, pageGeneration)}
             boundaryRevisionId={
@@ -377,7 +388,10 @@ function HistoryDisclosure({
               const button = event?.currentTarget;
               const keyboard = event?.detail === 0 && keyboardActivation.current === button;
               keyboardActivation.current = undefined;
-              void load(retryPage ? failedCursor : (next ?? undefined), keyboard ? button : undefined);
+              void load(
+                retryContext ? admittedCursor : retryPage ? failedCursor : (next ?? undefined),
+                keyboard ? button : undefined,
+              );
             }}
           >
             {retryPage ? m.exact_revision_retry() : m.thread_history_more()}
