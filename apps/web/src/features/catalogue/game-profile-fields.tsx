@@ -327,6 +327,7 @@ export function GameInitialFacts({
   omitProperties = [],
   reuse,
   focusReference,
+  stablePartAddresses,
 }: {
   type: string;
   release: Release;
@@ -339,6 +340,7 @@ export function GameInitialFacts({
   omitProperties?: readonly string[] | undefined;
   reuse?: { onReuse: (key: string, index: number) => void } | undefined;
   focusReference?: { key: string; index: number; nonce: number } | undefined;
+  stablePartAddresses?: boolean | undefined;
 }) {
   const o = { locale: locale as never };
   const groups = gameGroups(release, type);
@@ -439,6 +441,7 @@ export function GameInitialFacts({
                     ? { index: focusReference.index, nonce: focusReference.nonce }
                     : undefined
                 }
+                {...(stablePartAddresses ? { stablePartAddresses: true } : {})}
               />
               <GameInitialFactRemove
                 row={row}

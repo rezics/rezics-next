@@ -61,6 +61,8 @@ test('Add-on creation reviews evidenced facts, copies a reference, and retries u
   const urlRefs = urlRow.getByRole('group', { name: /Citations 1/ });
   await addPart(urlRefs, 'schema:url', /URL/i, `https://example.org/addon-source/${token}`);
   await sameRow.getByLabel('URL', { exact: true }).first().fill(`https://example.org/also/${token}`);
+  await sameRow.getByRole('button', { name: 'Add citation', exact: true }).click();
+  await addPart(sameRow.getByRole('group', { name: /Citations 1/ }), 'schema:url', /URL/i, `https://example.org/also-source/${token}`);
   await urlRefs.getByRole('button', { name: /Reuse this reference/ }).click();
   const panel = page.locator('[data-fact-reuse]');
   await panel.waitFor({ state: 'visible' });

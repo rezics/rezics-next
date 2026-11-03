@@ -189,6 +189,7 @@ export function AddonProfileCreate({
                 }}
                 editAllowed={canEdit}
                 omitProperties={[addonBase]}
+                stablePartAddresses
                 reuse={
                   canEdit() ? { onReuse: (key, index) => setReuse(captureAddonReuse(facts, key, index)) } : undefined
                 }

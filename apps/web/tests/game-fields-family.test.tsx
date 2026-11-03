@@ -698,6 +698,8 @@ test('Game and Addon complete fields family preserves independent labels, native
     );
     expect(creations).toEqual([]);
     await act(async () => user.click(within(host).getByRole('button', { name: m.catalogue_create_submit() })));
+    await waitFor(() => expect(host.querySelector('[data-addon-create-review]')).not.toBeNull());
+    await act(async () => user.click(within(host).getByRole('button', { name: m.catalogue_create_submit() })));
     await waitFor(() => expect(created).toHaveLength(1));
     expect(creations).toHaveLength(1);
     expect(creations[0]!.item).toEqual({

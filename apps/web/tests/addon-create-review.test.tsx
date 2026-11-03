@@ -89,10 +89,23 @@ test('add-on creator reviews the exact item, repairs nested diagnostics, and ret
       element.dispatchEvent(new window.Event('input', { bubbles: true }));
     });
   }
+  function fact(index: number) {
+    return group().querySelectorAll<HTMLElement>('[data-slot="game-initial-fact"]')[index]!;
+  }
   async function add(property: string) {
     await act(async () => user.selectOptions(within(group()).getByRole('combobox', { name: m.character_add_fact() }), property));
     await act(async () => user.click(within(group()).getAllByRole('button', { name: m.correction_add() })[0]!));
-    return [...group().querySelectorAll<HTMLElement>(':scope > fieldset > section')].at(-1)!;
+    return fact(group().querySelectorAll('[data-slot="game-initial-fact"]').length - 1);
+  }
+  async function cite(row: HTMLElement, href: string) {
+    await act(async () => user.click(within(row).getByRole('button', { name: m.correction_add_reference() })));
+    const part = within(row).getByRole('combobox', { name: m.correction_add_part() });
+    await act(async () => user.selectOptions(part, 'schema:url'));
+    await act(async () =>
+      user.click(within(part.closest('[data-slot="field"]')!.parentElement!).getByRole('button', { name: m.correction_add() })),
+    );
+    const urls = within(row).getAllByRole('textbox', { name: m.correction_url() });
+    await input(urls.at(-1)!, href);
   }
   async function confirm() {
     await act(async () => user.click(canvas().getByRole('button', { name: m.catalogue_create_submit() })));
@@ -140,25 +153,31 @@ test('add-on creator reviews the exact item, repairs nested diagnostics, and ret
     const urlRow = await add('schema:url');
     const sameRow = await add('schema:sameAs');
     await input(within(urlRow).getAllByRole('textbox', { name: m.correction_url() })[0]!, 'https://example.org/addon');
-    await act(async () => user.click(within(urlRow).getByRole('button', { name: m.correction_add_reference() })));
-    const urlPart = within(urlRow).getByRole('combobox', { name: m.correction_add_part() });
-    await act(async () => user.selectOptions(urlPart, 'schema:url'));
-    await act(async () =>
-      user.click(within(urlPart.closest('[data-slot="field"]')!.parentElement!).getByRole('button', { name: m.correction_add() })),
-    );
-    await input(within(urlRow).getAllByRole('textbox', { name: m.correction_url() })[1]!, 'https://example.org/addon-source');
+    await cite(urlRow, 'https://example.org/addon-source');
     await input(within(sameRow).getAllByRole('textbox', { name: m.correction_url() })[0]!, 'https://example.org/also');
+    await cite(sameRow, 'https://example.org/also-source');
     await act(async () =>
       user.click(
         within(urlRow).getByRole('button', { name: `${m.facts_reuse_reference()} · ${m.correction_references()} 1` }),
       ),
     );
     const panel = host.querySelector('[data-fact-reuse]')!;
-    expect(panel.textContent).toContain(m.addon_create_review_reuse_base());
+    expect(group().textContent).toContain(m.addon_create_review_reuse_base());
     expect(panel.textContent).not.toContain(addonWorkId);
-    await act(async () => user.click(within(panel).getByRole('checkbox')));
+    await act(async () => user.click(within(panel).getByRole('checkbox', { name: /exact match/i })));
     await act(async () => user.click(within(panel).getByRole('button', { name: m.facts_reuse_apply() })));
-    expect(within(sameRow).getAllByRole('group', { name: /Citations/ }).length).toBeGreaterThan(1);
+    await waitFor(() => expect(panel.textContent).toContain(m.facts_reuse_applied({ count: 1 })));
+    await waitFor(() =>
+      expect(
+        within(fact(1))
+          .getAllByRole('textbox', { name: m.correction_url() })
+          .map((control) => (control as HTMLInputElement).value),
+      ).toContain('https://example.org/addon-source'),
+    );
+    expect(within(fact(1)).getAllByRole('group', { name: /Citations/ }).length).toBeGreaterThan(1);
+    await input(within(urlRow).getAllByRole('textbox', { name: m.correction_url() })[1]!, 'https://example.org/addon-stale');
+    expect(panel.textContent).toContain(m.facts_reuse_stale());
+    await act(async () => user.click(within(panel).getByRole('button', { name: m.candidate_cancel() })));
     await act(async () => user.click(canvas().getByRole('button', { name: m.catalogue_create_submit() })));
     expect(commands).toHaveLength(0);
     const review = host.querySelector('[data-addon-create-review]')!;
@@ -174,13 +193,14 @@ test('add-on creator reviews the exact item, repairs nested diagnostics, and ret
     const link = await waitFor(() =>
       canvas().getByRole('link', { name: new RegExp(read.release.properties['schema:url']?.labels?.en ?? 'URL', 'i') }),
     );
-    const urlControl = within(urlRow).getAllByRole('textbox', { name: m.correction_url() })[1] as HTMLInputElement;
+    const urlControl = within(fact(0)).getAllByRole('textbox', { name: m.correction_url() })[1] as HTMLInputElement;
     expect(decodeURIComponent(link.getAttribute('href')!.slice(1))).toBe(urlControl.id);
     expect(decodeURIComponent(link.getAttribute('href')!.slice(1))).not.toBe(group().id);
-    const sameId = (within(sameRow).getAllByRole('textbox', { name: m.correction_url() })[0] as HTMLInputElement).id;
-    await act(async () => user.click(within(urlRow).getByRole('button', { name: m.recipe_remove_field() })));
-    await act(async () => user.click(within(urlRow).getByRole('button', { name: m.recipe_remove_field() })));
-    expect(urlRow.isConnected).toBe(false);
+    const sameId = (within(fact(1)).getAllByRole('textbox', { name: m.correction_url() })[0] as HTMLInputElement).id;
+    const withdrawn = fact(0);
+    await act(async () => user.click(within(withdrawn).getByRole('button', { name: m.recipe_remove_field() })));
+    await act(async () => user.click(within(withdrawn).getByRole('button', { name: m.recipe_remove_field() })));
+    expect(withdrawn.isConnected).toBe(false);
     expect(sameId).not.toBe(decodeURIComponent(link.getAttribute('href')!.slice(1)));
     expect(host.querySelector(`#${CSS.escape(decodeURIComponent(link.getAttribute('href')!.slice(1)))}`)).toBeNull();
     await confirm();
