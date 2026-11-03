@@ -194,8 +194,12 @@ test.serial(
         return response.json();
       };
 
-      await json(await call('PATCH', `/v1/accounts/${author.accountId}`, authorActor, { displayName: 'Private caption author' }));
-      const space = (await json(await call('POST', '/v1/spaces', fixture.owner, { title: 'Caption observations' }), 201)).space;
+      await json(
+        await call('PATCH', `/v1/accounts/${author.accountId}`, authorActor, { displayName: 'Private caption author' }),
+      );
+      const space = (
+        await json(await call('POST', '/v1/spaces', fixture.owner, { title: 'Caption observations' }), 201)
+      ).space;
       const realmId = (
         await json(
           await call('POST', '/v1/realms', fixture.owner, {
@@ -208,24 +212,16 @@ test.serial(
         )
       ).realm.realmId;
       for (const account of [fixture.member, authorActor])
-        await json(
-          await call('POST', `/v1/realms/${realmId}/members`, fixture.owner, { accountId: account.id }),
-          202,
-        );
+        await json(await call('POST', `/v1/realms/${realmId}/members`, fixture.owner, { accountId: account.id }), 202);
       await driver.settle();
       for (const account of [fixture.member, authorActor])
         await json(
-          await call(
-            'POST',
-            '/v1/grants',
-            fixture.owner,
-            {
-              resource: { route: routeOf(realmId), id: realmId },
-              subject: { kind: 'account', id: account.id },
-              actions: ['realm:manage'],
-              valid: '(,)',
-            },
-          ),
+          await call('POST', '/v1/grants', fixture.owner, {
+            resource: { route: routeOf(realmId), id: realmId },
+            subject: { kind: 'account', id: account.id },
+            actions: ['realm:manage'],
+            valid: '(,)',
+          }),
           201,
         );
 
@@ -236,13 +232,20 @@ test.serial(
       const history = `/v1/rating-questions/${created.id}/labels?limit=20`;
       const command = `/v1/rating-questions/${created.id}/label`;
       await json(await call('PUT', command, authorActor, { expectedLabelRevision: 1, label: 'Corrected by author' }));
-      await json(await call('PUT', command, fixture.member, { expectedLabelRevision: 2, label: 'Current member caption' }));
+      await json(
+        await call('PUT', command, fixture.member, { expectedLabelRevision: 2, label: 'Current member caption' }),
+      );
 
       const privacyObserver = observeSql(system.database.pool);
       const privacyBarrier = privacyObserver.hold({ statement: publicIdentityPage.sql, occurrence: 2 }, 'after');
       const privateRead = call('GET', history, fixture.owner);
       let privateLabels:
-        | { labels: { labelRevision: number; author: { id: string; state: string; displayName?: string | null } | null }[] }
+        | {
+            labels: {
+              labelRevision: number;
+              author: { id: string; state: string; displayName?: string | null } | null;
+            }[];
+          }
         | undefined;
       try {
         await privacyBarrier.entered;
@@ -253,7 +256,11 @@ test.serial(
         privacyBarrier.release();
         await privacyObserver.close();
       }
-      expect(privateLabels!.labels[1]!.author).toMatchObject({ id: author.accountId, state: 'active', displayName: null });
+      expect(privateLabels!.labels[1]!.author).toMatchObject({
+        id: author.accountId,
+        state: 'active',
+        displayName: null,
+      });
 
       const erasureObserver = observeSql(system.database.pool);
       const erasureBarrier = erasureObserver.hold({ statement: publicIdentityPage.sql, occurrence: 2 }, 'after');

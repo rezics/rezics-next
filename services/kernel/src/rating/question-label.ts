@@ -259,7 +259,7 @@ async function observeLabelPage(
     if (!question || question.realmId === null) throw new ProblemError('not_found');
 
     let after = selection?.after ?? 0;
-    let ceiling = selection?.ceiling ?? (question.labelRevision ?? 1);
+    let ceiling = selection?.ceiling ?? question.labelRevision ?? 1;
     if (cursor !== undefined) {
       const decoded = decodeCursor(deps.tokens, binding, cursor, (deps.clock?.() ?? new Date()).getTime());
       if (
