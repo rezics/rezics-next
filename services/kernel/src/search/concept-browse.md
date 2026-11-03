@@ -7,6 +7,9 @@ hierarchy journey are still to be installed; this module alone does not enable d
 Decision: hierarchy continuation follows sortable full native edge keys independently of returned child IDs, so
 duplicate or irrelevant rows can advance without being mistaken for an empty closure.
 
+Decision: each worker step owns an immutable copy of its admitted allowance before asynchronous reads, so caller
+mutation cannot enlarge its page, edge or working-set budget.
+
 `startConceptBrowse` copies and freezes the exact property/concept/scheme selection and the release, graph,
 scheme, membership, principal and request binding before retaining the root. The state contains only this
 bounded definition and a revision-fenced storage locator. It contains neither discovered keys nor frontier arrays.

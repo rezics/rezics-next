@@ -173,6 +173,8 @@ export async function advanceConceptBrowse(
     !validLocator(input.retained)
   )
     return { status: 'rejected' };
+  // Own the admitted allowance before asynchronous source or retained-store operations.
+  limits = Object.freeze({ pages: limits.pages, edges: limits.edges, pageSize: limits.pageSize });
   let state = freezeState(input);
   let pages = 0,
     edges = 0;
