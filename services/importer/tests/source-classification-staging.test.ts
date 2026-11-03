@@ -1,9 +1,9 @@
 import { expect, test } from 'bun:test';
 import { projectSourceClassification } from '@rezics/conversion';
-import { RunStore } from '../src/run-store.ts';
+import { RunStore, type SourceProjection } from '../src/run-store.ts';
 
 test('staging retains only bounded, validated converter classification output', () => {
-  const store = new RunStore(':memory:', { projectionMode: 'source-record' });
+  const store = new RunStore<SourceProjection>(':memory:', { projectionMode: 'source-record' });
   try {
     const run = store.begin('fixture');
     if (run === 'busy') throw new Error('Unexpected active run');
