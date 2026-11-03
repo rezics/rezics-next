@@ -1,9 +1,7 @@
 import { expect, expectTypeOf, test } from 'bun:test';
 import { createKernelClient, type KernelClient, type ModerationDecisionPage } from '../src/index.ts';
 
-type DecisionPageRead = Awaited<
-  ReturnType<ReturnType<KernelClient['moderation-decisions']>['get']>
->['data'];
+type DecisionPageRead = Awaited<ReturnType<ReturnType<KernelClient['moderation-decisions']>['get']>>['data'];
 
 expectTypeOf<DecisionPageRead>().toEqualTypeOf<ModerationDecisionPage | null>();
 
