@@ -9,6 +9,7 @@ import { parseDocument, serializeDocument, type DocumentSnapshot } from '@rezics
 import type { BatchCommand, Source } from '@rezics/definitions/bulk';
 import type { Release } from '@rezics/definitions';
 import type { Pool } from 'pg';
+import { declareCommandHistory, registerCommandHistoryKind } from '../history/record.ts';
 import {
   noEffect,
   runCommand,
@@ -43,6 +44,7 @@ export type BulkValue =
   | { candidate: string; revision: number }
   | { revision: number };
 type Value = { status: 200 | 201; value: BulkValue };
+registerCommandHistoryKind('subject.batch_create', 3021);
 
 export function batchRoute(routeKey: Uint8Array, command: BatchCommand): number | null {
   const tuple = tupleRoute(routeKey, command.source.source, command.source.external_id);
@@ -169,7 +171,15 @@ export async function batchCommand(
     },
     async (tx, { transactionId }) => {
       try {
-        const resolve = (value: BulkValue) => noEffect<Value>({ status: 200, value });
+        const history = (events: readonly unknown[]) =>
+          declareCommandHistory(tx, kind, {
+            response: { artifactType: 'command-receipt/v1', accounts: [] },
+            events: events.map(() => ({ artifactType: 'outbox-event/v1', accounts: [] })),
+          });
+        const resolve = async (value: BulkValue) => {
+          if (command.op === 'create') await history([]);
+          return noEffect<Value>({ status: 200, value });
+        };
         const source = command.source;
         if (command.op === 'create') {
           const claim = await readClaim.run(tx, {
@@ -198,6 +208,7 @@ export async function batchCommand(
             subject_id: target.id,
             transaction_id: transactionId,
           });
+          await history(written.events);
           return { value: { status: 201, value: { id: written.value.id, revision: 1 } }, events: written.events };
         }
         const subject = await visibleSubject(tx, route, command.subject);
