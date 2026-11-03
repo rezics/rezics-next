@@ -1005,10 +1005,34 @@ CREATE TABLE content.catalogue_report_candidate (
     subject_id uuid NOT NULL,
     created_at timestamp with time zone NOT NULL,
     target_kind text DEFAULT 'subject'::text NOT NULL,
-    CONSTRAINT catalogue_report_candidate_target_kind_check CHECK ((target_kind = ANY (ARRAY['subject'::text, 'space'::text, 'realm'::text]))),
     CONSTRAINT catalogue_report_candidate_check CHECK ((report_route = ((get_byte(uuid_send(report_id), 10) * 256) + get_byte(uuid_send(report_id), 11)))),
     CONSTRAINT catalogue_report_candidate_report_route_check CHECK (((report_route >= 0) AND (report_route <= 65535))),
-    CONSTRAINT catalogue_report_candidate_route_check CHECK ((route = 0))
+    CONSTRAINT catalogue_report_candidate_route_check CHECK ((route = 0)),
+    CONSTRAINT catalogue_report_candidate_target_kind_check CHECK ((target_kind = ANY (ARRAY['subject'::text, 'space'::text, 'realm'::text])))
+);
+
+
+--
+-- Name: conversation_activity_episode; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.conversation_activity_episode (
+    route integer NOT NULL,
+    post_id uuid NOT NULL,
+    thread_id uuid NOT NULL,
+    opening boolean NOT NULL,
+    contributed_at timestamp with time zone,
+    native_eligible boolean NOT NULL,
+    security_revision bigint NOT NULL,
+    source_epoch integer NOT NULL,
+    source_position bigint NOT NULL,
+    CONSTRAINT conversation_activity_episode_check CHECK ((route = ((get_byte(uuid_send(post_id), 10) * 256) + get_byte(uuid_send(post_id), 11)))),
+    CONSTRAINT conversation_activity_episode_check1 CHECK ((route = ((get_byte(uuid_send(thread_id), 10) * 256) + get_byte(uuid_send(thread_id), 11)))),
+    CONSTRAINT conversation_activity_episode_contributed_at_check CHECK (((contributed_at IS NULL) OR isfinite(contributed_at))),
+    CONSTRAINT conversation_activity_episode_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT conversation_activity_episode_security_revision_check CHECK ((security_revision > 0)),
+    CONSTRAINT conversation_activity_episode_source_epoch_check CHECK ((source_epoch > 0)),
+    CONSTRAINT conversation_activity_episode_source_position_check CHECK ((source_position > 0))
 );
 
 
@@ -1893,10 +1917,9 @@ CREATE TABLE content.report (
     resolved_by uuid,
     decision_id uuid,
     reporter_erased boolean DEFAULT false NOT NULL,
+    target_witness jsonb,
     CONSTRAINT report_check CHECK ((route = ((get_byte(uuid_send(report_id), 10) * 256) + get_byte(uuid_send(report_id), 11)))),
     CONSTRAINT report_check1 CHECK (((octet_length(reason) + COALESCE(octet_length(evidence), 0)) <= 2097152)),
-    target_witness jsonb,
-    CONSTRAINT report_witness_bytes CHECK (((target_witness IS NULL) OR (octet_length((target_witness)::text) <= 16384))),
     CONSTRAINT report_check2 CHECK (((revision_id IS NULL) OR (target_kind = ANY (ARRAY['thread'::text, 'post'::text])))),
     CONSTRAINT report_evidence_check CHECK ((char_length(evidence) <= 4096)),
     CONSTRAINT report_outcome_shape CHECK ((((outcome IS NULL) AND (resolved_at IS NULL) AND (resolved_by IS NULL) AND (decision_id IS NULL)) OR ((outcome IS NOT NULL) AND (outcome = ANY (ARRAY['actioned'::text, 'dismissed'::text])) AND (resolved_at IS NOT NULL) AND (((outcome = 'actioned'::text) AND (((target_kind = 'subject'::text) AND (decision_id IS NULL)) OR ((target_kind <> 'subject'::text) AND (decision_id IS NOT NULL)))) OR ((outcome = 'dismissed'::text) AND (decision_id IS NULL) AND (resolved_by IS NOT NULL)))))),
@@ -1905,7 +1928,8 @@ CREATE TABLE content.report (
     CONSTRAINT report_reporter_erased_shape CHECK (((NOT reporter_erased) OR ((reporter_account_id IS NULL) AND (evidence IS NULL)))),
     CONSTRAINT report_required_evidence CHECK ((reporter_erased OR (reason <> ALL (ARRAY['illegal'::text, 'other'::text])) OR ((evidence IS NOT NULL) AND (char_length(evidence) > 0)))),
     CONSTRAINT report_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT report_target_kind_check CHECK ((target_kind = ANY (ARRAY['board'::text, 'thread'::text, 'post'::text, 'subject'::text, 'space'::text, 'realm'::text])))
+    CONSTRAINT report_target_kind_check CHECK ((target_kind = ANY (ARRAY['board'::text, 'thread'::text, 'post'::text, 'subject'::text, 'space'::text, 'realm'::text]))),
+    CONSTRAINT report_witness_bytes CHECK (((target_witness IS NULL) OR (octet_length((target_witness)::text) <= 16384)))
 );
 
 
@@ -2348,6 +2372,14 @@ ALTER TABLE ONLY content.board_thread
 
 ALTER TABLE ONLY content.catalogue_report_candidate
     ADD CONSTRAINT catalogue_report_candidate_pkey PRIMARY KEY (route, report_id);
+
+
+--
+-- Name: conversation_activity_episode conversation_activity_episode_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.conversation_activity_episode
+    ADD CONSTRAINT conversation_activity_episode_pkey PRIMARY KEY (route, post_id);
 
 
 --
@@ -2988,12 +3020,24 @@ CREATE INDEX board_thread_rank_refresh_idx ON content.board_thread USING btree (
 
 
 --
--- Name: catalogue_report_candidate_page_idx; Type: INDEX; Schema: content; Owner: -
+-- Name: catalogue_report_candidate_kind_page_idx; Type: INDEX; Schema: content; Owner: -
 --
 
 CREATE INDEX catalogue_report_candidate_kind_page_idx ON content.catalogue_report_candidate USING btree (route, target_kind, created_at DESC, report_id DESC) INCLUDE (report_route, subject_id);
 
+
+--
+-- Name: catalogue_report_candidate_page_idx; Type: INDEX; Schema: content; Owner: -
+--
+
 CREATE INDEX catalogue_report_candidate_page_idx ON content.catalogue_report_candidate USING btree (route, created_at DESC, report_id DESC) INCLUDE (report_route, subject_id);
+
+
+--
+-- Name: conversation_activity_live_prefix_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX conversation_activity_live_prefix_idx ON content.conversation_activity_episode USING btree (route, thread_id, contributed_at DESC, post_id DESC) INCLUDE (opening) WHERE (native_eligible AND (contributed_at IS NOT NULL));
 
 
 --
