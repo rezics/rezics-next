@@ -1,29 +1,36 @@
-import { readAvatarSummaries, type AvatarSummary } from '../content/avatar.ts';
-import type { PublicViews } from './public-views.ts';
-import { createHash } from 'node:crypto';
-import type { Pool, PoolClient } from 'pg';
-import { routeOf } from '../route/route.ts';
-import handleRead from './lifecycle-handle-read.sql';
-import agentPagesPage from './agent-pages-page.sql';
-import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
-import type { KeyRing } from '../tokens/seal.ts';
-import { ProblemError } from '../http/problem.ts';
-import accountRead from './account-read.sql';
-import publicPage from './public-identity-page.sql';
-import publicRead from './account-public-read.sql';
-import agentPageRead from './agent-verification-page-read.sql';
-import organizationRoleRead from './account-organization-role.sql';
-import { accountAgentId } from '../semantic/agents.ts';
-import { accessNativeWork, type AccessWorkAccounting } from './work.ts';
+import { readAvatarSummaries, type AvatarSummary } from "../content/avatar.ts";
+import type { PublicViews } from "./public-views.ts";
+import { createHash } from "node:crypto";
+import type { Pool, PoolClient } from "pg";
+import { routeOf } from "../route/route.ts";
+import handleRead from "./lifecycle-handle-read.sql";
+import agentPagesPage from "./agent-pages-page.sql";
+import { decodeListCursor, encodeListCursor } from "../tokens/list-cursor.ts";
+import type { KeyRing } from "../tokens/seal.ts";
+import { ProblemError } from "../http/problem.ts";
+import accountRead from "./account-read.sql";
+import publicPage from "./public-identity-page.sql";
+import publicRead from "./account-public-read.sql";
+import agentPageRead from "./agent-verification-page-read.sql";
+import organizationRoleRead from "./account-organization-role.sql";
+import {
+  accountAgentId,
+  accountAgentsForSubjects,
+} from "../semantic/agents.ts";
+import { accessNativeWork, type AccessWorkAccounting } from "./work.ts";
 
-type Queryable = Pick<Pool | PoolClient, 'query'>;
+type Queryable = Pick<Pool | PoolClient, "query">;
 type AccountRow = NonNullable<Awaited<ReturnType<typeof accountRead.run>>>;
 
 /** Private authoritative row, including lifecycle's fenced flag; never a public profile. */
-export type Account = Omit<AccountRow, 'minimumAuthnEpoch'> & { minimumAuthnEpoch: bigint };
-export type AccountKind = Account['kind'];
-export type AccountState = Account['state'];
-export type OrganizationRole = NonNullable<Awaited<ReturnType<typeof organizationRoleRead.run>>>['role'];
+export type Account = Omit<AccountRow, "minimumAuthnEpoch"> & {
+  minimumAuthnEpoch: bigint;
+};
+export type AccountKind = Account["kind"];
+export type AccountState = Account["state"];
+export type OrganizationRole = NonNullable<
+  Awaited<ReturnType<typeof organizationRoleRead.run>>
+>["role"];
 
 export type PublicAccount =
   | {
@@ -36,20 +43,20 @@ export type PublicAccount =
       state: string;
       operatorAccountId: string | null;
     }
-  | { accountId: string; kind: string; state: 'deleted' };
+  | { accountId: string; kind: string; state: "deleted" };
 
 export type DeletedPublicIdentity = {
   id: string;
-  kind: 'actor' | 'organization';
-  state: 'deleted';
+  kind: "actor" | "organization";
+  state: "deleted";
 };
 export type PublicIdentity = PublicIdentityFields | DeletedPublicIdentity;
 export type PublicIdentityFields = {
   id: string;
-  kind: 'actor' | 'organization';
+  kind: "actor" | "organization";
   handle: string | null;
   displayName: string | null;
-  state: 'active';
+  state: "active";
   automated: boolean;
   operatorId: string | null;
 };
@@ -79,31 +86,75 @@ export async function readPublicAccountByHandle(
   handle: string,
   at = new Date(),
 ): Promise<(PublicIdentity | PublicHandleIdentity | PublicAccountProfile)[]> {
-  const route = createHash('sha256').update(handle).digest().readUInt16BE(0);
+  const route = createHash("sha256").update(handle).digest().readUInt16BE(0);
   const claim = await handleRead.run(client, { route, handle });
   if (!claim) return [];
-  const forwards = claim.formerUntil !== null && Date.parse(claim.formerUntil) > at.getTime();
-  if (claim.state !== 'active' && !forwards) return [];
-  const row = await publicRead.run(client, { route: routeOf(claim.accountId)!, account_id: claim.accountId });
-  if (!row || row.state === 'pending' || row.state === 'deleted') return [];
-  if (forwards && (row.state !== 'active' || row.handle === null || row.handle === handle)) return [];
-  return publicIdentityForAccount(client, row, forwards ? row.handle! : undefined);
+  const forwards =
+    claim.formerUntil !== null && Date.parse(claim.formerUntil) > at.getTime();
+  if (claim.state !== "active" && !forwards) return [];
+  const row = await publicRead.run(client, {
+    route: routeOf(claim.accountId)!,
+    account_id: claim.accountId,
+  });
+  if (!row || row.state === "pending" || row.state === "deleted") return [];
+  if (
+    forwards &&
+    (row.state !== "active" || row.handle === null || row.handle === handle)
+  )
+    return [];
+  return publicIdentityForAccount(
+    client,
+    row,
+    forwards ? row.handle! : undefined,
+  );
 }
 
-/** Resolve a verified catalogue subject through its pointer, then confirm it against the account authority. */
+/** Resolve a stored catalogue pointer or native graph link, then confirm current account authority. */
 export async function readPublicAccountByAgent(
   client: Pool,
   subjectId: string,
 ): Promise<(PublicIdentity | PublicHandleIdentity | PublicAccountProfile)[]> {
   const route = routeOf(subjectId);
   if (route === null) return [];
-  const pointer = await agentPageRead.run(client, { route, subject_id: subjectId });
-  if (!pointer) return [];
-  const accountRoute = routeOf(pointer.accountId);
+  const pointer = await agentPageRead.run(client, {
+    route,
+    subject_id: subjectId,
+  });
+  const native = pointer
+    ? undefined
+    : (await accountAgentsForSubjects(client, [subjectId])).get(subjectId);
+  // Only an exact, unmerged native graph link admits an unverified agent. A
+  // missing catalogue verification never permits inferring its account identity.
+  if (
+    !pointer &&
+    (!native ||
+      native.verified ||
+      native.subject !== subjectId ||
+      native.agent_id !== subjectId)
+  )
+    return [];
+  const accountId = pointer?.accountId ?? native!.account;
+  const accountRoute = routeOf(accountId);
   if (accountRoute === null) return [];
-  const row = await publicRead.run(client, { route: accountRoute, account_id: pointer.accountId });
-  if (!row || row.state !== 'active' || !row.agentVerified || row.agentSubjectId !== subjectId) return [];
-  return publicIdentityForAccount(client, row);
+  const row = await publicRead.run(client, {
+    route: accountRoute,
+    account_id: accountId,
+  });
+  if (!row || row.state !== "active") return [];
+  if (
+    pointer
+      ? !row.agentVerified || row.agentSubjectId !== subjectId
+      : row.agentVerified || accountAgentId(row.accountId) !== subjectId
+  )
+    return [];
+  const identity = await publicIdentityForAccount(client, row);
+  // Native resolution also requires the current visible graph subject.
+  return pointer ||
+    identity.some(
+      (value) => "subject" in value && value.subject?.id === subjectId,
+    )
+    ? identity
+    : [];
 }
 
 async function publicIdentityForAccount(
@@ -111,31 +162,39 @@ async function publicIdentityForAccount(
   row: NonNullable<Awaited<ReturnType<typeof publicRead.run>>>,
   movedTo?: string,
 ): Promise<(PublicIdentity | PublicHandleIdentity | PublicAccountProfile)[]> {
-  if (row.state === 'deleted') return [{ id: row.accountId, kind: row.kind, state: 'deleted' }];
+  if (row.state === "deleted")
+    return [{ id: row.accountId, kind: row.kind, state: "deleted" }];
   const identity: PublicIdentityFields & { movedTo?: string } = {
     id: row.accountId,
-    kind: row.kind === 'organization' ? 'organization' : 'actor',
+    kind: row.kind === "organization" ? "organization" : "actor",
     handle: row.handle,
     displayName: row.displayName,
-    state: 'active',
+    state: "active",
     automated: row.operatorAccountId !== null,
     operatorId: row.operatorAccountId,
     ...(movedTo ? { movedTo } : {}),
   };
-  const subjectId = row.agentVerified ? row.agentSubjectId : accountAgentId(row.accountId);
+  const subjectId = row.agentVerified
+    ? row.agentSubjectId
+    : accountAgentId(row.accountId);
   let subject: PublicSubject | null = null;
   if (subjectId !== null) {
-    const [{ readItemTypes, readLabels }, { subjectLabel }] = await Promise.all([
-      import('../semantic/subject.ts'),
-      import('../semantic/link-keys.ts'),
+    const [{ readItemTypes, readLabels }, { subjectLabel }] = await Promise.all(
+      [import("../semantic/subject.ts"), import("../semantic/link-keys.ts")],
+    );
+    const [labels, types] = await Promise.all([
+      readLabels(client, [subjectId]),
+      readItemTypes(client, [subjectId]),
     ]);
-    const [labels, types] = await Promise.all([readLabels(client, [subjectId]), readItemTypes(client, [subjectId])]);
     const labelSet = labels.get(subjectId);
     const type = types.get(subjectId);
-    const label = labelSet ? subjectLabel(labelSet) : '';
+    const label = labelSet ? subjectLabel(labelSet) : "";
     if (type && label) subject = { id: subjectId, label, type };
   }
-  const avatar = row.avatar ? ((await readAvatarSummaries(client, [row.avatar])).get(row.avatar) ?? null) : null;
+  const avatar = row.avatar
+    ? ((await readAvatarSummaries(client, [row.avatar])).get(row.avatar) ??
+      null)
+    : null;
   return [
     {
       ...identity,
@@ -143,7 +202,9 @@ async function publicIdentityForAccount(
       links: row.links as AccountLink[],
       avatar,
       publicViews: row.publicViews as AccountPublicViews,
-      ...(row.kind === 'organization' ? { speakersListed: row.speakersListed } : {}),
+      ...(row.kind === "organization"
+        ? { speakersListed: row.speakersListed }
+        : {}),
       subject,
       verified: row.agentVerified,
     },
@@ -160,8 +221,12 @@ export async function readAccount(
   work?: AccessWorkAccounting,
 ): Promise<Account | null> {
   const input = { route, account_id: accountId };
-  const row = await accessNativeWork(work, 'account-state', input, { targets: 1 }, () =>
-    accountRead.run(client, input),
+  const row = await accessNativeWork(
+    work,
+    "account-state",
+    input,
+    { targets: 1 },
+    () => accountRead.run(client, input),
   );
   if (!row) return null;
   return { ...row, minimumAuthnEpoch: BigInt(row.minimumAuthnEpoch) };
@@ -174,8 +239,9 @@ export async function readPublicAccount(
   accountId: string,
 ): Promise<PublicAccount | null> {
   const row = await publicRead.run(client, { route, account_id: accountId });
-  if (!row || row.state === 'pending') return null;
-  if (row.state === 'deleted') return { accountId: row.accountId, kind: row.kind, state: 'deleted' };
+  if (!row || row.state === "pending") return null;
+  if (row.state === "deleted")
+    return { accountId: row.accountId, kind: row.kind, state: "deleted" };
   return {
     accountId: row.accountId,
     kind: row.kind,
@@ -206,12 +272,12 @@ export async function readPublicIdentities(
     for (const row of rows)
       found.set(
         `${route}:${row.id}`,
-        row.state === 'deleted'
-          ? { id: row.id, kind: row.kind, state: 'deleted' }
+        row.state === "deleted"
+          ? { id: row.id, kind: row.kind, state: "deleted" }
           : {
               ...row,
-              kind: row.kind === 'organization' ? 'organization' : 'actor',
-              state: 'active',
+              kind: row.kind === "organization" ? "organization" : "actor",
+              state: "active",
             },
       );
   }
@@ -254,27 +320,28 @@ export async function readAgentPages(
   at = new Date(),
 ): Promise<AgentPagesPage> {
   const limit = input.limit ?? 1000;
-  if (!Number.isInteger(limit) || limit < 1 || limit > 1000) throw new ProblemError('invalid_request');
+  if (!Number.isInteger(limit) || limit < 1 || limit > 1000)
+    throw new ProblemError("invalid_request");
   const binding = {
-    route: 'GET /v1/agent-pages',
+    route: "GET /v1/agent-pages",
     viewer: input.viewer ?? null,
     query: { limit },
   };
   let afterRoute = -1;
-  let afterAccountId = '00000000-0000-0000-0000-000000000000';
+  let afterAccountId = "00000000-0000-0000-0000-000000000000";
   if (input.cursor !== undefined) {
     const decoded = await decodeListCursor(tokens, binding, input.cursor, at);
     if (
       !decoded.ok ||
       decoded.epoch !== 1 ||
       decoded.after.length !== 2 ||
-      typeof decoded.after[0] !== 'number' ||
+      typeof decoded.after[0] !== "number" ||
       decoded.after[0] < 0 ||
       decoded.after[0] > 65535 ||
-      typeof decoded.after[1] !== 'string' ||
+      typeof decoded.after[1] !== "string" ||
       routeOf(decoded.after[1]) !== decoded.after[0]
     )
-      throw new ProblemError('invalid_cursor');
+      throw new ProblemError("invalid_cursor");
     afterRoute = decoded.after[0];
     afterAccountId = decoded.after[1];
   }
@@ -288,12 +355,18 @@ export async function readAgentPages(
   return {
     agentPages: selected.map(({ handle, kind, lastModified }) => {
       // Only the erased identity skeleton can lose its public timestamp.
-      if (lastModified === null) throw new Error('Live account public timestamp is missing');
+      if (lastModified === null)
+        throw new Error("Live account public timestamp is missing");
       return { handle: handle!, kind, lastModified };
     }),
     next:
       page.length > limit && last
-        ? await encodeListCursor(tokens, binding, { epoch: 1, after: [last.route, last.accountId] }, at)
+        ? await encodeListCursor(
+            tokens,
+            binding,
+            { epoch: 1, after: [last.route, last.accountId] },
+            at,
+          )
         : null,
   };
 }

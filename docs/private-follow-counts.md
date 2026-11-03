@@ -54,6 +54,7 @@ Unknown, inactive, hidden, deleted or not-visible targets and failed management 
 Resolve target existence/visibility through its native reader; a private Collection's valid management grant must not
 be defeated by the curator-only command helper. Empty account-agent resolution never permits guessing ownership.
 Revoke a grant/role and the same bearer loses count access on the next request.
+Native unverified graph agents resolve only through their exact persisted Semantic link and current public account; catalogue subjects still require the existing verification pointer.
 
 The follower always sees its own outgoing follows, including follows of ordinary unowned subjects. Target management
 confers no right to another account's outgoing page or count. No follower identity list is authorized by an aggregate.
@@ -70,7 +71,7 @@ returns `400 invalid_request`. There is no query or request body. The closed suc
 
 ```ts
 {
-  targetType: 'subject' | 'collection' | 'space';
+  targetType: "subject" | "collection" | "space";
   targetId: string;
   followerCount: number;
 }
