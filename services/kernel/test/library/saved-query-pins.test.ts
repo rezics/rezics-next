@@ -1,6 +1,5 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { activeRelease } from '../../src/semantic/definitions.ts';
 import { createCollectionRulesFixture } from './support/collection-rules-fixture.ts';
 
 async function json(response: Response, status = 200) {
@@ -11,6 +10,7 @@ async function json(response: Response, status = 200) {
 test('saved meaning survives activation and metadata edits; explicit edits fence cursors, CAS and retries', async () => {
   const f = await createCollectionRulesFixture();
   try {
+    const { activeRelease } = await import('../../src/semantic/definitions.ts');
     const a = await activeRelease(f.runtime.database.pool);
     if (!a) throw new Error('Native Definitions release required');
     const ids = [await f.subject('Pinned first book'), await f.subject('Pinned second book')];
