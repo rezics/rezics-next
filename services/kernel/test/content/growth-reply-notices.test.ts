@@ -108,7 +108,8 @@ test('denied Access and completed-suppression redrives stay bounded as recipient
         expectedVersion: current.value.version,
         notifications: { reply: false },
       });
-      if (update.status !== 200) throw new Error(`Accounts preference update failed (${update.status}): ${JSON.stringify(update.value)}`);
+      if (update.status !== 200)
+        throw new Error(`Accounts preference update failed (${update.status}): ${JSON.stringify(update.value)}`);
     }
     return { postId: post.id, event };
   };
@@ -187,7 +188,9 @@ test('reply finalization waits for a paused native preference writer at the reci
       }
       throw new Error(`Timed out waiting for ${detail}`);
     };
-    let selected: { postId: string; event: NonNullable<Awaited<ReturnType<typeof native.envelope>>['events'][number]> } | undefined;
+    let selected:
+      | { postId: string; event: NonNullable<Awaited<ReturnType<typeof native.envelope>>['events'][number]> }
+      | undefined;
     const report = await checkGrowth(native.db, {
       name: 'Reply finalization at a paused recipient preference fence',
       scales: [64, 256, 1024],
@@ -274,10 +277,11 @@ test('registered reply effect runner stays bounded at the existing three scales'
       ])
     ).rows[0]!;
     const revision = (
-      await native.db.admin.query(
-        'SELECT * FROM content.revision WHERE route=$1 AND thread_id=$2 AND revision_id=$3',
-        [route, thread.id, sample.revisionId],
-      )
+      await native.db.admin.query('SELECT * FROM content.revision WHERE route=$1 AND thread_id=$2 AND revision_id=$3', [
+        route,
+        thread.id,
+        sample.revisionId,
+      ])
     ).rows[0]!;
     const effect = createReplyNoticeEffect(native.db.pool, native.accounts.access);
     const registered = registerEffects([effect], native.db.pool);

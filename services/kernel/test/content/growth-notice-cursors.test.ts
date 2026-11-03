@@ -118,7 +118,9 @@ test('native seen-marker advancing, retained-frontier and foreign points stay bo
           'DELETE FROM content.notice WHERE source_id=notice_id AND recipient_id=ANY($1::uuid[])',
           [[recipient, other]],
         );
-        await f.db.admin.query('DELETE FROM content.notice_seen WHERE account_id=ANY($1::uuid[])', [[recipient, other]]);
+        await f.db.admin.query('DELETE FROM content.notice_seen WHERE account_id=ANY($1::uuid[])', [
+          [recipient, other],
+        ]);
         const older = newId(recipientRoute);
         const newer = newId(recipientRoute);
         const foreign = newId(routeOf(other)!);
@@ -231,7 +233,15 @@ test('a current full-chain denial keeps advancing through sparse native inbox pa
                                       subject_ids,board_id,availability,recorded_transaction_id)
          SELECT $1,$2,posts.post_id,posts.revision_id,$4,$5,'','MIT','{}',$6,'available',posts.post_id
          FROM unnest($3::uuid[],$7::uuid[]) AS posts(post_id,revision_id)`,
-        [route, thread.id, postIds, sourceRevision.body, sourceRevision.body_sha256, sourceRevision.board_id, revisionIds],
+        [
+          route,
+          thread.id,
+          postIds,
+          sourceRevision.body,
+          sourceRevision.body_sha256,
+          sourceRevision.board_id,
+          revisionIds,
+        ],
       );
     };
     const exercise = async (history: 'content' | 'access') => {

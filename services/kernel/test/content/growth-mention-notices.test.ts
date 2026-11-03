@@ -53,7 +53,10 @@ test('first-ten mentions use production first-publication events while unrelated
       await f.accounts.grant(recipient, 'post:read', { route: routeOf(postId)!, id: postId });
     return { postId, event: (await f.envelope(postId)).events.find(Boolean)! };
   };
-  const effect = createMentionNoticeEffect(f.db.pool, createContentWorkAccess(() => new Date(), f.db.pool));
+  const effect = createMentionNoticeEffect(
+    f.db.pool,
+    createContentWorkAccess(() => new Date(), f.db.pool),
+  );
   const [samplePost, revision] = await Promise.all([
     f.db.admin.query<{ post_id: string; head_revision_id: string; author_account_id: string }>(
       `SELECT post_id,head_revision_id,author_account_id FROM content.post
