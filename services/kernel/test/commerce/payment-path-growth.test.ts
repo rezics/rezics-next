@@ -2,17 +2,17 @@ import { DBOS } from '@dbos-inc/dbos-sdk';
 import { expect, test } from 'bun:test';
 import Stripe from 'stripe';
 import { createCommerceWork } from '../../src/commerce/enqueue.ts';
-import type { Order, StripeEventRef } from '../../src/commerce/model.ts';
-import { STRIPE_EVENT_WORKFLOW, WORKFLOWS_QUEUE } from '../../src/commerce/work-contract.ts';
+import type { Order } from '../../src/commerce/model.ts';
 import { stripeWebhookRoutes } from '../../src/commerce/webhook-routes.ts';
 import { createApp } from '../../src/http/app.ts';
 import { declareKernelWriteRates } from '../../src/http/write-rate-routes.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
-import { WORK_APPLICATION, createWorkClient } from '../../src/work/client.ts';
+import { createWorkClient } from '../../src/work/client.ts';
 import { composeWork } from '../../src/work/registry.ts';
 import { commerceWorkModule } from '../../src/commerce/work-module.ts';
 import { checkGrowth, type GrowthDatabase, type GrowthReport } from '../support/growth.ts';
 import { nativeAnchorFixture, type NativeAnchorFixture } from './support/checkout-anchor.ts';
+import { createPaymentGrowthWorkflowSeeder } from './support/payment-growth-workflows.ts';
 import { observeProviderBytes, type ProviderByteObserver } from './support/provider-byte-observation.ts';
 
 const scales = [1, 8, 64] as const;
@@ -94,55 +94,6 @@ async function growReceipts(db: GrowthDatabase, prefix: string, principalId: str
   );
 }
 
-async function growWorkflowRows(db: GrowthDatabase, prefix: string, from: number, to: number, providerEvents: boolean) {
-  if (from === to) return;
-  const now = Date.now();
-  const rows = Array.from({ length: to - from }, (_, offset) => {
-    const index = from + offset;
-    const eventId = `evt_growth_${prefix}_${index}`;
-    const ref: StripeEventRef = {
-      eventId,
-      type: 'checkout.session.completed',
-      created: Math.floor(now / 1000),
-      livemode: false,
-      sessionId: null,
-      paymentIntentId: null,
-    };
-    return {
-      workflow_uuid: providerEvents ? `stripe:${eventId}` : `history:payment-path:${prefix}:${index}`,
-      workflow_name: providerEvents ? STRIPE_EVENT_WORKFLOW : 'commerce.paymentPathGrowthHistory',
-      inputs: JSON.stringify({ positionalArgs: providerEvents ? [ref] : [], namedArgs: {} }),
-      created_ms: now + offset,
-    };
-  });
-  await db.admin.query(
-    `WITH seeds AS (
-       SELECT * FROM jsonb_to_recordset($1::jsonb) AS x(
-         workflow_uuid text, workflow_name text, inputs text, created_ms bigint
-       )
-     ), status_rows AS (
-       INSERT INTO dbos.workflow_status (
-         workflow_uuid, status, name, queue_name, application_name, serialization,
-         created_at, updated_at, completed_at
-       )
-       SELECT workflow_uuid, 'SUCCESS', workflow_name, $2, $3, 'portable_json', created_ms, created_ms, created_ms
-       FROM seeds
-       RETURNING workflow_uuid, completed_at
-     ), input_rows AS (
-       INSERT INTO dbos.workflow_input (workflow_uuid, inputs, retention_timestamp)
-       SELECT s.workflow_uuid, seeds.inputs, s.completed_at
-       FROM status_rows s JOIN seeds USING (workflow_uuid)
-       RETURNING workflow_uuid
-     ), output_rows AS (
-       INSERT INTO dbos.workflow_output (workflow_uuid, output, retention_timestamp)
-       SELECT workflow_uuid, 'null', completed_at FROM status_rows
-       RETURNING workflow_uuid
-     )
-     SELECT count(*)::int AS inserted FROM status_rows`,
-    [JSON.stringify(rows), WORKFLOWS_QUEUE, WORK_APPLICATION],
-  );
-}
-
 async function growAxis(
   db: GrowthDatabase,
   anchor: Order,
@@ -153,10 +104,15 @@ async function growAxis(
   to: number,
 ) {
   if (axis === 'unrelated orders') return growUnrelatedOrders(db, anchor, from, to);
-  if (axis === 'provider events') return growWorkflowRows(db, prefix, from, to, true);
   if (axis === 'receipts') return growReceipts(db, prefix, principalId, from, to);
-  return growWorkflowRows(db, prefix, from, to, false);
+  throw new Error(`Growth axis ${axis} requires an installed DBOS workflow seeder`);
 }
+
+type PaymentGrowthWorkflowPopulation = {
+  readonly providerEventSessionId: string;
+  readonly seed: ReturnType<typeof createPaymentGrowthWorkflowSeeder>;
+  setWorkersEnabled(enabled: boolean): Promise<void>;
+};
 
 async function checkAxis(
   fixture: NativeAnchorFixture,
@@ -166,7 +122,12 @@ async function checkAxis(
   operationName: string,
   principalId: string,
   operation: Operation,
-  hooks: { prepare?: () => Promise<void>; warmup?: () => Promise<void> } = {},
+  workflows: PaymentGrowthWorkflowPopulation,
+  hooks: {
+    beforeWorkflowGrowth?: () => Promise<void>;
+    prepare?: () => Promise<void>;
+    warmup?: () => Promise<void>;
+  } = {},
 ): Promise<GrowthReport> {
   const prefix = `${operationName.replaceAll(' ', '-')}-${axis.replaceAll(' ', '-')}-${Bun.randomUUIDv7().replaceAll('-', '')}`;
   const expectsProvider = operationName === 'order reconciliation';
@@ -187,11 +148,31 @@ async function checkAxis(
     } else expect(observation.totals).toBeNull();
     return measured;
   };
+  const grow = async (db: GrowthDatabase, scale: number, previous: number) => {
+    if (axis === 'provider events' || axis === 'DBOS workflow history') {
+      const pauseForWebhook = operationName === 'signed webhook ingest';
+      if (pauseForWebhook) await hooks.beforeWorkflowGrowth?.();
+      await workflows.setWorkersEnabled(true);
+      try {
+        if (axis === 'provider events')
+          await workflows.seed.providerEvents(workflows.providerEventSessionId, previous, scale);
+        else await workflows.seed.unrelatedHistory(anchor.id, previous, scale);
+      } finally {
+        if (pauseForWebhook) await workflows.setWorkersEnabled(false);
+      }
+      return;
+    }
+    await growAxis(db, anchor, axis, prefix, principalId, previous, scale);
+  };
+  const observePhase = async (db: GrowthDatabase, scale: number, repetition: number, phase: string, run: Operation) => {
+    if (operationName === 'signed webhook ingest') await workflows.setWorkersEnabled(false);
+    return observe(db, scale, repetition, phase, run);
+  };
   const report = await checkGrowth(fixture.db, {
     name: `Commerce ${operationName} / unrelated ${axis}`,
     scales,
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
-    grow: (db, scale, previous) => growAxis(db, anchor, axis, prefix, principalId, previous, scale),
+    grow,
     // The existing counted series compares retained repetitions, alongside unchanged native counters.
     ...(expectsProvider
       ? {
@@ -205,9 +186,11 @@ async function checkAxis(
           },
         }
       : {}),
-    operation: (db, scale, repetition) => observe(db, scale, repetition, 'measurement candidate', operation),
+    operation: (db, scale, repetition) =>
+      observePhase(db, scale, repetition, 'measurement candidate', operation),
     ...(hooks.prepare === undefined ? {} : { prepare: hooks.prepare }),
-    warmup: (db, scale, repetition) => observe(db, scale, repetition, 'warmup', hooks.warmup ?? operation),
+    warmup: (db, scale, repetition) =>
+      observePhase(db, scale, repetition, 'warmup', hooks.warmup ?? operation),
   });
   expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
   expect(report.samples.every(({ cost }) => cost.rows > 0 && cost.statements > 0)).toBe(true);
@@ -228,6 +211,22 @@ test('signed webhook, reconciliation, settlement and offer revision stay bounded
     const snapshot = await fixture.stripe.readCheckout(anchor.checkoutSessionId!);
     const buyerId = fixture.buyer.actor.accountId;
     const sellerId = fixture.seller.actor.accountId;
+    const route = routeOf(anchor.id);
+    if (route === null) throw new Error('Growth anchor order has no route');
+    const providerHistory = await fixture.stripe.createCheckoutSession(
+      {
+        orderId: newId(route),
+        buyerAccountId: anchor.buyerAccountId,
+        title: anchor.title,
+        currency: anchor.currency,
+        unitAmountMinor: anchor.unitAmountMinor,
+        taxCode: anchor.taxCode,
+        successUrl: 'https://web.test/success',
+        cancelUrl: 'https://web.test/cancel',
+        expiresAt: Math.floor(Date.now() / 1000) + 3600,
+      },
+      `payment-path-growth:${Bun.randomUUIDv7().replaceAll('-', '')}`,
+    );
 
     runtime = await composeWork([commerceWorkModule], {
       pool: db.pool,
@@ -245,6 +244,23 @@ test('signed webhook, reconciliation, settlement and offer revision stay bounded
       },
     });
     await runtime.launch();
+    const workflowQueues = (await DBOS.listQueues()).filter((queue) =>
+      ['workflows', 'effects'].includes(queue.name),
+    );
+    const originalWorkerConcurrency = new Map(
+      await Promise.all(workflowQueues.map(async (queue) => [queue.name, await queue.getWorkerConcurrency()] as const)),
+    );
+    const workflows = {
+      providerEventSessionId: providerHistory.session.id,
+      seed: createPaymentGrowthWorkflowSeeder(client, enqueue),
+      async setWorkersEnabled(enabled: boolean) {
+        await Promise.all(
+          workflowQueues.map((queue) =>
+            queue.setWorkerConcurrency(enabled ? originalWorkerConcurrency.get(queue.name) : 0),
+          ),
+        );
+      },
+    } satisfies PaymentGrowthWorkflowPopulation;
     for (const queue of await DBOS.listQueues()) await queue.setMinPollingIntervalMs(5);
 
     let reconcileSequence = 0;
@@ -254,15 +270,13 @@ test('signed webhook, reconciliation, settlement and offer revision stay bounded
       return id;
     };
     for (const axis of axes)
-      await checkAxis(fixture, provider, anchor, axis, 'order reconciliation', buyerId, reconcile);
-
-    await runtime.shutdown();
-    runtime = undefined;
+      await checkAxis(fixture, provider, anchor, axis, 'order reconciliation', buyerId, reconcile, workflows);
 
     let settlementSequence = 0;
     const settle: Operation = async () =>
       fixture.commands.applyCheckoutSnapshot(snapshot, `payment-path-settlement-${settlementSequence++}`);
-    for (const axis of axes) await checkAxis(fixture, provider, anchor, axis, 'payment settlement', buyerId, settle);
+    for (const axis of axes)
+      await checkAxis(fixture, provider, anchor, axis, 'payment settlement', buyerId, settle, workflows);
 
     let revisionSequence = 0;
     const reviseOffer: Operation = async () =>
@@ -273,7 +287,7 @@ test('signed webhook, reconciliation, settlement and offer revision stay bounded
         `payment-path-offer-revision-${revisionSequence++}`,
       );
     for (const axis of axes)
-      await checkAxis(fixture, provider, anchor, axis, 'offer price revision', sellerId, reviseOffer);
+      await checkAxis(fixture, provider, anchor, axis, 'offer price revision', sellerId, reviseOffer, workflows);
 
     const secret = 'whsec_payment_path_growth';
     const timestamp = Math.floor(Date.now() / 1000);
@@ -334,7 +348,10 @@ test('signed webhook, reconciliation, settlement and offer revision stay bounded
       return response.status;
     };
     for (const axis of axes) {
-      await checkAxis(fixture, provider, anchor, axis, 'signed webhook ingest', buyerId, deliver, {
+      await checkAxis(fixture, provider, anchor, axis, 'signed webhook ingest', buyerId, deliver, workflows, {
+        beforeWorkflowGrowth: async () => {
+          await client.deleteWorkflows([`stripe:${eventId}`], false);
+        },
         prepare: async () => {
           await client.deleteWorkflows([`stripe:${eventId}`], false);
         },

@@ -1025,6 +1025,9 @@ Serializable command retries are deadline-bounded; the cost bound is the per-att
 
 Each operation has independent 1×/8×/64× series for unrelated orders, provider events, receipts and DBOS workflow
 history. The anchor order, provider snapshot, payload and retry configuration stay fixed.
+Provider-event history uses completed installed Stripe-event workflows against a local fake Session with no Commerce
+order; unrelated workflow history uses completed repair workflows for route-valid missing-order IDs, so both axes grow
+without changing Commerce orders or entitlements.
 
 #### Signed webhook ingest
 
