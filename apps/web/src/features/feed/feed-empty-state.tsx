@@ -70,7 +70,7 @@ export function FeedEmptyState({
   messages: FeedResultsMessages;
   actions?: ReactNode;
   headingLevel?: 1 | 2 | 3 | 4 | 5 | 6;
-  context?: FeedEmptyContext;
+  context?: FeedEmptyContext | undefined;
 }) {
   const explanation = messages.explanations?.[kind];
   const title = explanation?.title ?? (kind in messages.failure

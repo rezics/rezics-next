@@ -25,7 +25,7 @@ function Recovery({ initial = 'discovery', long = false }: { initial?: Scenario;
   const base = homeFeedStoryPage(locale, true, scenario === 'partial-rows' ? 'partial' : 'empty');
   let result: HomeFeedResult;
   if (['loading', 'auth', 'closed', 'denied', 'cursor', 'deadline', 'request', 'unavailable'].includes(scenario)) {
-    result = { state: scenario as 'loading' | 'auth' | 'closed' | 'denied' | 'cursor' | 'deadline' | 'request' | 'unavailable' };
+    result = { state: scenario as 'loading' | 'auth' | 'closed' | 'denied' | 'cursor' | 'deadline' | 'request' | 'unavailable', code: 'prepared-recovery-state' };
   } else {
     result = { state: 'ready', page: {
       ...base,
