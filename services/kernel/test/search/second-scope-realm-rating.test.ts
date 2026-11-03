@@ -252,13 +252,14 @@ function fixture(priorEpoch: number | null = 17, withSecondPartition = false) {
             hit.figure !== null &&
             hit.figure.priorEpoch === context.priorEpoch &&
             hit.figure.score !== null;
+          const textMismatch = !!input.text && !textMatches.has(hit.id);
           return {
             ...hit,
             ratingPhase: 'unscored',
             sort: [names.get(hit.id) ?? null, hit.id],
             position: hit.position,
-            figure: scored ? null : hit.figure,
-            ...(scored || (input.text && !textMatches.has(hit.id)) ? { suppressed: true as const } : {}),
+            figure: scored || textMismatch ? null : hit.figure,
+            ...(scored || textMismatch ? { suppressed: true as const } : {}),
           };
         })
         .sort((a, b) =>
