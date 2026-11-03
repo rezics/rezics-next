@@ -1477,6 +1477,10 @@ connections. This composes rechecked native observations, without an atomic cros
 The response is private and not stored. Request identity and Access's current session provenance
 remain the mounted HTTP/Access owners' responsibility; Web keeps its existing caller lifetime.
 
+Decision: if the current account, session epoch or identity binding changes during composition, the
+whole page is withheld even when the earlier management grant remains. Optional selected-content
+changes continue to use the existing concealed or unavailable variants.
+
 `operations.update` names PATCH `/v1/realms/:realmId`, `boardScheme` names PUT
 `/v1/realms/:realmId/boardScheme`, and `reserveMedia` names POST `/v1/realms/:realmId/media`.
 Their header/precondition and selection requirements are advisory current command facts. Existing
@@ -1496,22 +1500,39 @@ writer, asset picker or upload/lifecycle engine here.
   `readExactPublishedRules` for at most one pin; each owner reader includes its own source/final
   checks and Access preparation. All Community, Access, Auth and Content participating pools and
   registered runner phases belong to this operation, including cold evidence release and denial.
-- **Bound:** outer source rounds and selected calls have no retries, inventory or population loop.
-  Existing materialized Realm/Space identity seeks join only their exact head revision; lifecycle
-  binding and partition are exact keys. Selected rules inherit the owner's 33-post ancestry cap,
-  at most one thread/board/Realm and exact revision/body, and 65536 canonical UTF-8 bytes. Images
-  admit at most two keys, each with at most twelve variants. The response copies variants at each
-  selected round and serializes each selected result for comparison, then the final response;
-  rules are parsed/canonicalized/hashed in each owner read and copied into one response. Native
-  title/summary caps are characters, allowing up to four UTF-8 bytes per admitted code point;
-  they are not byte caps. Nested Access/identity/media statement, physical-row and JSON costs
-  still require the connected pool/runner accounting and strict growth plans before this journey's
-  complete cost ceiling can be claimed.
+- **Bound:** a fully selected success has two Community source-round transactions, eight image
+  snapshots (four per selected-image owner read) and four rules snapshots (two source rounds per
+  exact-rules read), for fourteen read-only transactions. The outer operation makes three current
+  `readRealm` calls and nineteen top-level Access preparations: one initial Realm check, six source
+  round checks, ten image-owner checks and two rules decision preparations. The exact-rules readers
+  make at most eight thread/post decisions. Empty image selection skips its eight snapshots; an
+  unset rules pin skips its four snapshots. No outer reader retries or scans a Realm population.
+  Each image owner reads at most two exact media keys in its initial, final and per-key Access
+  checks: twelve media rows and at most 144 retained variant rows across both owner reads. Each
+  rules source round reads at most 33 exact Post ancestry rows, one Thread, Board, Realm, revision
+  and body, and at most three represented homes. The four rules source rounds therefore examine
+  at most 132 Post rows and four rows of each other kind. `realm-read.sql` and `space-read.sql`
+  materialize the exact routed identity before joining its exact head; lifecycle binding, selected
+  media, media variants and rules revisions use their full routed keys. The only ancestry walk is
+  the rules owner's selected 33-Post cap.
+
+  Realm and Space titles/summaries admit 1,024/4,096 code points each, so their four response
+  strings use at most 40,960 UTF-8 bytes (61,440 bytes when every control character is JSON-escaped).
+  Each selected rules body is at most 65,536 canonical UTF-8 bytes; four source bodies cap those
+  reads at 262,144 bytes. Two stable-result copies and the final response contribute at most three
+  body serializations, conservatively 1,179,648 escaped bytes. A selected image credit admits at
+  most 3,652 code points from its rights-holder, source name/URL, licence and attribution fields;
+  that is 14,608 UTF-8 bytes or 21,912 JSON bytes per image. The response carries at most 24 image
+  variants. The outer composer makes two source signatures, at most six selected-value signatures
+  and one response serialization. These derived producer ceilings do not include the nested
+  Access/Auth SQL and runner work, which remains part of connected all-pool growth evidence.
 - **Growth check:** existing `growth-realm-presentation-settings` proves the update command,
   not this GET. `realm-settings-page.test.ts` connects native creation, empty/read-only effects,
-  exact pinned and concealed rules, host removal, existing CAS updates/readback, omission, account switching,
+  exact pinned and concealed rules, host removal, CAS updates/readback, omission, account switching,
   management revocation, optional rules failure/recovery and source/authority changes during composition.
-  `realm-settings-page-media.test.ts` connects native avatar/banner publication and claims, sparse selection
-  and read-only effects. Connected
-  GET growth at 256/1024/4096 for unrelated Realms, selected histories, optional media and authority
-  histories, with all participating pools and runner phases, remains in the continuation brief.
+  `realm-settings-page-media.test.ts` covers sparse image selection and read-only effects;
+  `realm-settings-page-media-rules.test.ts` connects avatar, banner and an exact rules pin together,
+  then withdraws one selected image. `realm-settings-page-lifecycle.test.ts` covers protected access,
+  orphan read-only state, erased selected rules and suspension during composition. Controller-owned
+  connected GET growth at 256/1024/4096 still captures unrelated Realms, Realm/rules/media/authority
+  histories, all participating pools, strict physical plans, cold release, retries and withheld phases.
