@@ -7,6 +7,7 @@ import { newId, routeOf } from '../../src/route/route.ts';
 import { replyNoticeFixture } from './support/reply-notice-fixture.ts';
 import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
+import { BOARD_WATCH_RECIPIENT_BUDGET, processBoardWatchNoticePage } from '../../src/content/board-watch-notices.ts';
 
 setDefaultTimeout(180_000);
 let f: Awaited<ReturnType<typeof replyNoticeFixture>>;
@@ -115,6 +116,33 @@ test('mounted board state uses CAS and exact retry, and delayed first opening se
   expect((await f.notices(suppressed.firstPost.id)).filter((notice) => notice.kind === 'board_activity')).toHaveLength(
     0,
   );
+});
+
+test('withdrawal closes a started opening before restoration can reach its remaining permitted subscriber', async () => {
+  const missing = Array.from({ length: 2 * BOARD_WATCH_RECIPIENT_BUDGET + 1 }, () => newId(0x7654));
+  await f.db.admin.query(
+    `INSERT INTO content.board_watch(route,watcher_account_id,board_id,watch_id,watching,revision,created_at)
+     SELECT $1,recipient,$2,watch,true,1,clock_timestamp() FROM unnest($3::uuid[],$4::uuid[]) n(recipient,watch)`,
+    [0x7654, f.boardId, missing, missing.map(() => newId(0x7654))],
+  );
+  try {
+    const reader = f.accounts.recipient;
+    expect((await f.call(reader, 'PUT', path(), { watching: true, expectedRevision: 0 })).status).toBe(200);
+    const opening = await f.thread(f.accounts.principal);
+    const event = await publication(opening.firstPost.id);
+    const access = createContentWorkAccess(() => new Date(), f.db.pool);
+    expect(await processBoardWatchNoticePage(f.db.pool, access, event)).toEqual({
+      done: false,
+      scanned: BOARD_WATCH_RECIPIENT_BUDGET,
+    });
+    await f.db.admin.query("UPDATE content.thread SET visibility='draft' WHERE thread_id=$1", [opening.id]);
+    expect(await processBoardWatchNoticePage(f.db.pool, access, event)).toEqual({ done: true, scanned: 0 });
+    await f.db.admin.query("UPDATE content.thread SET visibility='published' WHERE thread_id=$1", [opening.id]);
+    await effect().run(event);
+    expect(await f.notices(opening.firstPost.id)).toEqual([]);
+  } finally {
+    await f.db.admin.query('DELETE FROM content.board_watch WHERE watcher_account_id=ANY($1::uuid[])', [missing]);
+  }
 });
 
 test('one private reader pages explicit kinds, conceals unavailable targets and removes by personal identity after denial', async () => {
