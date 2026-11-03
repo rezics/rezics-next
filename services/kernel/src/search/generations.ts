@@ -46,6 +46,7 @@ export { observedWrite };
 import type { SubjectSource } from './source.ts';
 import { subjectConsumer, startDiscoveryIndexing } from './runner.ts';
 
+import { discoveryConsumer } from './consumer-name.ts';
 export { discoveryConsumer } from './consumer-name.ts';
 
 export { MAX_SUBJECT_GENERATIONS } from './indices.ts';

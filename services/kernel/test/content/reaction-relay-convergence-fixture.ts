@@ -44,7 +44,7 @@ export type ReactionRelayBase = {
   readonly conceptId: string;
   readonly schemeId: string;
   readonly mainBoardId: string;
-  readonly mainTarget: ReactionTarget;
+  readonly mainTarget: CreatedRealmTarget;
   call(method: string, path: string, options?: CallOptions): Promise<CallResult>;
   command<T = Record<string, any>>(method: string, path: string, body: unknown, options?: CommandOptions): Promise<T>;
   createThread(boardId: string, title: string, visibility?: 'published' | 'draft'): Promise<ReactionTarget>;

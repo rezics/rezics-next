@@ -24,7 +24,7 @@ export async function admitIdentityRatingEffect(
   const resolvedRoute = routeOf(input.resolvedTargetId);
   if (requestedRoute === null || resolvedRoute === null) return { status: 'pending', reason: 'source-pending' };
 
-  const [row] = await admission.run(tx, { subject_id: input.resolvedTargetId });
+  const row = await admission.run(tx, { subject_id: input.resolvedTargetId });
   if (!row || row.subjectId !== input.resolvedTargetId || row.activeTerminal !== true)
     return { status: 'pending', reason: 'source-pending' };
   if (row.redirect !== null) return { status: 'pending', reason: 'redirect-chain' };
