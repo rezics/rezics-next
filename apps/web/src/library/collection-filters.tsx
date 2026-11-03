@@ -19,10 +19,10 @@ import { useIsMobile } from '@rezics/ui/hooks/use-is-mobile';
 import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle } from '@rezics/ui/shadcn/dialog';
 import { Button } from '@rezics/ui/shadcn/button';
 import { SlidersHorizontalIcon } from 'lucide-react';
-import { Refinement, type RefinementData, type RefinementConditions } from '../search/refinement/refinement';
+import { Refinement, type RefinementData } from '../search/refinement/refinement';
 import { MAX_CACHED_FACET_PROPERTIES } from '../search/refinement/facet-continuation';
 import { createRangeDraftState, getRangeDraft, updateRangeDraft, type RangeDraftState } from '../search/refinement/range-draft';
-import type { RefinementProperty } from '../search/refinement/model';
+import type { RefinementConditions, RefinementProperty } from '../search/refinement/model';
 
 export type CollectionFilterProperty = {
   id: string;

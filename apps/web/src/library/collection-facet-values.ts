@@ -82,5 +82,5 @@ export const readCollectionFacetValues = createServerFn({ method: 'POST' })
     return { status: 'unavailable', code: 'collection_resource_scope_unavailable' };
   });
 
-export const loadCollectionFacetValues: CollectionFacetLoader = (request, signal) =>
-  readCollectionFacetValues({ data: request }, signal);
+export const loadCollectionFacetValues: CollectionFacetLoader = (request, _signal) =>
+  readCollectionFacetValues({ data: request });

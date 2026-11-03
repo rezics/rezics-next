@@ -1501,7 +1501,7 @@ function CollectionPageLifetime({
                 properties={page.filterProperties}
                 params={page.filterParams}
                 filterReleaseKey={page.filterReleaseKey}
-                viewerKey={session.state === 'signed-in' ? session.subject : 'anonymous'}
+                viewerKey={session.state === 'signed-in' ? (session.subject ?? 'signed-in') : 'anonymous'}
               />
             ) : null}
             <nav

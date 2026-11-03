@@ -131,6 +131,7 @@ function RefinementInstance({
   const initialShown = data.properties.slice(0, MAX_CACHED_FACET_PROPERTIES).map((entry) => entry.property);
   const [shown, setShown] = useState(initialShown);
   const shownRef = useRef(initialShown);
+  const initialFacetState = data.initial;
   const [pages, setPages] = useState<FacetPage['facets']>(
     data.initial?.status === 'ready'
       ? data.initial.page.facets.filter((facet) => initialShown.includes(facet.property))
@@ -138,11 +139,11 @@ function RefinementInstance({
   );
   const [state, setState] = useState(data.initial);
   const [propertyStates, setPropertyStates] = useState<Record<string, FacetState>>(() => {
-    if (data.initial?.status !== 'ready') return {};
+    if (initialFacetState?.status !== 'ready') return {};
     return Object.fromEntries(
-      data.initial.page.facets.map((facet) => [
+      initialFacetState.page.facets.map((facet) => [
         facet.property,
-        { status: 'ready' as const, page: { ...data.initial!.page, facets: [facet] } },
+        { status: 'ready' as const, page: { ...initialFacetState.page, facets: [facet] } },
       ]),
     );
   });
@@ -626,8 +627,8 @@ function RefinementInstance({
                 })}
                 onDraftChange={(draft) => changeRangeDraft(definition.property, draft)}
                 deferNavigation={deferNavigation}
-                rangeName={rangeName}
-                onConditionsChange={onConditionsChange}
+                {...(rangeName ? { rangeName } : {})}
+                {...(onConditionsChange ? { onConditionsChange } : {})}
               />
             ) : definition.mode === 'unsupported' ? (
               <p className="text-sm text-muted-foreground">{m.refinement_unsupported({}, options)}</p>
