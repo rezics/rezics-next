@@ -19,7 +19,7 @@ export const libraryProgressStoryNextCursor = 'next/opaque+==';
 export const libraryProgressStoryLongSubjectLabel = (() => {
   const subject = sessionsRecording.progressSessions[0]?.subject;
   if (!subject) return null;
-  const label = typeof subject.label === 'string' ? subject.label : subject.label.value;
+  const label = subject.label;
   return `${label} — ${label} — ${label} — ${label}`;
 })();
 
