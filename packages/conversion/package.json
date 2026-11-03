@@ -4,7 +4,10 @@
   "exports": {
     ".": "./src/index.ts",
     "./bangumi": "./src/bangumi.ts",
+    "./bangumi-vocabulary": "./src/bangumi-vocabulary.ts",
     "./vndb": "./src/vndb.ts",
+    "./vndb-vocabulary": "./src/vndb-vocabulary.ts",
+    "./source-vocabulary": "./src/source-vocabulary.ts",
     "./open-library": "./src/open-library.ts",
     "./wikidata": "./src/wikidata.ts"
   },

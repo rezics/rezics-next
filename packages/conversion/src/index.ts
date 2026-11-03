@@ -16,7 +16,25 @@ export type ConversionInput<T = unknown> = {
 export type ConversionDiagnostic = {
   pointer: string;
   code: string;
+  sourceVocabularyGap?: import('./source-vocabulary.ts').SourceVocabularyGap;
 };
+
+export type {
+  BangumiVocabularyRow,
+  NativeIdentity,
+  ResolvedConcept,
+  ResolvedScheme,
+  SourceRowOrigin,
+  SourceVocabularyBindings,
+  SourceVocabularyGap,
+  SourceVocabularyInput,
+  SourceVocabularyMetadata,
+  SourceVocabularyProvider,
+  SourceVocabularyRequest,
+  SourceVocabularyResult,
+  SourceVocabularyRow,
+  VndbVocabularyRow,
+} from './source-vocabulary.ts';
 
 export type ConvertedRecord<Proposal = unknown> = {
   source: SourceId;

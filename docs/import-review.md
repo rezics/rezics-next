@@ -5,6 +5,8 @@ Context. This is derived discovery; acceptance and selection remain separate nat
 
 ## Cross-media dump seed
 
+Decision: Status, episode-kind, tag, trait, staff-role and appearance-role values resolve only through exact source taxonomy/code and caller-supplied released Concept and Scheme identities; missing bindings produce field-specific gaps without fallback.
+
 `scripts/datasets/cross-media-seed.ts` imports named Steins;Gate, Clannad and Fate works from extracted native
 Bangumi and VNDB dumps. It requires an anime from Bangumi and a VN from VNDB for each franchise, and validates
 all selected records with the existing registered converters before starting an import. A synopsis mentioning

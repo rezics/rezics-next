@@ -999,3 +999,22 @@ source probe occurs. Pure conversion bounds are twelve projected fields,
 projection guard. The native producer/consumer cases and geometric 64/512/4096
 lookup case are authored in Kernel's existing native fixture. Native outcomes
 remain integration proof; this source delivery permits local typing only.
+
+## Registered source vocabulary mapping
+
+Bangumi and VNDB registrations append bounded proposals from the shared pure
+vocabulary mappers when a trusted conversion caller provides normalized graph
+rows and released bindings in `ConversionContext.sourceVocabulary`. The graph
+owner supplies row traversal and resolved identities; the importer registration
+does not search for endpoints, create subjects or resolve labels. Mapping output
+uses the existing source alias, revision, digest, licence attribution and
+ordinary batch-write path. Mapping-specific command-key revisions prevent a
+sealed command from being replayed with changed statement bytes.
+
+Exact unresolved values and descriptor admission failures are returned both as
+`sourceVocabularyGaps` and structured conversion diagnostics, including provider,
+source path, code or endpoint, required profile and property where applicable.
+VNDB release supersession remains a release-to-release `wdt:P155` gap while the
+released VNDB Release profile lacks that property. TBA and absent release dates
+remain distinct outcomes; date precision is never guessed. These proposals do
+not contain VNDB votes, personal lists or score-derived facts.

@@ -1033,6 +1033,28 @@ enumerations:
         meaning: Trial release of the linked work.,
         citations: *id010,
       }
+  development_status:
+    - {
+        value: 0,
+        term: 'schema:keywords',
+        mapping: 'skos:Concept',
+        meaning: Finished development status.,
+        citations: ['https://api.vndb.org/kana'],
+      }
+    - {
+        value: 1,
+        term: 'schema:keywords',
+        mapping: 'skos:Concept',
+        meaning: In-development status.,
+        citations: ['https://api.vndb.org/kana'],
+      }
+    - {
+        value: 2,
+        term: 'schema:keywords',
+        mapping: 'skos:Concept',
+        meaning: Cancelled development status.,
+        citations: ['https://api.vndb.org/kana'],
+      }
   tag_category: &id036
     - {
         value: cont,
@@ -1898,7 +1920,7 @@ tables:
         term: schema:datePublished
         'on': wd:Q20631656
         mapping: wdt:P577
-        meaning: Release publication date.
+        meaning: Year, month or day precision is retained. TBA and unknown remain distinct source states; absent dates and unadmitted states are reported as exact field gaps, never guessed calendar days.
         citations:
           [
             'https://schema.org/datePublished',
@@ -2196,8 +2218,8 @@ tables:
       - name: rid
         status: omitted
         reason: >-
-          This value links to another release, while the shared follows term targets creative works; the profile does not
-          represent this release-to-release relation.
+          The source endpoint is another release, but immutable profile wd:Q20631656 does not admit wdt:P155. Keep the
+          exact release endpoint as a review gap; do not retarget it to the represented visual novel.
   - name: releases_titles
     type: schema:name
     columns:
@@ -2243,11 +2265,13 @@ tables:
         meaning: Visual-novel work represented by this release.
         citations: [https://schema.org/exampleOfWork, https://www.wikidata.org/wiki/Property:P629]
       - name: rtype
-        status: existing
+        status: omitted
         term: wdt:P31
         'on': wd:Q20631656
         mapping: wdt:P31
-        meaning: Completeness class of this release-to-work link.
+        reason: >-
+          Completeness qualifies the release-to-work relation, while the immutable schema:exampleOfWork property does
+          not admit wdt:P31. Retain the exact code as a review gap instead of changing the relation grain.
         citations: ['https://www.wikidata.org/wiki/Property:31', 'https://www.wikidata.org/wiki/Property:P31']
         values: *id032
   - name: rlists
@@ -2617,8 +2641,12 @@ tables:
         status: omitted
         reason: VNDB length bucket is not a duration and cannot be mapped to schema:timeRequired.
       - name: devstatus
-        status: omitted
-        reason: Source development-status code has no selected profile property.
+        status: proposed
+        term: schema:keywords
+        'on': wd:Q689445
+        value: skos:Concept
+        meaning: Exact VNDB development-status concept; requires the caller's released concept and scheme bindings.
+        citations: [https://api.vndb.org/kana]
       - name: alias
         status: existing
         term: schema:alternateName

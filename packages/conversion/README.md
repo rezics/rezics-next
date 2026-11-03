@@ -14,7 +14,10 @@ The [package exports](package.json) are only these entry points:
 | --------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | `@rezics/conversion`              | `SourceId`, `SourceRecord`, `ConversionInput`, `ConversionDiagnostic`, `ConvertedRecord`, `ConversionError` |
 | `@rezics/conversion/bangumi`      | `convertBangumi`, `converter_revision`, `BangumiConversion`                                                 |
+| `@rezics/conversion/bangumi-vocabulary` | `mapBangumiVocabulary`, `bangumiVocabularyRevision` and Bangumi row types                                  |
 | `@rezics/conversion/vndb`         | `convertVndb`, `converter_revision`, `vndbLimits`, `VndbConversion`, `VndbOptions`                          |
+| `@rezics/conversion/vndb-vocabulary` | `mapVndbVocabulary`, `vndbVocabularyRevision` and VNDB row types                                          |
+| `@rezics/conversion/source-vocabulary` | Released binding, identity, row, gap and result types                                                   |
 | `@rezics/conversion/open-library` | `convertOpenLibrary`, `converter_revision`, `OpenLibraryConversion`                                         |
 | `@rezics/conversion/wikidata`     | `convertWikidata`, `converter_revision`, `wikidataLimits`, `WikidataConversion`                             |
 
@@ -58,11 +61,46 @@ Context supplies trusted, real target bindings separately from the source body:
 | `resolvedReferences` | Source-native relation key to an actual resolved subject UUID. Unresolved relations remain unresolved.                                                            |
 | `mediaIds`           | Exact source URL to an actual available media UUID. No image statement is proposed without this mapping.                                                          |
 | `source`             | Trusted registration alias written to source envelopes and used in command keys. Set it from registration configuration, never from `record`.                     |
+| `sourceVocabulary`   | Optional normalized rows already traversed by the graph caller and explicit released identity bindings; it never discovers rows or creates identities.             |
 
 The context shape is accepted by the converter functions, but its implementation
 type is internal to [`support.ts`](src/support.ts), not an exported package
 subpath. The converter's `converter_revision` option is also trusted
 registration data, not a field read from the source body.
+
+## Registered source vocabulary rows
+
+The importer registration invokes the matching pure mapper when a trusted caller
+supplies `sourceVocabulary`. Each row names its exact source path, source code,
+and already resolved native identities. The graph owner still owns traversal,
+entity creation and the reference frontier. A mapper will not follow IDs or
+infer a target from names. It validates the bundled immutable release digest,
+subject profile admission, target type, property and qualifier against the
+published descriptor before returning ordinary `BatchCommand` proposals.
+
+Concepts are resolved by the exact taxonomy and source code in the supplied
+bindings. Bangumi's inventory-pinned episode-kind, character-kind and
+appearance-role schemes must also match their exact scheme URI. VNDB concept
+tables without an inventory scheme URI still require one explicit resolved
+released Scheme binding from the caller. Missing release pins, schemes,
+concepts, endpoints or profile admissions return finite `SourceVocabularyGap`
+records; no fallback label match or substitute property is emitted. Output is
+bounded to 64 input rows and the remaining slots in the existing 100-command
+batch limit after ordinary source proposals. Unknown
+subtrees are never inspected; resolved scheme and concept bindings are capped
+at 64 and 512 entries per request. Bangumi reciprocal relation rows coalesce by
+canonical direction with a stable source-path order. VNDB tag bindings retain
+their exact content, erotic-content or technical category.
+
+VNDB release dates retain year, month or day precision. `TBA` and absent values
+remain distinct gaps when the release profile has no admitted status property;
+they are not converted to placeholder dates. Release supersession stays a
+release-to-release `wdt:P155` relation and reports the missing profile admission
+on `wd:Q20631656`; it is never moved to the represented work. Tag spoiler levels
+and character-trait spoiler levels remain qualifiers, while votes, list membership
+and user data remain outside these proposals. Mapping-specific revisions and the
+complete source, reference, statement and rights bytes are part of deterministic
+command keys, so a sealed command cannot be replayed with changed mapping bytes.
 
 Each result includes a `normalizedRecord` containing only the source fields the
 converter accepts. Unknown and private subtrees are not carried into it. For each
