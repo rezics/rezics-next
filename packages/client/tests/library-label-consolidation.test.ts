@@ -68,7 +68,10 @@ test('typed label consolidation calls preserve review evidence and retry the sel
     selection: review.data.selection,
     sourceLabel: review.data.sourceLabel,
     targetLabel: review.data.targetLabel,
-    items: review.data.items.filter((item) => item.outcome === 'movable' && item.source !== null),
+    items: review.data.items.filter(
+      (item): item is Extract<(typeof review.data.items)[number], { outcome: 'movable' }> =>
+        item.outcome === 'movable' && item.source !== null,
+    ),
   };
   const confirmation = await client.libraryLabels({ id: sourceLabelId }).$confirmConsolidation.post(evidence, options);
   if (confirmation.data === null) throw new Error('confirmation failed');

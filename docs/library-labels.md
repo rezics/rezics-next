@@ -115,6 +115,12 @@ only effective assignments with live same-owner parents. Duplicate assignment re
 Mutation receipts retain minimal outcomes and undo revisions, never names or private display fields.
 All catalogue and assignment mutations, including both restores, require `library_entry:update`.
 
+Explicit selected-assignment consolidation uses the [owner journey](library-label-consolidation.md): review up to 16
+assignment identities in four-item pages, confirm the complete evidence, and move one item at a time through native
+target assignment followed by safely addressed source unassignment. The typed client exposes review, confirm, apply,
+retry, cancel and retained-result reads. Reopen both labels through these native assignment readers; consolidation
+does not infer items from names or remove the source label.
+
 Delete declares `Library-Label-Revision` and unassign declares `Library-Label-Assignment-Revision` in OpenAPI success
 headers. Each is the actual post-delete revision from the native command receipt. Exact old-key replay returns the
 SAME original header even after restore or replacement. Undo submits the known opaque ID and that revision; it needs

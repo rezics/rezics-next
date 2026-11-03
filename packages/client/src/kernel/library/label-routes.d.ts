@@ -6011,6 +6011,834 @@ export declare function personalLabelRoutes(app: ReturnType<typeof definitionRou
             };
         };
     };
+} & {
+    v1: {
+        libraryLabelAssignments: {
+            get: {
+                body: unknown;
+                params: {};
+                query: {
+                    view?: "BASIC" | "FULL";
+                    cursor?: string;
+                    limit?: number;
+                    labelId?: string;
+                    subjectId?: string;
+                };
+                headers: unknown;
+                response: {
+                    200: {
+                        assignments: {
+                            id: string;
+                            labelId: string;
+                            subjectId: string;
+                            revision: number;
+                        }[];
+                        next: string | null;
+                    } | {
+                        assignments: {
+                            id: string;
+                            labelId: string;
+                            subjectId: string;
+                            revision: number;
+                            label: {
+                                name: string;
+                            };
+                        }[];
+                        next: string | null;
+                    } | {
+                        assignments: {
+                            subject: {
+                                id: string;
+                                type: string;
+                                types: string[];
+                                label: {
+                                    value: string;
+                                    language: string;
+                                } | null;
+                                creativeWork: boolean;
+                                cover: {
+                                    media: string;
+                                    width: number;
+                                    height: number;
+                                    placeholder: {
+                                        thumbhash: string;
+                                        color: string;
+                                    };
+                                    variants: {
+                                        format: "avif" | "webp";
+                                        width: number;
+                                    }[];
+                                    focalPoint: {
+                                        x: number;
+                                        y: number;
+                                    } | null;
+                                    credit: {
+                                        rightsHolder: string;
+                                        via: {
+                                            name: string;
+                                            url: string;
+                                        };
+                                        license: string;
+                                        obligations: string[];
+                                    };
+                                } | null;
+                            } | {
+                                id: string;
+                                type: string;
+                                label: string;
+                            } | null;
+                            id: string;
+                            labelId: string;
+                            subjectId: string;
+                            revision: number;
+                            libraryEntry: {
+                                subjectId: string;
+                                state: string;
+                                revision: number;
+                                createdAt: string;
+                                updatedAt: string;
+                                incarnationId: string | null;
+                                lastActivityAt: string;
+                                finishedAt: string | null;
+                                activeProgressSession: {
+                                    id: string;
+                                    subjectId: string;
+                                    versionSubjectId: string | null;
+                                    mode: "completed_units" | "cursor_position" | "scalar_amount";
+                                    unit: string;
+                                    total: string | null;
+                                    amount: string | null;
+                                    locator: string | null;
+                                    position: string | null;
+                                    completedUnitCount: number;
+                                    state: "abandoned" | "active" | "completed";
+                                    revision: number;
+                                    startedAt: string;
+                                    completedAt: string | null;
+                                } | null;
+                            } | null;
+                        }[];
+                        next: string | null;
+                        label: {
+                            id: string;
+                            name: string;
+                            revision: number;
+                        };
+                    };
+                    400: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    401: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    403: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    404: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    409: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    422: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    503: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                };
+                error: never;
+            };
+        };
+    };
+} & {
+    v1: {
+        libraryLabels: {
+            ":id": {
+                $reviewConsolidation: {
+                    post: {
+                        body: {
+                            targetLabelId: string;
+                            items: {
+                                subjectId: string;
+                                assignmentId: string;
+                                revision: number;
+                            }[];
+                            limit?: number;
+                            cursor?: string;
+                        };
+                        params: {
+                            id: string;
+                        };
+                        query: unknown;
+                        headers: unknown;
+                        response: {
+                            200: {
+                                selection: string;
+                                sourceLabel: {
+                                    id: string;
+                                    revision: number;
+                                    name: string;
+                                };
+                                targetLabel: {
+                                    id: string;
+                                    revision: number;
+                                    name: string;
+                                };
+                                items: import("./label-consolidation.ts").LabelConsolidationReviewItem[];
+                                next: string | null;
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            403: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            409: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        libraryLabels: {
+            ":id": {
+                $confirmConsolidation: {
+                    post: {
+                        body: {
+                            selection: string;
+                            sourceLabel: {
+                                id: string;
+                                revision: number;
+                                name: string;
+                            };
+                            targetLabel: {
+                                id: string;
+                                revision: number;
+                                name: string;
+                            };
+                            items: {
+                                selected: {
+                                    subjectId: string;
+                                    assignmentId: string;
+                                    revision: number;
+                                };
+                                source: {
+                                    id: string;
+                                    revision: number;
+                                    effective: boolean;
+                                };
+                                target: {
+                                    id: string;
+                                    revision: number;
+                                    effective: boolean;
+                                } | null;
+                                outcome: "already_on_target" | "movable";
+                            }[];
+                        };
+                        params: {
+                            id: string;
+                        };
+                        query: unknown;
+                        headers: {
+                            "idempotency-key": string;
+                        };
+                        response: {
+                            200: {
+                                confirmationId: `${string}-${string}-${string}-${string}-${string}`;
+                                expiresAt: string;
+                                status: 'active';
+                                itemCount: number;
+                            };
+                            201: {
+                                confirmationId: string;
+                                expiresAt: string;
+                                status: "active";
+                                itemCount: number;
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            403: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            409: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        libraryLabels: {
+            ":id": {
+                $applyConsolidation: {
+                    post: {
+                        body: {
+                            confirmationId: string;
+                        };
+                        params: {
+                            id: string;
+                        };
+                        query: unknown;
+                        headers: {
+                            "idempotency-key": string;
+                        };
+                        response: {
+                            200: {
+                                confirmationId: string;
+                                sourceLabelId: string;
+                                targetLabelId: string;
+                                status: "active" | "cancelled" | "completed";
+                                expiresAt: string;
+                                items: {
+                                    item: number;
+                                    selected?: {
+                                        subjectId: string;
+                                        assignmentId: string;
+                                        revision: number;
+                                    };
+                                    status: "capacity_limited" | "changed" | "inaccessible" | "moved" | "pending" | "processing" | "target_applied_source_retained";
+                                    targetAssignment?: {
+                                        id: string;
+                                        revision: number;
+                                    };
+                                    targetUnchanged?: boolean;
+                                    sourceUnassignRevision?: number;
+                                }[];
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            403: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            409: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        libraryLabels: {
+            ":id": {
+                $retryConsolidation: {
+                    post: {
+                        body: {
+                            confirmationId: string;
+                            item: number;
+                        };
+                        params: {
+                            id: string;
+                        };
+                        query: unknown;
+                        headers: {
+                            "idempotency-key": string;
+                        };
+                        response: {
+                            200: {
+                                confirmationId: string;
+                                sourceLabelId: string;
+                                targetLabelId: string;
+                                status: "active" | "cancelled" | "completed";
+                                expiresAt: string;
+                                items: {
+                                    item: number;
+                                    selected?: {
+                                        subjectId: string;
+                                        assignmentId: string;
+                                        revision: number;
+                                    };
+                                    status: "capacity_limited" | "changed" | "inaccessible" | "moved" | "pending" | "processing" | "target_applied_source_retained";
+                                    targetAssignment?: {
+                                        id: string;
+                                        revision: number;
+                                    };
+                                    targetUnchanged?: boolean;
+                                    sourceUnassignRevision?: number;
+                                }[];
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            403: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            409: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        libraryLabels: {
+            ":id": {
+                $cancelConsolidation: {
+                    post: {
+                        body: {
+                            confirmationId: string;
+                        };
+                        params: {
+                            id: string;
+                        };
+                        query: unknown;
+                        headers: {
+                            "idempotency-key": string;
+                        };
+                        response: {
+                            200: {
+                                confirmationId: string;
+                                sourceLabelId: string;
+                                targetLabelId: string;
+                                status: "active" | "cancelled" | "completed";
+                                expiresAt: string;
+                                items: {
+                                    item: number;
+                                    selected?: {
+                                        subjectId: string;
+                                        assignmentId: string;
+                                        revision: number;
+                                    };
+                                    status: "capacity_limited" | "changed" | "inaccessible" | "moved" | "pending" | "processing" | "target_applied_source_retained";
+                                    targetAssignment?: {
+                                        id: string;
+                                        revision: number;
+                                    };
+                                    targetUnchanged?: boolean;
+                                    sourceUnassignRevision?: number;
+                                }[];
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            403: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            409: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
 }, import("elysia").DefaultEphemeral, {
     derive: {
         readonly admission: import("../http/admission.ts").Admission;
@@ -6032,13 +6860,10 @@ export declare function personalLabelRoutes(app: ReturnType<typeof definitionRou
     schemas: {};
     response: {};
     error: [];
-}, "get", "/v1/libraryLabelAssignments", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
-    query: import("typebox").TObject<{
-        view: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"BASIC">, import("typebox").TLiteral<"FULL">]>>;
-        cursor: import("typebox").TOptional<import("typebox").TString>;
-        limit: import("typebox").TOptional<import("typebox").TInteger>;
-        labelId: import("typebox").TOptional<import("typebox").TString>;
-        subjectId: import("typebox").TOptional<import("typebox").TString>;
+}, "get", "/v1/libraryLabels/:id/consolidations/:confirmationId", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
+    params: import("typebox").TObject<{
+        id: import("typebox").TString;
+        confirmationId: import("typebox").TString;
     }>;
     transform: unknown;
     response: {
@@ -6140,105 +6965,28 @@ export declare function personalLabelRoutes(app: ReturnType<typeof definitionRou
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
-        200: import("typebox").TUnion<[import("typebox").TObject<{
-            assignments: import("typebox").TArray<import("typebox").TObject<{
-                id: import("typebox").TString;
-                labelId: import("typebox").TString;
-                subjectId: import("typebox").TString;
-                revision: import("typebox").TInteger;
-            }>>;
-            next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-        }>, import("typebox").TObject<{
-            assignments: import("typebox").TArray<import("typebox").TObject<{
-                id: import("typebox").TString;
-                labelId: import("typebox").TString;
-                subjectId: import("typebox").TString;
-                revision: import("typebox").TInteger;
-                label: import("typebox").TObject<{
-                    name: import("typebox").TString;
-                }>;
-            }>>;
-            next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-        }>, import("typebox").TObject<{
-            assignments: import("typebox").TArray<import("typebox").TObject<{
-                subject: import("typebox").TUnion<[import("typebox").TObject<{
-                    id: import("typebox").TString;
-                    type: import("typebox").TString;
-                    types: import("typebox").TArray<import("typebox").TString>;
-                    label: import("typebox").TUnion<[import("typebox").TObject<{
-                        value: import("typebox").TString;
-                        language: import("typebox").TString;
-                    }>, import("typebox").TNull]>;
-                    creativeWork: import("typebox").TBoolean;
-                    cover: import("typebox").TUnion<[import("typebox").TObject<{
-                        media: import("typebox").TString;
-                        width: import("typebox").TInteger;
-                        height: import("typebox").TInteger;
-                        placeholder: import("typebox").TObject<{
-                            thumbhash: import("typebox").TString;
-                            color: import("typebox").TString;
-                        }>;
-                        variants: import("typebox").TArray<import("typebox").TObject<{
-                            format: import("typebox").TUnion<[import("typebox").TLiteral<"avif">, import("typebox").TLiteral<"webp">]>;
-                            width: import("typebox").TInteger;
-                        }>>;
-                        focalPoint: import("typebox").TUnion<[import("typebox").TObject<{
-                            x: import("typebox").TNumber;
-                            y: import("typebox").TNumber;
-                        }>, import("typebox").TNull]>;
-                        credit: import("typebox").TObject<{
-                            rightsHolder: import("typebox").TString;
-                            via: import("typebox").TObject<{
-                                name: import("typebox").TString;
-                                url: import("typebox").TString;
-                            }>;
-                            license: import("typebox").TString;
-                            obligations: import("typebox").TArray<import("typebox").TString>;
-                        }>;
-                    }>, import("typebox").TNull]>;
-                }>, import("typebox").TObject<{
-                    id: import("typebox").TString;
-                    type: import("typebox").TString;
-                    label: import("typebox").TString;
-                }>, import("typebox").TNull]>;
-                id: import("typebox").TString;
-                labelId: import("typebox").TString;
-                subjectId: import("typebox").TString;
-                revision: import("typebox").TInteger;
-                libraryEntry: import("typebox").TUnion<[import("typebox").TObject<{
+        200: import("typebox").TObject<{
+            confirmationId: import("typebox").TString;
+            sourceLabelId: import("typebox").TString;
+            targetLabelId: import("typebox").TString;
+            status: import("typebox").TUnion<[import("typebox").TLiteral<"active">, import("typebox").TLiteral<"completed">, import("typebox").TLiteral<"cancelled">]>;
+            expiresAt: import("typebox").TString;
+            items: import("typebox").TArray<import("typebox").TObject<{
+                item: import("typebox").TInteger;
+                selected: import("typebox").TOptional<import("typebox").TObject<{
                     subjectId: import("typebox").TString;
-                    state: import("typebox").TString;
+                    assignmentId: import("typebox").TString;
                     revision: import("typebox").TInteger;
-                    createdAt: import("typebox").TString;
-                    updatedAt: import("typebox").TString;
-                    incarnationId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                    lastActivityAt: import("typebox").TString;
-                    finishedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                    activeProgressSession: import("typebox").TUnion<[import("typebox").TObject<{
-                        id: import("typebox").TString;
-                        subjectId: import("typebox").TString;
-                        versionSubjectId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        mode: import("typebox").TUnion<[import("typebox").TLiteral<"scalar_amount">, import("typebox").TLiteral<"cursor_position">, import("typebox").TLiteral<"completed_units">]>;
-                        unit: import("typebox").TString;
-                        total: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        amount: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        locator: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        position: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        completedUnitCount: import("typebox").TInteger;
-                        state: import("typebox").TUnion<[import("typebox").TLiteral<"active">, import("typebox").TLiteral<"completed">, import("typebox").TLiteral<"abandoned">]>;
-                        revision: import("typebox").TInteger;
-                        startedAt: import("typebox").TString;
-                        completedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                    }>, import("typebox").TNull]>;
-                }>, import("typebox").TNull]>;
+                }>>;
+                status: import("typebox").TUnion<[import("typebox").TLiteral<"pending">, import("typebox").TLiteral<"processing">, import("typebox").TLiteral<"moved">, import("typebox").TLiteral<"target_applied_source_retained">, import("typebox").TLiteral<"capacity_limited">, import("typebox").TLiteral<"changed">, import("typebox").TLiteral<"inaccessible">]>;
+                targetAssignment: import("typebox").TOptional<import("typebox").TObject<{
+                    id: import("typebox").TString;
+                    revision: import("typebox").TInteger;
+                }>>;
+                targetUnchanged: import("typebox").TOptional<import("typebox").TBoolean>;
+                sourceUnassignRevision: import("typebox").TOptional<import("typebox").TInteger>;
             }>>;
-            next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-            label: import("typebox").TObject<{
-                id: import("typebox").TString;
-                name: import("typebox").TString;
-                revision: import("typebox").TInteger;
-            }>;
-        }>]>;
+        }>;
     };
     detail: {
         operationId: string;
@@ -6248,9 +6996,8 @@ export declare function personalLabelRoutes(app: ReturnType<typeof definitionRou
             bearerAuth: never[];
         }[];
         'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
-        description: string;
     };
-}, {}, "/v1/libraryLabelAssignments">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ actor, query, admission, job }: {
+}, {}, "/v1/libraryLabels/:id/consolidations/:confirmationId">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ actor, params, admission, job, set }: {
     server: import("elysia").Server | null;
     redirect: import("elysia").redirect;
     set: {
@@ -6338,103 +7085,26 @@ export declare function personalLabelRoutes(app: ReturnType<typeof definitionRou
             errors: unknown;
         };
         200: {
-            assignments: {
-                id: string;
-                labelId: string;
-                subjectId: string;
-                revision: number;
-            }[];
-            next: string | null;
-        } | {
-            assignments: {
-                id: string;
-                labelId: string;
-                subjectId: string;
-                revision: number;
-                label: {
-                    name: string;
-                };
-            }[];
-            next: string | null;
-        } | {
-            assignments: {
-                subject: {
-                    id: string;
-                    type: string;
-                    types: string[];
-                    label: {
-                        value: string;
-                        language: string;
-                    } | null;
-                    creativeWork: boolean;
-                    cover: {
-                        media: string;
-                        width: number;
-                        height: number;
-                        placeholder: {
-                            thumbhash: string;
-                            color: string;
-                        };
-                        variants: {
-                            format: "avif" | "webp";
-                            width: number;
-                        }[];
-                        focalPoint: {
-                            x: number;
-                            y: number;
-                        } | null;
-                        credit: {
-                            rightsHolder: string;
-                            via: {
-                                name: string;
-                                url: string;
-                            };
-                            license: string;
-                            obligations: string[];
-                        };
-                    } | null;
-                } | {
-                    id: string;
-                    type: string;
-                    label: string;
-                } | null;
-                id: string;
-                labelId: string;
-                subjectId: string;
-                revision: number;
-                libraryEntry: {
+            confirmationId: string;
+            sourceLabelId: string;
+            targetLabelId: string;
+            status: "active" | "cancelled" | "completed";
+            expiresAt: string;
+            items: {
+                item: number;
+                selected?: {
                     subjectId: string;
-                    state: string;
+                    assignmentId: string;
                     revision: number;
-                    createdAt: string;
-                    updatedAt: string;
-                    incarnationId: string | null;
-                    lastActivityAt: string;
-                    finishedAt: string | null;
-                    activeProgressSession: {
-                        id: string;
-                        subjectId: string;
-                        versionSubjectId: string | null;
-                        mode: "completed_units" | "cursor_position" | "scalar_amount";
-                        unit: string;
-                        total: string | null;
-                        amount: string | null;
-                        locator: string | null;
-                        position: string | null;
-                        completedUnitCount: number;
-                        state: "abandoned" | "active" | "completed";
-                        revision: number;
-                        startedAt: string;
-                        completedAt: string | null;
-                    } | null;
-                } | null;
+                };
+                status: "capacity_limited" | "changed" | "inaccessible" | "moved" | "pending" | "processing" | "target_applied_source_retained";
+                targetAssignment?: {
+                    id: string;
+                    revision: number;
+                };
+                targetUnchanged?: boolean;
+                sourceUnassignRevision?: number;
             }[];
-            next: string | null;
-            label: {
-                id: string;
-                name: string;
-                revision: number;
-            };
         };
     }>;
     problem: import("elysia").SelectiveProblem<{
@@ -6516,112 +7186,32 @@ export declare function personalLabelRoutes(app: ReturnType<typeof definitionRou
             errors: unknown;
         };
         200: {
-            assignments: {
-                id: string;
-                labelId: string;
-                subjectId: string;
-                revision: number;
-            }[];
-            next: string | null;
-        } | {
-            assignments: {
-                id: string;
-                labelId: string;
-                subjectId: string;
-                revision: number;
-                label: {
-                    name: string;
-                };
-            }[];
-            next: string | null;
-        } | {
-            assignments: {
-                subject: {
-                    id: string;
-                    type: string;
-                    types: string[];
-                    label: {
-                        value: string;
-                        language: string;
-                    } | null;
-                    creativeWork: boolean;
-                    cover: {
-                        media: string;
-                        width: number;
-                        height: number;
-                        placeholder: {
-                            thumbhash: string;
-                            color: string;
-                        };
-                        variants: {
-                            format: "avif" | "webp";
-                            width: number;
-                        }[];
-                        focalPoint: {
-                            x: number;
-                            y: number;
-                        } | null;
-                        credit: {
-                            rightsHolder: string;
-                            via: {
-                                name: string;
-                                url: string;
-                            };
-                            license: string;
-                            obligations: string[];
-                        };
-                    } | null;
-                } | {
-                    id: string;
-                    type: string;
-                    label: string;
-                } | null;
-                id: string;
-                labelId: string;
-                subjectId: string;
-                revision: number;
-                libraryEntry: {
+            confirmationId: string;
+            sourceLabelId: string;
+            targetLabelId: string;
+            status: "active" | "cancelled" | "completed";
+            expiresAt: string;
+            items: {
+                item: number;
+                selected?: {
                     subjectId: string;
-                    state: string;
+                    assignmentId: string;
                     revision: number;
-                    createdAt: string;
-                    updatedAt: string;
-                    incarnationId: string | null;
-                    lastActivityAt: string;
-                    finishedAt: string | null;
-                    activeProgressSession: {
-                        id: string;
-                        subjectId: string;
-                        versionSubjectId: string | null;
-                        mode: "completed_units" | "cursor_position" | "scalar_amount";
-                        unit: string;
-                        total: string | null;
-                        amount: string | null;
-                        locator: string | null;
-                        position: string | null;
-                        completedUnitCount: number;
-                        state: "abandoned" | "active" | "completed";
-                        revision: number;
-                        startedAt: string;
-                        completedAt: string | null;
-                    } | null;
-                } | null;
+                };
+                status: "capacity_limited" | "changed" | "inaccessible" | "moved" | "pending" | "processing" | "target_applied_source_retained";
+                targetAssignment?: {
+                    id: string;
+                    revision: number;
+                };
+                targetUnchanged?: boolean;
+                sourceUnassignRevision?: number;
             }[];
-            next: string | null;
-            label: {
-                id: string;
-                name: string;
-                revision: number;
-            };
         };
     }>;
     defer: (fn: import("elysia/types").AfterResponseHandler<NoInfer<import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
-        query: import("typebox").TObject<{
-            view: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"BASIC">, import("typebox").TLiteral<"FULL">]>>;
-            cursor: import("typebox").TOptional<import("typebox").TString>;
-            limit: import("typebox").TOptional<import("typebox").TInteger>;
-            labelId: import("typebox").TOptional<import("typebox").TString>;
-            subjectId: import("typebox").TOptional<import("typebox").TString>;
+        params: import("typebox").TObject<{
+            id: import("typebox").TString;
+            confirmationId: import("typebox").TString;
         }>;
         transform: unknown;
         response: {
@@ -6723,105 +7313,28 @@ export declare function personalLabelRoutes(app: ReturnType<typeof definitionRou
                     code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
                 }>>>;
             }>;
-            200: import("typebox").TUnion<[import("typebox").TObject<{
-                assignments: import("typebox").TArray<import("typebox").TObject<{
-                    id: import("typebox").TString;
-                    labelId: import("typebox").TString;
-                    subjectId: import("typebox").TString;
-                    revision: import("typebox").TInteger;
-                }>>;
-                next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-            }>, import("typebox").TObject<{
-                assignments: import("typebox").TArray<import("typebox").TObject<{
-                    id: import("typebox").TString;
-                    labelId: import("typebox").TString;
-                    subjectId: import("typebox").TString;
-                    revision: import("typebox").TInteger;
-                    label: import("typebox").TObject<{
-                        name: import("typebox").TString;
-                    }>;
-                }>>;
-                next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-            }>, import("typebox").TObject<{
-                assignments: import("typebox").TArray<import("typebox").TObject<{
-                    subject: import("typebox").TUnion<[import("typebox").TObject<{
-                        id: import("typebox").TString;
-                        type: import("typebox").TString;
-                        types: import("typebox").TArray<import("typebox").TString>;
-                        label: import("typebox").TUnion<[import("typebox").TObject<{
-                            value: import("typebox").TString;
-                            language: import("typebox").TString;
-                        }>, import("typebox").TNull]>;
-                        creativeWork: import("typebox").TBoolean;
-                        cover: import("typebox").TUnion<[import("typebox").TObject<{
-                            media: import("typebox").TString;
-                            width: import("typebox").TInteger;
-                            height: import("typebox").TInteger;
-                            placeholder: import("typebox").TObject<{
-                                thumbhash: import("typebox").TString;
-                                color: import("typebox").TString;
-                            }>;
-                            variants: import("typebox").TArray<import("typebox").TObject<{
-                                format: import("typebox").TUnion<[import("typebox").TLiteral<"avif">, import("typebox").TLiteral<"webp">]>;
-                                width: import("typebox").TInteger;
-                            }>>;
-                            focalPoint: import("typebox").TUnion<[import("typebox").TObject<{
-                                x: import("typebox").TNumber;
-                                y: import("typebox").TNumber;
-                            }>, import("typebox").TNull]>;
-                            credit: import("typebox").TObject<{
-                                rightsHolder: import("typebox").TString;
-                                via: import("typebox").TObject<{
-                                    name: import("typebox").TString;
-                                    url: import("typebox").TString;
-                                }>;
-                                license: import("typebox").TString;
-                                obligations: import("typebox").TArray<import("typebox").TString>;
-                            }>;
-                        }>, import("typebox").TNull]>;
-                    }>, import("typebox").TObject<{
-                        id: import("typebox").TString;
-                        type: import("typebox").TString;
-                        label: import("typebox").TString;
-                    }>, import("typebox").TNull]>;
-                    id: import("typebox").TString;
-                    labelId: import("typebox").TString;
-                    subjectId: import("typebox").TString;
-                    revision: import("typebox").TInteger;
-                    libraryEntry: import("typebox").TUnion<[import("typebox").TObject<{
+            200: import("typebox").TObject<{
+                confirmationId: import("typebox").TString;
+                sourceLabelId: import("typebox").TString;
+                targetLabelId: import("typebox").TString;
+                status: import("typebox").TUnion<[import("typebox").TLiteral<"active">, import("typebox").TLiteral<"completed">, import("typebox").TLiteral<"cancelled">]>;
+                expiresAt: import("typebox").TString;
+                items: import("typebox").TArray<import("typebox").TObject<{
+                    item: import("typebox").TInteger;
+                    selected: import("typebox").TOptional<import("typebox").TObject<{
                         subjectId: import("typebox").TString;
-                        state: import("typebox").TString;
+                        assignmentId: import("typebox").TString;
                         revision: import("typebox").TInteger;
-                        createdAt: import("typebox").TString;
-                        updatedAt: import("typebox").TString;
-                        incarnationId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        lastActivityAt: import("typebox").TString;
-                        finishedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        activeProgressSession: import("typebox").TUnion<[import("typebox").TObject<{
-                            id: import("typebox").TString;
-                            subjectId: import("typebox").TString;
-                            versionSubjectId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                            mode: import("typebox").TUnion<[import("typebox").TLiteral<"scalar_amount">, import("typebox").TLiteral<"cursor_position">, import("typebox").TLiteral<"completed_units">]>;
-                            unit: import("typebox").TString;
-                            total: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                            amount: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                            locator: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                            position: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                            completedUnitCount: import("typebox").TInteger;
-                            state: import("typebox").TUnion<[import("typebox").TLiteral<"active">, import("typebox").TLiteral<"completed">, import("typebox").TLiteral<"abandoned">]>;
-                            revision: import("typebox").TInteger;
-                            startedAt: import("typebox").TString;
-                            completedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        }>, import("typebox").TNull]>;
-                    }>, import("typebox").TNull]>;
+                    }>>;
+                    status: import("typebox").TUnion<[import("typebox").TLiteral<"pending">, import("typebox").TLiteral<"processing">, import("typebox").TLiteral<"moved">, import("typebox").TLiteral<"target_applied_source_retained">, import("typebox").TLiteral<"capacity_limited">, import("typebox").TLiteral<"changed">, import("typebox").TLiteral<"inaccessible">]>;
+                    targetAssignment: import("typebox").TOptional<import("typebox").TObject<{
+                        id: import("typebox").TString;
+                        revision: import("typebox").TInteger;
+                    }>>;
+                    targetUnchanged: import("typebox").TOptional<import("typebox").TBoolean>;
+                    sourceUnassignRevision: import("typebox").TOptional<import("typebox").TInteger>;
                 }>>;
-                next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                label: import("typebox").TObject<{
-                    id: import("typebox").TString;
-                    name: import("typebox").TString;
-                    revision: import("typebox").TInteger;
-                }>;
-            }>]>;
+            }>;
         };
         detail: {
             operationId: string;
@@ -6831,9 +7344,8 @@ export declare function personalLabelRoutes(app: ReturnType<typeof definitionRou
                 bearerAuth: never[];
             }[];
             'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
-            description: string;
         };
-    }, {}, "/v1/libraryLabelAssignments">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
+    }, {}, "/v1/libraryLabels/:id/consolidations/:confirmationId">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
         derive: {
             readonly admission: import("../http/admission.ts").Admission;
             readonly job: {
@@ -6857,14 +7369,11 @@ export declare function personalLabelRoutes(app: ReturnType<typeof definitionRou
     request: Request;
     store: {};
     body: unknown;
-    query: {
-        view?: "BASIC" | "FULL";
-        cursor?: string;
-        limit?: number;
-        labelId?: string;
-        subjectId?: string;
+    query: Record<string, string | undefined>;
+    params: {
+        id: string;
+        confirmationId: string;
     };
-    params: {};
     headers: Record<string, string | undefined>;
     cookie: Record<string, import("elysia").Cookie<unknown>>;
     readonly admission: import("../http/admission.ts").Admission;
@@ -6881,101 +7390,10 @@ export declare function personalLabelRoutes(app: ReturnType<typeof definitionRou
     };
     readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
     readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
-}) => Promise<{
-    label?: {
-        id: string;
-        name: string;
-        revision: number;
-    };
-    assignments: (({
-        id: string;
-        labelId: string;
-        subjectId: string;
-        revision: number;
-    } & {
-        subject?: (import("../semantic/summaries.ts").SubjectSummary | {
-            id: string;
-            label: string;
-            type: string;
-        }) | null;
-    } & object) | ({
-        id: string;
-        labelId: string;
-        subjectId: string;
-        revision: number;
-        label: {
-            name: string;
-        } & object;
-    } & {
-        subject?: (import("../semantic/summaries.ts").SubjectSummary | {
-            id: string;
-            label: string;
-            type: string;
-        }) | null;
-    } & object) | ({
-        id: string;
-        labelId: string;
-        subjectId: string;
-        revision: number;
-        libraryEntry: ({
-            subjectId: string;
-            state: string;
-            revision: number;
-            createdAt: string;
-            updatedAt: string;
-            incarnationId: string | null;
-            lastActivityAt: string;
-            finishedAt: string | null;
-            activeProgressSession: ({
-                id: string;
-                subjectId: string;
-                versionSubjectId: string | null;
-                mode: "completed_units" | "cursor_position" | "scalar_amount";
-                unit: string;
-                total: string | null;
-                amount: string | null;
-                locator: string | null;
-                position: string | null;
-                completedUnitCount: number;
-                state: "abandoned" | "active" | "completed";
-                revision: number;
-                startedAt: string;
-                completedAt: string | null;
-            } & {
-                subject?: (import("../semantic/summaries.ts").SubjectSummary | {
-                    id: string;
-                    label: string;
-                    type: string;
-                }) | null;
-            } & {
-                versionSubject?: (import("../semantic/summaries.ts").SubjectSummary | {
-                    id: string;
-                    label: string;
-                    type: string;
-                }) | null;
-            } & object) | null;
-        } & {
-            subject?: (import("../semantic/summaries.ts").SubjectSummary | {
-                id: string;
-                label: string;
-                type: string;
-            }) | null;
-        } & object) | null;
-    } & {
-        subject?: (import("../semantic/summaries.ts").SubjectSummary | {
-            id: string;
-            label: string;
-            type: string;
-        }) | null;
-    } & object))[];
-    next: string | null;
-} & object>, {
-    query: import("typebox").TObject<{
-        view: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"BASIC">, import("typebox").TLiteral<"FULL">]>>;
-        cursor: import("typebox").TOptional<import("typebox").TString>;
-        limit: import("typebox").TOptional<import("typebox").TInteger>;
-        labelId: import("typebox").TOptional<import("typebox").TString>;
-        subjectId: import("typebox").TOptional<import("typebox").TString>;
+}) => Promise<import("./label-consolidation.ts").LabelConsolidationResult>, {
+    params: import("typebox").TObject<{
+        id: import("typebox").TString;
+        confirmationId: import("typebox").TString;
     }>;
     transform: ({ request }: Omit<{
         server: import("elysia").Server | null;
@@ -7065,103 +7483,26 @@ export declare function personalLabelRoutes(app: ReturnType<typeof definitionRou
                 errors: unknown;
             };
             200: {
-                assignments: {
-                    id: string;
-                    labelId: string;
-                    subjectId: string;
-                    revision: number;
-                }[];
-                next: string | null;
-            } | {
-                assignments: {
-                    id: string;
-                    labelId: string;
-                    subjectId: string;
-                    revision: number;
-                    label: {
-                        name: string;
-                    };
-                }[];
-                next: string | null;
-            } | {
-                assignments: {
-                    subject: {
-                        id: string;
-                        type: string;
-                        types: string[];
-                        label: {
-                            value: string;
-                            language: string;
-                        } | null;
-                        creativeWork: boolean;
-                        cover: {
-                            media: string;
-                            width: number;
-                            height: number;
-                            placeholder: {
-                                thumbhash: string;
-                                color: string;
-                            };
-                            variants: {
-                                format: "avif" | "webp";
-                                width: number;
-                            }[];
-                            focalPoint: {
-                                x: number;
-                                y: number;
-                            } | null;
-                            credit: {
-                                rightsHolder: string;
-                                via: {
-                                    name: string;
-                                    url: string;
-                                };
-                                license: string;
-                                obligations: string[];
-                            };
-                        } | null;
-                    } | {
-                        id: string;
-                        type: string;
-                        label: string;
-                    } | null;
-                    id: string;
-                    labelId: string;
-                    subjectId: string;
-                    revision: number;
-                    libraryEntry: {
+                confirmationId: string;
+                sourceLabelId: string;
+                targetLabelId: string;
+                status: "active" | "cancelled" | "completed";
+                expiresAt: string;
+                items: {
+                    item: number;
+                    selected?: {
                         subjectId: string;
-                        state: string;
+                        assignmentId: string;
                         revision: number;
-                        createdAt: string;
-                        updatedAt: string;
-                        incarnationId: string | null;
-                        lastActivityAt: string;
-                        finishedAt: string | null;
-                        activeProgressSession: {
-                            id: string;
-                            subjectId: string;
-                            versionSubjectId: string | null;
-                            mode: "completed_units" | "cursor_position" | "scalar_amount";
-                            unit: string;
-                            total: string | null;
-                            amount: string | null;
-                            locator: string | null;
-                            position: string | null;
-                            completedUnitCount: number;
-                            state: "abandoned" | "active" | "completed";
-                            revision: number;
-                            startedAt: string;
-                            completedAt: string | null;
-                        } | null;
-                    } | null;
+                    };
+                    status: "capacity_limited" | "changed" | "inaccessible" | "moved" | "pending" | "processing" | "target_applied_source_retained";
+                    targetAssignment?: {
+                        id: string;
+                        revision: number;
+                    };
+                    targetUnchanged?: boolean;
+                    sourceUnassignRevision?: number;
                 }[];
-                next: string | null;
-                label: {
-                    id: string;
-                    name: string;
-                    revision: number;
-                };
             };
         }>;
         problem: import("elysia").SelectiveProblem<{
@@ -7243,116 +7584,34 @@ export declare function personalLabelRoutes(app: ReturnType<typeof definitionRou
                 errors: unknown;
             };
             200: {
-                assignments: {
-                    id: string;
-                    labelId: string;
-                    subjectId: string;
-                    revision: number;
-                }[];
-                next: string | null;
-            } | {
-                assignments: {
-                    id: string;
-                    labelId: string;
-                    subjectId: string;
-                    revision: number;
-                    label: {
-                        name: string;
-                    };
-                }[];
-                next: string | null;
-            } | {
-                assignments: {
-                    subject: {
-                        id: string;
-                        type: string;
-                        types: string[];
-                        label: {
-                            value: string;
-                            language: string;
-                        } | null;
-                        creativeWork: boolean;
-                        cover: {
-                            media: string;
-                            width: number;
-                            height: number;
-                            placeholder: {
-                                thumbhash: string;
-                                color: string;
-                            };
-                            variants: {
-                                format: "avif" | "webp";
-                                width: number;
-                            }[];
-                            focalPoint: {
-                                x: number;
-                                y: number;
-                            } | null;
-                            credit: {
-                                rightsHolder: string;
-                                via: {
-                                    name: string;
-                                    url: string;
-                                };
-                                license: string;
-                                obligations: string[];
-                            };
-                        } | null;
-                    } | {
-                        id: string;
-                        type: string;
-                        label: string;
-                    } | null;
-                    id: string;
-                    labelId: string;
-                    subjectId: string;
-                    revision: number;
-                    libraryEntry: {
+                confirmationId: string;
+                sourceLabelId: string;
+                targetLabelId: string;
+                status: "active" | "cancelled" | "completed";
+                expiresAt: string;
+                items: {
+                    item: number;
+                    selected?: {
                         subjectId: string;
-                        state: string;
+                        assignmentId: string;
                         revision: number;
-                        createdAt: string;
-                        updatedAt: string;
-                        incarnationId: string | null;
-                        lastActivityAt: string;
-                        finishedAt: string | null;
-                        activeProgressSession: {
-                            id: string;
-                            subjectId: string;
-                            versionSubjectId: string | null;
-                            mode: "completed_units" | "cursor_position" | "scalar_amount";
-                            unit: string;
-                            total: string | null;
-                            amount: string | null;
-                            locator: string | null;
-                            position: string | null;
-                            completedUnitCount: number;
-                            state: "abandoned" | "active" | "completed";
-                            revision: number;
-                            startedAt: string;
-                            completedAt: string | null;
-                        } | null;
-                    } | null;
+                    };
+                    status: "capacity_limited" | "changed" | "inaccessible" | "moved" | "pending" | "processing" | "target_applied_source_retained";
+                    targetAssignment?: {
+                        id: string;
+                        revision: number;
+                    };
+                    targetUnchanged?: boolean;
+                    sourceUnassignRevision?: number;
                 }[];
-                next: string | null;
-                label: {
-                    id: string;
-                    name: string;
-                    revision: number;
-                };
             };
         }>;
         defer: (fn: import("elysia/types").AfterResponseHandler<{
-            params: {};
-            query: {
-                view?: string;
-                cursor?: string;
-                limit?: string;
-                labelId?: string;
-                subjectId?: string;
-            } & {
-                [key: string]: unknown;
+            params: {
+                id: string;
+                confirmationId: string;
             };
+            query: undefined;
             response: {
                 400: {
                     type: unknown;
@@ -7432,103 +7691,26 @@ export declare function personalLabelRoutes(app: ReturnType<typeof definitionRou
                     errors: unknown;
                 };
                 200: {
-                    assignments: {
-                        id: string;
-                        labelId: string;
-                        subjectId: string;
-                        revision: number;
-                    }[];
-                    next: string | null;
-                } | {
-                    assignments: {
-                        id: string;
-                        labelId: string;
-                        subjectId: string;
-                        revision: number;
-                        label: {
-                            name: string;
-                        };
-                    }[];
-                    next: string | null;
-                } | {
-                    assignments: {
-                        subject: {
-                            id: string;
-                            type: string;
-                            types: string[];
-                            label: {
-                                value: string;
-                                language: string;
-                            } | null;
-                            creativeWork: boolean;
-                            cover: {
-                                media: string;
-                                width: number;
-                                height: number;
-                                placeholder: {
-                                    thumbhash: string;
-                                    color: string;
-                                };
-                                variants: {
-                                    format: "avif" | "webp";
-                                    width: number;
-                                }[];
-                                focalPoint: {
-                                    x: number;
-                                    y: number;
-                                } | null;
-                                credit: {
-                                    rightsHolder: string;
-                                    via: {
-                                        name: string;
-                                        url: string;
-                                    };
-                                    license: string;
-                                    obligations: string[];
-                                };
-                            } | null;
-                        } | {
-                            id: string;
-                            type: string;
-                            label: string;
-                        } | null;
-                        id: string;
-                        labelId: string;
-                        subjectId: string;
-                        revision: number;
-                        libraryEntry: {
+                    confirmationId: string;
+                    sourceLabelId: string;
+                    targetLabelId: string;
+                    status: "active" | "cancelled" | "completed";
+                    expiresAt: string;
+                    items: {
+                        item: number;
+                        selected?: {
                             subjectId: string;
-                            state: string;
+                            assignmentId: string;
                             revision: number;
-                            createdAt: string;
-                            updatedAt: string;
-                            incarnationId: string | null;
-                            lastActivityAt: string;
-                            finishedAt: string | null;
-                            activeProgressSession: {
-                                id: string;
-                                subjectId: string;
-                                versionSubjectId: string | null;
-                                mode: "completed_units" | "cursor_position" | "scalar_amount";
-                                unit: string;
-                                total: string | null;
-                                amount: string | null;
-                                locator: string | null;
-                                position: string | null;
-                                completedUnitCount: number;
-                                state: "abandoned" | "active" | "completed";
-                                revision: number;
-                                startedAt: string;
-                                completedAt: string | null;
-                            } | null;
-                        } | null;
+                        };
+                        status: "capacity_limited" | "changed" | "inaccessible" | "moved" | "pending" | "processing" | "target_applied_source_retained";
+                        targetAssignment?: {
+                            id: string;
+                            revision: number;
+                        };
+                        targetUnchanged?: boolean;
+                        sourceUnassignRevision?: number;
                     }[];
-                    next: string | null;
-                    label: {
-                        id: string;
-                        name: string;
-                        revision: number;
-                    };
                 };
             };
         }, {
@@ -7542,15 +7724,11 @@ export declare function personalLabelRoutes(app: ReturnType<typeof definitionRou
         request: Request;
         store: {};
         body: unknown;
-        query: {
-            [x: string]: unknown;
-            view?: string;
-            cursor?: string;
-            limit?: string;
-            labelId?: string;
-            subjectId?: string;
+        query: Record<string, string | undefined>;
+        params: {
+            id: string;
+            confirmationId: string;
         };
-        params: {};
         headers: Record<string, string | undefined>;
         cookie: Record<string, import("elysia").Cookie<unknown>>;
     }, "cookie"> & {
@@ -7655,105 +7833,28 @@ export declare function personalLabelRoutes(app: ReturnType<typeof definitionRou
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
-        200: import("typebox").TUnion<[import("typebox").TObject<{
-            assignments: import("typebox").TArray<import("typebox").TObject<{
-                id: import("typebox").TString;
-                labelId: import("typebox").TString;
-                subjectId: import("typebox").TString;
-                revision: import("typebox").TInteger;
-            }>>;
-            next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-        }>, import("typebox").TObject<{
-            assignments: import("typebox").TArray<import("typebox").TObject<{
-                id: import("typebox").TString;
-                labelId: import("typebox").TString;
-                subjectId: import("typebox").TString;
-                revision: import("typebox").TInteger;
-                label: import("typebox").TObject<{
-                    name: import("typebox").TString;
-                }>;
-            }>>;
-            next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-        }>, import("typebox").TObject<{
-            assignments: import("typebox").TArray<import("typebox").TObject<{
-                subject: import("typebox").TUnion<[import("typebox").TObject<{
-                    id: import("typebox").TString;
-                    type: import("typebox").TString;
-                    types: import("typebox").TArray<import("typebox").TString>;
-                    label: import("typebox").TUnion<[import("typebox").TObject<{
-                        value: import("typebox").TString;
-                        language: import("typebox").TString;
-                    }>, import("typebox").TNull]>;
-                    creativeWork: import("typebox").TBoolean;
-                    cover: import("typebox").TUnion<[import("typebox").TObject<{
-                        media: import("typebox").TString;
-                        width: import("typebox").TInteger;
-                        height: import("typebox").TInteger;
-                        placeholder: import("typebox").TObject<{
-                            thumbhash: import("typebox").TString;
-                            color: import("typebox").TString;
-                        }>;
-                        variants: import("typebox").TArray<import("typebox").TObject<{
-                            format: import("typebox").TUnion<[import("typebox").TLiteral<"avif">, import("typebox").TLiteral<"webp">]>;
-                            width: import("typebox").TInteger;
-                        }>>;
-                        focalPoint: import("typebox").TUnion<[import("typebox").TObject<{
-                            x: import("typebox").TNumber;
-                            y: import("typebox").TNumber;
-                        }>, import("typebox").TNull]>;
-                        credit: import("typebox").TObject<{
-                            rightsHolder: import("typebox").TString;
-                            via: import("typebox").TObject<{
-                                name: import("typebox").TString;
-                                url: import("typebox").TString;
-                            }>;
-                            license: import("typebox").TString;
-                            obligations: import("typebox").TArray<import("typebox").TString>;
-                        }>;
-                    }>, import("typebox").TNull]>;
-                }>, import("typebox").TObject<{
-                    id: import("typebox").TString;
-                    type: import("typebox").TString;
-                    label: import("typebox").TString;
-                }>, import("typebox").TNull]>;
-                id: import("typebox").TString;
-                labelId: import("typebox").TString;
-                subjectId: import("typebox").TString;
-                revision: import("typebox").TInteger;
-                libraryEntry: import("typebox").TUnion<[import("typebox").TObject<{
+        200: import("typebox").TObject<{
+            confirmationId: import("typebox").TString;
+            sourceLabelId: import("typebox").TString;
+            targetLabelId: import("typebox").TString;
+            status: import("typebox").TUnion<[import("typebox").TLiteral<"active">, import("typebox").TLiteral<"completed">, import("typebox").TLiteral<"cancelled">]>;
+            expiresAt: import("typebox").TString;
+            items: import("typebox").TArray<import("typebox").TObject<{
+                item: import("typebox").TInteger;
+                selected: import("typebox").TOptional<import("typebox").TObject<{
                     subjectId: import("typebox").TString;
-                    state: import("typebox").TString;
+                    assignmentId: import("typebox").TString;
                     revision: import("typebox").TInteger;
-                    createdAt: import("typebox").TString;
-                    updatedAt: import("typebox").TString;
-                    incarnationId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                    lastActivityAt: import("typebox").TString;
-                    finishedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                    activeProgressSession: import("typebox").TUnion<[import("typebox").TObject<{
-                        id: import("typebox").TString;
-                        subjectId: import("typebox").TString;
-                        versionSubjectId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        mode: import("typebox").TUnion<[import("typebox").TLiteral<"scalar_amount">, import("typebox").TLiteral<"cursor_position">, import("typebox").TLiteral<"completed_units">]>;
-                        unit: import("typebox").TString;
-                        total: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        amount: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        locator: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        position: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                        completedUnitCount: import("typebox").TInteger;
-                        state: import("typebox").TUnion<[import("typebox").TLiteral<"active">, import("typebox").TLiteral<"completed">, import("typebox").TLiteral<"abandoned">]>;
-                        revision: import("typebox").TInteger;
-                        startedAt: import("typebox").TString;
-                        completedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                    }>, import("typebox").TNull]>;
-                }>, import("typebox").TNull]>;
+                }>>;
+                status: import("typebox").TUnion<[import("typebox").TLiteral<"pending">, import("typebox").TLiteral<"processing">, import("typebox").TLiteral<"moved">, import("typebox").TLiteral<"target_applied_source_retained">, import("typebox").TLiteral<"capacity_limited">, import("typebox").TLiteral<"changed">, import("typebox").TLiteral<"inaccessible">]>;
+                targetAssignment: import("typebox").TOptional<import("typebox").TObject<{
+                    id: import("typebox").TString;
+                    revision: import("typebox").TInteger;
+                }>>;
+                targetUnchanged: import("typebox").TOptional<import("typebox").TBoolean>;
+                sourceUnassignRevision: import("typebox").TOptional<import("typebox").TInteger>;
             }>>;
-            next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-            label: import("typebox").TObject<{
-                id: import("typebox").TString;
-                name: import("typebox").TString;
-                revision: import("typebox").TInteger;
-            }>;
-        }>]>;
+        }>;
     };
     detail: {
         operationId: string;
@@ -7763,6 +7864,5 @@ export declare function personalLabelRoutes(app: ReturnType<typeof definitionRou
             bearerAuth: never[];
         }[];
         'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
-        description: string;
     };
 }>;

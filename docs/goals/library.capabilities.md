@@ -7,7 +7,8 @@ installation/currentness and the integrating reader’s clear/cancellation/retry
 `test/library/reported-year-summary.test.ts`; three-scale and full lifecycle acceptance remain deferred to integration.
 
 [Selected label consolidation](../library-label-consolidation.md) has native/HTTP review, immutable confirmation,
-one-item apply and original-receipt retry, cancellation and result. Client declaration regeneration remains pending.
+one-item apply and original-receipt retry, cancellation and result. The typed client declarations expose the full
+review/confirm/apply/retry/cancel/result route surface and its retained result wire type.
 Review is capped at 16
 explicit assignments and four per page; retained plans expire after 15 minutes, with eight unexpired plans per owner.
 Focused native files are `services/kernel/test/library/label-consolidation-review.test.ts` and
