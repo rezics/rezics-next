@@ -159,9 +159,11 @@ test('Album and Manga keep one classification holder across reading loss, withdr
           return pending;
         },
       },
-      review: () => {
-        throw new Error('Unexpected review');
-      },
+      review: () => ({
+        reader: 'fixture',
+        read: async () => ({ ok: false as const, reason: 'unavailable' as const }),
+        confirm: async () => ({ ok: false as const, reason: 'unavailable' as const }),
+      }),
       relations: null,
       authored: null,
     };
