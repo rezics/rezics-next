@@ -118,9 +118,9 @@ test('mounted guest authentication stays distinct from denial and dependency fai
   expect(
     readingPageOperationState(guest, 'post.create', new Set(), new Map([['post.create', 'authenticated']]), watching),
   ).toBe('sign_in_required');
-  expect(readingPageOperationState(guest, 'report.create', new Set(), new Map([['report.create', 'anonymous']]), watching)).toBe(
-    'denied',
-  );
+  expect(
+    readingPageOperationState(guest, 'report.create', new Set(), new Map([['report.create', 'anonymous']]), watching),
+  ).toBe('denied');
   expect(readingPageOperationState(guest, 'post.create', new Set(), new Map(), watching)).toBe('unavailable');
   expect(
     readingPageOperationState(

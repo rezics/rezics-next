@@ -132,7 +132,10 @@ export const ReadingPageResponseSchema = t.Object(
     query: t.Object({ cursor: t.Union([t.String(), t.Null()]), limit: t.Literal(READING_PAGE_REPLY_LIMIT) }, closed),
     thread: ThreadViewSchema,
     replies: t.Object(
-      { items: t.Array(ReadingEntrySchema, { maxItems: READING_PAGE_REPLY_LIMIT }), next: t.Union([t.String(), t.Null()]) },
+      {
+        items: t.Array(ReadingEntrySchema, { maxItems: READING_PAGE_REPLY_LIMIT }),
+        next: t.Union([t.String(), t.Null()]),
+      },
       closed,
     ),
     authors: t.Object(
@@ -333,13 +336,7 @@ async function readReplyPage(
   cursor?: string,
 ) {
   const context = { actor, deadline };
-  const page = await listThreadPosts(
-    dependencies,
-    threadId,
-    context,
-    cursor,
-    readingPageRawLimit(cursor),
-  );
+  const page = await listThreadPosts(dependencies, threadId, context, cursor, readingPageRawLimit(cursor));
   return { page, replies: page.entries.filter((entry) => entry.id !== openingPostId) };
 }
 
@@ -356,7 +353,9 @@ function authorIds(opening: PostEntry, replies: readonly PostEntry[]): string[] 
 }
 
 function applicableBindings(bindings: ViewerActionBindings, type: ReadingReference['type'], id: string) {
-  return (bindings.get(type) ?? []).filter((binding) => binding.fixedResourceId === undefined || binding.fixedResourceId === id);
+  return (bindings.get(type) ?? []).filter(
+    (binding) => binding.fixedResourceId === undefined || binding.fixedResourceId === id,
+  );
 }
 
 export function readingPageOperationState(
@@ -364,7 +363,10 @@ export function readingPageOperationState(
   operationId: string,
   allowed: ReadonlySet<string>,
   guestSecurity: ReadonlyMap<string, 'anonymous' | 'authenticated' | 'unknown'>,
-  watch: { state: 'current'; watching: boolean } | { state: 'sign_in_required' } | { state: 'unavailable'; retryable: true },
+  watch:
+    | { state: 'current'; watching: boolean }
+    | { state: 'sign_in_required' }
+    | { state: 'unavailable'; retryable: true },
 ): ControlState {
   if (operationId === 'thread.watch_state') return 'not_applicable';
   if (operationId === 'thread.watch' || operationId === 'thread.unwatch') {
@@ -388,14 +390,21 @@ function projectedReferences(
   bindings: ViewerActionBindings,
   guestSecurity: ReadonlyMap<string, 'anonymous' | 'authenticated' | 'unknown'>,
   references: readonly Readonly<{ type: ReadingReference['type']; id: string; sourceRevisionId?: string }>[],
-  results: readonly Readonly<{ type: string; id: string; error?: string; viewerActions?: readonly { action: string; operations: readonly string[] }[] }>[],
-  watch: { state: 'current'; watching: boolean } | { state: 'sign_in_required' } | { state: 'unavailable'; retryable: true },
+  results: readonly Readonly<{
+    type: string;
+    id: string;
+    error?: string;
+    viewerActions?: readonly { action: string; operations: readonly string[] }[];
+  }>[],
+  watch:
+    | { state: 'current'; watching: boolean }
+    | { state: 'sign_in_required' }
+    | { state: 'unavailable'; retryable: true },
 ): ReadingReference[] {
   const byKey = new Map(results.map((result) => [`${result.type}/${result.id}`, result]));
   return references.map((reference) => {
     const result = byKey.get(`${reference.type}/${reference.id}`);
-    if (!result || result.error === 'not_found')
-      return { ...reference, state: 'withheld', operations: [] };
+    if (!result || result.error === 'not_found') return { ...reference, state: 'withheld', operations: [] };
     const permitted = new Set((result.viewerActions ?? []).flatMap((entry) => entry.operations));
     const operations = applicableBindings(bindings, reference.type, reference.id).map((binding) => ({
       action: binding.action,
@@ -418,7 +427,8 @@ function guestCatalogueReady(
       applicableBindings(bindings, reference.type, reference.id).every((binding) => {
         const classification = guestSecurity.get(binding.operationId);
         return classification === 'anonymous' || classification === 'authenticated';
-      }))
+      }),
+    )
   );
 }
 
@@ -426,15 +436,10 @@ function responseBytes(value: unknown): number {
   return new TextEncoder().encode(JSON.stringify(value)).byteLength;
 }
 
-function identityAuthors(
-  ids: readonly string[],
-  summaries: ReadonlyMap<string, AccountSummaryValue>,
-) {
+function identityAuthors(ids: readonly string[], summaries: ReadonlyMap<string, AccountSummaryValue>) {
   return ids.flatMap((id) => {
     const summary = summaries.get(id);
-    return summary
-      ? [{ id, displayName: summary.displayName, handle: summary.handle, avatar: summary.avatar }]
-      : [];
+    return summary ? [{ id, displayName: summary.displayName, handle: summary.handle, avatar: summary.avatar }] : [];
   });
 }
 
@@ -479,14 +484,7 @@ export async function readContentReadingPage(
   if (firstThread.value.firstPost.availability === 'withheld') throw new ContentNotFoundError();
   const firstBoard = await readBoard(dependencies, firstThread.value.boardId, { actor, deadline });
   if (!firstBoard.value) throw new ContentNotFoundError();
-  const selected = await readReplyPage(
-    dependencies,
-    threadId,
-    actor,
-    deadline,
-    firstThread.value.firstPost.id,
-    cursor,
-  );
+  const selected = await readReplyPage(dependencies, threadId, actor, deadline, firstThread.value.firstPost.id, cursor);
   const thread = firstThread.value;
   const replies = selected.replies;
   requireSelectedLimit(thread, replies);
@@ -510,7 +508,10 @@ export async function readContentReadingPage(
   try {
     actionRuntime = dependencies.viewerActionRuntime?.();
   } catch (error) {
-    if (classifyUnavailability(error) === undefined && !(error instanceof ProblemError && error.code === 'dependency_unavailable'))
+    if (
+      classifyUnavailability(error) === undefined &&
+      !(error instanceof ProblemError && error.code === 'dependency_unavailable')
+    )
       throw error;
   }
   let actionState: 'current' | 'unavailable' = 'current';
@@ -520,14 +521,16 @@ export async function readContentReadingPage(
     !!actionRuntime &&
     actionRefs.every((reference) => actionRuntime.resources.has(reference.type)) &&
     guestCatalogueReady(actor, actionRuntime.bindings, actionRuntime.guestSecurity, actionRefs);
-  const maxReferences = actionRuntime && catalogueReady ? maxReferenceProjection(actionRuntime.bindings, actionRefs) : [];
+  const maxReferences =
+    actionRuntime && catalogueReady ? maxReferenceProjection(actionRuntime.bindings, actionRefs) : [];
   const boundedEnvelope = {
     target: {
       threadId,
       boardId: thread.boardId,
       boardSecurityRevision: firstBoard.value.securityRevision,
     },
-    viewer: actor.kind === 'account' ? { kind: 'account' as const, id: actor.accountId } : { kind: 'anonymous' as const },
+    viewer:
+      actor.kind === 'account' ? { kind: 'account' as const, id: actor.accountId } : { kind: 'anonymous' as const },
     query: { cursor: cursor ?? null, limit: READING_PAGE_REPLY_LIMIT as typeof READING_PAGE_REPLY_LIMIT },
     thread,
     replies: { items: replies.map((entry) => safeEntry(entry as EntryWithReaction)), next: selected.page.nextCursor },
@@ -570,16 +573,24 @@ export async function readContentReadingPage(
       );
       authors.push(...identityAuthors(identityIds, summaries));
       if (authors.some((author) => responseBytes(author) > MAX_AUTHOR_DISPLAY_BYTES))
-        throw new ProblemError('dependency_unavailable', { detail: 'An account summary exceeded its bounded projection' });
+        throw new ProblemError('dependency_unavailable', {
+          detail: 'An account summary exceeded its bounded projection',
+        });
     } catch (error) {
-      if (classifyUnavailability(error) === undefined && !(error instanceof ProblemError && error.code === 'dependency_unavailable'))
+      if (
+        classifyUnavailability(error) === undefined &&
+        !(error instanceof ProblemError && error.code === 'dependency_unavailable')
+      )
         throw error;
       authorState = 'unavailable';
       authors.length = 0;
     }
   }
 
-  let watch: { state: 'current'; watching: boolean } | { state: 'sign_in_required' } | { state: 'unavailable'; retryable: true };
+  let watch:
+    | { state: 'current'; watching: boolean }
+    | { state: 'sign_in_required' }
+    | { state: 'unavailable'; retryable: true };
   let watchAnchor: AnchoredPosition | undefined;
   if (actor.kind === 'anonymous') watch = { state: 'sign_in_required' };
   else {
@@ -599,7 +610,8 @@ export async function readContentReadingPage(
   try {
     slowMode = { state: 'current', ...(await readBoardSlowMode(dependencies, actor, thread.boardId, deadline)) };
   } catch (error) {
-    if (classifyUnavailability(error) === undefined && !(error instanceof BoardSlowAdmissionUnavailableError)) throw error;
+    if (classifyUnavailability(error) === undefined && !(error instanceof BoardSlowAdmissionUnavailableError))
+      throw error;
     slowMode = { state: 'unavailable', retryable: true };
   }
 
@@ -644,7 +656,8 @@ export async function readContentReadingPage(
       if (slowModeWitness(finalSlowMode) !== slowModeWitness(slowMode))
         slowMode = { state: 'unavailable', retryable: true };
     } catch (error) {
-      if (classifyUnavailability(error) === undefined && !(error instanceof BoardSlowAdmissionUnavailableError)) throw error;
+      if (classifyUnavailability(error) === undefined && !(error instanceof BoardSlowAdmissionUnavailableError))
+        throw error;
       slowMode = { state: 'unavailable', retryable: true };
     }
   }
@@ -678,13 +691,22 @@ export async function readContentReadingPage(
     throw new ProblemError('dependency_unavailable', { detail: 'The reading page changed during hydration' });
 
   if (actionRuntime && actionState === 'current') {
-    projected = projectedReferences(actor, actionRuntime.bindings, actionRuntime.guestSecurity, actionRefs, actionResults, watch);
-    const replyReference = projected.find((reference) => reference.type === 'content.thread' && reference.id === thread.id);
+    projected = projectedReferences(
+      actor,
+      actionRuntime.bindings,
+      actionRuntime.guestSecurity,
+      actionRefs,
+      actionResults,
+      watch,
+    );
+    const replyReference = projected.find(
+      (reference) => reference.type === 'content.thread' && reference.id === thread.id,
+    );
     const mountedReply = replyReference?.operations.find((operation) => operation.operationId === 'post.create');
     replyState =
       replyReference?.state === 'withheld'
         ? 'withheld'
-        : (mountedReply?.state as typeof replyState | undefined) ?? 'unavailable';
+        : ((mountedReply?.state as typeof replyState | undefined) ?? 'unavailable');
   } else {
     projected = [];
     replyState = 'unavailable';
@@ -692,12 +714,18 @@ export async function readContentReadingPage(
 
   const output = {
     target: { threadId, boardId: thread.boardId, boardSecurityRevision: finalBoard.value.securityRevision },
-    viewer: actor.kind === 'account' ? { kind: 'account' as const, id: actor.accountId } : { kind: 'anonymous' as const },
+    viewer:
+      actor.kind === 'account' ? { kind: 'account' as const, id: actor.accountId } : { kind: 'anonymous' as const },
     query: { cursor: cursor ?? null, limit: READING_PAGE_REPLY_LIMIT as typeof READING_PAGE_REPLY_LIMIT },
     thread: displayThread,
     replies: { items: countedReplies.map(safeEntry), next: selected.page.nextCursor },
     authors: { state: authorState, retryable: authorState === 'unavailable', items: authors },
-    actions: { state: actionState, retryable: actionState === 'unavailable', references: projected, reply: { state: replyState } },
+    actions: {
+      state: actionState,
+      retryable: actionState === 'unavailable',
+      references: projected,
+      reply: { state: replyState },
+    },
     watch,
     slowMode,
     currentness: {

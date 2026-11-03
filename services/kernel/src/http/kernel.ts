@@ -498,13 +498,12 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
   let journalCommands: ReturnType<typeof createSessionCommands> | undefined;
   const deferredJournalCommands = new Proxy({} as ReturnType<typeof createSessionCommands>, {
     get(_target, property) {
-      const commands =
-        (journalCommands ??= createSessionCommands({
-          pool: dependencies.pool,
-          tokens,
-          clock,
-          access: resolveAccess({ actions: actionCatalogue(zones), realmRoleReader }),
-        }));
+      const commands = (journalCommands ??= createSessionCommands({
+        pool: dependencies.pool,
+        tokens,
+        clock,
+        access: resolveAccess({ actions: actionCatalogue(zones), realmRoleReader }),
+      }));
       const value = Reflect.get(commands, property, commands);
       return typeof value === 'function' ? value.bind(commands) : value;
     },
