@@ -309,7 +309,7 @@ const typed = [
   'POST /v1/libraryCopyArchives/:id/$cancel',
   'DELETE /v1/libraryCopyArchives/:id',
   'GET /v1/progressSessions/:sessionId/journal',
-  'PUT /v1/progressSessions/:sessionId/journal',
+  'PATCH /v1/progressSessions/:sessionId/journal',
   'POST /v1/libraryExports',
   'GET /v1/libraryExports/:id',
   'GET /v1/libraryExports/:id/pages',
