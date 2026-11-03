@@ -22,6 +22,27 @@ const binding: ConceptBrowseBinding = {
 const selection = { concept: 'root', property: 'schema:keywords', scheme: 'scheme-a', includeChildren: true } as const;
 const limits = { pages: 2, edges: 2, pageSize: 2 };
 
+test('caller mutation during observation cannot enlarge the admitted worker step', async () => {
+  const graph = sourceFor({ root: ['a', 'b', 'c'] });
+  const { store } = retention();
+  const state = (await startConceptBrowse(selection, binding, store))!;
+  const allowance = { pages: 1, edges: 1, pageSize: 1 };
+  const result = await advanceConceptBrowse(
+    {
+      ...graph.source,
+      observe: async () => {
+        Object.assign(allowance, CONCEPT_BROWSE_LIMITS);
+        return { status: 'current', binding };
+      },
+    },
+    store,
+    state,
+    allowance,
+  );
+  expect(result).toMatchObject({ status: 'preparing', pages: 1, edges: 1 });
+  expect(graph.calls).toHaveLength(1);
+});
+
 /** Models revision-fenced retained operations; population arrays never cross the storage port. */
 function retention() {
   const members = new Set<string>();
