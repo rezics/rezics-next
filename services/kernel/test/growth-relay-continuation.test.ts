@@ -243,7 +243,13 @@ test('empty relay and failed apply stay bounded and resume only through the vali
       grow: async (growthDb, scale, previous) => {
         const total = BigInt(scale * failedHistoryPerScale);
         const old = BigInt(previous * failedHistoryPerScale);
-        await insertSingles(growthDb, resumePartition, resumeInitial.epoch, resumeStart - total + 1n, resumeStart - old);
+        await insertSingles(
+          growthDb,
+          resumePartition,
+          resumeInitial.epoch,
+          resumeStart - total + 1n,
+          resumeStart - old,
+        );
       },
       prepare: async (growthDb) => {
         expect(await checkpointPosition(growthDb, resumePartition, EFFECTS_CONSUMER)).toBe(resumeStart.toString());
