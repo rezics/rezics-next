@@ -136,11 +136,13 @@ async function wakeSpace(
     if (!inserted.rows.length) return noEffect(null);
     return {
       value: null,
-      events: [{
-        type: SPACE_DISCOVERY_INVALIDATED,
-        subject: space.space_id,
-        data: { ...invalidation, target: { kind: 'space', id: space.space_id } },
-      }],
+      events: [
+        {
+          type: SPACE_DISCOVERY_INVALIDATED,
+          subject: space.space_id,
+          data: { ...invalidation, target: { kind: 'space', id: space.space_id } },
+        },
+      ],
     };
   });
 }
@@ -157,14 +159,18 @@ export async function drainSpaceDiscoveryFrontier(
   dependencyPageLimit(limit);
   const progress = await prepareFrontier(pool, key);
   if (progress.state !== 'draining') return progress.state;
-  const page = await withConnection(pool, async (client) => (
-    await client.query<{ route: number; space_id: string; ordinal: string }>(
-      `SELECT d.route,d.space_id,d.ordinal::text FROM community.space_discovery_dependency d
+  const page = await withConnection(
+    pool,
+    async (client) =>
+      (
+        await client.query<{ route: number; space_id: string; ordinal: string }>(
+          `SELECT d.route,d.space_id,d.ordinal::text FROM community.space_discovery_dependency d
        WHERE d.dependency=$1::jsonb AND d.ordinal>$2::bigint AND d.ordinal<=$3::bigint
        ORDER BY d.ordinal LIMIT $4`,
-      [JSON.stringify(progress.invalidation.target), progress.cursor, progress.cut, limit],
-    )
-  ).rows);
+          [JSON.stringify(progress.invalidation.target), progress.cursor, progress.cut, limit],
+        )
+      ).rows,
+  );
   for (const space of page) await wakeSpace(pool, key.obligation, progress.invalidation, space);
   const settled = page.length < limit;
   const cursor = settled ? progress.cut! : page.at(-1)!.ordinal;
@@ -190,10 +196,14 @@ export async function drainSpaceDiscoveryFrontier(
  * workflow boundaries; native cursors and deduplication never live in DBOS.
  */
 export function pendingSpaceDiscoveryFrontiers(pool: Pool): Promise<readonly SpaceDiscoveryFrontier[]> {
-  return withConnection(pool, async (client) => (
-    await client.query<SpaceDiscoveryFrontier>(
-      `SELECT partition_no AS partition,obligation FROM community.space_discovery_frontier
+  return withConnection(
+    pool,
+    async (client) =>
+      (
+        await client.query<SpaceDiscoveryFrontier>(
+          `SELECT partition_no AS partition,obligation FROM community.space_discovery_frontier
        WHERE state IN ('preparing','draining') ORDER BY partition_no,obligation LIMIT 50`,
-    )
-  ).rows);
+        )
+      ).rows,
+  );
 }

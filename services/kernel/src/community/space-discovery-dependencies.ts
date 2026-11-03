@@ -55,44 +55,40 @@ export async function initializeSpaceDiscoveryDependencies(
   dependencyPageLimit(limit);
   if (!Number.isInteger(partition) || partition < 0 || partition >= PARTITIONS)
     throw new RangeError('Invalid Space dependency partition');
-  const result = await runCommand(
-    pool,
-    { partition, basis: SPACE_DISCOVERY_DEPENDENCY_BASIS },
-    async (tx) => {
-      const row = (
-        await tx.query<{
-          cursor_route: number;
-          cursor_id: string;
-          cut_route: number;
-          cut_id: string;
-          complete: boolean;
-        }>(
-          `SELECT cursor_route,cursor_id,cut_route,cut_id,complete
+  const result = await runCommand(pool, { partition, basis: SPACE_DISCOVERY_DEPENDENCY_BASIS }, async (tx) => {
+    const row = (
+      await tx.query<{
+        cursor_route: number;
+        cursor_id: string;
+        cut_route: number;
+        cut_id: string;
+        complete: boolean;
+      }>(
+        `SELECT cursor_route,cursor_id,cut_route,cut_id,complete
            FROM community.space_discovery_dependency_install WHERE partition_no=$1 FOR UPDATE`,
-          [partition],
-        )
-      ).rows[0];
-      if (!row) throw new Error('Space dependency installation unavailable');
-      if (row.complete) return noEffect(false);
-      const page = (
-        await tx.query<{ route: number; space_id: string }>(
-          `SELECT route,space_id FROM community.space
+        [partition],
+      )
+    ).rows[0];
+    if (!row) throw new Error('Space dependency installation unavailable');
+    if (row.complete) return noEffect(false);
+    const page = (
+      await tx.query<{ route: number; space_id: string }>(
+        `SELECT route,space_id FROM community.space
            WHERE route BETWEEN $1 AND $2 AND (route,space_id)>($3,$4::uuid)
              AND (route,space_id)<=($5,$6::uuid) ORDER BY route,space_id LIMIT $7`,
-          [partition * 16, partition * 16 + 15, row.cursor_route, row.cursor_id, row.cut_route, row.cut_id, limit],
-        )
-      ).rows;
-      for (const key of page)
-        await tx.query('SELECT community.refresh_space_discovery_dependencies($1,$2::uuid)', [key.route, key.space_id]);
-      const last = page.at(-1);
-      await tx.query(
-        `UPDATE community.space_discovery_dependency_install
+        [partition * 16, partition * 16 + 15, row.cursor_route, row.cursor_id, row.cut_route, row.cut_id, limit],
+      )
+    ).rows;
+    for (const key of page)
+      await tx.query('SELECT community.refresh_space_discovery_dependencies($1,$2::uuid)', [key.route, key.space_id]);
+    const last = page.at(-1);
+    await tx.query(
+      `UPDATE community.space_discovery_dependency_install
          SET cursor_route=$2,cursor_id=$3,complete=$4 WHERE partition_no=$1`,
-        [partition, last?.route ?? row.cut_route, last?.space_id ?? row.cut_id, page.length < limit],
-      );
-      return noEffect(page.length === limit);
-    },
-  );
+      [partition, last?.route ?? row.cut_route, last?.space_id ?? row.cut_id, page.length < limit],
+    );
+    return noEffect(page.length === limit);
+  });
   return result.value;
 }
 

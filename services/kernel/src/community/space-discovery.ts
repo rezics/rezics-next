@@ -10,7 +10,10 @@ import type { Effect } from '../events/effects.ts';
 import type { CloudEvent } from '../events/log.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
 import { SPACE_DISCOVERY_INVALIDATED, type SpaceDiscoveryInvalidation } from './space-discovery-events.ts';
-import { spaceDiscoveryDependencyReadiness, type SpaceDiscoveryDependencyReadiness } from './space-discovery-dependencies.ts';
+import {
+  spaceDiscoveryDependencyReadiness,
+  type SpaceDiscoveryDependencyReadiness,
+} from './space-discovery-dependencies.ts';
 
 const spaceTypes = [
   'created',
