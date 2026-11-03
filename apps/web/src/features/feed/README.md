@@ -114,7 +114,9 @@ cannot write; it never reports zero or reads each row to manufacture a baseline.
 non-vote reaction kinds. A `plain` reply pill omits its filled background without reducing its phone targets.
 `reaction.reactionOrigin` and `origin` bind commands and browser feedback to the owner's current source visit.
 Every compact reaction control exposes each exact admitted operand in its accessible name, including both vote inputs
-and the signed score. Do not pass a fabricated current predicate to retain an old private snapshot.
+and the signed score. When a compact count differs from its exact locale form, retain the compact label in the
+accessible name and append the exact operand in parentheses. Do not pass a fabricated current predicate to retain an
+old private snapshot.
 
 `VoteControl` delegates to `ThreadReactions` and the shared `Reactions` queue. It does not implement another vote
 engine. Fresh feed commands reconcile through the existing single-target point read; `settleWithRead: false` lets
