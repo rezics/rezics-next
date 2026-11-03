@@ -52,7 +52,7 @@ async function readHistoryIdentities(client: KernelClient, revisions: NativeHist
   for (let offset = 0; offset < ids.length; offset += 100)
     batches.push(readPageAuthors(client, ids.slice(offset, offset + 100)));
   const authors: NonNullable<PageAuthors> = {};
-  const mentions: DocumentMentions = {};
+  const mentions: Record<string, { handle: string }> = {};
   let authorReadFailed = false;
   const pages = await Promise.all(batches);
   for (let index = 0; index < pages.length; index++) {
