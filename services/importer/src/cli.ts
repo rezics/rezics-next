@@ -43,6 +43,9 @@ import {
   throwIfAborted,
   type RawVndbEntry,
 } from './dump-input.ts';
+import { admitOpenLibraryDumpSet, OpenLibraryDumpSetError } from './open-library-dump-set.ts';
+import { readOpenLibraryDumpSet } from './open-library-dump-set-records.ts';
+import type { OpenLibraryDumpSetAdmission } from './open-library-dump-set.ts';
 
 const VALID_SOURCE = /^(?:bangumi|vndb|openlibrary|wikidata)$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -95,7 +98,8 @@ export type ImportCliResult = {
 
 type Config = {
   source: SourceKind;
-  dump: string;
+  dump?: string;
+  dumpSet?: string;
   state: string;
   api: string;
   accountKey: string;
@@ -114,6 +118,9 @@ function usage(): string {
     'Usage: rezics-import --source <bangumi|vndb|openlibrary|wikidata> --dump <path|-> --state <sqlite-path>',
     '       --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>',
     '       [--source-alias <name>] [--disappearance-threshold <0..1>] [--progress <human|jsonl>]',
+    '       rezics-import --source openlibrary --dump-set <manifest-path> --state <sqlite-path>',
+    '       --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>',
+    '       [--source-alias <name>] [--disappearance-threshold <0..1>] [--progress <human|jsonl>]',
     '       rezics-import diagnostics --source <bangumi|vndb|openlibrary|wikidata> --state <sqlite-path>',
     '       [--generation <id>] [--record <key>] [--limit <1..100>] [--cursor <token>] [--phase staging|application] [--format json|text]',
     '       rezics-import observations --state <sqlite-path> --source <configured-source-id> [--after <operation-id>] [--limit 1..20]',
@@ -121,7 +128,7 @@ function usage(): string {
     '       rezics-import observations --state <sqlite-path> --source <configured-source-id> --operation <operation-id>',
     '       --resolve --reviewed-observation <64-hex> --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>',
     'Exit 6 means a source observation needs explicit resolution; it is not an authorization failure.',
-    'Options: --source --dump --state --api --account-key --account --client --auth --source-alias --disappearance-threshold --progress --help',
+    'Options: --source --dump --dump-set --state --api --account-key --account --client --auth --source-alias --disappearance-threshold --progress --help',
   ].join('\n');
 }
 
@@ -139,6 +146,7 @@ function parse(argv: readonly string[]): Config | 'help' {
   const valueFlags = new Set([
     '--source',
     '--dump',
+    '--dump-set',
     '--state',
     '--api',
     '--account-key',
@@ -160,6 +168,7 @@ function parse(argv: readonly string[]): Config | 'help' {
 
   const source = values.get('--source');
   const dump = values.get('--dump');
+  const dumpSet = values.get('--dump-set');
   const state = values.get('--state');
   const api = values.get('--api');
   const accountKey = values.get('--account-key');
@@ -169,7 +178,8 @@ function parse(argv: readonly string[]): Config | 'help' {
   if (
     !source ||
     !VALID_SOURCE.test(source) ||
-    !dump ||
+    (dump !== undefined && dumpSet !== undefined) ||
+    (dump === undefined && dumpSet === undefined) ||
     !state ||
     !api ||
     !accountKey ||
@@ -180,13 +190,16 @@ function parse(argv: readonly string[]): Config | 'help' {
     !auth
   )
     throw new InputFailure();
-  if (dump !== '-' && !dump.trim()) throw new InputFailure();
+  if (dump !== undefined && dump !== '-' && !dump.trim()) throw new InputFailure();
+  if (dumpSet !== undefined && (!dumpSet.trim() || dumpSet === '-')) throw new InputFailure();
+  if (dumpSet !== undefined && source !== 'openlibrary') throw new InputFailure();
   if (!state.trim() || state === '-') throw new InputFailure();
   if (!accountKey.trim()) throw new InputFailure();
 
   const result: Config = {
     source: source as SourceKind,
-    dump,
+    ...(dump === undefined ? {} : { dump }),
+    ...(dumpSet === undefined ? {} : { dumpSet }),
     state,
     api,
     accountKey,
@@ -353,6 +366,7 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
   const credentialLifetime = new AbortController();
   const handles = { value: 0 };
   let dumpHandle: FileHandle | undefined;
+  let dumpSet: OpenLibraryDumpSetAdmission | undefined;
   let importer: Importer | undefined;
   let lastHttpStatus: number | undefined;
   const clock = options.clock ?? {
@@ -366,7 +380,15 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
   }) as unknown as typeof fetch;
   let tokenProvider: Awaited<ReturnType<typeof createAccountTokenProvider>>;
   try {
-    dumpHandle = await openDump(config.dump, handles);
+    if (config.dumpSet) {
+      dumpSet = await admitOpenLibraryDumpSet(
+        config.dumpSet,
+        { state: config.state, accountKey: config.accountKey },
+        'openlibrary',
+      );
+    } else {
+      dumpHandle = await openDump(config.dump!, handles);
+    }
     tokenProvider = await createAccountTokenProvider({
       accountKeyPath: config.accountKey,
       account: config.account,
@@ -404,7 +426,9 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
       stderr: diagnostic(
         error instanceof CredentialInputError
           ? 'Input or account key is unavailable or invalid.'
-          : 'Input is unavailable or invalid.',
+          : error instanceof OpenLibraryDumpSetError && error.memberIndex !== null
+            ? `Input is unavailable or invalid (member ${error.memberIndex}).`
+            : 'Input is unavailable or invalid.',
       ),
       openHandles: 0,
     };
@@ -647,6 +671,33 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
             },
           });
       output = resultFor(run, lastHttpStatus, signal);
+    } else if (dumpSet) {
+      const restoreRetention = observeDumpRetention((sample) => options.observer?.onInputBuffer?.(sample.total));
+      try {
+        options.observer?.onCoordinator?.({
+          importer,
+          registration,
+          state: config.state,
+          converterModule: converterModule(config.source),
+          decoderModule,
+        });
+        const capture = readOpenLibraryDumpSet(dumpSet, {
+          signal,
+          handleCount: handles,
+          ...(options.observer === undefined ? {} : { observer: options.observer }),
+          ...(progress === undefined ? {} : { progress }),
+        });
+        const run = await importer.runDumpSet(registration, capture.records, {
+          ...(config.disappearanceThreshold === undefined
+            ? {}
+            : { disappearanceThreshold: config.disappearanceThreshold }),
+          signal,
+          ...(progressHooks ? { progress: progressHooks } : {}),
+        });
+        output = resultFor(run, lastHttpStatus, signal);
+      } finally {
+        restoreRetention();
+      }
     } else {
       const input = ownedChunks(
         dumpHandle ? fileChunks(dumpHandle, signal) : (options.stdin ?? (process.stdin as AsyncIterable<Uint8Array>)),
@@ -681,7 +732,11 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
   } catch (error) {
     const interrupted = signal.aborted || (error instanceof DOMException && error.name === 'AbortError');
     output = {
-      code: interrupted ? 130 : error instanceof InputFailure || error instanceof VndbInputError ? 2 : 1,
+      code: interrupted
+        ? 130
+        : error instanceof InputFailure || error instanceof VndbInputError || error instanceof DumpInputError
+          ? 2
+          : 1,
       stdout: '',
       stderr: diagnostic(
         interrupted ? 'Import interrupted; durable state is retained for resume.' : 'Import failed safely.',
@@ -760,7 +815,7 @@ function resultFor(
     return {
       code: 2,
       stdout: '',
-      stderr: diagnostic('Input is incomplete or invalid.', counts, run.skipped),
+      stderr: diagnostic(run.diagnostic || 'Input is incomplete or invalid.', counts, run.skipped),
       openHandles: 0,
     };
   if (run.status === 'mass-disappearance')
