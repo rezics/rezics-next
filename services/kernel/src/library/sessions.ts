@@ -64,10 +64,12 @@ export type ProgressSessionJournalAdmission = {
 };
 type ExpectedProgressBinding = {
   subjectId: string;
-  requestedSubjectId: string | null;
+  // Profile-only review binds the native identity epoch and immutable release.
+  // Callers reviewing a particular source component also retain its exact coordinates.
+  requestedSubjectId?: string | null;
   acceptingType: string;
   identityEpoch: string;
-  component: { partition: number; epoch: number; position: string };
+  component?: { partition: number; epoch: number; position: string };
   profilePin: Extract<LibraryProfilePin, { provenance: 'profile' }>;
 };
 
@@ -83,12 +85,14 @@ function assertExpectedBinding(
       source.kind !== 'supported' ||
       source.subjectId !== expected.subjectId ||
       JSON.stringify(source.pin) !== JSON.stringify(expected.profilePin) ||
-      observation.anchor.requestedSubjectId !== expected.requestedSubjectId ||
+      (Object.hasOwn(expected, 'requestedSubjectId') &&
+        observation.anchor.requestedSubjectId !== expected.requestedSubjectId) ||
       observation.anchor.acceptingType !== expected.acceptingType ||
       observation.anchor.identityEpoch.toString() !== expected.identityEpoch ||
-      observation.anchor.component.partition !== expected.component.partition ||
-      observation.anchor.component.epoch !== expected.component.epoch ||
-      observation.anchor.component.position.toString() !== expected.component.position)
+      (expected.component !== undefined &&
+        (observation.anchor.component.partition !== expected.component.partition ||
+          observation.anchor.component.epoch !== expected.component.epoch ||
+          observation.anchor.component.position.toString() !== expected.component.position)))
   )
     throw new ProblemError('conflict');
 }
@@ -276,7 +280,7 @@ export function createSessionCommands(config: Dependencies) {
         input: { sessionId, revision, ...record },
         async prepare(attempt) {
           try {
-            if (action === 'reopen' || action === 'retire' || (expected && action !== 'record')) {
+            if (action === 'reopen' || action === 'retire' || (expected && (action !== 'record' || clearing))) {
               const session = await snapshot(owner, 'progress_session:update', (client) =>
                 load(client, owner, sessionId),
               );

@@ -182,6 +182,13 @@ release cannot establish recording support. The writer independently reauthorize
 requires compatible accepted/current meaning and validates incoming values against both native descriptors.
 Completion and abandonment retain their own lifecycle authority and require no new profile value.
 
+Independent measures share that exact accepted pin and these observations, while each unit keeps its own raw
+amount/total and presentation. The [composed measure journey](library-progress-measures.md#composed-occurrence-correction-and-recovery)
+uses native ID/start and shared revision rather than the mutable last-write transaction as occurrence identity.
+Reviewed import dispatch binds the current profile pin/type/identity epoch inside the native writer for new effects;
+an authorized original native receipt remains replayable under its old accepting meaning before current readback.
+Retirement continues to conceal ordinary reads; it adds no alternative historical reader or profile authority.
+
 The read captures one owner-authorized session and its private pin in one account snapshot, releases it, reads one
 exact accepted release and one current profile, and checks current original/terminal source identities, epochs and
 source components before returning. Subject and explicit version summaries cannot rescue a hidden source. After

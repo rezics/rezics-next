@@ -245,6 +245,15 @@ session, update or correct either measure under explicit revision control, and r
 history or effects. `services/kernel/test/library/progress-http.test.ts` owns the focused native journey;
 [Independent progress measures](../library-progress-measures.md) defines the exact API contract and limits.
 
+`progress-measures.test.ts` adds the composed selected-occurrence MAL/AniList chapter-and-volume journey, concurrent
+separate corrections, targeted clear, journal preservation and uncertain native receipt recovery after profile
+replacement or retirement. Native adoption preserves admitted siblings and reuses the original key/revision before
+current readback; fresh effects bind the reviewed profile inside the writer. Removed measures keep their accepted
+meaning and values while current recording is unsupported. Retired detail remains concealed. Existing presentation
+coverage for missing releases, incompatible units and unsupported historical pairs is retained. Full/frozen native,
+all-pool three-scale growth and browser acceptance remain controller-owned and unexecuted in this change; the
+inclusive cost derivation is source analysis, not measured acceptance.
+
 Each existing occurrence also has a private journal for partial reported start/finish dates, a reflection and an
 integer assessment (units 0–20, displayed as units/2), with one revision independent of progress values and an
 assessment meaning revision independent of public questions. [Private progress-session journal](../library-occurrence-reflections.md)

@@ -108,9 +108,45 @@ descriptors are shown as supplied; Web does not invent labels or a new profile.
 
 Mounted UI: `apps/web/src/library/independent-measures/` with the session page caller in
 `apps/web/src/library/progress-session.tsx`. Navigation to session history uses the existing progress session
-route. Commerce remains the native producer (task `2125f5c8-528e-4852-be3e-b95d928f0b38`).
+route. Commerce remains the native producer.
 
 Decision: The installed native `retired` state stays unavailable at the Web read/receipt adapter until its owner delivers a retired-session presentation; existing lifecycle states retain their meaning.
+
+## Composed occurrence correction and recovery
+
+The installed writer already owns exact-ID measure admission, immutable accepted pins, independent amounts and totals,
+targeted correction/clear, journal separation, shared revision CAS and original receipt replay. No second writer or
+measure profile is installed. Both retained MAL and AniList row reviews use that writer through their existing
+[explicit occurrence selection](library-import-progress-adoption.md), including simultaneous chapter and volume
+when the current compiled profile admits them. Bundled profile limitations remain explicit.
+
+Decision: identify an occurrence by its native ID and immutable start, and fence new measure effects with its shared
+revision; `transactionId` identifies its latest write and must not invalidate a sibling measure's accepted result.
+
+Each newly dispatched adoption step checks its reviewed subject identity epoch, accepting type and exact current
+profile pin inside the native writer. The existing complete Source-component binding remains available to callers
+that review those coordinates. A changed release, removed unit or incompatible descriptor refuses a new effect;
+changing the profile does not rewrite an accepted amount, total or original meaning. Per-measure clear still uses
+the historical owner fact without needing a newly admitted value. Import clear additionally requires its explicit
+current row consent and review.
+
+An attempted command with an uncertain acknowledgement reuses its original unit, operand, revision and key through
+the native command, before current session readback or current profile matching. A valid own receipt returns the
+original immutable value even after profile replacement or session retirement. Without that receipt, the native
+review binding refuses a new effect under changed meaning. Retained provider intent is checked again before
+dispatch, including repeated starts; replaced consent cannot authorize a new effect. An admitted result is saved
+independently of subsequent readback. A later concurrent update may make the next fresh measure stale but cannot
+turn an already accepted sibling into a refusal. Failed acknowledgements retain the pending key/revision; stale
+fresh steps require deliberate new review.
+
+Retirement keeps its existing [occurrence lifecycle](library-occurrence-correction.md): ordinary detail, journal,
+history and source pages conceal the retired session. Its retained pin/values and authorized exact receipts survive;
+they do not provide a new current read or write permission. No separate retired-session display is introduced.
+Native absent amounts, recorded zero, explicit clear history, and provider unknown/missing source values stay
+distinct. An unavailable exact release yields unavailable meaning; an unsupported historical pair keeps its raw
+value and unknown meaning. Current labels never fill either gap. Journal dates, assessment and their independent
+revision are unchanged by measure writes. Scalar episode amounts never populate canonical Episode membership or
+infer completion or dates.
 
 ## Cost
 
@@ -123,6 +159,52 @@ revisions. Installed cap `MAX_PROGRESS_MEASURES = 8` from the producer; this jou
 chapter+volume pair (`F = 2`) and does not fabricate an eight-measure profile.
 Test: `apps/web/tests/independent-progress-measures.test.tsx` (scales `N = 20, 200, 2_000`).
 This is a Web loader/controller bound, not a new kernel engine path.
+
+### Native and composed source derivation
+
+These are inclusive source-derived terms, not executed growth measurements. Let `F <= 8` be the session's measure
+count, `D <= F` selected dirty measures, `S` explicit starts, `A` actual dispatch attempts including retries, and `N`
+unrelated retained facts. Hold `F`, `D`, `S`, selected rows and page size fixed while varying `N`. Repeated caller
+attempts multiply work; receipt replay is not free. There is no bound on how often a caller may explicitly retry.
+
+Use `T` for mint/release of native read time, `O` for an owner-authorized account/partition/session snapshot, `E` for
+one exact immutable release read, `H` for active-release selection, and `Q` for the existing source-anchor operation.
+`Q` includes the current account check, before/after identity mappings, subject resolution, Access, accepting type,
+source reference and component observation. Include every native home/pool visited by these terms, its SQL
+statements, rows/blocks and definition bytes; response length alone cannot price them.
+
+- Presented detail is `2T + 2O + E + H + 2Q`, plus `2Q` for a distinct explicit version and the requested summary
+  projection. All `F` measure presentations share these observations. Serialization and measure projection are
+  `O(F)` plus actual accepted/current definition bytes; no release or authority lookup is repeated per measure.
+- Each record attempt prepares an owner fact snapshot, `E + H + Q`, then enters the existing command runner.
+  The runner's reservation, current principal/account/partition authority, receipt lookup, serialization and retry
+  work remain included even on replay or refusal. A guarded clear instead prepares its addressed session and
+  `H + Q`; ordinary native clear requires no profile read. A start prepares `H + Q` and any explicit version source.
+- A fresh scalar record orders the existing owner counter/subject head and session point locks, reads the locked
+  fact, performs one session CAS and one history append, and touches the existing activity projection. Price head
+  installation, triggers/source invalidation, outbox, receipt persistence and transaction statements as well as those
+  point operations. The session JSON rewrite and immutable receipt contain `O(F)` values. Scalar measures create
+  no sparse-unit or canonical Episode rows. Journal fields and revision are neither locked separately nor rewritten.
+- An authorized replay pays preparation and current command authority/receipt costs but does not repeat the CAS,
+  history append, activity, source invalidation or outbox effect. Any native internal retry pays its actual repeated
+  preparation, reservation, reads, lock acquisition and serialization; rollback statements also count.
+- Each fresh adoption step additionally pays the provider's current binding/cancellation observations, one presented
+  session inspect, an admission checkpoint, its native dispatch and a result checkpoint. Review has its own source
+  observation and addressed inspect. Pending receipt recovery skips the pre-dispatch inspect/binding but repeats
+  consent checkpointing and the native dispatch. There is no post-dispatch whole-session equality prerequisite.
+  Include the final checkpoint and all repeated provider mutations/receipts. Upper dispatch work is
+  `O(A * (S + D))`, with the above native terms charged for every dispatched command.
+- MAL retains its bounded document read/parse/serialization; AniList retains indexed row pages and checkpoints.
+  Charge their actual retained evidence bytes, row reads/writes and cleanup rather than treating those as constant
+  zero. Session terminal erasure removes the existing row and its existing history/children in their bounded pages,
+  including retired occurrences; measures add only capped row/receipt bytes. Existing provider expiry/cancellation
+  and receipt retention costs remain with those owners. No new background worker or cleanup participant is added.
+
+The original independent native `64/512/4096` three-scale journey, all-pool counters, retained native handles and
+controller placement remain unchanged. Full/frozen acceptance, native growth and browser execution are deferred to
+integration. Focused composed cases live in `services/kernel/test/library/progress-measures.test.ts`; existing
+`progress-http.test.ts` and `progress-presentation.test.ts` retain their correction, zero, unknown pair, incompatible
+unit and missing-release assertions. Source cost derivation does not claim measured rows, blocks or statements.
 
 ## Scope
 

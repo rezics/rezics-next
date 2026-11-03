@@ -3171,6 +3171,17 @@ return a useful retained page. The callback, locator and allocation declaration 
 
 Decision: preserve native metadata reservation and immutable-definition recovery; only explicit runtime admission requires the complete C3 parent, and list previews remain read-only.
 
+## Independent scalar measure composition
+
+Independent scalar measures retain their existing producer in `sessions.ts`, with exact historical presentation in
+`progress-presentation.ts`. [Measure correction and recovery](../../../../docs/library-progress-measures.md)
+owns the composed journey and inclusive source cost. `list-import-progress-adoption.ts` sequences selected measures
+on the returned shared revision; last-write `transactionId` is not immutable occurrence identity. New effects pass
+the reviewed profile binding to the native writer. Pending acknowledgements dispatch the original key/operands to
+that writer before current readback and retain each admitted receipt independently. Current owner authority still
+precedes receipt disclosure. Retired sessions retain values/pins internally and remain concealed on ordinary reads.
+Focused scenarios are in `test/library/progress-measures.test.ts`; broad acceptance and growth remain deferred.
+
 ## Canonical episode completion
 
 [Canonical episode progress](../../../../docs/library-episode-progress.md) owns the exact native checklist contract,

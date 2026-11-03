@@ -105,6 +105,18 @@ type NativeCommand =
   | Awaited<ReturnType<SessionCommands['startSession']>>
   | Awaited<ReturnType<SessionCommands['recordProgress']>>;
 
+/** Reviewed profile identity is checked inside the native writer only for a new effect.
+ * An authorized exact receipt still wins over a later profile change or hidden session.
+ */
+function expectedProfile(plan: ProgressAdoptionPlan) {
+  return {
+    subjectId: plan.subjectId,
+    acceptingType: plan.profile.acceptingType,
+    identityEpoch: plan.profile.epoch,
+    profilePin: plan.profile.pin,
+  };
+}
+
 export function progressMeasureUnit(
   profile: LibraryProfileDescriptor | null,
   unit: string | null,
@@ -294,7 +306,7 @@ export async function reviewProgressAdoption(
         revision: current.revision,
         state: current.state,
         mode: current.mode,
-        units: [current.unit, ...(current.measures ?? []).map((measure) => measure.unit)],
+        units: current.measures?.map((measure) => measure.unit) ?? [current.unit],
       },
       measures: measurePlans,
     };
@@ -422,20 +434,25 @@ export async function executeProgressAdoption(
       await stopRemaining(0, 'unattempted', 'import-was-canceled-before-start');
       return checkpoint;
     }
-    if (!(await currentBinding())) {
+    if (!checkpoint.startAttempted && !(await currentBinding())) {
       await stopRemaining(0, 'stale', 'current-profile-or-subject-changed');
       return checkpoint;
     }
-    if (!checkpoint.startAttempted) {
-      checkpoint.startAttempted = true;
-      if ((await controls.save(checkpoint, true)) === false) {
-        checkpoint.startAttempted = false;
-        await stopRemaining(0, 'unattempted', 'import-was-canceled-before-start');
-        return checkpoint;
-      }
+    const startWasAttempted = checkpoint.startAttempted === true;
+    checkpoint.startAttempted = true;
+    // Replaced consent must refuse even a pending command before native dispatch.
+    if ((await controls.save(checkpoint, true)) === false) {
+      checkpoint.startAttempted = startWasAttempted;
+      await stopRemaining(0, 'unattempted', 'import-was-canceled-before-start');
+      return checkpoint;
     }
     try {
-      const command = await sessions.startSession(actor, plan.occurrence.input, plan.occurrence.requestKey);
+      const command = await sessions.startSession(
+        actor,
+        plan.occurrence.input,
+        plan.occurrence.requestKey,
+        expectedProfile(plan),
+      );
       controls.recordNative?.(command);
       const session = command.value;
       checkpoint.occurrence = {
@@ -535,46 +552,47 @@ export async function executeProgressAdoption(
       await stopRemaining(index, 'unattempted', 'import-was-canceled');
       break;
     }
-    if (!(await currentBinding())) {
+    if (!existingStep?.attempted && !(await currentBinding())) {
       await stopRemaining(index, 'stale', 'current-profile-or-subject-changed');
       break;
     }
 
-    let latest: Presented;
-    try {
-      latest = await inspect(sessions, actor, occurrence.sessionId);
-    } catch (error) {
+    // A pending command goes straight to the native receipt boundary with its original
+    // operands. Current readback cannot decide whether a lost acknowledgement committed.
+    // The expected profile prevents that retry from creating a new effect under new meaning.
+    const step = existingStep;
+    const revision = step?.attempted ? step.revision : checkpoint.lastRevision;
+    let currentAmount = measure.currentAmount;
+    if (!step?.attempted) {
+      let latest: Presented;
+      try {
+        latest = await inspect(sessions, actor, occurrence.sessionId);
+      } catch (error) {
+        if (staleError(error)) {
+          await stopRemaining(index, 'stale', 'selected-occurrence-is-no-longer-current');
+          break;
+        }
+        throw error;
+      }
+      // transactionId identifies the latest write, not the creation of an occurrence.
+      // The immutable native id/start and the shared revision fence compose successive measures.
       if (
-        error instanceof ProblemError &&
-        ['not_found', 'conflict', 'unsupported_library_profile'].includes(error.code)
+        latest.session.id !== occurrence.sessionId ||
+        latest.session.subjectId !== plan.subjectId ||
+        latest.session.startedAt !== occurrence.startedAt ||
+        latest.session.state !== 'active' ||
+        latest.session.mode !== 'scalar_amount' ||
+        recordingFor(latest, measure.unit) !== 'supported'
       ) {
-        await stopRemaining(index, 'stale', 'selected-occurrence-is-no-longer-current');
+        await stopRemaining(index, 'stale', 'selected-occurrence-or-measure-changed');
         break;
       }
-      throw error;
+      if (latest.session.revision !== revision) {
+        await stopRemaining(index, 'stale', 'shared-occurrence-revision-changed');
+        break;
+      }
+      currentAmount = amountOf(latest.session, measure.unit);
     }
-    const sameOccurrence =
-      latest.session.id === occurrence.sessionId &&
-      latest.session.subjectId === plan.subjectId &&
-      latest.session.startedAt === occurrence.startedAt &&
-      latest.session.transactionId === occurrence.transactionId;
-    if (
-      !sameOccurrence ||
-      latest.session.state !== 'active' ||
-      latest.session.mode !== 'scalar_amount' ||
-      recordingFor(latest, measure.unit) !== 'supported'
-    ) {
-      await stopRemaining(index, 'stale', 'selected-occurrence-or-measure-changed');
-      break;
-    }
-
-    const step = checkpoint.steps[measure.field];
-    const revision = step?.attempted ? step.revision : (checkpoint.lastRevision ?? latest.session.revision);
-    if (!step?.attempted && latest.session.revision !== revision) {
-      await stopRemaining(index, 'stale', 'shared-occurrence-revision-changed');
-      break;
-    }
-    const currentAmount = amountOf(latest.session, measure.unit);
     if (
       !step?.attempted &&
       measure.action === 'adopt' &&
@@ -667,19 +685,12 @@ export async function executeProgressAdoption(
           ...(measure.action === 'clear' ? { clear: true } : { amount: measure.amount }),
         },
         requestKey,
+        expectedProfile(plan),
       );
       controls.recordNative?.(command);
       const updated = command.value;
-      const verify = await inspect(sessions, actor, occurrence.sessionId);
-      if (
-        verify.session.id !== updated.id ||
-        verify.session.startedAt !== occurrence.startedAt ||
-        verify.session.transactionId !== occurrence.transactionId ||
-        verify.session.revision !== updated.revision
-      ) {
-        await stopRemaining(index, 'stale', 'occurrence-changed-after-measure-write');
-        break;
-      }
+      // Retain an admitted result even if another command has already advanced the session.
+      // The next fresh measure performs its own current revision/profile inspection.
       checkpoint.lastRevision = updated.revision;
       checkpoint.steps[measure.field] = {
         ...pending,
