@@ -137,7 +137,6 @@ References for this visit: the native owner and export format above; the portabi
 resolution, conflict choices and result recovery, with all-row loading to replace); and the older app's
 `apps/web/features/progress/components/progress-import-dialog.tsx` (token-help navigation, not history import).
 
-
 The current continuation also consulted the installed generated merge declaration, mounted merge route/service,
 the generated client's original-text/envelope transport example, and the final producer-artifact assembly in
 `services/kernel/test/library/library-archive-merge.test.ts` (retained V2 capture), plus the decoder examples in

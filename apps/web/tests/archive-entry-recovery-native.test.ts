@@ -236,7 +236,11 @@ test('Cancellation with a recoverable partial page retains the exact original co
   const { visit } = fixture();
   try {
     visit.choose(1, 'entries', { action: 'preserve' });
-    visit.admitReview(visit.startReview(), { identity: 'original', key: 'apply-key', operands: [{ ordinal: 1, revision: 2 }] });
+    visit.admitReview(visit.startReview(), {
+      identity: 'original',
+      key: 'apply-key',
+      operands: [{ ordinal: 1, revision: 2 }],
+    });
     const first = visit.startApply();
     const cancel = visit.startCancel();
     visit.admitResults(visit.startResults(), page([]), true);
@@ -261,8 +265,15 @@ test('Supplied native results expose only selected supported outcomes and checkp
   for (const supplied of [1, 50, 100]) {
     const result = { effect: 'entry.put', subjectId: id, progressSession: { private: true }, completedEpisodes: [1] };
     const native: NativeArchiveResults = {
-      uploadId: id, state: 'ready', next: 400,
-      results: Array.from({ length: supplied }, (_, ordinal) => ({ ordinal, section: 'entries', status: 'recoverable', result })),
+      uploadId: id,
+      state: 'ready',
+      next: 400,
+      results: Array.from({ length: supplied }, (_, ordinal) => ({
+        ordinal,
+        section: 'entries',
+        status: 'recoverable',
+        result,
+      })),
     };
     const selected = [{ ordinal: 0, section: 'entries' as const }];
     expect(selectedArchiveRecoveryResults(native, selected)).toEqual({
