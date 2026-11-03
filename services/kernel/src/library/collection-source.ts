@@ -599,6 +599,9 @@ export function createCollectionSource(dependencies: {
             exhausted = true;
             break;
           }
+          // Keep the last settled frontier when the seek leaves too little for a native group proof.
+          // An empty Source can still prove exhaustion with the single seek key above.
+          if (l.allowance().remaining.candidateKeys < 4) break;
           const result = await membership({ ...input, subjectId: seek.subjectId }, saved, l, current);
           if (result.result === 'not_proven') throw new ProblemError('dependency_unavailable');
           coveredThrough = seek.subjectId;

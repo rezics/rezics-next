@@ -239,7 +239,16 @@ async function admit(
   return native;
 }
 
-async function checkpoint(tx: CommandTransaction, locator: CollectionPublicationLocator, work: NativeCollectionWork) {
+// JSONB stores partition positions as decimal strings; restore their native type before exact comparisons.
+function storedObservation(observation: CollectionSourceObservation): CollectionSourceObservation {
+  return { ...observation, stamp: { ...observation.stamp, position: BigInt(observation.stamp.position) } };
+}
+
+async function checkpoint(
+  tx: CommandTransaction,
+  locator: CollectionPublicationLocator,
+  work: NativeCollectionWork,
+): Promise<Checkpoint | null> {
   const [row] = await query<Checkpoint>(
     tx,
     work,
@@ -250,7 +259,20 @@ async function checkpoint(tx: CommandTransaction, locator: CollectionPublication
     [locator.route, locator.collectionId, locator.publicationId],
   );
   if (row && row.account_id !== locator.ownerAccountId) throw unavailable();
-  return row ?? null;
+  if (!row) return null;
+  return {
+    ...row,
+    binding: { ...row.binding, observation: storedObservation(row.binding.observation) },
+    scope_basis: row.scope_basis.nativeOwner
+      ? {
+          ...row.scope_basis,
+          nativeOwner: {
+            ...row.scope_basis.nativeOwner,
+            observation: storedObservation(row.scope_basis.nativeOwner.observation),
+          },
+        }
+      : row.scope_basis,
+  };
 }
 
 export async function readCollectionPublicationStagingCheckpoint(
@@ -282,8 +304,8 @@ export async function stageCollectionPublicationStep(
     const native = await admit(tx, locator, work);
     const evidence = options.evidence;
     const workRole: unknown = evidence?.work ? Reflect.get(evidence.work, 'kind') : null;
-    // Search owns the distinct guarded publication branch. Until it is delivered, the actual union has no
-    // such member: refuse explicitly, before Source I/O. Never cast/alias a Members or Kind work context.
+    // Search owns the distinct guarded publication branch. Verify its exact native transaction and locator
+    // before Source IO; Members and Kind contexts cannot substitute.
     if (
       options.pool !== resources.pool ||
       !evidence?.work ||
@@ -300,7 +322,10 @@ export async function stageCollectionPublicationStep(
         allowance,
       }),
     );
-    if (!isDeepStrictEqual(source.definition, native) || !isDeepStrictEqual(source.observation, native.observation))
+    if (
+      !isDeepStrictEqual(source.definition, structuredClone(native)) ||
+      !isDeepStrictEqual(source.observation, native.observation)
+    )
       throw unavailable();
     if (source.metadata.factFence === null) throw unavailable();
     const scope = createSearchScopeSource(options);
@@ -329,12 +354,12 @@ export async function stageCollectionPublicationStep(
     // In particular, protecting only the INSERT would let an evaluator starve the mandatory native admissions.
     const settlement = work.reserve({
       ...zeroScopeWork(),
-      nativeRows: 65536,
+      nativeRows: 32768,
       nativePoints: 1024,
       statements: 512,
       emptySeeks: 512,
-      identityMetadataRows: 16384,
-      bytes: 2097152,
+      identityMetadataRows: 8192,
+      bytes: 4 * 1024 * 1024,
     });
     let row = await checkpoint(tx, locator, work);
     if (!row) {
@@ -447,7 +472,7 @@ export async function stageCollectionPublicationStep(
       }),
     );
     if (
-      !isDeepStrictEqual(finalSource.definition, native) ||
+      !isDeepStrictEqual(finalSource.definition, structuredClone(native)) ||
       finalSource.generation !== source.generation ||
       !isDeepStrictEqual(finalSource.basis, source.basis)
     )

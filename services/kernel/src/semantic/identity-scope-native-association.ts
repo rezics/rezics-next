@@ -18,7 +18,7 @@ import {
   type IdentitySourceConsumerMaintenanceContext,
 } from './identity-source-consumer-maintenance.ts';
 import { recordIdentityEpochNativeCommit, serializeIdentityValue as json } from './identity-epoch-store.ts';
-import { IDENTITY_SCOPE_NATIVE_ASSOCIATED } from './events.ts';
+import { IDENTITY_SCOPE_NATIVE_ASSOCIATED, IDENTITY_SCOPE_DIRECTORY_ENROLLED } from './events.ts';
 import insert from './identity-scope-native-association-insert.sql';
 import native from './identity-epoch-store-insert-native-commit.sql';
 import fence from '../command/fence.sql';
@@ -173,5 +173,26 @@ export function recordIdentityScopeNativeAssociation(
       phase,
       transactionId: command.transactionId,
     },
+  };
+}
+
+/** Directory enrollment commits on the dependency's home, rather than the Source's.
+ * Its real inverse and native receipt share this transaction; it is not a Source association.
+ */
+export function recordIdentityScopeDirectoryEnrollment(
+  tx: CommandTransaction,
+  token: IdentityScopeNativeAssociationAdmission,
+  key: IdentityScopeKey,
+): CommandEvent {
+  bindIdentityScopeNativeAssociation(tx, token);
+  const binding = bindings.get(token)!;
+  if (binding.queued) throw new TypeError('Scope association already queued');
+  binding.queued = true;
+  const address = identityScopeAddress(key);
+  registerCommandCallback(tx, () => bindIdentityScopeNativeAssociation(tx, token));
+  recordIdentityEpochNativeCommit(tx, 'identity-scope-enrollment');
+  return {
+    type: IDENTITY_SCOPE_DIRECTORY_ENROLLED,
+    data: { sourceKey: address.source, scope: address.scope, transactionId: currentCommand(tx).transactionId },
   };
 }

@@ -177,7 +177,7 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { identityEpochStore } from '../semantic/identity-epoch-store.ts';
-import { createIdentityScopedObservations } from '../semantic/identity-scoped-observations.ts';
+import { createIdentityScopedObservations, identityScopeAddress } from '../semantic/identity-scoped-observations.ts';
 import type {
   IdentityScopeKey,
   IdentityScopeObservation,
@@ -456,7 +456,7 @@ async function observe(pool: Pool, input: CanonicalCall, l: CollectionSourceLedg
   return { metadata, basis };
 }
 function same(a: CanonicalBasis, b: CanonicalBasis) {
-  return a.digest === b.digest && JSON.stringify(a) === JSON.stringify(b);
+  return a.digest === b.digest && isDeepStrictEqual(a, b);
 }
 async function current(pool: Pool, input: CanonicalBoundCall, l: CollectionSourceLedger) {
   const observed = await observe(pool, input, l);
@@ -714,7 +714,7 @@ export async function repairCanonicalSourceStep(
     const row = await readGeneration(pool, input, input.repair.generation, l);
     if (!row || row.state !== 'working' || !same(row.basis, input.basis)) return notReady(l, 'stale');
     if (row.source_exhausted) return { state: 'complete', repair: repair(row), examined: [], work: work(l) };
-    if (JSON.stringify(repair(row)) !== JSON.stringify(input.repair))
+    if (!isDeepStrictEqual(repair(row), input.repair))
       return { state: 'working', repair: repair(row), examined: [], work: work(l) };
     if (row.driver === 'done') return notReady(l, 'incomplete');
     const limit = Math.min(100, l.allowance().remaining.candidateKeys);
@@ -970,19 +970,30 @@ export async function advanceCanonicalSourceCapture(pool: Pool, input: Canonical
       capture: { kind: 'library', capture: completed.capture, frontier: row.frontier, allowance: l.allowance() },
     });
     takeScopeWork(l, registered.work);
-    if (registered.status !== 'registered') return notReady(l, 'identity');
+    if (registered.status !== 'registered')
+      return notReady(l, registered.status === 'pending' ? 'incomplete' : 'identity');
+    const address = identityScopeAddress(registered.observation.key);
     await mutate(pool, input, l, metadata, async (tx) => {
       await query(
         tx,
         l,
-        `UPDATE library.canonical_source_scope SET capture_id=$4,committed_revision=$5
-      WHERE route=$1 AND collection_id=$2 AND source_fence=$3`,
+        `UPDATE library.canonical_source_scope s
+        SET frontier=i.frontier,capture_id=i.capture_id,committed_revision=i.revision
+        FROM semantic.identity_scope_summary i
+        WHERE s.route=$1 AND s.collection_id=$2 AND s.source_fence=$3
+          AND i.partition_no=$6 AND i.source_key=$7 AND i.scope_id=$8
+          AND i.capture_id=$4 AND i.revision=$5 AND i.state='ready' AND i.active=0 AND i.scan_complete
+          AND i.source=jsonb_build_object('kind','library','identity',s.identity)
+          AND i.frontier->>'driver'='done' AND (i.frontier->>'captureId')::uuid=i.capture_id`,
         [
           input.route,
           input.collectionId,
           fence,
           registered.observation.captureId,
           registered.observation.committedRevision.toString(),
+          address.partition,
+          address.source,
+          address.scope,
         ],
       );
     });

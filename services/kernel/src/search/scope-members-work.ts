@@ -8,8 +8,12 @@ import { ProblemError } from '../http/problem.ts';
 import type { Access } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { NativeCollectionWork } from '../library/collection-source-work.ts';
-import { readCollectionSourceWorkState } from '../library/collection-source-work-native.ts';
+import {
+  readCollectionSourceWorkGroup,
+  readCollectionSourceWorkState,
+} from '../library/collection-source-work-native.ts';
 import type { MembersPreparationWorkDefinition } from '../library/members-preparation.ts';
+import type { CollectionPublicationWorkDefinition } from '../library/collection-publication-work-admission.ts';
 import type { NativeOrdinalKey } from '../library/collection-source-order.ts';
 import type { WorkDimensions } from '../library/collection-source.ts';
 import { leafProvider, type CollectionMemberAdmission, type OwnerFilterFactLocator } from '../library/owner-filter.ts';
@@ -20,7 +24,12 @@ import { readRelease } from '../semantic/definitions.ts';
 import { createIdentityScopedObservations, identityScopeAddress } from '../semantic/identity-scoped-observations.ts';
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
 import type { CurrentOwnerFilterPlan } from './current-filter-plan.ts';
-import { readMembersPreparationWorkDefinition, type MembersPreparationWorkContext } from './scope-work-context.ts';
+import {
+  readCollectionPublicationScopeWorkDefinition,
+  readMembersPreparationWorkDefinition,
+  type CollectionPublicationWorkContext,
+  type MembersPreparationWorkContext,
+} from './scope-work-context.ts';
 import {
   MEMBERS_SEARCH_QUERY_SQL,
   MEMBERS_SNAPSHOT_OWNER_FENCE_DIMENSIONS,
@@ -41,10 +50,10 @@ export type MembersWorkInput = Readonly<{
   pool: Pool;
   access: Access;
   deadline: number;
-  work: MembersPreparationWorkContext;
+  work: MembersPreparationWorkContext | CollectionPublicationWorkContext;
 }>;
 export type MembersSnapshot = Readonly<{
-  native: MembersPreparationWorkDefinition;
+  native: MembersPreparationWorkDefinition | CollectionPublicationWorkDefinition;
   source: Awaited<ReturnType<typeof readCollectionSourceWorkState>>;
   observation: IdentityScopeObservation;
   ownerFence: string | null;
@@ -96,7 +105,17 @@ export async function readMembersSnapshot(
   input: MembersWorkInput,
   work: NativeCollectionWork,
 ): Promise<MembersSnapshot> {
-  const native = structuredClone(await readMembersPreparationWorkDefinition(input.work, input));
+  const workContext = input.work;
+  const native = structuredClone(
+    await (workContext.kind === 'members-preparation'
+      ? readMembersPreparationWorkDefinition(workContext, input)
+      : membersBounded(
+          work,
+          // The same bounded native publication definition port used by its staging owner.
+          { nativeRows: 8192, nativePoints: 128, statements: 128, bytes: 1024 * 1024, emptySeeks: 128 },
+          () => readCollectionPublicationScopeWorkDefinition(workContext, input),
+        )),
+  );
   const source = await membersSource(work, 1, (allowance) =>
     readCollectionSourceWorkState(input.pool, input.work, { ...input, allowance }),
   );
@@ -230,6 +249,31 @@ async function group(execution: MembersExecution, subject: string, work: NativeC
   const limit = Math.min(100, 101 - saved.keys.length, work.available('candidateKeys'), work.available('witnessKeys'));
   if (limit < 1) return saved;
   const last = saved.keys.at(-1);
+  if (execution.input.work.kind === 'collection-publication') {
+    const drivers = ['member', 'entry', 'label', 'session', 'copy', 'output'] as const;
+    const driver = last && drivers[last.driver];
+    if (last && (!driver || last.driver < 1 || last.driver > 4)) throw unavailable();
+    const page = await membersSource(work, 1, (allowance) =>
+      readCollectionSourceWorkGroup(
+        execution.input.work,
+        execution.snapshot.source,
+        subject,
+        last && driver ? { driver, storedSubjectId: last.original, factId: last.fact } : null,
+        limit,
+        { deadline: execution.input.deadline, allowance },
+      ),
+    );
+    saved.keys.push(
+      ...page.rows.map(({ key }) => ({
+        original: key.storedSubjectId,
+        driver: drivers.indexOf(key.driver),
+        fact: key.factId,
+      })),
+    );
+    saved.complete = page.exhausted;
+    execution.groups.set(subject, saved);
+    return saved;
+  }
   const groupValues = [
     execution.input.work.locator.route,
     execution.input.work.locator.collectionId,

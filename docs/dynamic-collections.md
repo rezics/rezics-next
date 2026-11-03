@@ -407,6 +407,7 @@ original/terminal/foreign disclosure still requires its actual producer; missing
 public execution remains unavailable without the complete Publication provider. Preserve the native saved
 creation, CAS/replay, useful member, clear/Undo, and unavailable-public-provider outcomes.
 
+<<<<<<< HEAD
 Public dynamic execution requires the actual complete explicit Publication provider. Native episode, work,
 staging and final-command bodies are present; their saved-source composition and complete output must be proved.
 Non-private saved creation requires the bound native Publication provider and its full source/rule admission;
@@ -420,6 +421,13 @@ empty success. Public Collections enter public listing; unlisted Collections all
 and unknown Collections remain identically concealed from other accounts and anonymous viewers. Shared DTOs
 omit rules, release/profile pins, fact values and private counts. An explicit admitted owner filter continues
 to select the private working graph. Source presence is no successful public
+=======
+Public dynamic execution requires the actual complete explicit Publication provider. Native episode, saved-source
+preparation, bounded staging and restored activation now compose the existing publication operation; only its
+complete native output is shareable. Missing producer evidence remains unavailable.
+Non-private saved creation currently refuses with `dependency_unavailable`. Public/unlisted requests, including an
+editor's public request, cannot evaluate current private curator facts. Source presence is no successful public
+>>>>>>> cb9aaa5161 (Squash worker branch changes)
 membership claim. Generated artifacts and native outcome checks remain controller-owned after integration.
 
 Saved-rule drafts compare exact title, description and filter structure (including operand order) with their initial
@@ -428,15 +436,17 @@ pending command. Navigation and supported unload warn even for an unresolved sav
 focus do not count as edits. Reload preserves that baseline and draft, and uncertain retries retain their exact
 sender, credential, request and key. Confirmed saves and authority retirement clear navigation protection.
 
-### Selected whole-query publication contract; native bodies pending
+<a id="selected-whole-query-publication-contract-native-bodies-pending"></a>
+
+### Selected whole-query publication runtime
 
 [`collection-publication-work-admission.ts`](../services/kernel/src/library/collection-publication-work-admission.ts)
 owns the literal server-only `CollectionPublicationLocator` (`route`, `ownerAccountId`, `collectionId`,
 `publicationId`) and `CollectionPublicationWorkDefinition`. Its exact owner calls are
 `admitCollectionPublicationStep(tx: OperationalTransaction, locator: CollectionPublicationLocator): Promise<boolean>`
 and `readCollectionPublicationWorkDefinition(tx: OperationalTransaction, locator: CollectionPublicationLocator):
-Promise<CollectionPublicationWorkDefinition | null>`. Both are explicitly temporary unavailable adapters until
-the native episode/evidence producer replaces them. Exported declarations and getter data grant no admission,
+Promise<CollectionPublicationWorkDefinition | null>`. Both read the committed native episode and validate its
+current pinned rule, working Source, capture, identity, repair and retained hold on the same live client. Exported declarations and getter data grant no admission,
 completion, Source acknowledgement or ordinary reader disclosure.
 
 Search's selected additive `collection-publication` work role carries the live Core `OperationalTransaction`
@@ -454,7 +464,7 @@ Source kind implicitly. Neither active explicit output nor frozen/public output 
 The native getter carries actual expanded pinned `{filter,sort:'id',release:{digest,value:FilterRelease}}`,
 NativeSourceIdentity, CollectionSourceObservation, IdentityScopeObservation, IdentityNativeReceipt repair proof,
 NativeSourceCustody, releaseDigest and audience, together with the immutable rule, committed creation and actual
-native output references. Private working Source admission for this episode is still missing implementation.
+native output references. Private working Source admission now uses the native capture and canonical generation, including saved rules.
 
 [`collection-publication-episode-contract.ts`](../services/kernel/src/library/collection-publication-episode-contract.ts)
 owns the selected begin input, source/target/rule references, immutable creation payload and phase/result data.
@@ -505,11 +515,35 @@ accessCommandAuthorization prepare/authorize at the same T before receipt lookup
 scopes, floor/operator/delegation, mounted authority and Collection/episode/query/output/source/lifecycle fences
 are independently rechecked. Only that real authorized collection:update CommandTransaction invokes the native
 output hooks; Core basis, receipt, event and complete B selection commit atomically. Mechanical staging has no
-final command authority. Existing output hooks currently require ordinary command authority even for appends;
-bounded operational staging bodies must supply their own native admitted integration, without bypassing them.
+final command authority. Bounded operational staging writes only admitted building-output rows and their evidence; final selection uses
+the existing ordinary command output hooks.
 
-Native episode/provenance/admission, bounded staging and restored final-command bodies are present in source;
-their complete runtime binding and native outcome proof remain required. Source, receiving, publication, control,
+Decision: publication first advances the existing bounded canonical Source producer, then stages through the shared
+compiler and WorkAllowance; unavailable Search or identity evidence continues to refuse explicitly.
+Private query family reads use their mounted own-account authority, matching ordinary private Library readers.
+The canonical producer reserves native custody metadata work as well as candidate and ordinary native work,
+and advances pending native scope registration without treating it as completion.
+Native scope registration keeps the current Source maintenance frame; independent Source work enters the installed
+bounded Source admission before producing its native associations.
+Dependency enrollment commits a funded Source association and a distinct native directory event on the dependency's
+home. A closed directory rolls back partial bridge writes; only the committed inverse and native receipt admit readiness.
+Canonical repair compares the complete persisted basis by value, preserving its commitment across JSON object key reordering.
+After scope enrollment the canonical Source adopts that registered capture's actual completed frontier, so publication
+checks the same native capture, retained hold and canonical identity basis. Current-source reads reserve their native metadata work.
+Staging compares detached native definition data across Source calls; custody brands stay local to fresh native admission.
+Checkpoint reads restore native partition positions from their persisted decimal representation before exact binding and scope comparisons.
+Canonical prefixes stop before an unfunded membership proof, retaining the last settled subject without claiming exhaustion; a single empty seek can still prove exhaustion.
+Decision: publication reuses the native Members evaluator with its exact publication admission and private canonical groups; each step has one fixed shared allowance of 262,144 native row-work units, 4,096 empty seeks and 64 MiB, reserving 4 MiB for final native rereads and sealing before evaluation, without refilling spent work.
+
+Native episode/provenance/admission, saved working-source evidence, bounded staging and restored activation are
+bound to the existing begin/status operation. Staging commits its frontier, selected subjects and evidence together;
+only a committed exhaustion seal can activate output. The working observation uses its native repair receipt
+position so advancing the partition head to seal a checkpoint does not invalidate its own replay. Final attempts restore current initiator and expanded
+private-family authority before receipt replay, including after successful activation.
+Decision: each final attempt restores the same recorded initiator separately for every expanded private-family action on its own account anchor, preserving native action-bound identities and current consent.
+Native outcome cases cover
+multiple pages, staging rollback/retry and reduced authority with actual output references. Broader integrated
+acceptance remains deferred. Source, receiving, publication, control,
 late-writer and creation-evidence retention must join the existing native inventory
 and disposition obligations. These declarations claim no receiving/frozen/root support, NoData, cleanup authority
 or native/runtime pass. Original public dynamic C5, whole-query, replay/revocation and terminal outcomes remain

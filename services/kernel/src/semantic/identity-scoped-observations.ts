@@ -56,6 +56,7 @@ import {
   prepayIdentityScopeNativeAssociation,
   bindIdentityScopeNativeAssociation,
   recordIdentityScopeNativeAssociation,
+  recordIdentityScopeDirectoryEnrollment,
 } from './identity-scope-native-association.ts';
 import receivingSelectionRead from './identity-receiving-selection-read.sql';
 import receivingLookup from './identity-epoch-store-receiving-lookup.sql';
@@ -618,185 +619,203 @@ async function enroll(
   if (home === null) return null;
   const k = identityScopeAddress(key);
   if (dep.directory_home === null) {
-    const retained = await runCommand(pool, { partition: k.partition, deadline }, async (tx) => {
-      const locked = await head(tx, key, measured, true);
-      if (
-        !locked ||
-        locked.registration !== row.registration ||
-        locked.capture_id !== row.capture_id ||
-        locked.state === 'retiring' ||
-        locked.state === 'retired'
-      )
-        return { value: false, events: [] };
-      const result = await query(
-        tx,
-        measured,
-        `UPDATE semantic.identity_scope_forward
-        SET directory_home=$6,directory_generation=$7,directory_group=$8
-        WHERE partition_no=$1 AND source_key=$2 AND scope_id=$3 AND registration=$4 AND dependency=$5
-          AND (directory_home IS NULL OR (directory_home,directory_generation,directory_group)=($6,$7,$8))`,
-        [...params(key), row.registration, dep.dependency, home, generation, group],
-      );
-      return { value: result.rowCount === 1, events: [] };
-    });
+    const admission = prepayIdentityScopeNativeAssociation(pool, deadline);
+    const retained = await withSingleCommandAttempt(() =>
+      runCommand(pool, { partition: k.partition, deadline: admission.deadline }, async (tx) => {
+        bindIdentityScopeNativeAssociation(tx, admission);
+        const locked = await head(tx, key, measured, true);
+        if (
+          !locked ||
+          locked.registration !== row.registration ||
+          locked.capture_id !== row.capture_id ||
+          locked.state === 'retiring' ||
+          locked.state === 'retired'
+        )
+          return noEffect(false);
+        const result = await query(
+          tx,
+          measured,
+          `UPDATE semantic.identity_scope_forward
+            SET directory_home=$6,directory_generation=$7,directory_group=$8
+            WHERE partition_no=$1 AND source_key=$2 AND scope_id=$3 AND registration=$4 AND dependency=$5
+              AND (directory_home IS NULL OR (directory_home,directory_generation,directory_group)=($6,$7,$8))`,
+          [...params(key), row.registration, dep.dependency, home, generation, group],
+        );
+        if (result.rowCount !== 1) return noEffect(false);
+        return {
+          value: true,
+          events: [
+            recordIdentityScopeNativeAssociation(tx, admission, key, 'enrollment', { dependency: dep.dependency }),
+          ],
+        };
+      }),
+    );
     if (!retained.value) return null;
   }
-  const issued = await runCommand(pool, { partition: home, deadline }, async (tx) => {
-    if (dep.original) {
-      const g = (
+  const admission = prepayIdentityScopeNativeAssociation(pool, deadline);
+  const refused = new Error('Native enrollment directory closed');
+  const issued = await withSingleCommandAttempt(() =>
+    runCommand(pool, { partition: home, deadline: admission.deadline }, async (tx) => {
+      bindIdentityScopeNativeAssociation(tx, admission);
+      if (dep.original) {
+        const g = (
+          await query(
+            tx,
+            measured,
+            `SELECT generation,version,owner_epoch,ready,pending_job FROM semantic.identity_epoch_group
+          WHERE partition_no=$1 AND terminal=$2 FOR UPDATE`,
+            [home, group],
+          )
+        ).rows[0];
+        const native = await readPartition(tx, home!);
+        if (
+          !g ||
+          !native ||
+          g.generation !== generation ||
+          !g.ready ||
+          g.pending_job !== null ||
+          g.owner_epoch !== native.epoch
+        )
+          return noEffect(false);
+        const member = await query(
+          tx,
+          measured,
+          `SELECT 1 FROM semantic.identity_epoch_original WHERE partition_no=$1 AND generation=$2 AND original=$3 AND present AND terminal=$4`,
+          [home, g.generation, dep.original, group],
+        );
+        if (member.rowCount !== 1) return noEffect(false);
+        // Register in the delivered admission producer's indexed directory. PREPARE closes
+        // this same bridge before its first export, so a late registration cannot become ready.
         await query(
           tx,
           measured,
-          `SELECT generation,version,owner_epoch,ready,pending_job FROM semantic.identity_epoch_group
-        WHERE partition_no=$1 AND terminal=$2 FOR UPDATE`,
-          [home, group],
+          `INSERT INTO semantic.identity_epoch_prearm_bridge
+          (partition_no,generation,terminal,owner_epoch,basis_version) VALUES($1,$2,$3,$4,$5)
+          ON CONFLICT DO NOTHING`,
+          [home, generation, group, g.owner_epoch, g.version],
+        );
+        const nativeBridge = (
+          await query(
+            tx,
+            measured,
+            `SELECT terminal,owner_epoch,basis_version,job_id
+          FROM semantic.identity_epoch_prearm_bridge WHERE partition_no=$1 AND generation=$2 FOR UPDATE`,
+            [home, generation],
+          )
+        ).rows[0];
+        if (
+          !nativeBridge ||
+          nativeBridge.job_id !== null ||
+          nativeBridge.terminal !== group ||
+          nativeBridge.owner_epoch !== g.owner_epoch ||
+          nativeBridge.basis_version !== g.version
         )
-      ).rows[0];
-      const native = await readPartition(tx, home!);
-      if (
-        !g ||
-        !native ||
-        g.generation !== generation ||
-        !g.ready ||
-        g.pending_job !== null ||
-        g.owner_epoch !== native.epoch
-      )
-        return { value: false, events: [] };
-      const member = await query(
-        tx,
-        measured,
-        `SELECT 1 FROM semantic.identity_epoch_original WHERE partition_no=$1 AND generation=$2 AND original=$3 AND present AND terminal=$4`,
-        [home, g.generation, dep.original, group],
-      );
-      if (member.rowCount !== 1) return { value: false, events: [] };
-      // Register in the delivered admission producer's indexed directory. PREPARE closes
-      // this same bridge before its first export, so a late registration cannot become ready.
+          throw refused;
+      }
       await query(
         tx,
         measured,
-        `INSERT INTO semantic.identity_epoch_prearm_bridge
-        (partition_no,generation,terminal,owner_epoch,basis_version) VALUES($1,$2,$3,$4,$5)
-        ON CONFLICT DO NOTHING`,
-        [home, generation, group, g.owner_epoch, g.version],
+        `INSERT INTO semantic.identity_scope_bridge(partition_no,generation) VALUES($1,$2) ON CONFLICT DO NOTHING`,
+        [home, generation],
       );
-      const nativeBridge = (
+      const bridge = (
         await query(
           tx,
           measured,
-          `SELECT terminal,owner_epoch,basis_version,job_id
-        FROM semantic.identity_epoch_prearm_bridge WHERE partition_no=$1 AND generation=$2 FOR UPDATE`,
+          `SELECT closed_job FROM semantic.identity_scope_bridge WHERE partition_no=$1 AND generation=$2 FOR UPDATE`,
           [home, generation],
         )
       ).rows[0];
-      if (
-        !nativeBridge ||
-        nativeBridge.job_id !== null ||
-        nativeBridge.terminal !== group ||
-        nativeBridge.owner_epoch !== g.owner_epoch ||
-        nativeBridge.basis_version !== g.version
-      )
-        return { value: false, events: [] };
-    }
-    await query(
-      tx,
-      measured,
-      `INSERT INTO semantic.identity_scope_bridge(partition_no,generation) VALUES($1,$2) ON CONFLICT DO NOTHING`,
-      [home, generation],
-    );
-    const bridge = (
+      if (!bridge || bridge.closed_job !== null) throw refused;
+      const released = await query(
+        tx,
+        measured,
+        `SELECT 1 FROM semantic.identity_scope_directory_release
+        WHERE partition_no=$1 AND generation=$2 AND original=$3 AND source_partition=$4 AND source_key=$5 AND scope_id=$6 AND registration=$7 AND capture_id=$8`,
+        [home, generation, dep.original ?? HOME, k.partition, k.source, k.scope, row.registration, row.capture_id],
+      );
+      if (released.rowCount) throw refused;
+      if (!dep.original) {
+        // A claim that predates the creation guard cannot be hidden by registering afterward.
+        // Claims change this same bridge row, so a stale SERIALIZABLE snapshot must retry.
+        const pending = await query(
+          tx,
+          measured,
+          `SELECT 1 FROM semantic.identity_epoch_group
+          WHERE partition_no=$1 AND pending_job IS NOT NULL ORDER BY terminal LIMIT 1`,
+          [home],
+        );
+        if (pending.rowCount) throw refused;
+        const fenced = await query(
+          tx,
+          measured,
+          `SELECT 1 FROM semantic.identity_public_capture_home h
+          JOIN semantic.identity_public_writer w ON w.partition_no=h.partition_no AND w.revision=h.writer_revision
+          JOIN core.partition p ON p.partition_no=h.partition_no AND p.epoch=h.owner_epoch
+          WHERE h.partition_no=$1 AND h.capture_id=$2 AND h.home=$1 AND h.complete
+          AND p.write_state='active' AND p.moved_to IS NULL FOR SHARE OF h,w`,
+          [home, row.capture_id],
+        );
+        if (fenced.rowCount !== 1) throw refused;
+      }
       await query(
         tx,
         measured,
-        `SELECT closed_job FROM semantic.identity_scope_bridge WHERE partition_no=$1 AND generation=$2 FOR UPDATE`,
-        [home, generation],
-      )
-    ).rows[0];
-    if (!bridge || bridge.closed_job !== null) return { value: false, events: [] };
-    const released = await query(
-      tx,
-      measured,
-      `SELECT 1 FROM semantic.identity_scope_directory_release
-      WHERE partition_no=$1 AND generation=$2 AND original=$3 AND source_partition=$4 AND source_key=$5 AND scope_id=$6 AND registration=$7 AND capture_id=$8`,
-      [home, generation, dep.original ?? HOME, k.partition, k.source, k.scope, row.registration, row.capture_id],
-    );
-    if (released.rowCount) return { value: false, events: [] };
-    if (!dep.original) {
-      // A claim that predates the creation guard cannot be hidden by registering afterward.
-      // Claims change this same bridge row, so a stale SERIALIZABLE snapshot must retry.
-      const pending = await query(
-        tx,
-        measured,
-        `SELECT 1 FROM semantic.identity_epoch_group
-        WHERE partition_no=$1 AND pending_job IS NOT NULL ORDER BY terminal LIMIT 1`,
-        [home],
-      );
-      if (pending.rowCount) return { value: false, events: [] };
-      const fenced = await query(
-        tx,
-        measured,
-        `SELECT 1 FROM semantic.identity_public_capture_home h
-        JOIN semantic.identity_public_writer w ON w.partition_no=h.partition_no AND w.revision=h.writer_revision
-        JOIN core.partition p ON p.partition_no=h.partition_no AND p.epoch=h.owner_epoch
-        WHERE h.partition_no=$1 AND h.capture_id=$2 AND h.home=$1 AND h.complete
-        AND p.write_state='active' AND p.moved_to IS NULL FOR SHARE OF h,w`,
-        [home, row.capture_id],
-      );
-      if (fenced.rowCount !== 1) return { value: false, events: [] };
-    }
-    await query(
-      tx,
-      measured,
-      `INSERT INTO semantic.identity_scope_inverse
-      (partition_no,generation,original,source_partition,source_key,scope_id,registration,capture_id,source,transaction_id)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT DO NOTHING`,
-      [
-        home,
-        generation,
-        dep.original ?? HOME,
-        k.partition,
-        k.source,
-        k.scope,
-        row.registration,
-        row.capture_id,
-        json(key.source),
-        currentCommand(tx).transactionId,
-      ],
-    );
-    if (dep.original) {
-      const identity = key.source.identity;
-      bindSemanticProducerRoles(
-        tx,
-        key.source.kind === 'library' && 'accountId' in identity
-          ? [{ account_id: identity.accountId, role: 'subject' }]
-          : [],
-      );
-    }
-    recordIdentityEpochNativeCommit(tx, 'identity-scope-enrollment');
-    if (dep.original)
-      registerCommandCallback(tx, async (transactionId) => {
-        // The native receipt must exist before the admission inverse's same-home FK is written.
-        await query(
-          tx,
-          measured,
-          `INSERT INTO semantic.identity_epoch_prearm_inverse
-        (partition_no,generation,original,scope_key,registration,scope,capture_id,
-         source_partition,source_owner_epoch,transaction_id)
+        `INSERT INTO semantic.identity_scope_inverse
+        (partition_no,generation,original,source_partition,source_key,scope_id,registration,capture_id,source,transaction_id)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT DO NOTHING`,
-          [
-            home,
-            generation,
-            dep.original,
-            digest({ source: k.source, scope: k.scope }),
-            row.registration,
-            json(key),
-            row.capture_id,
-            k.partition,
-            key.source.kind === 'library' ? key.source.identity.ownerEpoch : key.source.identity.epoch,
-            transactionId,
-          ],
+        [
+          home,
+          generation,
+          dep.original ?? HOME,
+          k.partition,
+          k.source,
+          k.scope,
+          row.registration,
+          row.capture_id,
+          json(key.source),
+          currentCommand(tx).transactionId,
+        ],
+      );
+      if (dep.original) {
+        const identity = key.source.identity;
+        bindSemanticProducerRoles(
+          tx,
+          key.source.kind === 'library' && 'accountId' in identity
+            ? [{ account_id: identity.accountId, role: 'subject' }]
+            : [],
         );
-      });
-    return { value: true, events: [] };
+      }
+      const event = recordIdentityScopeDirectoryEnrollment(tx, admission, key);
+      if (dep.original)
+        registerCommandCallback(tx, async (transactionId) => {
+          // The native receipt must exist before the admission inverse's same-home FK is written.
+          await query(
+            tx,
+            measured,
+            `INSERT INTO semantic.identity_epoch_prearm_inverse
+          (partition_no,generation,original,scope_key,registration,scope,capture_id,
+           source_partition,source_owner_epoch,transaction_id)
+          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT DO NOTHING`,
+            [
+              home,
+              generation,
+              dep.original,
+              digest({ source: k.source, scope: k.scope }),
+              row.registration,
+              json(key),
+              row.capture_id,
+              k.partition,
+              key.source.kind === 'library' ? key.source.identity.ownerEpoch : key.source.identity.epoch,
+              transactionId,
+            ],
+          );
+        });
+      return { value: true, events: [event] };
+    }),
+  ).catch((cause) => {
+    if (cause === refused) return { value: false };
+    throw cause;
   });
   if (!issued.value) return null;
   return withReadTransaction(

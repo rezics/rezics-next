@@ -84,7 +84,7 @@ const allowance = (): WorkAllowance => ({
     statements: 32,
     emptySeeks: 32,
     witnessKeys: 0,
-    identityMetadataRows: 0,
+    identityMetadataRows: 16,
     bytes: 128 * 1024,
   },
 });
@@ -194,6 +194,7 @@ export async function readCollectionPublicationNativeSource(
     collection_id: input.locator.collectionId,
     source_fence: nativeSourceFence(metadata),
     owner_account_id: input.locator.ownerAccountId,
+    partition: address.partition,
     source_key: address.source,
     scope_id: address.scope,
     owner_epoch: identity.ownerEpoch,
@@ -299,7 +300,9 @@ export async function readCollectionPublicationNativeSource(
     incarnation: metadata.incarnation,
     revision: metadata.revision,
     authority,
-    stamp: metadata.stamp,
+    // The retained native proof is stable across operational checkpoints and the seal
+    // advancing the partition head. Current source/fact/identity fences are checked above.
+    stamp: { ...metadata.stamp, position: BigInt(row.repairPosition) },
     basis: {
       digest: row.canonicalBasis.digest,
       identity: row.canonicalBasis.identity,

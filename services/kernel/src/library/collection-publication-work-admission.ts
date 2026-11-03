@@ -142,10 +142,7 @@ function digest(value: unknown): string | null {
   return bytes === undefined ? null : createHash('sha256').update(bytes).digest('hex');
 }
 
-async function currentPublicationWork(
-  tx: OperationalTransaction,
-  locator: CollectionPublicationLocator,
-): Promise<CollectionPublicationWorkDefinition | null> {
+async function currentPublicationInput(tx: OperationalTransaction, locator: CollectionPublicationLocator) {
   if (!livePublicationNamespace(tx, locator)) return null;
   const resources = currentOperationalResources(tx);
   const at = commandTime(tx);
@@ -230,6 +227,31 @@ async function currentPublicationWork(
   }
   if (!isDeepStrictEqual(expanded, rule.filter)) return null;
 
+  const definition: CollectionPublicationDefinition = {
+    filter: expanded,
+    sort: 'id',
+    release: { digest: rule.releaseDigest, value: release as FilterRelease },
+  };
+  if (!current()) return null;
+  return { episode, rule, definition };
+}
+
+/** Preparation may advance only an original committed episode, before any private Source IO. */
+export async function admitCollectionPublicationSourcePreparation(
+  tx: OperationalTransaction,
+  locator: CollectionPublicationLocator,
+): Promise<boolean> {
+  return (await currentPublicationInput(tx, locator)) !== null;
+}
+
+async function currentPublicationWork(
+  tx: OperationalTransaction,
+  locator: CollectionPublicationLocator,
+): Promise<CollectionPublicationWorkDefinition | null> {
+  const input = await currentPublicationInput(tx, locator);
+  if (!input) return null;
+  const { episode, rule, definition } = input;
+  const resources = currentOperationalResources(tx);
   const native = await readCollectionPublicationNativeSource(tx, {
     pool: resources.pool,
     deadline: resources.deadline,
@@ -237,12 +259,8 @@ async function currentPublicationWork(
     episode,
     rule,
   });
-  if (!native || !current()) return null;
-  const definition: CollectionPublicationDefinition = {
-    filter: expanded,
-    sort: 'id',
-    release: { digest: rule.releaseDigest, value: release as FilterRelease },
-  };
+  if (!native || !livePublicationNamespace(tx, locator)) return null;
+  const ruleRef = episode.source.rule;
   return {
     locator: Object.freeze({ ...locator }),
     definition,

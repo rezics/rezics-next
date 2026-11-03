@@ -45,6 +45,7 @@ export const LINK_KEYS_CHANGED = 'com.rezics.semantic.links.keys-changed.v1' as 
 export const LINKS_VISIBILITY_CHANGED = 'com.rezics.semantic.links.visibility-changed.v1' as const;
 export const LINKS_PROJECTED = 'com.rezics.semantic.links.projected.v1' as const;
 export const IDENTITY_SCOPE_NATIVE_ASSOCIATED = 'com.rezics.semantic.identity-scope.native-associated.v1' as const;
+export const IDENTITY_SCOPE_DIRECTORY_ENROLLED = 'com.rezics.semantic.identity-scope.directory-enrolled.v1' as const;
 export const IDENTITY_EPOCH_ADMITTED = 'com.rezics.semantic.identity-epoch.admitted.v1' as const;
 export const IDENTITY_EPOCH_HOME_AVAILABLE = 'com.rezics.semantic.identity-epoch.home-available.v1' as const;
 export const IDENTITY_EPOCH_PROGRESS = 'com.rezics.semantic.identity-epoch.progress.v1' as const;
@@ -106,6 +107,14 @@ export const SEMANTIC_EVENTS = {
       phase: Type.Union(
         ['registration', 'capture', 'enrollment', 'ready', 'progress', 'finish'].map((p) => Type.Literal(p)),
       ),
+      transactionId: UUID,
+    },
+    { additionalProperties: false },
+  ),
+  [IDENTITY_SCOPE_DIRECTORY_ENROLLED]: Type.Object(
+    {
+      sourceKey: Type.String({ minLength: 1, maxLength: 256 }),
+      scope: Type.String({ minLength: 1, maxLength: 256 }),
       transactionId: UUID,
     },
     { additionalProperties: false },

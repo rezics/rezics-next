@@ -9,9 +9,13 @@ import { enqueueIntent, runOperationalTransaction } from '../command/operational
 import { ProblemError } from '../http/problem.ts';
 import { readMembershipWorkConfig } from '../access/membership-work-config.ts';
 import { routeOf, partitionOf } from '../route/route.ts';
+import { advanceCollectionSourceWork } from './collection-source-work.ts';
 import { stageCollectionPublicationStep } from './collection-publication-staging.ts';
 import { createCollectionPublicationFinalActivation } from './collection-publication-final.ts';
-import type { CollectionPublicationLocator } from './collection-publication-work-admission.ts';
+import {
+  admitCollectionPublicationSourcePreparation,
+  type CollectionPublicationLocator,
+} from './collection-publication-work-admission.ts';
 import { workStepDeadline } from './command-support.ts';
 import { scopeAllowance } from '../search/scope-execution.ts';
 import { collectionPublicationScopeRuntime } from '../search/work.ts';
@@ -21,6 +25,15 @@ type WorkflowInput = Readonly<CollectionPublicationLocator & { accounts: readonl
 type Context = Pick<WorkContext, 'pool' | 'client' | 'clock' | 'env' | 'getAuthorization'>;
 function unavailable(): ProblemError {
   return new ProblemError('dependency_unavailable');
+}
+
+/** One fixed root covers repeated native admissions, evaluation and the exhaustive seal. */
+export function collectionPublicationStepAllowance(reservationId: string) {
+  const allowance = scopeAllowance(100, reservationId);
+  return {
+    ...allowance,
+    remaining: { ...allowance.remaining, nativeRows: 262144, emptySeeks: 4096, bytes: 64 * 1024 * 1024 },
+  };
 }
 
 function validate(input: WorkflowInput): CollectionPublicationLocator {
@@ -57,6 +70,40 @@ function intent(locator: CollectionPublicationLocator, workflowId: string) {
   };
 }
 
+/** Reuse the installed canonical producer only after verifying this episode's original native binding. */
+export async function prepareCollectionPublicationSource(
+  context: WorkContext,
+  input: WorkflowInput,
+): Promise<'more' | 'ready' | 'done'> {
+  const locator = validate(input);
+  const proceed = await runOperationalTransaction(
+    context.pool,
+    {
+      mode: 'work-step',
+      partition: partitionOf(locator.route),
+      kind: COLLECTION_PUBLICATION_WORKFLOW,
+      accounts: [locator.ownerAccountId],
+      workClient: context.client,
+      deadline: workStepDeadline(),
+      clock: context.clock,
+    },
+    async (tx) => {
+      const episode = await readCollectionPublicationEpisode(tx, locator);
+      if (!episode) throw unavailable();
+      if (episode.phase === 'complete' || episode.phase === 'refused') return false;
+      if (!(await admitCollectionPublicationSourcePreparation(tx, locator))) throw unavailable();
+      return true;
+    },
+  );
+  if (!proceed) return 'done';
+  const state = await advanceCollectionSourceWork(context, {
+    accounts: [locator.ownerAccountId],
+    collectionId: locator.collectionId,
+  });
+  if (state === 'unavailable') throw unavailable();
+  return state;
+}
+
 async function stage(context: Context, input: WorkflowInput): Promise<'more' | 'sealed' | 'done'> {
   const locator = validate(input);
   const runtime = collectionPublicationScopeRuntime(context as WorkContext);
@@ -80,7 +127,7 @@ async function stage(context: Context, input: WorkflowInput): Promise<'more' | '
       if (!episode || episode.phase === 'refused' || episode.phase === 'complete') return 'done';
       const version = await readCollectionPublicationEpisodeVersion(tx, locator);
       if (version === null) throw unavailable();
-      const allowance = scopeAllowance(100, `${locator.publicationId}:${version}`);
+      const allowance = collectionPublicationStepAllowance(`${locator.publicationId}:${version}`);
       const result = await stageCollectionPublicationStep(tx, locator, {
         ...runtime,
         clock: context.clock,
@@ -119,6 +166,32 @@ async function activate(context: Context, input: WorkflowInput): Promise<void> {
 
 /** Register the locator-only continuation on the Library module's existing workflows queue. */
 export function registerCollectionPublicationWork(context: WorkContext): void {
+  const prepare = DBOS.registerStep((input: WorkflowInput) => prepareCollectionPublicationSource(context, input), {
+    name: 'library.collectionPublicationPrepare',
+    retriesAllowed: true,
+    maxAttempts: 3,
+    intervalSeconds: 1,
+  });
+  const continuePreparation = DBOS.registerStep(
+    async (input: WorkflowInput, sequence: number) => {
+      const locator = validate(input);
+      await context.client.enqueue(
+        {
+          queueName: 'workflows',
+          workflowName: COLLECTION_PUBLICATION_WORKFLOW,
+          workflowID: `${locator.publicationId}:prepare:${sequence}`,
+          workflowIDReusePolicy: 'return-existing',
+        },
+        input,
+      );
+    },
+    {
+      name: 'library.collectionPublicationContinuePreparation',
+      retriesAllowed: true,
+      maxAttempts: 3,
+      intervalSeconds: 1,
+    },
+  );
   const step = DBOS.registerStep(async (input: WorkflowInput) => stage(context, input), {
     name: 'library.collectionPublicationStage',
     retriesAllowed: true,
@@ -133,6 +206,14 @@ export function registerCollectionPublicationWork(context: WorkContext): void {
   });
   DBOS.registerWorkflow(
     async (input: WorkflowInput) => {
+      let preparation: 'more' | 'ready' | 'done' = 'more';
+      for (let n = 0; n < 100 && preparation === 'more'; n++) preparation = await prepare(input);
+      if (preparation === 'done') return;
+      if (preparation === 'more') {
+        const sequence = Number(DBOS.workflowID!.split(':prepare:')[1] ?? 0) + 1;
+        await continuePreparation(input, sequence);
+        return;
+      }
       const result = await step(input);
       if (result === 'sealed') await activateStep(input);
     },

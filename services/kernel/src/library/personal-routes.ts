@@ -196,7 +196,7 @@ function detail(operationId: string, action: string, write = false) {
     'x-action': action,
     'x-exposure': 'gate:personal_library',
     security: [{ bearerAuth: [] }],
-    ...(action === 'library_entry:list'
+    ...(['library_entry:list', 'library_entry:read', 'copy:list'].includes(action)
       ? { 'x-authority-anchor': 'own-account', 'x-authority-resource-types': Object.keys(bundledRelease.types) }
       : {}),
     ...(write ? { 'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }) } : {}),

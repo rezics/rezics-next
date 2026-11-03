@@ -772,6 +772,10 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import {
+  activeIdentitySourceConsumerMaintenance,
+  withIdentitySourceConsumerMaintenance,
+} from '../semantic/identity-source-consumer-maintenance.ts';
+import {
   bindCanonicalSourceWork,
   advanceCanonicalSourceCapture,
   readCanonicalSourceState,
@@ -791,7 +795,8 @@ const sourceStepAllowance = (): CanonicalAllowance => ({
   emptySeeks: 1000,
   statements: 10000,
   bytes: 16 * 1024 * 1024,
-  identityMetadataRows: 0,
+  // Native custody checks the owner partition and its committed capture receipt.
+  identityMetadataRows: 32,
 });
 type SourceLocator = { accounts: [string]; collectionId: string };
 type SourceSweep = {
@@ -801,56 +806,79 @@ type SourceSweep = {
   route: number | null;
   collection: string | null;
 };
+export async function advanceCollectionSourceWork(
+  context: WorkContext,
+  input: SourceLocator,
+): Promise<'ready' | 'more' | 'unavailable'> {
+  const active = activeIdentitySourceConsumerMaintenance(context.pool);
+  const deadline = Math.min(Date.now() + 30000, active?.deadline ?? Infinity);
+  const run = () => advanceSourceStep(context, input, deadline);
+  return active
+    ? run()
+    : withIdentitySourceConsumerMaintenance({ pool: context.pool, env: context.env }, { deadline }, run);
+}
+async function advanceSourceStep(
+  context: WorkContext,
+  input: SourceLocator,
+  deadline: number,
+): Promise<'ready' | 'more' | 'unavailable'> {
+  const route = routeOf(input.collectionId);
+  if (
+    route === null ||
+    input.accounts.length !== 1 ||
+    routeOf(input.accounts[0]) === null ||
+    partitionOf(routeOf(input.accounts[0])!) !== partitionOf(route) ||
+    Buffer.byteLength(JSON.stringify(input)) > 4096
+  )
+    throw new TypeError('Invalid native Source work locator');
+  const call = {
+    route,
+    collectionId: input.collectionId,
+    deadline,
+    allowance: sourceStepAllowance(),
+  };
+  function consume(w: CanonicalWork) {
+    const a = call.allowance;
+    call.allowance = {
+      reservationId: a.reservationId,
+      rawKeys: a.rawKeys - w.candidateKeys - w.aliasKeys - w.duplicateKeys - w.lookaheadKeys - w.internalDriverKeys,
+      nativeRows: a.nativeRows - w.nativeRows,
+      nativePoints: a.nativePoints - w.nativePoints,
+      emptySeeks: a.emptySeeks - w.emptySeeks,
+      statements: a.statements - w.statements,
+      bytes: a.bytes - w.bytes,
+      identityMetadataRows: a.identityMetadataRows - w.identityMetadataRows,
+    };
+  }
+  const observed = await advanceCanonicalSourceCapture(context.pool, call);
+  consume(observed.work);
+  if (observed.state !== 'admitted') {
+    return observed.reason === 'incomplete' ? 'more' : 'unavailable';
+  }
+  const ready = await readCanonicalSourceState(context.pool, call);
+  consume(ready.work);
+  if (ready.state === 'ready') return 'ready';
+  const started = await beginCanonicalSourceRepair(context.pool, { ...call, basis: observed.basis });
+  consume(started.work);
+  if (started.state !== 'working') return 'unavailable';
+  const next = await repairCanonicalSourceStep(context.pool, {
+    ...call,
+    basis: observed.basis,
+    repair: started.repair,
+  });
+  consume(next.work);
+  if (next.state !== 'complete') return next.state === 'working' ? 'more' : 'unavailable';
+  const published = await publishCanonicalSourceRepair(context.pool, {
+    ...call,
+    basis: observed.basis,
+    repair: next.repair,
+  });
+  return published.state === 'published' ? 'ready' : 'unavailable';
+}
 /** The existing Library worker owns native checkpoints. No Source GET writes, scheduler or new participant. */
 export async function registerCollectionSourceWork(context: WorkContext): Promise<void> {
   bindCanonicalSourceWork(context);
-  async function page(input: SourceLocator): Promise<void> {
-    const route = routeOf(input.collectionId);
-    if (
-      route === null ||
-      input.accounts.length !== 1 ||
-      routeOf(input.accounts[0]) === null ||
-      partitionOf(routeOf(input.accounts[0])!) !== partitionOf(route) ||
-      Buffer.byteLength(JSON.stringify(input)) > 4096
-    )
-      throw new TypeError('Invalid native Source work locator');
-    const call = {
-      route,
-      collectionId: input.collectionId,
-      deadline: Date.now() + 30000,
-      allowance: sourceStepAllowance(),
-    };
-    function consume(w: CanonicalWork) {
-      const a = call.allowance;
-      call.allowance = {
-        reservationId: a.reservationId,
-        rawKeys: a.rawKeys - w.candidateKeys - w.aliasKeys - w.duplicateKeys - w.lookaheadKeys - w.internalDriverKeys,
-        nativeRows: a.nativeRows - w.nativeRows,
-        nativePoints: a.nativePoints - w.nativePoints,
-        emptySeeks: a.emptySeeks - w.emptySeeks,
-        statements: a.statements - w.statements,
-        bytes: a.bytes - w.bytes,
-        identityMetadataRows: a.identityMetadataRows - w.identityMetadataRows,
-      };
-    }
-    const observed = await advanceCanonicalSourceCapture(context.pool, call);
-    consume(observed.work);
-    if (observed.state !== 'admitted') return;
-    const ready = await readCanonicalSourceState(context.pool, call);
-    consume(ready.work);
-    if (ready.state === 'ready') return;
-    const started = await beginCanonicalSourceRepair(context.pool, { ...call, basis: observed.basis });
-    consume(started.work);
-    if (started.state !== 'working') return;
-    const next = await repairCanonicalSourceStep(context.pool, {
-      ...call,
-      basis: observed.basis,
-      repair: started.repair,
-    });
-    consume(next.work);
-    if (next.state === 'complete')
-      await publishCanonicalSourceRepair(context.pool, { ...call, basis: observed.basis, repair: next.repair });
-  }
+  const page = (input: SourceLocator) => advanceCollectionSourceWork(context, input);
   const step = DBOS.registerStep(page, { name: 'library.canonicalSourcePage', ...COMMAND_STEP_RETRIES });
   DBOS.registerWorkflow((input: SourceLocator) => step(input), { name: CANONICAL_SOURCE_WORKFLOW });
   const sweepPage = DBOS.registerStep(
