@@ -63,9 +63,9 @@ snapshot, deadline, epoch, lifecycle and operational-disclosure bounds.
 
 Eventual acceptance command:
 `bun run --cwd services/kernel check test/community/growth-realm-claim-review.test.ts`.
-Native/browser/acceptance launch remains deferred to controller admission. No test
-assertion or three-scale observation has been executed in this attempt; authored
-coverage and compiler results are not measured passes. The continuation at
+Native/browser/acceptance launch remains deferred to controller admission. Authored
+coverage and compiler results establish neither native request/listing assertions
+nor a three-scale observation. The continuation at
 `.temp/continuation/realm-claim-review-growth.md` describes the remaining listing
 outcome after the native producer is supplied. At admitted execution, bind the
 then-current committed source revision and private fixture to the command above,

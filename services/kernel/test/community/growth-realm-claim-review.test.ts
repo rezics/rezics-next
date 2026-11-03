@@ -89,7 +89,7 @@ test('registered owner erasure supplies the original episode and native HTTP req
       next: expect.any(String),
     });
     expect(await fixture.list(1, filteredOne.next!)).toEqual({
-      claimRequests: [expected[1]],
+      claimRequests: [expected[1]!],
       next: expect.any(String),
     });
 
