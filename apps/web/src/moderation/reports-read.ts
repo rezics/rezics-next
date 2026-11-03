@@ -104,9 +104,7 @@ export type Report = {
 };
 type ReportRecord = Omit<Report, 'target'> & { target: { kind: string; id: string } };
 export type ReportPage = { reports: Report[]; next: string | null };
-type NativeReportList = NonNullable<
-  Awaited<ReturnType<ReturnType<KernelClient['boards']>['reports']['get']>>['data']
->;
+type NativeReportList = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['boards']>['reports']['get']>>['data']>;
 type ReportSourcePage = { reports: readonly ReportRecord[]; next: string | null };
 export type ReportReadSource = {
   boardReports: (id: string, cursor?: string, selection?: ReportSelection) => Promise<ReportSourcePage>;
