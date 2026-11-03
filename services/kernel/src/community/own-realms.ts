@@ -24,7 +24,7 @@ export type OwnRealmsDependencies = {
   access: Access;
   clock?: () => Date;
 };
-export type OwnRealmMembership = NonNullable<Awaited<ReturnType<typeof confirmMembership.run>>> & { epoch: number };
+export type OwnRealmMembership = NonNullable<Awaited<ReturnType<typeof confirmMembership.run>>> & { epoch: number; since: string };
 type OwnRealmsInput = { cursor?: string };
 type Context = { deadline: number; at: string };
 
@@ -80,7 +80,7 @@ export async function observeOwnRealmMembership(
     });
     if (member && (member.since === null || !Number.isFinite(Date.parse(member.since))))
       throw new ProblemError('dependency_unavailable');
-    return member && { ...member, epoch: partition.epoch };
+    return member && { ...member, since: member.since!, epoch: partition.epoch };
   });
 }
 
