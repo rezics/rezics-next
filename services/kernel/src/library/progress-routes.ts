@@ -1,4 +1,5 @@
 import { t } from 'elysia';
+import { createEpisodeProgressCommands, MAX_EPISODE_IDS } from './episode-progress.ts';
 import type { Pool } from 'pg';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import type { KernelClock } from '../clock.ts';
@@ -238,6 +239,7 @@ const profileConflict = problemSchema('idempotency_conflict', 'unsupported_libra
 const forbidden = problemSchema('forbidden');
 const notFound = problemSchema('not_found');
 const unavailable = problemSchema(
+  'semantic_not_ready',
   'overloaded',
   'partition_unavailable',
   'transaction_retry_exhausted',
@@ -352,6 +354,8 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
   const { pool, tokens, clock } = dependencies;
   let sessions: ReturnType<typeof createSessionCommands> | undefined;
   let published: ReturnType<typeof createPublishedLogCommands> | undefined;
+  let episodes: ReturnType<typeof createEpisodeProgressCommands> | undefined;
+  const episodeCommands = () => (episodes ??= createEpisodeProgressCommands(config()));
   const sessionCommands = () =>
     (sessions ??= createSessionCommands({ pool, access: dependencies.access(), tokens, clock }));
   const publishedCommands = () =>
@@ -359,6 +363,15 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
   const statistics = createConsumptionStatisticsReads({ pool });
   const reportedYears = createReportedYearSummaryReads({ pool });
 
+  const episodeRow = t.Object(
+    {
+      episodeSubjectId: t.Union([id, t.Null()]),
+      completed: t.Union([t.Boolean(), t.Null()]),
+      membership: t.Union([t.Literal('member'), t.Literal('detached'), t.Literal('unavailable')]),
+      ordinal: nullableString,
+    },
+    closed,
+  );
   return app
     .get(
       '/v1/libraryReportedYearSummary',
@@ -439,6 +452,87 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
       async ({ actor, admission, job, request }) => {
         requireAccount(actor);
         return admission.run('normal', job, () => statistics.summary(actor, job.deadline, request.signal));
+      },
+    )
+    .get(
+      '/v1/progressSessions/:sessionId/episodes',
+      {
+        params: t.Object({ sessionId: id }, closed),
+        query: t.Object(
+          {
+            ids: t.Optional(t.String({ maxLength: 739 })),
+            cursor: t.Optional(t.String({ maxLength: 4096 })),
+            limit: t.Optional(t.Numeric({ minimum: 1, maximum: MAX_EPISODE_IDS, multipleOf: 1 })),
+          },
+          closed,
+        ),
+        response: {
+          200: t.Object({ revision, episodes: t.Array(episodeRow), next: nullableString }, closed),
+          400: invalid,
+          401: unauthorized,
+          403: forbidden,
+          404: notFound,
+          409: conflict,
+          503: unavailable,
+        },
+        detail: detail('progress_session.episodes', 'progress_session:read'),
+      },
+      async ({ params, query, actor, admission, job, set }) => {
+        requireAccount(actor);
+        set.headers['cache-control'] = 'private, no-store';
+        return admission.run('normal', job, () =>
+          mapped(
+            () =>
+              episodeCommands().readEpisodes(actor, params.sessionId, {
+                ...(query.ids === undefined ? {} : { ids: query.ids.split(',') }),
+                ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+                ...(query.limit === undefined ? {} : { limit: query.limit }),
+              }),
+            'not_found',
+          ),
+        );
+      },
+    )
+    .post(
+      customMethod('/v1/progressSessions/:sessionId', 'recordEpisodes'),
+      {
+        params: t.Object({ sessionId: id }, closed),
+        headers: idempotencyHeaders,
+        body: t.Object(
+          {
+            revision,
+            clear: t.Optional(t.Literal(true)),
+            add: t.Optional(t.Array(id, { maxItems: MAX_EPISODE_IDS })),
+            remove: t.Optional(t.Array(id, { maxItems: MAX_EPISODE_IDS })),
+          },
+          closed,
+        ),
+        response: {
+          200: t.Object({ revision }, closed),
+          400: invalid,
+          401: unauthorized,
+          403: forbidden,
+          404: notFound,
+          409: problemSchema('conflict'),
+          422: profileConflict,
+          503: unavailable,
+        },
+        detail: detail('progress_session.record_episodes', 'progress_session:update'),
+      },
+      async ({ params, body, headers, actor, admission, job, session }) => {
+        requireAccount(actor);
+        const result = await admission.run('normal', job, () =>
+          mapped(() =>
+            episodeCommands().recordEpisodes(
+              actor,
+              params.sessionId,
+              body,
+              idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
+            ),
+          ),
+        );
+        session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
+        return result.value;
       },
     )
     .post(
