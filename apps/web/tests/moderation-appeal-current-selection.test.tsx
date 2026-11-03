@@ -15,7 +15,7 @@ mock.module('../src/moderation/actions', () => ({
   actionOnReport: async () => ({ ok: true }),
   actionOnAppeal: async ({ data }: { data: ResolutionCommand }) => {
     sent.push(data);
-    return { state: 'uncertain' };
+    throw new Error('Response lost');
   },
 }));
 const { Window } = await import(
