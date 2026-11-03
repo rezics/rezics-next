@@ -175,7 +175,13 @@ export async function readAppealReviewTargetContexts(
         );
         for (const row of value) {
           if (typeof row.kind !== 'string' || typeof row.target_id !== 'string') continue;
-          locations.set(`${row.kind}:${row.target_id}`, row);
+          locations.set(`${row.kind}:${row.target_id}`, {
+            kind: row.kind,
+            target_id: row.target_id,
+            board_id: row.board_id,
+            thread_id: row.thread_id,
+            present: row.present,
+          });
         }
       } catch {
         failedHomes.add(home);
