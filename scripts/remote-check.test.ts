@@ -1343,7 +1343,7 @@ function slotScriptEnvironment(testRoot: string, tasksCurrent = 0): Record<strin
   mkdirSync(bin, { recursive: true });
   writeFileSync(
     join(bin, 'systemctl'),
-    '#!/bin/sh\ncase "$1" in show) printf "%s\\n" "${TASKS_CURRENT:-0}" ;; list-units) ;; esac\n',
+    '#!/bin/sh\ncase "$1" in show) printf "%s\\n" "${TASKS_CURRENT:-0}" ;; is-active) [ "${TASKS_CURRENT:-0}" -gt 0 ] ;; list-units|stop) ;; *) exit 1 ;; esac\n',
   );
   writeFileSync(join(bin, 'docker'), '#!/bin/sh\nexit 0\n');
   chmodSync(join(bin, 'systemctl'), 0o755);
@@ -2099,27 +2099,15 @@ test('with KERNEL_CHECK_REMOTE set the kernel check selects its files locally an
 });
 
 test('among hosts that pass load and available-memory admission, free slots and memory headroom choose the host', async () => {
-  const { env, events } = scenario({
-    memory: {
-      available: 64 * 2 ** 30,
-      memoryMax: 2 * CHECK_SLOT_MEMORY_BYTES,
-      memoryHeadroom: CHECK_SLOT_MEMORY_BYTES - 1,
-      cpuQuotaPercent: 200,
-      processors: 16,
-      load: 0,
-      slots: 4,
-    },
-    full: {
-      available: 64 * 2 ** 30,
-      memoryMax: 2 * CHECK_SLOT_MEMORY_BYTES,
-      memoryHeadroom: 2 * CHECK_SLOT_MEMORY_BYTES,
-      cpuQuotaPercent: 800,
-      processors: 16,
-      load: 8 - CHECK_SLOT_PROCESSORS + 0.01,
-      slots: 4,
-      ordinaryBusy: 3,
-    },
-    ready: {
+  const unavailableHosts: HostConfig[] = [
+    { available: 64 * 2 ** 30, memoryMax: 2 * CHECK_SLOT_MEMORY_BYTES,
+      memoryHeadroom: CHECK_SLOT_MEMORY_BYTES - 1, cpuQuotaPercent: 400, slots: 4 },
+    { available: 64 * 2 ** 30, memoryMax: 2 * CHECK_SLOT_MEMORY_BYTES,
+      memoryHeadroom: 2 * CHECK_SLOT_MEMORY_BYTES, cpuQuotaPercent: 800, slots: 4, ordinaryBusy: 3 },
+  ];
+  for (const unavailable of unavailableHosts) {
+  const { env, events } = scenario({ a: unavailable,
+    b: {
       available: 4 * 2 ** 30,
       memoryMax: 2 * CHECK_SLOT_MEMORY_BYTES,
       memoryHeadroom: CHECK_SLOT_MEMORY_BYTES,
@@ -2132,7 +2120,7 @@ test('among hosts that pass load and available-memory admission, free slots and 
   const result = await remote(env, workspace());
 
   expect(result.code).toBe(0);
-  expect(events().find((event) => event.kind === 'rsync')!.destination).toStartWith('ops@ready.test:');
+  expect(events().find((event) => event.kind === 'rsync')!.destination).toStartWith('ops@b.test:');
   const probe = events().find((event) => event.kind === 'probe')!.script as string;
   for (const reportedValue of [
     'nproc',
@@ -2148,7 +2136,8 @@ test('among hosts that pass load and available-memory admission, free slots and 
     events()
       .filter((event) => event.kind === 'slot')
       .map((event) => event.address),
-  ).toEqual(['ops@ready.test']);
+  ).toEqual(['ops@b.test']);
+  }
 });
 
 test('configured slots and slice resources bound the admission capacity', async () => {
@@ -2372,8 +2361,8 @@ test('a non-positive or non-finite processorsPerSlot fails host loading with the
 
 test('a request above half the smallest answering host capacity is refused before waiting', async () => {
   const { env, events } = scenario({
-    small: { slots: 4, memoryMax: 16 * 2 ** 30, memoryHeadroom: 16 * 2 ** 30, cpuQuotaPercent: 800 },
-    large: { slots: 8, memoryMax: 48 * 2 ** 30, memoryHeadroom: 48 * 2 ** 30, cpuQuotaPercent: 1600 },
+    a: { slots: 4, memoryMax: 16 * 2 ** 30, memoryHeadroom: 16 * 2 ** 30, cpuQuotaPercent: 800 },
+    b: { slots: 8, memoryMax: 48 * 2 ** 30, memoryHeadroom: 48 * 2 ** 30, cpuQuotaPercent: 1600 },
   });
   const directory = workspace();
   const result = await remote(env, directory, ['true'], ['--slots', '3']);
@@ -2532,26 +2521,26 @@ test('acquisition prefers the host with the most free capacity', async () => {
 
 test('a host over 1.5 times its slice processors in load is skipped and logged with its load limit', async () => {
   const { env, events } = scenario({
-    loaded: { available: 16 * 2 ** 30, load: 13, sliceProcessors: 8 },
-    ready: { available: 16 * 2 ** 30, load: 0 },
+    a: { available: 16 * 2 ** 30, load: 13, sliceProcessors: 8 },
+    b: { available: 16 * 2 ** 30, load: 0 },
   });
   const result = await remote(env, workspace(), ['true']);
 
   expect(result.code).toBe(0);
-  expect(events().find((event) => event.kind === 'run')?.address).toBe('ops@ready.test');
-  expect(result.stderr).toContain('skipped loaded: load 13 exceeds limit 12');
+  expect(events().find((event) => event.kind === 'run')?.address).toBe('ops@b.test');
+  expect(result.stderr).toContain('skipped a: load 13 exceeds limit 12');
 });
 
 test('a host with less than 4 GiB MemAvailable is skipped and logged with its available memory', async () => {
   const { env, events } = scenario({
-    low: { available: 3 * 2 ** 30, memoryMax: 16 * 2 ** 30, memoryHeadroom: 16 * 2 ** 30 },
-    ready: { available: 16 * 2 ** 30 },
+    a: { available: 3 * 2 ** 30, memoryMax: 16 * 2 ** 30, memoryHeadroom: 16 * 2 ** 30 },
+    b: { available: 16 * 2 ** 30 },
   });
   const result = await remote(env, workspace(), ['true']);
 
   expect(result.code).toBe(0);
-  expect(events().find((event) => event.kind === 'run')?.address).toBe('ops@ready.test');
-  expect(result.stderr).toContain(`skipped low: MemAvailable ${3 * 2 ** 30} bytes is under ${4 * 2 ** 30} bytes`);
+  expect(events().find((event) => event.kind === 'run')?.address).toBe('ops@b.test');
+  expect(result.stderr).toContain(`skipped a: MemAvailable ${3 * 2 ** 30} bytes is under ${4 * 2 ** 30} bytes`);
 });
 
 test('tmp floor: the probe reports free /tmp bytes and inodes, and missing values make it invalid', async () => {
@@ -2569,59 +2558,59 @@ test('tmp floor: the probe reports free /tmp bytes and inodes, and missing value
 
   for (const missing of ['omitTmpBytes', 'omitTmpInodes'] as const) {
     const invalid = scenario({
-      invalid: { available: 16 * 2 ** 30, [missing]: true },
-      ready: { available: 16 * 2 ** 30 },
+      a: { available: 16 * 2 ** 30, [missing]: true },
+      b: { available: 16 * 2 ** 30 },
     });
     const admitted = await remote(invalid.env, workspace(), ['true']);
     expect(admitted.code).toBe(0);
-    expect(invalid.events().find((event) => event.kind === 'run')?.address).toBe('ops@ready.test');
+    expect(invalid.events().find((event) => event.kind === 'run')?.address).toBe('ops@b.test');
     expect(
       invalid
         .events()
         .filter((event) => event.kind === 'slot')
         .map((event) => event.address),
-    ).not.toContain('ops@invalid.test');
+    ).not.toContain('ops@a.test');
   }
 });
 
 test('tmp floor: a host under the free byte floor is skipped for a ready host', async () => {
   const freeBytes = CHECK_HOST_MIN_TMP_BYTES - 1;
   const { env, events } = scenario({
-    low: { available: 16 * 2 ** 30, tmpBytes: freeBytes, tmpInodes: CHECK_HOST_MIN_TMP_INODES },
-    ready: { available: 16 * 2 ** 30 },
+    a: { available: 16 * 2 ** 30, tmpBytes: freeBytes, tmpInodes: CHECK_HOST_MIN_TMP_INODES },
+    b: { available: 16 * 2 ** 30 },
   });
   const result = await remote(env, workspace(), ['true']);
 
   expect(result.code).toBe(0);
-  expect(events().find((event) => event.kind === 'run')?.address).toBe('ops@ready.test');
+  expect(events().find((event) => event.kind === 'run')?.address).toBe('ops@b.test');
   expect(result.stderr).toContain(
-    `skipped low: /tmp ${freeBytes} free bytes is under ${CHECK_HOST_MIN_TMP_BYTES} required bytes`,
+    `skipped a: /tmp ${freeBytes} free bytes is under ${CHECK_HOST_MIN_TMP_BYTES} required bytes`,
   );
   expect(
     events()
       .filter((event) => event.kind === 'slot')
       .map((event) => event.address),
-  ).not.toContain('ops@low.test');
+  ).not.toContain('ops@a.test');
 });
 
 test('tmp floor: a host under the free inode floor is skipped even with enough free bytes', async () => {
   const freeInodes = CHECK_HOST_MIN_TMP_INODES - 1;
   const { env, events } = scenario({
-    low: { available: 16 * 2 ** 30, tmpBytes: CHECK_HOST_MIN_TMP_BYTES + 1, tmpInodes: freeInodes },
-    ready: { available: 16 * 2 ** 30 },
+    a: { available: 16 * 2 ** 30, tmpBytes: CHECK_HOST_MIN_TMP_BYTES + 1, tmpInodes: freeInodes },
+    b: { available: 16 * 2 ** 30 },
   });
   const result = await remote(env, workspace(), ['true']);
 
   expect(result.code).toBe(0);
-  expect(events().find((event) => event.kind === 'run')?.address).toBe('ops@ready.test');
+  expect(events().find((event) => event.kind === 'run')?.address).toBe('ops@b.test');
   expect(result.stderr).toContain(
-    `skipped low: /tmp ${freeInodes} free inodes is under ${CHECK_HOST_MIN_TMP_INODES} required inodes`,
+    `skipped a: /tmp ${freeInodes} free inodes is under ${CHECK_HOST_MIN_TMP_INODES} required inodes`,
   );
   expect(
     events()
       .filter((event) => event.kind === 'slot')
       .map((event) => event.address),
-  ).not.toContain('ops@low.test');
+  ).not.toContain('ops@a.test');
 });
 
 test('tmp floor: a host at the byte and inode floors is admitted', async () => {
@@ -2637,8 +2626,8 @@ test('tmp floor: a host at the byte and inode floors is admitted', async () => {
 
 test('when every host is skipped for load or memory the check waits and names both reasons', async () => {
   const { env, events } = scenario({
-    loaded: { available: 16 * 2 ** 30, load: 13, sliceProcessors: 8 },
-    low: { available: 3 * 2 ** 30, memoryMax: 16 * 2 ** 30, memoryHeadroom: 16 * 2 ** 30 },
+    a: { available: 16 * 2 ** 30, load: 13, sliceProcessors: 8 },
+    b: { available: 3 * 2 ** 30, memoryMax: 16 * 2 ** 30, memoryHeadroom: 16 * 2 ** 30 },
   });
   const waitFile = join(env.FAKE_DIR!, 'admission-wait-ms');
   env.GOAL_CHECK_WAIT_FILE = waitFile;
@@ -2648,15 +2637,15 @@ test('when every host is skipped for load or memory the check waits and names bo
   const [, , stderr] = await Promise.all([run.child.exited, run.stdout, run.stderr]);
 
   expect(stderr).toContain(
-    'waiting for an eligible check host (no responding hosts); configured loaded 2 slots, low 2 slots',
+    'every check slot is busy; waiting for a free one (no responding hosts); configured a 2 slots, b 2 slots',
   );
-  expect(stderr).toContain('loaded: load 13 exceeds limit 12');
-  expect(stderr).toContain(`low: MemAvailable ${3 * 2 ** 30} bytes is under ${4 * 2 ** 30} bytes`);
+  expect(stderr).toContain('a: load 13 exceeds limit 12');
+  expect(stderr).toContain(`b: MemAvailable ${3 * 2 ** 30} bytes is under ${4 * 2 ** 30} bytes`);
   expect(events().some((event) => event.kind === 'slot')).toBe(false);
 });
 
 test('non-gate runs prefer any startable non-fallback host over a fallback host', async () => {
-  const { env, events } = scenario({ a: { available: 8e9 }, c: { available: 8e9, fallback: true } });
+  const { env, events } = scenario({ a: { available: 8e9 }, b: { available: 8e9, fallback: true } });
   const directory = workspace();
   try {
     const result = await remote(env, directory, ['echo', 'preferred']);
@@ -2668,12 +2657,12 @@ test('non-gate runs prefer any startable non-fallback host over a fallback host'
 });
 
 test('a fallback host starts a non-gate run only when every non-fallback host is unable to start it', async () => {
-  const { env, events } = scenario({ a: { available: 8e9, ordinaryBusy: 1 }, c: { available: 8e9, fallback: true } });
+  const { env, events } = scenario({ a: { available: 8e9, ordinaryBusy: 1 }, b: { available: 8e9, fallback: true } });
   const directory = workspace();
   try {
     const result = await remote(env, directory, ['echo', 'fallback']);
     expect(result.code).toBe(0);
-    expect(events().find((event) => event.kind === 'run')?.address).toBe('ops@c.test');
+    expect(events().find((event) => event.kind === 'run')?.address).toBe('ops@b.test');
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -2682,7 +2671,7 @@ test('a fallback host starts a non-gate run only when every non-fallback host is
 test('when every host is busy, the uploaded placement stays on the selected non-fallback host', async () => {
   const { env, events } = scenario({
     a: { available: 8e9, slots: 4, ordinaryBusySlots: [0, 1] },
-    c: { available: 16e9, slots: 4, ordinaryBusySlots: [0, 1], fallback: true },
+    b: { available: 16e9, slots: 4, ordinaryBusySlots: [0, 1], fallback: true },
   });
   const directory = workspace();
   const waitFile = join(env.FAKE_DIR!, 'soonest-wait-ms');
@@ -3581,34 +3570,33 @@ test('containers started on a check host run under its capped cgroup slice', () 
 });
 
 test('a remote run takes all requested slots in one session on one host and releases them all', async () => {
-  // a and b each have room for one legacy slot reservation; c is reachable after three injected take failures.
+  // a has room for one legacy slot reservation; b is reachable after three injected take failures.
   const { env, events } = scenario({
     a: { available: 4.5e9, memoryMax: 4 * 2 ** 30, memoryMaxGiB: 4, slots: 4 },
-    b: { available: 4.5e9, memoryMax: 4 * 2 ** 30, memoryMaxGiB: 4, slots: 4 },
-    c: { available: 30e9, memoryMax: 30 * 2 ** 30, memoryMaxGiB: 30, slots: 4, busy: 3 },
+    b: { available: 30e9, memoryMax: 30 * 2 ** 30, memoryMaxGiB: 30, slots: 4, busy: 3 },
   });
   const result = await remote(env, workspace(), ['bun', 'test'], ['--slots', '2']);
   expect(result.code).toBe(0);
 
   const seen = events();
   const on = (host: string) => seen.filter((event) => event.address === `ops@${host}.test`);
-  // b and a cannot serve this run; c takes both slots in one SSH session after its injected busy responses.
-  expect(on('b').filter((event) => event.kind === 'slot')).toEqual([]);
-  expect(on('c').filter((event) => event.kind === 'reservation')).toHaveLength(0);
-  expect(on('c').filter((event) => event.kind === 'slot' && event.granted === false)).toHaveLength(3);
-  expect(on('c').filter((event) => event.kind === 'slot' && event.granted === true)).toHaveLength(2);
-  // c holds both slots through the command, then drops them before the run directory is removed.
-  const kinds = on('c').map((event) => event.kind);
+  // a cannot serve this run; b takes both slots in one SSH session after its injected busy responses.
+  expect(on('a').filter((event) => event.kind === 'slot')).toEqual([]);
+  expect(on('b').filter((event) => event.kind === 'reservation')).toHaveLength(0);
+  expect(on('b').filter((event) => event.kind === 'slot' && event.granted === false)).toHaveLength(3);
+  expect(on('b').filter((event) => event.kind === 'slot' && event.granted === true)).toHaveLength(2);
+  // b holds both slots through the command, then drops them before the run directory is removed.
+  const kinds = on('b').map((event) => event.kind);
   expect(
-    on('c')
+    on('b')
       .filter((event) => event.kind === 'slot')
       .map((event) => event.granted),
   ).toEqual([false, false, false, true, true]);
-  const successfulTakes = on('c').filter((event) => event.kind === 'slot' && event.granted);
+  const successfulTakes = on('b').filter((event) => event.kind === 'slot' && event.granted);
   expect(new Set(successfulTakes.map((event) => event.call)).size).toBe(1);
   expect(kinds.indexOf('run')).toBeGreaterThan(kinds.lastIndexOf('slot'));
-  expect(on('c').find((event) => event.kind === 'run')!.slotHeld).toBe(true);
-  const releases = on('c').filter((event) => event.kind === 'release');
+  expect(on('b').find((event) => event.kind === 'run')!.slotHeld).toBe(true);
+  const releases = on('b').filter((event) => event.kind === 'release');
   expect(releases).toHaveLength(2);
   expect(releases[0]!.slotHeld).toBe(true);
   expect(releases[1]!.slotHeld).toBe(false);
@@ -4481,7 +4469,7 @@ test('the generated shell invocation preserves spaces, quotes and dollar text in
   const marker = 'should-not-exist';
   const argumentsToPreserve = ['two words', "single'quote", '"double quotes"', '$HOME', `$(touch ${marker})`];
   const command = ['sh', '-c', `printf '%s\\n' "$@" > ${output}`, 'sh', ...argumentsToPreserve];
-  const script = runScript('literal-arguments', '/srv/rezics-check/runs/literal-arguments', '.', command, 'check-a');
+  const script = runScript('literal-arguments', '/srv/rezics-check/runs/literal-arguments', '.', command, 'a');
   const result = fixture.execute(script);
 
   expect(result.status, result.stderr).toBe(0);
@@ -4548,7 +4536,7 @@ test('the run checks installed packages after the command and before recording i
   const marker = run.indexOf('.bun-install-complete');
   const command = run.indexOf('\n        "$@"');
   const packageCheck = run.indexOf('modified_files=$(find');
-  const exitStatus = run.indexOf('exit-status');
+  const exitStatus = run.indexOf("printf '%s\\n' \"$code\" > \"$terminal_status\"");
   expect(install).toBeGreaterThanOrEqual(0);
   expect(marker).toBeGreaterThan(install);
   expect(command).toBeGreaterThan(marker);
@@ -4563,12 +4551,12 @@ test('a quiet remote command reports CPU progress and the progress loop exits wi
     '/srv/rezics-check/runs/remote-progress',
     '.',
     ['/bin/sleep', '0.35'],
-    'check-a',
+    'a',
     10,
   );
-  const result = fixture.execute(script, { PROGRESS_INCREMENT: '1200000', REMOTE_CHECK_HOST: 'check-a' });
+  const result = fixture.execute(script, { PROGRESS_INCREMENT: '1200000', REMOTE_CHECK_HOST: 'a' });
   expect(result.status).toBe(0);
-  expect(result.stderr).toMatch(/remote-check: running on check-a, \d+ CPU seconds/);
+  expect(result.stderr).toMatch(/remote-check: running on a, \d+ CPU seconds/);
   const pids = readFileSync(join(fixture.directory, 'sleep-pids'), 'utf8').trim().split('\n').map(Number);
   expect(pids.every((pid) => !existsSync(`/proc/${pid}`))).toBe(true);
 });
@@ -4580,12 +4568,12 @@ test('a quiet remote command without CPU progress writes no progress line', () =
     '/srv/rezics-check/runs/remote-idle',
     '.',
     ['/bin/sleep', '0.3'],
-    'check-a',
+    'a',
     10,
   );
-  const result = fixture.execute(script, { REMOTE_CHECK_HOST: 'check-a' });
+  const result = fixture.execute(script, { REMOTE_CHECK_HOST: 'a' });
   expect(result.status).toBe(0);
-  expect(result.stderr).not.toContain('remote-check: running on check-a');
+  expect(result.stderr).not.toContain('remote-check: running on a');
   const pids = readFileSync(join(fixture.directory, 'sleep-pids'), 'utf8').trim().split('\n').map(Number);
   expect(pids.every((pid) => !existsSync(`/proc/${pid}`))).toBe(true);
 });
@@ -4600,11 +4588,11 @@ test('a quiet remote command reports every interval with at least one CPU second
     '/srv/rezics-check/sleep-pids',
   ];
   const result = fixture.execute(
-    runScript('remote-each-interval', '/srv/rezics-check/runs/remote-each-interval', '.', command, 'check-a', 10),
+    runScript('remote-each-interval', '/srv/rezics-check/runs/remote-each-interval', '.', command, 'a', 10),
     { PROGRESS_INCREMENT: '1200000' },
   );
   expect(result.status, result.stderr).toBe(0);
-  const reports = [...result.stderr.matchAll(/remote-check: running on check-a, (\d+) CPU seconds/g)];
+  const reports = [...result.stderr.matchAll(/remote-check: running on a, (\d+) CPU seconds/g)];
   const pids = readFileSync(join(fixture.directory, 'sleep-pids'), 'utf8').trim().split('\n').map(Number);
   // Each new sleeper proves the preceding interval finished sampling and reporting.
   expect(reports.length).toBeGreaterThanOrEqual(6);
@@ -4633,12 +4621,12 @@ test('remote CPU reports accumulate subsecond work across intervals', () => {
     '/srv/rezics-check/runs/remote-fractional',
     '.',
     command,
-    'check-a',
+    'a',
     10,
   );
-  const result = fixture.execute(script, { PROGRESS_INCREMENT: '400000', REMOTE_CHECK_HOST: 'check-a' });
+  const result = fixture.execute(script, { PROGRESS_INCREMENT: '400000', REMOTE_CHECK_HOST: 'a' });
   expect(result.status, result.stderr).toBe(0);
-  const reports = [...result.stderr.matchAll(/remote-check: running on check-a, (\d+) CPU seconds/g)].map((match) =>
+  const reports = [...result.stderr.matchAll(/remote-check: running on a, (\d+) CPU seconds/g)].map((match) =>
     Number(match[1]),
   );
   expect(reports.length).toBeGreaterThanOrEqual(2);
@@ -4655,10 +4643,10 @@ test('a signal to the remote command wrapper reaps its progress loop and sleeper
     '/srv/rezics-check/runs/remote-signal',
     '.',
     ['sh', '-c', '/bin/sleep 0.15; kill -TERM "$PPID"; exec /bin/sleep 0.5'],
-    'check-a',
+    'a',
     10,
   );
-  const result = fixture.execute(script, { PROGRESS_INCREMENT: '1200000', REMOTE_CHECK_HOST: 'check-a' });
+  const result = fixture.execute(script, { PROGRESS_INCREMENT: '1200000', REMOTE_CHECK_HOST: 'a' });
   expect(result.status, result.stderr).toBe(143);
   const pids = readFileSync(join(fixture.directory, 'sleep-pids'), 'utf8').trim().split('\n').map(Number);
   expect(pids.length).toBeGreaterThan(0);
@@ -5058,7 +5046,7 @@ test('transfer progress from rsync stdout keeps uploads and returns alive beyond
 test('repeated, decreasing, malformed and diagnostic-only rsync output cannot extend transfer progress deadlines', async () => {
   for (const [mode, lastBytes] of [
     ['repeated', '1024'],
-    ['decreasing', '1024'],
+    ['decreasing', '2048'],
     ['malformed', 'none'],
     ['diagnostic-only', 'none'],
   ] as const) {
@@ -5601,9 +5589,15 @@ test('bounded return inventory retains output, status and receipts at the unchan
     });
     expect(inventory.status).toBe(0);
     expect(inventory.stderr).toBe('');
-    expect(inventory.stdout.trimEnd().split('\n').sort()).toEqual(
+    expect(inventory.stdout.trimEnd().split('\n').filter((line) => !line.startsWith('MANIFEST ')).sort()).toEqual(
       ['exit-status', 'output.log', 'receipt.json'].map((file) => `PRESENT ${path}/${file}`).sort(),
     );
+    const encoded = inventory.stdout.trimEnd().split('\n').find((line) => line.startsWith('MANIFEST '))!;
+    const entries = JSON.parse(Buffer.from(encoded.slice('MANIFEST '.length), 'base64').toString());
+    expect(entries.map((entry: { path: string }) => entry.path)).toEqual(
+      ['exit-status', 'output.log', 'receipt.json'].map((file) => `${path}/${file}`),
+    );
+    expect(entries.every((entry: { sha256: string; kind: string }) => /^[a-f0-9]{64}$/.test(entry.sha256) && entry.kind === 'file')).toBe(true);
     expect(existsSync(join(directory, 'injected'))).toBe(false);
 
     for (let index = 3; index < CHECK_ARTIFACTS_MAX_FILES; index++) {
@@ -5615,7 +5609,7 @@ test('bounded return inventory retains output, status and receipts at the unchan
     });
     expect(atLimit.status).toBe(0);
     expect(atLimit.stderr).toBe('');
-    expect(new Set(atLimit.stdout.trimEnd().split('\n')).size).toBe(CHECK_ARTIFACTS_MAX_FILES);
+    expect(new Set(atLimit.stdout.trimEnd().split('\n').filter((line) => !line.startsWith('MANIFEST '))).size).toBe(CHECK_ARTIFACTS_MAX_FILES);
     expect(atLimit.stdout).not.toContain('OVERSIZE');
 
     const overflow = join(stage, 'one-too-many');
@@ -5681,22 +5675,22 @@ test('a remote run puts the docker wrapper first on the path', async () => {
   expect(script).toContain(readFileSync(join(checkHost, 'docker'), 'utf8'));
 });
 
-test('without KERNEL_CHECK_REMOTE the kernel check runs locally as before', async () => {
+test('missing or unreadable remote configuration never starts a local kernel check', async () => {
   const { env, events } = scenario({ a: { available: 4.5e9 } });
   const local = { ...env };
   delete local.KERNEL_CHECK_REMOTE;
   const result = await kernelCheck(local);
   expect(result.code).not.toBe(0);
   const seen = events();
-  expect(seen.some((event) => event.kind === 'docker')).toBe(true);
-  // An unset name falls back to the shared hosts file. Those hosts do not answer this fake ssh, so the check still
-  // runs locally; the probes are the only remote traffic.
+  expect(seen.some((event) => event.kind === 'docker')).toBe(false);
+  // Default host discovery may probe, but unavailable placement never starts a local database.
   expect(seen.filter((event) => event.kind !== 'docker' && event.kind !== 'probe')).toEqual([]);
 
   // An unreadable hosts file does not fall back and does not hand off.
   const missing = scenario({ a: { available: 4.5e9 } });
-  await kernelCheck({ ...missing.env, KERNEL_CHECK_REMOTE: join(root, 'no-such-hosts.json') });
-  expect(missing.events().some((event) => event.kind === 'docker')).toBe(true);
+  const unavailable = await kernelCheck({ ...missing.env, KERNEL_CHECK_REMOTE: join(root, 'no-such-hosts.json') });
+  expect(unavailable.code).not.toBe(0);
+  expect(missing.events().some((event) => event.kind === 'docker')).toBe(false);
   expect(missing.events().filter((event) => event.kind !== 'docker')).toEqual([]);
 
   // The flag does not itself force local placement; actual check-host location still takes precedence.
@@ -7829,6 +7823,7 @@ test('lifecycle control uses the selected host run and recovers idempotently aft
       ssh,
       `#!${process.execPath}\nimport{appendFileSync,readFileSync}from'node:fs';
       if(process.argv.includes('-O'))process.exit(0);
+      await Bun.stdin.text();
       appendFileSync(${JSON.stringify(trace)},JSON.stringify(process.argv.slice(2))+'\\n');
       if(readFileSync(${JSON.stringify(mode)},'utf8')==='lost')process.exit(255);
       console.log(JSON.stringify({ack:'same-physical-release'}));\n`,
