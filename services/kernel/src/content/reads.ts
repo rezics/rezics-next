@@ -602,7 +602,9 @@ async function prepare(
       return decision.allowed;
     };
   }
-  return accessCheck(dependencies.access, context.actor, action, resourceWithEligibility, accessContext);
+  const check = await accessCheck(dependencies.access, context.actor, action, resourceWithEligibility, accessContext);
+  if (context.work && !check.work) context.work.unavailable(`Content ${action} native work producer`);
+  return check;
 }
 
 async function observeBoard(
@@ -1576,7 +1578,7 @@ export async function prepareRealmSubjectThreadDisclosure(
   state: 'positive' | 'absent' | 'withheld';
   signature: string | null;
   anchors: readonly AnchoredPosition[];
-  final(): Promise<boolean>;
+  final(): Promise<Readonly<{ signature: string; anchors: readonly AnchoredPosition[] }> | null>;
 }>> {
   const observed = await snapshot(dependencies, candidate.threadId, context, async (client) => {
     const thread = await point(client, 'thread', candidate.threadId);
@@ -1584,7 +1586,7 @@ export async function prepareRealmSubjectThreadDisclosure(
   });
   const initial = observed.value;
   const unavailable = {
-    state: 'withheld' as const, signature: null, anchors: [], final: async () => false,
+    state: 'withheld' as const, signature: null, anchors: [], final: async () => null,
   };
   if (!initial?.thread.board_id || !initial.revision || !initial.posts[0]) return unavailable;
   const boardObservation = await observeBoard(dependencies, initial.thread.board_id, context);
@@ -1626,8 +1628,12 @@ export async function prepareRealmSubjectThreadDisclosure(
     anchors: [observed.anchor, board.anchor],
     async final() {
       // Reuse the original baseline. Re-reading cannot bless a changed source.
-      if (!(await snapshot(dependencies, candidate.threadId, context, allowed)).value) return false;
-      return boardObservation.recheck();
+      const current = await snapshot(dependencies, candidate.threadId, context, allowed);
+      if (!current.value || !(await boardObservation.recheck())) return null;
+      return {
+        signature: createHash('sha256').update(baseline).digest('hex'),
+        anchors: [current.anchor],
+      };
     },
   };
 }

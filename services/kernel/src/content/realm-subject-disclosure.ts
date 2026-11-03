@@ -39,6 +39,7 @@ export type RealmSubjectDisclosureContext = Readonly<{
 export type RealmSubjectFreshness = Readonly<{
   before: string;
   final: string;
+  expiresAt: number;
   anchors: readonly AnchoredPosition[];
 }>;
 export type RealmSubjectEvidence =
@@ -72,7 +73,7 @@ function denied(error: unknown): boolean {
 /** Native original read eligibility supplies all permissions. This helper only
  * constructs exact resources; it never derives authority from role names.
  */
-function prepareAccess(
+async function prepareAccess(
   dependencies: RealmSubjectDisclosureDependencies,
   context: RealmSubjectDisclosureContext,
   id: string,
@@ -81,9 +82,12 @@ function prepareAccess(
   const identity = { id, route: route(id) };
   const eligibility = action === 'realm:read' ? realmReadEligibility(identity)
     : action === 'space:read' ? spaceReadEligibility(identity) : subjectReadEligibility(identity);
-  return accessCheck(dependencies.access, context.actor, action, { ...identity, eligibility }, {
+  if (!dependencies.access.prepare) context.work.unavailable('Content Realm Subject native Access preparation');
+  const check = await accessCheck(dependencies.access, context.actor, action, { ...identity, eligibility }, {
     pool: dependencies.pool, deadline: context.deadline, work: context.work,
   });
+  if (!check.work) context.work.unavailable(`Content Realm Subject ${action} native work producer`);
+  return check;
 }
 
 /** Raw typed plans retain native original/terminal semantics without generated
@@ -124,7 +128,7 @@ async function observeParent(
     const current = await nativePoint(client, 'parent.binding', bindingRead, parameters, 3);
     if (!current || hash(current) !== hash(parent) || !(await realm(client))) return false;
     if (accounts.length) {
-      // CURRENT_TIMESTAMP belongs to this native snapshot; no caller time can
+      // The clock observation belongs to this native snapshot; no caller time can
       // move a ban interval. Access independently mints its ordinary live T.
       const at = await realmSubjectPoint<{ at: string }>(client, 'content.realmSubject.time', [],
         () => client.query('SELECT clock_timestamp()::text AS at'), { keys: 0, rows: 1, bytes: 128 });
@@ -232,15 +236,16 @@ export async function prepareRealmSubjectDisclosure(
         }
         const candidate = request.candidates[index]!;
         const subject = await observeSubject(dependencies, candidate.subjectId, context);
-        if (!subject || subject.signature !== item.subject.signature || !(await item.source.final())) {
+        const source = subject && subject.signature === item.subject.signature ? await item.source.final() : null;
+        if (!subject || !source) {
           results.push({ state: 'withheld' }); continue;
         }
         if (item.source.state === 'absent') { results.push({ state: 'absent' }); continue; }
         const before = hash([item.source.signature, item.parent.signature, item.subject.signature]);
-        const final = hash([item.source.signature, finalParent.signature, subject.signature]);
+        const final = hash([source.signature, finalParent.signature, subject.signature]);
         results.push({ state: 'positive', freshness: {
-          before, final,
-          anchors: [...item.source.anchors, ...finalParent.anchors, ...subject.anchors],
+          before, final, expiresAt: context.deadline,
+          anchors: [...source.anchors, ...finalParent.anchors, ...subject.anchors],
         } });
       }
       requireAccessDeadline(context.deadline);
