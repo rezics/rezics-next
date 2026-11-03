@@ -28,7 +28,11 @@ beforeAll(async () => {
   expect(active.status).toBe(200);
   const digest = ((await active.json()) as { digest: string }).digest;
   if (digest !== bundledDigest) throw new Error(`Native stack activated ${digest}; expected ${bundledDigest}.`);
-  series = await createSubject(stack, 'schema:TVSeries', `Native series episode parent ${crypto.randomUUID().slice(0, 8)}`);
+  series = await createSubject(
+    stack,
+    'schema:TVSeries',
+    `Native series episode parent ${crypto.randomUUID().slice(0, 8)}`,
+  );
   auth = await startAuthStack(stack);
   alice = await auth.signIn('alice');
 }, 600_000);
@@ -94,7 +98,9 @@ describe('series contributor creates an episode and returns to parts', () => {
       expect(body.statements?.['schema:isPartOf']?.[0]?.value.content).toBe(series.id);
       const createdId = createdRead(before)!.url.slice('/v1/subjects/'.length);
       await page.getByRole('link', { name: m.screen_episode_return_parts(), exact: true }).click();
-      await page.waitForURL((url) => url.pathname.endsWith('/work-parts') && url.searchParams.get('child') === createdId);
+      await page.waitForURL(
+        (url) => url.pathname.endsWith('/work-parts') && url.searchParams.get('child') === createdId,
+      );
       await hydrate(page);
       const located = page.getByRole('status').filter({ hasText: createdId });
       const onPage = page.locator('[data-created-child]');

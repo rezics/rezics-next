@@ -47,12 +47,18 @@ test('confirmed admitted membership may enter create; omitted membership and unr
     qualifiers: [],
   });
   expect(
-    episodeJourneyFromCreate({ ok: true, id: episode, reader: { state: 'unavailable' } }, { target: series, position: '' }, false),
+    episodeJourneyFromCreate(
+      { ok: true, id: episode, reader: { state: 'unavailable' } },
+      { target: series, position: '' },
+      false,
+    ),
   ).toEqual({ stage: 'unread', id: episode });
   expect(
     episodeJourneyFromCreate({ ok: true, id: episode, reader: ready }, { target: series, position: '' }, false),
   ).toEqual({ stage: 'unlinked', id: episode, reader: ready });
-  expect(episodeJourneyFromCreate({ ok: true, id: episode, reader: ready }, { target: series, position: '' }, true)).toEqual({
+  expect(
+    episodeJourneyFromCreate({ ok: true, id: episode, reader: ready }, { target: series, position: '' }, true),
+  ).toEqual({
     stage: 'created',
     id: episode,
     reader: ready,

@@ -399,11 +399,7 @@ function ScreenProfileLive({
               pickText(read.release.types[type]?.descriptions ?? {}, locale).lang ?? undefined,
             prepare: (item) => {
               const statements = (drafts[item.type] ?? []).map((row) => row.statement);
-              const membership = membershipCreateStatement(
-                read.release,
-                read.series?.subject.type,
-                membershipDraft,
-              );
+              const membership = membershipCreateStatement(read.release, read.series?.subject.type, membershipDraft);
               if (membership) statements.push(membership);
               return screenInitialFacts(read.release, item, statements);
             },

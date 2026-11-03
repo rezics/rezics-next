@@ -377,9 +377,7 @@ function WorkPartsPageLive({
             )}
             {locatedChild && (
               <p role="status">
-                {createdChild
-                  ? m.work_parts_created_child_on_page({}, o)
-                  : m.work_parts_created_child_located({}, o)}
+                {createdChild ? m.work_parts_created_child_on_page({}, o) : m.work_parts_created_child_located({}, o)}
                 {!createdChild && (
                   <>
                     {' '}
@@ -436,137 +434,138 @@ function WorkPartsPageLive({
                       createdChild.holder === row.holder &&
                       createdChild.statementId === row.statementId;
                     return (
-                    <li
-                      key={`${row.holder}:${row.statementId}`}
-                      data-slot="list-row"
-                      data-created-child={highlighted ? '' : undefined}
-                      aria-current={highlighted ? 'true' : undefined}
-                      aria-labelledby={`${streamId}-part-${index}`}
-                      className={highlighted ? 'rounded-xl ring-2 ring-ring' : undefined}
-                    >
-                      <ContentItemFrame as="div" className="min-w-0 space-y-3 py-3 sm:py-4">
-                        {row.summary && (
-                          <ListRowLink
-                            href={
-                              subjectHref({ id: row.summary.id, label: row.summary.label?.value ?? '' }, locale).href
-                            }
-                            lang={row.summary.label?.language}
-                            aria-labelledby={`${streamId}-part-${index}`}
+                      <li
+                        key={`${row.holder}:${row.statementId}`}
+                        data-slot="list-row"
+                        data-created-child={highlighted ? '' : undefined}
+                        aria-current={highlighted ? 'true' : undefined}
+                        aria-labelledby={`${streamId}-part-${index}`}
+                        className={highlighted ? 'rounded-xl ring-2 ring-ring' : undefined}
+                      >
+                        <ContentItemFrame as="div" className="min-w-0 space-y-3 py-3 sm:py-4">
+                          {row.summary && (
+                            <ListRowLink
+                              href={
+                                subjectHref({ id: row.summary.id, label: row.summary.label?.value ?? '' }, locale).href
+                              }
+                              lang={row.summary.label?.language}
+                              aria-labelledby={`${streamId}-part-${index}`}
+                            >
+                              {row.summary.label?.value || m.subject_value_unlabelled({}, o)}
+                            </ListRowLink>
+                          )}
+                          <ContentItemHeading
+                            id={`${streamId}-part-${index}`}
+                            lang={row.summary?.label?.language}
+                            className="font-sans text-[17px] leading-snug font-semibold whitespace-normal [overflow-wrap:anywhere] sm:text-lg md:text-xl"
                           >
-                            {row.summary.label?.value || m.subject_value_unlabelled({}, o)}
-                          </ListRowLink>
-                        )}
-                        <ContentItemHeading
-                          id={`${streamId}-part-${index}`}
-                          lang={row.summary?.label?.language}
-                          className="font-sans text-[17px] leading-snug font-semibold whitespace-normal [overflow-wrap:anywhere] sm:text-lg md:text-xl"
-                        >
-                          {row.summary
-                            ? row.summary.label?.value || m.subject_value_unlabelled({}, o)
-                            : m.work_parts_unresolved({}, o)}
-                        </ContentItemHeading>
-                        <div
-                          data-content-item-slot="preview"
-                          className="min-w-0 space-y-3 text-sm leading-relaxed [&_a]:relative [&_a]:z-10 [&_a]:whitespace-normal [&_a]:[overflow-wrap:anywhere] [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring [&_button]:relative [&_button]:z-10 [&_summary]:relative [&_summary]:z-10"
-                        >
-                          {row.statement ? (
-                            <div className="space-y-3 text-sm">
-                              <div>
-                                <p
-                                  lang={read.labels[row.statement.property.id]?.lang ?? undefined}
-                                  className="text-muted-foreground"
-                                >
-                                  {read.labels[row.statement.property.id]?.text || m.subject_value_unlabelled({}, o)}
-                                </p>
-                                <CandidateValue snak={row.statement} related={row.related} locale={locale} />
-                              </div>
-                              {row.statement.qualifiers.map((snak, index) => (
-                                <div key={index}>
+                            {row.summary
+                              ? row.summary.label?.value || m.subject_value_unlabelled({}, o)
+                              : m.work_parts_unresolved({}, o)}
+                          </ContentItemHeading>
+                          <div
+                            data-content-item-slot="preview"
+                            className="min-w-0 space-y-3 text-sm leading-relaxed [&_a]:relative [&_a]:z-10 [&_a]:whitespace-normal [&_a]:[overflow-wrap:anywhere] [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring [&_button]:relative [&_button]:z-10 [&_summary]:relative [&_summary]:z-10"
+                          >
+                            {row.statement ? (
+                              <div className="space-y-3 text-sm">
+                                <div>
                                   <p
-                                    lang={read.labels[snak.property.id]?.lang ?? undefined}
+                                    lang={read.labels[row.statement.property.id]?.lang ?? undefined}
                                     className="text-muted-foreground"
                                   >
-                                    {read.labels[snak.property.id]?.text || m.subject_value_unlabelled({}, o)}
+                                    {read.labels[row.statement.property.id]?.text || m.subject_value_unlabelled({}, o)}
                                   </p>
-                                  <CandidateValue snak={snak} related={row.related} locale={locale} />
+                                  <CandidateValue snak={row.statement} related={row.related} locale={locale} />
                                 </div>
-                              ))}
-                              <section className="space-y-2" aria-label={m.sources_citations({}, o)}>
-                                <h3 className="font-medium">{m.sources_citations({}, o)}</h3>
-                                {row.statement.references.length ? (
-                                  row.statement.references.map((reference, index) => (
-                                    <div key={index} className="space-y-2">
-                                      {reference.parts.length ? (
-                                        reference.parts.map((snak, at) => (
-                                          <div key={at}>
-                                            <p
-                                              lang={read.labels[snak.property.id]?.lang ?? undefined}
-                                              className="text-muted-foreground"
-                                            >
-                                              {read.labels[snak.property.id]?.text || m.subject_value_unlabelled({}, o)}
-                                            </p>
-                                            <CandidateValue snak={snak} related={row.related} locale={locale} />
-                                          </div>
-                                        ))
-                                      ) : (
-                                        <p>{m.value_reference_unavailable({}, o)}</p>
-                                      )}
-                                    </div>
-                                  ))
-                                ) : (
-                                  <p>{m.sources_no_citations({}, o)}</p>
+                                {row.statement.qualifiers.map((snak, index) => (
+                                  <div key={index}>
+                                    <p
+                                      lang={read.labels[snak.property.id]?.lang ?? undefined}
+                                      className="text-muted-foreground"
+                                    >
+                                      {read.labels[snak.property.id]?.text || m.subject_value_unlabelled({}, o)}
+                                    </p>
+                                    <CandidateValue snak={snak} related={row.related} locale={locale} />
+                                  </div>
+                                ))}
+                                <section className="space-y-2" aria-label={m.sources_citations({}, o)}>
+                                  <h3 className="font-medium">{m.sources_citations({}, o)}</h3>
+                                  {row.statement.references.length ? (
+                                    row.statement.references.map((reference, index) => (
+                                      <div key={index} className="space-y-2">
+                                        {reference.parts.length ? (
+                                          reference.parts.map((snak, at) => (
+                                            <div key={at}>
+                                              <p
+                                                lang={read.labels[snak.property.id]?.lang ?? undefined}
+                                                className="text-muted-foreground"
+                                              >
+                                                {read.labels[snak.property.id]?.text ||
+                                                  m.subject_value_unlabelled({}, o)}
+                                              </p>
+                                              <CandidateValue snak={snak} related={row.related} locale={locale} />
+                                            </div>
+                                          ))
+                                        ) : (
+                                          <p>{m.value_reference_unavailable({}, o)}</p>
+                                        )}
+                                      </div>
+                                    ))
+                                  ) : (
+                                    <p>{m.sources_no_citations({}, o)}</p>
+                                  )}
+                                </section>
+                                {partCorrection(row, stream) && (
+                                  <Button
+                                    className={actionClassName}
+                                    variant="outline"
+                                    onClick={(event) => open(row, stream, event.currentTarget, event.detail === 0)}
+                                  >
+                                    {m.work_parts_correct({}, o)}
+                                  </Button>
                                 )}
-                              </section>
-                              {partCorrection(row, stream) && (
-                                <Button
-                                  className={actionClassName}
-                                  variant="outline"
-                                  onClick={(event) => open(row, stream, event.currentTarget, event.detail === 0)}
-                                >
-                                  {m.work_parts_correct({}, o)}
-                                </Button>
-                              )}
-                              {stream.positionEditable && partCorrection(row, stream) && (
-                                <WorkPartsOrderingSelect
-                                  selected={selectedOrdering.has(orderingKey(row))}
-                                  busy={busy}
-                                  disabled={
-                                    !selectedOrdering.has(orderingKey(row)) && pageOrdering.length >= orderingLimit
-                                  }
-                                  locale={locale}
-                                  controlId={`${streamId}-order-${row.holder}-${row.statementId}`}
-                                  onToggle={(checked) => toggleOrdering(row, checked)}
-                                />
-                              )}
-                            </div>
-                          ) : (
-                            <p>{m.work_parts_assertion_unavailable({}, o)}</p>
-                          )}
-                          <details className="rounded-lg border border-border p-3 text-sm">
-                            <summary className={summaryClassName}>{m.catalogue_technical_details({}, o)}</summary>
-                            <dl className="mt-3 space-y-2 [&_dd]:break-all [&_dd]:font-mono [&_dd]:text-xs">
-                              <div>
-                                <dt>{m.work_parts_holder({}, o)}</dt>
-                                <dd>{row.holder}</dd>
+                                {stream.positionEditable && partCorrection(row, stream) && (
+                                  <WorkPartsOrderingSelect
+                                    selected={selectedOrdering.has(orderingKey(row))}
+                                    busy={busy}
+                                    disabled={
+                                      !selectedOrdering.has(orderingKey(row)) && pageOrdering.length >= orderingLimit
+                                    }
+                                    locale={locale}
+                                    controlId={`${streamId}-order-${row.holder}-${row.statementId}`}
+                                    onToggle={(checked) => toggleOrdering(row, checked)}
+                                  />
+                                )}
                               </div>
-                              <div>
-                                <dt>{m.work_parts_relation({}, o)}</dt>
-                                <dd>{stream.property}</dd>
-                              </div>
-                              <div>
-                                <dt>{m.catalogue_statement_id({}, o)}</dt>
-                                <dd>{row.statementId}</dd>
-                              </div>
-                            </dl>
-                            {row.statement && (
-                              <pre className="mt-3 whitespace-pre-wrap break-all text-xs">
-                                {JSON.stringify(row.statement, null, 2)}
-                              </pre>
+                            ) : (
+                              <p>{m.work_parts_assertion_unavailable({}, o)}</p>
                             )}
-                          </details>
-                        </div>
-                      </ContentItemFrame>
-                    </li>
+                            <details className="rounded-lg border border-border p-3 text-sm">
+                              <summary className={summaryClassName}>{m.catalogue_technical_details({}, o)}</summary>
+                              <dl className="mt-3 space-y-2 [&_dd]:break-all [&_dd]:font-mono [&_dd]:text-xs">
+                                <div>
+                                  <dt>{m.work_parts_holder({}, o)}</dt>
+                                  <dd>{row.holder}</dd>
+                                </div>
+                                <div>
+                                  <dt>{m.work_parts_relation({}, o)}</dt>
+                                  <dd>{stream.property}</dd>
+                                </div>
+                                <div>
+                                  <dt>{m.catalogue_statement_id({}, o)}</dt>
+                                  <dd>{row.statementId}</dd>
+                                </div>
+                              </dl>
+                              {row.statement && (
+                                <pre className="mt-3 whitespace-pre-wrap break-all text-xs">
+                                  {JSON.stringify(row.statement, null, 2)}
+                                </pre>
+                              )}
+                            </details>
+                          </div>
+                        </ContentItemFrame>
+                      </li>
                     );
                   })}
                 </ul>
