@@ -1010,6 +1010,37 @@ Import identity history: `test/imports/identity-growth.test.ts`, “fixed public
 
 Effect registration has no fan-out cap, so a fixed event can create an unbounded number of independently persisted workflows. The core callback interfaces do not establish bounds for authorization, mutation, projection or erasure; those bounds require the supplied implementations' SQL. Session and cursor input caps do not cap all encoding or binding work; constant request CPU assumes fixed byte widths and configuration. Ordinary PostgreSQL relations provide logarithmic B-tree access shapes, but planner choice, MVCC dead tuples and maintenance still affect examined work. Same-partition writers serialize at the partition position; same-process attempts queue without holding a connection, while other processes can retry contention until the deadline. Preparation may read a separately anchored parent, and arbitrary callbacks can add cross-partition work. DBOS uses shared system tables; logical queue partitioning does not prove physical partition placement or atomicity between enqueue and checkpoint transactions.
 
+### Partition subject keyset continuation
+
+- Touches: `pageSubjects` reads one `core.partition` primary key, then seeks
+  `semantic.subject` by its `(route, subject_id)` primary key within that partition's route range. The materialized
+  page admits at most `size + 1` subjects, including the discarded lookahead. Each admitted subject probes
+  `semantic.term_head` and `semantic.fact` through `current_term_fact` to assemble labels; the lookahead also pays
+  that expansion. Obtaining a deep cursor by walking earlier pages is setup, charged separately from resuming it.
+- Bound: two application statements in one read-only repeatable-read transaction. With page size `s`, examined term-head
+  count `h` per subject (including filtered heads) and surviving fact revisions `f` per head, examined rows are bounded by
+  `1 + (s + 1) * (1 + h + h * f)`, with logarithmic index buffers per probe and local label sorting/aggregation
+  proportional to admitted term rows. There is no offset or scan of subjects before the full cursor key.
+  `s` is capped at 100; this helper does not cap `h`, so its label expansion is not universally constant.
+  The label-empty fixture fixes `s = 2`, `h = 0`: at most four examined rows, five index descents and one discarded
+  subject for a deep page; empty exhaustion reads only the partition row and seeks beyond the last subject.
+  History and unrelated subjects grow independently from 512 to 1,024/4,608/33,280 rows; all selected history uses
+  the same route and sorts before a fixed tail. Empty setup removes the outstanding, fact-free lookahead after
+  normal pagination issued its cursor. This measures native continuation SQL, not removal cost or eligibility.
+  Native plan rows include filter/recheck discards; every repetition checks the ceiling and subject access path.
+  Token-only decode is measured separately with zero SQL/plans/rows/buffers. Token CPU follows the Cursors and seal
+  derivation above; native SQL measurements do not measure CPU or a callback's Access cost.
+- Growth check: `test/growth-keyset-continuation.test.ts`:
+  “Deep keyset continuation stays bounded as selected history grows”;
+  “Deep keyset continuation stays bounded as unrelated population grows”;
+  “Empty keyset continuation stays bounded as selected history grows”;
+  “Empty keyset continuation stays bounded as unrelated population grows”.
+
+Decision: retain `pageSubjects`' existing partition-only cursor boundary for this SQL proof; viewer/query-bound
+production pagination with native Access and label expansion requires separate coverage. This helper takes no
+viewer or Access callback, binds only the partition, and returns no cursor on its terminal page; the fixture's
+disappearing lookahead must not stand in for production eligibility or lifecycle proof.
+
 ### Replay authorization and aborted commands
 
 Measure revoked replay and aborted attempts separately from successful commands; trusted authorization fixtures
