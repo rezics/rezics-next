@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import type { Pool } from 'pg';
 import { Value } from 'typebox/value';
 import type { DocumentSnapshot } from '@rezics/document';
+import type { NativePostRevisionPage } from '../../src/content/history-page.ts';
 import type { CommunityPresentation } from '../../src/content/community-presentation-model.ts';
 import type { CommandOutcome, CommandTransaction } from '../../src/command/command.ts';
 import type { Effect } from '../../src/events/effects.ts';
@@ -129,7 +130,7 @@ function publishedSignatures(): void {
         context: model.ReadContext,
         cursor?: string,
         limit?: number,
-      ) => Promise<model.Page<reads.RevisionView>>
+      ) => Promise<NativePostRevisionPage>
     >
   >();
   same<

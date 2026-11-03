@@ -1893,19 +1893,19 @@ async function list(
       after = key;
       scanned++;
       const result = await withRealmDisclosureScope(
-            async () =>
-              (await disclose(
-                dependencies,
-                threadId,
-                context,
-                key.id,
-                undefined,
-                false,
-                undefined,
-                undefined,
-                true,
-              )) as Anchored<PostEntry | null>,
-          );
+        async () =>
+          (await disclose(
+            dependencies,
+            threadId,
+            context,
+            key.id,
+            undefined,
+            false,
+            undefined,
+            undefined,
+            true,
+          )) as Anchored<PostEntry | null>,
+      );
       if (!result.value) continue;
       entries.push(result.value);
     }
