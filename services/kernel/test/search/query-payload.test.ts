@@ -16,6 +16,7 @@ import {
   suggestSubjects,
   type SearchPlan,
 } from '../../src/search/query.ts';
+import { encodeSearchCursor } from '../../src/search/cursor.ts';
 import { createSearchService } from '../../src/search/service.ts';
 import type { IndexedSubject, SubjectSource } from '../../src/search/source.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
@@ -45,7 +46,7 @@ const subject: IndexedSubject = {
 
 // Paths address exactly one consumed field in a genuine native reply, never completion metadata.
 type Body = Record<string, unknown>;
-type Fault = { path: string; value?: unknown; grow?: number };
+type Fault = { path: string; value?: unknown; grow?: number; afterId?: string };
 function field(body: Body, path: string): { parent: Body; key: string } {
   const parts = path.split('.');
   const key = parts.pop()!;
@@ -57,7 +58,13 @@ function inject(body: Body, fault: Fault) {
   const { parent, key } = field(body, fault.path);
   if (fault.grow)
     parent[key] = Array.from({ length: fault.grow }, () => structuredClone((parent[key] as unknown[])[0]));
-  else if (fault.value === undefined) delete parent[key];
+  else if (fault.afterId) {
+    const hits = parent[key] as Body[];
+    const extra = structuredClone(hits[0]) as Body;
+    extra._id = fault.afterId;
+    extra.sort = [...((hits[0] as Body).sort as unknown[]).slice(0, -1), fault.afterId];
+    parent[key] = [...hits, extra];
+  } else if (fault.value === undefined) delete parent[key];
   else parent[key] = fault.value;
 }
 function observe(fault?: Fault) {
@@ -312,6 +319,11 @@ const serviceFaults = [
     fault: { path: 'hits.hits.0._index', value: 'foreign-subjects-g1' },
   },
   { name: 'duplicate native roots', operation: 'search' as const, fault: { path: 'hits.hits', grow: 2 } },
+  {
+    name: 'reordered native tuples',
+    operation: 'search' as const,
+    fault: { path: 'hits.hits', afterId: '018e0000-0000-7000-8000-00a000000001' },
+  },
 ];
 for (const { name, operation, fault } of serviceFaults) {
   test(`actual service maps ${name} to index_not_ready 503 before Source`, async () => {
@@ -398,3 +410,43 @@ for (const operation of ['search', 'suggest'] as const) {
     expect(JSON.parse(await response.text())).toMatchObject({ code: 'index_not_ready', status: 503 });
   });
 }
+
+test('actual service maps a non-advancing frontier to index_not_ready 503 before Source', async () => {
+  const cursors = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(5)]]) };
+  const request = { text: 'kokoro', sort: 'id' as const };
+  const cursor = await encodeSearchCursor(
+    cursors,
+    { operation: 'subjects.search', request: { ...request, limit: 20 }, principal: 'anonymous' },
+    { generation: 1, after: [id] },
+  );
+  const observed = observe({
+    path: 'hits.hits',
+    value: [{ _id: id, _index: index, _source: { partition: 10, security_revision: 0 }, sort: [id] }],
+  });
+  let reads = 0;
+  const denied = async (): Promise<never> => {
+    reads++;
+    throw new Error('Source must not be reached');
+  };
+  const source: SubjectSource = { read: denied, count: denied, matchRelationFacets: denied };
+  const service = createSearchService({
+    pool,
+    client: observed.client,
+    prefix,
+    source,
+    cursors,
+  });
+  const outcome = await service.search('anonymous', { ...request, cursor }).then(
+    (value) => ({ value }),
+    (error: unknown) => ({ error }),
+  );
+  expect(reads).toBe(0);
+  expect(observed.replies).toHaveLength(1);
+  expect(observed.calls.filter(({ path }) => path.endsWith('/_search/template'))).toHaveLength(1);
+  const error = 'error' in outcome ? outcome.error : outcome;
+  expect(error).toBeInstanceOf(ProblemError);
+  expect(error).toMatchObject({ code: 'index_not_ready', headers: { 'retry-after': '1' } });
+  const response = problemResponse(error, { method: 'GET', id: 'frontier-payload-test' });
+  expect(response.status).toBe(503);
+  expect(JSON.parse(await response.text())).toMatchObject({ code: 'index_not_ready', status: 503 });
+});

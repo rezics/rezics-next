@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { newId } from '../../src/route/route.ts';
 import { SearchUnavailableError } from '../../src/search/opensearch.ts';
-import { admitSearchPayload } from '../../src/search/query-payload.ts';
+import { admitHitPayload, admitSearchPayload } from '../../src/search/query-payload.ts';
 
 const prefix = 'keyset-';
 type Plan = { size: number; sort: 'id'; generation: number; after?: readonly (string | number | null)[] };
@@ -56,5 +56,16 @@ test('wrong-partition native hits cannot enter an ordinary keyset page', () => {
         _source: { partition: 11, security_revision: 1 },
       },
     ]),
+  );
+});
+
+test('hit-only keysets omit totals and still refuse order and frontier faults', () => {
+  const [first, second] = [newId(160), newId(160)].sort();
+  expect(() => admitHitPayload({ hits: { hits: [hit(second!), hit(first!)] } }, plan, prefix)).toThrow(
+    SearchUnavailableError,
+  );
+  const id = newId(160);
+  expect(() => admitHitPayload({ hits: { hits: [hit(id)] } }, { ...plan, size: 1, after: [id] }, prefix)).toThrow(
+    SearchUnavailableError,
   );
 });
