@@ -34,6 +34,7 @@ import { observationsUsage, runObservationsCli } from './source-observation-cli.
 import { runPreviewCli } from './preview-cli.ts';
 import { runCompareCli } from './compare-cli.ts';
 import { runBackupCli } from './backup-cli.ts';
+import { batchUsage, runBatchCli } from './batch-cli.ts';
 import {
   admitDumpCompression,
   decodeDumpBytes,
@@ -137,6 +138,9 @@ function usage(): string {
     '       rezics-import observations --state <sqlite-path> --source <configured-source-id> --operation <operation-id>',
     '       rezics-import observations --state <sqlite-path> --source <configured-source-id> --operation <operation-id>',
     '       --resolve --reviewed-observation <64-hex> --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>',
+    '       rezics-import batch --manifest <path> [--json]',
+    '       rezics-import batch --manifest <path> --run --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>',
+    '       [--progress human|jsonl] [--json]',
     'Exit 6 means a source observation needs explicit resolution; it is not an authorization failure.',
     'Options: --source --dump --dump-set --state --api --account-key --account --client --auth --source-alias --disappearance-threshold --progress --compression --decode-budget --help',
     'gzip is admitted only for Open Library and Wikidata streamed dumps. Default --compression none. A .gz suffix is not a source identity. --decode-budget is a gzip decoded-byte ceiling (default 256 GiB). Dump-set members are decompressed local files.',
@@ -369,6 +373,9 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
     });
   if (Array.isArray(argv) && argv.length === 2 && argv[0] === '--help' && argv[1] === 'diagnostics')
     return { code: 0, stdout: `${diagnosticsUsage()}\n`, stderr: '', openHandles: 0 };
+  if (Array.isArray(argv) && argv[0] === 'batch') return runBatchCli(argv.slice(1), options);
+  if (Array.isArray(argv) && argv.length === 2 && argv[0] === '--help' && argv[1] === 'batch')
+    return { code: 0, stdout: `${batchUsage()}\n`, stderr: '', openHandles: 0 };
   let config: Config;
   try {
     const parsed = parse(argv);
