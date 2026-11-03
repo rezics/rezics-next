@@ -10,10 +10,7 @@ const workspace = resolve(import.meta.dir, '../..');
 
 afterAll(() => rmSync(temporary, { recursive: true, force: true }));
 
-async function runFocused(
-  appDirectory: string,
-  command: string[],
-): Promise<{ status: number; output: string }> {
+async function runFocused(appDirectory: string, command: string[]): Promise<{ status: number; output: string }> {
   let output = '';
   const status = await runFocusedCommand(command, {
     appDirectory,
