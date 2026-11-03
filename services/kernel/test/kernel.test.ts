@@ -48,6 +48,8 @@ const typed = [
   'GET /v1/libraryImports/anilist/:importId',
   'POST /v1/libraryImports/anilist/:importId/$review',
   'POST /v1/libraryImports/anilist/:importId/$apply',
+  'POST /v1/libraryImports/anilist/:importId/$reviewLabels',
+  'POST /v1/libraryImports/anilist/:importId/$applyLabels',
   'POST /v1/libraryImports/anilist/:importId/$cancel',
   'GET /health',
   'GET /v1/commerceMoney',
