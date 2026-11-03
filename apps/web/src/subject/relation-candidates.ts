@@ -250,9 +250,10 @@ export async function proposeRelation(
   authorization: string,
   descriptor: RelationTypeDescriptorReader,
   input: RelationProposal,
+  locale = 'en',
 ): Promise<RelationProposalResult> {
   if (!input.retry) {
-    const current = await readRelationEditor(client, authorization, descriptor, input.id, 'en', input.slot);
+    const current = await readRelationEditor(client, authorization, descriptor, input.id, locale, input.slot);
     if (!current.ok) return current;
     if (!current.descriptor) return candidateFailure(503);
     const field = current.fields.find((field) => field.id === input.slot.property);

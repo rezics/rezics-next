@@ -1,8 +1,8 @@
+import type { Release } from '@rezics/definitions';
 import { createServerFn } from '@tanstack/react-start';
 import { setResponseHeader } from '@tanstack/react-start/server';
 import { kernelClient, requestLocale } from '../../kernel/client';
 import type { CreateType, TypeDescriptorRead, TypeDirectoryPage, TypeDirectoryQuery } from './create-subject';
-
 import {
   definitionTypes,
   httpStatus,
@@ -57,7 +57,36 @@ export async function readTypeDescriptors(
 
 /** Relation editing requires the bounded effective properties of the exact current Type. */
 export async function readRelationTypeDescriptor(typeId: string, locale: string): Promise<CurrentTypeRead> {
-  return readCurrentDescriptor(kernelClient(locale), typeId, locale);
+  const client = kernelClient(locale);
+  const result = await readCurrentDescriptor(client, typeId, locale);
+  if (!result.ok) return result;
+  const { descriptor } = result;
+  const missing = new Set<string>();
+  for (const id of descriptor.definition.properties) {
+    const property = descriptor.properties[id];
+    if (!property?.relation || property.relation.group === 'classification' || !Array.isArray(property.qualifiers))
+      continue;
+    for (const qualifier of property.qualifiers) {
+      if (!Object.hasOwn(descriptor.properties, qualifier)) missing.add(qualifier);
+    }
+  }
+  if (!missing.size) return result;
+  try {
+    const release = await client.definitions.releases({ digest: descriptor.releaseDigest }).get();
+    if (release.status !== 200 || release.data?.digest !== descriptor.releaseDigest || !release.data.release)
+      return { ok: false, reason: 'unavailable' };
+    const properties = (release.data.release as Release).properties;
+    if (!properties) return { ok: false, reason: 'unavailable' };
+    const completed = { ...descriptor.properties };
+    for (const id of missing) {
+      const definition = properties[id];
+      if (!definition?.labels || !Object.keys(definition.labels).length) return { ok: false, reason: 'unavailable' };
+      completed[id] = definition;
+    }
+    return { ok: true, descriptor: { ...descriptor, properties: completed } };
+  } catch {
+    return { ok: false, reason: 'unavailable' };
+  }
 }
 
 export const readCreateTypePage = createServerFn({ method: 'GET' })

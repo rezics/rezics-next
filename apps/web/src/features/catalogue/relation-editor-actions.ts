@@ -94,7 +94,13 @@ export const proposeSubjectRelation = createServerFn({ method: 'POST', strict: f
     const authorization = await candidateAuthorization(data.expectedReader);
     if (!authorization) return { ok: false, reason: 'denied' };
     try {
-      return await proposeRelation(kernelClient(), authorization, readRelationTypeDescriptor, data);
+      return await proposeRelation(
+        kernelClient(),
+        authorization,
+        readRelationTypeDescriptor,
+        data,
+        requestLocale() ?? 'en',
+      );
     } catch {
       return { ok: false, reason: 'unavailable' };
     }

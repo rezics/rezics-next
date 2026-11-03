@@ -308,7 +308,7 @@ function RelationEditorLive({
   const visibleNow = useRef(visible);
   visibleNow.current = visible;
   const publicRead = result?.public ?? current?.public;
-  const concealed = failure?.reason === 'denied';
+  const concealed = failure?.reason === 'denied' && !current;
   const uncertain = failure?.reason === 'unavailable' && !!request.current;
   const nativeFrozen = busy || !!confirmation || uncertain || failure?.reason === 'stale';
   const nativeFrozenNow = useRef(nativeFrozen);
@@ -692,16 +692,20 @@ function RelationEditorLive({
 
   function failed(next: CandidateFailure) {
     setFailure(next);
-    if (next.reason === 'denied') {
-      setRead(undefined);
-      setCandidate(undefined);
-      setResult(undefined);
-      setConfirmation(undefined);
-      setConsentEntry(undefined);
-      setProposedId(undefined);
-      picked.current = {};
-      proposedCandidate.current = undefined;
+    if (next.reason !== 'denied') return;
+    setConfirmation(undefined);
+    if (request.current) {
+      request.current = undefined;
+      proposalReplay.current = false;
+      return;
     }
+    setRead(undefined);
+    setCandidate(undefined);
+    setResult(undefined);
+    setConsentEntry(undefined);
+    setProposedId(undefined);
+    picked.current = {};
+    proposedCandidate.current = undefined;
   }
   async function readPage(
     address?: RelationSlot,

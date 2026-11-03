@@ -744,7 +744,9 @@ editor shows the unsupported Context state. There is no browser Context override
 After session preparation, contributors choose an effective released relation property and a real target through
 the existing subject picker, or edit one of the public reader's existing relations. Classification properties stay
 in descriptive-field review. Qualifiers use released property meanings and item pickers for roles and declared
-keys. Existing qualifiers, original names and reference parts survive replacement proposals. Citations are attached
+keys. Decision: admitted relation fields come from the exact Type descriptor; qualifier definitions missing from that
+projection are filled from the same pinned release. Existing qualifiers, original names and reference parts survive
+replacement proposals. Citations are attached
 to the immutable statement submitted through native candidate proposal, not to a presentation document.
 Relation draft edits synchronously retire their callback lifetime before advancing its revision; retained target, qualifier, staging, citation and consent callbacks cannot restore a replaced property/source or removed qualifier, while current callbacks keep editing mounted controls.
 
