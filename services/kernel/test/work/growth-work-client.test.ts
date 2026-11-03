@@ -82,6 +82,33 @@ function plansFrom(documents: readonly unknown[]): PlanEvidence[] {
   });
 }
 
+function indexNamesIn(plan: unknown): string[] {
+  if (Array.isArray(plan)) return plan.flatMap(indexNamesIn);
+  if (typeof plan !== 'object' || plan === null) return [];
+  const entry = plan as { readonly 'Index Name'?: unknown; readonly Plans?: unknown };
+  return [
+    ...(typeof entry['Index Name'] === 'string' ? [entry['Index Name']] : []),
+    ...(Array.isArray(entry.Plans) ? entry.Plans.flatMap(indexNamesIn) : []),
+  ];
+}
+
+function expectDiscoveryIndexes(runs: readonly RunEvidence[]): void {
+  for (const scale of scales) {
+    const plans = runs
+      .filter((run) => run.scale === scale)
+      .flatMap((run) => run.plans)
+      .filter(({ query }) => query.includes('work:legacy-membership-child-discovery'));
+    expect(plans.length, `discovery plan at scale ${scale}`).toBeGreaterThan(0);
+    const indexes = new Set(plans.flatMap(({ plan }) => indexNamesIn(plan)));
+    expect(indexes).toEqual(
+      expect.arrayContaining([
+        'work_legacy_leave_parent_input_identity',
+        'work_legacy_leave_child_input_identity',
+      ]),
+    );
+  }
+}
+
 function probeFor(prefix: string, repetition: number): Probe {
   const probes = probesByPrefix.get(prefix) ?? new Map<number, Probe>();
   probesByPrefix.set(prefix, probes);
@@ -367,11 +394,14 @@ function childWorkflowIDForProbe(prefix: string, probe: Probe): string {
   return `${prefix}probe:child:${scale}:${probeIndex}`;
 }
 
-async function runBoundedFallback(prefix: string, probe: Probe): Promise<void> {
+async function runIndexedDiscovery(prefix: string, probe: Probe, absent: string): Promise<void> {
   const childWorkflowID = childWorkflowIDForProbe(prefix, probe);
   const expectedName = `growth.work_client.step:${childWorkflowID}`;
+  const discovered = await client.discoverLegacyLeaveChild(probe.legacyWorkflowID);
+  expect(discovered).toBe(childWorkflowID);
+  if (discovered === null) throw new Error(`Missing indexed legacy child for ${probe.legacyWorkflowID}`);
   expect(await client.getWorkflow(childWorkflowID)).toMatchObject({ workflowID: childWorkflowID, status: 'SUCCESS' });
-  const list = (offset: number) => client.listWorkflowSteps(probe.legacyWorkflowID, { limit: pageLimit, offset });
+  const list = (offset: number) => client.listWorkflowSteps(discovered, { limit: pageLimit, offset });
   const first = await list(0);
   expect(first).toHaveLength(pageLimit);
   expect(first?.map(({ functionID }) => functionID)).toEqual(
@@ -397,15 +427,15 @@ async function runBoundedFallback(prefix: string, probe: Probe): Promise<void> {
   expect(await list(deepOffset)).toEqual(deep);
   expect(await list(deepStepCount)).toEqual([]);
 
-  const absent = `realm:leave:${crypto.randomUUID()}:${crypto.randomUUID()}`;
   expect(await client.getWorkflow(absent)).toBeNull();
-  expect(await client.listWorkflowSteps(absent, { limit: pageLimit, offset: 0 })).toEqual([]);
+  expect(await client.discoverLegacyLeaveChild(absent)).toBeNull();
 }
 
-test('Legacy leave fallback discovery stays bounded as unrelated workflow history grows', async () => {
+test('Indexed legacy leave child discovery stays bounded as unrelated workflow history grows', async () => {
   const runs: RunEvidence[] = [];
+  const absent = `realm:leave:${crypto.randomUUID()}:${crypto.randomUUID()}`;
   const report = await checkGrowth(db, {
-    name: 'legacy leave fallback bounded discovery',
+    name: 'legacy leave indexed child discovery',
     scales,
     repetitions,
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
@@ -432,16 +462,20 @@ test('Legacy leave fallback discovery stays bounded as unrelated workflow histor
       }
     },
     async warmup(_growth, _scale, repetition) {
-      await runBoundedFallback(boundedFallbackPrefix, probeFor(boundedFallbackPrefix, repetition));
+      await runIndexedDiscovery(boundedFallbackPrefix, probeFor(boundedFallbackPrefix, repetition), absent);
     },
     async operation(_growth, scale, repetition) {
       const before = planDocuments.length;
-      await runBoundedFallback(boundedFallbackPrefix, probeFor(boundedFallbackPrefix, repetition));
+      await runIndexedDiscovery(boundedFallbackPrefix, probeFor(boundedFallbackPrefix, repetition), absent);
       runs.push({ scale, repetition, plans: plansFrom(planDocuments.slice(before)) });
     },
   });
 
   expect(report.samples).toHaveLength(scales.length);
-  logEvidence('legacy fallback bounded', report, runs, (sql) => sql.toLowerCase().includes('workflow'));
+  expectDiscoveryIndexes(runs);
+  logEvidence('legacy indexed child discovery', report, runs, (sql) =>
+    sql.includes('work:legacy-membership-child-discovery'),
+  );
+  expect(await client.listWorkflowSteps(absent, { limit: pageLimit, offset: 0 })).toEqual([]);
   await deleteFixture(boundedFallbackPrefix);
 }, 180_000);
