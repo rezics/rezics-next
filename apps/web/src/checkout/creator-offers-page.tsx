@@ -542,11 +542,15 @@ export function CreatorOffersPage({
                             <dl className="space-y-2 py-2 text-sm">
                               <div>
                                 <dt className="font-medium">{m.creator_offers_offer_id()}</dt>
-                                <dd className="break-all"><code>{offer.id}</code></dd>
+                                <dd className="break-all">
+                                  <code>{offer.id}</code>
+                                </dd>
                               </div>
                               <div>
                                 <dt className="font-medium">{m.creator_offers_offer_revision()}</dt>
-                                <dd><code>{offer.revision}</code></dd>
+                                <dd>
+                                  <code>{offer.revision}</code>
+                                </dd>
                               </div>
                               {offer.contentEdition !== null && (
                                 <div>
