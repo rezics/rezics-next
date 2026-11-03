@@ -3,6 +3,8 @@ import {
   advanceConceptBrowse,
   CONCEPT_BROWSE_LIMITS,
   currentConceptMembership,
+  currentConceptMemberships,
+  matchCurrentConceptStatements,
   startConceptBrowse,
   type ConceptBrowseBinding,
   type ConceptBrowseFrontier,
@@ -10,6 +12,7 @@ import {
   type ConceptBrowseState,
   type ConceptBrowseStore,
 } from '../../src/search/concept-browse.ts';
+import { compileCurrentFilter } from '../../src/search/current-filter-plan.ts';
 
 const binding: ConceptBrowseBinding = {
   release: 'release-a',
@@ -19,7 +22,12 @@ const binding: ConceptBrowseBinding = {
   principal: 'anonymous',
   request: 'request-a',
 };
-const selection = { concept: 'root', property: 'schema:keywords', scheme: 'scheme-a', includeChildren: true } as const;
+const selection = {
+  concept: 'root',
+  property: 'schema:keywords',
+  scheme: 'scheme-a',
+  includeChildren: true,
+} as const;
 const limits = { pages: 2, edges: 2, pageSize: 2 };
 
 test('caller mutation during observation cannot enlarge the admitted worker step', async () => {
@@ -71,7 +79,10 @@ function retention() {
       if (!valid(ref)) return { status: 'retired' };
       if (sealed) return { status: 'complete' };
       const next = frontier.entries().next().value;
-      return { status: 'building', next: next ? { parent: next[0], after: next[1] } : null };
+      return {
+        status: 'building',
+        next: next ? { parent: next[0], after: next[1] } : null,
+      };
     },
     async advance(ref, expected, delta) {
       if (!valid(ref) || sealed || !frontier.has(expected.parent) || frontier.get(expected.parent) !== expected.after)
@@ -149,7 +160,11 @@ async function finish(source: ConceptBrowseSource, store: ConceptBrowseStore, st
 }
 
 test('retained pages finish polyhierarchy and cycles without duplicate expansion', async () => {
-  const { source, calls } = sourceFor({ root: ['a', 'b'], a: ['b', 'c'], b: ['root', 'c'] });
+  const { source, calls } = sourceFor({
+    root: ['a', 'b'],
+    a: ['b', 'c'],
+    b: ['root', 'c'],
+  });
   const { store, members } = retention();
   const state = (await startConceptBrowse(selection, binding, store))!;
   expect(await currentConceptMembership(source, store, state, 'missing')).toBe('not_proven');
@@ -183,7 +198,9 @@ test('every binding change restarts before child I/O and retires complete negati
 });
 
 test('full native cursors cross duplicate and empty child pages independently of child order', async () => {
-  const { source, calls } = sourceFor({ root: [null, null, 'z', 'a', 'z', 'root'] });
+  const { source, calls } = sourceFor({
+    root: [null, null, 'z', 'a', 'z', 'root'],
+  });
   const { store, members } = retention();
   const state = (await startConceptBrowse(selection, binding, store))!;
   expect((await finish(source, store, state)).status).toBe('complete');
@@ -201,7 +218,10 @@ test('a locator cannot be rebound, and changes during a negative lookup retire i
   const result = await finish(graph.source, store, (await startConceptBrowse(selection, binding, store))!);
   if (result.status !== 'complete') throw new Error('Expected completion');
   for (const field of ['concept', 'property'] as const) {
-    const changed = { ...result.state, selection: { ...selection, [field]: 'other' } };
+    const changed = {
+      ...result.state,
+      selection: { ...selection, [field]: 'other' },
+    };
     expect(await currentConceptMembership(graph.source, store, changed, 'missing')).toBe('not_proven');
   }
   let observations = 0;
@@ -278,6 +298,96 @@ test('large retained closures do not grow step state or truncate at the filter i
   expect(result.state).not.toHaveProperty('discovered');
   expect(result.state).not.toHaveProperty('frontier');
   expect(await currentConceptMembership(source, retained.store, result.state, 'child-129')).toBe(true);
+  expect(
+    await matchCurrentConceptStatements(source, retained.store, result.state, {
+      selection,
+      statements: [{ property: selection.property, concept: 'child-129', witness: true }],
+      complete: false,
+    }),
+  ).toBe(true);
+});
+
+test('a membership page owns its keys and shares two observations and distinct point probes', async () => {
+  const graph = sourceFor({ root: ['a'] }),
+    { store } = retention();
+  const result = await finish(graph.source, store, (await startConceptBrowse(selection, binding, store))!);
+  if (result.status !== 'complete') throw new Error('Expected completion');
+  const requested = ['a', 'missing', 'a'],
+    probed: string[] = [];
+  let observations = 0;
+  const source = {
+    ...graph.source,
+    observe: async () => {
+      observations++;
+      requested.fill('mutated');
+      return { status: 'current' as const, binding };
+    },
+  };
+  const points = {
+    ...store,
+    contains: async (state: ConceptBrowseState, concept: string) => {
+      probed.push(concept);
+      return store.contains(state, concept);
+    },
+  };
+  expect(await currentConceptMemberships(source, points, result.state, requested)).toEqual([true, false, true]);
+  expect([observations, probed]).toEqual([2, ['a', 'missing']]);
+  expect(await currentConceptMemberships(source, points, result.state, ['', 'a'])).toEqual([
+    'not_proven',
+    'not_proven',
+  ]);
+  await expect(currentConceptMemberships(source, points, result.state, Array(257).fill('a'))).rejects.toThrow(
+    RangeError,
+  );
+  expect(observations).toBe(2);
+});
+
+test('exact, descendant and excluded conditions combine only same-statement native witnesses', async () => {
+  const graph = sourceFor({ root: ['a'] }),
+    { store } = retention();
+  const result = await finish(graph.source, store, (await startConceptBrowse(selection, binding, store))!);
+  if (result.status !== 'complete') throw new Error('Expected completion');
+  const row = (concept: string, witness: boolean | 'not_proven') => ({
+    property: selection.property,
+    concept,
+    witness,
+  });
+  const match = (statements: ReturnType<typeof row>[], complete = true, includeChildren = true) =>
+    matchCurrentConceptStatements(graph.source, store, result.state, {
+      selection: { ...selection, includeChildren },
+      statements,
+      complete,
+    });
+  expect(await match([row('root', false), row('outside', true)])).toBe(false);
+  expect(await match([row('a', true)])).toBe(true);
+  expect(await match([row('a', true)], true, false)).toBe(false);
+  expect(await match([row('root', true)], true, false)).toBe(true);
+  expect(await match([row('a', 'not_proven')])).toBe('not_proven');
+  expect(await match([], false)).toBe('not_proven');
+  const excluded = compileCurrentFilter({
+    not: {
+      statement: {
+        property: selection.property,
+        in: ['root'],
+        concept: { scheme: selection.scheme, includeChildren: true },
+      },
+    },
+  });
+  expect(excluded.evaluate([await match([])])).toBe(true);
+  expect(excluded.evaluate([await match([], false)])).toBe('not_proven');
+  let observations = 0;
+  const changed = {
+    ...graph.source,
+    observe: async () => ({
+      status: 'current' as const,
+      binding: ++observations === 1 ? binding : { ...binding, membership: 'changed' },
+    }),
+  };
+  expect(await currentConceptMemberships(changed, store, result.state, ['a', 'outside'])).toEqual([
+    'not_proven',
+    'not_proven',
+  ]);
+  expect(await match([row('root', false)])).toBe('not_proven');
 });
 
 test('invalid selection and excessive step limits reject before storage or source reads', async () => {
@@ -287,7 +397,10 @@ test('invalid selection and excessive step limits reject before storage or sourc
   expect(await startConceptBrowse({ ...selection, includeChildren: false } as never, binding, store)).toBeNull();
   const state = (await startConceptBrowse(selection, binding, store))!;
   expect(
-    await advanceConceptBrowse(graph.source, store, state, { ...limits, edges: CONCEPT_BROWSE_LIMITS.edges + 1 }),
+    await advanceConceptBrowse(graph.source, store, state, {
+      ...limits,
+      edges: CONCEPT_BROWSE_LIMITS.edges + 1,
+    }),
   ).toEqual({ status: 'rejected' });
   expect(graph.calls).toHaveLength(0);
 });

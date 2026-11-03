@@ -1,3 +1,6 @@
+import { currentConceptStatementsMatch } from './current-filter-plan.ts';
+import type { RelationFacetMatch } from './source.ts';
+
 /** A descendant predicate is tied to its property, scheme, and observed source cut. */
 export type ConceptDescendantSelection = Readonly<{
   concept: string;
@@ -22,7 +25,10 @@ export type ConceptBrowseState = Readonly<{
   binding: ConceptBrowseBinding;
   retained: ConceptBrowseLocator;
 }>;
-export type ConceptBrowseFrontier = Readonly<{ parent: string; after: string | null }>;
+export type ConceptBrowseFrontier = Readonly<{
+  parent: string;
+  after: string | null;
+}>;
 export type ConceptBrowsePage = Readonly<{
   binding: ConceptBrowseBinding;
   children: readonly string[];
@@ -64,17 +70,35 @@ export type ConceptBrowseStore = Readonly<{
   advance(
     state: ConceptBrowseState,
     expected: ConceptBrowseFrontier,
-    delta: Readonly<{ children: readonly string[]; after: string | null; exhausted: boolean }>,
+    delta: Readonly<{
+      children: readonly string[];
+      after: string | null;
+      exhausted: boolean;
+    }>,
   ): Promise<ConceptBrowseLocator | null>;
   seal(state: ConceptBrowseState): Promise<ConceptBrowseLocator | null>;
   retire(state: ConceptBrowseState): Promise<void>;
   contains(state: ConceptBrowseState, concept: string): Promise<boolean | null>;
 }>;
 /** Absolute working-set limits; total retained graph size is never a request-sized array. */
-export const CONCEPT_BROWSE_LIMITS = Object.freeze({ pages: 32, edges: 4096, pageSize: 256, keyBytes: 1024 });
-export type ConceptBrowseLimits = Readonly<{ pages: number; edges: number; pageSize: number }>;
+export const CONCEPT_BROWSE_LIMITS = Object.freeze({
+  pages: 32,
+  edges: 4096,
+  pageSize: 256,
+  keyBytes: 1024,
+});
+export type ConceptBrowseLimits = Readonly<{
+  pages: number;
+  edges: number;
+  pageSize: number;
+}>;
 export type ConceptBrowseResult =
-  | Readonly<{ status: 'complete' | 'preparing'; state: ConceptBrowseState; pages: number; edges: number }>
+  | Readonly<{
+      status: 'complete' | 'preparing';
+      state: ConceptBrowseState;
+      pages: number;
+      edges: number;
+    }>
   | Readonly<{ status: 'unavailable' | 'rejected' | 'restart' }>;
 
 const encoder = new TextEncoder();
@@ -144,7 +168,10 @@ function freezeState(state: ConceptBrowseState): ConceptBrowseState {
       principal: state.binding.principal,
       request: state.binding.request,
     }),
-    retained: Object.freeze({ id: state.retained.id, revision: state.retained.revision }),
+    retained: Object.freeze({
+      id: state.retained.id,
+      revision: state.retained.revision,
+    }),
   });
 }
 export async function startConceptBrowse(
@@ -154,7 +181,12 @@ export async function startConceptBrowse(
 ): Promise<ConceptBrowseState | null> {
   if (!validBinding(binding) || !validSelection(selection, binding)) return null;
   // Copy before awaiting persistence; caller mutation cannot change the retained definition.
-  const definition = freezeState({ version: 2, selection, binding, retained: { id: '', revision: '' } });
+  const definition = freezeState({
+    version: 2,
+    selection,
+    binding,
+    retained: { id: '', revision: '' },
+  });
   const retained = await store.create(definition.selection, definition.binding);
   return validLocator(retained) ? freezeState({ ...definition, retained }) : null;
 }
@@ -174,7 +206,11 @@ export async function advanceConceptBrowse(
   )
     return { status: 'rejected' };
   // Own the admitted allowance before asynchronous source or retained-store operations.
-  limits = Object.freeze({ pages: limits.pages, edges: limits.edges, pageSize: limits.pageSize });
+  limits = Object.freeze({
+    pages: limits.pages,
+    edges: limits.edges,
+    pageSize: limits.pageSize,
+  });
   let state = freezeState(input);
   let pages = 0,
     edges = 0;
@@ -193,7 +229,11 @@ export async function advanceConceptBrowse(
     if (!key(current.parent) || (current.after !== null && !key(current.after))) return retire('restart');
     const limit = Math.min(limits.pageSize, limits.edges - edges);
     pages++;
-    const read = await source.children({ ...current, binding: state.binding, limit });
+    const read = await source.children({
+      ...current,
+      binding: state.binding,
+      limit,
+    });
     if (read.status !== 'current') {
       if (read.status !== 'preparing') return retire(read.status);
       break;
@@ -243,31 +283,132 @@ export async function currentConceptMembership(
   state: ConceptBrowseState,
   concept: string,
 ): Promise<boolean | 'not_proven'> {
+  return (await currentConceptMemberships(source, store, state, [concept]))[0]!;
+}
+
+/** One bounded page of point probes shares a cut, independently of total closure size.
+ * The source owns observation costs; the retained store reserves each distinct full-key probe.
+ * No provisional verdict escapes when any probe or the final revision check loses the cut.
+ */
+export async function currentConceptMemberships(
+  source: ConceptBrowseSource,
+  store: ConceptBrowseStore,
+  state: ConceptBrowseState,
+  concepts: readonly string[],
+): Promise<RelationFacetMatch[]> {
+  if (!Array.isArray(concepts) || concepts.length > CONCEPT_BROWSE_LIMITS.pageSize)
+    throw new RangeError('Invalid concept membership page');
+  const unknown = (): RelationFacetMatch[] => Array.from({ length: concepts.length }, () => 'not_proven');
   if (
     state.version !== 2 ||
     !validBinding(state.binding) ||
     !validSelection(state.selection, state.binding) ||
     !validLocator(state.retained) ||
-    !key(concept)
+    Array.from(concepts).some((concept) => !key(concept))
   )
-    return 'not_proven';
+    return unknown();
+  if (!concepts.length) return [];
+  // Own both the requested keys and the entire retained definition before the first await.
+  const requested = [...concepts];
+  const missing = requested.map(() => 'not_proven' as const);
   const snapshot = freezeState(state);
   const first = await source.observe();
   if (first.status !== 'current') {
     if (first.status !== 'preparing') await store.retire(snapshot);
-    return 'not_proven';
+    return missing;
   }
   if (!sameBinding(first.binding, snapshot.binding)) {
     await store.retire(snapshot);
-    return 'not_proven';
+    return missing;
   }
-  const member = await store.contains(snapshot, concept);
-  if (member === null) return 'not_proven';
+  const members = new Map<string, boolean>();
+  for (const concept of requested) {
+    if (members.has(concept)) continue;
+    const member = await store.contains(snapshot, concept);
+    if (typeof member !== 'boolean') return missing;
+    members.set(concept, member);
+  }
   const final = await source.observe();
   if (final.status !== 'current' || !sameBinding(final.binding, snapshot.binding)) {
     if (final.status !== 'preparing') await store.retire(snapshot);
-    return 'not_proven';
+    return missing;
   }
   const retained = await store.read(snapshot);
-  return retained.status === 'complete' ? member : 'not_proven';
+  return retained.status === 'complete' ? requested.map((concept) => members.get(concept)!) : missing;
+}
+
+/** Native evidence about ONE classified statement. The owner must prove the property and value,
+ * disclosure and every admitted qualifier (including the spoiler threshold) on that same statement.
+ * A witness is request-local evidence, never a retained permission or a completeness certificate.
+ */
+export type ConceptStatementWitness = Readonly<{
+  property: string;
+  concept: string;
+  witness: RelationFacetMatch;
+}>;
+
+/** Compose native classified-statement evidence with retained exact/descendant membership.
+ * `complete` may be true only from the owner's current absence proof for the entire statement
+ * predicate, never from a LIMIT, an exhausted sample or an empty witness page. The enclosing native
+ * caller still revalidates the statement evidence before publishing a useful page.
+ */
+export async function matchCurrentConceptStatements(
+  source: ConceptBrowseSource,
+  store: ConceptBrowseStore,
+  state: ConceptBrowseState,
+  input: Readonly<{
+    selection: Readonly<{
+      property: string;
+      concept: string;
+      scheme: string;
+      includeChildren?: boolean;
+    }>;
+    statements: readonly ConceptStatementWitness[];
+    complete: boolean;
+  }>,
+): Promise<RelationFacetMatch> {
+  if (!Array.isArray(input.statements) || input.statements.length > CONCEPT_BROWSE_LIMITS.pageSize)
+    throw new RangeError('Invalid concept statement page');
+  const selection = { ...input.selection };
+  if (
+    selection.property !== state.selection.property ||
+    selection.concept !== state.selection.concept ||
+    selection.scheme !== state.selection.scheme ||
+    (selection.includeChildren !== undefined && typeof selection.includeChildren !== 'boolean') ||
+    typeof input.complete !== 'boolean'
+  )
+    return 'not_proven';
+  const complete = input.complete;
+  const statements: ConceptStatementWitness[] = [];
+  for (const statement of input.statements) {
+    if (
+      !statement ||
+      !key(statement.property) ||
+      !key(statement.concept) ||
+      ![true, false, 'not_proven'].includes(statement.witness)
+    )
+      return 'not_proven';
+    if (
+      statement.property === selection.property &&
+      (selection.includeChildren || statement.concept === selection.concept)
+    )
+      statements.push({ ...statement });
+  }
+  // An empty native page still checks the retained cut before absence can participate in NOT.
+  const members = await currentConceptMemberships(
+    source,
+    store,
+    state,
+    statements.length ? statements.map((statement) => statement.concept) : [selection.concept],
+  );
+  // Losing the retained cut invalidates the entire result, including an otherwise false witness.
+  if (members.includes('not_proven')) return 'not_proven';
+  if (!statements.length && members[0] !== true) return 'not_proven';
+  return currentConceptStatementsMatch(
+    statements.map((statement, index) => ({
+      membership: members[index]!,
+      witness: statement.witness,
+    })),
+    complete,
+  );
 }

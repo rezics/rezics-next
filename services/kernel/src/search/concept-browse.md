@@ -83,3 +83,27 @@ retired, unavailable or unsealed closure yields `not_proven`, including for an a
 Boolean interpreter must preserve this value under exclusion, and the shared statement matcher must independently
 prove the property, concept value, disclosure and spoiler qualifier on the same statement. Membership must never
 be lowered to a bounded `statement.in` list or truncated to the filter's 64-value admission limit.
+
+Decision: exact and descendant statement matching share the same sealed, scheme-bound retained cut;
+losing that cut invalidates every verdict in a bounded witness page, including negative verdicts.
+
+`currentConceptMemberships` probes at most 256 requested keys with two source observations and one
+final sealed-revision read. It copies the full definition and requested keys before awaiting, deduplicates
+point probes and preserves input order. The scalar `currentConceptMembership` uses this same path.
+For D distinct keys it invokes D full-primary-key `contains` queries against
+`scope_preparation_concept_member`, each fenced by the owning plan's full-primary-key lookup,
+revision, definition, expiry and ready state. Including the final `read`, retained storage reserves
+D + 1 statements, 2D + 2 rows and 32768(D + 1) bytes. Source observation and exceptional retirement
+costs remain additional owner work. Working memory holds at most 256 keys and Boolean results;
+neither probe count nor memory grows with closure size. A changed cut, invalid point result or
+unsealed revision returns `not_proven` for every requested key.
+
+`matchCurrentConceptStatements` composes those probes with the existing three-valued statement
+interpreter. Each native witness carries its own property and concept value and must prove current
+disclosure and the admitted qualifiers, including spoiler level, on that same statement. Exact mode
+retains only the selected concept; descendant mode probes retained membership without copying the
+closure. An empty witness page still probes the selected root, so complete absence cannot bypass
+retained currentness. The `complete` input is reserved for Semantic's current complete-absence proof;
+partial or withheld native evidence cannot set it. The enclosing caller must revalidate native
+statement evidence before publishing results. These ports do not implement that native producer,
+its completeness proof, source cost derivation or the universal Search and page installation.
