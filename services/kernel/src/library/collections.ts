@@ -1,7 +1,9 @@
 import {
   createCollectionPublicationEpisodes,
+  retireCollectionPublicationWork,
   type CollectionPublicationEpisodes,
 } from './collection-publication-episodes.ts';
+import { isDeepStrictEqual } from 'node:util';
 import { createBuiltinRuntime } from './builtin-runtime.ts';
 import { enterShelfWrite } from './shelf-counter-owner.ts';
 import { createShelfCounters } from './shelf-counters.ts';
@@ -78,6 +80,7 @@ import {
   parseCollectionRule,
   prepareCollectionRuleAuthority,
   prepareCollectionRuleWrite,
+  readSavedCollectionRule,
   updateSavedCollectionRule,
   type AdmittedCollectionRule,
   type CollectionRule,
@@ -762,11 +765,21 @@ export function createCollectionCommands(config: {
       async (tx, command, route) => {
         if (!command.rule) throw new Error('Missing admitted Collection rule');
         const previous = await activeCollection(tx, route, id);
+        if (previous.revision !== revision) throw new ProblemError('conflict');
+        const saved = await readSavedCollectionRule(tx, route, id);
+        if (
+          saved &&
+          isDeepStrictEqual(saved.filter, command.rule.filter) &&
+          saved.sort === command.rule.sort &&
+          saved.releaseDigest === command.rule.releaseDigest
+        )
+          return { value: previous, events: collectionEvents('updated', id, false) };
         await updateSavedCollectionRule(tx, route, id, revision, command.rule, command);
+        await retireCollectionPublicationWork(tx, route, id);
         const updated = await activeCollection(tx, route, id);
-        if (listed(previous) && listed(updated))
+        if (previous.visibility !== 'private')
           await recordPublicCollectionReduction(tx, route, id, command.transactionId);
-        return { value: updated, events: collectionEvents('updated', id, false) };
+        return { value: updated, events: collectionEvents('updated', id, listed(previous)) };
       },
       undefined,
       undefined,
@@ -827,7 +840,10 @@ export function createCollectionCommands(config: {
           command,
         );
         if (!value) throw new ProblemError('conflict');
-        if (wasListed && !listed(value)) await recordPublicCollectionReduction(tx, route, id, command.transactionId);
+        if (current.membershipKind === 'dynamic' && current.visibility !== value.visibility)
+          await retireCollectionPublicationWork(tx, route, id);
+        if ((wasListed && !listed(value)) || (current.visibility !== 'private' && value.visibility === 'private'))
+          await recordPublicCollectionReduction(tx, route, id, command.transactionId);
         return {
           value: current.membershipKind === 'dynamic' ? await activeCollection(tx, route, id) : value,
           events: collectionEvents('updated', id, wasListed !== listed(value)),

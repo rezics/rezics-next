@@ -171,6 +171,27 @@ type Loaded = {
   phase: 'staging' | 'awaiting_activation' | 'refused' | 'complete';
   version: string;
 };
+/** The owning header mutation already holds its ordinary Collection write lock. Retire only the
+ * single pending episode (the native partial unique index enforces that bound). Immutable creation,
+ * output, staging and custody rows remain available to their existing retention/disposition owners.
+ * Cancel the exact pending output so its unique building slot can admit the next explicit publish.
+ * Refusal is final: neither a receipt replay nor a late phase CAS can make this episode pending again.
+ */
+export async function retireCollectionPublicationWork(tx: CommandTransaction, route: number, collectionId: string) {
+  await tx.query(
+    `WITH retired AS (
+       UPDATE library.collection_publication_episode SET phase='refused',version=version+1
+       WHERE route=$1 AND collection_id=$2 AND phase IN ('staging','awaiting_activation')
+       RETURNING route,collection_id,source_id,publication_id
+     )
+     UPDATE library.collection_source_output g SET state='cancelled'
+     FROM retired e JOIN library.collection_publication_source s
+       ON (s.route,s.source_id,s.publication_id)=(e.route,e.source_id,e.publication_id)
+     WHERE (g.route,g.collection_id)=(e.route,e.collection_id)
+       AND g.generation=(s.bytes::jsonb->'output'->>'generation')::uuid AND g.state='building'`,
+    [route, collectionId],
+  );
+}
 /** Exact immutable operation/source point, followed by its exact receipt PK. No history fallback. */
 async function load(client: Client, operation: DurableOperationAnchor): Promise<Loaded | null> {
   if (
@@ -556,7 +577,7 @@ export function createCollectionPublicationEpisodes(config: {
               kind: COLLECTION_PUBLICATION_COMMAND,
               sourceId: prior.sourceId,
             });
-            if (!original) throw unavailable();
+            if (!original || original.phase === 'refused') throw unavailable();
             if (original.creation.initiator.creation.requestDigest !== requestDigest.toString('hex'))
               throw new IdempotencyConflictError(partitionOf(route));
             if (creation) {
@@ -710,16 +731,33 @@ export function createCollectionPublicationEpisodes(config: {
             receipt.key !== requestKey
           )
             throw unavailable();
-          const pending = await tx.query(
-            "SELECT publication_id FROM library.collection_publication_episode WHERE route=$1 AND collection_id=$2 AND phase IN ('staging','awaiting_activation') LIMIT 1",
+          const pending = await tx.query<{ publicationId: string; owner: string }>(
+            `SELECT publication_id::text AS "publicationId",owner_account_id::text AS owner
+             FROM library.collection_publication_episode
+             WHERE route=$1 AND collection_id=$2 AND phase IN ('staging','awaiting_activation') LIMIT 1`,
             [route, input.collectionId],
           );
-          if (pending.rows.length) throw conflict();
-          const retained = await tx.query(
-            'SELECT generation FROM library.collection_source_output WHERE route=$1 AND collection_id=$2 ORDER BY generation LIMIT 2',
-            [route, input.collectionId],
-          );
-          if (retained.rows.length >= 2) throw unavailable();
+          const prior = pending.rows[0];
+          if (prior) {
+            const priorLocator = {
+              route,
+              collectionId: input.collectionId,
+              ownerAccountId: prior.owner,
+              publicationId: prior.publicationId,
+            };
+            const original = await loadLocator(tx, priorLocator);
+            // Missing immutable evidence is not proof of obsolete work. Keep it unavailable,
+            // rather than treating an unverified row as permission to create another producer.
+            if (!original) throw unavailable();
+            if (
+              (await readCollectionPublicationRule(tx, priorLocator)) &&
+              isDeepStrictEqual(original.creation.source.input.identity, identity)
+            )
+              throw conflict();
+            await retireCollectionPublicationWork(tx, route, input.collectionId);
+          }
+          // One current build is enforced by the native pending index. Historical native outputs
+          // keep their immutable references and custody; they are never enumerated or reclaimed here.
           // Unknown whole-query cardinality stays NULL until real exhaustion. No selected-set count or complete receipt.
           await tx.query(
             `INSERT INTO library.collection_source_output(route,collection_id,generation,source_generation,account_id,expected_members,output_mode)
@@ -827,7 +865,7 @@ export async function advanceCollectionPublicationEpisodePhase(
   if (!(await admitCollectionPublicationStep(tx, locator))) return false;
   const episode = await readCollectionPublicationEpisode(tx, locator);
   if (!episode || episode.phase !== expected.phase || !(await readCollectionPublicationRule(tx, locator))) return false;
-  return (
+  const changed =
     (
       await tx.query(
         `UPDATE library.collection_publication_episode SET phase=$7,version=version+1
@@ -843,8 +881,14 @@ export async function advanceCollectionPublicationEpisodePhase(
           phase,
         ],
       )
-    ).rows.length === 1
-  );
+    ).rows.length === 1;
+  if (changed && phase === 'refused')
+    await tx.query(
+      `UPDATE library.collection_source_output SET state='cancelled'
+       WHERE route=$1 AND collection_id=$2 AND generation=$3 AND state='building'`,
+      [locator.route, locator.collectionId, episode.output.ref.generation],
+    );
+  return changed;
 }
 
 /** Existing terminal participant only. Erase private operation/actor/rule refs even when selected A survives.

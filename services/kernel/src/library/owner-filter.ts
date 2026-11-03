@@ -444,7 +444,7 @@ export function readNativeCollectionMemberAdmission(admission: CollectionMemberA
 type PrivateRead = { action: string; group: string };
 
 /** Native family list authority, including branches whose truth could otherwise short circuit. */
-function privateReads(filter: FilterDocument): PrivateRead[] {
+export function collectionMemberPrivateReads(filter: FilterDocument): PrivateRead[] {
   const reads = new Map<string, PrivateRead>();
   const add = (action: string, group: string) => reads.set(action, { action, group });
   for (const node of walkFilter(filter)) {
@@ -474,7 +474,7 @@ export async function prepareNativeCollectionMemberAuthority(
   const route = routeOf(viewer.accountId);
   if (route === null || (attempt && attempt.time !== at)) throw new TypeError('Foreign native owner time');
   const checks = [];
-  for (const { action, group } of privateReads(admission.filter)) {
+  for (const { action, group } of collectionMemberPrivateReads(admission.filter)) {
     if (!viewer.scopes.includes(action)) throw new ProblemError('forbidden');
     await admitGroup({
       pool: deps.pool,
@@ -577,7 +577,7 @@ async function finishCollectionMemberAdmission(
   deadline: number,
   retainedMeaning = false,
 ): Promise<CollectionMemberAdmission> {
-  const reads = filter === undefined ? [] : privateReads(filter);
+  const reads = filter === undefined ? [] : collectionMemberPrivateReads(filter);
   if (reads.length) {
     if (viewer.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
     if (reads.some(({ action }) => !viewer.scopes.includes(action)))

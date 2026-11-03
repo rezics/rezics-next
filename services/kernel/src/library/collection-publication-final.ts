@@ -6,7 +6,10 @@ import type { PoolClient } from 'pg';
 import { durableInitiatorCommitment } from '../access/durable-initiator-capture.ts';
 import { createInitiatorRestorer, DurableInitiatorUnavailableError } from '../access/durable-initiator.ts';
 import { resourceAuthorization } from '../access/resource-authorization.ts';
+import { readAccount } from '../access/account-data.ts';
+import { admitGroup } from '../access/gates/admission.ts';
 import {
+  authoritativeTimeValue,
   currentCommand,
   registerCommandCallback,
   runCommand,
@@ -37,6 +40,12 @@ import {
 } from './collection-publication-episodes.ts';
 import type { CollectionPublicationLocator } from './collection-publication-work-admission.ts';
 import type { WorkDimensions } from './collection-source.ts';
+import { deadlineClient } from '../access/authenticate.ts';
+import { commandAccessContext } from '../access/command-admission.ts';
+import { accessCheck, type AccessCheck } from '../request/access.ts';
+import { readBuiltinPublicationRule } from './builtin-materialization.ts';
+import { authorizeCollectionRule, collectionRuleActions, readSavedCollectionRule } from './collection-rules.ts';
+import { admitSavedCollectionMemberQuery, collectionMemberPrivateReads } from './owner-filter.ts';
 import { completeCollectionSourceOutput, type CollectionOutputRef } from './collection-source-output.ts';
 import { readCollectionPublicationStagingSeal } from './collection-publication-staging.ts';
 import outputInventoryQuery from './collection-publication-final-output-inventory.sql';
@@ -211,7 +220,12 @@ export function createCollectionPublicationFinalCommand(
       return row?.valid === true;
     },
   });
-  type Prepared = { attempt: CommandAttempt; current: CommandAuthorization; proof: unknown };
+  type Prepared = {
+    attempt: CommandAttempt;
+    current: CommandAuthorization;
+    proof: unknown;
+    checks: readonly AccessCheck[];
+  };
   const proofs = new WeakMap<object, Prepared>();
   const authorization: CollectionPublicationFinalCommand['authorization'] = Object.freeze({
     action: 'collection:update',
@@ -222,6 +236,60 @@ export function createCollectionPublicationFinalCommand(
         { operation, action: 'collection:update', anchor, context: { pool, deadline } },
         attempt.time,
       );
+      // A restored collection:update grant alone cannot publish a private predicate. Re-admit
+      // the current whole rule and every expanded private family at this exact command time,
+      // including on receipt replay. The body separately compares the immutable episode meaning.
+      if (!actor.scopes.includes('collection:read')) throw denied();
+      const client = deadlineClient(pool, deadline);
+      const rule =
+        (await readSavedCollectionRule(client, route, collectionId)) ??
+        (await readBuiltinPublicationRule(client, route, collectionId))?.rule;
+      if (!rule) throw unavailable();
+      const config = { pool, access, clock: () => new Date(authoritativeTimeValue(attempt.time)) };
+      const admission = await admitSavedCollectionMemberQuery(config, actor, rule, {}, deadline);
+      const ownerAnchor = {
+        resource: { route, id: ownerAccountId },
+        async validate(client: Client) {
+          const account = await readAccount(client, route, ownerAccountId);
+          return account?.kind === 'actor' && account.state === 'active' && !account.fenced;
+        },
+      };
+      const families = [
+        ...collectionRuleActions(rule.filter).map((action) => ({
+          action,
+          group: action === 'progress_session:read' ? 'reading_progress' : 'personal_library',
+        })),
+        ...collectionMemberPrivateReads(admission.filter ?? rule.filter),
+      ];
+      const checks: AccessCheck[] = [];
+      // Durable identities are bound to one action and resource. Restore each required
+      // read separately; the collection:update identity cannot authorize those reads.
+      for (const family of [{ action: 'collection:read', group: null }, ...families]) {
+        const target = family.group === null ? anchor : ownerAnchor;
+        const reader = await restorer.restoreInitiator(
+          { operation, action: family.action, anchor: target, context: { pool, deadline } },
+          attempt.time,
+        );
+        if (family.group !== null)
+          await admitGroup({
+            pool,
+            access: () => access,
+            actor: reader,
+            group: family.group,
+            clientAction: family.action,
+            deadline,
+            clock: config.clock,
+          });
+        checks.push(
+          await accessCheck(
+            access,
+            reader,
+            family.action,
+            target.resource,
+            commandAccessContext({ pool, deadline }, attempt),
+          ),
+        );
+      }
       const current = resourceAuthorization({
         access,
         actor,
@@ -231,7 +299,7 @@ export function createCollectionPublicationFinalCommand(
       });
       const proof = await current.prepare!(attempt);
       const evidence = Object.freeze({});
-      proofs.set(evidence, { attempt, current, proof });
+      proofs.set(evidence, { attempt, current, proof, checks });
       return evidence;
     },
     async authorize(tx, attempt, evidence) {
@@ -239,6 +307,7 @@ export function createCollectionPublicationFinalCommand(
       if (typeof evidence === 'object' && evidence !== null) proofs.delete(evidence);
       if (!prepared || prepared.attempt !== attempt) throw denied();
       if ((await prepared.current.authorize(tx, attempt, prepared.proof)) !== 'execute') throw denied();
+      await authorizeCollectionRule(tx, attempt, prepared.checks);
       return 'execute';
     },
   });
@@ -312,6 +381,7 @@ export function createCollectionPublicationFinalActivation(
             !before.version
           )
             throw unavailable();
+          const selectedBefore = before.episode.selected;
           const firstInventory = await bounded(
             work,
             {
@@ -326,6 +396,10 @@ export function createCollectionPublicationFinalActivation(
               outputInventoryQuery.run(tx, {
                 route: locator.route,
                 collection_id: locator.collectionId,
+                generations: [
+                  creation.source.output.generation,
+                  ...(selectedBefore ? [selectedBefore.ref.generation] : []),
+                ],
               }) as Promise<OutputInventoryRow[]>,
           );
           validateInventory(firstInventory, creation.source.output, before.episode.selected);
@@ -379,6 +453,10 @@ export function createCollectionPublicationFinalActivation(
               outputInventoryQuery.run(tx, {
                 route: locator.route,
                 collection_id: locator.collectionId,
+                generations: [
+                  creation.source.output.generation,
+                  ...(activationEpisode.selected ? [activationEpisode.selected.ref.generation] : []),
+                ],
               }) as Promise<OutputInventoryRow[]>,
           );
           validateInventory(finalInventory, creation.source.output, after.episode.selected);

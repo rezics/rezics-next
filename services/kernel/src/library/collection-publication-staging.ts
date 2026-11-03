@@ -579,6 +579,9 @@ async function currentSource(tx: CommandTransaction, row: Checkpoint, work: Nati
      JOIN library.canonical_source_head h ON h.route=c.route AND h.collection_id=c.collection_id
      JOIN library.canonical_source_generation g ON g.route=h.route AND g.collection_id=h.collection_id AND g.generation=h.generation
      JOIN library.fact_source_head facts ON facts.route=c.route AND facts.account_id=c.curator_account_id
+     JOIN library.collection_publication_episode episode ON episode.route=c.route AND episode.collection_id=c.collection_id
+       AND episode.publication_id=$13 AND episode.owner_account_id=c.curator_account_id
+       AND episode.phase IN ('staging','awaiting_activation')
      JOIN editorial.write_basis repair ON repair.partition_no=p.partition_no AND repair.epoch=p.epoch
        AND repair.position=$11 AND repair.transaction_id=$12
      WHERE c.route=$1 AND c.collection_id=$2 AND c.curator_account_id=$3 AND c.state='active'
@@ -600,6 +603,7 @@ async function currentSource(tx: CommandTransaction, row: Checkpoint, work: Nati
       row.fact_fence,
       row.binding.repair.position,
       row.binding.repair.transactionId,
+      row.publication_id,
     ],
     128,
   );

@@ -465,6 +465,25 @@ Phase data, count, a first page and the delivered explicit 0..100 selected-set h
 Source/compiler, with query/source/identity/current fences before work and at finalization; unchanged A remains
 selected until genuine full exhaustion and successful final activation.
 
+Refresh and revocation use the existing rule revision, Source generation and monotonic listing stamp.
+An unchanged admitted rule is a no-op; a real rule edit advances the rule revision and Source generation once,
+retires the single pending episode as refused and cancels its exact building output in that transaction,
+freeing the native build slot while retaining its rows, and invalidates incompatible cursors and
+working Source references. Metadata-only edits do not advance the rule revision. Visibility changes also retire
+pending work. Private visibility and rule changes withdraw incompatible public use immediately through the
+current native output/source fence and query privacy reduction; the retained A reference is never a fallback
+through an unsafe or changed Source. Unlisted reductions receive the same query privacy invalidation.
+
+Decision: native refresh bounds active work to one pending episode and reads only its exact B and currently
+selected A; historical output, creation, staging and custody rows remain retained for their existing owners.
+A fresh explicit begin may replace incompatible pending work after checking its original evidence, without
+enumerating or reclaiming history. Private fact edits alone never request publication. Refused/incomplete B
+cannot select itself, and reopening visibility cannot revive withdrawn A or old begin/stage/final work.
+Final activation re-admits the current expanded query and all private-family and Collection read authority at
+the restored initiator's current command time, including receipt replay. It still requires actual native
+exhaustion, Source/identity/privacy fences and a current final authorization; unavailable foreign evidence
+remains unavailable. Listing delivery continues to use the shared monotonic protocol, with no new clock/store.
+
 Final activation uses WorkContext.getAuthorization()'s same mounted Access/current readConsent and pool with
 createInitiatorRestorer and the real domain reader. Every runCommand retry/replay restores the initiator **inside
 CommandAuthorization.prepare at that attempt.time**, then delegates ordinary resourceAuthorization or

@@ -456,8 +456,8 @@ export const recordPrivacyReduction: RecordPrivacyReductionType = async (
     position: position.toString(),
     transaction_id: command.transactionId,
     cause: reduction.cause,
-    affected: JSON.stringify(reduction.affected),
-    impacts: JSON.stringify(reduction.impacts),
+    affected: reduction.affected,
+    impacts: reduction.impacts,
     recorded_at: authoritativeTimeValue(command.time),
   });
   if (!appended) throw new AccessUnavailableError('overloaded');
