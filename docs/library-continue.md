@@ -105,7 +105,7 @@ never successful empty results. The fake's retained entry/session summaries are 
 native Continue responses or evidence of Source readiness. Decision: the fake uses only exact supplied summary
 IDs and fields; unrecorded headers stay null, and Space population or signed pagination without recordings stays
 unavailable rather than being simulated. Web owns the existing Progress route captures; exact native recordings
-remain unavailable until supplied by that owner.
+remain unavailable until supplied by that owner. PatternStory plus AppShell Continue presentations at `/library/continue` map supplied recorded sessions and constructed empty, no-progress, unavailable, preparing, unknown and denied states for shared-shell review; they are not the actual route or native proof.
 
 `state` is an exact data ID, not a kernel enum. `subjectId` is canonical. BASIC_SESSION reuses the existing HTTP
 field set in [progress-routes.ts](../services/kernel/src/library/progress-routes.ts): `id`, `subjectId`,
