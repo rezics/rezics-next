@@ -5,6 +5,19 @@ import type { ClientKernel as KernelType } from './kernel/http/kernel.ts';
 import type { subjectRoutes } from './kernel/semantic/http/subjects.ts';
 
 export type { ClientKernel as Kernel } from './kernel/http/kernel.ts';
+export type {
+  PersonalEntry,
+  PersonalEntryAnnotationWrite,
+  PersonalEntryFieldChange,
+  PersonalEntryObservation,
+  PersonalEntryPrivacy,
+  PersonalEntryPrivacyValue,
+  PersonalEntrySourceAdmission,
+  PersonalEntrySourceCorrection,
+  PersonalEntryTimestampValue,
+  PersonalEntryTimestamp,
+  PersonalEntryTimestampInput,
+} from './kernel/library/entry-personal-model';
 
 type Routes = KernelType['~Routes']['v1'];
 

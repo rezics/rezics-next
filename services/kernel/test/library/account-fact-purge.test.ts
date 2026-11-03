@@ -18,6 +18,20 @@ test('terminal account fact pages erase bounded native rows exactly once preserv
     [route, id(1), id(2), id(10), id(11), time],
   );
   await pool.query(
+    `INSERT INTO library.entry_personal_fact(route,account_id,subject_id,fact_id,annotation_revision,note,priority,
+       annotation_updated_at,annotation_transaction_id,created_at,updated_at,transaction_id)
+     VALUES($1,$2,$3,$4,1,'Private annotation',8,$5,$2,$5,$5,$2)`,
+    [route, id(1), id(10), id(12), time],
+  );
+  await pool.query(
+    `INSERT INTO library.entry_source_observation(route,account_id,subject_id,provider,record_id,revision,
+       privacy_status,privacy_meaning,source_created_status,source_created_value,source_created_precision,source_created_zone,
+       source_updated_status,source_updated_value,source_updated_precision,source_updated_zone,created_at,updated_at,transaction_id)
+     VALUES($1,$2,$3,'vndb','record-1',1,'known','private','known','2024-02','month','unknown',
+       'unknown',NULL,NULL,NULL,$4,$4,$2)`,
+    [route, id(1), id(10), time],
+  );
+  await pool.query(
     `INSERT INTO library.copy(route,copy_id,account_id,subject_id,status,note,revision,created_at,updated_at,transaction_id) VALUES($1,$2,$4,$6,'owned','Private erased note',1,$7,$7,$4),($1,$3,$5,$6,'owned','Keep note',1,$7,$7,$5)`,
     [route, id(20), id(21), id(1), id(2), id(10), time],
   );
@@ -45,6 +59,12 @@ test('terminal account fact pages erase bounded native rows exactly once preserv
   expect(second.value.examined).toBe(1);
   expect(second.value.removed).toBe(1);
   expect(second.value.exhausted).toBe(true);
+  expect(
+    (await pool.query(`SELECT count(*)::int AS n FROM library.entry_personal_fact WHERE route=$1 AND account_id=$2`, [route, id(1)])).rows,
+  ).toEqual([{ n: 0 }]);
+  expect(
+    (await pool.query(`SELECT count(*)::int AS n FROM library.entry_source_observation WHERE route=$1 AND account_id=$2`, [route, id(1)])).rows,
+  ).toEqual([{ n: 0 }]);
   expect(
     (await pool.query(`SELECT account_id FROM library.entry WHERE route=$1 ORDER BY account_id`, [route])).rows,
   ).toEqual([{ account_id: id(2) }]);

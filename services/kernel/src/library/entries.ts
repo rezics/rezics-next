@@ -48,6 +48,9 @@ import stampLegacyIncarnation from './entry-legacy-incarnation-stamp.sql';
 import restoreState from './entry-restore-state.sql';
 import mutationState from './entry-mutation-state.sql';
 import { decodeLibraryProfilePin } from './profile-pin.ts';
+import { LibraryConflictError } from './entry-errors.ts';
+export { LibraryConflictError } from './entry-errors.ts';
+import { createEntryPersonalCommands } from './entry-personal.ts';
 
 type Dependencies = {
   pool: Pool;
@@ -77,13 +80,6 @@ export class LibraryEntryInvalidError extends TypeError {
 
 /** Unwinds the owner checkout before the independently committed preparation command. */
 class TypePreparationRequired extends Error {}
-
-export class LibraryConflictError extends Error {
-  constructor() {
-    super('Library entry revision conflicts');
-    this.name = 'LibraryConflictError';
-  }
-}
 
 export class LibraryEntryLifecycleConflictError extends LibraryConflictError {
   constructor(readonly reason: 'stale' | 'occupied' | 'expired') {
@@ -243,6 +239,7 @@ export async function deleteLibraryEntryInTransaction(
 export function createEntryCommands(config: Dependencies) {
   const { pool, access, tokens, clock } = config;
   const runner = createLibraryCommandRunner({ pool, ...(clock === undefined ? {} : { clock }) });
+  const personal = createEntryPersonalCommands({ pool, access, ...(clock === undefined ? {} : { clock }) });
   const heads = createShelfHeads(),
     counters = createShelfCounters();
   const types = createTypePreparationPorts({
@@ -653,6 +650,7 @@ export function createEntryCommands(config: Dependencies) {
   }
 
   return {
+    ...personal,
     putEntry: (...args: Parameters<typeof putEntry>) =>
       withRequestDeadline(deadlineFor(WORK_STEP_DEADLINE_MS), () => putEntry(...args)),
     deleteEntry,

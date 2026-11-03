@@ -129,13 +129,31 @@ export async function stepOwnerIndex(tx: OperationalTransaction, accountId: stri
     return current;
   }
   const [table, id, pin] = sources[current.phase];
-  // Only fixed native table/column literals above are interpolated; inputs remain parameters.
-  const { rows } = await tx.query<Scope>(
-    `SELECT subject_id AS subject, ${id} AS fact, ${pin} AS pin FROM ${table}
-    WHERE route=$1 AND account_id=$2 AND ($3::uuid IS NULL OR (subject_id,${id})>($3,$4::uuid))
-    ORDER BY subject_id,${id} LIMIT 100`,
-    [...args, current.subject, current.fact],
-  );
+  // Personal annotations and reviewed source observations are owner facts in the existing entry family.
+  const rows = current.phase === 'entry'
+    ? (await tx.query<Scope>(
+        `SELECT subject AS "subject",fact AS "fact",pin AS "pin" FROM (
+          (SELECT e.subject_id AS subject,e.subject_id AS fact,COALESCE(e.library_profile_pin,'{}'::jsonb) AS pin
+           FROM library.entry e WHERE e.route=$1 AND e.account_id=$2
+             AND ($3::uuid IS NULL OR (e.subject_id,e.subject_id)>($3,$4::uuid))
+           ORDER BY e.subject_id,e.subject_id LIMIT 100)
+          UNION ALL
+          (SELECT p.subject_id AS subject,p.fact_id AS fact,'{}'::jsonb AS pin
+           FROM library.entry_personal_fact p WHERE p.route=$1 AND p.account_id=$2
+             AND ($3::uuid IS NULL OR (p.subject_id,p.fact_id)>($3,$4::uuid))
+             AND (p.note IS NOT NULL OR p.priority IS NOT NULL OR EXISTS(
+               SELECT 1 FROM library.entry_source_observation o WHERE o.route=p.route AND o.account_id=p.account_id
+                 AND o.subject_id=p.subject_id))
+           ORDER BY p.subject_id,p.fact_id LIMIT 100)
+        ) facts ORDER BY subject,fact LIMIT 100`,
+        [...args, current.subject, current.fact],
+      )).rows
+    : (await tx.query<Scope>(
+        `SELECT subject_id AS subject, ${id} AS fact, ${pin} AS pin FROM ${table}
+        WHERE route=$1 AND account_id=$2 AND ($3::uuid IS NULL OR (subject_id,${id})>($3,$4::uuid))
+        ORDER BY subject_id,${id} LIMIT 100`,
+        [...args, current.subject, current.fact],
+      )).rows;
   for (const row of rows)
     await tx.query('SELECT library.refresh_owner_member_scope($1,$2,$3,$4,$5::jsonb)', [
       ...args,
@@ -180,7 +198,10 @@ export async function readOwnerOriginalTruth(client: Client, accountId: string, 
     sequence: string | null;
     pin: unknown;
   }>(
-    `SELECT EXISTS(SELECT 1 FROM library.entry WHERE route=$1 AND account_id=$2 AND subject_id=$3) AS entry,
+    `SELECT (EXISTS(SELECT 1 FROM library.entry WHERE route=$1 AND account_id=$2 AND subject_id=$3) OR
+      EXISTS(SELECT 1 FROM library.entry_personal_fact p WHERE p.route=$1 AND p.account_id=$2 AND p.subject_id=$3
+        AND (p.note IS NOT NULL OR p.priority IS NOT NULL OR EXISTS(SELECT 1 FROM library.entry_source_observation o
+          WHERE o.route=p.route AND o.account_id=p.account_id AND o.subject_id=p.subject_id)))) AS entry,
     EXISTS(SELECT 1 FROM library.label_assignment x WHERE x.route=$1 AND x.account_id=$2 AND x.subject_id=$3
       AND x.deleted_at IS NULL AND x.slot_no IS NOT NULL AND x.assignment_id IS NOT NULL AND EXISTS(SELECT 1 FROM library.personal_label l
         WHERE l.route=$1 AND l.account_id=$2 AND l.label_id=x.label_id AND l.deleted_at IS NULL)) AS label,
