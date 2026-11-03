@@ -3451,7 +3451,8 @@ Cost: current sales read
 ## Mounted cross-media catalogue navigation
 
 Home now includes the existing native route TypeLists without replacing the Home feed or Search adapters. Realm
-catalogues continue through the delivered Space composer. Subject overviews mount the authenticated Connections
+catalogues continue through the delivered Space composer and native publication shelf. The real seed must have
+independently admitted Realm publications; a source import alone never creates that authority. Subject overviews mount the authenticated Connections
 reader for work relations, character appearances/qualified voice credits and incoming person credits. It uses the
 current release and actual native `relations`, `links` and explicitly requested bounded graph method; it never
 loads a canned Imports manifest or hydrates related endpoints per row.

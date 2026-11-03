@@ -76,8 +76,10 @@ test('mounted seeded franchises remain connected through Home, both Realms, work
   try {
     for (const path of ['/', visit.realms.anime, visit.realms.visualNovel]) {
       await open(path);
-      // Existing Search pagination remains the owner of complete catalogue traversal.
-      const lists = page.locator('[data-slot="type-list"]');
+      // Home uses Search TypeLists; Realms use their independently authorized native publication shelf.
+      const lists = page.locator(
+        path === '/' ? '[data-slot="type-list"]' : '[aria-labelledby="realm-published-heading"]',
+      );
       await visible(lists.first()).toBeVisible();
       expect(await lists.locator('a[href*="/subjects/"]').count()).toBeGreaterThan(0);
     }

@@ -1329,7 +1329,8 @@ The existing 16-read, 128-slot and native request bounds still apply.
 
 Home mounts the native `/` page's four existing TypeLists alongside the existing Home feed. Books, Anime,
 Visual novels and Recipes retain Search's admission, ordering, 12-hit preview and explicit list continuation.
-The anime and visual-novel Realm pages retain their delivered native Space page and discovery composer. Neither
+The anime and visual-novel Realm pages retain their delivered native Space page and independently authorized
+publication shelf. Native publication membership, not a Realm title or a source record, admits a work to that shelf. Neither
 page reads an Imports manifest, invents a featured seed card, or performs a per-hit detail fetch. The authentic
 Imports cross-media producer supplies selected identities and statements; a proposed statement is not a public
 relation. Its `gaps[].fields`, `gaps[].record` and `unresolved[].{holder,target,property}` remain producer-owned.
@@ -1382,7 +1383,10 @@ source fields and unresolved seed endpoints. Neither gap licenses a local graph 
 For a selected page let `P(v)` be the installed native `pages:read` plan's component count, already bounded by
 16 reads and 128 slots; its supplied section limits remain authoritative. Home adds one such aggregate: its four
 catalogue search components have limit 12, so at most 48 hits enter the existing TypeList projection. The existing
-Home feed and Realm discovery keep their own fixed request components and caps; this composition adds no search
+Home feed keeps its own fixed request components and caps. The existing Realm shelf requests at most 20 boards
+and 12 publications, with at most 12 independently authorized subject summaries; presentation, membership and
+continuation remain with that shelf’s original owner. For that existing route these fixed components and selected
+summary window comprise its component bound; this composition adds no search
 or detail request per catalogue hit.
 
 The supplemental visit has two page aggregates, the installed active-digest/release pair and one selected stream
