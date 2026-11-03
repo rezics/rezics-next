@@ -1898,19 +1898,19 @@ writer, asset picker or upload/lifecycle engine here.
   `t=1..4` complete rules snapshots, and `F_t` the sum of that snapshot's four
   actual formula costs. The complete expression is
   `S_auth + 114 + sum_j(m_j+2*a_j+b_locator_j+b_final_j)
-   + b_locator+b_initial+b_final + sum_t(H_t+e_t+B_t+F_t)
-   + sum_outer(P_i+Q_i) + sum_media(P_i+Q_i) + E_1+E_2`.
-  Here 114 is `28+2*27+4*8`; the seven outer preparations, up to ten media
-  preparations and two batched rules preparations are separate. The fixed local
-  and eligibility terms are at most 273 before those preparations, formulas and
-  authentication; this is a source coefficient, not a total measured ceiling.
-  The complete two-image/two-rules path has fourteen read-only snapshots and
-  twenty-eight controls: two/four outer, eight/sixteen media and four/eight rules
-  snapshots/controls respectively. Locator and preparation statements and any
-  authentication transactions remain additional. Empty image or rules selection
-  removes its dispatched owner calls; it does not remove outer proofs. Denial,
-  optional failure and rollback charge their executed prefixes; an explicit caller
-  retry adds both complete attempts, including authentication.
+  - b_locator+b_initial+b_final + sum_t(H_t+e_t+B_t+F_t)
+  - sum_outer(P_i+Q_i) + sum_media(P_i+Q_i) + E_1+E_2`.
+    Here 114 is `28+2*27+4*8`; the seven outer preparations, up to ten media
+    preparations and two batched rules preparations are separate. The fixed local
+    and eligibility terms are at most 273 before those preparations, formulas and
+    authentication; this is a source coefficient, not a total measured ceiling.
+    The complete two-image/two-rules path has fourteen read-only snapshots and
+    twenty-eight controls: two/four outer, eight/sixteen media and four/eight rules
+    snapshots/controls respectively. Locator and preparation statements and any
+    authentication transactions remain additional. Empty image or rules selection
+    removes its dispatched owner calls; it does not remove outer proofs. Denial,
+    optional failure and rollback charge their executed prefixes; an explicit caller
+    retry adds both complete attempts, including authentication.
 
 - **Direct source physical keys:** `realm-read.sql` and `space-read.sql` materialize
   one routed active identity before joining its exact revision. The revision PKs
