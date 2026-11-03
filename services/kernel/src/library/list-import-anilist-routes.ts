@@ -75,9 +75,6 @@ export function aniListImportRoutes(
         headers,
         body: t.Object(
           {
-            beforeHandle: ({ set }) => {
-              set.headers['Cache-Control'] = 'private, no-store';
-            },
             upload: t.String({ maxLength: 1048576 }),
             scoreFormat: t.Optional(
               t.Union(['POINT_100', 'POINT_10', 'POINT_10_DECIMAL', 'POINT_5', 'POINT_3'].map((v) => t.Literal(v))),
@@ -122,9 +119,6 @@ export function aniListImportRoutes(
         headers,
         body: t.Object(
           {
-            beforeHandle: ({ set }) => {
-              set.headers['Cache-Control'] = 'private, no-store';
-            },
             ordinal,
             subjectId: t.Optional(id),
             skip: t.Optional(t.Boolean()),
