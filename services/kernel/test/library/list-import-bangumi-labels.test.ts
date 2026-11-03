@@ -112,6 +112,30 @@ test('native 32-slot capacity preserves unchanged outcomes and reclaims only a d
   expect((await apply(r.id, fresh.token)).outcomes[0].status).toBe('assigned');
   expect((await assignments().listAssignments(f.owner.actor, { subjectId: r.subject, limit: 100 })).assignments).toHaveLength(32);
 }, 180000);
+test('tag pages preserve maximum admitted text, reject negative targets and bound lifetime effects', async () => {
+  const r = await retained(Array.from({ length: 65 }, (_, i) => `tag ${i}`));
+  for (const [after, count, next] of [[-1, 32, 31], [31, 32, 63], [63, 1, null]]) {
+    const page = await json(await send(`/${r.id}/rows/0/tags?after=${after}`));
+    expect(page.tags).toHaveLength(count as number); expect(page.next).toBe(next);
+    expect(Buffer.byteLength(JSON.stringify(page))).toBeLessThan(65536);
+  }
+  const missing = await json(await send(':preview', { upload: wrapper([{}, { tags: [] }, { tags: ['x', 3] }, { tags: ['x'.repeat(8000)] }]) }));
+  const statuses = [];
+  for (let i = 0; i < 4; i++) statuses.push((await json(await send(`/${missing.uploadId}/rows/${i}/tags`))).evidence);
+  expect(statuses).toEqual(['missing', 'empty', 'invalid', 'known']);
+  const max = await json(await send(`/${missing.uploadId}/rows/3/tags`));
+  expect(max.tags[0]).toMatchObject({ value: 'x'.repeat(8000), status: 'invalid', proposedName: null });
+  const foreign = (await createPersonalLabelCommands(native()).createLabel(f.other.actor, { name: randomUUID() }, randomUUID())).value.label;
+  expect((await send(`/${r.id}:reviewLabels`, { ordinal: 0, rowRevision: r.revision,
+    mappings: [{ index: 0, target: { labelId: foreign.id } }] })).status).toBe(404);
+  const v = await review(r, Array.from({ length: 16 }, (_, index) => ({ index, target: { name: randomUUID() } })));
+  const accepted = await apply(r.id, v.token);
+  expect(accepted.outcomes.every((o: { status: string }) => o.status === 'assigned')).toBe(true);
+  const limit = await review(r, [{ index: 16, target: { name: randomUUID() } }]);
+  expect((await apply(r.id, limit.token)).outcomes[0].status).toBe('limit');
+  const unchanged = await review(r, [{ index: 0, target: { labelId: accepted.outcomes[0].label.id } }]);
+  expect((await apply(r.id, unchanged.token)).outcomes[0].status).toBe('unchanged');
+}, 180000);
 test('partial interruption, cancel and source removal retain accepted native facts and remove new review evidence', async () => {
   const r = await retained(['first', 'second']);
   const v = await review(r, [{ index: 0, target: { name: randomUUID() } }, { index: 1, target: { name: randomUUID() } }]);

@@ -144,8 +144,14 @@ export function createBangumiLabelReview(
               WHERE route=$1 AND account_id=$2 AND label_id=$3 AND deleted_at IS NULL FOR SHARE`,
               [requireRoute(actor.accountId), actor.accountId, target.id]);
             if (parent.rows[0]?.revision !== target.revision) throw new StaleError();
+            const existing = await tx.query(`SELECT assignment_id FROM library.label_assignment
+              WHERE route=$1 AND account_id=$2 AND subject_id=$3 AND label_id=$4
+                AND deleted_at IS NULL AND slot_no IS NOT NULL`,
+              [requireRoute(actor.accountId), actor.accountId, review.subject!.subjectId, target.id]);
+            // Native admission still returns the original unchanged receipt; it consumes no effect allowance.
+            if (existing.rows.length) return;
           }
-          // Charge fresh native commands only; receipt replay never executes this body.
+          // Charge fresh native effects only; receipt replay never executes this body.
           const counter = target ? 'label_assignments' : 'label_creations';
           const charged = await tx.query(`UPDATE library.bangumi_upload_row SET ${counter}=${counter}+1
             WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4 AND ${counter}<16`,

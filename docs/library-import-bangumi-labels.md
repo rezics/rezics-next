@@ -5,13 +5,13 @@ upload-to-result interface and consumes these generated methods; there is no add
 upload format, catalogue producer or importer store. The REZICS collection wrapper is not an official Bangumi export.
 
 Decision: label review has its own confirmation epoch, with at most 16 selected mappings per retained row and 16
-native create commands and 16 assignment commands over that row's lifetime, including refreshed reviews; original
+native creations and 16 effective assignments over that row's lifetime, including refreshed reviews; unchanged assignments and original
 receipt replay consumes no additional allowance. The Subject review token is the immutable retained row's revision.
 
 ## Installed owner methods
 
 All three methods use the existing authenticated own-account Library actions, personal_library exposure,
-request admission and `Cache-Control: private, no-store`. The generated client exposes:
+request admission and `Cache-Control: private, no-store`. Mounted route types define the following client methods (declaration regeneration remains required):
 
 - `libraryImports.bangumi({ uploadId }).rows({ ordinal }).tags.get({ query: { after: -1 } })`
 - `libraryImports.bangumi({ uploadId }).$reviewLabels.post({ ordinal, rowRevision, mappings }, { headers })`
