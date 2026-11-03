@@ -10,6 +10,7 @@ import type { SearchService } from '../../src/search/http/routes.ts';
 import { bindSearchScopeCursorRequest } from '../../src/search/service.ts';
 import type { PublicSearchPage } from '../../src/search/service.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -58,7 +59,7 @@ const search: SearchService = {
     return { subjects: [], as_of: asOf };
   },
 };
-const app = createKernel({ pool, access, tokens, routeKey, search });
+const app = createKernel({ pool, access, tokens, receiptKeys: testReceiptKeys(), routeKey, search });
 
 beforeAll(async () => {
   for (const group of ['search', 'search_advanced']) {
