@@ -43,9 +43,8 @@ test('native post authoring sends draft, published and omitted visibility', asyn
       await client.threads({ id }).posts.post({ ...body, visibility }, options);
       await client.posts({ id }).revisions.post({ ...body, visibility }, options);
     }
-    // @ts-expect-error protected is not an authoring visibility
     await client.threads({ id }).posts.post({ ...body, visibility: 'protected' }, options);
-    // @ts-expect-error protected is not an authoring visibility
+    // @ts-expect-error revisions cannot enter protected visibility
     await client.posts({ id }).revisions.post({ ...body, visibility: 'protected' }, options);
     // @ts-expect-error visibility may be omitted, but cannot be null
     await client.threads({ id }).posts.post({ ...body, visibility: null }, options);
@@ -53,7 +52,9 @@ test('native post authoring sends draft, published and omitted visibility', asyn
     await client.posts({ id }).revisions.post({ ...body, visibility: null }, options);
   };
   expect(typeof typed).toBe('function');
-  expectTypeOf<Pick<PostInput, 'visibility'>>().toEqualTypeOf<{ readonly visibility?: 'published' | 'draft' }>();
+  expectTypeOf<Pick<PostInput, 'visibility'>>().toEqualTypeOf<{
+    readonly visibility?: 'published' | 'draft' | 'protected';
+  }>();
   expectTypeOf<Pick<RevisionInput, 'visibility'>>().toEqualTypeOf<{ readonly visibility?: 'published' | 'draft' }>();
 });
 
