@@ -4,6 +4,7 @@ import { act, createElement, useState } from 'react';
 import { createKernelClient } from '@rezics/client';
 import type { SessionEnv } from '../src/session/client';
 import type { SessionStore } from '../src/session/store';
+import { viewerExposureLifetime, viewerExposureQuery } from '../src/kernel/viewer-exposure';
 import { loadMineFollowingPage, unfollowFollow } from '../src/library/mine-following';
 import type { MineFollowingPage } from '../src/library/mine-following';
 import { loadFollowState, writeFollowRecord, type FollowWriteInput } from '../src/library/follow-records';
@@ -270,7 +271,7 @@ test('Following management has a genuine discovery destination after the last un
   const session = { ...(await import('../src/session/query')) };
   mock.module('../src/session/query', () => ({
     ...session,
-    useSession: () => ({ state: 'signed-in', csrfToken }),
+    useSession: () => ({ state: 'signed-in', subject: 'alice', csrfToken }),
   }));
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
@@ -292,7 +293,15 @@ test('Following management has a genuine discovery destination after the last un
     });
   }
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnMount: false } } });
-  queryClient.setQueryData(session.exposureQuery.queryKey, ['personal_library']);
+  queryClient.setQueryData(session.sessionQuery.queryKey, { state: 'signed-in', subject: 'alice', csrfToken });
+  const lifetime = viewerExposureLifetime(queryClient);
+  const stopAdmission = lifetime.subscribe(() => {});
+  const admission = lifetime.getSnapshot();
+  if (admission.state !== 'signed-in') throw new Error('Expected current viewer observation');
+  queryClient.setQueryData(viewerExposureQuery(admission.observation).queryKey, {
+    subject: 'alice',
+    admitted: ['personal_library'],
+  });
   const router = createRouter({
     routeTree: createRootRoute({ component: Page }),
     history: createMemoryHistory({ initialEntries: ['/library/following'] }),
@@ -305,13 +314,19 @@ test('Following management has a genuine discovery destination after the last un
   const discovery = () => host.querySelector<HTMLAnchorElement>('[data-slot="empty"] a');
   const more = () =>
     [...host.querySelectorAll<HTMLAnchorElement>('a')].find((link) => link.textContent === m.library_collection_more());
+  const followButton = () => host.querySelector<HTMLButtonElement>('[data-slot="follow-control"] button');
   const settle = () =>
     act(async () => {
       await new Promise((resolve) => window.setTimeout(resolve, 20));
     });
+  const awaitFollowAction = async () => {
+    for (let i = 0; i < 20 && !followButton(); i++) await settle();
+    expect(followButton()).not.toBeNull();
+  };
   const remove = async () => {
+    await awaitFollowAction();
     await act(async () => {
-      host.querySelector<HTMLButtonElement>('[data-slot="follow-control"] button')!.click();
+      followButton()!.click();
     });
     await settle();
     const action = window.document.querySelector<HTMLElement>('[role="menuitem"]');
@@ -330,6 +345,7 @@ test('Following management has a genuine discovery destination after the last un
     });
     expect(row()?.textContent).toContain('Kokoro');
     expect(row()?.textContent).toContain(m.library_follow_reason_library());
+    await awaitFollowAction();
     expect(empty()).toBeNull();
     await act(async () => showAddressRejected(true));
     expect(host.querySelector('[role="alert"]')?.textContent).toBe(m.library_directory_address_invalid());
@@ -340,6 +356,7 @@ test('Following management has a genuine discovery destination after the last un
     expect(host.textContent).not.toContain('Kokoro');
     await act(async () => showAddressRejected(false));
     expect(row()?.textContent).toContain('Kokoro');
+    await awaitFollowAction();
     for (const response of [
       async () => Response.json({ code: 'forbidden' }, { status: 403 }),
       async () => Response.json({ code: 'unavailable' }, { status: 503 }),
@@ -407,6 +424,7 @@ test('Following management has a genuine discovery destination after the last un
       await expect(read()).rejects.toThrow();
     }
   } finally {
+    stopAdmission();
     await act(async () => root.unmount());
     queryClient.clear();
     await window.happyDOM.close();

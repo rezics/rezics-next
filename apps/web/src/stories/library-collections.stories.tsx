@@ -5,7 +5,7 @@ import { completePendingCollectionCreate, setCollectionStoryMode } from '../kern
 import { setLibraryNavigationStoryState } from '../kernel/fake/library-pins';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
-import { PageStory, PatternStory, pagePaths, pageReady } from './page';
+import { PageStory, PatternStory, libraryHeadingReady, pagePaths, pageReady } from './page';
 import { MineCollectionsPageView } from '../library/mine-collections-page';
 import { readMineCollectionsPage } from '../library/mine-collections-route';
 import { readLibraryPinsPage } from '../library/pins-read';
@@ -31,11 +31,7 @@ function render(
 }
 
 async function collectionsReady(context: { canvasElement: HTMLElement }) {
-  await pageReady(context);
-  await within(within(context.canvasElement).getByRole('main')).findByRole('heading', {
-    level: 1,
-    name: m.library_collections_heading(),
-  });
+  await libraryHeadingReady(context, m.library_collections_heading);
   await openPinManager(context.canvasElement);
 }
 

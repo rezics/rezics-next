@@ -11,7 +11,7 @@ import { subjectOf } from '../library/reads';
 import { displayLibraryTitle } from '../library/title';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
-import { PageStory, PatternStory, pagePaths, pageReady } from './page';
+import { PageStory, PatternStory, libraryHeadingReady, pagePaths, pageReady } from './page';
 
 const meta = {
   title: 'Pages/Library/Copies',
@@ -34,8 +34,7 @@ function CopiesStory({ mode }: { mode: CopiesStoryMode }) {
 }
 
 const ready = async (context: { canvasElement: HTMLElement }) => {
-  await pageReady(context);
-  await within(context.canvasElement).findByRole('heading', { level: 1, name: m.library_copy_heading() });
+  await libraryHeadingReady(context, m.library_copy_heading);
 };
 
 export const ManyCopies: Story = {
@@ -118,9 +117,9 @@ function ProfileStory({ retired = false }: { retired?: boolean }) {
 export const NoLongerOffered: Story = {
   name: 'Owner, copy type unavailable',
   render: () => <ProfileStory retired />,
-  async play({ canvasElement }) {
-    const canvas = within(canvasElement);
-    await canvas.findByRole('heading', { level: 1, name: m.library_copy_heading() });
+  async play(context) {
+    await ready(context);
+    const canvas = within(context.canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.library_copy_delete() }));
     await within(document.body).findByText(m.library_copy_no_longer_offered());
   },
@@ -131,9 +130,9 @@ export const UnsupportedProfile: Story = {
   render: () => (
     <PageStory visitor="Signed In" path={`/library/copies?subjectId=${encodeURIComponent(unprofiledSubjectId)}`} />
   ),
-  async play({ canvasElement }) {
-    const canvas = within(canvasElement);
-    await canvas.findByRole('heading', { level: 1, name: m.library_copy_heading() });
+  async play(context) {
+    await ready(context);
+    const canvas = within(context.canvasElement);
     await canvas.findByRole('status', { name: m.library_copy_unsupported() });
     expect(canvas.queryByRole('button', { name: m.library_copy_add() })).not.toBeInTheDocument();
   },
@@ -216,8 +215,8 @@ export const UnknownLegacy: Story = {
   name: 'Unknown legacy meaning (bounded view)',
   render: () => <HistoricView mode="unknown" list />,
   async play({ canvasElement }) {
-    await ready({ canvasElement });
     const canvas = within(canvasElement);
+    await canvas.findByRole('heading', { level: 1, name: m.library_copy_heading() });
     expect(canvas.getByText(m.library_copy_history_notice())).toBeVisible();
     const disclosure = canvas.getByText(m.library_copy_history_details());
     expect(disclosure.closest('details')).not.toHaveAttribute('open');
@@ -233,8 +232,8 @@ export const RequiredReleaseUnavailable: Story = {
   name: 'Accepted release unavailable (bounded view)',
   render: () => <HistoricView mode="unavailable" list />,
   async play({ canvasElement }) {
-    await ready({ canvasElement });
     const canvas = within(canvasElement);
+    await canvas.findByRole('heading', { level: 1, name: m.library_copy_heading() });
     expect(canvas.getByText(m.library_copy_history_notice())).toBeVisible();
     const disclosure = canvas.getByText(m.library_copy_history_details());
     expect(disclosure.closest('details')).not.toHaveAttribute('open');

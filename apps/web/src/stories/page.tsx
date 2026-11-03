@@ -517,12 +517,12 @@ async function followingActionReady(trigger: HTMLElement) {
   await userEvent.keyboard('{Escape}');
 }
 
+/** Following row actions wait for current-viewer personal_library admission after the heading. */
 export async function libraryFollowingReady(context: { canvasElement: HTMLElement }) {
-  await pageReady(context);
+  await libraryHeadingReady(context, m.library_following_heading);
   const view = viewOf(context);
   const title = libraryFollowsRecording.follows[0]?.target.label;
   if (!title) throw new Error('The recorded Following page has no available target.');
-  await view.findByRole('heading', { level: 1, name: m.library_following_heading() });
   await view.findAllByText(title, { exact: false });
   const trigger = await view.findByRole('button', { name: m.library_follow_more_actions({ title }) });
   await followingActionReady(trigger);
