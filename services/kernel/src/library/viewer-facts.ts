@@ -111,10 +111,7 @@ export const viewerFactsResponseSchema = t.Object(
           id: idSchema,
           revision: t.Integer({ minimum: 1 }),
           grain: t.String(),
-          scale: t.Object(
-            { min: t.Integer(), max: t.Integer(), displayStep: t.Integer({ minimum: 1 }) },
-            closed,
-          ),
+          scale: t.Object({ min: t.Integer(), max: t.Integer(), displayStep: t.Integer({ minimum: 1 }) }, closed),
           meaning: t.String(),
         },
         closed,
@@ -212,10 +209,10 @@ async function currentAccount(client: Pick<PoolClient, 'query'>, actor: AccountA
   const account = await readAccount(client, route, actor.accountId);
   return Boolean(
     account &&
-      account.kind === 'actor' &&
-      account.state === 'active' &&
-      !account.fenced &&
-      account.minimumAuthnEpoch <= BigInt(actor.authnEpoch),
+    account.kind === 'actor' &&
+    account.state === 'active' &&
+    !account.fenced &&
+    account.minimumAuthnEpoch <= BigInt(actor.authnEpoch),
   );
 }
 
@@ -234,9 +231,7 @@ export async function prepareViewerFacts(
   const originals = [...new Set(rows.map((row) => row.subjectId))];
   const [mappings, question] = await Promise.all([
     readIdentityMappings(dependencies.pool, originals),
-    canReadVotes
-      ? readVisibleRatingQuestion(dependencies, actor, questionId, deadline, false)
-      : Promise.resolve(null),
+    canReadVotes ? readVisibleRatingQuestion(dependencies, actor, questionId, deadline, false) : Promise.resolve(null),
   ]);
   const records = originals.map((subjectId, index) => ({ subjectId, mapping: mappings[index]! }));
   return Object.freeze({
@@ -268,7 +263,9 @@ export async function readViewerFacts(
   if (!(await currentAccount(client, actor))) throw new GrantDeniedError();
 
   const mappingByOriginal = new Map(prepared.mappings.map(({ subjectId, mapping }) => [subjectId, mapping]));
-  const targets = [...new Set(prepared.rows.map((row) => canonicalTarget(mappingByOriginal.get(row.subjectId)!, row.subjectId)))];
+  const targets = [
+    ...new Set(prepared.rows.map((row) => canonicalTarget(mappingByOriginal.get(row.subjectId)!, row.subjectId))),
+  ];
   if (targets.some((target) => target === null)) return unavailable('identity');
   const canonicalIds = targets as string[];
   const entryIds = [...new Set([...prepared.rows.map((row) => row.subjectId), ...canonicalIds])];
@@ -287,18 +284,22 @@ export async function readViewerFacts(
   let directVotes = new Map<string, CountedVote>();
   let canonicalVotes = new Map<string, CountedVote>();
   if (prepared.canReadVotes && prepared.question) {
-    const directIds = [...new Set(
-      prepared.rows.flatMap((row) => {
-        const mapping = mappingByOriginal.get(row.subjectId)!;
-        return mapping.state === 'mapped' && mapping.terminal !== row.subjectId ? [] : [row.subjectId];
-      }),
-    )];
-    const redirectedIds = [...new Set(
-      prepared.rows.flatMap((row) => {
-        const mapping = mappingByOriginal.get(row.subjectId)!;
-        return mapping.state === 'mapped' && mapping.terminal !== row.subjectId ? [mapping.terminal] : [];
-      }),
-    )];
+    const directIds = [
+      ...new Set(
+        prepared.rows.flatMap((row) => {
+          const mapping = mappingByOriginal.get(row.subjectId)!;
+          return mapping.state === 'mapped' && mapping.terminal !== row.subjectId ? [] : [row.subjectId];
+        }),
+      ),
+    ];
+    const redirectedIds = [
+      ...new Set(
+        prepared.rows.flatMap((row) => {
+          const mapping = mappingByOriginal.get(row.subjectId)!;
+          return mapping.state === 'mapped' && mapping.terminal !== row.subjectId ? [mapping.terminal] : [];
+        }),
+      ),
+    ];
     if (directIds.length) directVotes = await readOwnVotes(client, actor, prepared.questionId, directIds);
     if (redirectedIds.length)
       canonicalVotes = await readOwnCountedVotes(client, actor, prepared.questionId, redirectedIds);
@@ -326,22 +327,23 @@ export async function readViewerFacts(
       : !prepared.question
         ? ({ state: 'unavailable', reason: 'question' } as const)
         : (() => {
-            const own = mapping.state === 'mapped' && mapping.terminal !== input.subjectId
-              ? canonicalVotes.get(target)
-              : directVotes.get(input.subjectId);
+            const own =
+              mapping.state === 'mapped' && mapping.terminal !== input.subjectId
+                ? canonicalVotes.get(target)
+                : directVotes.get(input.subjectId);
             return own
-              ? {
+              ? ({
                   state: 'present',
                   questionId: prepared.question!.id,
                   questionRevision: prepared.question!.revision,
                   units: own.units,
                   revision: own.revision,
-                } as const
-              : {
+                } as const)
+              : ({
                   state: 'absent',
                   questionId: prepared.question!.id,
                   questionRevision: prepared.question!.revision,
-                } as const;
+                } as const);
           })();
     return { rowKey: input.rowKey, subjectId: input.subjectId, entry, vote };
   });

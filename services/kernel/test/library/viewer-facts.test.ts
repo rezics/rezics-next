@@ -192,10 +192,19 @@ test('bounded viewer facts keep page identity and current private state, vote an
     STANDARD_QUESTION_ID,
     Date.now() + 30_000,
   );
-  expect(absentPage).toMatchObject({ state: 'current', rows: [{ entry: { state: 'absent' }, vote: { state: 'absent' } }] });
+  expect(absentPage).toMatchObject({
+    state: 'current',
+    rows: [{ entry: { state: 'absent' }, vote: { state: 'absent' } }],
+  });
 
-  await database.admin.query(`UPDATE library.entry SET state='paused',revision=2 WHERE account_id=$1 AND subject_id=$2`, [ownerId, first]);
-  await database.admin.query(`UPDATE rating.vote SET units=NULL,revision=2 WHERE voter_id=$1 AND target_id=$2`, [ownerId, alias]);
+  await database.admin.query(
+    `UPDATE library.entry SET state='paused',revision=2 WHERE account_id=$1 AND subject_id=$2`,
+    [ownerId, first],
+  );
+  await database.admin.query(`UPDATE rating.vote SET units=NULL,revision=2 WHERE voter_id=$1 AND target_id=$2`, [
+    ownerId,
+    alias,
+  ]);
   const changed = await readViewerFactsPage(
     { pool: database.pool, access },
     owner,
