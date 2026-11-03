@@ -456,8 +456,16 @@ test('loaded bulk reports keep the page bound, restore review and cancel focus, 
     const bulkModule = await import('../src/moderation/reports-bulk-action');
     const originalFactory = bulkModule.createReportsBulkAction;
     let bulkNotifications = 0;
+    let bulkSnapshotReads = 0;
     const factorySpy = spyOn(bulkModule, 'createReportsBulkAction').mockImplementation((...args) => {
       const controller = originalFactory(...args);
+      const getSnapshot = controller.getSnapshot;
+      controller.getSnapshot = () => {
+        bulkSnapshotReads++;
+        if (bulkSnapshotReads >= 5_000)
+          throw new Error(`DIAGNOSTIC_BUDGET:bulk-snapshot:${stage}:${bulkSnapshotReads}`);
+        return getSnapshot();
+      };
       const subscribe = controller.subscribe;
       controller.subscribe = (listener) =>
         subscribe(() => {
@@ -546,8 +554,10 @@ test('loaded bulk reports keep the page bound, restore review and cancel focus, 
     await select(2);
     setStage('select-three');
     await select(3);
-    setStage('review');
-    await clickButton(host, m.moderation_bulk_review(), flush);
+    setStage('review-click');
+    await act(async () => buttonByText(host, m.moderation_bulk_review()).click());
+    setStage('review-flush');
+    await flush();
     const reviewGroup = host.querySelector('[role="group"][tabindex="-1"]') as HTMLElement;
     expect(reviewGroup.textContent).toContain(m.moderation_bulk_confirmation({ count: 3 }));
     expect(window.document.activeElement).toBe(reviewGroup);
@@ -578,6 +588,7 @@ test('loaded bulk reports keep the page bound, restore review and cancel focus, 
     expect(host.textContent).not.toContain('Bulk row 1');
     expect(commits).toBeLessThan(80);
     expect(bulkNotifications).toBeLessThan(100);
+    expect(bulkSnapshotReads).toBeLessThan(5_000);
     expect(departureNotifications).toBeLessThan(200);
   });
 });
