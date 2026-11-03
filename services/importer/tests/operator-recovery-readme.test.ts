@@ -55,3 +55,31 @@ test('complete-generation retirement and unpublished staging retirement stay dis
   expect(staging).toContain('--apply');
   expect(staging).toContain('retire-staging');
 });
+
+test('Cost operation bounds list each identity once with current CLI and retirement rows', () => {
+  const cost = section('Cost');
+  const lines = cost.split('\n');
+  const headers = lines.flatMap((line, index) => (line.startsWith('| Operation') ? [index] : []));
+  expect(headers).toHaveLength(1);
+  const rows: string[][] = [];
+  for (let index = headers[0]! + 2; index < lines.length; index++) {
+    const line = lines[index]!;
+    if (!line.startsWith('|')) break;
+    rows.push(line.split('|').slice(1, -1).map((cell) => cell.trim()));
+  }
+  const ops = rows.map((row) => row[0]!);
+  expect(ops).toHaveLength(33);
+  expect(new Set(ops).size).toBe(33);
+  expect(ops).toContain('Streaming zstd dump transform (`zstd-input.ts`)');
+  expect(ops).toContain('Binding inspection overview, page and exact request (`binding-inspection-store.ts`)');
+  expect(ops.indexOf('Retain conversion diagnostics (`run-store.ts`, `importer.ts`)')).toBe(
+    ops.indexOf('Retire superseded complete generations (`retention.ts`, `retention-cli.ts`)') - 1,
+  );
+  expect(ops.indexOf('Retire superseded complete generations (`retention.ts`, `retention-cli.ts`)') + 1).toBe(
+    ops.indexOf('Retire unpublished staging (`staging-retirement.ts`, `staging-retirement-cli.ts`)'),
+  );
+  expect(rows[0]![0]).toBe('CLI entry and bounded input (`cli.ts`)');
+  expect(rows[0]![1]).toContain('zstd is rejected for Bangumi and Open Library');
+  expect(rows[0]![1]).toContain('decompresses VNDB/Wikidata zstd dumps');
+  expect(rows[0]![2]).toContain('gzip/zstd+decoder');
+});
