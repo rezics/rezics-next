@@ -52,10 +52,21 @@ export function OwnDraftsPage({
   identity,
   active,
   reader,
+  initialPage,
 }: {
   identity: OwnDraftIdentity;
   active: boolean;
   reader: OwnDraftReader;
+  initialPage?: OwnDraftPageData;
+}) {
+  return <BoundOwnDraftsPage key={ownDraftIdentityKey(identity)} identity={identity} active={active} reader={reader} initialPage={initialPage} />;
+}
+
+function BoundOwnDraftsPage({ identity, active, reader, initialPage }: {
+  identity: OwnDraftIdentity;
+  active: boolean;
+  reader: OwnDraftReader;
+  initialPage?: OwnDraftPageData;
 }) {
   const locale = identity.locale;
   const identityKey = ownDraftIdentityKey(identity);
@@ -70,10 +81,16 @@ export function OwnDraftsPage({
   const currentCursor = cursor.key === identityKey ? cursor.value : null;
   const requestKey = ownDraftRequestKey(identityKey, currentCursor);
   const [retry, setRetry] = useState(0);
-  const [pageState, setPageState] = useState<PageState | null>(null);
+  const initial = useRef(initialPage);
+  const [pageState, setPageState] = useState<PageState | null>(() => initialPage ? {
+    requestKey, state: initialPage.state, page: initialPage, index: indexOwnDraftPage(initialPage),
+  } : null);
   const [selectionState, setSelectionState] = useState<SelectionState | null>(null);
   const page = active && pageState?.requestKey === requestKey ? pageState : null;
-  const selection = active && selectionState?.identityKey === identityKey ? selectionState : null;
+  const selection = active && page && selectionState?.identityKey === identityKey ? selectionState : null;
+  const admission = useRef({ active, reader, requestKey });
+  admission.current = { active, reader, requestKey };
+  const current = () => admission.current.active && admission.current.reader === reader && admission.current.requestKey === requestKey;
 
   useLayoutEffect(() => {
     if (previousIdentity.current === identityKey) return;
@@ -91,8 +108,16 @@ export function OwnDraftsPage({
   useEffect(() => {
     if (!active) {
       listController.current?.abort();
+      selectionController.current?.abort();
+      selectionGeneration.current++;
+      returnFocus.current = null;
+      initial.current = undefined;
       setPageState(null);
       setSelectionState(null);
+      return;
+    }
+    if (initial.current && retry === 0 && currentCursor === null) {
+      initial.current = undefined;
       return;
     }
     const controller = new AbortController();
@@ -108,7 +133,7 @@ export function OwnDraftsPage({
         controller.signal,
       )
       .then((result) => {
-        if (controller.signal.aborted || identityRef.current !== identityKey) return;
+        if (controller.signal.aborted || !current() || identityRef.current !== identityKey) return;
         if (typeof result === 'string') {
           setPageState({ requestKey, state: result === 'denied' ? 'denied' : 'unavailable' });
           return;
@@ -120,7 +145,7 @@ export function OwnDraftsPage({
         setPageState({ requestKey, state: result.state, page: result, index: indexOwnDraftPage(result) });
       })
       .catch(() => {
-        if (!controller.signal.aborted && identityRef.current === identityKey)
+        if (!controller.signal.aborted && current() && identityRef.current === identityKey)
           setPageState({ requestKey, state: 'unavailable' });
       });
     return () => controller.abort();
@@ -169,6 +194,7 @@ export function OwnDraftsPage({
       .catch(() => {
         if (
           !controller.signal.aborted &&
+          current() &&
           identityRef.current === identityKey &&
           selectionGeneration.current === generation
         )

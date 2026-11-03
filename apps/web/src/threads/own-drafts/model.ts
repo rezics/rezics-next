@@ -65,10 +65,7 @@ export type OwnDraftSelectionRequest = Readonly<{
 
 export type OwnDraftReadFailure = 'unavailable' | 'denied' | 'concealed' | 'stale';
 
-/**
- * Minimal seam for the generated Content client. The Content route is installed, but its generated Web client
- * methods are not published yet; callers supply this adapter when those typed methods are available.
- */
+/** Bounded native reader; neither selected bytes nor cursors enter a persistent query cache. */
 export type OwnDraftReader = Readonly<{
   list: (request: OwnDraftPageRequest, signal: AbortSignal) => Promise<OwnDraftPageData | OwnDraftReadFailure>;
   resume: (request: OwnDraftSelectionRequest, signal: AbortSignal) => Promise<OwnDraftSelection | OwnDraftReadFailure>;
