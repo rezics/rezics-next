@@ -26,7 +26,7 @@ async function openEditor(page: Page): Promise<void> {
   expect(navigation?.status()).toBe(200);
   await hydrate(page);
   await page.getByRole('button', { name: 'Open relation editor', exact: true }).click();
-  await playExpect(page.getByLabel('Relation', exact: true)).toBeVisible();
+  await playExpect(page.getByLabel('Relation', { exact: true })).toBeVisible();
 }
 
 async function pickSubject(page: Page, label: string, title: string): Promise<void> {
@@ -37,12 +37,12 @@ async function pickSubject(page: Page, label: string, title: string): Promise<vo
 }
 
 async function draftCredit(page: Page, roleLabel: string): Promise<void> {
-  await page.getByLabel('Relation', exact: true).selectOption({ label: 'voice actor' });
+  await page.getByLabel('Relation', { exact: true }).selectOption({ label: 'voice actor' });
   await pickSubject(page, 'Target subject', fixture.person.label);
-  await page.getByLabel('Qualifier', exact: true).selectOption({ label: 'character role' });
+  await page.getByLabel('Qualifier', { exact: true }).selectOption({ label: 'character role' });
   await page.getByRole('button', { name: 'Add a qualifier', exact: true }).click();
   await pickSubject(page, 'character role', roleLabel);
-  await page.getByLabel('Citation URL', exact: true).fill(citation);
+  await page.getByLabel('Citation URL', { exact: true }).fill(citation);
   await page.getByRole('button', { name: 'Add citation', exact: true }).click();
 }
 
@@ -83,7 +83,7 @@ describe('native catalogue relation contribution', () => {
     await confirmPropose(page);
     await fixture.stack.syncKernelRequests();
     await playExpect(page.getByRole('alert')).toContainText('You do not have permission for this operation.');
-    await playExpect(page.getByLabel('Relation', exact: true)).toHaveValue(voiceCredit);
+    await playExpect(page.getByLabel('Relation', { exact: true })).toHaveValue(voiceCredit);
     await playExpect(page.getByRole('combobox', { name: 'Target subject', exact: true })).toHaveValue(
       fixture.person.label,
     );
