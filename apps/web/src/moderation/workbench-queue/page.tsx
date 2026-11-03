@@ -161,9 +161,8 @@ export function WorkbenchPage({
     recovery.current = null;
     if (focus) {
       const target =
-        view.state === 'unavailable'
-          ? boundary.current?.querySelector<HTMLButtonElement>('[data-workbench-retry]')
-          : boundary.current?.querySelector<HTMLElement>('article');
+        boundary.current?.querySelector<HTMLButtonElement>('[data-workbench-retry]') ??
+        (view.state === 'ready' ? boundary.current?.querySelector<HTMLElement>('article') : null);
       target?.focus();
     }
   }, [reading, view.generation, view.state]);
@@ -193,7 +192,7 @@ export function WorkbenchPage({
           onAction={submit}
           isCurrent={isCurrent}
           onUnresolvedAppealChange={unresolvedChanged}
-          refreshBlocked={refreshBlocked || reading}
+          refreshBlocked={refreshBlocked}
           onRestart={() => onSearch(workbenchWithoutContinuation(search))}
           {...(!reading && search.queue === 'appeals' && search.case
             ? { onRetry: (event?: MouseEvent<HTMLButtonElement>) => void retryInspection(event) }
@@ -204,7 +203,7 @@ export function WorkbenchPage({
                   },
                 }
               : {})}
-          {...(onRefresh ? { onRefresh: refresh } : {})}
+          {...(onRefresh && !reading ? { onRefresh: refresh } : {})}
         />
       </div>
     </WorkbenchSelectionBoundary>
