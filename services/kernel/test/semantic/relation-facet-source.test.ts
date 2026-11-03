@@ -785,7 +785,8 @@ test('active facet and qualifier retirement suppress historical selected credits
         .filter((property) => property !== probe.property);
     } else {
       const property = replacement.properties[probe.property]!;
-      property.qualifiers = property.qualifiers.filter((property) => property !== 'wdt:P3831');
+      const qualifiers = typeof property.qualifiers === 'string' ? [property.qualifiers] : property.qualifiers;
+      property.qualifiers = qualifiers.filter((property) => property !== 'wdt:P3831');
       if (property.relation?.filter)
         property.relation.filter = property.relation.filter.filter((property) => property !== 'wdt:P3831');
     }

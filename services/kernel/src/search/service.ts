@@ -644,16 +644,17 @@ export function createSearchService({
       const kinds: KindSnapshot | undefined = current
         ? compileKinds(current, native?.digest ?? kindDigest(current))
         : undefined;
+      const releaseBinding = native ? { digest: native.digest, head: native.head } : null;
       const assertCurrentRelease = async () => {
         if (!current) return;
-        if (native) {
-          const latest = await activeRelease(pool);
+        if (releaseBinding) {
+          const latest = await sourceRequest(() => activeRelease(pool));
           if (
-            latest?.digest !== native.digest ||
-            (native.head !== undefined && latest.head !== native.head)
+            latest?.digest !== releaseBinding.digest ||
+            (releaseBinding.head !== undefined && latest.head !== releaseBinding.head)
           ) throw new ProblemError('search_restart_required');
         } else if (releaseOverride) {
-          const latest = await release();
+          const latest = await sourceRequest(release);
           if (!latest || kindDigest(latest) !== kinds!.digest)
             throw new ProblemError('search_restart_required');
         }
