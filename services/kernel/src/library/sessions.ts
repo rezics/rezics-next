@@ -448,6 +448,12 @@ export function createSessionCommands(config: Dependencies) {
         input: { sessionId, patch, admission: admission?.identity ?? null },
       },
       async (tx) => {
+        if (admission) {
+          await sessionLock.run(tx, { route, session_id: sessionId });
+          const fact = await store.readSessionFact(tx, route, sessionId);
+          if (!fact || fact.session.accountId !== owner.accountId || fact.session.state === 'retired')
+            throw new LibraryNotFoundError();
+        }
         await admission?.assert(tx);
         const current = await store.lockSessionJournal(tx, route, owner.accountId, sessionId);
         if (!current) throw new LibraryNotFoundError();

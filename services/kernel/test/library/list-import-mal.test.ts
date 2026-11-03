@@ -213,7 +213,7 @@ test('MAL adopts reviewed partial dates to selected repeats, preserves unknowns,
   expect((await native.send('steward', 'POST', '/v1/platform/exposure/reading_progress:open')).status).toBe(200);
   const target = await native.createSubject('game');
   const occurrences: { id: string }[] = [];
-  for (let index = 0; index < 4; index++) {
+  for (let index = 0; index < 5; index++) {
     const started = await json(
       'POST',
       '/v1/progressSessions',
@@ -241,9 +241,10 @@ test('MAL adopts reviewed partial dates to selected repeats, preserves unknowns,
     anime('700', '<my_start_date>2024-00-00</my_start_date><my_finish_date>2024-02-29</my_finish_date><my_last_updated>999</my_last_updated>') +
       anime('701', '<my_start_date>0000-00-00</my_start_date>') +
       anime('702', '<my_start_date>0000-00-00</my_start_date>') +
-      anime('703', '<my_start_date>2024-01-01</my_start_date>'),
+      anime('703', '<my_start_date>2024-01-01</my_start_date>') +
+      anime('704', '<my_start_date>2024-03-03</my_start_date>'),
   );
-  for (let row = 0; row < 4; row++) await review(id, row, target);
+  for (let row = 0; row < 5; row++) await review(id, row, target);
 
   const adoptedVersion = randomUUID();
   await json(
@@ -303,5 +304,15 @@ test('MAL adopts reviewed partial dates to selected repeats, preserves unknowns,
   expect((await dateApply(3, refreshedVersion, ['startDate'])).outcomes[0].status).toBe('applied');
   const diary = await json('GET', '/v1/libraryDiary?limit=25', undefined, randomUUID(), bearer);
   expect(diary.occurrences.find((item: { id: string }) => item.id === occurrences[0]!.id).reportedDates.startDate).toEqual({ year: 2024 });
+  const retiredVersion = randomUUID();
+  await json(
+    'POST',
+    `${base}/${id}/dates/review`,
+    { row: 4, occurrenceId: occurrences[4]!.id, startAction: 'adopt' },
+    retiredVersion,
+    bearer,
+  );
+  await json('POST', `/v1/progressSessions/${occurrences[4]!.id}:retire`, { revision: 0 }, randomUUID(), bearer);
+  expect((await dateApply(4, retiredVersion, ['startDate'])).outcomes[0]).toMatchObject({ status: 'stale' });
   await json('DELETE', `${base}/${id}`);
 });
