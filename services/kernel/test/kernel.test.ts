@@ -409,7 +409,7 @@ const typed = [
   'POST /v1/accounts/:accountId/notifications/$markSeen',
 ] as const satisfies readonly Routes[];
 type Missing = Exclude<Routes, (typeof typed)[number]>;
-const complete: [Missing] extends [never] ? true : Missing = true;
+const complete: Record<Missing, never> = {};
 type Loose = LooseRoutes<Kernel['~Routes']>;
 const precise: [Loose] extends [never] ? true : Loose = true;
 
@@ -417,7 +417,7 @@ test("the kernel app's type, which is the Eden contract, carries exactly the rou
   const served = createKernel({ receiptKeys: testReceiptKeys(), pool, routeKey: new Uint8Array(32) }).routes.map(
     ({ method, path }) => `${method} ${path}`,
   );
-  expect([complete, precise]).toEqual([true, true]);
+  expect([complete, precise]).toEqual([{}, true]);
   expect(served.sort()).toEqual([...typed].sort());
 });
 
