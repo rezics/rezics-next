@@ -464,7 +464,8 @@ async function dispatchReady(
     try {
       const markdown = readFileSync(claimed, 'utf8');
       continuation = readBriefContinuation(markdown);
-      if (basename(claimed).startsWith('continuation-') || continuation) {
+      // Worker remainders create new work; manager-authored retries retain their exact-owner validation.
+      if (basename(claimed).startsWith('continuation-')) {
         const source = continuation?.taskId ?? (
           runtime.db.query("SELECT id FROM worker_tasks WHERE json_extract(body, '$.brief.goal') = ?")
             .all(pick.goal) as { id: string }[]
