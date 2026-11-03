@@ -104,6 +104,9 @@ the installed typed client. It uses two duplicate occurrences with different not
 opposite to source UUID traversal. Focused replay coverage uses the existing native create/member/note/order/pin
 commands. Broader native64/512/4096 growth acceptance and shared browser/remote checks remain deferred to integration.
 
-Web323 remains the only export interface owner. After landing, its adjacent recovery interface can use the methods
-above, version coverage `1`, per-item add/note/order outcomes, and the explicit ordinal limitations. This document
-does not define a competing export page or promise support for dynamic or public output.
+Web remains the only export interface owner. Its adjacent recovery visit is delivered at
+`/library/recover-collections` and consumes the methods above, version coverage `1`, per-item add/note/order outcomes,
+and the explicit ordinal limitations. Web exposes only a new private destination because the installed native journey
+does not admit merge or reuse. See the [Web consumer guide](../apps/web/src/library/archive-collection-recovery.md)
+for mounted behavior and browser bounds. This document does not define a competing export page or promise support for
+dynamic or public output.

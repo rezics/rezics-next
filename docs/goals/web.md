@@ -214,6 +214,16 @@ render unavailable. Decision: bind the installed Eden `libraryExports` surface w
 export engine or copy missing fields from other private reads. Details and Cost live in
 [personal Library export](../library-export.md).
 
+### Personal Collection archive recovery
+
+Web also owns the signed-in `/library/recover-collections` visit for one manually curated Collection from a completed
+private Library export. It consumes Commerce's installed `libraryArchiveCollectionRecoveries` journey and leaves
+archive decoding, current authority, ordered native effects, retention and outcomes with Native. The only admitted
+destination is a newly created private Collection; title matching cannot select or merge into an existing target.
+Coverage, occurrence review, current Subject mapping, bounded continuation, uncertainty, cancellation and result links
+are described in the [Web recovery guide](../../apps/web/src/library/archive-collection-recovery.md). The native
+producer contract remains the authority for its HTTP methods, caps and expiry.
+
 ### Personal list import
 
 Web owns the signed-in visit for a person's own uploaded list. VNDB remains a separate Commerce producer, not a
