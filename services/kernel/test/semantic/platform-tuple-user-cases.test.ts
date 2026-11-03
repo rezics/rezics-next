@@ -70,7 +70,7 @@ function matches(statements: Statement[], platform: CreatedSubject, language: st
       values: [platform.id],
       qualifiers: [{ property: 'schema:inLanguage', in: [language] }],
     },
-  );
+  ) === true;
 }
 
 test('release platform language qualifiers belong to one actual statement and never form a Cartesian tuple', async () => {
