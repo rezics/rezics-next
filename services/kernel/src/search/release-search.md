@@ -65,6 +65,16 @@ through its `schema:inLanguage` qualifier; without a platform, they use the rele
 Decision: expose developer and publisher controls only when the active release subtype admits their exact property;
 do not expose a generic producer control without a separately admitted Semantic property.
 
+Decision: derive release-capable subtypes and controls from the shared inherited facet roster and released
+datatypes; developer and publisher operands can be combined independently in one filter.
+
+`admittedReleaseSearchControls` describes each subtype's admitted platform/language relationship, calendar
+operand, age-rating units and separate credit roles. Its roster is metadata, not enumerated option values or
+current population evidence. Language codes need the released code pattern; platform-language controls also
+need that exact qualifier admission. Missing properties, incompatible datatypes and absent quantity units
+withdraw the corresponding control. The filter builder consumes this same descriptor, preventing controls and
+admission from diverging. Existing role-specific producer operands retain their exact role meaning.
+
 ## Remaining integration
 
 Decision: mixed calendar documents use format 3, derived from the immutable mixed format-2 mapping with calendar
