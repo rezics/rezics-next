@@ -17,6 +17,8 @@ these declarations are absent. It shows unavailable, separately from native prep
 cursor outcomes. Explicit score URLs retain direction, state/type, display choices and opaque cursor in navigation;
 restart drops the cursor and date-order recovery deliberately begins a new visit. Changing the native predicate
 retires the prior page through the existing personal-shelf address owner. No old rows decorate an unavailable order.
+Decision: sort forms submit the explicit unavailable score address until a date order is selected; replacing the
+supplied address or its filters/display resets pending edits in place, preserving the focused control.
 
 The existing route reads one preference snapshot, then prepares shelf, Continue and navigation reads independently
 and accepts only matching viewer/credential origins. Chronological shelf reads request one FULL page of 20 entries;

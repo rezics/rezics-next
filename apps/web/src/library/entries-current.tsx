@@ -202,8 +202,20 @@ export function SortControls({
   const navigate = useNavigate();
   const entries = useOperation('library_entry.list');
   const progress = useOperation('progress_session.list');
-  const [selectedOrder, setSelectedOrder] = useState(sort.orderBy);
-  const scoreOrder = selectedOrder === 'personalScore';
+  const address = JSON.stringify([
+    locale,
+    state,
+    type,
+    display.layout,
+    display.size,
+    display.columns,
+    sort.orderBy,
+    sort.direction,
+  ]);
+  const [selection, setSelection] = useState({ address, ...sort });
+  // Replace pending edits with a newly supplied address without remounting focused controls.
+  if (selection.address !== address) setSelection({ address, ...sort });
+  const scoreOrder = selection.orderBy === 'personalScore';
   if (!entries || !progress) return null;
   return (
     <form
@@ -222,14 +234,18 @@ export function SortControls({
       <input type="hidden" name="layout" value={display.layout} />
       <input type="hidden" name="size" value={display.size} />
       {display.columns ? <input type="hidden" name="columns" value={display.columns} /> : null}
+      {/* A disabled selected option is not a successful form control. Retain the explicit score address. */}
+      {scoreOrder ? <input type="hidden" name="orderBy" value="personalScore" /> : null}
       <label className="grid min-w-0 max-w-full gap-1 text-sm">
         {m.library_sort_by()}
         <select
-          name="orderBy"
-          defaultValue={sort.orderBy}
-          onChange={(event) =>
-            setSelectedOrder(validateShelfSearch({ orderBy: event.target.value }).orderBy ?? sort.orderBy)
-          }
+          name={scoreOrder ? undefined : 'orderBy'}
+          value={selection.orderBy}
+          onChange={(event) => {
+            if (!(isCurrent?.() ?? true)) return;
+            const orderBy = validateShelfSearch({ orderBy: event.target.value }).orderBy;
+            if (orderBy && orderBy !== 'personalScore') setSelection({ ...selection, orderBy });
+          }}
           className="min-h-11 max-w-full rounded-md border bg-background p-2"
         >
           <option value="lastActivity">{m.library_sort_activity()}</option>
@@ -242,11 +258,16 @@ export function SortControls({
       </label>
       <label className="grid min-w-0 max-w-full gap-1 text-sm">
         {m.library_sort_direction()}
-        {scoreOrder ? <input type="hidden" name="direction" value={sort.direction} /> : null}
+        {scoreOrder ? <input type="hidden" name="direction" value={selection.direction} /> : null}
         <select
           name="direction"
           disabled={scoreOrder}
-          defaultValue={sort.direction}
+          value={selection.direction}
+          onChange={(event) => {
+            if (scoreOrder || !(isCurrent?.() ?? true)) return;
+            const direction = validateShelfSearch({ direction: event.target.value }).direction;
+            if (direction) setSelection({ ...selection, direction });
+          }}
           className="min-h-11 max-w-full rounded-md border bg-background p-2"
         >
           <option value="desc">{scoreOrder ? m.library_score_highest() : m.library_sort_newest()}</option>

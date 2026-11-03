@@ -75,7 +75,6 @@ test('mounted sort form retains score addresses until date selection and replace
   const host = window.document.createElement('div');
   window.document.body.append(host);
   const root = createRoot(host);
-  let current = true;
   const render = async (direction: 'asc' | 'desc') => {
     const props: ComponentProps<typeof SortControls> = {
       locale: 'en',
@@ -83,7 +82,7 @@ test('mounted sort form retains score addresses until date selection and replace
       type: 'schema:Book',
       display: { layout: 'table', size: 'l', columns: 'title,status' },
       sort: { orderBy: 'personalScore', direction },
-      isCurrent: () => current,
+      isCurrent: () => client.getQueryData<{ subject: string }>(['session'])?.subject === 'A',
     };
     await act(async () =>
       root.render(
@@ -96,7 +95,7 @@ test('mounted sort form retains score addresses until date selection and replace
   };
   const form = () => host.querySelector('form')!;
   const submitted = () => Object.fromEntries(new window.FormData(form()));
-  const select = (name: string) => host.querySelector(`select[name="${name}"]`)! as HTMLSelectElement;
+  const select = (name: string) => host.querySelectorAll('select')[name === 'orderBy' ? 0 : 1]! as HTMLSelectElement;
   const choose = async (name: string, value: string) => {
     await act(async () => {
       select(name).value = value;
@@ -116,6 +115,7 @@ test('mounted sort form retains score addresses until date selection and replace
       expect(order.querySelector('option[value="personalScore"]')?.hasAttribute('disabled')).toBe(true);
       expect(select('direction').disabled).toBe(true);
       expect(submitted()).toEqual({ ...retained, orderBy: 'personalScore', direction });
+      expect(new window.FormData(form()).getAll('orderBy')).toEqual(['personalScore']);
       await submit();
       expect(navigate.mock.calls.at(-1)?.[0]).toEqual({
         to: '/library',
@@ -138,15 +138,20 @@ test('mounted sort form retains score addresses until date selection and replace
       expect(order.value).toBe('personalScore');
       expect(select('direction').value).toBe(changedDirection);
       expect(submitted()).toEqual({ ...retained, orderBy: 'personalScore', direction: changedDirection });
-      current = false;
+      await act(async () => {
+        client.setQueryData(['session'], { state: 'signed-in', subject: 'B', csrfToken: 'csrf-B' });
+      });
       const before = submitted();
       const calls = navigate.mock.calls.length;
       await choose('orderBy', 'finishedAt');
       await submit();
       expect(navigate).toHaveBeenCalledTimes(calls);
       expect(submitted()).toEqual(before);
-      current = true;
+      await act(async () => {
+        client.setQueryData(['session'], { state: 'signed-in', subject: 'A', csrfToken: 'csrf-A' });
+      });
       // Leave a pending edit for the next address replacement.
+      await render(direction);
       await choose('orderBy', 'lastActivity');
     }
   } finally {
