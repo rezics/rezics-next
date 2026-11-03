@@ -80,7 +80,7 @@ function ReleaseSearchSubjectPicker({
   };
   const statusText =
     status === 'loading'
-      ? m.search_suggestions_loading({}, options)
+      ? m.search_suggestions_preparing({}, options)
       : status === 'empty'
         ? m.search_no_suggestions({}, options)
         : status === 'unavailable'
@@ -205,16 +205,19 @@ export function ReleaseSearchFormView({
     </label>
   );
   const subjectHelp = m.release_search_subject_help({}, options);
-  const subjectPicker = (name: 'platform' | 'developer' | 'publisher', label: string) => (
-    <ReleaseSearchSubjectPicker
-      name={name}
-      label={label}
-      help={subjectHelp}
-      locale={locale}
-      invalid={invalid.includes(name)}
-      initial={selections?.[name] ?? (form[name] ? { id: form[name] } : undefined)}
-    />
-  );
+  const subjectPicker = (name: 'platform' | 'developer' | 'publisher', label: string) => {
+    const initial = selections?.[name] ?? (form[name] ? { id: form[name] } : undefined);
+    return (
+      <ReleaseSearchSubjectPicker
+        name={name}
+        label={label}
+        help={subjectHelp}
+        locale={locale}
+        invalid={invalid.includes(name)}
+        {...(initial ? { initial } : {})}
+      />
+    );
+  };
   return (
     <form
       method="get"
@@ -371,7 +374,7 @@ export function ReleaseSearchPage({
           parsed={parsed}
           types={types}
           locale={locale}
-          selections={selections}
+          {...(selections ? { selections } : {})}
         />
       )}
       {pageEmpty && (
