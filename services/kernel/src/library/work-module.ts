@@ -1,6 +1,7 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { WorkContext, WorkModule } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
+import { purgeLabelConsolidations } from './label-consolidation-retention.ts';
 import { purgeLabelRetentionPage } from './label-retention.ts';
 import { cutoverEntryIncarnationsPage } from './entry-incarnation-cutover.ts';
 
@@ -96,8 +97,10 @@ type LabelSweep = { root: string; sequence: number; partition: number; after: st
 
 async function registerLabelRetention({ pool, client, clock }: WorkContext) {
   const page = DBOS.registerStep(
-    async (partition: number, after: string | null) =>
-      purgeLabelRetentionPage({ pool, clock }, { partition, limit: 100, after }),
+    async (partition: number, after: string | null) => {
+      if (after === null) await purgeLabelConsolidations({ pool, clock }, partition);
+      return purgeLabelRetentionPage({ pool, clock }, { partition, limit: 100, after });
+    },
     { name: 'library.labelRetentionPage', ...COMMAND_STEP_RETRIES },
   );
   const continuation = DBOS.registerStep(

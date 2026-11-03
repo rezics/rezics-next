@@ -44,24 +44,57 @@ held across Subject partition reads. Owner standing and label revisions are chec
 Responses are `Cache-Control: private, no-store`. No private names or assignment operands enter event/error payloads.
 The existing native assignment readers reopen both labels; review changes neither selected nor unselected facts.
 
-## Remaining confirmation and movement
+## Installed selection, confirmation and movement
 
-The native typed review function and HTTP route are installed. Client declaration regeneration, confirmation,
-apply/retry/result APIs and Web integration remain continuation work. Web's existing Labels interface owns the eventual single flow. It must not interpret `movable`
-or the `selection` hash as permission or immutable confirmation. There is no competing label editor or rule filter.
+The native review and HTTP route remain pure. The same Labels module now installs these owner-only methods;
+all require `library_entry:read`, `library_entry:update` and current `personal_library` exposure. Responses are
+`Cache-Control: private, no-store`.
 
-Confirmation must bind each item's exact source/target label revisions, assignment incarnations/revisions, current
-Subject exposure and stable original operation identities. Refresh requires new explicit confirmation. Native
-target assign and addressed source unassign retain their receipts, History, events and export fences exactly once.
-Source removal follows only definite accepted/current target assignment, including target acceptance with a lost
-acknowledgement. Original replay must not consume a later changed source. Cancellation stops new items and returns
-accepted partial results without promising batch atomicity. Both parent fences and current Subject authority apply.
+| Method | Input and result |
+| --- | --- |
+| `POST /v1/libraryLabels/{id}:selectConsolidation` | Supply `{sourceLabel,targetLabel,items}` by joining the exact review pages, retaining their order and observations. An idempotency key is required. Returns `{id,digest,expiresAt}`. |
+| `GET /v1/libraryLabelConsolidations/{id}` | Returns immutable captured evidence, original per-item `operations`, current state and accepted partial item results. |
+| `POST /v1/libraryLabelConsolidations/{id}:confirm` | Explicit `{digest}` and an idempotency key bind the captured selection. Returns `{id,digest,confirmed:true}`. |
+| `POST /v1/libraryLabelConsolidations/{id}:apply` | `{ordinal}` applies one selected item, in order. Repeating the ordinal uses its original native assign/unassign receipts. No new client operation key is accepted. |
+| `POST /v1/libraryLabelConsolidations/{id}:cancel` | An idempotency key cancels new effects and returns accepted partial results. |
+| `DELETE /v1/libraryLabelConsolidations/{id}` | An idempotency key removes the finite retained composition; it does not undo accepted effects or remove either label. |
 
-Only native reservation semantics admit target assignment: no source-first deletion, extra reclaim, temporary 33rd
-effective label or renewed undo deadline. Source labels remain live until ordinary explicit deletion. Source undo
-remains finite, addressed and subject to current identity, cap and authority. Any retained composition needs finite
-expiry, bounded per-owner admission and shared terminal/expiry cleanup. The journey grants no Entry state, Session,
-follow, licence or publication, and changes no imported evidence or public snapshot.
+Selection re-runs bounded native review and rejects changed visible evidence, nonmovable items and substituted
+labels. It captures distinct live parent IDs/revisions, exact source and target assignment incarnations/revisions,
+current Subject identity/type/security evidence, the initiating client and attribution, and stable original command
+keys. The review selection digest cannot confirm a move. Confirmation rechecks the captured evidence and binds
+its separate immutable digest. Refresh requires removal of the old composition, a new review and new explicit
+confirmation. Original selection receipts never recreate expired or removed evidence.
+
+Decision: retain one composition per owner for 15 minutes, including completed/cancelled results, and apply one
+explicit ordinal per request; explicit removal releases admission without changing native facts.
+
+Fresh native effects share-lock the retained confirmation against cancellation/removal/expiry, acquire the native
+Subject guard before sorted exact parent locks, recheck both parent revisions and the addressed source/target
+facts, and re-admit current Subject authority and security evidence. Target assignment runs through native 32-slot
+admission; only its definite accepted receipt permits addressed source unassignment. Existing target assignment
+has no duplicate event or domain effect. No source-first removal, extra reservation reclaim, temporary 33rd label,
+source-label removal or renewed undo deadline is introduced.
+
+Items expose `pending`, `unknown`, `target_accepted` or `moved`. A durable start precedes native dispatch. Result
+and retry resolve original native receipts, including a target acceptance whose acknowledgement/checkpoint was
+lost. Receipt-only recovery cannot start a fresh fact effect, including after cancellation. If target acceptance is
+known but the source evidence changed, the target remains accepted and the source remains untouched. Cancellation
+can leave such a partial result; it promises neither batch atomicity nor automatic rollback. Native undo addresses
+the original source assignment ID and deleted revision and retains its original finite deadline and current
+identity/capacity/authority requirements. Replay never consumes a later restored or replacement source.
+
+Use `evidence.sourceLabel.id` and `evidence.targetLabel.id` to reopen the existing native
+`GET /v1/libraryLabelAssignments?labelId={id}` readers (or their existing FULL views). Web's existing Labels
+interface owns this one flow: explicit selection, review, selection capture, explicit confirmation, one-item retry,
+partial results/cancel, and reopening both labels. No Web component or competing label editor is installed here.
+Unselected facts, query operands, import evidence and public snapshots retain their native meanings. These methods
+grant no Entry state, Session, follow, licence or publication.
+
+The retained root has an exact owner primary key, a 32,768-byte payload bound, 1..16 items and an indexed
+partition/expiry window. Existing label maintenance removes expired roots under the account barrier, and the
+shared Library owner-graph erasure has an appended `label_consolidation` phase. No local timer or new bulk engine
+is used. Shared receipt/History payload minimization retains its existing native ownership.
 
 ## Cost and verification boundary
 
@@ -91,3 +124,21 @@ cleanup and complete caller growth are continuation acceptance, not inferred fro
 Sources read: `docs/library-labels.md`, native metadata/assignment commands and storage, reservation/parent/tuple SQL
 and migrations, native Subject and family admission, shared cursor codec and existing native label fixtures. No
 external product survey is needed to preserve the adopted native model.
+
+## Focused native coverage and deferred measurement
+
+`services/kernel/test/library/label-consolidation.test.ts` composes real catalogue/assignment commands, native
+review, installed HTTP routes, original receipts and shared erasure. It covers selected moves and native reopening,
+existing targets, 32-slot refusal/deleted-parent admission, stale source identity/revision, source recreation,
+target rename, changed Subject exposure, lost acknowledgement, replay after restoration, cancellation, finite undo,
+owner isolation and terminal/expiry removal. The original pure-review focused tests retain their assertions.
+
+Complete-caller native64/512/4096 measurements remain continuation work, including nested authority, locks,
+receipt resolution, History/events, export fences, serialization and terminal cleanup. The new composition adds
+fixed exact root reads/writes, at most two indexed parent points and two tuple points per fresh guard, and up to
+four native supplied-ID review pages per capture. Each apply has at most one native assign and one native unassign;
+receipt-only result recovery uses the original keys and rolls back absent-receipt fresh bodies. Capacity refusal
+rolls back native admission and preserves the source; existing-target acceptance uses the native minimal no-effect
+receipt. These index predicates explain bounded intended work, not measured complete-caller growth or buffers.
+The due query uses `(partition_no,expires_at,route,account_id)`; no deleted-parent catalogue scan is introduced.
+Broader native/growth and Web acceptance remain deferred to integration.
