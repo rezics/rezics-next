@@ -19,6 +19,7 @@ import {
 } from './native-conformance.ts';
 import { provisionOwnerReadableSubject } from './native-private-subject.ts';
 import { inspectNativeDynamicCollections } from './native-dynamic-inspection.ts';
+import { replayProjectionEvents } from './native-dynamic-replay.ts';
 import type { StateReferenceRepairLatch } from './native-state-reference-repair.ts';
 import { createNativePrivateFactsFixture } from './native-private-facts-fixture.ts';
 
@@ -164,9 +165,7 @@ export async function createDynamicCollectionsDriver(
         await world.settle();
         return unavailable('native durable preparation step observations');
       },
-      async replayProjectionEvents() {
-        return unavailable('native Collection projection redelivery binding');
-      },
+      replayProjectionEvents: (order) => replayProjectionEvents(world, order),
       async seedUnrelatedFacts() {
         return unavailable('native independently shaped dynamic population fixture');
       },
