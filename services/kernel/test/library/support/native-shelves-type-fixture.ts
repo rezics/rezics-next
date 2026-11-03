@@ -1,6 +1,7 @@
 import { createAccess } from '../../../src/access/index.ts';
 import { accessCheck } from '../../../src/request/access.ts';
 import { deadlineFor } from '../../../src/request/deadline.ts';
+import { SHELF_TYPE_SYNC_WORKFLOW, shelfTypeSyncWorkflowId } from '../../../src/library/shelf-contract.ts';
 import { routeOf } from '../../../src/route/route.ts';
 import { activeRelease } from '../../../src/semantic/definitions.ts';
 import { updateSubjectIdentity } from '../../../src/semantic/subject.ts';
@@ -17,7 +18,7 @@ export function createNativeShelvesTypeFixture(world: NativeConformanceWorld) {
       issuer,
       audience: 'https://ordinary.api.test',
       jwksUrl: `${issuer}/.well-known/jwks.json`,
-      fetch: (location, init) => accountHost.service.handler(new Request(location, init)),
+      fetch: async (location, init) => accountHost.service.handler(new Request(location, init)),
     },
   });
   return {
@@ -43,14 +44,25 @@ export function createNativeShelvesTypeFixture(world: NativeConformanceWorld) {
       // Finish original deliveries before asking the SDK to execute their consumers again.
       await world.settle();
       const events = (
-        await reader.query<{ partition: number; position: string; eventSeq: number }>(
-          `SELECT partition_no AS partition,position::text,event_seq AS "eventSeq"
+        await reader.query<{ partition: number; position: string; eventSeq: number; data: { revision: number } }>(
+          `SELECT partition_no AS partition,position::text,event_seq AS "eventSeq",data
            FROM core.outbox WHERE type='com.rezics.subject.revised.v1' AND subject=$1
            ORDER BY partition_no,position,event_seq`,
           [input.subjectId],
         )
       ).rows;
       if (events.length === 0) return unavailable('core.outbox: recorded subject.revised event');
+      // Other subject.revised consumers cannot stand in for Library's type consumer.
+      // Refuse an absent owner binding before replaying any unrelated effects.
+      for (const event of events) {
+        const sync = await workClient.getWorkflow(shelfTypeSyncWorkflowId({
+          kind: 'revised', subjectId: input.subjectId, revision: event.data.revision,
+        }));
+        if (sync?.workflowName !== SHELF_TYPE_SYNC_WORKFLOW)
+          return unavailable(
+            'library/shelf-contract.ts:syncShelfSubjectType(change: ShelfTypeChange, dependencies: ShelfProjectionDependencies); library.shelfTypeSync subject.revised consumer registration',
+          );
+      }
       if (input.order === 'reverse') events.reverse();
       for (const event of events) {
         const consumers = (
