@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import reconcile from '../../src/search/reconcile.sql';
 import { newId } from '../../src/route/route.ts';
 import {
+  assertGrowthAccessPaths,
   checkGrowth,
   openGrowthDatabase,
   seed,
@@ -14,7 +15,7 @@ import {
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 
-// Search README Reconcile: one reconcile.sql statement, O(4096) rows, indexed O(4096*L(P)) blocks.
+// Search README Reconcile: two reconcile.sql statements, O(4096) rows, indexed O(4096*L(P)) blocks.
 const partitionDomain = 4096;
 const scales = [64, 512, 4096] as const;
 const idleConsumer = 'growth_search_idle';
@@ -179,7 +180,11 @@ async function measureIdle(growthDb: GrowthDatabase) {
   if (idle.length < controlPartitions.length) {
     throw new Error('Caught-up reconcile hid the nonempty partition domain behind zero returned rows');
   }
-  if (absent.some((row) => numeric(row.checkpoint) !== 0n) || absent.length !== idle.length) {
+  if (
+    absent.some((row) => numeric(row.checkpoint) !== 0n) ||
+    pendingOf(absent).length !== absent.length ||
+    absent.length !== idle.length
+  ) {
     throw new Error(
       'Absent-consumer reconcile did not COALESCE missing checkpoints to 0 over the same nonempty domain',
     );
@@ -232,21 +237,33 @@ test('Idle Search reconcile stays within its finite-domain bound as unrelated ch
     operation: measureIdle,
   });
   expect(report.samples.map((sample) => sample.scale)).toEqual([...scales]);
+  assertGrowthAccessPaths(report.name, report.samples, ['core.consumer_checkpoint']);
   for (const sample of report.samples) {
     const removed = sampleRemoved(sample);
+    const partitions = relation(sample.cost, 'partition');
+    const checkpoints = relation(sample.cost, 'consumer_checkpoint');
     expect(sample.cost.statements).toBe(2);
     expect(sample.cost.rows, `examined rows at scale ${sample.scale}`).toBeGreaterThanOrEqual(partitionDomain);
     expect(sample.cost.blocks).toBeGreaterThan(0);
     expect(sample.cost.sharedHit + sample.cost.sharedRead).toBe(sample.cost.blocks);
-    expect(removed).toBeGreaterThanOrEqual(0);
-    expect(relation(sample.cost, 'partition')?.rows).toBeGreaterThanOrEqual(partitionDomain);
+    expect(partitions?.rows).toBeGreaterThanOrEqual(partitionDomain);
+    expect(partitions?.sequentialScans).toBeGreaterThan(0);
+    expect(checkpoints).toBeDefined();
+    expect(checkpoints!.sequentialScans).toBe(0);
     expect(Object.keys(sample.cost.relations).some((name) => name.includes('outbox'))).toBe(false);
     for (const [index, cost] of sample.repetitions.entries()) {
       expect(cost.rows).toBeGreaterThanOrEqual(partitionDomain);
       expect(cost.statements).toBe(2);
       const run = sample.occurrenceRepetitions[index];
-      expect(run?.statements).toHaveLength(2);
-      expect(run?.statements.every((item) => item.error === null)).toBe(true);
+      expect(run).toBeDefined();
+      expect(run!.statements).toHaveLength(2);
+      expect(run!.backgroundStatements.every((item) => item.error === null)).toBe(true);
+      for (const item of run!.statements) {
+        expect(item.error).toBeNull();
+        expect(item.statement).toMatch(/FROM\s+core\.partition/i);
+        expect(item.statement).toMatch(/LEFT\s+JOIN\s+core\.consumer_checkpoint/i);
+        expect(item.statement).toMatch(/COALESCE\s*\(\s*checkpoint\.position\s*,\s*0\s*\)/i);
+      }
     }
     console.info(
       JSON.stringify({
@@ -258,8 +275,8 @@ test('Idle Search reconcile stays within its finite-domain bound as unrelated ch
         blocks: sample.cost.blocks,
         sharedHit: sample.cost.sharedHit,
         sharedRead: sample.cost.sharedRead,
-        backgroundStatements: sample.cost.backgroundStatements ?? 0,
-        backgroundRows: sample.cost.backgroundRows ?? 0,
+        backgroundStatements: sample.cost.backgroundStatements,
+        backgroundRows: sample.cost.backgroundRows,
       }),
     );
   }
