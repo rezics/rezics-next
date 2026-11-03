@@ -718,7 +718,7 @@ export function createSearchService({
             release: current ?? undefined,
             meaningDigest: kinds?.digest,
             text,
-            filter: catalogueFilter(admitted),
+            filter: admitted === undefined ? undefined : catalogueFilter(admitted),
             deadline: readContext?.deadline ?? Date.now() + 10_000,
             ...(readContext?.realmAuthority ? { authority: readContext.realmAuthority } : {}),
           },

@@ -136,8 +136,14 @@ function realmResource(
           const native = await prepared.read(client, ids, at, time);
           return Object.fromEntries(
             expected.map(({ realmId, snapshot }) => {
-              const source = current.get(snapshot.space_id);
-              return [realmId, native[realmId] === true && sameSpace(source, snapshot) && sameRealm(source, snapshot)];
+              const source = snapshot.space_id === null ? undefined : current.get(snapshot.space_id);
+              return [
+                realmId,
+                snapshot.space_id !== null &&
+                  native[realmId] === true &&
+                  sameSpace(source, snapshot) &&
+                  sameRealm(source, snapshot),
+              ];
             }),
           );
         },
