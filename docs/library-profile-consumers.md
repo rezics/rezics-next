@@ -581,3 +581,18 @@ measures survive reopening; retirement hides the whole session from ordinary rea
 Export, diary and analytics consumers must use live native session facts and invalidate on the existing session-updated
 event; retained audit rows and public snapshots are not current repeat/completion facts. Journal fields use the same
 row and lifecycle through shared-source receiving. No duplicate journal store or publication worker is introduced.
+
+## Canonical episode checklist consumer
+
+[Canonical episode progress](library-episode-progress.md) owns the installed producer/consumer interface. The
+reserved Web checklist uses `GET /v1/progressSessions/{sessionId}/episodes` with up to 20 canonical IDs from a
+Semantic catalogue page, then `POST /v1/progressSessions/{sessionId}:recordEpisodes` with revision and add/remove
+or exclusive clear. The generated client retains these methods. Preserve exact retry keys/bodies; refresh after
+409, show redacted/unavailable rows explicitly, and keep generic scalar/manual progress independent.
+
+Adds require the session's compatible original/current profile mode/unit with `unit: episode`, plus current
+Semantic Episode type and direct parent authority. This does not change any descriptor's generic identity or
+structure algorithm or activate a release. Removal and clear use historical owner fact identity after definition
+rollback or concealment. There is no conversion of legacy session-local tokens, no inferred prefix, no receiver-only
+API and no competing Web surface. Semantic's requested bounded producer interface is currently consumed through
+the selected/disclosed `readSubject` adapter; catalogue enumeration remains Semantic-owned.

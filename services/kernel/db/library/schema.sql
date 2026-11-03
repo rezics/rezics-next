@@ -3698,6 +3698,18 @@ CREATE TABLE library.progress_change (
 
 
 --
+-- Name: progress_episode; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.progress_episode (
+    route integer NOT NULL,
+    session_id uuid NOT NULL,
+    episode_subject_id uuid NOT NULL,
+    added_at timestamp with time zone NOT NULL
+);
+
+
+--
 -- Name: progress_head; Type: TABLE; Schema: library; Owner: -
 --
 
@@ -3746,6 +3758,7 @@ CREATE TABLE library.progress_session (
     journal_finish_day smallint,
     journal_reflection text,
     reported_year_initialized boolean DEFAULT false NOT NULL,
+    episode_completed_count integer DEFAULT 0 NOT NULL,
     CONSTRAINT progress_session_additional_measures_check CHECK (
 CASE
     WHEN (jsonb_typeof(additional_measures) = 'array'::text) THEN ((jsonb_array_length(additional_measures) <= 7) AND (octet_length((additional_measures)::text) <= 4096) AND ((mode = 'scalar_amount'::text) OR (additional_measures = '[]'::jsonb)))
@@ -3757,6 +3770,7 @@ END),
     CONSTRAINT progress_session_check3 CHECK (((state = 'completed'::text) = (completed_at IS NOT NULL))),
     CONSTRAINT progress_session_check4 CHECK ((((mode = 'scalar_amount'::text) AND (locator IS NULL) AND ("position" IS NULL) AND (completed_unit_count = 0)) OR ((mode = 'cursor_position'::text) AND (amount IS NULL) AND (total IS NULL) AND (completed_unit_count = 0) AND (((locator IS NULL) AND ("position" IS NULL)) OR ((locator IS NOT NULL) AND ("position" IS NOT NULL)))) OR ((mode = 'completed_units'::text) AND (amount IS NULL) AND (total IS NULL) AND (locator IS NULL) AND ("position" IS NULL)))),
     CONSTRAINT progress_session_completed_unit_count_check CHECK (((completed_unit_count >= 0) AND (completed_unit_count <= 20000))),
+    CONSTRAINT progress_session_episode_completed_count_check CHECK (((episode_completed_count >= 0) AND (episode_completed_count <= 20000))),
     CONSTRAINT progress_session_journal_finish_date_check CHECK ((((journal_finish_year IS NULL) AND (journal_finish_month IS NULL) AND (journal_finish_day IS NULL)) OR ((journal_finish_year IS NOT NULL) AND ((journal_finish_year >= 1) AND (journal_finish_year <= 9999)) AND ((journal_finish_month IS NULL) OR ((journal_finish_month >= 1) AND (journal_finish_month <= 12))) AND ((journal_finish_day IS NULL) OR ((journal_finish_month IS NOT NULL) AND ((journal_finish_day >= 1) AND (journal_finish_day <=
 CASE
     WHEN (journal_finish_month = 2) THEN
@@ -5319,6 +5333,14 @@ ALTER TABLE ONLY library.personal_label
 
 ALTER TABLE ONLY library.progress_change
     ADD CONSTRAINT progress_change_pkey PRIMARY KEY (route, session_id, change_no);
+
+
+--
+-- Name: progress_episode progress_episode_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.progress_episode
+    ADD CONSTRAINT progress_episode_pkey PRIMARY KEY (route, session_id, episode_subject_id);
 
 
 --
@@ -7816,6 +7838,14 @@ ALTER TABLE ONLY library.owner_index_state
 
 ALTER TABLE ONLY library.progress_change
     ADD CONSTRAINT progress_change_route_session_id_fkey FOREIGN KEY (route, session_id) REFERENCES library.progress_session(route, session_id);
+
+
+--
+-- Name: progress_episode progress_episode_route_session_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.progress_episode
+    ADD CONSTRAINT progress_episode_route_session_id_fkey FOREIGN KEY (route, session_id) REFERENCES library.progress_session(route, session_id);
 
 
 --

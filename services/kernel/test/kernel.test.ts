@@ -88,6 +88,8 @@ const typed = [
   'POST /v1/progressSessions/:sessionId/$retire',
   'GET /v1/progressSessions/:sessionId/completedUnits',
   'GET /v1/progressSessions/:sessionId/changes',
+  'GET /v1/progressSessions/:sessionId/episodes',
+  'POST /v1/progressSessions/:sessionId/$recordEpisodes',
   'POST /v1/publishedLogs',
   'GET /v1/publishedLogs/:logId',
   'GET /v1/publishedLogs',

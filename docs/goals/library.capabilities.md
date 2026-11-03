@@ -543,3 +543,13 @@ artifacts and expose owner-only holding pages, cancellation and bounded removal.
 stable effect outcomes, scheduled expiry removal, client generation and Web adoption remain a continuation.
 The focused native scenario is `services/kernel/test/library/copy-archive.test.ts`; full recovery acceptance and
 native64/512/4096 executed caller growth are not claimed.
+
+## Canonical episode completion capability
+
+Owners can independently mark canonical episodes 1 and 3 while 2 stays unmarked, with specials and rereads kept
+separate. The mounted `progress_session.episodes` and `progress_session.record_episodes` operations use persisted
+Episode Subjects and admitted direct parent relationships; generic progress retains its existing meaning.
+[Exact shapes, limits and lifecycle](../library-episode-progress.md) include private bounded inspection, catalogue
+withdrawal/visibility changes, correction/clear, current revisions, owner isolation and stable retry identity.
+Focused native scenarios: `services/kernel/test/library/episode-progress.test.ts`. Broader frozen integration
+acceptance remains controller-owned; source presence is not an acceptance result.

@@ -542,3 +542,12 @@ methods and continuation boundary. The installed first part preserves independen
 current copy review and effects remain undelivered. Holding evidence never restores an entry, progress, entitlement
 or financial fact. Decision: split admission/inspection from native review/effects while keeping both in that owner
 contract; do not expose a completed recovery interface before command composition and expiry scheduling land.
+
+## Canonical episode facts
+
+[Canonical episode progress](library-episode-progress.md) defines the installed authenticated per-session checklist.
+Canonical completions are separate personal facts over real Episode Subject IDs and admitted direct parent
+relationships. They preserve noncontiguous holes, specials and rereads without converting scalar amounts or manual
+unit tokens. Catalogue order/membership/visibility changes never rewrite these rows; bounded owner reads redact
+concealed identities, and correction/clear survives missing current catalogue support. Native session/profile,
+receipt, revision and terminal fences apply. Web's existing canonical checklist consumes that exact contract.
