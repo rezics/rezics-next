@@ -7,11 +7,7 @@ import { communityWorkModule } from '../../../src/community/work.ts';
 import { partitionOf, routeOf } from '../../../src/route/route.ts';
 import type { GrowthDatabase } from '../../support/growth.ts';
 import { workerTestEnv } from '../../support/worker-env.ts';
-import {
-  closeCommunityDrivers,
-  createCommunityDriver,
-  worker,
-} from '../community-driver.ts';
+import { closeCommunityDrivers, createCommunityDriver, worker } from '../community-driver.ts';
 
 const SEGMENT_WORKFLOW = 'community.member-count.acceptance-segment';
 
@@ -59,11 +55,7 @@ export async function createRealmMemberCountInitializationFixture(): Promise<Rea
   const close = () =>
     (closing ??= (async () => {
       const errors: unknown[] = [];
-      for (const release of [
-        stopComposer,
-        async () => driver?.close(),
-        closeCommunityDrivers,
-      ]) {
+      for (const release of [stopComposer, async () => driver?.close(), closeCommunityDrivers]) {
         try {
           await release();
         } catch (error) {
@@ -88,8 +80,7 @@ export async function createRealmMemberCountInitializationFixture(): Promise<Rea
     const interceptedRegisterStep = ((...args: unknown[]) => {
       const step = Reflect.apply(originalRegisterStep, DBOS, args) as (partition: number) => Promise<boolean>;
       const options = args[1] as { name?: string } | undefined;
-      if (options?.name === 'community.member-count.segment')
-        registeredSegment = step;
+      if (options?.name === 'community.member-count.segment') registeredSegment = step;
       return step;
     }) as typeof DBOS.registerStep;
     const dbos = DBOS as unknown as { registerStep: typeof DBOS.registerStep };
@@ -107,10 +98,7 @@ export async function createRealmMemberCountInitializationFixture(): Promise<Rea
     }
     if (!registeredSegment) throw new Error('Production member-count segment was not registered');
 
-    DBOS.registerWorkflow(
-      async (partition: number) => registeredSegment!(partition),
-      { name: SEGMENT_WORKFLOW },
-    );
+    DBOS.registerWorkflow(async (partition: number) => registeredSegment!(partition), { name: SEGMENT_WORKFLOW });
     await runtime.launch();
 
     const realmId = growth.realmId;

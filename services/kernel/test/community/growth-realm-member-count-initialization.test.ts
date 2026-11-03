@@ -205,8 +205,7 @@ async function transaction<T>(operation: (client: PoolClient) => Promise<T>): Pr
 
 async function resetInstall(frontierId: string, clearRouteControls = false): Promise<void> {
   await transaction(async (client) => {
-    if (clearRouteControls)
-      await client.query('DELETE FROM community.realm_member_count WHERE route=$1', [f.route]);
+    if (clearRouteControls) await client.query('DELETE FROM community.realm_member_count WHERE route=$1', [f.route]);
     await client.query(
       `INSERT INTO community.realm_member_count_install
          (partition_no,cursor_route,cursor_id,frontier_route,frontier_id,complete)
@@ -231,10 +230,7 @@ async function resetLegacySelectedSource(): Promise<void> {
         WHERE route=$1 AND realm_id=$2 AND NOT upper_inf(valid)`,
       [f.route, f.realmId],
     );
-    await client.query('DELETE FROM community.realm_member_count WHERE route=$1 AND realm_id=$2', [
-      f.route,
-      f.realmId,
-    ]);
+    await client.query('DELETE FROM community.realm_member_count WHERE route=$1 AND realm_id=$2', [f.route, f.realmId]);
     await client.query(
       `INSERT INTO community.realm_member_count_install
          (partition_no,cursor_route,cursor_id,frontier_route,frontier_id,complete)
@@ -264,10 +260,7 @@ async function removeInventoryPressure(): Promise<void> {
       f.route,
       realmIds,
     ]);
-    await client.query('DELETE FROM community.realm WHERE route=$1 AND realm_id=ANY($2::uuid[])', [
-      f.route,
-      realmIds,
-    ]);
+    await client.query('DELETE FROM community.realm WHERE route=$1 AND realm_id=ANY($2::uuid[])', [f.route, realmIds]);
     await client.query('DELETE FROM access.resource_initialization WHERE route=$1 AND resource_id=ANY($2::uuid[])', [
       f.route,
       realmIds,
@@ -280,10 +273,7 @@ async function removeInventoryPressure(): Promise<void> {
       f.route,
       spaceIds,
     ]);
-    await client.query('DELETE FROM community.space WHERE route=$1 AND space_id=ANY($2::uuid[])', [
-      f.route,
-      spaceIds,
-    ]);
+    await client.query('DELETE FROM community.space WHERE route=$1 AND space_id=ANY($2::uuid[])', [f.route, spaceIds]);
   });
   inventoryIds = new Map();
   await resetInstall(f.realmId, true);
