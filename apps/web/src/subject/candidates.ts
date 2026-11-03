@@ -118,10 +118,10 @@ export async function readCandidates(
 ): Promise<CandidateRead> {
   try {
     // Public reading and private competition are independent. Neither uses per-value hydration.
+    // Ordinary public GET carries Session continuity only; viewer authorization stays on competition.
+    const publicHeaders = session ? { headers: { 'rezics-session-token': session } } : undefined;
     const [current, result] = await Promise.all([
-      client
-        .subjects({ id })
-        .get({ headers: { authorization, ...(session ? { 'rezics-session-token': session } : {}) } }),
+      client.subjects({ id }).get(publicHeaders),
       property
         ? client.subjects({ id }).candidates.get({
             query: { property, context: candidateContext, ...slot, limit: 20, ...(cursor ? { cursor } : {}) },
@@ -153,19 +153,24 @@ export async function readCandidates(
   }
 }
 
-export function candidateIsPublic(current: SubjectRead, property: string, candidate: string): boolean {
-  return publicCandidateSelection(current, property).some((entry) => entry.candidate === candidate);
+export function candidateIsPublic(
+  current: SubjectRead,
+  property: string,
+  candidate: string,
+  slot?: CandidateSlot,
+): boolean {
+  return publicCandidateSelection(current, property, slot).some((entry) => entry.candidate === candidate);
 }
 
-/** Only disclosed, admitted selected ranks from the ordinary reader establish public selection. */
-export function publicCandidateSelection(
+/** Disclosed selected statements for one exact slot from the ordinary public reader. */
+export function publicSlotStatements(
   current: SubjectRead,
   property: string,
   slot?: CandidateSlot,
-): CandidateSelection[] {
-  return (current.subject.statements[property] ?? []).flatMap((statement) => {
-    if (statement.rank !== 'normal' && statement.rank !== 'preferred') return [];
-    if (slot?.target && (statement.value.type !== 'value' || statement.value.content !== slot.target)) return [];
+): SubjectRead['subject']['statements'][string] {
+  return (current.subject.statements[property] ?? []).filter((statement) => {
+    if (statement.rank !== 'normal' && statement.rank !== 'preferred') return false;
+    if (slot?.target && (statement.value.type !== 'value' || statement.value.content !== slot.target)) return false;
     if (
       slot?.sameAs &&
       (statement.value.type !== 'somevalue' ||
@@ -174,14 +179,26 @@ export function publicCandidateSelection(
             snak.property.id === 'schema:sameAs' && snak.value.type === 'value' && snak.value.content === slot.sameAs,
         ))
     )
-      return [];
+      return false;
     if (
       slot?.key &&
       !statement.qualifiers.some((snak) => snak.value.type === 'value' && snak.value.content === slot.key)
     )
-      return [];
-    return [{ candidate: statement.id, rank: statement.rank }];
+      return false;
+    return true;
   });
+}
+
+/** Only disclosed, admitted selected ranks from the ordinary reader establish public selection. */
+export function publicCandidateSelection(
+  current: SubjectRead,
+  property: string,
+  slot?: CandidateSlot,
+): CandidateSelection[] {
+  return publicSlotStatements(current, property, slot).map((statement) => ({
+    candidate: statement.id,
+    rank: statement.rank as CandidateSelection['rank'],
+  }));
 }
 
 export function sameCandidateSelection(left: CandidateSelection[], right: CandidateSelection[]): boolean {
@@ -239,9 +256,7 @@ export async function selectCandidate(
     const session = new Headers(result.headers).get('rezics-session-token') ?? input.session;
     let current: SubjectRead | null = null;
     try {
-      const read = await endpoint.get({
-        headers: { authorization, ...(session ? { 'rezics-session-token': session } : {}) },
-      });
+      const read = await endpoint.get(session ? { headers: { 'rezics-session-token': session } } : undefined);
       if (read.status === 200 && read.data?.subject.id === input.id && read.data.subject.context === candidateContext)
         current = read.data;
     } catch {
@@ -253,7 +268,9 @@ export async function selectCandidate(
         input.operation === 'reject'
           ? 'rejected'
           : input.operation === 'accept'
-            ? context === candidateContext && current && candidateIsPublic(current, input.property, input.candidate)
+            ? context === candidateContext &&
+                current &&
+                candidateIsPublic(current, input.property, input.candidate, input.slot)
               ? 'selected'
               : 'accepted'
             : context === candidateContext &&

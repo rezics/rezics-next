@@ -14,6 +14,7 @@ import { candidateCanSelect, editCandidateDraft, refreshCandidateDraft, type Can
 import {
   candidateSourceRecords,
   publicCandidateSelection,
+  publicSlotStatements,
   type Candidate,
   type CandidateCommand,
   type CandidateFailure,
@@ -111,11 +112,13 @@ function CandidateReviewLive({
   const draft = drafts[property];
   const maximum = current?.fields.find((field) => field.id === property)?.multivalued ? 32 : 1;
   const locked = busy || confirmation !== null || !!request.current || !!result;
-  const publicStatements = (
-    context
-      ? (result?.contextReview?.selected ?? current?.contextReview?.selected ?? [])
-      : (publicRead?.subject.statements[property] ?? [])
-  ).filter((statement) => statement.rank === 'normal' || statement.rank === 'preferred');
+  const publicStatements = context
+    ? (result?.contextReview?.selected ?? current?.contextReview?.selected ?? []).filter(
+        (statement) => statement.rank === 'normal' || statement.rank === 'preferred',
+      )
+    : publicRead
+      ? publicSlotStatements(publicRead, property, slot)
+      : [];
   // Public values outside this page remain choices. No page ever stands in for the whole selection.
   const choices = new Map(publicStatements.map((statement) => [statement.id, { statement, eligible: true }]));
   for (const item of current?.page?.candidates ?? [])
@@ -190,7 +193,7 @@ function CandidateReviewLive({
                     ? [{ candidate: statement.id, rank: statement.rank }]
                     : [],
                 )
-              : publicCandidateSelection(next.public, field),
+              : publicCandidateSelection(next.public, field, slot),
           ),
         }));
       if (exactCandidate) {
