@@ -847,7 +847,15 @@ export function createSearchService({
       return response;
     },
   };
-  registerSearchScopeRuntime(service, { pool, client, prefix, source, release, clock, realmSubjects });
+  registerSearchScopeRuntime(service, {
+    pool,
+    client,
+    prefix,
+    source,
+    release,
+    clock,
+    ...(realmSubjects ? { realmSubjects } : {}),
+  });
   return service;
 }
 

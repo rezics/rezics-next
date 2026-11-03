@@ -409,8 +409,8 @@ export function createSearchScopeSource({
   return {
     realm: createRealmScopeSource({
       pool,
-      reader: evidence,
-      source: realmSubjects,
+      ...(evidence ? { reader: evidence } : {}),
+      ...(realmSubjects ? { source: realmSubjects } : {}),
       release: (digest) => readSearchScopeRelease(pool, digest),
     }),
     /** Additive native caller accounting; opaque result shapes and the legacy evaluation ABI stay unchanged. */

@@ -170,7 +170,11 @@ export function createRealmScopeSource(input: {
       const basis = createHash('sha256')
         .update(canonicalize({ filter: admitted, release, observations: [...observations] })!)
         .digest('hex');
-      const scope: PreparedRealmScope = Object.freeze({ [prepared]: true, readiness: 'population_ready', basis });
+      const scope: PreparedRealmScope = Object.freeze({
+        [prepared]: true as const,
+        readiness: 'population_ready',
+        basis,
+      });
       const value = { plan, observations, release: immutable(structuredClone(release)) };
       await current(value, work);
       states.set(scope, value);
@@ -196,8 +200,9 @@ export function createRealmScopeSource(input: {
       await current(value, work);
       return { ...prefix, basis: scope.basis, work: work.receipt() };
     },
-    /** Current full catalogue/Realm predicate, using the existing native catalogue
-     * evaluator and its ledger. Withheld and unfinished evidence cannot prove NOT.
+    /** Preparation-only full catalogue/Realm predicate, using the existing native
+     * catalogue evaluator and its ledger. Final Search disclosure still requires the
+     * canonical prepared Source observation. Unknown evidence cannot prove NOT.
      */
     async evaluate(scope: PreparedRealmScope, subjects: readonly string[], allowance: WorkAllowance) {
       if (subjects.length > 100) throw new RangeError('Invalid Realm candidate batch');
