@@ -4977,6 +4977,7 @@
   "home_space_unavailable": "We couldn't load this Space. Try again or clear it.",
   "home_space_changed": "This Space changed, so Home is updating your results.",
   "home_feed_sparse": "No items on this page. Continue to the next page.",
+  "home_feed_public_discovery_unavailable": "Public Collection, review, and Space discovery are not yet available from the native feed.",
   "subject_relation_completed_more": "New visible items in {label}: {count}. You can load more.",
   "subject_relation_completed_end": "New visible items in {label}: {count}. End of this list.",
   "subject_relation_end": "End of {label}.",

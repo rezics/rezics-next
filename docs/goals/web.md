@@ -100,13 +100,21 @@ independent rather than making shared files or unfinished producer delivery into
   and exact `kind` selection. Following Collections are delivered: title, description and `/collections/{id}` are
   used as supplied. Membership, rules, covers, authors and ratings stay omitted when absent. Public discovery
   Collection hits remain Search/Content's pending registration; Home types that discovery branch locally and does
-  not invent a successful native page.
+  not invent a successful native page. Home visibly labels the unavailable public discovery branch and keeps the
+  current Following Collection variant.
 - **Review and Space discovery.** Home renders a review as its thread identity (`key.kind` stays `thread`,
-  destination `/threads/{id}`) with a Review label and optional disclosed reviewed-Subject context; it never
-  substitutes the Subject as the primary row. Space rows use the named `HomeSpaceFeedItem` seam: destination
-  `/spaces/{address}` when the address is readable, Realm title as carrier text only. Search has not registered
-  review or Space discovery kinds and Content has not delivered Space feed rows; those remain named pending
-  producer bindings. Missing author, excerpt, image and rating stay omitted.
+  destination `/threads/{id}`) with a Review label, current optional author/excerpt and a reviewed-Subject link only
+  when that Subject is disclosed. It never substitutes the Subject as the primary row or reconstructs a hidden
+  association. Space rows use the named `HomeSpaceFeedItem` seam: destination `/spaces/{address}` when the address
+  is readable, Realm title as carrier text only. Search has not registered public review or Space discovery kinds
+  and Content has not delivered Space feed rows; Home shows those discovery branches as unavailable. Missing
+  author, excerpt, image and rating stay omitted.
+- **Home return.** Back/Forward and owner-destination return restore only the current stream, native selectors and
+  opaque page frontier from bounded same-origin history state. Home never puts selected filters or private feed rows
+  in the URL or history state. Kind/Space changes retire the displayed page before the next request; expired cursors
+  offer restart with the same selectors. The descriptor is capped at 32,768 cursor characters; larger frontiers
+  return as explicit restart. Space and rating-question identities are revalidated through their existing point
+  readers.
 - **Collection discovery.** Add native public Collection hits to existing Search and mixed Home rows, with the
   supplied title, description and canonical destination. A dedicated localized `/collections` route browses the
   native Collection-kind page and links to the existing public Collection route. Membership and private rule facts

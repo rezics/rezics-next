@@ -4933,6 +4933,7 @@
   "home_space_unavailable": "이 Space를 불러오지 못했습니다. 다시 시도하거나 선택을 해제하세요.",
   "home_space_changed": "이 Space가 변경되어 홈 결과를 새로 불러오고 있습니다.",
   "home_feed_sparse": "이 페이지에는 항목이 없습니다. 다음 페이지로 이동하세요.",
+  "home_feed_public_discovery_unavailable": "공개 컬렉션, 리뷰, Space 탐색은 네이티브 피드에서 아직 사용할 수 없습니다.",
   "subject_relation_completed_more": "{label}: 새로 표시된 항목 {count}개. 더 불러올 수 있습니다.",
   "subject_relation_completed_end": "{label}: 새로 표시된 항목 {count}개. 이 목록의 끝입니다.",
   "subject_relation_end": "{label}의 끝입니다.",

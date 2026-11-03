@@ -4933,6 +4933,7 @@
   "home_space_unavailable": "この Space を読み込めませんでした。再試行するか、選択を解除してください。",
   "home_space_changed": "この Space が変更されたため、ホームの結果を更新しています。",
   "home_feed_sparse": "このページに項目はありません。次のページに進んでください。",
+  "home_feed_public_discovery_unavailable": "公開コレクション、レビュー、Space の発見はネイティブフィードではまだ利用できません。",
   "subject_relation_completed_more": "{label}：新しく表示された項目は{count}件です。さらに読み込めます。",
   "subject_relation_completed_end": "{label}：新しく表示された項目は{count}件です。このリストの末尾です。",
   "subject_relation_end": "{label}の末尾です。",

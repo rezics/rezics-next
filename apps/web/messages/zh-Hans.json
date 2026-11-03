@@ -4933,6 +4933,7 @@
   "home_space_unavailable": "无法加载此 Space。请重试或清除该选择。",
   "home_space_changed": "此 Space 已更改，正在更新主页结果。",
   "home_feed_sparse": "本页没有条目。请继续下一页。",
+  "home_feed_public_discovery_unavailable": "原生信息流暂不支持发现公开合集、评论和 Space。",
   "subject_relation_completed_more": "{label}：新增可见条目 {count} 个。可以继续加载。",
   "subject_relation_completed_end": "{label}：新增可见条目 {count} 个。已到达此列表末尾。",
   "subject_relation_end": "已到达{label}末尾。",

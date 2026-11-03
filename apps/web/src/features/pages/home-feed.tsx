@@ -18,6 +18,10 @@ import {
 import type { ReactNode } from 'react';
 import {
   createHomeFeedWindow,
+  HOME_FEED_HISTORY_CURSOR_LIMIT,
+  homeFeedHistoryState,
+  homeFeedNavigationDescriptor,
+  readHomeFeedNavigationDescriptor,
   type FeedInput,
   type FeedItem,
   type FeedStream,
@@ -26,6 +30,10 @@ import {
 
 function requestIdentity({ stream, cursor, kind, spaceId, ratingQuestionId }: FeedInput) {
   return JSON.stringify([stream, cursor ?? null, kind ?? null, spaceId ?? null, ratingQuestionId ?? null]);
+}
+
+function selectionIdentity({ stream, kind, spaceId, ratingQuestionId }: FeedInput) {
+  return JSON.stringify([stream, kind ?? null, spaceId ?? null, ratingQuestionId ?? null]);
 }
 
 export function HomeFeed({
@@ -185,6 +193,11 @@ export function HomeFeed({
         {questionControl}
       </div>
       {catalogue}
+      {stream === 'home' ? (
+        <p role="note" className="text-sm text-muted-foreground">
+          {m.home_feed_public_discovery_unavailable({}, options)}
+        </p>
+      ) : null}
       <FeedResults
         boundaryRef={boundary}
         regionLabel={m.nav_home({}, options)}
@@ -256,9 +269,23 @@ export function HomeFeedConsumer({
 }) {
   const window = useState(() => createHomeFeedWindow(initial, read))[0];
   const choices = useState(() => createHomeKindChoices(readKinds))[0];
+  const restoreGeneration = useRef(0);
+  const saveNavigation = (input: FeedInput, mode: 'push' | 'replace') => {
+    if (typeof globalThis.window === 'undefined') return;
+    const browser = globalThis.window;
+    const descriptor = homeFeedNavigationDescriptor(input, browser.location, locale);
+    const state = homeFeedHistoryState(browser.history.state, descriptor);
+    if (mode === 'push') browser.history.pushState(state, '', browser.location.href);
+    else browser.history.replaceState(state, '', browser.location.href);
+  };
   // Store callbacks run after construction, when both independent selection stores exist.
   const questions = useState(() =>
     createHomeQuestionChoices(readQuestions, readQuestion, (question, result) => {
+      if (result === undefined) {
+        restoreGeneration.current++;
+        const { cursor: _cursor, ratingQuestionId: _question, ...selection } = window.snapshot().input;
+        saveNavigation({ ...selection, ...(question ? { ratingQuestionId: question.id } : {}) }, 'push');
+      }
       choices.retire();
       spaces.retire();
       const { cursor: _cursor, ratingQuestionId: _question, ...selection } = window.snapshot().input;
@@ -269,10 +296,17 @@ export function HomeFeedConsumer({
   )[0];
   const spaces = useState(() =>
     createHomeSpaceSelection(readSpace, (space, available) => {
+      restoreGeneration.current++;
       choices.retire();
       questions.retire();
       const { cursor: _cursor, spaceId: _space, ...selection } = window.snapshot().input;
       const input = { ...selection, ...(space ? { spaceId: space.spaceId } : {}) };
+      const current =
+        typeof globalThis.window === 'undefined'
+          ? undefined
+          : readHomeFeedNavigationDescriptor(globalThis.window.history.state, globalThis.window.location, locale)
+              ?.input;
+      saveNavigation(input, current && selectionIdentity(current) === selectionIdentity(input) ? 'replace' : 'push');
       window.retire(available ? undefined : { state: 'unavailable', code: 'space_unavailable' }, input);
       if (available && !loadRefusal(input)) void window.load(input);
     }),
@@ -295,7 +329,9 @@ export function HomeFeedConsumer({
     }
     return false;
   }
-  const loadSelection = (input: FeedInput) => {
+  const loadSelection = (input: FeedInput, historyMode: 'push' | 'replace' = 'push') => {
+    restoreGeneration.current++;
+    saveNavigation(input, historyMode);
     choices.retire();
     spaces.retire();
     questions.retire();
@@ -303,8 +339,10 @@ export function HomeFeedConsumer({
     if (!loadRefusal(input)) void window.load(input);
   };
   const retry = () => {
-    if (!spaces.snapshot().available) void spaces.refresh();
-    else if (questions.snapshot().selected && questions.snapshot().selection !== 'ready') void questions.refresh();
+    if (!spaces.snapshot().available) {
+      if (spaces.snapshot().selected) void spaces.refresh();
+      else void spaces.retry();
+    } else if (questions.snapshot().selected && questions.snapshot().selection !== 'ready') void questions.refresh();
     else void window.load(window.snapshot().input);
   };
   const questionSnapshot = useSyncExternalStore(questions.subscribe, questions.snapshot, questions.snapshot);
@@ -319,10 +357,6 @@ export function HomeFeedConsumer({
     },
     [choices, spaces, questions],
   );
-  useEffect(() => {
-    if (signedIn) void window.load({ stream: 'home' });
-    return window.clear;
-  }, [window, signedIn]);
   const options = { locale: locale as Locale };
   const activeFilters: ReactNode[] = [];
   if (kinds.selected) {
@@ -391,6 +425,87 @@ export function HomeFeedConsumer({
         currentResult.state === questionFailure.state &&
         currentResult.code === questionFailure.code));
   const filterOwnsResultMessage = spaceOwnsResultMessage || questionOwnsResultMessage;
+  const restoreSelection = async (input: FeedInput, frontierUnavailable = false) => {
+    const current = ++restoreGeneration.current;
+    choices.retire();
+    spaces.retire();
+    questions.retire();
+    window.retire({ state: 'loading', code: 'loading' }, input);
+    choices.select(input.kind ? { id: input.kind, text: '' } : undefined);
+    const space = await spaces.restore(input.spaceId);
+    if (current !== restoreGeneration.current) return;
+    if (input.spaceId && space === undefined) return;
+    if (input.spaceId && space?.status !== 'ready') {
+      window.retire({ state: 'unavailable', code: 'space_unavailable' }, input);
+      return;
+    }
+    const question = await questions.restore(input.ratingQuestionId);
+    if (current !== restoreGeneration.current) return;
+    if (input.ratingQuestionId && question?.status !== 'ready') {
+      window.retire(
+        question ? questionFeedFailure(question) : { state: 'unavailable', code: 'question_unavailable' },
+        input,
+      );
+      return;
+    }
+    if (frontierUnavailable) {
+      window.retire({ state: 'cursor', code: 'frontier_unavailable' }, input);
+      return;
+    }
+    void window.load(input);
+  };
+  const restoreFromHistory = (force: boolean) => {
+    if (typeof globalThis.window === 'undefined') return;
+    const browser = globalThis.window;
+    const descriptor = readHomeFeedNavigationDescriptor(browser.history.state, browser.location, locale);
+    const input =
+      descriptor?.input && (signedIn || descriptor.input.stream !== 'following')
+        ? descriptor.input
+        : { stream: 'home' as const };
+    if (!descriptor || (!signedIn && descriptor.input.stream === 'following')) saveNavigation(input, 'replace');
+    const current = window.snapshot();
+    if (
+      force &&
+      (requestIdentity(current.input) === requestIdentity(input) ||
+        (descriptor?.frontierUnavailable === true &&
+          typeof current.input.cursor === 'string' &&
+          current.input.cursor.length > HOME_FEED_HISTORY_CURSOR_LIMIT &&
+          selectionIdentity(current.input) === selectionIdentity(input))) &&
+      current.result.state === 'ready'
+    )
+      return;
+    if (
+      !force &&
+      !signedIn &&
+      !descriptor?.frontierUnavailable &&
+      requestIdentity(current.input) === requestIdentity(input) &&
+      current.result.state === 'ready'
+    ) {
+      void spaces.restore(input.spaceId);
+      void questions.restore(input.ratingQuestionId);
+      choices.select(input.kind ? { id: input.kind, text: '' } : undefined);
+      return;
+    }
+    void restoreSelection(input, descriptor?.frontierUnavailable === true);
+  };
+  useEffect(() => {
+    const popstate = () => restoreFromHistory(true);
+    const pageshow = (event: PageTransitionEvent) => {
+      if (event.persisted) restoreFromHistory(true);
+    };
+    globalThis.window.addEventListener('popstate', popstate);
+    globalThis.window.addEventListener('pageshow', pageshow);
+    restoreFromHistory(false);
+    return () => {
+      globalThis.window.removeEventListener('popstate', popstate);
+      globalThis.window.removeEventListener('pageshow', pageshow);
+      restoreGeneration.current++;
+      choices.retire();
+      spaces.retire();
+      questions.retire();
+      window.clear();
+    };
+  }, [window, signedIn, locale]);
   return (
     <HomeFeed
       result={snapshot.result}
@@ -425,10 +540,12 @@ export function HomeFeedConsumer({
       onRetry={retry}
       onRestart={() => {
         const { cursor: _cursor, ...selection } = snapshot.input;
-        loadSelection(selection);
+        loadSelection(selection, 'replace');
       }}
       onNext={(cursor) => {
-        if (!loadRefusal(snapshot.input)) void window.load({ ...snapshot.input, cursor });
+        const input = { ...snapshot.input, cursor };
+        saveNavigation(input, 'push');
+        if (!loadRefusal(snapshot.input)) void window.load(input);
       }}
     />
   );

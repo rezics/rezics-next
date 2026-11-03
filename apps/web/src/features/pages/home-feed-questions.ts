@@ -204,6 +204,45 @@ export function createHomeQuestionChoices(
         listeners.delete(listener);
       };
     },
+    async restore(id?: string): Promise<QuestionPointResult | undefined> {
+      retire();
+      if (!id) {
+        snapshot = { ...snapshot, selected: undefined, selection: 'none', failure: undefined };
+        emit();
+        return;
+      }
+      try {
+        homeQuestionId(id);
+      } catch {
+        const result: QuestionFailure = { status: 'invalid', code: 'invalid_question_id' };
+        snapshot = { ...snapshot, selected: undefined, selection: result.status, failure: result };
+        emit();
+        return result;
+      }
+      const current = generation;
+      const controller = new AbortController();
+      selectedPending = controller;
+      snapshot = { ...snapshot, selected: undefined, selection: 'loading', failure: undefined };
+      emit();
+      let result: QuestionPointResult;
+      try {
+        result = await point(id, controller.signal);
+      } catch {
+        result = { status: 'unavailable', code: 'dependency_unavailable' };
+      }
+      if (current !== generation || controller.signal.aborted) return;
+      if (result.status === 'ready' && result.question.id !== id)
+        result = { status: 'unavailable', code: 'invalid_question_response' };
+      selectedPending = undefined;
+      snapshot = {
+        ...snapshot,
+        selected: result.status === 'ready' ? result.question : undefined,
+        selection: result.status,
+        failure: result.status === 'ready' ? undefined : result,
+      };
+      emit();
+      return result;
+    },
     retire() {
       retire();
       emit();

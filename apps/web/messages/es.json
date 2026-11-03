@@ -4933,6 +4933,7 @@
   "home_space_unavailable": "No se pudo cargar este Space. Inténtalo de nuevo o quítalo.",
   "home_space_changed": "Este Space ha cambiado. Inicio está actualizando tus resultados.",
   "home_feed_sparse": "No hay elementos en esta página. Continúa a la siguiente.",
+  "home_feed_public_discovery_unavailable": "El descubrimiento público de colecciones, reseñas y Spaces aún no está disponible en el feed nativo.",
   "subject_relation_completed_more": "{label}: nuevos elementos visibles: {count}. Puedes cargar más.",
   "subject_relation_completed_end": "{label}: nuevos elementos visibles: {count}. Fin de esta lista.",
   "subject_relation_end": "Fin de {label}.",

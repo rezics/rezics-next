@@ -4933,6 +4933,7 @@
   "home_space_unavailable": "Dieser Space konnte nicht geladen werden. Versuche es erneut oder entferne ihn.",
   "home_space_changed": "Dieser Space hat sich geändert. Home lädt deine Ergebnisse neu.",
   "home_feed_sparse": "Keine Elemente auf dieser Seite. Mit der nächsten Seite fortfahren.",
+  "home_feed_public_discovery_unavailable": "Die öffentliche Entdeckung von Sammlungen, Rezensionen und Spaces ist im nativen Feed noch nicht verfügbar.",
   "subject_relation_completed_more": "{label}: Neue sichtbare Einträge: {count}. Weitere können geladen werden.",
   "subject_relation_completed_end": "{label}: Neue sichtbare Einträge: {count}. Ende dieser Liste.",
   "subject_relation_end": "Ende von {label}.",

@@ -1,4 +1,5 @@
 import type { KernelClient } from '@rezics/client';
+import { parseDiscoveryFilter } from '@rezics/filter';
 import { isPlatformClosedError } from '../../kernel/platform-closed';
 
 /** Inferred from Content's mounted FeedPageSchema, never a parallel browser DTO. */
@@ -54,6 +55,16 @@ export type FeedInput = {
   kind?: string;
   spaceId?: string;
   ratingQuestionId?: string;
+};
+export const HOME_FEED_HISTORY_KEY = 'rezicsHomeFeed';
+export const HOME_FEED_HISTORY_CURSOR_LIMIT = 32_768;
+export type HomeFeedNavigationDescriptor = {
+  version: 1;
+  origin: string;
+  pathname: string;
+  locale: string;
+  input: FeedInput;
+  frontierUnavailable?: true;
 };
 export type FeedFailure = 'request' | 'auth' | 'denied' | 'closed' | 'cursor' | 'deadline' | 'unavailable';
 export type HomeFeedResult = { state: 'ready'; page: FeedPage } | { state: FeedFailure | 'loading'; code: string };
@@ -246,4 +257,123 @@ export function homeFeedViewer(session: { state: string; subject?: string | null
   return session.state === 'signed-in' && session.subject && session.csrfToken
     ? { subject: session.subject, scope: `${session.subject}:${session.csrfToken}` }
     : null;
+}
+
+function record(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isHomePath(pathname: string, locale: string): boolean {
+  const prefix = `/${encodeURIComponent(locale)}`;
+  return pathname === '/' || pathname === prefix || pathname === `${prefix}/`;
+}
+
+function validFeedInput(value: unknown): FeedInput | undefined {
+  if (!record(value) || !['home', 'following'].includes(String(value.stream))) return;
+  const keys = Object.keys(value);
+  if (keys.some((key) => !['stream', 'cursor', 'kind', 'spaceId', 'ratingQuestionId'].includes(key))) return;
+  if (
+    value.cursor !== undefined &&
+    (typeof value.cursor !== 'string' ||
+      value.cursor.length < 1 ||
+      value.cursor.length > HOME_FEED_HISTORY_CURSOR_LIMIT)
+  )
+    return;
+  if (value.kind !== undefined) {
+    if (typeof value.kind !== 'string') return;
+    try {
+      parseDiscoveryFilter({ kind: { in: [value.kind] } });
+    } catch {
+      return;
+    }
+  }
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (value.spaceId !== undefined && (typeof value.spaceId !== 'string' || !uuid.test(value.spaceId))) return;
+  if (
+    value.ratingQuestionId !== undefined &&
+    (typeof value.ratingQuestionId !== 'string' || !uuid.test(value.ratingQuestionId))
+  )
+    return;
+  return {
+    stream: value.stream as FeedStream,
+    ...(typeof value.cursor === 'string' ? { cursor: value.cursor } : {}),
+    ...(typeof value.kind === 'string' ? { kind: value.kind } : {}),
+    ...(typeof value.spaceId === 'string' ? { spaceId: value.spaceId } : {}),
+    ...(typeof value.ratingQuestionId === 'string' ? { ratingQuestionId: value.ratingQuestionId } : {}),
+  };
+}
+
+/** Store only the current native selection and signed frontier, never rows or URL filters. */
+export function homeFeedNavigationDescriptor(
+  input: FeedInput,
+  location: { origin: string; pathname: string },
+  locale: string,
+): HomeFeedNavigationDescriptor | undefined {
+  if (!isHomePath(location.pathname, locale)) return;
+  let origin: string;
+  try {
+    const parsed = new URL(location.origin);
+    if (parsed.origin !== location.origin || !['http:', 'https:'].includes(parsed.protocol)) return;
+    origin = parsed.origin;
+  } catch {
+    return;
+  }
+  const frontierUnavailable = typeof input.cursor === 'string' && input.cursor.length > HOME_FEED_HISTORY_CURSOR_LIMIT;
+  const { cursor: _cursor, ...selection } = input;
+  const boundedInput: FeedInput = frontierUnavailable ? selection : input;
+  const validated = validFeedInput(boundedInput);
+  if (!validated) return;
+  return {
+    version: 1,
+    origin,
+    pathname: location.pathname,
+    locale,
+    input: validated,
+    ...(frontierUnavailable ? { frontierUnavailable: true as const } : {}),
+  };
+}
+
+/** A descriptor is usable only at its original same-origin localized Home entry. */
+export function readHomeFeedNavigationDescriptor(
+  state: unknown,
+  location: { origin: string; pathname: string },
+  locale: string,
+): HomeFeedNavigationDescriptor | undefined {
+  if (!record(state) || !record(state[HOME_FEED_HISTORY_KEY])) return;
+  const descriptor = state[HOME_FEED_HISTORY_KEY];
+  const descriptorKeys = Object.keys(descriptor).sort().join(',');
+  if (
+    !['input,locale,origin,pathname,version', 'frontierUnavailable,input,locale,origin,pathname,version'].includes(
+      descriptorKeys,
+    ) ||
+    descriptor.version !== 1 ||
+    descriptor.origin !== location.origin ||
+    descriptor.pathname !== location.pathname ||
+    descriptor.locale !== locale ||
+    typeof descriptor.pathname !== 'string' ||
+    !isHomePath(descriptor.pathname, locale)
+  )
+    return;
+  if (descriptor.frontierUnavailable !== undefined && descriptor.frontierUnavailable !== true) return;
+  const input = validFeedInput(descriptor.input);
+  if (!input) return;
+  if (descriptor.frontierUnavailable === true && input.cursor !== undefined) return;
+  return {
+    version: 1,
+    origin: location.origin,
+    pathname: location.pathname,
+    locale,
+    input,
+    ...(descriptor.frontierUnavailable === true ? { frontierUnavailable: true } : {}),
+  };
+}
+
+export function homeFeedHistoryState(
+  state: unknown,
+  descriptor?: HomeFeedNavigationDescriptor,
+): Record<string, unknown> {
+  const next = record(state) ? { ...state } : {};
+  if (descriptor) next[HOME_FEED_HISTORY_KEY] = descriptor;
+  else delete next[HOME_FEED_HISTORY_KEY];
+  return next;
 }

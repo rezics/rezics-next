@@ -179,6 +179,35 @@ export function createHomeSpaceSelection(
         listeners.delete(listener);
       };
     },
+    async restore(spaceId?: string): Promise<HomeSpaceResult | undefined> {
+      retire();
+      attempted = spaceId ? { spaceId } : undefined;
+      if (!spaceId) {
+        snapshot = { status: 'idle', available: true, changed: false };
+        emit();
+        return;
+      }
+      const current = generation;
+      const controller = new AbortController();
+      pending = controller;
+      snapshot = { status: 'loading', available: false, changed: false };
+      emit();
+      let result: HomeSpaceResult;
+      try {
+        result = await read({ spaceId }, controller.signal);
+      } catch {
+        result = { status: 'unavailable', spaceId };
+      }
+      if (generation !== current || controller.signal.aborted) return;
+      if (result.status === 'ready' && result.space.spaceId !== spaceId) result = { status: 'unavailable', spaceId };
+      pending = undefined;
+      snapshot =
+        result.status === 'ready'
+          ? { status: 'ready', selected: result.space, available: true, changed: false }
+          : { status: result.status, available: false, changed: false };
+      emit();
+      return result;
+    },
     retire: () => {
       retire();
       snapshot = {

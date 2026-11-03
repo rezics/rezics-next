@@ -4933,6 +4933,7 @@
   "home_space_unavailable": "無法載入此 Space。請重試或清除選取項目。",
   "home_space_changed": "此 Space 已變更，正在更新首頁結果。",
   "home_feed_sparse": "本頁沒有項目。請繼續下一頁。",
+  "home_feed_public_discovery_unavailable": "原生動態目前尚未支援探索公開合集、評論與 Space。",
   "subject_relation_completed_more": "{label}：新增可見項目 {count} 個。可以繼續載入。",
   "subject_relation_completed_end": "{label}：新增可見項目 {count} 個。已到達此清單結尾。",
   "subject_relation_end": "已到達{label}結尾。",

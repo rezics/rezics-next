@@ -14,11 +14,14 @@ Collection eligibility, and Content owns review and Space populations. Feed comp
 summaries without point-read enrichment, private membership or Collection query contents as fallback data.
 Following Collection activity retains its existing meaning and does not establish discovery eligibility.
 
-The current dev Search union, registry and native hydration still supply only Subject and Account variants.
-Collection/review/Space activation therefore remains pending those producers; no successful empty variant or
-feed-local index substitutes for them. The delivered wire/schema has no new variants in this increment.
-Decision: retain the delivered Subject/Account wire until Search supplies the new native variants; unknown
-or mismatched summaries make discovery unavailable instead of becoming fallback Account cards.
+The installed `FeedItemSchema` admits public discovery Subject and Account rows, plus Following thread, post and
+Collection rows. It has no public discovery Collection, review or Space variants. The Web reader keeps named
+Collection and Space seams for the eventual owner union, and renders the existing disclosed Following Collection
+and review rows through the shared ContentItem adapter. Home states visibly that public Collection, review and Space
+discovery is unavailable; it does not turn their absence into an empty result or hydrate them with point reads.
+Search/Content activation remains pending those producers; no successful empty variant or feed-local index
+substitutes for them. Unknown or mismatched summaries make discovery unavailable instead of becoming fallback
+Account cards.
 `feed-discovery.ts` dispatches exhaustively on Search's summary discriminator and requires the exact owner,
 kind and summary identity. A rejected mapping retains the incoming lane position for retry. Search-omitted
 removed or unauthorized candidates retain Search's native examined frontier, including empty pages with `next`.
@@ -68,6 +71,23 @@ read fields. Their optional `author` carries only the currently disclosed Accoun
 optional `excerpt` contains native document plain text, with whitespace collapsed, capped at 160 Unicode code points
 and cut before a grapheme would cross the cap. Empty or withheld bodies omit the excerpt; missing identities omit
 the author, with no identifier fallback. No row ratings are added. Collection summaries contain its current ID, title and description.
+
+The mounted page cap is 20 rows; the native kind picker returns at most eight choices per metadata page, and the
+existing rating-question directory returns at most 20. Space restoration uses one current Space point read. The
+wire has no aggregate disclosed-summary byte cap, and its Following Collection description has no `maxLength`;
+public Collection/review/Space summary caps remain producer-owned and unavailable until those variants are mounted.
+Response row counts do not establish native indexed scan work.
+
+Web Back/Forward and owner-destination return keep a versioned descriptor in the current same-origin Home
+history entry. It contains only the stream, exact selector IDs and current opaque request frontier; it has no feed
+rows, private summaries or credentials, and selection is never added to the URL. The Web reader validates the
+descriptor's version, origin, localized Home path, selector grammar and 32,768-character cursor bound before
+restoring it. A frontier above that bound is omitted and returns as explicit restart with the same selectors.
+Space and rating-question identities are revalidated through their existing point readers. A changed or expired
+native frontier shows explicit restart, which keeps the same selectors and removes the cursor. Selection
+replacement retires the current page and pending request before reading; session/viewer remounts cannot reuse the
+previous private page body. Following is restored only while the current viewer is signed in.
+Decision: Home return state is a bounded same-origin history descriptor, never URL filters or retained feed bodies.
 
 Anonymous home invokes only the existing public DiscoverySearch producer. Following and
 Continue are `not_requested`. Authenticated responses are `private, no-store`; session
